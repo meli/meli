@@ -263,7 +263,7 @@ impl NntpStream {
                     "Could not connect: no supported auth mechanisms in server capabilities: {:?}",
                     capabilities
                 ))
-                .set_err_kind(ErrorKind::Authentication));
+                .set_kind(ErrorKind::Authentication));
             }
         }
 
@@ -335,7 +335,7 @@ impl NntpStream {
                             || ret.starts_with("401 ")
                         {
                             return Err(Error::new(format!("Connection state error: {}", ret))
-                                .set_err_kind(ErrorKind::Authentication));
+                                .set_kind(ErrorKind::Authentication));
                         } else if !expected_reply_code.iter().any(|r| ret.starts_with(r)) {
                             return Err(Error::new(format!("Unexpected reply code: {}", ret)));
                         }

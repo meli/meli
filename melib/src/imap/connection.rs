@@ -368,7 +368,7 @@ impl ImapStream {
                 "Could not connect to {}: server does not accept logins [LOGINDISABLED]",
                 &server_conf.server_hostname
             ))
-            .set_err_kind(ErrorKind::Authentication));
+            .set_kind(ErrorKind::Authentication));
         }
 
         (uid_store.event_consumer)(
@@ -395,7 +395,7 @@ impl ImapStream {
                             .collect::<Vec<String>>()
                             .join(" ")
                     ))
-                    .set_err_kind(ErrorKind::Authentication));
+                    .set_kind(ErrorKind::Authentication));
                 }
                 let xoauth2 = base64::decode(&server_conf.server_password)
                     .chain_err_summary(|| {
@@ -442,7 +442,7 @@ impl ImapStream {
                             "Could not connect. Server replied with '{}'",
                             String::from_utf8_lossy(l[tag_start.len()..].trim())
                         ))
-                        .set_err_kind(ErrorKind::Authentication));
+                        .set_kind(ErrorKind::Authentication));
                     }
                     should_break = true;
                 }

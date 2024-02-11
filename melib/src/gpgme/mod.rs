@@ -49,7 +49,7 @@ use crate::{
         pgp::{DecryptionMetadata, Recipient},
         Address,
     },
-    error::{Error, ErrorKind, IntoError, Result, ResultIntoError},
+    error::{Error, ErrorKind, Result, ResultIntoError},
 };
 
 macro_rules! call {
@@ -557,7 +557,7 @@ impl Context {
                     return Err(Error::new(
                         "Unspecified libgpgme error: gpgme_op_verify_result returned NULL.",
                     )
-                    .set_err_kind(ErrorKind::External));
+                    .set_kind(ErrorKind::External));
                 }
             }
             let io_state_lck = io_state.lock().unwrap();
@@ -914,7 +914,7 @@ impl Context {
                 return Err(Error::new(
                     "Unspecified libgpgme error: gpgme_op_decrypt_result returned NULL.",
                 )
-                .set_err_kind(ErrorKind::External));
+                .set_kind(ErrorKind::External));
             }
             let mut recipients = vec![];
             let is_mime;
@@ -1123,7 +1123,7 @@ impl Context {
                 return Err(Error::new(
                     "Unspecified libgpgme error: gpgme_op_encrypt_result returned NULL.",
                 )
-                .set_err_kind(ErrorKind::External));
+                .set_kind(ErrorKind::External));
             }
             /* Rewind cursor */
             cipher

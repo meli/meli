@@ -131,7 +131,7 @@ pub fn pipe() -> Result<(OwnedFd, OwnedFd)> {
                 .set_source(Some(
                     (Box::new(err) as Box<dyn std::error::Error + Send + Sync + 'static>).into(),
                 ))
-                .set_err_kind(ErrorKind::OSError)
+                .set_kind(ErrorKind::OSError)
         })
 }
 
