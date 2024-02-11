@@ -428,7 +428,7 @@ pub mod sqlite3_m {
                 return Ok(None);
             }
 
-            let ret: Vec<(UID, Envelope, Option<ModSequence>)> = match {
+            let res = {
                 let mut stmt = self.connection.prepare(
                     "SELECT uid, envelope, modsequence FROM envelopes WHERE mailbox_hash = ?1;",
                 )?;
@@ -445,7 +445,8 @@ pub mod sqlite3_m {
                     })?
                     .collect::<std::result::Result<_, _>>();
                 x
-            } {
+            };
+            let ret: Vec<(UID, Envelope, Option<ModSequence>)> = match res {
                 Err(err) if matches!(&err, rusqlite::Error::FromSqlConversionFailure(_, _, _)) => {
                     drop(err);
                     self.reset()?;

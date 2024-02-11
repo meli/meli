@@ -106,24 +106,27 @@ impl HappyEyeballs {
         self.error.get_or_insert(error);
     }
 
-    // Initiate a fresh non-blocking TCP connection to `saddr`.
-    //
-    // Returns `AddOutcome::InProgress`.
-    //
-    // If there is an error concerning this particular connection
-    // attempt, return `AddOutcome::Error` and the error code is
-    // remembered in `self` if it is the first to occur; it will be
-    // the one returned if no connection can be established at all.
-    //
-    // If the connection succeeds immediately, returns
-    // `AddOutcome::Connected(stream)`. Because of non-blocking and
-    // the way TCP works, this should *not* happen.
+    /// Initiate a fresh non-blocking TCP connection to `saddr`.
+    ///
+    /// Returns `AddOutcome::InProgress`.
+    ///
+    /// If there is an error concerning this particular connection
+    /// attempt, return `AddOutcome::Error` and the error code is
+    /// remembered in `self` if it is the first to occur; it will be
+    /// the one returned if no connection can be established at all.
+    ///
+    /// If the connection succeeds immediately, returns
+    /// `AddOutcome::Connected(stream)`. Because of non-blocking and
+    /// the way TCP works, this should *not* happen.
     fn add(&mut self, saddr: SockAddr, domain: Domain) -> AddOutcome {
-        let sock = match Socket::new(domain, socket2::Type::STREAM, Some(socket2::Protocol::TCP))
-            .and_then(|sock| {
-                sock.set_nonblocking(true)?;
-                Ok(sock)
-            }) {
+        let set_nonblocking =
+            Socket::new(domain, socket2::Type::STREAM, Some(socket2::Protocol::TCP)).and_then(
+                |sock| {
+                    sock.set_nonblocking(true)?;
+                    Ok(sock)
+                },
+            );
+        let sock = match set_nonblocking {
             Ok(sock) => sock,
             Err(e) => {
                 self.set_error(e);

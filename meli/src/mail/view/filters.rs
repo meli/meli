@@ -324,7 +324,7 @@ impl ViewFilter {
                 command
             };
             if let Some(command) = command {
-                match File::create_temp_file(&_self.unfiltered, None, None, Some("html"), true)
+                let res = File::create_temp_file(&_self.unfiltered, None, None, Some("html"), true)
                     .and_then(|p| {
                         let exec_cmd = desktop_exec_to_command(
                             &command,
@@ -340,7 +340,8 @@ impl ViewFilter {
                                 .stdout(Stdio::piped())
                                 .spawn()?,
                         ))
-                    }) {
+                    });
+                match res {
                     Ok((p, child)) => {
                         context
                             .replies

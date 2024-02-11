@@ -928,7 +928,7 @@ impl State {
 
                             self.overlay.insert(new.id(), new);
                         } else if matches!(action, Action::ReloadConfiguration) {
-                            match Settings::new().and_then(|new_settings| {
+                            let res = Settings::new().and_then(|new_settings| {
                                 let old_accounts = self
                                     .context
                                     .settings
@@ -961,7 +961,8 @@ impl State {
                                     return Err("No changes detected.".into());
                                 }
                                 Ok(Box::new(new_settings))
-                            }) {
+                            });
+                            match res {
                                 Ok(new_settings) => {
                                     let old_settings =
                                         std::mem::replace(&mut self.context.settings, new_settings);

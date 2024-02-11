@@ -1441,7 +1441,7 @@ impl Component for EnvelopeView {
                             let attachment_type = attachment.mime_type();
                             let filename = attachment.filename();
                             if let Ok(command) = query_default_app(&attachment_type) {
-                                match File::create_temp_file(
+                                let res = File::create_temp_file(
                                     &attachment.decode(Default::default()),
                                     filename.as_deref(),
                                     None,
@@ -1462,7 +1462,8 @@ impl Component for EnvelopeView {
                                             .stdout(Stdio::piped())
                                             .spawn()?,
                                     ))
-                                }) {
+                                });
+                                match res {
                                     Ok((p, child)) => {
                                         context.temp_files.push(p);
                                         context.children.push(child);

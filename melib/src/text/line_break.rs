@@ -850,8 +850,8 @@ mod alg {
     }
 
     fn smawk(
-        rows: &Vec<usize>,
-        columns: &mut Vec<usize>,
+        rows: &[usize],
+        columns: &mut [usize],
         minima: &mut Vec<usize>,
         breaks: &mut Vec<usize>,
         width: usize,
@@ -879,7 +879,12 @@ mod alg {
         }
         let rows = &stack;
         if columns.len() > 1 {
-            let mut odd_columns = columns.iter().skip(1).step_by(2).cloned().collect();
+            let mut odd_columns = columns
+                .iter()
+                .skip(1)
+                .step_by(2)
+                .cloned()
+                .collect::<Vec<_>>();
             smawk(rows, &mut odd_columns, minima, breaks, width, offsets);
             for (i, o) in odd_columns.into_iter().enumerate() {
                 columns[2 * i + 1] = o;
@@ -950,8 +955,8 @@ mod alg {
             let r = std::cmp::min(n, 2 * i);
             let edge = i + offset;
             smawk(
-                &(offset..edge).collect(),
-                &mut (edge..(r + offset)).collect(),
+                &(offset..edge).collect::<Vec<_>>(),
+                &mut (edge..(r + offset)).collect::<Vec<_>>(),
                 &mut minima,
                 &mut breaks,
                 width,

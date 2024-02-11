@@ -1973,7 +1973,7 @@ impl Component for Composer {
                         });
                         return false;
                     }
-                    match File::create_temp_file(&[], None, None, None, true)
+                    let res = File::create_temp_file(&[], None, None, None, true)
                         .and_then(|f| {
                             let std_file = f.as_std_file()?;
                             Ok((
@@ -1985,8 +1985,8 @@ impl Component for Composer {
                                     .spawn()?,
                             ))
                         })
-                        .and_then(|(f, child)| Ok((f, child.wait_with_output()?.stderr)))
-                    {
+                        .and_then(|(f, child)| Ok((f, child.wait_with_output()?.stderr)));
+                    match res {
                         Ok((f, stderr)) => {
                             if !stderr.is_empty() {
                                 context.replies.push_back(UIEvent::StatusEvent(
