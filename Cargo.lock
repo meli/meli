@@ -1350,6 +1350,7 @@ dependencies = [
  "socket2 0.5.5",
  "stderrlog",
  "unicode-segmentation",
+ "url",
  "uuid",
  "xdg",
 ]
@@ -2457,6 +2458,7 @@ dependencies = [
  "form_urlencoded",
  "idna",
  "percent-encoding",
+ "serde",
 ]
 
 [[package]]

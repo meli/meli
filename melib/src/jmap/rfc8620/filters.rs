@@ -21,7 +21,8 @@
 
 use super::*;
 
-pub trait FilterTrait<T>: Default {}
+pub trait FilterTrait<T>: Default + Send + Sync {}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(untagged)]

@@ -35,3 +35,6 @@ pub use identity::*;
 
 mod submission;
 pub use submission::*;
+
+#[cfg(test)]
+mod tests;

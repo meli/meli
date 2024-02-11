@@ -19,6 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+// In case we forget to wait some future.
+#![deny(unused_must_use)]
+
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     convert::TryFrom,
@@ -28,11 +31,18 @@ use std::{
     time::{Duration, Instant},
 };
 
-use futures::{lock::Mutex as FutureMutex, Stream};
+use futures::{
+    lock::{
+        MappedMutexGuard as FutureMappedMutexGuard, Mutex as FutureMutex,
+        MutexGuard as FutureMutexGuard,
+    },
+    Stream,
+};
 use indexmap::{IndexMap, IndexSet};
 use isahc::{config::RedirectPolicy, AsyncReadResponseExt, HttpClient};
 use serde_json::{json, Value};
 use smallvec::SmallVec;
+use url::Url;
 
 use crate::{
     backends::*,
@@ -117,7 +127,7 @@ pub struct EnvelopeCache {
 
 #[derive(Clone, Debug)]
 pub struct JmapServerConf {
-    pub server_url: String,
+    pub server_url: Url,
     pub server_username: String,
     pub server_password: String,
     pub use_token: bool,
@@ -133,6 +143,19 @@ macro_rules! get_conf_val {
                 $s.name.as_str(),
                 $var
             ))
+        })
+    };
+    ($s:ident[$var:literal], $t:ty) => {
+        get_conf_val!($s[$var]).and_then(|v| {
+            <$t>::from_str(&v).map_err(|e| {
+                Error::new(format!(
+                    "Configuration error ({}): Invalid value for field `{}`: {}\n{}",
+                    $s.name.as_str(),
+                    $var,
+                    v,
+                    e
+                ))
+            })
         })
     };
     ($s:ident[$var:literal], $default:expr) => {
@@ -169,8 +192,8 @@ impl JmapServerConf {
             )));
         }
         Ok(Self {
-            server_url: get_conf_val!(s["server_url"])?.to_string(),
-            server_username: get_conf_val!(s["server_username"])?.to_string(),
+            server_url: get_conf_val!(s["server_url"], Url)?,
+            server_username: get_conf_val!(s["server_username"], String)?,
             server_password: s.server_password()?,
             use_token,
             danger_accept_invalid_certs: get_conf_val!(s["danger_accept_invalid_certs"], false)?,
@@ -185,66 +208,114 @@ impl JmapServerConf {
     }
 }
 
+#[derive(Debug, Clone)]
+#[repr(transparent)]
+pub struct OnlineStatus(pub Arc<FutureMutex<(Instant, Result<Session>)>>);
+
+impl OnlineStatus {
+    /// Returns if session value is `Ok(_)`.
+    pub async fn is_ok(&self) -> bool {
+        self.0.lock().await.1.is_ok()
+    }
+
+    /// Get timestamp of last update.
+    pub async fn timestamp(&self) -> Instant {
+        self.0.lock().await.0
+    }
+
+    /// Get timestamp of last update.
+    pub async fn update_timestamp(&self, value: Option<Instant>) {
+        self.0.lock().await.0 = value.unwrap_or_else(Instant::now);
+    }
+
+    /// Set inner value.
+    pub async fn set(&self, t: Option<Instant>, value: Result<Session>) -> Result<Session> {
+        std::mem::replace(
+            &mut (*self.0.lock().await),
+            (t.unwrap_or_else(Instant::now), value),
+        )
+        .1
+    }
+
+    pub async fn session_guard(
+        &'_ self,
+    ) -> Result<FutureMappedMutexGuard<'_, (Instant, Result<Session>), Session>> {
+        let guard = self.0.lock().await;
+        if let Err(ref err) = guard.1 {
+            return Err(err.clone());
+        }
+        Ok(FutureMutexGuard::map(guard, |status| {
+            // SAFETY: we checked if it's an Err() in the previous line, but we cannot do it
+            // in here since it's a closure. So unwrap unchecked for API
+            // convenience.
+            unsafe { status.1.as_mut().unwrap_unchecked() }
+        }))
+    }
+}
+
 #[derive(Debug)]
 pub struct Store {
     pub account_name: Arc<String>,
     pub account_hash: AccountHash,
     pub main_identity: String,
     pub extra_identities: Vec<String>,
-    pub account_id: Arc<Mutex<Id<Account>>>,
-    pub byte_cache: Arc<Mutex<HashMap<EnvelopeHash, EnvelopeCache>>>,
-    pub id_store: Arc<Mutex<HashMap<EnvelopeHash, Id<EmailObject>>>>,
-    pub reverse_id_store: Arc<Mutex<HashMap<Id<EmailObject>, EnvelopeHash>>>,
-    pub blob_id_store: Arc<Mutex<HashMap<EnvelopeHash, Id<BlobObject>>>>,
+    pub byte_cache: Arc<FutureMutex<HashMap<EnvelopeHash, EnvelopeCache>>>,
+    pub id_store: Arc<FutureMutex<HashMap<EnvelopeHash, Id<EmailObject>>>>,
+    pub reverse_id_store: Arc<FutureMutex<HashMap<Id<EmailObject>, EnvelopeHash>>>,
+    pub blob_id_store: Arc<FutureMutex<HashMap<EnvelopeHash, Id<BlobObject>>>>,
     pub collection: Collection,
     pub mailboxes: Arc<RwLock<HashMap<MailboxHash, JmapMailbox>>>,
     pub mailboxes_index: Arc<RwLock<HashMap<MailboxHash, HashSet<EnvelopeHash>>>>,
-    pub mailbox_state: Arc<Mutex<State<MailboxObject>>>,
-    pub online_status: Arc<FutureMutex<(Instant, Result<()>)>>,
+    pub mailbox_state: Arc<FutureMutex<State<MailboxObject>>>,
+    pub online_status: OnlineStatus,
     pub is_subscribed: Arc<IsSubscribedFn>,
     pub core_capabilities: Arc<Mutex<IndexMap<String, CapabilitiesObject>>>,
     pub event_consumer: BackendEventConsumer,
 }
 
 impl Store {
-    pub fn add_envelope(&self, obj: EmailObject) -> Envelope {
+    pub async fn add_envelope(&self, obj: EmailObject) -> Envelope {
         let mut flags = Flag::default();
         let mut labels: IndexSet<TagHash> = IndexSet::new();
-        let mut tag_lck = self.collection.tag_index.write().unwrap();
-        for t in obj.keywords().keys() {
-            match t.as_str() {
-                "$draft" => {
-                    flags |= Flag::DRAFT;
-                }
-                "$seen" => {
-                    flags |= Flag::SEEN;
-                }
-                "$flagged" => {
-                    flags |= Flag::FLAGGED;
-                }
-                "$answered" => {
-                    flags |= Flag::REPLIED;
-                }
-                "$junk" | "$notjunk" => { /* ignore */ }
-                _ => {
-                    let tag_hash = TagHash::from_bytes(t.as_bytes());
-                    tag_lck.entry(tag_hash).or_insert_with(|| t.to_string());
-                    labels.insert(tag_hash);
+        let id;
+        let mailbox_ids;
+        let blob_id;
+        {
+            let mut tag_lck = self.collection.tag_index.write().unwrap();
+            for t in obj.keywords().keys() {
+                match t.as_str() {
+                    "$draft" => {
+                        flags |= Flag::DRAFT;
+                    }
+                    "$seen" => {
+                        flags |= Flag::SEEN;
+                    }
+                    "$flagged" => {
+                        flags |= Flag::FLAGGED;
+                    }
+                    "$answered" => {
+                        flags |= Flag::REPLIED;
+                    }
+                    "$junk" | "$notjunk" => { /* ignore */ }
+                    _ => {
+                        let tag_hash = TagHash::from_bytes(t.as_bytes());
+                        tag_lck.entry(tag_hash).or_insert_with(|| t.to_string());
+                        labels.insert(tag_hash);
+                    }
                 }
             }
-        }
 
-        let id = obj.id.clone();
-        let mailbox_ids = obj.mailbox_ids.clone();
-        let blob_id = obj.blob_id.clone();
-        drop(tag_lck);
+            id = obj.id.clone();
+            mailbox_ids = obj.mailbox_ids.clone();
+            blob_id = obj.blob_id.clone();
+        }
         let mut ret: Envelope = obj.into();
         ret.set_flags(flags);
         ret.tags_mut().extend(labels);
 
-        let mut id_store_lck = self.id_store.lock().unwrap();
-        let mut reverse_id_store_lck = self.reverse_id_store.lock().unwrap();
-        let mut blob_id_store_lck = self.blob_id_store.lock().unwrap();
+        let mut id_store_lck = self.id_store.lock().await;
+        let mut reverse_id_store_lck = self.reverse_id_store.lock().await;
+        let mut blob_id_store_lck = self.blob_id_store.lock().await;
         let mailboxes_lck = self.mailboxes.read().unwrap();
         let mut mailboxes_index_lck = self.mailboxes_index.write().unwrap();
         for (mailbox_id, _) in mailbox_ids {
@@ -262,14 +333,14 @@ impl Store {
         ret
     }
 
-    pub fn remove_envelope(
+    pub async fn remove_envelope(
         &self,
         obj_id: Id<EmailObject>,
     ) -> Option<(EnvelopeHash, SmallVec<[MailboxHash; 8]>)> {
-        let env_hash = self.reverse_id_store.lock().unwrap().remove(&obj_id)?;
-        self.id_store.lock().unwrap().remove(&env_hash);
-        self.blob_id_store.lock().unwrap().remove(&env_hash);
-        self.byte_cache.lock().unwrap().remove(&env_hash);
+        let env_hash = self.reverse_id_store.lock().await.remove(&obj_id)?;
+        self.id_store.lock().await.remove(&env_hash);
+        self.blob_id_store.lock().await.remove(&env_hash);
+        self.byte_cache.lock().await.remove(&env_hash);
         let mut mailbox_hashes = SmallVec::new();
         {
             let mut mailboxes_lck = self.mailboxes_index.write().unwrap();
@@ -318,14 +389,9 @@ impl MailBackend for JmapType {
         let connection = self.connection.clone();
         let timeout_dur = self.server_conf.timeout;
         Ok(Box::pin(async move {
-            match timeout(timeout_dur, connection.lock()).await {
-                Ok(_conn) => match timeout(timeout_dur, online.lock()).await {
-                    Err(err) => Err(err),
-                    Ok(lck) if lck.1.is_err() => lck.1.clone(),
-                    _ => Ok(()),
-                },
-                Err(err) => Err(err),
-            }
+            let _conn = timeout(timeout_dur, connection.lock()).await?;
+            let _session = timeout(timeout_dur, online.session_guard()).await??;
+            Ok(())
         }))
     }
 
@@ -440,13 +506,13 @@ impl MailBackend for JmapType {
              * 1. upload binary blob, get blobId
              * 2. Email/import
              */
-            let upload_url = { conn.session.lock().unwrap().upload_url.clone() };
+            let (upload_url, mail_account_id) = {
+                let g = conn.session_guard().await?;
+                (g.upload_url.clone(), g.mail_account_id())
+            };
             let mut res = conn
                 .post_async(
-                    Some(&upload_request_format(
-                        upload_url.as_str(),
-                        &conn.mail_account_id(),
-                    )),
+                    Some(&upload_request_format(&upload_url, &mail_account_id)?),
                     bytes,
                 )
                 .await?;
@@ -466,7 +532,7 @@ impl MailBackend for JmapType {
 
             let upload_response: UploadResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
-                    *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                    _ = conn.store.online_status.set(None, Err(err.clone())).await;
                     return Err(err);
                 }
                 Ok(s) => s,
@@ -474,23 +540,24 @@ impl MailBackend for JmapType {
             let mut req = Request::new(conn.request_no.clone());
             let creation_id: Id<EmailObject> = "1".to_string().into();
 
-            let import_call: EmailImport = EmailImport::new()
-                .account_id(conn.mail_account_id())
-                .emails(indexmap! {
-                    creation_id.clone() => EmailImportObject::new()
-                    .blob_id(upload_response.blob_id)
-                    .mailbox_ids(indexmap! {
-                        mailbox_id => true
-                    })
-                });
+            let import_call: EmailImport =
+                EmailImport::new()
+                    .account_id(mail_account_id)
+                    .emails(indexmap! {
+                        creation_id.clone() => EmailImportObject::new()
+                        .blob_id(upload_response.blob_id)
+                        .mailbox_ids(indexmap! {
+                            mailbox_id => true
+                        })
+                    });
 
-            req.add_call(&import_call);
+            req.add_call(&import_call).await;
             let mut res = conn.post_async(None, serde_json::to_string(&req)?).await?;
             let res_text = res.text().await?;
 
             let mut v: MethodResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
-                    *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                    _ = conn.store.online_status.set(None, Err(err.clone())).await;
                     return Err(err);
                 }
                 Ok(s) => s,
@@ -549,28 +616,29 @@ impl MailBackend for JmapType {
         Ok(Box::pin(async move {
             let mut conn = connection.lock().await;
             conn.connect().await?;
+            let mail_account_id = conn.session_guard().await?.mail_account_id();
             let email_call: EmailQuery = EmailQuery::new(
                 Query::new()
-                    .account_id(conn.mail_account_id())
+                    .account_id(mail_account_id)
                     .filter(Some(filter))
                     .position(0),
             )
             .collapse_threads(false);
 
             let mut req = Request::new(conn.request_no.clone());
-            req.add_call(&email_call);
+            req.add_call(&email_call).await;
 
             let mut res = conn.post_async(None, serde_json::to_string(&req)?).await?;
 
             let res_text = res.text().await?;
             let mut v: MethodResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
-                    *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                    _ = conn.store.online_status.set(None, Err(err.clone())).await;
                     return Err(err);
                 }
                 Ok(s) => s,
             };
-            *store.online_status.lock().await = (std::time::Instant::now(), Ok(()));
+            store.online_status.update_timestamp(None).await;
             let m = QueryResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
             let QueryResponse::<EmailObject> { ids, .. } = m;
             let ret = ids.into_iter().map(|id| id.into_hash()).collect();
@@ -596,9 +664,10 @@ impl MailBackend for JmapType {
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
             let mut conn = connection.lock().await;
+            let mail_account_id = conn.session_guard().await?.mail_account_id();
             let mailbox_set_call: MailboxSet = MailboxSet::new(
                 Set::<MailboxObject>::new()
-                    .account_id(conn.mail_account_id())
+                    .account_id(mail_account_id)
                     .create(Some({
                         let id: Id<MailboxObject> = path.as_str().into();
                         indexmap! {
@@ -612,7 +681,7 @@ impl MailBackend for JmapType {
             );
 
             let mut req = Request::new(conn.request_no.clone());
-            let _prev_seq = req.add_call(&mailbox_set_call);
+            let _prev_seq = req.add_call(&mailbox_set_call).await;
             let new_mailboxes = protocol::get_mailboxes(&mut conn, Some(req)).await?;
             *store.mailboxes.write().unwrap() = new_mailboxes;
 
@@ -707,7 +776,7 @@ impl MailBackend for JmapType {
             }
             {
                 for env_hash in env_hashes.iter() {
-                    if let Some(id) = store.id_store.lock().unwrap().get(&env_hash) {
+                    if let Some(id) = store.id_store.lock().await.get(&env_hash) {
                         // ids.push(id.clone());
                         // id_map.insert(id.clone(), env_hash);
                         update_map.insert(
@@ -718,15 +787,16 @@ impl MailBackend for JmapType {
                 }
             }
             let conn = connection.lock().await;
+            let mail_account_id = conn.session_guard().await?.mail_account_id();
 
             let email_set_call: EmailSet = EmailSet::new(
                 Set::<EmailObject>::new()
-                    .account_id(conn.mail_account_id())
+                    .account_id(mail_account_id)
                     .update(Some(update_map)),
             );
 
             let mut req = Request::new(conn.request_no.clone());
-            let _prev_seq = req.add_call(&email_set_call);
+            let _prev_seq = req.add_call(&email_set_call).await;
 
             let mut res = conn.post_async(None, serde_json::to_string(&req)?).await?;
 
@@ -734,12 +804,12 @@ impl MailBackend for JmapType {
 
             let mut v: MethodResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
-                    *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                    _ = conn.store.online_status.set(None, Err(err.clone())).await;
                     return Err(err);
                 }
                 Ok(s) => s,
             };
-            *store.online_status.lock().await = (std::time::Instant::now(), Ok(()));
+            store.online_status.update_timestamp(None).await;
             let m = SetResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
             if let Some(ids) = m.not_updated {
                 if !ids.is_empty() {
@@ -815,7 +885,7 @@ impl MailBackend for JmapType {
             }
             {
                 for hash in env_hashes.iter() {
-                    if let Some(id) = store.id_store.lock().unwrap().get(&hash) {
+                    if let Some(id) = store.id_store.lock().await.get(&hash) {
                         ids.push(id.clone());
                         id_map.insert(id.clone(), hash);
                         update_map.insert(
@@ -826,23 +896,24 @@ impl MailBackend for JmapType {
                 }
             }
             let conn = connection.lock().await;
+            let mail_account_id = conn.session_guard().await?.mail_account_id();
 
             let email_set_call: EmailSet = EmailSet::new(
                 Set::<EmailObject>::new()
-                    .account_id(conn.mail_account_id())
+                    .account_id(mail_account_id.clone())
                     .update(Some(update_map)),
             );
 
             let mut req = Request::new(conn.request_no.clone());
-            req.add_call(&email_set_call);
+            req.add_call(&email_set_call).await;
             let email_call: EmailGet = EmailGet::new(
                 Get::new()
                     .ids(Some(Argument::Value(ids)))
-                    .account_id(conn.mail_account_id())
+                    .account_id(mail_account_id)
                     .properties(Some(vec!["keywords".to_string()])),
             );
 
-            req.add_call(&email_call);
+            req.add_call(&email_call).await;
 
             let mut res = conn.post_async(None, serde_json::to_string(&req)?).await?;
 
@@ -857,12 +928,12 @@ impl MailBackend for JmapType {
             //debug!("res_text = {}", &res_text);
             let mut v: MethodResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
-                    *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                    _ = conn.store.online_status.set(None, Err(err.clone())).await;
                     return Err(err);
                 }
                 Ok(s) => s,
             };
-            *store.online_status.lock().await = (std::time::Instant::now(), Ok(()));
+            store.online_status.update_timestamp(None).await;
             let m = SetResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
             if let Some(ids) = m.not_updated {
                 return Err(Error::new(
@@ -992,19 +1063,18 @@ impl MailBackend for JmapType {
                 })
             };
             let conn = connection.lock().await;
+            let mail_account_id = conn.session_guard().await?.mail_account_id();
+
             // [ref:TODO] smarter identity detection based on From: ?
-            let Some(identity_id) = conn.mail_identity_id() else {
+            let Some(identity_id) = conn.session_guard().await?.mail_identity_id() else {
                 return Err(Error::new(
                     "You need to setup an Identity in the JMAP server.",
                 ));
             };
-            let upload_url = { conn.session.lock().unwrap().upload_url.clone() };
+            let upload_url = { conn.session_guard().await?.upload_url.clone() };
             let mut res = conn
                 .post_async(
-                    Some(&upload_request_format(
-                        upload_url.as_str(),
-                        &conn.mail_account_id(),
-                    )),
+                    Some(&upload_request_format(&upload_url, &mail_account_id)?),
                     bytes,
                 )
                 .await?;
@@ -1012,7 +1082,7 @@ impl MailBackend for JmapType {
 
             let upload_response: UploadResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
-                    *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                    _ = conn.store.online_status.set(None, Err(err.clone())).await;
                     return Err(err);
                 }
                 Ok(s) => s,
@@ -1021,7 +1091,7 @@ impl MailBackend for JmapType {
                 let mut req = Request::new(conn.request_no.clone());
                 let creation_id: Id<EmailObject> = "newid".into();
                 let import_call: EmailImport = EmailImport::new()
-                    .account_id(conn.mail_account_id())
+                    .account_id(mail_account_id.clone())
                     .emails(indexmap! {
                         creation_id => EmailImportObject::new()
                             .blob_id(upload_response.blob_id)
@@ -1034,13 +1104,13 @@ impl MailBackend for JmapType {
                             }),
                     });
 
-                req.add_call(&import_call);
+                req.add_call(&import_call).await;
 
                 let mut res = conn.post_async(None, serde_json::to_string(&req)?).await?;
                 let res_text = res.text().await?;
                 let v: MethodResponse = match deserialize_from_str(&res_text) {
                     Err(err) => {
-                        *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                        _ = conn.store.online_status.set(None, Err(err.clone())).await;
                         return Err(err);
                     }
                     Ok(s) => s,
@@ -1061,10 +1131,10 @@ impl MailBackend for JmapType {
                 let mut req = Request::new(conn.request_no.clone());
                 let subm_set_call: EmailSubmissionSet = EmailSubmissionSet::new(
                     Set::<EmailSubmissionObject>::new()
-                        .account_id(conn.mail_account_id())
+                        .account_id(mail_account_id.clone())
                         .create(Some(indexmap! {
                             Argument::from(Id::from("k1490")) => EmailSubmissionObject::new(
-                                /* account_id: */ conn.mail_account_id(),
+                                /* account_id: */ mail_account_id,
                                 /* identity_id: */ identity_id,
                                 /* email_id: */ email_id,
                                 /* envelope: */ None,
@@ -1080,15 +1150,15 @@ impl MailBackend for JmapType {
                     })
                 }));
 
-                req.add_call(&subm_set_call);
-                let mut res = conn.post_async(None, serde_json::to_string(&req)?).await?;
+                req.add_call(&subm_set_call).await;
 
+                let mut res = conn.post_async(None, serde_json::to_string(&req)?).await?;
                 let res_text = res.text().await?;
 
                 // [ref:TODO] parse/return any error.
                 let _: MethodResponse = match deserialize_from_str(&res_text) {
                     Err(err) => {
-                        *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                        _ = conn.store.online_status.set(None, Err(err.clone())).await;
                         return Err(err);
                     }
                     Ok(s) => s,
@@ -1106,10 +1176,10 @@ impl JmapType {
         is_subscribed: Box<dyn Fn(&str) -> bool + Send + Sync>,
         event_consumer: BackendEventConsumer,
     ) -> Result<Box<dyn MailBackend>> {
-        let online_status = Arc::new(FutureMutex::new((
+        let online_status = OnlineStatus(Arc::new(FutureMutex::new((
             std::time::Instant::now(),
             Err(Error::new("Account is uninitialised.")),
-        )));
+        ))));
         let server_conf = JmapServerConf::new(s)?;
 
         let account_hash = AccountHash::from_bytes(s.name.as_bytes());
@@ -1118,7 +1188,6 @@ impl JmapType {
             account_hash,
             main_identity: s.make_display_name(),
             extra_identities: s.extra_identities.clone(),
-            account_id: Arc::new(Mutex::new(Id::empty())),
             online_status,
             event_consumer,
             is_subscribed: Arc::new(IsSubscribedFn(is_subscribed)),
@@ -1154,6 +1223,19 @@ impl JmapType {
                     ))
                 })
             };
+            ($s:ident[$var:literal], $t:ty) => {
+                get_conf_val!($s[$var]).and_then(|v| {
+                    <$t>::from_str(&v).map_err(|e| {
+                        Error::new(format!(
+                            "Configuration error ({}): Invalid value for field `{}`: {}\n{}",
+                            $s.name.as_str(),
+                            $var,
+                            v,
+                            e
+                        ))
+                    })
+                })
+            };
             ($s:ident[$var:literal], $default:expr) => {
                 $s.extra
                     .remove($var)
@@ -1171,7 +1253,7 @@ impl JmapType {
                     .unwrap_or_else(|| Ok($default))
             };
         }
-        get_conf_val!(s["server_url"])?;
+        get_conf_val!(s["server_url"], Url)?;
         get_conf_val!(s["server_username"])?;
 
         get_conf_val!(s["use_token"], false)?;

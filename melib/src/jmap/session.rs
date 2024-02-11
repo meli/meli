@@ -23,13 +23,14 @@ use std::sync::Arc;
 
 use indexmap::IndexMap;
 use serde_json::Value;
+use url::Url;
 
 use crate::jmap::{
     rfc8620::{Account, Id, Object, State},
-    IdentityObject,
+    IdentityObject, JMAP_MAIL_CAPABILITY,
 };
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Session {
     pub capabilities: IndexMap<String, CapabilitiesObject>,
@@ -38,11 +39,11 @@ pub struct Session {
     #[serde(skip)]
     pub identities: IndexMap<Id<IdentityObject>, IdentityObject>,
     pub username: String,
-    pub api_url: Arc<String>,
-    pub download_url: Arc<String>,
+    pub api_url: Arc<Url>,
+    pub download_url: Arc<Url>,
 
-    pub upload_url: Arc<String>,
-    pub event_source_url: Arc<String>,
+    pub upload_url: Arc<Url>,
+    pub event_source_url: Arc<Url>,
     pub state: State<Session>,
     #[serde(flatten)]
     pub extra_properties: IndexMap<String, Value>,
@@ -50,6 +51,19 @@ pub struct Session {
 
 impl Object for Session {
     const NAME: &'static str = stringify!(Session);
+}
+
+impl Session {
+    /// Return the first identity.
+    pub fn mail_identity_id(&self) -> Option<Id<IdentityObject>> {
+        self.identities.keys().next().cloned()
+    }
+
+    /// Return the account ID corresponding to the [`JMAP_MAIL_CAPABILITY`]
+    /// capability.
+    pub fn mail_account_id(&self) -> Id<Account> {
+        self.primary_accounts[JMAP_MAIL_CAPABILITY].clone()
+    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]

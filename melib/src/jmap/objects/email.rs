@@ -747,49 +747,6 @@ impl From<crate::search::Query> for Filter<EmailFilterCondition, EmailObject> {
     }
 }
 
-#[test]
-fn test_jmap_query() {
-    use std::sync::{Arc, Mutex};
-    let q: crate::search::Query = crate::search::Query::try_from(
-        "subject:wah or (from:Manos and (subject:foo or subject:bar))",
-    )
-    .unwrap();
-    let f: Filter<EmailFilterCondition, EmailObject> = Filter::from(q);
-    assert_eq!(
-        r#"{"operator":"OR","conditions":[{"subject":"wah"},{"operator":"AND","conditions":[{"from":"Manos"},{"operator":"OR","conditions":[{"subject":"foo"},{"subject":"bar"}]}]}]}"#,
-        serde_json::to_string(&f).unwrap().as_str()
-    );
-    let filter = {
-        let mailbox_id = "mailbox_id".to_string();
-
-        let mut r = Filter::Condition(
-            EmailFilterCondition::new()
-                .in_mailbox(Some(mailbox_id.into()))
-                .into(),
-        );
-        r &= f;
-        r
-    };
-
-    let email_call: EmailQuery = EmailQuery::new(
-        Query::new()
-            .account_id("account_id".to_string().into())
-            .filter(Some(filter))
-            .position(0),
-    )
-    .collapse_threads(false);
-
-    let request_no = Arc::new(Mutex::new(0));
-    let mut req = Request::new(request_no.clone());
-    req.add_call(&email_call);
-
-    assert_eq!(
-        r#"{"using":["urn:ietf:params:jmap:core","urn:ietf:params:jmap:mail"],"methodCalls":[["Email/query",{"accountId":"account_id","calculateTotal":false,"collapseThreads":false,"filter":{"conditions":[{"inMailbox":"mailbox_id"},{"conditions":[{"subject":"wah"},{"conditions":[{"from":"Manos"},{"conditions":[{"subject":"foo"},{"subject":"bar"}],"operator":"OR"}],"operator":"AND"}],"operator":"OR"}],"operator":"AND"},"position":0,"sort":null},"m0"]]}"#,
-        serde_json::to_string(&req).unwrap().as_str()
-    );
-    assert_eq!(*request_no.lock().unwrap(), 1);
-}
-
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailSet {

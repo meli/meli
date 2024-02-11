@@ -50,8 +50,8 @@ serde_path_to_error = { version = "0.1" }
 smallvec = { version = "^1.5.0", features = ["serde"] }
 smol = "1.0.0"
 socket2 = { version = "0.5", features = [] }
-
 unicode-segmentation = { version = "1.2.1", default-features = false, optional = true }
+url = { version = "2.4", optional = true }
 uuid = { version = "^1", features = ["serde", "v4", "v5"] }
 xdg = "2.1.0"
 
@@ -64,7 +64,7 @@ http = ["isahc"]
 http-static = ["isahc", "isahc/static-curl"]
 imap = ["imap-codec", "tls"]
 imap-trace = ["imap"]
-jmap = ["http"]
+jmap = ["http", "url/serde"]
 jmap-trace = ["jmap"]
 nntp = ["tls"]
 nntp-trace = ["nntp"]

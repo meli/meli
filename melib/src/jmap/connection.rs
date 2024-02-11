@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{convert::TryFrom, sync::MutexGuard};
+use std::convert::TryFrom;
 
 use isahc::config::Configurable;
 
@@ -28,8 +28,7 @@ use crate::error::NetworkErrorKind;
 
 #[derive(Debug)]
 pub struct JmapConnection {
-    pub session: Arc<Mutex<Session>>,
-    pub request_no: Arc<Mutex<usize>>,
+    pub request_no: Arc<FutureMutex<usize>>,
     pub client: Arc<HttpClient>,
     pub server_conf: JmapServerConf,
     pub store: Arc<Store>,
@@ -69,8 +68,7 @@ impl JmapConnection {
         let client = client.build()?;
         let server_conf = server_conf.clone();
         Ok(Self {
-            session: Arc::new(Mutex::new(Default::default())),
-            request_no: Arc::new(Mutex::new(0)),
+            request_no: Arc::new(FutureMutex::new(0)),
             client: Arc::new(client),
             server_conf,
             store,
@@ -79,28 +77,37 @@ impl JmapConnection {
     }
 
     pub async fn connect(&mut self) -> Result<()> {
-        if self.store.online_status.lock().await.1.is_ok() {
+        if self.store.online_status.is_ok().await {
             return Ok(());
         }
 
-        fn to_well_known(uri: &str) -> String {
-            let uri = uri.trim_start_matches('/');
-            format!("{uri}/.well-known/jmap")
+        fn to_well_known(uri: &Url) -> Url {
+            let mut uri = uri.clone();
+            uri.set_path(".well-known/jmap");
+            uri
         }
 
         let mut jmap_session_resource_url = to_well_known(&self.server_conf.server_url);
 
-        let mut req = match self.client.get_async(&jmap_session_resource_url).await {
+        let mut req = match self
+            .client
+            .get_async(jmap_session_resource_url.as_str())
+            .await
+        {
             Err(err) => 'block: {
-                if matches!(NetworkErrorKind::from(err.kind()), NetworkErrorKind::ProtocolViolation if self.server_conf.server_url.starts_with("http://"))
+                if matches!(NetworkErrorKind::from(err.kind()), NetworkErrorKind::ProtocolViolation if self.server_conf.server_url.scheme() == "http")
                 {
                     // attempt recovery by trying https://
-                    self.server_conf.server_url = format!(
-                        "https{}",
-                        self.server_conf.server_url.trim_start_matches("http")
+                    self.server_conf.server_url.set_scheme("https").expect(
+                        "set_scheme to https must succeed here because we checked earlier that \
+                         current scheme is http",
                     );
                     jmap_session_resource_url = to_well_known(&self.server_conf.server_url);
-                    if let Ok(s) = self.client.get_async(&jmap_session_resource_url).await {
+                    if let Ok(s) = self
+                        .client
+                        .get_async(jmap_session_resource_url.as_str())
+                        .await
+                    {
                         log::error!(
                             "Account {} server URL should start with `https`. Please correct your \
                              configuration value. Its current value is `{}`.",
@@ -119,11 +126,12 @@ impl JmapConnection {
                     &self.server_conf.server_url, &err
                 ))
                 .set_source(Some(Arc::new(err)));
-                *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                _ = self.store.online_status.set(None, Err(err.clone())).await;
                 return Err(err);
             }
             Ok(s) => s,
         };
+        let req_instant = Instant::now();
 
         if !req.status().is_success() {
             let kind: crate::error::NetworkErrorKind = req.status().into();
@@ -133,7 +141,11 @@ impl JmapConnection {
                 &self.server_conf.server_url, res_text
             ))
             .set_kind(kind.into());
-            *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+            _ = self
+                .store
+                .online_status
+                .set(Some(req_instant), Err(err.clone()))
+                .await;
             return Err(err);
         }
 
@@ -147,7 +159,11 @@ impl JmapConnection {
                     &self.server_conf.server_url, &err
                 ))
                 .set_source(Some(Arc::new(err)));
-                *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                _ = self
+                    .store
+                    .online_status
+                    .set(Some(req_instant), Err(err.clone()))
+                    .await;
                 return Err(err);
             }
             Ok(s) => s,
@@ -163,7 +179,11 @@ impl JmapConnection {
                     &self.server_conf.server_url, &res_text
                 ))
                 .set_source(Some(Arc::new(err)));
-                *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                _ = self
+                    .store
+                    .online_status
+                    .set(Some(req_instant), Err(err.clone()))
+                    .await;
                 return Err(err);
             }
             Ok(s) => s,
@@ -181,7 +201,11 @@ impl JmapConnection {
                     .join(", "),
                 core_capability = JMAP_CORE_CAPABILITY
             ));
-            *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+            _ = self
+                .store
+                .online_status
+                .set(Some(req_instant), Err(err.clone()))
+                .await;
             return Err(err);
         }
         if !session.capabilities.contains_key(JMAP_MAIL_CAPABILITY) {
@@ -197,24 +221,37 @@ impl JmapConnection {
                     .join(", "),
                 mail_capability = JMAP_MAIL_CAPABILITY
             ));
-            *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+            _ = self
+                .store
+                .online_status
+                .set(Some(req_instant), Err(err.clone()))
+                .await;
             return Err(err);
         }
-        *self.store.core_capabilities.lock().unwrap() = session.capabilities.clone();
 
-        *self.store.online_status.lock().await = (Instant::now(), Ok(()));
-        *self.session.lock().unwrap() = session;
+        *self.store.core_capabilities.lock().unwrap() = session.capabilities.clone();
+        let mail_account_id = session.mail_account_id();
+        _ = self
+            .store
+            .online_status
+            .set(Some(req_instant), Ok(session))
+            .await;
+
         /* Fetch account identities. */
 
         let mut id_list = {
             let mut req = Request::new(self.request_no.clone());
-            let identity_get = IdentityGet::new().account_id(self.mail_account_id());
-            req.add_call(&identity_get);
+            let identity_get = IdentityGet::new().account_id(mail_account_id.clone());
+            req.add_call(&identity_get).await;
             let mut res_text = self.post_async(None, serde_json::to_string(&req)?).await?;
             let res_text = res_text.text().await?;
             let mut v: MethodResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
-                    *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                    _ = self
+                        .store
+                        .online_status
+                        .set(Some(req_instant), Err(err.clone()))
+                        .await;
                     return Err(err);
                 }
                 Ok(s) => s,
@@ -227,7 +264,7 @@ impl JmapConnection {
             let mut req = Request::new(self.request_no.clone());
             let identity_set = IdentitySet(
                 Set::<IdentityObject>::new()
-                    .account_id(self.mail_account_id())
+                    .account_id(mail_account_id.clone())
                     .create(Some({
                         let address =
                             crate::email::Address::try_from(self.store.main_identity.as_str())
@@ -258,24 +295,32 @@ impl JmapConnection {
                         }
                     })),
             );
-            req.add_call(&identity_set);
+            req.add_call(&identity_set).await;
             let mut res_text = self.post_async(None, serde_json::to_string(&req)?).await?;
             let res_text = res_text.text().await?;
             let _: MethodResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
-                    *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                    _ = self
+                        .store
+                        .online_status
+                        .set(Some(req_instant), Err(err.clone()))
+                        .await;
                     return Err(err);
                 }
                 Ok(s) => s,
             };
             let mut req = Request::new(self.request_no.clone());
-            let identity_get = IdentityGet::new().account_id(self.mail_account_id());
-            req.add_call(&identity_get);
+            let identity_get = IdentityGet::new().account_id(mail_account_id.clone());
+            req.add_call(&identity_get).await;
             let mut res_text = self.post_async(None, serde_json::to_string(&req)?).await?;
             let res_text = res_text.text().await?;
             let mut v: MethodResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
-                    *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                    _ = self
+                        .store
+                        .online_status
+                        .set(Some(req_instant), Err(err.clone()))
+                        .await;
                     return Err(err);
                 }
                 Ok(s) => s,
@@ -284,28 +329,17 @@ impl JmapConnection {
                 GetResponse::<IdentityObject>::try_from(v.method_responses.remove(0))?;
             id_list = list;
         }
-        self.session.lock().unwrap().identities =
+        self.session_guard().await?.identities =
             id_list.into_iter().map(|id| (id.id.clone(), id)).collect();
 
         Ok(())
     }
 
-    pub fn mail_account_id(&self) -> Id<Account> {
-        self.session.lock().unwrap().primary_accounts[JMAP_MAIL_CAPABILITY].clone()
-    }
-
-    pub fn mail_identity_id(&self) -> Option<Id<IdentityObject>> {
-        self.session
-            .lock()
-            .unwrap()
-            .identities
-            .keys()
-            .next()
-            .cloned()
-    }
-
-    pub fn session_guard(&'_ self) -> MutexGuard<'_, Session> {
-        self.session.lock().unwrap()
+    #[inline]
+    pub async fn session_guard(
+        &'_ self,
+    ) -> Result<FutureMappedMutexGuard<'_, (Instant, Result<Session>), Session>> {
+        self.store.online_status.session_guard().await
     }
 
     pub fn add_refresh_event(&self, event: RefreshEvent) {
@@ -325,15 +359,16 @@ impl JmapConnection {
         } else {
             return Ok(());
         };
+        let mail_account_id = self.session_guard().await?.mail_account_id();
         loop {
             let email_changes_call: EmailChanges = EmailChanges::new(
                 Changes::<EmailObject>::new()
-                    .account_id(self.mail_account_id().clone())
+                    .account_id(mail_account_id.clone())
                     .since_state(current_state.clone()),
             );
 
             let mut req = Request::new(self.request_no.clone());
-            let prev_seq = req.add_call(&email_changes_call);
+            let prev_seq = req.add_call(&email_changes_call).await;
             let email_get_call: EmailGet = EmailGet::new(
                 Get::new()
                     .ids(Some(Argument::reference::<
@@ -344,43 +379,46 @@ impl JmapConnection {
                         prev_seq,
                         ResultField::<EmailChanges, EmailObject>::new("/created"),
                     )))
-                    .account_id(self.mail_account_id().clone()),
+                    .account_id(mail_account_id.clone()),
             );
 
-            req.add_call(&email_get_call);
-            let mailbox_id: Id<MailboxObject>;
-            if let Some(mailbox) = self.store.mailboxes.read().unwrap().get(&mailbox_hash) {
-                if let Some(email_query_state) = mailbox.email_query_state.lock().unwrap().clone() {
-                    mailbox_id = mailbox.id.clone();
-                    let email_query_changes_call = EmailQueryChanges::new(
-                        QueryChanges::new(self.mail_account_id().clone(), email_query_state)
-                            .filter(Some(Filter::Condition(
-                                EmailFilterCondition::new()
-                                    .in_mailbox(Some(mailbox_id.clone()))
-                                    .into(),
-                            ))),
-                    );
-                    let seq_no = req.add_call(&email_query_changes_call);
-                    let email_get_call: EmailGet = EmailGet::new(
-                        Get::new()
-                            .ids(Some(Argument::reference::<
-                                EmailQueryChanges,
-                                EmailObject,
-                                EmailObject,
-                            >(
-                                seq_no,
-                                ResultField::<EmailQueryChanges, EmailObject>::new("/removed"),
-                            )))
-                            .account_id(self.mail_account_id().clone())
-                            .properties(Some(vec![
-                                "keywords".to_string(),
-                                "mailboxIds".to_string(),
-                            ])),
-                    );
-                    req.add_call(&email_get_call);
-                } else {
-                    return Ok(());
-                }
+            req.add_call(&email_get_call).await;
+            let mailbox = self
+                .store
+                .mailboxes
+                .read()
+                .unwrap()
+                .get(&mailbox_hash)
+                .map(|m| {
+                    let email_query_state = m.email_query_state.lock().unwrap().clone();
+                    let mailbox_id: Id<MailboxObject> = m.id.clone();
+                    (email_query_state, mailbox_id)
+                });
+            if let Some((Some(email_query_state), mailbox_id)) = mailbox {
+                let email_query_changes_call = EmailQueryChanges::new(
+                    QueryChanges::new(mail_account_id.clone(), email_query_state).filter(Some(
+                        Filter::Condition(
+                            EmailFilterCondition::new()
+                                .in_mailbox(Some(mailbox_id.clone()))
+                                .into(),
+                        ),
+                    )),
+                );
+                let seq_no = req.add_call(&email_query_changes_call).await;
+                let email_get_call: EmailGet = EmailGet::new(
+                    Get::new()
+                        .ids(Some(Argument::reference::<
+                            EmailQueryChanges,
+                            EmailObject,
+                            EmailObject,
+                        >(
+                            seq_no,
+                            ResultField::<EmailQueryChanges, EmailObject>::new("/removed"),
+                        )))
+                        .account_id(mail_account_id.clone())
+                        .properties(Some(vec!["keywords".to_string(), "mailboxIds".to_string()])),
+                );
+                req.add_call(&email_get_call).await;
             } else {
                 return Ok(());
             }
@@ -395,7 +433,7 @@ impl JmapConnection {
             }
             let mut v: MethodResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
-                    *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                    _ = self.store.online_status.set(None, Err(err.clone())).await;
                     return Err(err);
                 }
                 Ok(s) => s,
@@ -425,11 +463,8 @@ impl JmapConnection {
                         .collect::<SmallVec<[MailboxHash; 8]>>();
                     mailbox_hashes.push(v);
                 }
-                for (env, mailbox_hashes) in list
-                    .into_iter()
-                    .map(|obj| self.store.add_envelope(obj))
-                    .zip(mailbox_hashes)
-                {
+                for (obj, mailbox_hashes) in list.into_iter().zip(mailbox_hashes) {
+                    let env = self.store.add_envelope(obj).await;
                     for mailbox_hash in mailbox_hashes.iter().skip(1).cloned() {
                         let mut mailboxes_lck = self.store.mailboxes.write().unwrap();
                         mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
@@ -460,7 +495,7 @@ impl JmapConnection {
                     }
                 }
             }
-            let reverse_id_store_lck = self.store.reverse_id_store.lock().unwrap();
+            let reverse_id_store_lck = self.store.reverse_id_store.lock().await;
             let response = v.method_responses.remove(0);
             match EmailQueryChangesResponse::try_from(response) {
                 Ok(EmailQueryChangesResponse {
@@ -581,7 +616,7 @@ impl JmapConnection {
         let _: MethodResponse = match deserialize_from_str(&res_text) {
             Err(err) => {
                 log::error!("{}", &err);
-                *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                _ = self.store.online_status.set(None, Err(err.clone())).await;
                 return Err(err);
             }
             Ok(s) => s,
@@ -589,19 +624,19 @@ impl JmapConnection {
         Ok(res_text)
     }
 
-    pub async fn get_async(&self, url: &str) -> Result<isahc::Response<isahc::AsyncBody>> {
+    pub async fn get_async(&self, url: &Url) -> Result<isahc::Response<isahc::AsyncBody>> {
         if cfg!(feature = "jmap-trace") {
-            let res = self.client.get_async(url).await;
+            let res = self.client.get_async(url.as_str()).await;
             log::trace!("get_async(): url `{}` response {:?}", url, res);
             Ok(res?)
         } else {
-            Ok(self.client.get_async(url).await?)
+            Ok(self.client.get_async(url.as_str()).await?)
         }
     }
 
     pub async fn post_async<T: Into<Vec<u8>> + Send + Sync>(
         &self,
-        api_url: Option<&str>,
+        api_url: Option<&Url>,
         request: T,
     ) -> Result<isahc::Response<isahc::AsyncBody>> {
         let request: Vec<u8> = request.into();
@@ -612,9 +647,9 @@ impl JmapConnection {
             );
         }
         if let Some(api_url) = api_url {
-            Ok(self.client.post_async(api_url, request).await?)
+            Ok(self.client.post_async(api_url.as_str(), request).await?)
         } else {
-            let api_url = self.session.lock().unwrap().api_url.clone();
+            let api_url = self.session_guard().await?.api_url.clone();
             Ok(self.client.post_async(api_url.as_str(), request).await?)
         }
     }

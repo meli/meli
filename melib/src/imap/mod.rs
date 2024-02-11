@@ -19,6 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+// In case we forget to wait some future.
+#![deny(unused_must_use)]
+
 use smallvec::SmallVec;
 #[macro_use]
 mod protocol_parser;
