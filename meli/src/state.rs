@@ -986,7 +986,7 @@ impl State {
                     }
                     Err(err) => {
                         self.context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(format!("invalid command: {err}")),
+                            StatusEvent::DisplayMessage(format!("Invalid command `{cmd}`: {err}")),
                         ));
                     }
                 }
