@@ -7,7 +7,7 @@ Try an [old online interactive web demo](https://meli-email.org/wasm2.html "onli
 * `#meli` on OFTC IRC | [mailing lists](https://lists.meli-email.org/)
 * Repository:
   - Main <https://git.meli-email.org/meli/meli> Report bugs and/or feature requests in [meli's issue tracker](https://git.meli-email.org/meli/meli/issues "meli gitea issue tracker")
-  - Official mirror <https://codeberg.org/epilys/meli>
+  - Official mirror <https://codeberg.org/meli/meli>
   - Official mirror <https://github.com/meli/meli>
 
 **Table of contents**:
