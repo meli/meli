@@ -23,7 +23,6 @@ use std::convert::{TryFrom, TryInto};
 
 use imap_codec::imap_types::{command::CommandBody, search::SearchKey, sequence::SequenceSet};
 
-use super::{ImapConnection, MailboxSelection, UID};
 use crate::{
     backends::{
         BackendMailbox, RefreshEvent,
@@ -32,8 +31,12 @@ use crate::{
     },
     email::common_attributes,
     error::*,
-    imap::protocol_parser::{
-        generate_envelope_hash, FetchResponse, ImapLineSplit, RequiredResponses, UntaggedResponse,
+    imap::{
+        protocol_parser::{
+            generate_envelope_hash, FetchResponse, ImapLineSplit, RequiredResponses,
+            UntaggedResponse,
+        },
+        ImapConnection, MailboxSelection, UID,
     },
 };
 
@@ -60,10 +63,7 @@ impl ImapConnection {
         let mailbox =
             std::clone::Clone::clone(&self.uid_store.mailboxes.lock().await[&mailbox_hash]);
 
-        #[cfg(not(feature = "sqlite3"))]
-        let mut cache_handle = super::cache::DefaultCache::get(self.uid_store.clone())?;
-        #[cfg(feature = "sqlite3")]
-        let mut cache_handle = super::cache::Sqlite3Cache::get(self.uid_store.clone())?;
+        let mut cache_handle = self.uid_store.cache_handle();
         let mut response = Vec::with_capacity(8 * 1024);
         let untagged_response =
             match super::protocol_parser::untagged_responses(line).map(|(_, v, _)| v) {
@@ -156,7 +156,7 @@ impl ImapConnection {
                             }
                         }
                     }
-                    if *self.uid_store.keep_offline_cache.lock().unwrap() {
+                    if let Ok(Some(ref mut cache_handle)) = cache_handle {
                         for mailbox_hash in mboxes_to_update {
                             cache_handle.update(mailbox_hash, &events)?;
                         }
@@ -215,7 +215,7 @@ impl ImapConnection {
                     })
                     .collect::<Vec<(_, [(UID, RefreshEvent); 1])>>();
                 for (mailbox_hash, pair) in events {
-                    if *self.uid_store.keep_offline_cache.lock().unwrap() {
+                    if let Ok(Some(ref mut cache_handle)) = cache_handle {
                         cache_handle.update(mailbox_hash, &pair)?;
                     }
                     let [(_, event)] = pair;
@@ -302,7 +302,7 @@ impl ImapConnection {
                         mailbox.path(),
                     );
                 }
-                if *self.uid_store.keep_offline_cache.lock().unwrap() {
+                if let Ok(Some(ref mut cache_handle)) = cache_handle {
                     if let Err(err) = cache_handle
                         .insert_envelopes(mailbox_hash, &v)
                         .chain_err_summary(|| {
@@ -404,7 +404,7 @@ impl ImapConnection {
                             }
                             mailbox.exists.lock().unwrap().insert_new(env.hash());
                         }
-                        if *self.uid_store.keep_offline_cache.lock().unwrap() {
+                        if let Ok(Some(ref mut cache_handle)) = cache_handle {
                             if let Err(err) = cache_handle
                                 .insert_envelopes(mailbox_hash, &v)
                                 .chain_err_summary(|| {
@@ -551,7 +551,7 @@ impl ImapConnection {
                                 kind: NewFlags(env_hash, flags),
                             },
                         )];
-                        if *self.uid_store.keep_offline_cache.lock().unwrap() {
+                        if let Ok(Some(ref mut cache_handle)) = cache_handle {
                             cache_handle.update(mailbox_hash, &event)?;
                         }
                         self.add_refresh_event(std::mem::replace(

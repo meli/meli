@@ -799,38 +799,36 @@ impl State {
                     });
                     return;
                 }
-                match crate::sqlite3::index(&self.context, account_index) {
-                    Ok(job) => {
-                        let handle = self
-                            .context
-                            .main_loop_handler
-                            .job_executor
-                            .spawn_blocking("sqlite3::index".into(), job);
-                        self.context.accounts[account_index].active_jobs.insert(
-                            handle.job_id,
-                            crate::accounts::JobRequest::Generic {
-                                name: "Message index rebuild".into(),
-                                handle,
-                                on_finish: None,
-                                log_level: LogLevel::INFO,
-                            },
-                        );
-                        self.context.replies.push_back(UIEvent::Notification {
-                            title: None,
-                            source: None,
-                            body: "Message index rebuild started.".into(),
-                            kind: Some(NotificationType::Info),
-                        });
-                    }
-                    Err(err) => {
-                        self.context.replies.push_back(UIEvent::Notification {
-                            title: Some("Message index rebuild failed".into()),
-                            source: None,
-                            body: err.to_string().into(),
-                            kind: Some(NotificationType::Error(err.kind)),
-                        });
-                    }
-                }
+                let account = &self.context.accounts[account_index];
+                let (acc_name, backend_mutex): (Arc<String>, Arc<_>) = (
+                    Arc::new(account.name().to_string()),
+                    account.backend.clone(),
+                );
+                let job = crate::sqlite3::AccountCache::index(
+                    acc_name,
+                    account.collection.clone(),
+                    backend_mutex,
+                );
+                let handle = self
+                    .context
+                    .main_loop_handler
+                    .job_executor
+                    .spawn_specialized("sqlite3::index".into(), job);
+                self.context.accounts[account_index].active_jobs.insert(
+                    handle.job_id,
+                    crate::accounts::JobRequest::Generic {
+                        name: "Message index rebuild".into(),
+                        handle,
+                        on_finish: None,
+                        log_level: LogLevel::INFO,
+                    },
+                );
+                self.context.replies.push_back(UIEvent::Notification {
+                    title: None,
+                    source: None,
+                    body: "Message index rebuild started.".into(),
+                    kind: Some(NotificationType::Info),
+                });
             }
             #[cfg(not(feature = "sqlite3"))]
             AccountAction(_, ReIndex) => {

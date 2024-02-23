@@ -19,115 +19,151 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::path::PathBuf;
+use std::{borrow::Cow, os::unix::fs::PermissionsExt, path::PathBuf, sync::Arc};
 
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput};
-pub use rusqlite::{self, params, Connection};
+pub use rusqlite::{self, config::DbConfig, params, Connection};
 
 use crate::{error::*, log, Envelope};
 
-#[derive(Clone, Copy, Debug)]
+/// A description for creating, opening and handling application databases.
+#[derive(Clone, Debug)]
 pub struct DatabaseDescription {
+    /// A name that represents the function of this database, e.g.
+    /// `headers_cache`, `contacts`, `settings`, etc.
     pub name: &'static str,
+    /// An optional identifier string that along with
+    /// [`DatabaseDescription::name`] makes a specialized identifier for the
+    /// database. E.g. an account name, a date, etc.
+    pub identifier: Option<Cow<'static, str>>,
+    /// The name of the application to use when storing the database in `XDG`
+    /// directories, used for when the consumer application is not `meli`
+    /// itself.
+    pub application_prefix: &'static str,
+    /// A script that initializes the schema of the database.
     pub init_script: Option<&'static str>,
+    /// The current value of the `user_version` `PRAGMA` of the `sqlite3`
+    /// database, used for schema versioning.
     pub version: u32,
 }
 
-pub fn db_path(name: &str) -> Result<PathBuf> {
-    let data_dir =
-        xdg::BaseDirectories::with_prefix("meli").map_err(|e| Error::new(e.to_string()))?;
-    data_dir
-        .place_data_file(name)
-        .map_err(|err| Error::new(err.to_string()))
-}
-
-pub fn open_db(db_path: PathBuf) -> Result<Connection> {
-    if !db_path.exists() {
-        return Err(Error::new("Database doesn't exist"));
+impl DatabaseDescription {
+    /// Returns whether the computed database path for this description exist.
+    pub fn exists(&self) -> Result<bool> {
+        let path = self.db_path()?;
+        Ok(path.exists())
     }
-    Ok(Connection::open(&db_path).and_then(|db| {
-        rusqlite::vtab::array::load_module(&db)?;
-        Ok(db)
-    })?)
-}
 
-pub fn open_or_create_db(
-    description: &DatabaseDescription,
-    identifier: Option<&str>,
-) -> Result<Connection> {
-    let mut second_try: bool = false;
-    loop {
-        let db_path = identifier.map_or_else(
-            || db_path(description.name),
-            |id| db_path(&format!("{}_{}", id, description.name)),
-        )?;
+    /// Returns the computed database path for this description.
+    pub fn db_path(&self) -> Result<PathBuf> {
+        let name: Cow<'static, str> = self.identifier.as_ref().map_or_else(
+            || self.name.into(),
+            |id| format!("{}_{}", id, self.name).into(),
+        );
+        let data_dir =
+            xdg::BaseDirectories::with_prefix(self.application_prefix).map_err(|err| {
+                Error::new(format!(
+                    "Could not open XDG data directory with prefix {}",
+                    self.application_prefix
+                ))
+                .set_source(Some(Arc::new(err)))
+            })?;
+        data_dir.place_data_file(name.as_ref()).map_err(|err| {
+            Error::new(format!("Could not create `{}`", name)).set_source(Some(Arc::new(err)))
+        })
+    }
+
+    /// Returns an [`rusqlite::Connection`] for this description.
+    pub fn open_or_create_db(&self) -> Result<Connection> {
+        let mut second_try: bool = false;
+        let db_path = self.db_path()?;
         let set_mode = !db_path.exists();
         if set_mode {
-            log::info!(
-                "Creating {} database in {}",
-                description.name,
-                db_path.display()
-            );
+            log::info!("Creating {} database in {}", self.name, db_path.display());
         }
-        let conn = Connection::open(&db_path)?;
-        rusqlite::vtab::array::load_module(&conn)?;
-        if set_mode {
-            use std::os::unix::fs::PermissionsExt;
-            let file = std::fs::File::open(&db_path)?;
-            let metadata = file.metadata()?;
-            let mut permissions = metadata.permissions();
+        loop {
+            let mut inner_fn = || {
+                let conn = Connection::open(&db_path)?;
+                conn.busy_timeout(std::time::Duration::new(10, 0))?;
+                for conf_flag in [
+                    DbConfig::SQLITE_DBCONFIG_ENABLE_FKEY,
+                    DbConfig::SQLITE_DBCONFIG_ENABLE_TRIGGER,
+                ]
+                .into_iter()
+                {
+                    conn.set_db_config(conf_flag, true)?;
+                }
+                rusqlite::vtab::array::load_module(&conn)?;
+                if set_mode {
+                    let file = std::fs::File::open(&db_path)?;
+                    let metadata = file.metadata()?;
+                    let mut permissions = metadata.permissions();
 
-            permissions.set_mode(0o600); // Read/write for owner only.
-            file.set_permissions(permissions)?;
-        }
-        let version: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
-        if version != 0_i32 && version as u32 != description.version {
-            log::info!(
-                "Database version mismatch, is {} but expected {}. Attempting to recreate \
-                 database.",
-                version,
-                description.version
-            );
-            if second_try {
-                return Err(Error::new(format!(
-                    "Database version mismatch, is {} but expected {}. Could not recreate \
-                     database.",
-                    version, description.version
-                )));
+                    permissions.set_mode(0o600); // Read/write for owner only.
+                    file.set_permissions(permissions)?;
+                }
+                let _: String =
+                    conn.pragma_update_and_check(None, "journal_mode", "WAL", |row| row.get(0))?;
+                let version: i32 =
+                    conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+                if version != 0_i32 && version as u32 != self.version {
+                    log::info!(
+                        "Database version mismatch, is {} but expected {}. Attempting to recreate \
+                         database.",
+                        version,
+                        self.version
+                    );
+                    if second_try {
+                        return Err(Error::new(format!(
+                            "Database version mismatch, is {} but expected {}. Could not recreate \
+                             database.",
+                            version, self.version
+                        )));
+                    }
+                    self.reset_db()?;
+                    second_try = true;
+                    return Ok(conn);
+                }
+
+                if version == 0 {
+                    conn.pragma_update(None, "user_version", self.version)?;
+                }
+                if let Some(s) = self.init_script {
+                    conn.execute_batch(s)
+                        .map_err(|err| Error::new(err.to_string()))?;
+                }
+
+                Ok(conn)
+            };
+            inner_fn().unwrap();
+            match inner_fn() {
+                Ok(_) if second_try => continue,
+                Ok(conn) => return Ok(conn),
+                Err(err) => {
+                    return Err(Error::new(format!(
+                        "{}: Could not open or create database",
+                        db_path.display()
+                    ))
+                    .set_source(Some(Arc::new(err))))
+                }
             }
-            reset_db(description, identifier)?;
-            second_try = true;
-            continue;
         }
-
-        if version == 0 {
-            conn.pragma_update(None, "user_version", description.version)?;
-        }
-        if let Some(s) = description.init_script {
-            conn.execute_batch(s)
-                .map_err(|e| Error::new(e.to_string()))?;
-        }
-
-        return Ok(conn);
     }
-}
 
-/// Return database to a clean slate.
-pub fn reset_db(description: &DatabaseDescription, identifier: Option<&str>) -> Result<()> {
-    let db_path = identifier.map_or_else(
-        || db_path(description.name),
-        |id| db_path(&format!("{}_{}", id, description.name)),
-    )?;
-    if !db_path.exists() {
-        return Ok(());
+    /// Reset database to a clean slate.
+    pub fn reset_db(&self) -> Result<()> {
+        let db_path = self.db_path()?;
+        if !db_path.exists() {
+            return Ok(());
+        }
+        log::info!("Resetting {} database in {}", self.name, db_path.display());
+        std::fs::remove_file(&db_path).map_err(|err| {
+            Error::new(format!("{}: could not remove file", db_path.display()))
+                .set_kind(ErrorKind::from(err.kind()))
+                .set_source(Some(Arc::new(err)))
+        })?;
+        Ok(())
     }
-    log::info!(
-        "Resetting {} database in {}",
-        description.name,
-        db_path.display()
-    );
-    std::fs::remove_file(&db_path)?;
-    Ok(())
 }
 
 impl ToSql for Envelope {

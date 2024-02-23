@@ -178,10 +178,9 @@ impl AccountStatus {
                 }
                 #[cfg(feature = "sqlite3")]
                 (SearchBackend::Sqlite3, _) => {
-                    if let Ok(path) = crate::sqlite3::db_path() {
-                        format!("sqlite3 database {}", path.display())
-                    } else {
-                        "sqlite3 database".to_string()
+                    match crate::sqlite3::AccountCache::db_path(&a.name) {
+                        Ok(path) => format!("sqlite3 database: {}", path.display()),
+                        Err(err) => format!("sqlite3 error: {err}"),
                     }
                 }
             },

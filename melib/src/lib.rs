@@ -191,6 +191,8 @@ pub extern crate futures;
 #[allow(unused_imports)]
 #[macro_use]
 pub extern crate indexmap;
+#[cfg(feature = "sqlite3")]
+pub extern crate rusqlite;
 pub extern crate serde_path_to_error;
 pub extern crate smallvec;
 pub extern crate smol;

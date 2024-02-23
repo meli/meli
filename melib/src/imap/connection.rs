@@ -993,11 +993,7 @@ impl ImapConnection {
             format!("Could not parse select response for mailbox {}", imap_path)
         })?;
         {
-            if *self.uid_store.keep_offline_cache.lock().unwrap() {
-                #[cfg(not(feature = "sqlite3"))]
-                let mut cache_handle = super::cache::DefaultCache::get(self.uid_store.clone())?;
-                #[cfg(feature = "sqlite3")]
-                let mut cache_handle = super::cache::Sqlite3Cache::get(self.uid_store.clone())?;
+            if let Some(mut cache_handle) = self.uid_store.cache_handle()? {
                 if let Err(err) = cache_handle.mailbox_state(mailbox_hash).and_then(|r| {
                     if r.is_none() {
                         cache_handle.clear(mailbox_hash, &select_response)

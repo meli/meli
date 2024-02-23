@@ -234,6 +234,7 @@ impl JobExecutor {
     }
 
     /// Spawns a future with a generic return value `R`
+    #[inline(always)]
     pub fn spawn_specialized<F, R>(&self, desc: Cow<'static, str>, future: F) -> JoinHandle<R>
     where
         F: Future<Output = R> + Send + 'static,
@@ -295,6 +296,7 @@ impl JobExecutor {
 
     /// Spawns a future with a generic return value `R` that might block on a
     /// new thread
+    #[inline(always)]
     pub fn spawn_blocking<F, R>(&self, desc: Cow<'static, str>, future: F) -> JoinHandle<R>
     where
         F: Future<Output = R> + Send + 'static,

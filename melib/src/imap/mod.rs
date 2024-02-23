@@ -52,8 +52,6 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-#[cfg(feature = "sqlite3")]
-pub use cache::ImapCacheReset;
 pub use cache::ModSequence;
 use futures::{lock::Mutex as FutureMutex, stream::Stream};
 use imap_codec::imap_types::{
@@ -203,6 +201,30 @@ impl UIDStore {
             timeout,
         }
     }
+
+    pub fn cache_handle(self: &Arc<Self>) -> Result<Option<Box<dyn cache::ImapCache>>> {
+        if !*self.keep_offline_cache.lock().unwrap() {
+            return Ok(None);
+        }
+        #[cfg(not(feature = "sqlite3"))]
+        return Ok(None);
+        #[cfg(feature = "sqlite3")]
+        return Ok(Some(cache::sqlite3_cache::Sqlite3Cache::get(Arc::clone(
+            self,
+        ))?));
+    }
+
+    pub fn reset_db(self: &Arc<Self>) -> Result<()> {
+        if !*self.keep_offline_cache.lock().unwrap() {
+            return Ok(());
+        }
+        #[cfg(not(feature = "sqlite3"))]
+        return Ok(());
+        #[cfg(feature = "sqlite3")]
+        use crate::imap::cache::ImapCacheReset;
+        #[cfg(feature = "sqlite3")]
+        return cache::sqlite3_cache::Sqlite3Cache::reset_db(self);
+    }
 }
 
 #[derive(Debug)]
@@ -304,39 +326,32 @@ impl MailBackend for ImapType {
         mailbox_hash: MailboxHash,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>> {
         let cache_handle = {
-            #[cfg(feature = "sqlite3")]
-            if *self.uid_store.keep_offline_cache.lock().unwrap() {
-                match cache::Sqlite3Cache::get(self.uid_store.clone()).chain_err_summary(|| {
-                    format!(
-                        "Could not initialize cache for IMAP account {}. Resetting database.",
-                        self.uid_store.account_name
-                    )
-                }) {
-                    Ok(v) => Some(v),
-                    Err(err) => {
-                        (self.uid_store.event_consumer)(self.uid_store.account_hash, err.into());
-                        match cache::Sqlite3Cache::reset_db(&self.uid_store)
-                            .and_then(|()| cache::Sqlite3Cache::get(self.uid_store.clone()))
-                            .chain_err_summary(|| "Could not reset IMAP cache database.")
-                        {
-                            Ok(v) => Some(v),
-                            Err(err) => {
-                                *self.uid_store.keep_offline_cache.lock().unwrap() = false;
-                                log::trace!(
-                                    "{}: sqlite3 cache error: {}",
-                                    self.uid_store.account_name,
-                                    err
-                                );
-                                None
-                            }
+            match self.uid_store.cache_handle().chain_err_summary(|| {
+                format!(
+                    "Could not initialize cache for IMAP account {}. Resetting database.",
+                    self.uid_store.account_name
+                )
+            }) {
+                Ok(Some(v)) => Some(v),
+                Ok(None) => None,
+                Err(err) => {
+                    (self.uid_store.event_consumer)(self.uid_store.account_hash, err.into());
+                    match self
+                        .uid_store
+                        .reset_db()
+                        .and_then(|()| self.uid_store.cache_handle())
+                        .chain_err_summary(|| "Could not reset IMAP cache database.")
+                    {
+                        Ok(Some(v)) => Some(v),
+                        Ok(None) => None,
+                        Err(err) => {
+                            *self.uid_store.keep_offline_cache.lock().unwrap() = false;
+                            log::trace!("{}: cache error: {}", self.uid_store.account_name, err);
+                            None
                         }
                     }
                 }
-            } else {
-                None
             }
-            #[cfg(not(feature = "sqlite3"))]
-            None
         };
         let mut state = FetchState {
             stage: if *self.uid_store.keep_offline_cache.lock().unwrap() && cache_handle.is_some() {
@@ -860,9 +875,7 @@ impl MailBackend for ImapType {
                     }
                 }
             }
-            #[cfg(feature = "sqlite3")]
-            if *uid_store.keep_offline_cache.lock().unwrap() {
-                let mut cache_handle = cache::Sqlite3Cache::get(uid_store.clone())?;
+            if let Some(mut cache_handle) = uid_store.cache_handle()? {
                 let res = cache_handle.update_flags(env_hashes, mailbox_hash, flags);
                 log::trace!("update_flags in cache: {:?}", res);
             }

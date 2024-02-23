@@ -60,28 +60,31 @@ impl Account {
     pub(super) fn update_cached_env(&mut self, env: Envelope, old_hash: Option<EnvelopeHash>) {
         if self.settings.conf.search_backend == crate::conf::SearchBackend::Sqlite3 {
             let msg_id = env.message_id_display().to_string();
-            match crate::sqlite3::remove(old_hash.unwrap_or_else(|| env.hash()))
-                .map(|_| crate::sqlite3::insert(env, self.backend.clone(), self.name.clone()))
-            {
-                Ok(job) => {
-                    let handle = self
-                        .main_loop_handler
-                        .job_executor
-                        .spawn_blocking("sqlite3::remove".into(), job);
-                    self.insert_job(
-                        handle.job_id,
-                        JobRequest::Generic {
-                            name: format!("Update envelope {} in sqlite3 cache", msg_id).into(),
-                            handle,
-                            log_level: LogLevel::TRACE,
-                            on_finish: None,
-                        },
-                    );
-                }
-                Err(err) => {
-                    log::error!("Failed to update envelope {} in cache: {}", msg_id, err);
-                }
-            }
+            let name = self.name.clone();
+            let backend = self.backend.clone();
+            let fut = async move {
+                crate::sqlite3::AccountCache::remove(
+                    name.clone(),
+                    old_hash.unwrap_or_else(|| env.hash()),
+                )
+                .await?;
+
+                crate::sqlite3::AccountCache::insert(env, backend, name).await?;
+                Ok(())
+            };
+            let handle = self
+                .main_loop_handler
+                .job_executor
+                .spawn_specialized("sqlite3::remove".into(), fut);
+            self.insert_job(
+                handle.job_id,
+                JobRequest::Generic {
+                    name: format!("Update envelope {} in sqlite3 cache", msg_id).into(),
+                    handle,
+                    log_level: LogLevel::TRACE,
+                    on_finish: None,
+                },
+            );
         }
     }
 }

@@ -35,6 +35,8 @@ mod inner {
 
     pub const DB_DESCRIPTION: DatabaseDescription = DatabaseDescription {
         name: "nntp_store.db",
+        application_prefix: "meli",
+        identifier: None,
         init_script: Some(
             "PRAGMA foreign_keys = true;
 PRAGMA encoding = 'UTF-8';
@@ -60,8 +62,12 @@ CREATE TABLE IF NOT EXISTS article (
 
     impl Store {
         pub fn new(id: &str) -> Result<Self> {
+            let db_desc = DatabaseDescription {
+                identifier: Some(id.to_string().into()),
+                ..DB_DESCRIPTION
+            };
             Ok(Self {
-                connection: sqlite3::open_or_create_db(&DB_DESCRIPTION, Some(id))?,
+                connection: db_desc.open_or_create_db()?,
             })
         }
 

@@ -26,22 +26,23 @@ use std::{
 };
 
 use melib::{
-    backends::{MailBackend, ResultFuture},
+    backends::MailBackend,
     email::{Envelope, EnvelopeHash},
     log,
     search::{
         escape_double_quote,
         Query::{self, *},
     },
-    utils::sqlite3::{self as melib_sqlite3, rusqlite::params, DatabaseDescription},
-    Error, Result, SortField, SortOrder,
+    smol,
+    utils::sqlite3::{rusqlite::params, DatabaseDescription},
+    Error, Result, ResultIntoError, SortField, SortOrder,
 };
 use smallvec::SmallVec;
 
-use crate::melib::ResultIntoError;
-
 const DB: DatabaseDescription = DatabaseDescription {
     name: "index.db",
+    identifier: None,
+    application_prefix: "meli",
     init_script: Some(
         "CREATE TABLE IF NOT EXISTS envelopes (
                     id               INTEGER PRIMARY KEY,
@@ -113,10 +114,6 @@ END; ",
     version: 1,
 };
 
-pub fn db_path() -> Result<PathBuf> {
-    melib_sqlite3::db_path(DB.name)
-}
-
 //#[inline(always)]
 //fn fts5_bareword(w: &str) -> Cow<str> {
 //    if w == "AND" || w == "OR" || w == "NOT" {
@@ -140,152 +137,192 @@ pub fn db_path() -> Result<PathBuf> {
 //    }
 //}
 //
-//
-pub async fn insert(
-    envelope: Envelope,
-    backend: Arc<RwLock<Box<dyn MailBackend>>>,
-    acc_name: String,
-) -> Result<()> {
-    let db_path = db_path()?;
-    if !db_path.exists() {
-        return Err(Error::new(
-            "Database hasn't been initialised. Run `reindex` command",
-        ));
-    }
 
-    let conn = melib_sqlite3::open_db(db_path)?;
+pub struct AccountCache;
 
-    let op = backend
-        .read()
-        .unwrap()
-        .operation(envelope.hash())?
-        .as_bytes()?;
+impl AccountCache {
+    pub async fn insert(
+        envelope: Envelope,
+        backend: Arc<RwLock<Box<dyn MailBackend>>>,
+        acc_name: String,
+    ) -> Result<()> {
+        let db_desc = DatabaseDescription {
+            identifier: Some(acc_name.clone().into()),
+            ..DB.clone()
+        };
 
-    let body = match op.await.map(|bytes| envelope.body_bytes(&bytes)) {
-        Ok(body) => body.text(),
-        Err(err) => {
-            log::error!(
-                "Failed to open envelope {}: {err}",
-                envelope.message_id_display(),
-            );
-            return Err(err);
+        if !db_desc.exists().unwrap_or(false) {
+            return Err(Error::new(format!(
+                "Database hasn't been initialised. Run `reindex {acc_name}` command"
+            )));
         }
-    };
 
-    if let Err(err) = conn.execute(
-        "INSERT OR IGNORE INTO accounts (name) VALUES (?1)",
-        params![acc_name,],
-    ) {
-        log::error!(
-            "Failed to insert envelope {}: {err}",
-            envelope.message_id_display(),
-        );
-        return Err(Error::new(err.to_string()));
-    }
-    let account_id: i32 = {
-        let mut stmt = conn
-            .prepare("SELECT id FROM accounts WHERE name = ?")
-            .unwrap();
-        let x = stmt
-            .query_map(params![acc_name], |row| row.get(0))
+        let op = backend
+            .read()
             .unwrap()
-            .next()
-            .unwrap()
-            .unwrap();
-        x
-    };
-    if let Err(err) = conn
-        .execute(
-            "INSERT OR REPLACE INTO envelopes (account_id, hash, date, _from, _to, cc, bcc, \
-             subject, message_id, in_reply_to, _references, flags, has_attachments, body_text, \
-             timestamp)
+            .operation(envelope.hash())?
+            .as_bytes()?;
+
+        let body = match op.await.map(|bytes| envelope.body_bytes(&bytes)) {
+            Ok(body) => body.text(),
+            Err(err) => {
+                log::error!(
+                    "Failed to open envelope {}: {err}",
+                    envelope.message_id_display(),
+                );
+                return Err(err);
+            }
+        };
+        smol::unblock(move || {
+            let mut conn = db_desc.open_or_create_db()?;
+
+            let tx =
+                conn.transaction_with_behavior(melib::rusqlite::TransactionBehavior::Immediate)?;
+            if let Err(err) = tx.execute(
+                "INSERT OR IGNORE INTO accounts (name) VALUES (?1)",
+                params![acc_name,],
+            ) {
+                log::error!(
+                    "Failed to insert envelope {}: {err}",
+                    envelope.message_id_display(),
+                );
+                return Err(Error::new(err.to_string()));
+            }
+            let account_id: i32 = {
+                let mut stmt = tx
+                    .prepare("SELECT id FROM accounts WHERE name = ?")
+                    .unwrap();
+                let x = stmt
+                    .query_map(params![acc_name], |row| row.get(0))
+                    .unwrap()
+                    .next()
+                    .unwrap()
+                    .unwrap();
+                x
+            };
+            if let Err(err) = tx
+                .execute(
+                    "INSERT OR REPLACE INTO envelopes (account_id, hash, date, _from, _to, cc, \
+                     bcc, subject, message_id, in_reply_to, _references, flags, has_attachments, \
+                     body_text, timestamp)
               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
-            params![
-                account_id,
-                envelope.hash().to_be_bytes().to_vec(),
-                envelope.date_as_str(),
-                envelope.field_from_to_string(),
-                envelope.field_to_to_string(),
-                envelope.field_cc_to_string(),
-                envelope.field_bcc_to_string(),
-                envelope.subject().into_owned().trim_end_matches('\u{0}'),
-                envelope.message_id_display().to_string(),
-                envelope
-                    .in_reply_to_display()
-                    .map(|f| f.to_string())
-                    .unwrap_or_default(),
-                envelope.field_references_to_string(),
-                i64::from(envelope.flags().bits()),
-                i32::from(envelope.has_attachments()),
-                body,
-                envelope.date().to_be_bytes().to_vec()
-            ],
-        )
-        .map_err(|e| Error::new(e.to_string()))
-    {
-        log::error!(
-            "Failed to insert envelope {}: {err}",
-            envelope.message_id_display(),
-        );
-    }
-    Ok(())
-}
-
-pub fn remove(env_hash: EnvelopeHash) -> Result<()> {
-    let db_path = db_path()?;
-    if !db_path.exists() {
-        return Err(Error::new(
-            "Database hasn't been initialised. Run `reindex` command",
-        ));
+                    params![
+                        account_id,
+                        envelope.hash().to_be_bytes().to_vec(),
+                        envelope.date_as_str(),
+                        envelope.field_from_to_string(),
+                        envelope.field_to_to_string(),
+                        envelope.field_cc_to_string(),
+                        envelope.field_bcc_to_string(),
+                        envelope.subject().into_owned().trim_end_matches('\u{0}'),
+                        envelope.message_id_display().to_string(),
+                        envelope
+                            .in_reply_to_display()
+                            .map(|f| f.to_string())
+                            .unwrap_or_default(),
+                        envelope.field_references_to_string(),
+                        i64::from(envelope.flags().bits()),
+                        i32::from(envelope.has_attachments()),
+                        body,
+                        envelope.date().to_be_bytes().to_vec()
+                    ],
+                )
+                .map_err(|e| Error::new(e.to_string()))
+            {
+                drop(tx);
+                log::error!(
+                    "Failed to insert envelope {}: {err}",
+                    envelope.message_id_display(),
+                );
+            } else {
+                tx.commit()?;
+            }
+            Ok(())
+        })
+        .await?;
+        Ok(())
     }
 
-    let conn = melib_sqlite3::open_db(db_path)?;
-    if let Err(err) = conn
-        .execute(
-            "DELETE FROM envelopes WHERE hash = ?",
-            params![env_hash.to_be_bytes().to_vec(),],
-        )
-        .map_err(|e| Error::new(e.to_string()))
-    {
-        log::error!("Failed to remove envelope {env_hash}: {err}");
-        return Err(err);
+    pub async fn remove(acc_name: String, env_hash: EnvelopeHash) -> Result<()> {
+        let db_desc = DatabaseDescription {
+            identifier: Some(acc_name.into()),
+            ..DB.clone()
+        };
+        let db_path = db_desc.db_path()?;
+        if !db_path.exists() {
+            return Err(Error::new(
+                "Database hasn't been initialised. Run `reindex {acc_name}` command",
+            ));
+        }
+
+        smol::unblock(move || {
+            let mut conn = db_desc.open_or_create_db()?;
+            let tx =
+                conn.transaction_with_behavior(melib::rusqlite::TransactionBehavior::Immediate)?;
+            if let Err(err) = tx
+                .execute(
+                    "DELETE FROM envelopes WHERE hash = ?",
+                    params![env_hash.to_be_bytes().to_vec(),],
+                )
+                .map_err(|e| Error::new(e.to_string()))
+            {
+                drop(tx);
+                log::error!("Failed to remove envelope {env_hash}: {err}");
+                return Err(err);
+            }
+            tx.commit()?;
+            Ok(())
+        })
+        .await?;
+        Ok(())
     }
-    Ok(())
-}
 
-pub fn index(context: &crate::state::Context, account_index: usize) -> ResultFuture<()> {
-    let account = &context.accounts[account_index];
-    let (acc_name, acc_mutex, backend_mutex): (String, Arc<RwLock<_>>, Arc<_>) = (
-        account.name().to_string(),
-        account.collection.envelopes.clone(),
-        account.backend.clone(),
-    );
-    let conn = melib_sqlite3::open_or_create_db(&DB, Some(acc_name.as_str()))?;
-    let env_hashes = acc_mutex
-        .read()
-        .unwrap()
-        .keys()
-        .cloned()
-        .collect::<Vec<_>>();
+    pub async fn index(
+        acc_name: Arc<String>,
+        collection: melib::Collection,
+        backend_mutex: Arc<RwLock<Box<dyn MailBackend>>>,
+    ) -> Result<()> {
+        let acc_mutex = collection.envelopes.clone();
+        let db_desc = Arc::new(DatabaseDescription {
+            identifier: Some(acc_name.to_string().into()),
+            ..DB.clone()
+        });
+        let env_hashes = acc_mutex
+            .read()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
 
-    /* Sleep, index and repeat in order not to block the main process */
-    Ok(Box::pin(async move {
-        conn.execute(
-            "INSERT OR REPLACE INTO accounts (name) VALUES (?1)",
-            params![acc_name.as_str(),],
-        )
-        .chain_err_summary(|| "Failed to update index:")?;
+        /* Sleep, index and repeat in order not to block the main process */
         let account_id: i32 = {
-            let mut stmt = conn
-                .prepare("SELECT id FROM accounts WHERE name = ?")
-                .unwrap();
-            let x = stmt
-                .query_map(params![acc_name.as_str()], |row| row.get(0))
-                .unwrap()
-                .next()
-                .unwrap()
-                .unwrap();
-            x
+            let acc_name = Arc::clone(&acc_name);
+            let db_desc = Arc::clone(&db_desc);
+            smol::unblock(move || {
+                let mut conn = db_desc.open_or_create_db()?;
+                let tx = conn
+                    .transaction_with_behavior(melib::rusqlite::TransactionBehavior::Immediate)?;
+                tx.execute(
+                    "INSERT OR REPLACE INTO accounts (name) VALUES (?1)",
+                    params![acc_name.as_str(),],
+                )
+                .chain_err_summary(|| "Failed to update index:")?;
+                let account_id = {
+                    let mut stmt = tx
+                        .prepare("SELECT id FROM accounts WHERE name = ?")
+                        .unwrap();
+                    let x = stmt
+                        .query_map(params![acc_name.as_str()], |row| row.get(0))
+                        .unwrap()
+                        .next()
+                        .unwrap()
+                        .unwrap();
+                    x
+                };
+                tx.commit()?;
+                Ok::<i32, Error>(account_id)
+            })
+            .await?
         };
         let mut ctr = 0;
         log::trace!(
@@ -296,90 +333,133 @@ pub fn index(context: &crate::state::Context, account_index: usize) -> ResultFut
         );
         for chunk in env_hashes.chunks(200) {
             ctr += chunk.len();
-            for env_hash in chunk {
-                let mut op = backend_mutex.read().unwrap().operation(*env_hash)?;
+            let mut chunk_bytes = Vec::with_capacity(chunk.len());
+            for &env_hash in chunk {
+                let mut op = backend_mutex.read().unwrap().operation(env_hash)?;
                 let bytes = op
                     .as_bytes()?
                     .await
                     .chain_err_summary(|| format!("Failed to open envelope {}", env_hash))?;
-                let envelopes_lck = acc_mutex.read().unwrap();
-                if let Some(e) = envelopes_lck.get(env_hash) {
-                    let body = e.body_bytes(&bytes).text().replace('\0', "");
-                    conn.execute(
-                        "INSERT OR REPLACE INTO envelopes (account_id, hash, date, _from, _to, \
-                         cc, bcc, subject, message_id, in_reply_to, _references, flags, \
-                         has_attachments, body_text, timestamp)
-              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
-                        params![
-                            account_id,
-                            e.hash().to_be_bytes().to_vec(),
-                            e.date_as_str(),
-                            e.field_from_to_string(),
-                            e.field_to_to_string(),
-                            e.field_cc_to_string(),
-                            e.field_bcc_to_string(),
-                            e.subject().into_owned().trim_end_matches('\u{0}'),
-                            e.message_id_display().to_string(),
-                            e.in_reply_to_display()
-                                .map(|f| f.to_string())
-                                .unwrap_or_default(),
-                            e.field_references_to_string(),
-                            i64::from(e.flags().bits()),
-                            i32::from(e.has_attachments()),
-                            body,
-                            e.date().to_be_bytes().to_vec()
-                        ],
-                    )
-                    .chain_err_summary(|| {
-                        format!("Failed to insert envelope {}", e.message_id_display())
-                    })?;
-                }
+                chunk_bytes.push((env_hash, bytes));
             }
-            let sleep_dur = std::time::Duration::from_millis(20);
-            std::thread::sleep(sleep_dur);
+            {
+                let acc_mutex = acc_mutex.clone();
+                let db_desc = Arc::clone(&db_desc);
+                smol::unblock(move || {
+                    let mut conn = db_desc.open_or_create_db()?;
+                    let tx = conn.transaction_with_behavior(
+                        melib::rusqlite::TransactionBehavior::Immediate,
+                    )?;
+                    let envelopes_lck = acc_mutex.read().unwrap();
+                    for (env_hash, bytes) in chunk_bytes {
+                        if let Some(e) = envelopes_lck.get(&env_hash) {
+                            let body = e.body_bytes(&bytes).text().replace('\0', "");
+                            tx.execute(
+                                "INSERT OR REPLACE INTO envelopes (account_id, hash, date, _from, \
+                                 _to, cc, bcc, subject, message_id, in_reply_to, _references, \
+                                 flags, has_attachments, body_text, timestamp)
+              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                                params![
+                                    account_id,
+                                    e.hash().to_be_bytes().to_vec(),
+                                    e.date_as_str(),
+                                    e.field_from_to_string(),
+                                    e.field_to_to_string(),
+                                    e.field_cc_to_string(),
+                                    e.field_bcc_to_string(),
+                                    e.subject().into_owned().trim_end_matches('\u{0}'),
+                                    e.message_id_display().to_string(),
+                                    e.in_reply_to_display()
+                                        .map(|f| f.to_string())
+                                        .unwrap_or_default(),
+                                    e.field_references_to_string(),
+                                    i64::from(e.flags().bits()),
+                                    i32::from(e.has_attachments()),
+                                    body,
+                                    e.date().to_be_bytes().to_vec()
+                                ],
+                            )
+                            .chain_err_summary(|| {
+                                format!("Failed to insert envelope {}", e.message_id_display())
+                            })?;
+                        }
+                    }
+                    tx.commit()?;
+                    Ok::<(), Error>(())
+                })
+                .await?;
+            }
+            let sleep_dur = std::time::Duration::from_millis(50);
+            smol::Timer::after(sleep_dur).await;
         }
         Ok(())
-    }))
-}
-
-pub fn search(
-    query: &Query,
-    (sort_field, sort_order): (SortField, SortOrder),
-) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
-    let db_path = db_path()?;
-    if !db_path.exists() {
-        return Err(Error::new(
-            "Database hasn't been initialised. Run `reindex` command",
-        ));
     }
 
-    let conn = melib_sqlite3::open_db(db_path)?;
+    pub async fn search(
+        acc_name: String,
+        query: Query,
+        (sort_field, sort_order): (SortField, SortOrder),
+    ) -> Result<SmallVec<[EnvelopeHash; 512]>> {
+        let db_desc = DatabaseDescription {
+            identifier: Some(acc_name.clone().into()),
+            ..DB.clone()
+        };
 
-    let sort_field = match sort_field {
-        SortField::Subject => "subject",
-        SortField::Date => "timestamp",
-    };
+        if !db_desc.exists().unwrap_or(false) {
+            return Err(Error::new(format!(
+                "Database hasn't been initialised for account `{}`. Run `reindex` command to \
+                 build an index.",
+                acc_name
+            )));
+        }
+        let query = query_to_sql(&query);
 
-    let sort_order = match sort_order {
-        SortOrder::Asc => "ASC",
-        SortOrder::Desc => "DESC",
-    };
+        smol::unblock(move || {
+            let mut conn = db_desc.open_or_create_db()?;
 
-    let mut stmt = conn
-        .prepare(&format!(
-            "SELECT hash FROM envelopes WHERE {} ORDER BY {} {};",
-            query_to_sql(query),
-            sort_field,
-            sort_order
-        ))
-        .map_err(|e| Error::new(e.to_string()))?;
+            let sort_field = match sort_field {
+                SortField::Subject => "subject",
+                SortField::Date => "timestamp",
+            };
 
-    let results = stmt
-        .query_map([], |row| row.get::<_, EnvelopeHash>(0))
-        .map_err(Error::from)?
-        .map(|item| item.map_err(Error::from))
-        .collect::<Result<SmallVec<[EnvelopeHash; 512]>>>();
-    Ok(Box::pin(async { results }))
+            let sort_order = match sort_order {
+                SortOrder::Asc => "ASC",
+                SortOrder::Desc => "DESC",
+            };
+
+            let tx = conn.transaction()?;
+            let mut stmt = tx
+                .prepare(&format!(
+                    "SELECT hash FROM envelopes WHERE {} ORDER BY {} {};",
+                    query, sort_field, sort_order
+                ))
+                .map_err(|e| Error::new(e.to_string()))?;
+
+            #[allow(clippy::let_and_return)] // false positive, the let binding is needed
+            // for the temporary to live long enough
+            let x = stmt
+                .query_map([], |row| row.get::<_, EnvelopeHash>(0))
+                .map_err(Error::from)?
+                .map(|item| item.map_err(Error::from))
+                .collect::<Result<SmallVec<[EnvelopeHash; 512]>>>();
+            x
+        })
+        .await
+    }
+
+    pub fn db_path(acc_name: &str) -> Result<PathBuf> {
+        let db_desc = DatabaseDescription {
+            identifier: Some(acc_name.to_string().into()),
+            ..DB.clone()
+        };
+        let db_path = db_desc.db_path()?;
+        if !db_path.exists() {
+            return Err(Error::new(
+                "Database hasn't been initialised. Run `reindex {acc_name}` command",
+            ));
+        }
+        Ok(db_path)
+    }
 }
 
 /// Translates a `Query` to an Sqlite3 expression in a `String`.

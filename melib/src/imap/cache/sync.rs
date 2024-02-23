@@ -37,22 +37,22 @@ impl ImapConnection {
             return Ok(None);
         }
 
-        #[cfg(not(feature = "sqlite3"))]
-        let mut cache_handle = DefaultCache::get(self.uid_store.clone())?;
-        #[cfg(feature = "sqlite3")]
-        let mut cache_handle = Sqlite3Cache::get(self.uid_store.clone())?;
-        if cache_handle.mailbox_state(mailbox_hash)?.is_none() {
-            return Ok(None);
-        }
-
-        match self.sync_policy {
-            SyncPolicy::None => Ok(None),
-            SyncPolicy::Basic => self.resync_basic(cache_handle, mailbox_hash).await,
-            SyncPolicy::Condstore => self.resync_condstore(cache_handle, mailbox_hash).await,
-            SyncPolicy::CondstoreQresync => {
-                self.resync_condstoreqresync(cache_handle, mailbox_hash)
-                    .await
+        if let Some(mut cache_handle) = self.uid_store.cache_handle()? {
+            if cache_handle.mailbox_state(mailbox_hash)?.is_none() {
+                return Ok(None);
             }
+
+            match self.sync_policy {
+                SyncPolicy::None => Ok(None),
+                SyncPolicy::Basic => self.resync_basic(cache_handle, mailbox_hash).await,
+                SyncPolicy::Condstore => self.resync_condstore(cache_handle, mailbox_hash).await,
+                SyncPolicy::CondstoreQresync => {
+                    self.resync_condstoreqresync(cache_handle, mailbox_hash)
+                        .await
+                }
+            }
+        } else {
+            Ok(None)
         }
     }
 
@@ -61,14 +61,8 @@ impl ImapConnection {
         mailbox_hash: MailboxHash,
     ) -> Option<Result<Vec<EnvelopeHash>>> {
         debug!("load_cache {}", mailbox_hash);
-        #[cfg(not(feature = "sqlite3"))]
-        let mut cache_handle = match DefaultCache::get(self.uid_store.clone()) {
-            Ok(v) => v,
-            Err(err) => return Some(Err(err)),
-        };
-        #[cfg(feature = "sqlite3")]
-        let mut cache_handle = match Sqlite3Cache::get(self.uid_store.clone()) {
-            Ok(v) => v,
+        let mut cache_handle = match self.uid_store.cache_handle() {
+            Ok(v) => v?,
             Err(err) => return Some(Err(err)),
         };
         match cache_handle.mailbox_state(mailbox_hash) {
@@ -85,7 +79,7 @@ impl ImapConnection {
         }
     }
 
-    //rfc4549_Synchronization_Operations_for_Disconnected_IMAP4_Clients
+    /// > rfc4549_Synchronization_Operations_for_Disconnected_IMAP4_Clients
     pub async fn resync_basic(
         &mut self,
         mut cache_handle: Box<dyn ImapCache>,
@@ -317,8 +311,8 @@ impl ImapConnection {
         Ok(Some(payload.into_iter().map(|(_, env)| env).collect()))
     }
 
-    //rfc4549_Synchronization_Operations_for_Disconnected_IMAP4_Clients
-    //Section 6.1
+    /// > rfc4549_Synchronization_Operations_for_Disconnected_IMAP4_Clients
+    /// > Section 6.1
     pub async fn resync_condstore(
         &mut self,
         mut cache_handle: Box<dyn ImapCache>,
@@ -627,8 +621,9 @@ impl ImapConnection {
         Ok(Some(payload.into_iter().map(|(_, env)| env).collect()))
     }
 
-    //rfc7162_Quick Flag Changes Resynchronization (CONDSTORE)_and Quick Mailbox
-    // Resynchronization (QRESYNC)
+    /// > rfc7162_Quick Flag Changes Resynchronization (CONDSTORE)_and Quick
+    /// > Mailbox
+    /// > Resynchronization (QRESYNC)
     pub async fn resync_condstoreqresync(
         &mut self,
         _cache_handle: Box<dyn ImapCache>,

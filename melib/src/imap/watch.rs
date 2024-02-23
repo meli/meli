@@ -90,11 +90,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
 
         if let Some(v) = uidvalidities.get(&mailbox_hash) {
             if *v != select_response.uidvalidity {
-                if *uid_store.keep_offline_cache.lock().unwrap() {
-                    #[cfg(not(feature = "sqlite3"))]
-                    let mut cache_handle = super::cache::DefaultCache::get(uid_store.clone())?;
-                    #[cfg(feature = "sqlite3")]
-                    let mut cache_handle = super::cache::Sqlite3Cache::get(uid_store.clone())?;
+                if let Ok(Some(mut cache_handle)) = uid_store.cache_handle() {
                     cache_handle.clear(mailbox_hash, &select_response)?;
                 }
                 conn.add_refresh_event(RefreshEvent {
@@ -213,10 +209,7 @@ pub async fn examine_updates(
             });
         }
     } else {
-        #[cfg(not(feature = "sqlite3"))]
-        let mut cache_handle = super::cache::DefaultCache::get(uid_store.clone())?;
-        #[cfg(feature = "sqlite3")]
-        let mut cache_handle = super::cache::Sqlite3Cache::get(uid_store.clone())?;
+        let cache_handle = uid_store.cache_handle();
         let mut response = Vec::with_capacity(8 * 1024);
         let select_response = conn
             .examine_mailbox(mailbox_hash, &mut response, true)
@@ -227,7 +220,7 @@ pub async fn examine_updates(
 
             if let Some(v) = uidvalidities.get(&mailbox_hash) {
                 if *v != select_response.uidvalidity {
-                    if *uid_store.keep_offline_cache.lock().unwrap() {
+                    if let Ok(Some(mut cache_handle)) = cache_handle {
                         cache_handle.clear(mailbox_hash, &select_response)?;
                     }
                     conn.add_refresh_event(RefreshEvent {
@@ -378,17 +371,17 @@ pub async fn examine_updates(
                 }
             }
         }
-        if *uid_store.keep_offline_cache.lock().unwrap()
-            && cache_handle.mailbox_state(mailbox_hash)?.is_some()
-        {
-            cache_handle
-                .insert_envelopes(mailbox_hash, &v)
-                .chain_err_summary(|| {
-                    format!(
-                        "Could not save envelopes in cache for mailbox {}",
-                        mailbox.imap_path()
-                    )
-                })?;
+        if let Ok(Some(mut cache_handle)) = cache_handle {
+            if cache_handle.mailbox_state(mailbox_hash)?.is_some() {
+                cache_handle
+                    .insert_envelopes(mailbox_hash, &v)
+                    .chain_err_summary(|| {
+                        format!(
+                            "Could not save envelopes in cache for mailbox {}",
+                            mailbox.imap_path()
+                        )
+                    })?;
+            }
         }
 
         for FetchResponse { uid, envelope, .. } in v {
