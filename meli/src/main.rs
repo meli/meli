@@ -101,6 +101,11 @@ fn run_app(opt: Opt) -> Result<()> {
         Some(SubCommand::EditConfig) => {
             return subcommands::edit_config();
         }
+        Some(SubCommand::PrintConfigPath) => {
+            let config_path = crate::conf::get_config_file()?;
+            println!("{}", config_path.display());
+            return Ok(());
+        }
         #[cfg(not(feature = "cli-docs"))]
         Some(SubCommand::Man(ManOpt {})) => {
             return Err(Error::new("error: this version of meli was not build with embedded documentation (cargo feature `cli-docs`). You might have it installed as manpages (eg `man meli`), otherwise check https://meli-email.org"));
@@ -122,7 +127,7 @@ fn run_app(opt: Opt) -> Result<()> {
             return Ok(());
         }
         Some(SubCommand::View { .. }) => {}
-        Some(SubCommand::PrintUsedPaths) => {
+        Some(SubCommand::PrintAppDirectories) => {
             println!(
                 "{}",
                 xdg::BaseDirectories::with_prefix("meli")

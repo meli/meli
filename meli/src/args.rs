@@ -40,8 +40,11 @@ pub enum SubCommand {
     PrintDefaultTheme,
     /// print loaded themes in full to stdout and exit.
     PrintLoadedThemes,
-    /// print all paths that meli creates/uses.
-    PrintUsedPaths,
+    /// print all directories that meli creates/uses.
+    PrintAppDirectories,
+    /// print location of configuration file that will be loaded on normal app
+    /// startup.
+    PrintConfigPath,
     /// edit configuration files with `$EDITOR`/`$VISUAL`.
     EditConfig,
     /// create a sample configuration file with available configuration options.

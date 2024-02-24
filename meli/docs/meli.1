@@ -65,12 +65,6 @@ Create configuration file in
 .Pa path
 if given, or at
 .Pa $XDG_CONFIG_HOME/meli/config.toml
-.It Cm edit-config
-Edit configuration files with
-.Ev EDITOR
-or
-.Ev VISUAL Ns
-\&.
 .It Cm test-config Op Ar path
 Test a configuration file for syntax issues or missing options.
 .It Cm man Op Ar page
@@ -81,14 +75,26 @@ Install manual pages to the first location provided by
 or
 .Xr manpath 1 ,
 unless you specify the directory as an argument.
+.It Cm compiled-with
+Print compile time feature flags of this binary.
+.It Cm edit-config
+Edit configuration files with
+.Ev EDITOR
+or
+.Ev VISUAL Ns
+\&.
+.It Cm help
+Prints help information or the help of the given subcommand(s).
+.It Cm print-app-directories
+Print all directories that
+.Nm Ns
+ creates and uses.
+.It Cm print-config-path
+Print location of configuration file that will be loaded on normal app startup.
 .It Cm print-default-theme
 Print default theme keys and values in TOML syntax, to be used as a blueprint.
 .It Cm print-loaded-themes
 Print all loaded themes in TOML syntax.
-.It Cm print-used-paths
-Print all paths that are created and used.
-.It Cm compiled-with
-Print compile time feature flags of this binary.
 .It Cm view
 View mail from input file.
 .El
