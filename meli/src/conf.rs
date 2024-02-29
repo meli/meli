@@ -585,7 +585,7 @@ pub struct Settings {
     pub terminal: TerminalSettings,
     pub log: LogSettings,
     #[serde(skip)]
-    _logger: StderrLogger,
+    pub _logger: StderrLogger,
 }
 
 impl Settings {

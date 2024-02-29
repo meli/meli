@@ -76,6 +76,8 @@ pub enum SubCommand {
     #[structopt(display_order = 5)]
     /// print compile time feature flags of this binary
     CompiledWith,
+    /// Print log file location.
+    PrintLogPath,
     /// View mail from input file.
     View {
         #[structopt(value_name = "INPUT", parse(from_os_str))]

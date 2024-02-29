@@ -20,9 +20,10 @@
  */
 
 #[cfg(not(test))]
-use std::{fs::OpenOptions, path::PathBuf};
+use std::fs::{File, OpenOptions};
 use std::{
     io::{BufWriter, Write},
+    path::PathBuf,
     sync::{
         atomic::{AtomicU8, Ordering},
         Arc, Mutex,
@@ -133,12 +134,17 @@ pub enum Destination {
     None,
 }
 
+struct FileOutput {
+    #[cfg(test)]
+    writer: BufWriter<std::io::Stderr>,
+    #[cfg(not(test))]
+    writer: BufWriter<std::fs::File>,
+    path: PathBuf,
+}
+
 #[derive(Clone)]
 pub struct StderrLogger {
-    #[cfg(test)]
-    dest: Arc<Mutex<BufWriter<std::io::Stderr>>>,
-    #[cfg(not(test))]
-    dest: Arc<Mutex<BufWriter<std::fs::File>>>,
+    dest: Arc<Mutex<FileOutput>>,
     level: Arc<AtomicU8>,
     print_level: bool,
     print_module_names: bool,
@@ -170,13 +176,23 @@ impl StderrLogger {
 
         #[cfg(not(test))]
         let logger = {
-            let data_dir = xdg::BaseDirectories::with_prefix("meli").unwrap();
-            let log_file = OpenOptions::new().append(true) /* writes will append to a file instead of overwriting previous contents */
-            .create(true) /* a new file will be created if the file does not yet already exist.*/
-            .read(true)
-            .open(data_dir.place_data_file("meli.log").unwrap()).unwrap();
+            #[inline(always)]
+            fn __inline_err_wrap() -> Result<(PathBuf, File), Box<dyn std::error::Error>> {
+                let data_dir = xdg::BaseDirectories::with_prefix("meli")?;
+                let path = data_dir.place_data_file("meli.log")?;
+                let log_file = OpenOptions::new().append(true) /* writes will append to a file instead of overwriting previous contents */
+                    .create(true) /* a new file will be created if the file does not yet already exist.*/
+                    .read(true)
+                    .open(&path)?;
+                Ok((path, log_file))
+            }
+            let (path, log_file) =
+                __inline_err_wrap().expect("Could not create log file in XDG_DATA_DIR");
             Self {
-                dest: Arc::new(Mutex::new(BufWriter::new(log_file))),
+                dest: Arc::new(Mutex::new(FileOutput {
+                    writer: BufWriter::new(log_file),
+                    path,
+                })),
                 level: Arc::new(AtomicU8::new(level as u8)),
                 print_level: true,
                 print_module_names: true,
@@ -190,7 +206,10 @@ impl StderrLogger {
         #[cfg(test)]
         let logger = {
             Self {
-                dest: Arc::new(Mutex::new(BufWriter::new(std::io::stderr()))),
+                dest: Arc::new(Mutex::new(FileOutput {
+                    writer: BufWriter::new(std::io::stderr()),
+                    path: PathBuf::new(),
+                })),
                 level: Arc::new(AtomicU8::new(level as u8)),
                 print_level: true,
                 print_module_names: true,
@@ -225,10 +244,17 @@ impl StderrLogger {
 
         let path = path.expand(); // expand shell stuff
         let mut dest = self.dest.lock().unwrap();
-        *dest = BufWriter::new(OpenOptions::new().append(true) /* writes will append to a file instead of overwriting previous contents */
+        *dest = FileOutput {
+            writer: BufWriter::new(OpenOptions::new().append(true) /* writes will append to a file instead of overwriting previous contents */
                          .create(true) /* a new file will be created if the file does not yet already exist.*/
                          .read(true)
-                         .open(path).unwrap());
+                         .open(&path).unwrap()),
+            path
+        };
+    }
+
+    pub fn log_dest(&self) -> PathBuf {
+        self.dest.lock().unwrap().path.clone()
     }
 }
 
@@ -284,7 +310,7 @@ impl Log for StderrLogger {
             (Destination::None | Destination::File, _) => {
                 _ = self.dest.lock().ok().and_then(|mut d| {
                     write(
-                        &mut (*d),
+                        &mut d.writer,
                         record,
                         (self.print_level, self.print_module_names),
                     )
@@ -293,7 +319,7 @@ impl Log for StderrLogger {
             (Destination::Stderr, true) => {
                 _ = self.dest.lock().ok().and_then(|mut d| {
                     write(
-                        &mut (*d),
+                        &mut d.writer,
                         record,
                         (self.print_level, self.print_module_names),
                     )
@@ -315,6 +341,9 @@ impl Log for StderrLogger {
     }
 
     fn flush(&self) {
-        self.dest.lock().ok().and_then(|mut w| w.flush().ok());
+        self.dest
+            .lock()
+            .ok()
+            .and_then(|mut w| w.writer.flush().ok());
     }
 }

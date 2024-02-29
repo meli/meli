@@ -157,6 +157,11 @@ fn run_app(opt: Opt) -> Result<()> {
             }
             return Ok(());
         }
+        Some(SubCommand::PrintLogPath) => {
+            let settings = crate::conf::Settings::new()?;
+            println!("{}", settings._logger.log_dest().display());
+            return Ok(());
+        }
         None => {}
     }
 
