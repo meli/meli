@@ -387,15 +387,11 @@ impl Composer {
                 to.extend(envelope.from().iter().cloned());
             }
             to.extend(envelope.to().iter().cloned());
-            if let Ok(ours) = TryInto::<Address>::try_into(
-                context.accounts[&coordinates.0]
-                    .settings
-                    .account()
-                    .make_display_name()
-                    .as_str(),
-            ) {
-                to.remove(&ours);
-            }
+            let ours = context.accounts[&coordinates.0]
+                .settings
+                .account()
+                .make_display_name();
+            to.remove(&ours);
             ret.draft.set_header(HeaderName::TO, {
                 let mut ret: String =
                     to.into_iter()
@@ -671,7 +667,7 @@ To: {}
                                         }
                                     };
 
-                                (addr, desc)
+                                (addr.to_string(), desc)
                             })
                             .map(AutoCompleteEntry::from)
                             .collect::<Vec<AutoCompleteEntry>>()
@@ -688,7 +684,12 @@ To: {}
         let theme_default = crate::conf::value(context, "theme_default");
         grid.clear_area(area, theme_default);
         #[cfg(feature = "gpgme")]
-        if self.gpg_state.sign_mail.is_true() {
+        if self
+            .gpg_state
+            .sign_mail
+            .unwrap_or(ActionFlag::False)
+            .is_true()
+        {
             let key_list = self
                 .gpg_state
                 .sign_keys
@@ -731,7 +732,12 @@ To: {}
             );
         }
         #[cfg(feature = "gpgme")]
-        if self.gpg_state.encrypt_mail.is_true() {
+        if self
+            .gpg_state
+            .encrypt_mail
+            .unwrap_or(ActionFlag::False)
+            .is_true()
+        {
             let key_list = self
                 .gpg_state
                 .encrypt_keys
@@ -867,10 +873,9 @@ impl Component for Composer {
 
         if !self.initialized {
             #[cfg(feature = "gpgme")]
-            if self.gpg_state.sign_mail.is_unset() {
-                self.gpg_state.sign_mail = ToggleFlag::InternalVal(*account_settings!(
-                    context[self.account_hash].pgp.auto_sign
-                ));
+            if self.gpg_state.sign_mail.is_none() {
+                self.gpg_state.sign_mail =
+                    Some(*account_settings!(context[self.account_hash].pgp.auto_sign));
             }
             if !self.draft.headers().contains_key(HeaderName::FROM)
                 || self.draft.headers()[HeaderName::FROM].is_empty()
@@ -880,7 +885,8 @@ impl Component for Composer {
                     context.accounts[&self.account_hash]
                         .settings
                         .account()
-                        .make_display_name(),
+                        .make_display_name()
+                        .to_string(),
                 );
             }
             self.pager.update_from_str(self.draft.body(), Some(77));
@@ -1457,12 +1463,20 @@ impl Component for Composer {
                 #[cfg(feature = "gpgme")]
                 match self.cursor {
                     Cursor::Sign => {
-                        let is_true = self.gpg_state.sign_mail.is_true();
-                        self.gpg_state.sign_mail = ToggleFlag::from(!is_true);
+                        let is_true = self
+                            .gpg_state
+                            .sign_mail
+                            .unwrap_or(ActionFlag::False)
+                            .is_true();
+                        self.gpg_state.sign_mail = Some(ActionFlag::from(!is_true));
                     }
                     Cursor::Encrypt => {
-                        let is_true = self.gpg_state.encrypt_mail.is_true();
-                        self.gpg_state.encrypt_mail = ToggleFlag::from(!is_true);
+                        let is_true = self
+                            .gpg_state
+                            .encrypt_mail
+                            .unwrap_or(ActionFlag::False)
+                            .is_true();
+                        self.gpg_state.encrypt_mail = Some(ActionFlag::from(!is_true));
                     }
                     _ => {}
                 };
@@ -1686,7 +1700,7 @@ impl Component for Composer {
                     )
                 }) {
                     Ok(widget) => {
-                        self.gpg_state.sign_mail = ToggleFlag::from(true);
+                        self.gpg_state.sign_mail = Some(ActionFlag::from(true));
                         self.mode = ViewMode::SelectEncryptKey(false, widget);
                     }
                     Err(err) => {
@@ -1727,7 +1741,7 @@ impl Component for Composer {
                     )
                 }) {
                     Ok(widget) => {
-                        self.gpg_state.encrypt_mail = ToggleFlag::from(true);
+                        self.gpg_state.encrypt_mail = Some(ActionFlag::from(true));
                         self.mode = ViewMode::SelectEncryptKey(true, widget);
                     }
                     Err(err) => {
@@ -2166,15 +2180,23 @@ impl Component for Composer {
                 }
                 #[cfg(feature = "gpgme")]
                 Action::Compose(ComposeAction::ToggleSign) => {
-                    let is_true = self.gpg_state.sign_mail.is_true();
-                    self.gpg_state.sign_mail = ToggleFlag::from(!is_true);
+                    let is_true = self
+                        .gpg_state
+                        .sign_mail
+                        .unwrap_or(ActionFlag::False)
+                        .is_true();
+                    self.gpg_state.sign_mail = Some(ActionFlag::from(!is_true));
                     self.set_dirty(true);
                     return true;
                 }
                 #[cfg(feature = "gpgme")]
                 Action::Compose(ComposeAction::ToggleEncrypt) => {
-                    let is_true = self.gpg_state.encrypt_mail.is_true();
-                    self.gpg_state.encrypt_mail = ToggleFlag::from(!is_true);
+                    let is_true = self
+                        .gpg_state
+                        .encrypt_mail
+                        .unwrap_or(ActionFlag::False)
+                        .is_true();
+                    self.gpg_state.encrypt_mail = Some(ActionFlag::from(!is_true));
                     self.set_dirty(true);
                     return true;
                 }
@@ -2520,13 +2542,22 @@ pub fn send_draft_async(
         >,
     > = vec![];
     #[cfg(feature = "gpgme")]
-    if gpg_state.sign_mail.is_true() && !gpg_state.encrypt_mail.is_true() {
+    if gpg_state.sign_mail.unwrap_or(ActionFlag::False).is_true()
+        && !gpg_state
+            .encrypt_mail
+            .unwrap_or(ActionFlag::False)
+            .is_true()
+    {
         filters_stack.push(Box::new(crate::mail::pgp::sign_filter(
             gpg_state.sign_keys,
         )?));
-    } else if gpg_state.encrypt_mail.is_true() {
+    } else if gpg_state
+        .encrypt_mail
+        .unwrap_or(ActionFlag::False)
+        .is_true()
+    {
         filters_stack.push(Box::new(crate::mail::pgp::encrypt_filter(
-            if gpg_state.sign_mail.is_true() {
+            if gpg_state.sign_mail.unwrap_or(ActionFlag::False).is_true() {
                 Some(gpg_state.sign_keys.clone())
             } else {
                 None

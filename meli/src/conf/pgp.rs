@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use melib::conf::ToggleFlag;
+use melib::conf::ActionFlag;
 
 use super::default_vals::*;
 
@@ -30,22 +30,22 @@ pub struct PGPSettings {
     /// auto verify signed e-mail according to RFC3156
     /// Default: true
     #[serde(default = "true_val", alias = "auto-verify-signatures")]
-    pub auto_verify_signatures: bool,
+    pub auto_verify_signatures: ActionFlag,
 
     /// auto decrypt encrypted e-mail
     /// Default: true
     #[serde(default = "true_val", alias = "auto-decrypt")]
-    pub auto_decrypt: bool,
+    pub auto_decrypt: ActionFlag,
 
     /// always sign sent e-mail
     /// Default: false
     #[serde(default = "false_val", alias = "auto-sign")]
-    pub auto_sign: bool,
+    pub auto_sign: ActionFlag,
 
     /// Auto encrypt sent e-mail
     /// Default: false
     #[serde(default = "false_val", alias = "auto-encrypt")]
-    pub auto_encrypt: bool,
+    pub auto_encrypt: ActionFlag,
 
     // https://tools.ietf.org/html/rfc4880#section-12.2
     /// Default: None
@@ -61,9 +61,12 @@ pub struct PGPSettings {
     pub encrypt_key: Option<String>,
 
     /// Allow remote lookups
-    /// Default: None
-    #[serde(default = "internal_value_false", alias = "allow-remote-lookups")]
-    pub allow_remote_lookup: ToggleFlag,
+    /// Default: False
+    #[serde(
+        default = "action_internal_value_false",
+        alias = "allow-remote-lookups"
+    )]
+    pub allow_remote_lookup: ActionFlag,
 
     /// Remote lookup mechanisms.
     /// Default: "local,wkd"
@@ -92,14 +95,14 @@ fn default_lookup_mechanism() -> melib::gpgme::LocateKey {
 impl Default for PGPSettings {
     fn default() -> Self {
         Self {
-            auto_verify_signatures: true,
-            auto_decrypt: true,
-            auto_sign: false,
-            auto_encrypt: false,
+            auto_verify_signatures: true.into(),
+            auto_decrypt: true.into(),
+            auto_sign: false.into(),
+            auto_encrypt: false.into(),
             sign_key: None,
             decrypt_key: None,
             encrypt_key: None,
-            allow_remote_lookup: internal_value_false::<ToggleFlag>(),
+            allow_remote_lookup: action_internal_value_false::<ActionFlag>(),
             #[cfg(feature = "gpgme")]
             remote_lookup_mechanisms: default_lookup_mechanism(),
             #[cfg(not(feature = "gpgme"))]

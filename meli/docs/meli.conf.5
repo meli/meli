@@ -1589,6 +1589,15 @@ Flag to show if thread entry has been selected.
 .It Ic attachment_flag Ar Option<String>
 Flag to show if thread entry contains attachments.
 .LiteralStringValueRenders 📎\e\uu{FE0E} 📎︎ \" default value
+.It Ic highlight_self_flag Ar Option<String>
+Flag to show if any thread entry contains your address as a receiver.
+Useful to make mailing list threads that CC you stand out.
+.Pq Em "✸" \" default value
+.It Ic highlight_self Ar boolean
+Show
+.Ic highlight_self_flag
+or not.
+.Pq Em false \" default value
 .It Ic thread_subject_pack Ar boolean
 Should threads with differentiating Subjects show a list of those subjects on
 the entry title?

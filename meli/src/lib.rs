@@ -62,6 +62,14 @@
     clippy::cognitive_complexity,
     clippy::manual_clamp
 )]
+/* Source Code Annotation Tags:
+ *
+ * Global tags (in tagref format <https://github.com/stepchowfun/tagref>) for source code
+ * annotation:
+ *
+ * - tags from melib/src/lib.rs.
+ * - [tag:hardcoded_color_value] Replace hardcoded color values with user configurable ones.
+ */
 
 //!
 //!  This crate contains the frontend stuff of the application. The application
@@ -93,8 +101,8 @@ static GLOBAL: System = System;
 
 pub extern crate melib;
 pub use melib::{
-    error::*, log, AccountHash, Envelope, EnvelopeHash, EnvelopeRef, Flag, LogLevel, Mail, Mailbox,
-    MailboxHash, ThreadHash, ToggleFlag,
+    error::*, log, AccountHash, ActionFlag, Envelope, EnvelopeHash, EnvelopeRef, Flag, LogLevel,
+    Mail, Mailbox, MailboxHash, ThreadHash, ToggleFlag,
 };
 
 pub mod args;

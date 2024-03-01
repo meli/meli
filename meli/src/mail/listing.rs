@@ -41,25 +41,11 @@ use crate::{
     components::ExtendShortcutsMaps,
 };
 
-// [ref:TODO]: emoji_text_presentation_selector should be printed along with the chars
-// before it but not as a separate Cell
-//macro_rules! emoji_text_presentation_selector {
-//    () => {
-//        "\u{FE0E}"
-//    };
-//}
-//
-//pub const DEFAULT_ATTACHMENT_FLAG: &str = concat!("📎",
-// emoji_text_presentation_selector!()); pub const DEFAULT_SELECTED_FLAG: &str =
-// concat!("☑️", emoji_text_presentation_selector!());
-// pub const DEFAULT_UNSEEN_FLAG: &str = concat!("●",
-// emoji_text_presentation_selector!()); pub const DEFAULT_SNOOZED_FLAG: &str =
-// concat!("💤", emoji_text_presentation_selector!());
-
-pub const DEFAULT_ATTACHMENT_FLAG: &str = "📎";
-pub const DEFAULT_SELECTED_FLAG: &str = "☑️";
-pub const DEFAULT_UNSEEN_FLAG: &str = "●";
-pub const DEFAULT_SNOOZED_FLAG: &str = "💤";
+pub const DEFAULT_ATTACHMENT_FLAG: &str = concat!("📎", emoji_text_presentation_selector!());
+pub const DEFAULT_SELECTED_FLAG: &str = concat!("☑️", emoji_text_presentation_selector!());
+pub const DEFAULT_UNSEEN_FLAG: &str = concat!("●", emoji_text_presentation_selector!());
+pub const DEFAULT_SNOOZED_FLAG: &str = concat!("💤", emoji_text_presentation_selector!());
+pub const DEFAULT_HIGHLIGHT_SELF_FLAG: &str = concat!("✸", emoji_text_presentation_selector!());
 
 #[derive(Debug, Default)]
 pub struct RowsState<T> {
@@ -401,6 +387,7 @@ pub struct EntryStrings {
     pub flag: FlagString,
     pub from: FromString,
     pub tags: TagString,
+    pub highlight_self: bool,
 }
 
 #[macro_export]

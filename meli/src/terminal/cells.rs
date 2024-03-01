@@ -650,6 +650,7 @@ impl CellBuffer {
         let upper_left = area.upper_left();
         let bottom_right = area.bottom_right();
         let (mut x, mut y) = upper_left;
+        let mut prev_coords = upper_left;
         if y == get_y(bounds) || x == get_x(bounds) {
             if self.growable {
                 if !self.resize(
@@ -684,10 +685,17 @@ impl CellBuffer {
             }
         }
         for c in s.chars() {
+            if c == crate::emoji_text_presentation_selector!() {
+                let prev_attrs = self[prev_coords].attrs();
+                self[prev_coords].set_attrs(prev_attrs | Attr::FORCE_TEXT);
+                continue;
+            }
+
             if c == '\r' {
                 continue;
             }
             if c == '\n' {
+                prev_coords = (x, y);
                 y += 1;
                 if let Some(_x) = line_break {
                     x = _x + get_x(upper_left);
@@ -710,6 +718,7 @@ impl CellBuffer {
                 }
                 break;
             }
+            prev_coords = (x, y);
             if c == '\t' {
                 self[(x, y)].set_ch(' ');
                 x += 1;
@@ -996,7 +1005,10 @@ impl Cell {
         self.attrs
     }
 
-    pub fn set_attrs(&mut self, newattrs: Attr) -> &mut Self {
+    pub fn set_attrs(&mut self, mut newattrs: Attr) -> &mut Self {
+        if self.attrs.intersects(Attr::FORCE_TEXT) {
+            newattrs |= Attr::FORCE_TEXT;
+        }
         if !self.keep_attrs {
             self.attrs = newattrs;
         }
@@ -1079,14 +1091,15 @@ bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct Attr: u8 {
         /// Terminal default.
-        const DEFAULT   = 0b000_0000;
-        const BOLD      = 0b000_0001;
-        const DIM       = 0b000_0010;
-        const ITALICS   = 0b000_0100;
-        const UNDERLINE = 0b000_1000;
-        const BLINK     = 0b001_0000;
-        const REVERSE   = 0b010_0000;
-        const HIDDEN    = 0b100_0000;
+        const DEFAULT    = 0;
+        const BOLD       = 1;
+        const DIM        = Self::BOLD.bits() << 1;
+        const ITALICS    = Self::DIM.bits() << 1;
+        const UNDERLINE  = Self::ITALICS.bits() << 1;
+        const BLINK      = Self::UNDERLINE.bits() << 1;
+        const REVERSE    = Self::BLINK.bits() << 1;
+        const HIDDEN     = Self::REVERSE.bits() << 1;
+        const FORCE_TEXT = Self::HIDDEN.bits() << 1;
     }
 }
 
@@ -1107,6 +1120,7 @@ impl std::fmt::Display for Attr {
             Self::BLINK => write!(f, "Blink"),
             Self::REVERSE => write!(f, "Reverse"),
             Self::HIDDEN => write!(f, "Hidden"),
+            Self::FORCE_TEXT => write!(f, "ForceTextRepresentation"),
             combination => {
                 let mut ctr = 0;
                 if combination.intersects(Self::BOLD) {
@@ -1154,6 +1168,12 @@ impl std::fmt::Display for Attr {
                     }
                     Self::HIDDEN.fmt(f)?;
                 }
+                if combination.intersects(Self::FORCE_TEXT) {
+                    if ctr > 0 {
+                        write!(f, "|")?;
+                    }
+                    Self::FORCE_TEXT.fmt(f)?;
+                }
                 write!(f, "")
             }
         }
@@ -1196,6 +1216,7 @@ impl Attr {
             "Blink" => Ok(Self::BLINK),
             "Reverse" => Ok(Self::REVERSE),
             "Hidden" => Ok(Self::HIDDEN),
+            "ForceTextRepresentation" => Ok(Self::FORCE_TEXT),
             combination if combination.contains('|') => {
                 let mut ret = Self::DEFAULT;
                 for c in combination.trim().split('|') {

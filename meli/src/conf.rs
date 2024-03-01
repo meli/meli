@@ -62,7 +62,7 @@ use std::{
 
 use indexmap::IndexMap;
 use melib::{
-    conf::{AccountSettings, MailboxConf, ToggleFlag},
+    conf::{AccountSettings, ActionFlag, MailboxConf, ToggleFlag},
     error::*,
 };
 use pager::PagerSettings;
@@ -679,16 +679,29 @@ mod default_vals {
         None
     }
 
-    pub(in crate::conf) fn internal_value_false<T: std::convert::From<super::ToggleFlag>>() -> T {
-        super::ToggleFlag::InternalVal(false).into()
+    pub(in crate::conf) fn internal_value_false<T: std::convert::From<melib::conf::ToggleFlag>>(
+    ) -> T {
+        melib::conf::ToggleFlag::InternalVal(false).into()
     }
 
-    pub(in crate::conf) fn internal_value_true<T: std::convert::From<super::ToggleFlag>>() -> T {
-        super::ToggleFlag::InternalVal(true).into()
+    pub(in crate::conf) fn internal_value_true<T: std::convert::From<melib::conf::ToggleFlag>>() -> T
+    {
+        melib::conf::ToggleFlag::InternalVal(true).into()
     }
 
-    pub(in crate::conf) fn ask<T: std::convert::From<super::ToggleFlag>>() -> T {
-        super::ToggleFlag::Ask.into()
+    pub(in crate::conf) fn action_internal_value_false<T: std::convert::From<melib::ActionFlag>>(
+    ) -> T {
+        melib::conf::ActionFlag::InternalVal(false).into()
+    }
+
+    //pub(in crate::conf) fn action_internal_value_true<
+    //    T: std::convert::From<melib::conf::ActionFlag>,
+    //>() -> T {
+    //    melib::conf::ActionFlag::InternalVal(true).into()
+    //}
+
+    pub(in crate::conf) fn ask<T: std::convert::From<melib::conf::ActionFlag>>() -> T {
+        melib::conf::ActionFlag::Ask.into()
     }
 }
 
@@ -1041,6 +1054,7 @@ mod dotaddressable {
     impl DotAddressable for melib::LogLevel {}
     impl DotAddressable for PathBuf {}
     impl DotAddressable for ToggleFlag {}
+    impl DotAddressable for ActionFlag {}
     impl DotAddressable for SearchBackend {}
     impl DotAddressable for melib::SpecialUsageMailbox {}
     impl<T: DotAddressable> DotAddressable for Option<T> {}

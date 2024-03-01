@@ -68,7 +68,6 @@
  * Global tags (in tagref format <https://github.com/stepchowfun/tagref>) for source code
  * annotation:
  *
- * - [tag:hardcoded_color_value] Replace hardcoded color values with user configurable ones.
  * - [tag:needs_unit_test]
  * - [tag:needs_user_doc]
  * - [tag:needs_dev_doc]

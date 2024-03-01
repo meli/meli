@@ -785,6 +785,7 @@ impl PlainListing {
             )),
             from: FromString(Address::display_name_slice(e.from())),
             tags: TagString(tags, colors),
+            highlight_self: false,
         }
     }
 

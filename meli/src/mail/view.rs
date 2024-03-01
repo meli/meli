@@ -675,7 +675,8 @@ impl Component for MailView {
                                                 context.accounts[&coordinates.0]
                                                     .settings
                                                     .account()
-                                                    .make_display_name(),
+                                                    .make_display_name()
+                                                    .to_string(),
                                             );
                                             /* Manually drop stuff because borrowck doesn't do it
                                              * on its own */

@@ -23,7 +23,7 @@
 //! [`backends`](./backends/index.html)
 use std::{collections::HashMap, path::Path};
 
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     backends::SpecialUsageMailbox,
@@ -55,8 +55,8 @@ pub struct AccountSettings {
 impl AccountSettings {
     /// Create the account's display name from fields
     /// [`AccountSettings::identity`] and [`AccountSettings::display_name`].
-    pub fn make_display_name(&self) -> String {
-        Address::new(self.display_name.clone(), self.identity.clone()).to_string()
+    pub fn make_display_name(&self) -> Address {
+        Address::new(self.display_name.clone(), self.identity.clone())
     }
 
     pub fn order(&self) -> Option<(SortField, SortOrder)> {
@@ -184,117 +184,196 @@ pub const fn none<T>() -> Option<T> {
     None
 }
 
-macro_rules! named_unit_variant {
-    ($variant:ident) => {
-        pub mod $variant {
-            pub fn deserialize<'de, D>(deserializer: D) -> Result<(), D::Error>
-            where
-                D: serde::Deserializer<'de>,
-            {
-                struct V;
-                impl<'de> serde::de::Visitor<'de> for V {
-                    type Value = ();
-                    fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                        f.write_str(concat!("\"", stringify!($variant), "\""))
-                    }
-                    fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Self::Value, E> {
-                        if value == stringify!($variant) {
-                            Ok(())
-                        } else {
-                            Err(E::invalid_value(serde::de::Unexpected::Str(value), &self))
+pub use config_field_types::*;
+
+pub mod config_field_types {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    macro_rules! named_unit_variant {
+        ($variant:ident) => {
+            pub mod $variant {
+                pub fn deserialize<'de, D>(deserializer: D) -> Result<(), D::Error>
+                where
+                    D: serde::Deserializer<'de>,
+                {
+                    struct V;
+                    impl<'de> serde::de::Visitor<'de> for V {
+                        type Value = ();
+                        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                            f.write_str(concat!("\"", stringify!($variant), "\""))
+                        }
+                        fn visit_str<E: serde::de::Error>(
+                            self,
+                            value: &str,
+                        ) -> Result<Self::Value, E> {
+                            if value == stringify!($variant) {
+                                Ok(())
+                            } else {
+                                Err(E::invalid_value(serde::de::Unexpected::Str(value), &self))
+                            }
                         }
                     }
+                    deserializer.deserialize_str(V)
                 }
-                deserializer.deserialize_str(V)
+            }
+        };
+    }
+
+    pub mod strings {
+        named_unit_variant!(ask);
+    }
+
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub enum ToggleFlag {
+        #[default]
+        Unset,
+        InternalVal(bool),
+        False,
+        True,
+    }
+
+    impl From<bool> for ToggleFlag {
+        fn from(val: bool) -> Self {
+            if val {
+                Self::True
+            } else {
+                Self::False
             }
         }
-    };
-}
+    }
 
-pub mod strings {
-    named_unit_variant!(ask);
-}
+    impl ToggleFlag {
+        pub fn is_unset(&self) -> bool {
+            Self::Unset == *self
+        }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum ToggleFlag {
-    #[default]
-    Unset,
-    InternalVal(bool),
-    False,
-    True,
-    Ask,
-}
+        pub fn is_internal(&self) -> bool {
+            matches!(self, Self::InternalVal(_))
+        }
 
-impl From<bool> for ToggleFlag {
-    fn from(val: bool) -> Self {
-        if val {
-            Self::True
-        } else {
-            Self::False
+        pub fn is_false(&self) -> bool {
+            matches!(self, Self::False | Self::InternalVal(false))
+        }
+
+        pub fn is_true(&self) -> bool {
+            matches!(self, Self::True | Self::InternalVal(true))
         }
     }
-}
 
-impl ToggleFlag {
-    pub fn is_unset(&self) -> bool {
-        Self::Unset == *self
-    }
-
-    pub fn is_internal(&self) -> bool {
-        matches!(self, Self::InternalVal(_))
-    }
-
-    pub fn is_ask(&self) -> bool {
-        matches!(self, Self::Ask)
-    }
-
-    pub fn is_false(&self) -> bool {
-        matches!(self, Self::False | Self::InternalVal(false))
-    }
-
-    pub fn is_true(&self) -> bool {
-        matches!(self, Self::True | Self::InternalVal(true))
-    }
-}
-
-impl Serialize for ToggleFlag {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            Self::Unset | Self::InternalVal(_) => serializer.serialize_none(),
-            Self::False => serializer.serialize_bool(false),
-            Self::True => serializer.serialize_bool(true),
-            Self::Ask => serializer.serialize_str("ask"),
+    impl Serialize for ToggleFlag {
+        fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            match self {
+                Self::Unset | Self::InternalVal(_) => serializer.serialize_none(),
+                Self::False => serializer.serialize_bool(false),
+                Self::True => serializer.serialize_bool(true),
+            }
         }
     }
-}
 
-impl<'de> Deserialize<'de> for ToggleFlag {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        #[serde(untagged)]
-        enum InnerToggleFlag {
-            Bool(bool),
-            #[serde(with = "strings::ask")]
-            Ask,
+    impl<'de> Deserialize<'de> for ToggleFlag {
+        fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            #[derive(Deserialize)]
+            #[serde(untagged)]
+            enum InnerToggleFlag {
+                Bool(bool),
+            }
+            let s = <InnerToggleFlag>::deserialize(deserializer);
+            Ok(
+                match s.map_err(|err| {
+                    serde::de::Error::custom(format!(
+                        r#"expected one of "true", "false", found `{}`"#,
+                        err
+                    ))
+                })? {
+                    InnerToggleFlag::Bool(true) => Self::True,
+                    InnerToggleFlag::Bool(false) => Self::False,
+                },
+            )
         }
-        let s = <InnerToggleFlag>::deserialize(deserializer);
-        Ok(
-            match s.map_err(|err| {
-                serde::de::Error::custom(format!(
-                    r#"expected one of "true", "false", "ask", found `{}`"#,
-                    err
-                ))
-            })? {
-                InnerToggleFlag::Bool(true) => Self::True,
-                InnerToggleFlag::Bool(false) => Self::False,
-                InnerToggleFlag::Ask => Self::Ask,
-            },
-        )
+    }
+
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub enum ActionFlag {
+        InternalVal(bool),
+        False,
+        True,
+        #[default]
+        Ask,
+    }
+
+    impl From<bool> for ActionFlag {
+        fn from(val: bool) -> Self {
+            if val {
+                Self::True
+            } else {
+                Self::False
+            }
+        }
+    }
+
+    impl ActionFlag {
+        pub fn is_internal(&self) -> bool {
+            matches!(self, Self::InternalVal(_))
+        }
+
+        pub fn is_ask(&self) -> bool {
+            matches!(self, Self::Ask)
+        }
+
+        pub fn is_false(&self) -> bool {
+            matches!(self, Self::False | Self::InternalVal(false))
+        }
+
+        pub fn is_true(&self) -> bool {
+            matches!(self, Self::True | Self::InternalVal(true))
+        }
+    }
+
+    impl Serialize for ActionFlag {
+        fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            match self {
+                Self::InternalVal(_) => serializer.serialize_none(),
+                Self::False => serializer.serialize_bool(false),
+                Self::True => serializer.serialize_bool(true),
+                Self::Ask => serializer.serialize_str("ask"),
+            }
+        }
+    }
+
+    impl<'de> Deserialize<'de> for ActionFlag {
+        fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            #[derive(Deserialize)]
+            #[serde(untagged)]
+            enum InnerActionFlag {
+                Bool(bool),
+                #[serde(with = "strings::ask")]
+                Ask,
+            }
+            let s = <InnerActionFlag>::deserialize(deserializer);
+            Ok(
+                match s.map_err(|err| {
+                    serde::de::Error::custom(format!(
+                        r#"expected one of "true", "false", "ask", found `{}`"#,
+                        err
+                    ))
+                })? {
+                    InnerActionFlag::Bool(true) => Self::True,
+                    InnerActionFlag::Bool(false) => Self::False,
+                    InnerActionFlag::Ask => Self::Ask,
+                },
+            )
+        }
     }
 }

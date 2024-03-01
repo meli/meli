@@ -29,7 +29,7 @@ pub enum KeySelection {
         secret: bool,
         local: bool,
         pattern: String,
-        allow_remote_lookup: ToggleFlag,
+        allow_remote_lookup: ActionFlag,
     },
     Error {
         id: ComponentId,
@@ -52,7 +52,7 @@ impl KeySelection {
         secret: bool,
         local: bool,
         pattern: String,
-        allow_remote_lookup: ToggleFlag,
+        allow_remote_lookup: ActionFlag,
         context: &Context,
     ) -> Result<Self> {
         use melib::gpgme::*;
@@ -247,8 +247,8 @@ impl Component for KeySelection {
 
 #[derive(Clone, Debug)]
 pub struct GpgComposeState {
-    pub sign_mail: ToggleFlag,
-    pub encrypt_mail: ToggleFlag,
+    pub sign_mail: Option<ActionFlag>,
+    pub encrypt_mail: Option<ActionFlag>,
     pub encrypt_keys: Vec<melib::gpgme::Key>,
     pub encrypt_for_self: bool,
     pub sign_keys: Vec<melib::gpgme::Key>,
@@ -257,8 +257,8 @@ pub struct GpgComposeState {
 impl Default for GpgComposeState {
     fn default() -> Self {
         Self {
-            sign_mail: ToggleFlag::Unset,
-            encrypt_mail: ToggleFlag::Unset,
+            sign_mail: None,
+            encrypt_mail: None,
             encrypt_keys: vec![],
             encrypt_for_self: true,
             sign_keys: vec![],

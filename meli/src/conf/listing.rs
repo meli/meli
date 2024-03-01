@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use melib::{search::Query, Error, Result};
+use melib::{search::Query, Error, Result, ToggleFlag};
 
 use super::{default_vals::*, DotAddressable, IndexStyle};
 
@@ -130,6 +130,17 @@ pub struct ListingSettings {
     #[serde(default)]
     pub attachment_flag: Option<String>,
 
+    /// Flag to show if any thread entry contains your address as a receiver.
+    /// Useful to make mailing list threads that CC you stand out.
+    /// Default: "✸"
+    #[serde(default)]
+    pub highlight_self_flag: Option<String>,
+
+    /// Show `highlight_self_flag` or not.
+    /// Default: false
+    #[serde(default)]
+    pub highlight_self: ToggleFlag,
+
     /// Should threads with different Subjects show a list of those
     /// subjects on the entry title?
     /// Default: "true"
@@ -185,6 +196,8 @@ impl Default for ListingSettings {
             thread_snoozed_flag: None,
             selected_flag: None,
             attachment_flag: None,
+            highlight_self_flag: None,
+            highlight_self: ToggleFlag::Unset,
             thread_subject_pack: true,
             threaded_repeat_identical_from_values: false,
             relative_menu_indices: true,
@@ -224,6 +237,8 @@ impl DotAddressable for ListingSettings {
                     "thread_snoozed_flag" => self.thread_snoozed_flag.lookup(field, tail),
                     "selected_flag" => self.selected_flag.lookup(field, tail),
                     "attachment_flag" => self.attachment_flag.lookup(field, tail),
+                    "highlight_self_flag" => self.highlight_self_flag.lookup(field, tail),
+                    "highlight_self" => self.highlight_self.lookup(field, tail),
                     "thread_subject_pack" => self.thread_subject_pack.lookup(field, tail),
                     "threaded_repeat_identical_from_values" => self
                         .threaded_repeat_identical_from_values

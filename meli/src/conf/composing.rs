@@ -22,7 +22,7 @@
 //! Configuration for composing email.
 use std::collections::HashMap;
 
-use melib::{email::HeaderName, ToggleFlag};
+use melib::{conf::ActionFlag, email::HeaderName};
 use serde::{de, Deserialize, Deserializer};
 
 use super::{
@@ -92,7 +92,7 @@ pub struct ComposingSettings {
     /// Forward emails as attachment? (Alternative is inline)
     /// Default: ask
     #[serde(default = "ask", alias = "forward-as-attachment")]
-    pub forward_as_attachment: ToggleFlag,
+    pub forward_as_attachment: ActionFlag,
     /// Alternative lists of reply prefixes (etc. ["Re:", "RE:", ...]) to strip
     /// Default: `["Re:", "RE:", "Fwd:", "Fw:", "回复:", "回覆:", "SV:", "Sv:",
     /// "VS:", "Antw:", "Doorst:", "VS:", "VL:", "REF:", "TR:", "TR:", "AW:",
@@ -126,7 +126,7 @@ impl Default for ComposingSettings {
             wrap_header_preamble: None,
             attribution_format_string: None,
             attribution_use_posix_locale: true,
-            forward_as_attachment: ToggleFlag::Ask,
+            forward_as_attachment: ActionFlag::Ask,
             reply_prefix_list_to_strip: None,
             reply_prefix: res(),
             custom_compose_hooks: vec![],

@@ -405,6 +405,9 @@ impl Screen<Tty> {
             }
             if !c.empty() {
                 write!(stdout, "{}", c.ch()).unwrap();
+                if c.attrs().intersects(Attr::FORCE_TEXT) {
+                    _ = write!(stdout, "\u{FE0E}");
+                }
             }
         }
     }
@@ -432,6 +435,9 @@ impl Screen<Tty> {
             }
             if !c.empty() {
                 write!(stdout, "{}", c.ch()).unwrap();
+                if c.attrs().intersects(Attr::FORCE_TEXT) {
+                    _ = write!(stdout, "\u{FE0E}");
+                }
             }
         }
     }

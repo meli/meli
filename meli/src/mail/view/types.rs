@@ -21,7 +21,10 @@
 
 use std::fmt::Write as IoWrite;
 
-use melib::{attachment_types::Charset, error::*, pgp::DecryptionMetadata, Attachment, Result};
+use melib::{
+    attachment_types::Charset, conf::ActionFlag, error::*, pgp::DecryptionMetadata, Attachment,
+    Result,
+};
 
 use crate::{
     conf::shortcuts::EnvelopeViewShortcuts,
@@ -43,8 +46,8 @@ pub struct ViewSettings {
     pub sticky_headers: bool,
     pub show_date_in_my_timezone: bool,
     pub show_extra_headers: Vec<String>,
-    pub auto_verify_signatures: bool,
-    pub auto_decrypt: bool,
+    pub auto_verify_signatures: ActionFlag,
+    pub auto_decrypt: ActionFlag,
 }
 
 impl Default for ViewSettings {
@@ -61,8 +64,8 @@ impl Default for ViewSettings {
             sticky_headers: false,
             show_date_in_my_timezone: false,
             show_extra_headers: vec![],
-            auto_verify_signatures: true,
-            auto_decrypt: true,
+            auto_verify_signatures: ActionFlag::InternalVal(true),
+            auto_decrypt: ActionFlag::InternalVal(true),
         }
     }
 }
@@ -184,7 +187,13 @@ impl ViewOptions {
                     .collect::<Vec<Link>>();
             }
             for (lidx, l) in links.iter().enumerate().rev() {
-                text.insert_str(l.start, &format!("[{}]", lidx));
+                let mut start = l.start;
+                while start < text.len() && !text.is_char_boundary(start) {
+                    start += 1;
+                }
+                if start < text.len() {
+                    text.insert_str(start, &format!("[{}]", lidx));
+                }
             }
         }
 

@@ -713,7 +713,7 @@ impl ConversationsListing {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn make_entry_string(
+    fn make_entry_string(
         &self,
         root_envelope: &Envelope,
         context: &Context,
@@ -795,6 +795,7 @@ impl ConversationsListing {
             )),
             from: FromString(Address::display_name_slice(from)),
             tags: TagString(tags_string, colors),
+            highlight_self: false,
         }
     }
 

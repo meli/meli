@@ -58,6 +58,13 @@ pub enum Alignment {
     Center,
 }
 
+#[macro_export]
+macro_rules! emoji_text_presentation_selector {
+    () => {
+        '\u{FE0E}'
+    };
+}
+
 /*
  * CSI events we use
  */

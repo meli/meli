@@ -257,7 +257,7 @@ impl EnvelopeView {
                     }
                     #[cfg(feature = "gpgme")]
                     {
-                        if view_settings.auto_verify_signatures {
+                        if view_settings.auto_verify_signatures.is_true() {
                             let verify_fut = crate::mail::pgp::verify(a.clone());
                             let handle = main_loop_handler
                                 .job_executor
@@ -317,7 +317,7 @@ impl EnvelopeView {
                             }
                             #[cfg(feature = "gpgme")]
                             {
-                                if view_settings.auto_decrypt {
+                                if view_settings.auto_decrypt.is_true() {
                                     let decrypt_fut = crate::mail::pgp::decrypt(a.raw().to_vec());
                                     let handle = main_loop_handler
                                         .job_executor
