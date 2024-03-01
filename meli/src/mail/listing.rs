@@ -2655,14 +2655,14 @@ impl Listing {
                 .iter()
                 .map(|entry| entry.entries.len() + 1)
                 .sum::<usize>();
-        let min_width: usize = 2 * area.width();
+        let min_width: usize = area.width();
         let (width, height) = self.menu.grid().size();
         let cursor = match self.focus {
             ListingFocus::Mailbox => self.cursor_pos,
             ListingFocus::Menu => self.menu_cursor_pos,
         };
         if min_width > width || height < total_height || self.dirty {
-            let _ = self.menu.resize(min_width * 2, total_height);
+            let _ = self.menu.resize(min_width, total_height);
             let mut y = 0;
             for a in 0..self.accounts.len() {
                 let menu_area = self.menu.area().skip_rows(y);
