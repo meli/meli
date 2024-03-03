@@ -38,11 +38,11 @@ enum SelectorCursor {
 
 /// Shows a little window with options for user to select.
 ///
-/// Instantiate with Selector::new(). Set single_only to true if user should
+/// Instantiate with `Selector::new()`. Set `single_only` to true if user should
 /// only choose one of the options. After passing input events to this
-/// component, check Selector::is_done to see if the user has finalised their
-/// choices. Collect the choices by consuming the Selector with
-/// Selector::collect()
+/// component, check `Selector::is_done` to see if the user has finalised their
+/// choices. Collect the choices by consuming the `Selector` with
+/// `Selector::collect()`
 pub struct Selector<
     T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send,
     F: 'static + Sync + Send,
@@ -58,7 +58,7 @@ pub struct Selector<
     horizontal_alignment: Alignment,
     title: String,
 
-    /// If true, user has finished their selection
+    /// If `true`, user has finished their selection
     done: bool,
     done_fn: F,
     dirty: bool,

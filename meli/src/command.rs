@@ -63,7 +63,7 @@ pub use crate::actions::{
     ViewAction::{self, *},
 };
 
-/// Helper macro to convert an array of tokens into a TokenStream
+/// Helper macro to convert an array of tokens into a `TokenStream`
 macro_rules! to_stream {
     ($token: expr) => {
         TokenStream {

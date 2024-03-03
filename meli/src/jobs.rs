@@ -417,7 +417,7 @@ impl JobExecutor {
 
 pub type JobChannel<T> = oneshot::Receiver<T>;
 
-/// JoinHandle for the future that allows us to cancel the task.
+/// `JoinHandle` for the future that allows us to cancel the task.
 #[derive(Debug)]
 pub struct JoinHandle<T> {
     pub task: Arc<Mutex<Option<async_task::Task<()>>>>,

@@ -76,7 +76,7 @@ impl File {
         inner(&self.path).chain_err_summary(|| format!("Can't read {}", self.path.display()))
     }
 
-    /// Returned `File` will be deleted when dropped if delete_on_drop is set,
+    /// Returned `File` will be deleted when dropped if `delete_on_drop` is set,
     /// so make sure to add it on `context.temp_files` to reap it later.
     pub fn create_temp_file(
         bytes: &[u8],

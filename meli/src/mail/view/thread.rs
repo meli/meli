@@ -32,7 +32,7 @@ use crate::components::PageMovement;
 #[derive(Debug)]
 struct ThreadEntry {
     index: (usize, ThreadNodeHash, usize),
-    /// (indentation, thread_node index, line number in listing)
+    /// (indentation, `thread_node` index, line number in listing)
     indentation: usize,
     msg_hash: EnvelopeHash,
     seen: bool,
@@ -73,11 +73,11 @@ pub struct ThreadView {
 }
 
 impl ThreadView {
-    /// @coordinates: (account index, mailbox_hash, root set thread_node index)
-    /// @expanded_hash: optional position of expanded entry when we render the
-    ///                 ThreadView.
-    ///                 default: expanded message is the last one.
-    /// @context: current context
+    /// @`coordinates`: (account index, `mailbox_hash`, root set `thread_node`
+    /// index)
+    /// @`expanded_hash`: optional position of expanded entry when we
+    ///                   render the `ThreadView`.
+    ///                   default: expanded message is the last one.
     pub fn new(
         coordinates: (AccountHash, MailboxHash, EnvelopeHash),
         thread_group: ThreadHash,

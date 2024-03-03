@@ -361,17 +361,17 @@ pub enum ColorField {
     Bg,
 }
 
-/// The field a ThemeValue::Link refers to.
+/// The field a `ThemeValue::Link` refers to.
 trait ThemeLink {
     type LinkType;
 }
 
-/// A color value that's a link can either refer to .fg or .bg field
+/// A color value that's a link can either refer to `.fg` or `.bg` field
 impl ThemeLink for Color {
     type LinkType = ColorField;
 }
 
-/// An attr value that's a link can only refer to an .attr field
+/// An `attr` value that's a link can only refer to an `.attr` field
 impl ThemeLink for Attr {
     type LinkType = ();
 }
