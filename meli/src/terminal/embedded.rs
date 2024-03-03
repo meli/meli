@@ -19,6 +19,8 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#[cfg(target_os = "macos")]
+use std::os::fd::OwnedFd;
 use std::{
     ffi::{CString, OsStr},
     os::unix::{
@@ -78,7 +80,7 @@ ioctl_none_bad!(
 /// `command` in it.
 pub fn create_pty(width: usize, height: usize, command: String) -> Result<Arc<Mutex<Terminal>>> {
     #[cfg(not(target_os = "macos"))]
-    let (frontend_fd, backend_name) = {
+    let (frontend_fd, backend_name): (nix::pty::PtyMaster, String) = {
         // Open a new PTY frontend
         let frontend_fd = posix_openpt(OFlag::O_RDWR)?;
 
@@ -103,7 +105,7 @@ pub fn create_pty(width: usize, height: usize, command: String) -> Result<Arc<Mu
         (frontend_fd, backend_name)
     };
     #[cfg(target_os = "macos")]
-    let (frontend_fd, backend_fd) = {
+    let (frontend_fd, backend_fd): (OwnedFd, OwnedFd) = {
         let winsize = Winsize {
             ws_row: <u16>::try_from(height).unwrap(),
             ws_col: <u16>::try_from(width).unwrap(),
@@ -122,12 +124,12 @@ pub fn create_pty(width: usize, height: usize, command: String) -> Result<Arc<Mu
             let backend_fd = open(Path::new(&backend_name), OFlag::O_RDWR, stat::Mode::empty())?;
 
             // assign stdin, stdout, stderr to the pty
-            dup2(backend_fd, STDIN_FILENO).unwrap();
-            dup2(backend_fd, STDOUT_FILENO).unwrap();
-            dup2(backend_fd, STDERR_FILENO).unwrap();
+            dup2(backend_fd.as_raw_fd(), STDIN_FILENO).unwrap();
+            dup2(backend_fd.as_raw_fd(), STDOUT_FILENO).unwrap();
+            dup2(backend_fd.as_raw_fd(), STDERR_FILENO).unwrap();
             /* Become session leader */
             nix::unistd::setsid().unwrap();
-            match unsafe { set_controlling_terminal(backend_fd) } {
+            match unsafe { set_controlling_terminal(backend_fd.as_raw_fd()) } {
                 Ok(c) if c < 0 => {
                     log::error!(
                         "Could not execute `{command}`: ioctl(fd, TIOCSCTTY, NULL) returned {c}",
