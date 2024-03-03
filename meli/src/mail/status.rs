@@ -19,6 +19,8 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use std::borrow::Cow;
+
 use melib::{MailBackendExtensionStatus, SpecialUsageMailbox};
 
 use super::*;
@@ -171,16 +173,19 @@ impl AccountStatus {
                 a.backend_capabilities.supports_search,
             ) {
                 (SearchBackend::Auto, true) | (SearchBackend::None, true) => {
-                    "backend-side search".to_string()
+                    Cow::Borrowed("backend-side search")
                 }
                 (SearchBackend::Auto, false) | (SearchBackend::None, false) => {
-                    "none (search will be slow)".to_string()
+                    Cow::Borrowed("none (search will be slow)")
                 }
                 #[cfg(feature = "sqlite3")]
                 (SearchBackend::Sqlite3, _) => {
                     match crate::sqlite3::AccountCache::db_path(&a.name) {
-                        Ok(path) => format!("sqlite3 database: {}", path.display()),
-                        Err(err) => format!("sqlite3 error: {err}"),
+                        Ok(Some(path)) => {
+                            Cow::Owned(format!("sqlite3 database: {}", path.display()))
+                        }
+                        Ok(None) => Cow::Borrowed("sqlite3 database: uninitialized"),
+                        Err(err) => Cow::Owned(format!("sqlite3 error: {err}")),
                     }
                 }
             },

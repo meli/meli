@@ -562,7 +562,7 @@ impl Account {
                     )));
                     None
                 }
-                Ok(path) => Some(path),
+                Ok(path) => path,
             };
             if let Some(db_path) = db_path {
                 if !db_path.exists() {

@@ -186,7 +186,10 @@ impl AccountCache {
                     "Failed to insert envelope {}: {err}",
                     envelope.message_id_display(),
                 );
-                return Err(Error::new(err.to_string()));
+                return Err(Error::new(format!(
+                    "Failed to insert envelope {}: {err}",
+                    envelope.message_id_display(),
+                )));
             }
             let account_id: i32 = {
                 let mut stmt = tx
@@ -245,30 +248,29 @@ impl AccountCache {
 
     pub async fn remove(acc_name: String, env_hash: EnvelopeHash) -> Result<()> {
         let db_desc = DatabaseDescription {
-            identifier: Some(acc_name.into()),
+            identifier: Some(acc_name.clone().into()),
             ..DB.clone()
         };
         let db_path = db_desc.db_path()?;
         if !db_path.exists() {
-            return Err(Error::new(
-                "Database hasn't been initialised. Run `reindex {acc_name}` command",
-            ));
+            return Err(Error::new(format!(
+                "Database hasn't been initialised. Run `reindex {acc_name}` command"
+            )));
         }
 
         smol::unblock(move || {
             let mut conn = db_desc.open_or_create_db()?;
             let tx =
                 conn.transaction_with_behavior(melib::rusqlite::TransactionBehavior::Immediate)?;
-            if let Err(err) = tx
-                .execute(
-                    "DELETE FROM envelopes WHERE hash = ?",
-                    params![env_hash.to_be_bytes().to_vec(),],
-                )
-                .map_err(|e| Error::new(e.to_string()))
-            {
+            if let Err(err) = tx.execute(
+                "DELETE FROM envelopes WHERE hash = ?",
+                params![env_hash.to_be_bytes().to_vec(),],
+            ) {
                 drop(tx);
                 log::error!("Failed to remove envelope {env_hash}: {err}");
-                return Err(err);
+                return Err(Error::new(format!(
+                    "Failed to remove envelope {env_hash}: {err}"
+                )));
             }
             tx.commit()?;
             Ok(())
@@ -447,18 +449,16 @@ impl AccountCache {
         .await
     }
 
-    pub fn db_path(acc_name: &str) -> Result<PathBuf> {
+    pub fn db_path(acc_name: &str) -> Result<Option<PathBuf>> {
         let db_desc = DatabaseDescription {
             identifier: Some(acc_name.to_string().into()),
             ..DB.clone()
         };
         let db_path = db_desc.db_path()?;
         if !db_path.exists() {
-            return Err(Error::new(
-                "Database hasn't been initialised. Run `reindex {acc_name}` command",
-            ));
+            return Ok(None);
         }
-        Ok(db_path)
+        Ok(Some(db_path))
     }
 }
 
