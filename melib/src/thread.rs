@@ -815,7 +815,7 @@ impl Threads {
         }
     }
 
-    /// Update show_subject details of ThreadNode
+    /// Update `show_subject` details of [`ThreadNode`].
     pub fn update_show_subject(
         &mut self,
         id: ThreadNodeHash,

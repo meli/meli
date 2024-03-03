@@ -99,7 +99,7 @@ impl Method<MailboxObject> for MailboxGet {
 /// Section 5.3 but with the following additional request argument:
 ///
 ///
-/// The following extra SetError types are defined:
+/// The following extra [`SetError`] types are defined:
 ///
 /// For `destroy`:
 ///

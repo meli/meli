@@ -72,7 +72,7 @@
 //!
 //! ## Metadata
 //!
-//! `melib` recognizes the CClient (a [Pine client API](https://web.archive.org/web/20050203003235/http://www.washington.edu/imap/)) convention for metadata in `mbox` format:
+//! `melib` recognizes the `CClient` (a [Pine client API](https://web.archive.org/web/20050203003235/http://www.washington.edu/imap/)) convention for metadata in `mbox` format:
 //!
 //! - `Status`: R (Seen) and O (non-Recent) flags
 //! - `X-Status`: A (Answered), F (Flagged), T (Draft) and D (Deleted) flags

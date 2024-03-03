@@ -24,13 +24,12 @@ use std::{cell::Cell, marker::PhantomData, ptr::NonNull};
 use super::*;
 use crate::{
     notmuch::ffi::{
-        _notmuch_status_NOTMUCH_STATUS_READ_ONLY_DATABASE,
-        _notmuch_status_NOTMUCH_STATUS_UNBALANCED_FREEZE_THAW, notmuch_database_find_message,
-        notmuch_message_add_tag, notmuch_message_destroy, notmuch_message_freeze,
-        notmuch_message_get_date, notmuch_message_get_filename, notmuch_message_get_header,
-        notmuch_message_get_message_id, notmuch_message_get_replies, notmuch_message_remove_tag,
-        notmuch_message_tags_to_maildir_flags, notmuch_message_thaw, notmuch_messages_get,
-        notmuch_messages_move_to_next, notmuch_messages_valid,
+        notmuch_database_find_message, notmuch_message_add_tag, notmuch_message_destroy,
+        notmuch_message_freeze, notmuch_message_get_date, notmuch_message_get_filename,
+        notmuch_message_get_header, notmuch_message_get_message_id, notmuch_message_get_replies,
+        notmuch_message_remove_tag, notmuch_message_tags_to_maildir_flags, notmuch_message_thaw,
+        notmuch_messages_get, notmuch_messages_move_to_next, notmuch_messages_valid,
+        NOTMUCH_STATUS_READ_ONLY_DATABASE, NOTMUCH_STATUS_UNBALANCED_FREEZE_THAW,
     },
     thread::{ThreadHash, ThreadNode, ThreadNodeHash},
 };
@@ -260,7 +259,8 @@ impl<'m> Message<'m> {
     /// Quoted from `libnotmuch` C header:
     ///
     /// > The returned filename is an absolute filename, (the initial
-    /// > component will match `notmuch_database_get_path()`).
+    /// > component will match
+    /// > [`notmuch_database_get_path`](crate::notmuch::ffi::notmuch_database_get_path)).
     /// >
     /// > The returned string belongs to the message so should not be
     /// > modified or freed by the caller (nor should it be referenced after
@@ -269,7 +269,9 @@ impl<'m> Message<'m> {
     /// > Note: If this message corresponds to multiple files in the mail
     /// > store, (that is, multiple files contain identical message IDs),
     /// > this function will arbitrarily return a single one of those
-    /// > filenames. See `notmuch_message_get_filenames` for returning the
+    /// > filenames. See
+    /// > [`notmuch_message_get_filenames`](crate::notmuch::ffi::notmuch_message_get_filenames)
+    /// > for returning the
     /// > complete list of filenames.
     #[doc(alias = "notmuch_message_get_filename")]
     pub fn get_filename(&self) -> &OsStr {
@@ -284,9 +286,10 @@ impl<'m> Message<'m> {
     /// Quoted from `libnotmuch` C header:
     ///
     /// > This means that changes to the message state, (via
-    /// > notmuch_message_add_tag, notmuch_message_remove_tag, and
-    /// > notmuch_message_remove_all_tags), will not be committed to the
-    /// > database until the message is thawed with notmuch_message_thaw.
+    /// > [`notmuch_message_add_tag`], [`notmuch_message_remove_tag`](, and
+    /// > [`notmuch_message_remove_all_tags`](crate::notmuch::ffi::notmuch_message_remove_all_tags)), will not be committed to the
+    /// > database until the message is thawed with
+    /// > [`notmuch_message_thaw`].
     /// >
     /// > Multiple calls to freeze/thaw are valid and these calls will
     /// > "stack". That is there must be as many calls to thaw as to freeze
@@ -314,17 +317,17 @@ impl<'m> Message<'m> {
     /// > Imagine the example above without freeze/thaw and the operation
     /// > somehow getting interrupted. This could result in the message being
     /// > left with no tags if the interruption happened after
-    /// > notmuch_message_remove_all_tags but before notmuch_message_add_tag.
+    /// > [`notmuch_message_remove_all_tags`](crate::notmuch::ffi::notmuch_message_remove_all_tags) but before [`notmuch_message_add_tag`].
     /// >
     /// > Return value:
     /// >
-    /// > - `NOTMUCH_STATUS_SUCCESS`: Message successfully frozen.
-    /// > - `NOTMUCH_STATUS_READ_ONLY_DATABASE`: Database was opened in
+    /// > - [`NOTMUCH_STATUS_SUCCESS`](crate::notmuch::ffi::NOTMUCH_STATUS_SUCCESS): Message successfully frozen.
+    /// > - [`NOTMUCH_STATUS_READ_ONLY_DATABASE`]: Database was opened in
     /// > read-only
     /// > mode so message cannot be modified.
     #[doc(alias = "notmuch_message_freeze")]
     pub fn freeze(&self) {
-        if _notmuch_status_NOTMUCH_STATUS_READ_ONLY_DATABASE
+        if NOTMUCH_STATUS_READ_ONLY_DATABASE
             == unsafe { call!(self.lib, notmuch_message_freeze)(self.message.as_ptr()) }
         {
             return;
@@ -347,19 +350,23 @@ impl<'m> Message<'m> {
     /// >
     /// > Return value:
     /// >
-    /// > - `NOTMUCH_STATUS_SUCCESS`: Message successfully thawed, (or at least
+    /// > - [`NOTMUCH_STATUS_SUCCESS`](crate::notmuch::ffi::NOTMUCH_STATUS_SUCCESS): Message successfully thawed, (or at
+    /// > least
     /// > its frozen count has successfully been reduced by 1).
-    /// > - `NOTMUCH_STATUS_UNBALANCED_FREEZE_THAW`: An attempt was made to thaw
+    /// > - [`NOTMUCH_STATUS_UNBALANCED_FREEZE_THAW`]: An attempt was made to
+    /// > thaw
     /// > an unfrozen message. That is, there have been an unbalanced
-    /// > number of calls to `notmuch_message_freeze` and
-    /// > `notmuch_message_thaw`.
+    /// > number of calls to
+    /// > [`notmuch_message_freeze`]
+    /// > and
+    /// > [`notmuch_message_thaw`].
     #[doc(alias = "notmuch_message_thaw")]
     pub fn thaw(&self) {
         if self.freezes.get() == 0 {
             return;
         }
 
-        if _notmuch_status_NOTMUCH_STATUS_UNBALANCED_FREEZE_THAW
+        if NOTMUCH_STATUS_UNBALANCED_FREEZE_THAW
             == unsafe { call!(self.lib, notmuch_message_thaw)(self.message.as_ptr()) }
         {
             return;

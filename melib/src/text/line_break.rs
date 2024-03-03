@@ -101,7 +101,7 @@ macro_rules! get_class {
     }};
 }
 
-/// Side effects: Updates $graph_iter and potentially $idx and $grapheme
+/// Side effects: Updates `$graph_iter` and potentially `$idx` and `$grapheme`
 macro_rules! next_grapheme_class {
     ($graph_iter:ident, $grapheme:ident) => ({
         if let Some((_, g)) = $graph_iter.next() {

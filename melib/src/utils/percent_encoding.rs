@@ -497,7 +497,7 @@ fn decode_utf8_lossy(input: Cow<'_, [u8]>) -> Cow<'_, str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    /// https://url.spec.whatwg.org/#fragment-percent-encode-set
+    /// <https://url.spec.whatwg.org/#fragment-percent-encode-set>
     const FRAGMENT: &AsciiSet = &NON_ALPHANUMERIC
         .add(b' ')
         .add(b'"')

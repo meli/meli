@@ -502,7 +502,7 @@ pub trait BackendOp: ::std::fmt::Debug + ::std::marker::Send {
     fn as_bytes(&mut self) -> ResultFuture<Vec<u8>>;
 }
 
-/// Wrapper for BackendOps that are to be set read-only.
+/// Wrapper for [`BackendOp`] that are to be set read-only.
 ///
 /// Warning: Backend implementations may still cause side-effects (for example
 /// IMAP can set the Seen flag when fetching an envelope)

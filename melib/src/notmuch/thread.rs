@@ -110,11 +110,12 @@ impl Drop for Thread<'_> {
 /// Quoting the docs:
 ///
 /// > Note that there's no explicit destructor needed for the
-/// > notmuch_threads_t object. (For consistency, we do provide a
-/// > notmuch_threads_destroy function, but there's no good reason
+/// > [`notmuch_threads_t`] object. (For consistency, we do provide a
+/// > [`notmuch_threads_destroy`][crate::notmuch::ffi::notmuch_threads_destroy]
+/// > function, but there's no good reason
 /// > to call it if the query is about to be destroyed).
 ///
-/// So there's no need to implement Drop for this type.
+/// So there's no need to implement [`Drop`] for this type.
 pub struct ThreadsIterator<'query> {
     pub lib: Arc<NotmuchLibrary>,
     pub inner: Option<NonNull<notmuch_threads_t>>,

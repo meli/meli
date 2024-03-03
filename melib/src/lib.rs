@@ -41,6 +41,8 @@
     //clippy::cast_possible_wrap,
     //clippy::ptr_as_ptr,
     //clippy::bool_to_int_with_if,
+    clippy::doc_markdown,
+    clippy::expect_fun_call,
     clippy::borrow_as_ptr,
     clippy::case_sensitive_file_extension_comparisons,
     //clippy::cast_lossless,

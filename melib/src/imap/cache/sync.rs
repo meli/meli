@@ -79,7 +79,7 @@ impl ImapConnection {
         }
     }
 
-    /// > rfc4549_Synchronization_Operations_for_Disconnected_IMAP4_Clients
+    /// RFC4549 Synchronization Operations for Disconnected IMAP4 Clients
     pub async fn resync_basic(
         &mut self,
         mut cache_handle: Box<dyn ImapCache>,
@@ -311,7 +311,7 @@ impl ImapConnection {
         Ok(Some(payload.into_iter().map(|(_, env)| env).collect()))
     }
 
-    /// > rfc4549_Synchronization_Operations_for_Disconnected_IMAP4_Clients
+    /// RFC4549 Synchronization Operations for Disconnected IMAP4 Clients
     /// > Section 6.1
     pub async fn resync_condstore(
         &mut self,
@@ -621,9 +621,8 @@ impl ImapConnection {
         Ok(Some(payload.into_iter().map(|(_, env)| env).collect()))
     }
 
-    /// > rfc7162_Quick Flag Changes Resynchronization (CONDSTORE)_and Quick
-    /// > Mailbox
-    /// > Resynchronization (QRESYNC)
+    /// RFC7162 Quick Flag Changes Resynchronization (CONDSTORE) and Quick
+    /// Mailbox Resynchronization (QRESYNC)
     pub async fn resync_condstoreqresync(
         &mut self,
         _cache_handle: Box<dyn ImapCache>,

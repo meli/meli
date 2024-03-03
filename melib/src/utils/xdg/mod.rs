@@ -23,12 +23,10 @@
 //! `xdg-utils`.
 //!
 //! # What is implemented?
-//! * Function <a class="fn" href="fn.query_default_app.html"
-//!   title="xdg_utils::query_default_app fn">query_default_app</a> performs
-//!   like the xdg-utils function `binary_to_desktop_file`
-//! * Function <a class="fn" href="fn.query_mime_info.html"
-//!   title="xdg_utils::query_mime_info fn">query_mime_info</a> launches the
-//!   `mimetype` or else the `file` command.
+//! * Function [`query_default_app`] performs like the `xdg-utils` function
+//!   `binary_to_desktop_file`.
+//! * Function [`query_mime_info`] launches the `mimetype` or else the `file`
+//!   command.
 //!
 //! Some of the utils may be implemented by combining these functions with other
 //! functions in the Rust standard library.

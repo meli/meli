@@ -76,7 +76,7 @@ impl<'a> Borrow<dyn HeaderKey + 'a> for HeaderName {
 /// - `usize`
 /// - `&[u8]`, which panics if it's not a valid header value.
 /// - `&str`, which also panics if it's not a valid header value.
-/// - [HeaderName], which is guaranteed to be valid.
+/// - [`HeaderName`], which is guaranteed to be valid.
 ///
 /// # Panics
 ///

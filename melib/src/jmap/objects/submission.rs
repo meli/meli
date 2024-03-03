@@ -60,9 +60,9 @@ pub enum UndoStatus {
 /// This represents the delivery status for each of the submission's
 /// recipients, if known.  This property MAY not be supported by all
 /// servers, in which case it will remain null.  Servers that support
-/// it SHOULD update the EmailSubmission object each time the status
-/// of any of the recipients changes, even if some recipients are
-/// still being retried.
+/// it SHOULD update the [`EmailSubmission`](`EmailSubmissionObject`) object
+/// each time the status of any of the recipients changes, even if some
+/// recipients are still being retried.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeliveryStatusObject {
@@ -175,7 +175,7 @@ pub enum Delivered {
 
 /// # Email Submission
 ///
-/// An *EmailSubmission* object represents the submission of an Email for
+/// An `EmailSubmission` object represents the submission of an Email for
 /// delivery to one or more recipients.  It has the following properties:
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -299,11 +299,11 @@ pub struct EmailSubmissionSet {
     #[serde(default)]
     pub on_success_update_email: Option<IndexMap<Id<EmailSubmissionObject>, PatchObject>>,
     /// onSuccessDestroyEmail: `Id[]|null`
-    /// A list of EmailSubmission ids for which the Email with the
+    /// A list of [`EmailSubmissionObject`] ids for which the Email with the
     /// corresponding `emailId` should be destroyed if the create/update/
-    /// destroy succeeds.  (For references to EmailSubmission creations,
-    /// this is equivalent to a creation-reference, so the id will be the
-    /// creation id prefixed with a `#`.)
+    /// destroy succeeds.  (For references to [`EmailSubmissionObject`]
+    /// creations, this is equivalent to a creation-reference, so the id
+    /// will be the creation id prefixed with a `#`.)
     #[serde(default)]
     pub on_success_destroy_email: Option<Vec<Id<EmailSubmissionObject>>>,
 }
@@ -353,9 +353,9 @@ pub struct EnvelopeObject {
 
     /// When a JMAP server performs an SMTP message submission, it MAY
     /// use the same id string for the ENVID parameter `[RFC3461]` and
-    /// the EmailSubmission object id.  Servers that do this MAY
-    /// replace a client-provided value for ENVID with a server-
-    /// provided value.
+    /// the [`EmailSubmission`](`EmailSubmissionObject`) object id.  Servers
+    /// that do this MAY replace a client-provided value for ENVID with a
+    /// server- provided value.
     pub mail_from: Address,
 
     /// The email addresses to send the message to, and any RCPT TO

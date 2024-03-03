@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-//! Verification of OpenPGP signatures.
+//! Verification of `OpenPGP` signatures.
 use crate::{
     email::{
         attachment_types::{ContentType, MultipartType},

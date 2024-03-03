@@ -1402,10 +1402,12 @@ pub mod generic {
         Ok((input, ret.into()))
     }
 
-    ///`atext           =   ALPHA / DIGIT /    ; Printable US-ASCII "!" / "#" /
+    ///```text
+    /// atext           =   ALPHA / DIGIT /    ; Printable US-ASCII "!" / "#" /
     /// ;  characters not including "$" / "%" /        ;  specials.  Used for
     /// atoms.  "&" / "'" / "*" / "+" / "-" / "/" / "=" / "?" / "^" / "_" / "`"
-    /// / "{" / "|" / "}" / "~"`
+    /// / "{" / "|" / "}" / "~"
+    /// ```
     pub fn atext_ascii(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
         if input.is_empty() {
             return Err(nom::Err::Error((input, "atext(): empty input").into()));

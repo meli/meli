@@ -59,7 +59,7 @@ macro_rules! call {
 macro_rules! try_call {
     ($lib:expr, $call:expr) => {{
         let status = $call;
-        if status == $crate::notmuch::ffi::_notmuch_status_NOTMUCH_STATUS_SUCCESS {
+        if status == $crate::notmuch::ffi::NOTMUCH_STATUS_SUCCESS {
             Ok(())
         } else {
             let c_str = call!($lib, notmuch_status_to_string)(status);
@@ -505,9 +505,9 @@ impl NotmuchDb {
             call!(lib, notmuch_database_open)(
                 path_ptr,
                 if write {
-                    ffi::notmuch_database_mode_t_NOTMUCH_DATABASE_MODE_READ_WRITE
+                    ffi::NOTMUCH_DATABASE_MODE_READ_WRITE
                 } else {
-                    ffi::notmuch_database_mode_t_NOTMUCH_DATABASE_MODE_READ_ONLY
+                    ffi::NOTMUCH_DATABASE_MODE_READ_ONLY
                 },
                 std::ptr::addr_of_mut!(database),
             )

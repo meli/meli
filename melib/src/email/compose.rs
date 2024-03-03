@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-//! Compose a [``Draft`], with `MIME` and attachment support.
+//! Compose a [`Draft`], with `MIME` and attachment support.
 use std::{
     convert::TryFrom,
     ffi::OsStr,
@@ -542,7 +542,7 @@ fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
 }
 
 /// Reads file from given path, and returns an 'application/octet-stream'
-/// AttachmentBuilder object
+/// [`AttachmentBuilder`] object
 pub fn attachment_from_file<I>(path: &I) -> Result<AttachmentBuilder>
 where
     I: AsRef<OsStr>,
