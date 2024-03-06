@@ -221,3 +221,27 @@ test-makefile:
 	@export DATEVAL=$$(printf "%s" ${DATE} | wc -c | tr -d "[:blank:]" 2>&1); ([ "$${DATEVAL}" = "10" ] && $(PRINTF) "${GREEN}OK${ANSI_RESET}\n") || $(PRINTF) "${RED}ERROR${ANSI_RESET}\n'date -I' does not produce a YYYY-MM-DD output on this platform.\n" 1>&2
 	@$(PRINTF) "Checking that the git commit SHA can be detected. "
 	@([ ! -z "$(GIT_COMMIT)" ] && $(PRINTF) "${GREEN}OK${ANSI_RESET}\n") || $(PRINTF) "${YELLOW}WARN${ANSI_RESET}\nGIT_COMMIT env var is empty.\n" 1>&2
+
+# Checking if mdoc changes produce new lint warnings from mandoc(1) compared to HEAD version:
+#
+# example invocation: `mandoc_lint meli.1`
+#
+# with diff(1)
+# ============
+#function mandoc_lint () {
+#diff <(mandoc -T lint <(git show HEAD:./meli/docs/$1) 2> /dev/null | cut -d':' -f 3-) <(mandoc -T lint ./meli/docs/$1 2> /dev/null | cut -d':' -f 3-)
+#}
+#
+# with sdiff(1) (side by side)
+# ============================
+#
+#function mandoc_lint () {
+#sdiff <(mandoc -T lint <(git show HEAD:./meli/docs/$1) 2> /dev/null | cut -d':' -f 3-) <(mandoc -T lint ./meli/docs/$1 2> /dev/null | cut -d':' -f 3-)
+#}
+#
+# with delta(1)
+# =============
+#
+#function mandoc_lint () {
+#delta --side-by-side <(mandoc -T lint <(git show HEAD:./meli/docs/$1) 2> /dev/null | cut -d':' -f 3-) <(mandoc -T lint ./meli/docs/$1 2> /dev/null | cut -d':' -f 3-)
+#}

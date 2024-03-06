@@ -17,6 +17,31 @@
 .\" You should have received a copy of the GNU General Public License
 .\" along with meli. If not, see <http://www.gnu.org/licenses/>.
 .\"
+.de HorizontalRule
+\l'\n(.l/1.25'
+.sp
+..
+.de LiteralStringValue
+.Sm
+.Po Qo
+.Em Li \\$1
+.Qc Pc
+.Sm
+..
+.de LiteralStringValueRenders
+.LiteralStringValue \\$1
+.shift 1
+.Bo
+.Sm
+Rendered as:
+.Li r##
+.Qo
+\\$1
+.Qc
+.Li ##
+.Bc
+.Sm
+..
 .Dd November 11, 2022
 .Dt MELI.CONF 5
 .Os
@@ -178,13 +203,13 @@ theme = "light"
 .\"
 .sp
 Available options are listed below.
-Default values are shown in parentheses.
 .\"
 .\"
 .\"
 .\"
 .\"
 .Sh ACCOUNTS
+.Ss Account configuration settings
 Default values are shown in parentheses.
 .Bl -tag -width 36n
 .It Ic root_mailbox Ar String
@@ -278,6 +303,7 @@ Its format is described below in
 \&.
 .El
 .Ss notmuch only
+.HorizontalRule
 notmuch is supported by loading the dynamic library
 .Sy libnotmuch Ns
 \&.
@@ -346,6 +372,7 @@ format = "notmuch"
 .\"
 .\"
 .Ss IMAP only
+.HorizontalRule
 .Tn IMAP
 specific options are:
 .Bl -tag -width 36n
@@ -439,17 +466,20 @@ seconds means there is no timeout.
 .Pq Em 16 \" default value
 .El
 .Ss Gmail
+.HorizontalRule
 .Tn Gmail
 has non-standard
 .Tn IMAP
 behaviors that need to be worked around.
 .Ss Gmail - sending mail
+.HorizontalRule
 Option
 .Ic store_sent_mail
 should be disabled since
 .Tn Gmail
 auto-saves sent mail by its own.
 .Ss Gmail OAUTH2
+.HorizontalRule
 To use
 .Tn OAUTH2 Ns
 , you must go through a process to register your own private
@@ -507,6 +537,7 @@ should evaluate this command which if successful must only return a
 .Tn IMAP.
 .El
 .Ss JMAP only
+.HorizontalRule
 .Tn JMAP
 specific options
 .Bl -tag -width 36n
@@ -527,6 +558,7 @@ certificates.
 .Pq Em false \" default value
 .El
 .Ss mbox only
+.HorizontalRule
 .Tn mbox
 specific options:
 .Bl -tag -width 36n
@@ -575,6 +607,7 @@ mailboxes."Python mailing list" = { path = "~/.mail/python.mbox", subscribe = tr
 .\"
 .\"
 .Ss NNTP
+.HorizontalRule
 .Tn NNTP
 specific options
 .Bl -tag -width 36n
@@ -585,7 +618,7 @@ example:
 Server username
 .It Ic server_password Ar String
 Server password
-.It Ic require_auth Ar bool
+.It Ic require_auth Ar boolean
 .Pq Em optional
 require authentication in every case
 .Pq Em true \" default value
@@ -646,6 +679,7 @@ composing.send_mail = "server_submission"
 .\"
 .\"
 .Ss MAILBOXES
+.HorizontalRule
 .Bl -tag -width 36n
 .It Ic alias Ar String
 .Pq Em optional
@@ -748,7 +782,7 @@ mailboxes.
 .\"
 .\"
 .Sh COMPOSING
-Composing specific options.
+.Ss Composing specific configuration settings
 Default values are shown in parentheses.
 .Bl -tag -width 36n
 .It Ic send_mail Ar String|SmtpServerConf
@@ -939,8 +973,9 @@ or draft body mention attachments but they are missing.
 .\"
 .\"
 .Sh SHORTCUTS
-Default values are shown in parentheses.
+.Ss Values corresponding to keyboard keys, keycodes
 Shortcuts can take the following values:
+.sp
 .Bl -bullet -compact
 .It
 .Em Backspace
@@ -979,9 +1014,13 @@ Shortcuts can take the following values:
 .It
 .Em char
 .El
-.Em char
-is a single character string.
 .sp
+Where
+.Em char
+is a single character string, maximum 4 bytes long, like the corresponding type
+in Rust.
+.Pp
+In the next subsection, you will find lists for each shortcut category.
 The headings before each list indicate the map key of the shortcut list.
 For example for the first list titled
 .Em general
@@ -1015,8 +1054,10 @@ exit_entry = 'i'
 .Pp
 .Em commands
 .sp
-In addition, each shortcuts section supports a TOML array of commands to associate a key to an array of meli
+In addition, each shortcuts section supports a TOML array of commands to
+associate a key to an array of
 .Em COMMAND
+mode commands.
 .sp
 .\"
 .\"
@@ -1029,7 +1070,10 @@ commands = [ { command = [ "tag remove trash", "flag unset trash" ], shortcut = 
 .\"
 .\"
 .\"
-.Pp
+.Ss Shortcut configuration settings
+.HorizontalRule
+Default values are shown in parentheses.
+.sp
 .Em general
 .Bl -tag -width 36n
 .It Ic toggle_help
@@ -1350,6 +1394,7 @@ Toggle between horizontal and vertical layout.
 .\"
 .\"
 .Sh NOTIFICATIONS
+.Ss Notification configuration settings
 Default values are shown in parentheses.
 .Bl -tag -width 36n
 .It Ic enable Ar boolean
@@ -1384,6 +1429,7 @@ Play sound file in notifications if possible.
 .\"
 .\"
 .Sh PAGER
+.Ss Pager (viewing text) configuration settings
 Default values are shown in parentheses.
 .Bl -tag -width 36n
 .It Ic sticky_headers Ar boolean
@@ -1402,11 +1448,11 @@ A command to open html files.
 .Pq Em optional
 A command to pipe mail output through for viewing in pager.
 .Pq Em none \" default value
-.It Ic format_flowed Ar bool
+.It Ic format_flowed Ar boolean
 .Pq Em optional
 Respect format=flowed
 .Pq Em true \" default value
-.It Ic split_long_lines Ar bool
+.It Ic split_long_lines Ar boolean
 .Pq Em optional
 Split long lines that would overflow on the x axis.
 .Pq Em true \" default value
@@ -1468,6 +1514,7 @@ INBOX = {}
 .\"
 .\"
 .Sh LISTING
+.Ss Listing (lists of e-mail entries in a mailbox) configuration settings
 Default values are shown in parentheses.
 .Bl -tag -width 36n
 .It Ic show_menu_scrollbar Ar boolean
@@ -1535,33 +1582,34 @@ Flag to show if thread entry contains unseen mail.
 .Pq Em "●" \" default value
 .It Ic thread_snoozed_flag Ar Option<String>
 Flag to show if thread has been snoozed.
-.Pq Em "💤" \" default value
+.LiteralStringValueRenders 💤\e\uu{FE0E} 💤︎ \" default value
 .It Ic selected_flag Ar Option<String>
 Flag to show if thread entry has been selected.
-.Pq Em "☑️" \" default value
+.LiteralStringValueRenders ☑️ \e\uu{2007} ☑️ 
 .It Ic attachment_flag Ar Option<String>
 Flag to show if thread entry contains attachments.
-.Pq Em "📎" \" default value
-.It Ic thread_subject_pack Ar bool
+.LiteralStringValueRenders 📎\e\uu{FE0E} 📎︎ \" default value
+.It Ic thread_subject_pack Ar boolean
 Should threads with differentiating Subjects show a list of those subjects on
 the entry title?
-.Pq Em "true" \" default value
-.It Ic threaded_repeat_identical_from_values Ar bool
+.Pq Em true \" default value
+.It Ic threaded_repeat_identical_from_values Ar boolean
 In threaded listing style, repeat identical From column values within a thread.
 Not repeating adds empty space in the From column which might result in less
 visual clutter.
-.Pq Em "false" \" default value
-.It Ic relative_menu_indices Ar bool
+.Pq Em false \" default value
+.It Ic relative_menu_indices Ar boolean
 Show relative indices in menu mailboxes to quickly help with jumping to them.
 .Pq Em true \" default value
-.It Ic relative_list_indices Ar bool
+.It Ic relative_list_indices Ar boolean
 Show relative indices in listings to quickly help with jumping to them.
 .Pq Em true \" default value
-.It Ic hide_sidebar_on_launch Ar bool
+.It Ic hide_sidebar_on_launch Ar boolean
 Start app with sidebar hidden.
 .Pq Em false \" default value
 .El
 .Ss Examples of sidebar mailbox tree customization
+.HorizontalRule
 The default values
 .sp
 .\"
@@ -1669,6 +1717,7 @@ no_sibling_leaf = " \\_"
 .\"
 .\"
 .Sh TAGS
+.Ss Tags (e-mail metadata in backends that support them) configuration settings
 Default values are shown in parentheses.
 .Bl -tag -width 36n
 .It Ic colours Ar hash table String[Color]
@@ -1782,6 +1831,29 @@ Possible mechanisms:
 .\"
 .\"
 .Sh TERMINAL
+.Ss Note about emojis and other multi-width characters in string values
+Some useful unicode combining marks
+.Po
+invisible characters that modify the presentation of visible characters before
+them
+.Pc
+are:
+.sp
+.Bl -tag -width 15n
+.It Ns
+.Li \e\uu{FE0E}
+Emoji variation sequence select 15: renders an emoji as text style (monochrome)
+.It Ns
+.Li \e\uu{FE0F}
+Emoji variation sequence select 16: renders an emoji in color
+.It Ns
+.Li \e\uu{2007}
+Figure space, a space character with the width of a digit in a monospace
+typeface
+.El
+.sp
+.Ss Terminal configuration settings
+.HorizontalRule
 Default values are shown in parentheses.
 .Bl -tag -width 36n
 .It Ic theme Ar String
@@ -1834,7 +1906,7 @@ theme = "themeB"
 .\"
 .\"
 .\"
-.It Ic use_mouse Ar bool
+.It Ic use_mouse Ar boolean
 Use mouse events.
 This will disable text selection, but you will be able to resize some widgets.
 This setting can be toggled with
@@ -1926,6 +1998,7 @@ progress_spinner_sequence = { interval_ms = 150, frames = [ "-", "=", "≡" ] }
 .\"
 .\"
 .Sh LOG
+.Ss Logging configuration settings
 Default values are shown in parentheses.
 .Bl -tag -width 36n
 .It Ic log_file Ar String
@@ -1966,6 +2039,7 @@ to
 .\"
 .\"
 .Sh SMTP Connections
+.Ss SMTP configuration settings
 Default values are shown in parentheses.
 .Bl -tag -width 36n
 .It Ic hostname Ar String
@@ -2011,7 +2085,7 @@ For type
 .Bl -tag -width 36n
 .It Ic username Ar String
 .It Ic password Ar SmtpPassword
-.It Ic require_auth Ar bool
+.It Ic require_auth Ar boolean
 .Pq Em optional
 require authentication in every case.
 .Pq Em true \" default value
@@ -2025,7 +2099,7 @@ For type
 Command to evaluate that returns an
 .Tn XOAUTH2
 token.
-.It Ic require_auth Ar bool
+.It Ic require_auth Ar boolean
 .Pq Em optional
 require authentication in every case.
 .Pq Em true \" default value
@@ -2094,7 +2168,7 @@ Default security type is
 \&.
 .Bl -tag -width 36n
 .It Ic type Ar "none" | "auto" | "starttls" | "tls"
-.It Ic danger_accept_invalid_certs Ar bool
+.It Ic danger_accept_invalid_certs Ar boolean
 Accept invalid
 .Tn SSL
 /
@@ -2104,13 +2178,13 @@ certificates
 .El
 .Ss SmtpExtensions
 .Bl -tag -width 36n
-.It Ic pipelining Ar bool
+.It Ic pipelining Ar boolean
 RFC2920
 .Pq Em true \" default value
-.It Ic chunking Ar bool
+.It Ic chunking Ar boolean
 RFC3030
 .Pq Em true \" default value
-.It Ic prdr Ar bool
+.It Ic prdr Ar boolean
 draft-hall-prdr-00
 .Pq Em true \" default value
 .It Ic dsn_notify Ar String
