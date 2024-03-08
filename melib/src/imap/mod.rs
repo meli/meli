@@ -394,7 +394,7 @@ impl MailBackend for ImapType {
             loop {
                 let res = fetch_hlpr(&mut state).await.map_err(|err| {
                     #[cfg(debug_assertions)]
-                    log::trace!("{} fetch_hlpr err {:?}", id,  &err);
+                    log::trace!("{} fetch_hlpr at stage {:?} err {:?}", id,  state.stage, &err);
                     err
                 })?;
                 yield res;

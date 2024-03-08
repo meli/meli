@@ -75,6 +75,15 @@ macro_rules! imap_trace {
     };
 }
 
+macro_rules! imap_log {
+    ($fn:ident, $conn:expr, $fmt:literal, $($t:tt)*) => {
+        log::$fn!(std::concat!("{} ", $fmt), $conn.id, $($t)*);
+    };
+    ($fn:ident, $conn:expr, $fmt:literal) => {
+        log::$fn!(std::concat!("{} ", $fmt), $conn.id);
+    };
+}
+
 use super::{protocol_parser, Capabilities, ImapServerConf, UIDStore};
 
 #[derive(Clone, Copy, Debug)]
