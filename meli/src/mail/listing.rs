@@ -1024,7 +1024,7 @@ pub struct Listing {
     prev_ratio: usize,
     menu_width: WidgetWidth,
     focus: ListingFocus,
-    view: Box<ThreadView>,
+    view: Option<Box<ThreadView>>,
 }
 
 impl std::fmt::Display for Listing {
@@ -1102,8 +1102,9 @@ impl Component for Listing {
             } else {
                 self.component.draw(grid, area, context);
                 if self.component.unfocused() {
-                    self.view
-                        .draw(grid, self.component.view_area().unwrap_or(area), context);
+                    if let Some(ref mut view) = self.view {
+                        view.draw(grid, self.component.view_area().unwrap_or(area), context);
+                    }
                 }
             }
         } else if right_component_width == 0 {
@@ -1126,8 +1127,9 @@ impl Component for Listing {
                 let area = area.skip_cols(mid + 1);
                 self.component.draw(grid, area, context);
                 if self.component.unfocused() {
-                    self.view
-                        .draw(grid, self.component.view_area().unwrap_or(area), context);
+                    if let Some(ref mut view) = self.view {
+                        view.draw(grid, self.component.view_area().unwrap_or(area), context);
+                    }
                 }
             }
         }
@@ -1329,17 +1331,21 @@ impl Component for Listing {
                 match content.downcast_ref::<ListingMessage>().copied() {
                     None => {}
                     Some(ListingMessage::FocusUpdate { new_value }) => {
-                        self.view.process_event(
-                            &mut UIEvent::VisibilityChange(!matches!(new_value, Focus::None)),
-                            context,
-                        );
+                        if let Some(ref mut view) = self.view {
+                            view.process_event(
+                                &mut UIEvent::VisibilityChange(!matches!(new_value, Focus::None)),
+                                context,
+                            );
+                        }
                         if matches!(new_value, Focus::Entry) {
                             // Need to clear gap between sidebar and listing component, if any.
                             self.dirty = true;
                         }
                     }
                     Some(ListingMessage::UpdateView) => {
-                        self.view.set_dirty(true);
+                        if let Some(ref mut view) = self.view {
+                            view.set_dirty(true);
+                        }
                     }
                     Some(ListingMessage::OpenEntryUnderCursor {
                         env_hash,
@@ -1348,8 +1354,10 @@ impl Component for Listing {
                         go_to_first_unread,
                     }) => {
                         let (a, m) = self.component.coordinates();
-                        self.view.unrealize(context);
-                        self.view = Box::new(ThreadView::new(
+                        if let Some(view) = self.view.take() {
+                            view.unrealize(context);
+                        }
+                        self.view = Some(Box::new(ThreadView::new(
                             (a, m, env_hash),
                             thread_hash,
                             Some(env_hash),
@@ -1360,7 +1368,7 @@ impl Component for Listing {
                                 Some(ThreadViewFocus::MailView)
                             },
                             context,
-                        ));
+                        )));
                     }
                 }
                 return true;
@@ -1387,7 +1395,13 @@ impl Component for Listing {
             _ => {}
         }
 
-        if self.component.unfocused() && self.view.process_event(event, context) {
+        if self.component.unfocused()
+            && self
+                .view
+                .as_mut()
+                .map(|v| v.process_event(event, context))
+                .unwrap_or(false)
+        {
             return true;
         }
 
@@ -1399,7 +1413,12 @@ impl Component for Listing {
             }
         }
         if (self.focus == ListingFocus::Mailbox && self.status.is_none())
-            && ((self.component.unfocused() && self.view.process_event(event, context))
+            && ((self.component.unfocused()
+                && self
+                    .view
+                    .as_mut()
+                    .map(|v| v.process_event(event, context))
+                    .unwrap_or(false))
                 || self.component.process_event(event, context))
         {
             return true;
@@ -2441,7 +2460,7 @@ impl Component for Listing {
                 .map(Component::is_dirty)
                 .unwrap_or_else(|| self.component.is_dirty())
             || if self.component.unfocused() {
-                self.view.is_dirty()
+                self.view.as_ref().map(|v| v.is_dirty()).unwrap_or(false)
             } else {
                 self.component.is_dirty()
             }
@@ -2454,7 +2473,9 @@ impl Component for Listing {
         } else {
             self.component.set_dirty(value);
             if self.component.unfocused() {
-                self.view.set_dirty(value);
+                if let Some(ref mut view) = self.view {
+                    view.set_dirty(value);
+                }
             }
         }
     }
@@ -2462,7 +2483,9 @@ impl Component for Listing {
     fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = ShortcutMaps::default();
         if self.focus != ListingFocus::Menu && self.component.unfocused() {
-            map.extend_shortcuts(self.view.shortcuts(context));
+            if let Some(ref view) = self.view {
+                map.extend_shortcuts(view.shortcuts(context));
+            }
         }
         map.extend_shortcuts(if let Some(s) = self.status.as_ref() {
             s.shortcuts(context)
@@ -2591,7 +2614,7 @@ impl Listing {
                 first_account_hash,
                 MailboxHash::default(),
             ))),
-            view: Box::<ThreadView>::default(),
+            view: None,
             accounts: account_entries,
             status: None,
             dirty: true,

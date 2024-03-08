@@ -51,7 +51,7 @@ pub enum ThreadViewFocus {
     MailView,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ThreadView {
     new_cursor_pos: usize,
     cursor_pos: usize,
@@ -106,7 +106,11 @@ impl ThreadView {
             //],
             use_color: context.settings.terminal.use_color(),
             horizontal: None,
-            ..Default::default()
+            expanded_pos: 0,
+            new_expanded_pos: 0,
+            visible_entries: vec![],
+            movement: None,
+            content: Screen::<Virtual>::default(),
         };
         view.initiate(expanded_hash, go_to_first_unread, context);
         view.new_cursor_pos = view.new_expanded_pos;
