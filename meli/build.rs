@@ -25,7 +25,6 @@ extern crate syn;
 include!("config_macros.rs");
 
 fn main() {
-    println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=src/conf/.rebuild.overrides.rs");
     override_derive(&[
         ("src/conf/pager.rs", "PagerSettings"),
