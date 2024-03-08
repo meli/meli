@@ -535,6 +535,8 @@ impl State {
         }
         let mut areas: smallvec::SmallVec<[Area; 8]> =
             self.context.dirty_areas.drain(0..).collect();
+
+        let can_draw_above_screen: bool = !matches!(self.mode, UIMode::Embedded | UIMode::Fork);
         if self.message_box.active {
             let now = datetime::now();
             if self
@@ -554,7 +556,7 @@ impl State {
         /* Sort by x_start, ie upper_left corner's x coordinate */
         areas.sort_by(|a, b| a.upper_left().0.partial_cmp(&b.upper_left().0).unwrap());
 
-        if self.message_box.active {
+        if self.message_box.active && can_draw_above_screen {
             /* Check if any dirty area intersects with the area occupied by
              * floating notification box */
             let displ = self.message_box.cached_area();
@@ -605,7 +607,7 @@ impl State {
             }
         }
 
-        if self.message_box.is_dirty() && self.message_box.active {
+        if self.message_box.is_dirty() && self.message_box.active && can_draw_above_screen {
             if !self.message_box.is_empty() {
                 if !self.message_box.initialised {
                     {
@@ -638,7 +640,7 @@ impl State {
                 }
             }
             self.message_box.set_dirty(false);
-        } else if self.message_box.is_dirty() {
+        } else if self.message_box.is_dirty() && can_draw_above_screen {
             /* Clear area previously occupied by floating notification box */
             if self.message_box.cached_area().generation() == self.screen.area().generation() {
                 for row in self
@@ -653,7 +655,7 @@ impl State {
             self.message_box.set_dirty(false);
         }
 
-        if !self.overlay.is_empty() {
+        if !self.overlay.is_empty() && can_draw_above_screen {
             let area: Area = self.screen.area();
             let overlay_area = area.center_inside((
                 if self.screen.cols() / 3 > 30 {
