@@ -6,8 +6,8 @@ edition = "2018"
 rust-version = "1.65.0"
 
 license = "GPL-3.0-or-later"
-homepage = "https://meli.delivery"
-repository = "https://git.meli.delivery/meli/meli.git"
+homepage = "https://meli-email.org"
+repository = "https://git.meli-email.org/meli/meli.git"
 publish = false
 
 [[bin]]

@@ -22,10 +22,10 @@ body = """
 {% if not version %}
 ## [Unreleased]
 {% else %}
-## [{{ version }}](https://git.meliemail.org/meli/meli/releases/tag/{{ version }}) - {{ timestamp | date(format="%Y-%m-%d") }}
+## [{{ version }}](https://git.meli-email.org/meli/meli/releases/tag/{{ version }}) - {{ timestamp | date(format="%Y-%m-%d") }}
 {% endif %}
 {% macro commit(commit) -%}
-- [{{ commit.id | truncate(length=8, end="") }}]({{ "https://git.meliemail.org/meli/meli/commit/" ~ commit.id }}) {% if commit.scope %}*({{commit.scope | lower }})* {% endif %}{{ commit.message | split(pat="\n")| first | upper_first }}{% endmacro -%}
+- [{{ commit.id | truncate(length=8, end="") }}]({{ "https://git.meli-email.org/meli/meli/commit/" ~ commit.id }}) {% if commit.scope %}*({{commit.scope | lower }})* {% endif %}{{ commit.message | split(pat="\n")| first | upper_first }}{% endmacro -%}
 {% for group, commits in commits | group_by(attribute="group") %}
 
 ### {{ group | striptags | trim | upper_first }}
@@ -58,7 +58,7 @@ filter_unconventional = false
 split_commits = false
 # regex for preprocessing the commit messages
 commit_preprocessors = [
-  { pattern = '\((\w+\s)?#([0-9]+)\)', replace = "([#${2}](https://git.meliemail.org/meli/meli/issues/${2}))" },
+  { pattern = '\((\w+\s)?#([0-9]+)\)', replace = "([#${2}](https://git.meli-email.org/meli/meli/issues/${2}))" },
 ]
 # regex for parsing and grouping commits
 commit_parsers = [

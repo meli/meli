@@ -6,8 +6,8 @@ edition = "2021"
 build = "build.rs"
 rust-version = "1.68.2"
 
-homepage = "https://meli.delivery"
-repository = "https://git.meli.delivery/meli/meli.git"
+homepage = "https://meli-email.org"
+repository = "https://git.meli-email.org/meli/meli.git"
 description = "library for e-mail clients and other e-mail applications"
 keywords = ["mail", "mua", "maildir", "imap", "jmap"]
 categories = ["email", "parser-implementations"]

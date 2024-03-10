@@ -302,7 +302,7 @@ impl SmtpConnection {
                     }
                 }
                 if !matches!(server_conf.security, SmtpSecurity::Tls { .. }) {
-                    socket.write_all(b"EHLO meli.delivery\r\n").await?;
+                    socket.write_all(b"EHLO meli-email.org\r\n").await?;
                 }
                 if matches!(server_conf.security, SmtpSecurity::StartTLS { .. }) {
                     let pre_tls_extensions_reply = read_lines(
@@ -376,7 +376,7 @@ impl SmtpConnection {
                     .await?;
                     drop(pre_ehlo_extensions_reply);
                 }
-                ret.write_all(b"EHLO meli.delivery\r\n").await?;
+                ret.write_all(b"EHLO meli-email.org\r\n").await?;
                 ret
             }
             SmtpSecurity::None => {
@@ -412,7 +412,7 @@ impl SmtpConnection {
                         Reply::new(&res, code)
                     )));
                 }
-                ret.write_all(b"EHLO meli.delivery\r\n").await?;
+                ret.write_all(b"EHLO meli-email.org\r\n").await?;
                 ret
             }
         };
@@ -536,7 +536,7 @@ impl SmtpConnection {
                     ret.read_lines(&mut res, Some((ReplyCode::_235, &[])))
                         .await
                         .chain_err_kind(crate::error::ErrorKind::Authentication)?;
-                    ret.send_command(&[b"EHLO meli.delivery"]).await?;
+                    ret.send_command(&[b"EHLO meli-email.org"]).await?;
                 }
                 SmtpAuth::XOAuth2 { token_command, .. } => {
                     let password_token = {
@@ -569,7 +569,7 @@ impl SmtpConnection {
                     ret.read_lines(&mut res, Some((ReplyCode::_235, &[])))
                         .await
                         .chain_err_kind(crate::error::ErrorKind::Authentication)?;
-                    ret.send_command(&[b"EHLO meli.delivery"]).await?;
+                    ret.send_command(&[b"EHLO meli-email.org"]).await?;
                 }
             }
             {
