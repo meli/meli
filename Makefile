@@ -183,10 +183,11 @@ install-bin: meli
 .NOTPARALLEL: yes
 install: meli install-bin install-doc
 	@(if [ -z $${NO_MAN+x} ]; then \
-	echo "\n You're ready to go. You might want to read the \"STARTING WITH meli\" section in the manpage (\`man meli\`)" ;\
+	$(PRINTF) "\n You're ready to go. You might want to read the \"STARTING WITH meli\" section in the manpage (\`man meli\`)" ;\
+	$(PRINTF) "\n or the tutorial in meli(7) (\`man 7 meli\`).\n" ;\
 	fi)
-	@echo " - Report bugs in the mailing list or git issue tracker ${UNDERLINE}https://git.meli.delivery${ANSI_RESET}"
-	@echo " - If you have a specific feature or workflow you want to use, you can post in the mailing list or git issue tracker."
+	@$(PRINTF) " - Report bugs in the mailing list or git issue tracker ${UNDERLINE}https://git.meli-email.org${ANSI_RESET}\n"
+	@$(PRINTF) " - If you have a specific feature or workflow you want to use, you can post in the mailing list or git issue tracker.\n"
 
 .PHONY: dist
 dist:

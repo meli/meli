@@ -46,7 +46,7 @@ impl ImapConnection {
             ($mailbox_hash: expr, $($result:expr $(,)*)+) => {
                 $(if let Err(err) = $result {
                     self.uid_store.is_online.lock().unwrap().1 = Err(err.clone());
-                    imap_trace!(self, "failure: {}", err.to_string());
+                    imap_log!(trace, self, "failure: {}", err.to_string());
                     log::debug!("failure: {}", err.to_string());
                     self.add_refresh_event(RefreshEvent {
                         account_hash: self.uid_store.account_hash,
@@ -176,7 +176,7 @@ impl ImapConnection {
                     .entry(mailbox_hash)
                     .or_default()
                     .remove(TryInto::<usize>::try_into(n).unwrap().saturating_sub(1));
-                imap_trace!(self, "expunge {}, UID = {}", n, deleted_uid);
+                imap_log!(trace, self, "expunge {}, UID = {}", n, deleted_uid);
                 let deleted_hash: crate::email::EnvelopeHash = match self
                     .uid_store
                     .uid_index
@@ -224,7 +224,7 @@ impl ImapConnection {
                 }
             }
             UntaggedResponse::Exists(n) => {
-                imap_trace!(self, "exists {}", n);
+                imap_log!(trace, self, "exists {}", n);
                 try_fail!(
                     mailbox_hash,
                     self.send_command(CommandBody::fetch(n, common_attributes(), false)?).await
@@ -233,7 +233,8 @@ impl ImapConnection {
                 let mut v = match super::protocol_parser::fetch_responses(&response) {
                     Ok((_, v, _)) => v,
                     Err(err) => {
-                        imap_trace!(
+                        imap_log!(
+                            trace,
                             self,
                             "Error when parsing FETCH response after untagged exists {:?}",
                             err
@@ -241,7 +242,7 @@ impl ImapConnection {
                         return Ok(true);
                     }
                 };
-                imap_trace!(self, "responses len is {}", v.len());
+                imap_log!(trace, self, "responses len is {}", v.len());
                 for FetchResponse {
                     ref uid,
                     ref mut envelope,
@@ -297,7 +298,8 @@ impl ImapConnection {
                         .lock()
                         .unwrap()
                         .insert((mailbox_hash, uid), env.hash());
-                    imap_trace!(
+                    imap_log!(
+                        trace,
                         self,
                         "Create event {} {} {}",
                         env.hash(),
@@ -343,7 +345,7 @@ impl ImapConnection {
                     .map_err(Error::from)
                 {
                     Ok(&[]) => {
-                        imap_trace!(self, "UID SEARCH RECENT returned no results");
+                        imap_log!(trace, self, "UID SEARCH RECENT returned no results");
                     }
                     Ok(v) => {
                         let command = {
@@ -377,7 +379,7 @@ impl ImapConnection {
                                 return Ok(true);
                             }
                         };
-                        imap_trace!(self, "responses len is {}", v.len());
+                        imap_log!(trace, self, "responses len is {}", v.len());
                         for FetchResponse {
                             ref uid,
                             ref mut envelope,

@@ -381,7 +381,6 @@ impl MailBackend for ImapType {
             }
         };
         Ok(Box::pin(async_stream::try_stream! {
-            #[cfg(debug_assertions)]
             let id = state.connection.lock().await.id.clone();
             {
                 let f = &state.uid_store.mailboxes.lock().await[&mailbox_hash];
@@ -393,7 +392,6 @@ impl MailBackend for ImapType {
             };
             loop {
                 let res = fetch_hlpr(&mut state).await.map_err(|err| {
-                    #[cfg(debug_assertions)]
                     log::trace!("{} fetch_hlpr at stage {:?} err {:?}", id,  state.stage, &err);
                     err
                 })?;
@@ -476,7 +474,7 @@ impl MailBackend for ImapType {
         Ok(Box::pin(async move {
             match timeout(timeout_dur, connection.lock()).await {
                 Ok(mut conn) => {
-                    imap_trace!(conn, "is_online");
+                    imap_log!(trace, conn, "is_online");
                     match timeout(timeout_dur, conn.connect()).await {
                         Ok(Ok(())) => Ok(()),
                         Err(err) | Ok(Err(err)) => {
@@ -512,7 +510,6 @@ impl MailBackend for ImapType {
                 idle(ImapWatchKit {
                     conn: ImapConnection::new_connection(
                         &server_conf,
-                        #[cfg(debug_assertions)]
                         "watch()::idle".into(),
                         uid_store.clone(),
                     ),
@@ -524,7 +521,6 @@ impl MailBackend for ImapType {
                 poll_with_examine(ImapWatchKit {
                     conn: ImapConnection::new_connection(
                         &server_conf,
-                        #[cfg(debug_assertions)]
                         "watch()::poll_with_examine".into(),
                         uid_store.clone(),
                     ),
@@ -901,7 +897,8 @@ impl MailBackend for ImapType {
             conn.send_command(CommandBody::Expunge).await?;
             conn.read_response(&mut response, RequiredResponses::empty())
                 .await?;
-            imap_trace!(
+            imap_log!(
+                trace,
                 conn,
                 "EXPUNGE response: {}",
                 &String::from_utf8_lossy(&response)
@@ -1227,7 +1224,8 @@ impl MailBackend for ImapType {
             .await?;
             conn.read_response(&mut response, RequiredResponses::SEARCH)
                 .await?;
-            imap_trace!(
+            imap_log!(
+                trace,
                 conn,
                 "searching for {} returned: {}",
                 query_str,
@@ -1323,12 +1321,8 @@ impl ImapType {
                 server_conf.timeout,
             )
         });
-        let connection = ImapConnection::new_connection(
-            &server_conf,
-            #[cfg(debug_assertions)]
-            "ImapType::new".into(),
-            uid_store.clone(),
-        );
+        let connection =
+            ImapConnection::new_connection(&server_conf, "ImapType::new".into(), uid_store.clone());
 
         Ok(Box::new(Self {
             server_conf,
@@ -1341,7 +1335,6 @@ impl ImapType {
     pub fn shell(&mut self) {
         let mut conn = ImapConnection::new_connection(
             &self.server_conf,
-            #[cfg(debug_assertions)]
             "ImapType::shell".into(),
             self.uid_store.clone(),
         );
@@ -1389,7 +1382,7 @@ impl ImapType {
                     if input.trim() == "IDLE" {
                         let mut iter = ImapBlockingConnection::from(conn);
                         while let Some(line) = iter.next() {
-                            imap_trace!("out: {}", unsafe { std::str::from_utf8_unchecked(&line) });
+                            imap_log!(trace, "out: {}", unsafe { std::str::from_utf8_unchecked(&line) });
                         }
                         conn = iter.into_conn();
                     }
@@ -1428,7 +1421,7 @@ impl ImapType {
             conn.read_response(&mut res, RequiredResponses::LIST_REQUIRED)
                 .await?;
         }
-        imap_trace!(conn, "LIST reply: {}", String::from_utf8_lossy(&res));
+        imap_log!(trace, conn, "LIST reply: {}", String::from_utf8_lossy(&res));
         for l in res.split_rn() {
             if !l.starts_with(b"*") {
                 continue;
@@ -1470,14 +1463,14 @@ impl ImapType {
                     }
                 }
             } else {
-                imap_trace!(conn, "parse error for {:?}", l);
+                imap_log!(trace, conn, "parse error for {:?}", l);
             }
         }
         mailboxes.retain(|_, v| !v.hash.is_null());
         conn.send_command(CommandBody::lsub("", "*")?).await?;
         conn.read_response(&mut res, RequiredResponses::LSUB_REQUIRED)
             .await?;
-        imap_trace!(conn, "LSUB reply: {}", String::from_utf8_lossy(&res));
+        imap_log!(trace, conn, "LSUB reply: {}", String::from_utf8_lossy(&res));
         for l in res.split_rn() {
             if !l.starts_with(b"*") {
                 continue;
@@ -1492,7 +1485,7 @@ impl ImapType {
                     f.is_subscribed = true;
                 }
             } else {
-                imap_trace!(conn, "parse error for {:?}", l);
+                imap_log!(trace, conn, "parse error for {:?}", l);
             }
         }
         Ok(mailboxes)
@@ -1624,7 +1617,8 @@ struct FetchState {
 }
 
 async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
-    imap_trace!(
+    imap_log!(
+        trace,
         state.connection.lock().await,
         "fetch_hlpr mailbox: {:?} stage: {:?}",
         state.mailbox_hash,
@@ -1686,7 +1680,8 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                     }
                     Ok(Some(cached_payload)) => {
                         state.stage = FetchStage::ResyncCache;
-                        imap_trace!(
+                        imap_log!(
+                            trace,
                             state.connection.lock().await,
                             "fetch_hlpr fetch_cached_envs payload {} len for mailbox_hash {}",
                             cached_payload.len(),
@@ -1758,7 +1753,13 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                 conn.examine_mailbox(mailbox_hash, &mut response, false)
                     .await?;
                 if max_uid_left > 0 {
-                    imap_trace!(conn, "{} max_uid_left= {}", mailbox_hash, max_uid_left);
+                    imap_log!(
+                        trace,
+                        conn,
+                        "{} max_uid_left= {}",
+                        mailbox_hash,
+                        max_uid_left
+                    );
                     let sequence_set = if max_uid_left == 1 {
                         SequenceSet::from(ONE)
                     } else {
@@ -1782,7 +1783,8 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                             )
                         })?;
                     let (_, mut v, _) = protocol_parser::fetch_responses(&response)?;
-                    imap_trace!(
+                    imap_log!(
+                        trace,
                         conn,
                         "fetch response is {} bytes and {} lines and has {} parsed Envelopes",
                         response.len(),
@@ -1799,7 +1801,8 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                     } in v.iter_mut()
                     {
                         if uid.is_none() || envelope.is_none() || flags.is_none() {
-                            imap_trace!(
+                            imap_log!(
+                                trace,
                                 conn,
                                 "BUG? something in fetch is none. UID: {:?}, envelope: {:?} \
                                  flags: {:?}",
@@ -1807,7 +1810,8 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                                 envelope,
                                 flags
                             );
-                            imap_trace!(
+                            imap_log!(
+                                trace,
                                 conn,
                                 "response was: {}",
                                 String::from_utf8_lossy(&response)
@@ -1861,7 +1865,7 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                         let uid = uid.unwrap();
                         let env = envelope.unwrap();
                         /*
-                        imap_trace!(
+                        imap_log!(trace,
                             "env hash {} {} UID = {} MSN = {}",
                             env.hash(),
                             env.subject(),
