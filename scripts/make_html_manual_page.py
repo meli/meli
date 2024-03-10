@@ -131,7 +131,7 @@ class ManFixer(HTMLParser):
 
 
 @functools.cache
-def give_me_head(url, url_, name, section):
+def give_me_head(url_):
     o = urlparse(url_)
     conn = http.client.HTTPSConnection(o.hostname, timeout=6)
     conn.request(HTTPMethod.HEAD, o.path)
@@ -148,7 +148,7 @@ def give_me_head(url, url_, name, section):
             return None
         if response.getheader("Location"):
             # print("for ", url_, "following redirect to ", response.getheader("Location"))
-            return give_me_head(url, response.getheader("Location"), name, section)
+            return give_me_head(response.getheader("Location"))
         print("bailout")
         return None
     # print("for ", url_, "code is ", response.status)
@@ -342,7 +342,7 @@ if __name__ == "__main__":
                         )
                         url_ = url.replace("%N", name).replace("%S", section)
                         try:
-                            got = give_me_head(url, url_, name, section)
+                            got = give_me_head(url_, name, section)
                             if got:
                                 link["href"] = got
                                 found = True

@@ -18,7 +18,7 @@
 .\" along with meli. If not, see <http://www.gnu.org/licenses/>.
 .\"
 .de HorizontalRule
-\l'\n(.l/1.25'
+.\"\l'\n(.l\(ru1.25'
 .sp
 ..
 .de LiteralStringValue
@@ -42,7 +42,8 @@ Rendered as:
 .Bc
 .Sm
 ..
-.Dd November 11, 2022
+.\".Dd November 11, 2022
+.Dd March 10, 2024
 .Dt MELI.CONF 5
 .Os
 .Sh NAME
@@ -69,7 +70,7 @@ is written in
 .Tn TOML
 which has a few things to consider (quoting the specification):
 .sp
-.Bl -bullet -compact
+.Bl -dash -compact
 .It
 .Tn TOML
 is case sensitive.
@@ -119,7 +120,7 @@ include macro:
 .\"
 .Sh SECTIONS
 The top level sections of the configuration are:
-.Bl -bullet -compact
+.Bl -dash -compact
 .It
 accounts
 .It
@@ -240,14 +241,6 @@ When replying to an e-mail addressed to one of these identities, the
 :
 header will be adjusted to its value instead of the default identity.
 .El
-.TS
-allbox tab(:);
-lb l.
-conversations:shows one entry per thread
-compact:shows one row per thread
-threaded:shows threads as a tree structure
-plain:shows one row per mail, regardless of threading
-.TE
 .Bl -tag -width 36n
 .It Ic display_name Ar String
 .Pq Em optional
@@ -502,7 +495,7 @@ to generate and request the appropriate data to perform
 authentication.
 .sp
 Steps:
-.Bl -bullet -compact
+.Bl -dash -compact
 .It
 In
 .Tn Google API Ns
@@ -574,7 +567,7 @@ If the preferred format fails, the message is retried with mboxrd and then if
 it fails again there is a recover attempt, which discards the invalid message.
 .sp
 Valid values
-.Bl -bullet -compact
+.Bl -dash -compact
 .It
 .Ar auto
 .It
@@ -706,7 +699,7 @@ Silently insert updates for this mailbox, if any.
 .Pq Em optional
 special usage of this mailbox.
 Valid values are:
-.Bl -bullet -compact
+.Bl -dash -compact
 .It
 .Ar Normal
 .Pq Em default
@@ -859,7 +852,7 @@ This setting is meant to be disabled for non-standard behaviour in
 .Pq Em optional
 The attribution line appears above the quoted reply text.
 The format specifiers for the replied address are:
-.Bl -bullet -compact
+.Bl -dash -compact
 .It
 .Li %+f
 — the sender's name and email address.
@@ -893,8 +886,10 @@ Alternative lists of reply prefixes (etc. ["Re:", "RE:", ...]) to strip.
 .It Ic reply_prefix Ar String
 .Pq Em optional
 The prefix to use in reply subjects.
-The default prefix is "Re:".
-.Pq Em `Re:` \" default value
+The default prefix is
+.Ns Ql Re: Ns
+\&.
+.Pq Ql Re: \" default value
 .Pp
 RFC 2822, "Internet Message Format" has this to say on the matter:
 .\"
@@ -936,7 +931,7 @@ compose-hooks run before submitting an e-mail.
 They perform draft validation and/or transformations.
 If a hook encounters an error or warning, it will show up as a notification.
 The currently available hooks are:
-.Bl -bullet -compact
+.Bl -dash -compact
 .It
 .Ic past-date-warn
 — Warn if
@@ -976,7 +971,7 @@ or draft body mention attachments but they are missing.
 .Ss Values corresponding to keyboard keys, keycodes
 Shortcuts can take the following values:
 .sp
-.Bl -bullet -compact
+.Bl -dash -compact
 .It
 .Em Backspace
 .It
@@ -1214,7 +1209,7 @@ current sorting.
 .Pq Em C-p \" default value
 .It Ic toggle_menu_visibility
 Toggle visibility of side menu in mail list.
-.Pq Em ` \" default value
+.Pq Em \(ga \" default value
 .It Ic focus_left
 Switch focus on the left.
 .Pq Em Left \" default value
@@ -1273,7 +1268,7 @@ Go to previous account.
 .Pq Em L \" default value
 .It Ic toggle_menu_visibility
 Toggle visibility of side menu in mail list.
-.Pq Em ` \" default value
+.Pq Em \(ga \" default value
 .El
 .sp
 .sp
@@ -1529,7 +1524,9 @@ Datetime formatting passed verbatim to
 .Pq Em \&%Y-\&%m-\&%d \&%T \" default value
 .It Ic recent_dates Ar Boolean
 .Pq Em optional
-Show recent dates as `X {minutes,hours,days} ago`, up to 7 days.
+Show recent dates as
+.Ns Ql X {minutes,hours,days} ago
+.Ns , up to 7 days.
 .Pq Em true \" default value
 .It Ic filter Ar Query
 .Pq Em optional
@@ -1552,6 +1549,14 @@ filter = "not flags:seen" # show only unseen messages
 .\"
 .It Ic index_style Ar String
 Sets the way mailboxes are displayed.
+.TS
+allbox tab(:);
+lb l.
+conversations:shows one entry per thread
+compact:shows one row per thread
+threaded:shows threads as a tree structure
+plain:shows one row per mail, regardless of threading
+.TE
 .It Ic sidebar_mailbox_tree_has_sibling Ar String
 .Pq Em optional
 Sets the string to print in the mailbox tree for a level where its root has a
@@ -1750,7 +1755,7 @@ colors = { signed="#Ff6600", replied="DeepSkyBlue4", draft="#f00", replied="8" }
 \&...
   [accounts.dummy.mailboxes]
   # per mailbox override:
-  "INBOX" = {  tags.ignore_tags=["inbox", ] }
+  "INBOX" = { tags.ignore_tags=["inbox", ] }
 .Ed
 .\"
 .\"
@@ -1815,7 +1820,7 @@ Use comma to separate values.
 .Pq Em Local,WKD \" default value
 .Pp
 Possible mechanisms:
-.Bl -bullet -compact
+.Bl -dash -compact
 .It
 .Em cert
 .It
@@ -1875,7 +1880,9 @@ If true, box drawing will be done with ASCII characters.
 .Pq Em false \" default value
 .It Ic use_color Ar boolean
 .Pq Em optional
-If false, no ANSI colors are used.
+If false, no
+.Tn ANSI
+colors are used.
 .Pq Em true \" default value
 .It Ic window_title Ar String
 .Pq Em optional
@@ -2021,7 +2028,7 @@ All levels less or equal to the
 .Ic maximum_level
 will be appended to the log file.
 Available levels are, in partial order:
-.Bl -bullet -compact
+.Bl -dash -compact
 .It
 .Em OFF
 .It
@@ -2208,16 +2215,35 @@ RFC3461
 .Sh SEE ALSO
 .Xr meli 1 ,
 .Xr meli-themes 5
-.Sh CONFORMING TO
+.Sh STANDARDS
+.Bl -item -compact
+.It
 .Tn TOML
 Standard
 .Li v.0.5.0
 .Lk https://toml.io/en/v0.5.0
+.El
 .Sh AUTHORS
-Copyright 2017-2019
-.An Manos Pitsidianakis Aq manos@pitsidianak.is
+Copyright 2017\(en2024
+.An Manos Pitsidianakis Aq Mt manos@pitsidianak.is
+.Pp
 Released under the GPL, version 3 or greater.
 This software carries no warranty of any kind.
-(See COPYING for full copyright and warranty notices.)
-.Pp
-.Lk https://meli.delivery
+.Po
+See
+.Pa COPYING
+for full copyright and warranty notices.
+.Pc
+.Ss Links
+.Bl -item -compact
+.It
+.Lk https://meli\-email.org "Website"
+.It
+.Lk https://git.meli\-email.org/meli/meli "Main\ git\ repository\ and\ issue\ tracker"
+.It
+.Lk https://codeberg.org/meli/meli "Official\ read-only\ git\ mirror\ on\ codeberg.org"
+.It
+.Lk https://github.com/meli/meli "Official\ read-only\ git\ mirror\ on\ github.com"
+.It
+.Lk https://crates.io/crates/meli "meli\ crate\ on\ crates.io"
+.El

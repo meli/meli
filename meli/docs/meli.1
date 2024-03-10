@@ -17,6 +17,10 @@
 .\" You should have received a copy of the GNU General Public License
 .\" along with meli. If not, see <http://www.gnu.org/licenses/>.
 .\"
+.de HorizontalRule
+.\"\l'\n(.l\(ru1.25'
+.sp
+..
 .de Shortcut
 .Sm
 .Aq \\$1
@@ -40,12 +44,13 @@
 .Ed
 .sp
 ..
-.Dd November 11, 2022
+.\".Dd November 11, 2022
+.Dd March 10, 2024
 .Dt MELI 1
 .Os
 .Sh NAME
 .Nm meli
-.Nd terminal e-mail client
+.Nd terminal e\-mail client
 .Em μέλι
 is the Greek word for honey
 .Sh SYNOPSIS
@@ -71,7 +76,7 @@ Test a configuration file for syntax issues or missing options.
 Print documentation page and exit (Piping to a pager is recommended).
 .It Cm install-man Op Ar path
 Install manual pages to the first location provided by
-.Ar MANPATH
+.Ev MANPATH
 or
 .Xr manpath 1 ,
 unless you specify the directory as an argument.
@@ -87,8 +92,8 @@ or
 Prints help information or the help of the given subcommand(s).
 .It Cm print-app-directories
 Print all directories that
-.Nm Ns
- creates and uses.
+.Ns Nm
+creates and uses.
 .It Cm print-config-path
 Print location of configuration file that will be loaded on normal app startup.
 .It Cm print-default-theme
@@ -102,7 +107,7 @@ View mail from input file.
 .El
 .Sh DESCRIPTION
 .Nm
-is a terminal mail client aiming for extensive and user-frendly configurability.
+is a terminal mail client aiming for extensive and user-friendly configurability.
 .Bd -literal
      ^^      .-=-=-=-.  ^^
  ^^        (`-=-=-=-=-`)         ^^
@@ -136,11 +141,28 @@ At any time, you may press
 for a searchable list of all available actions and shortcuts, along with every possible setting and command that your version supports.
 .Pp
 The main visual navigation tool, the left-side sidebar may be toggled with
-.ShortcutPeriod ` listing toggle_menu_visibility
+.ShortcutPeriod \(ga listing toggle_menu_visibility
 \&.
 .Pp
 Each mailbox may be viewed in 4 modes:
-Plain views each mail individually, Threaded shows their thread relationship visually, Conversations collapses each thread of emails into a single entry, Compact shows one row per thread.
+.Bl -dash -compact
+.It
+.Tg index-style-plain
+.Em Plain
+views each mail individually,
+.It
+.Tg index-style-threaded
+.Em Threaded
+shows their thread relationship visually,
+.It
+.Tg index-style-conversations
+.Em Conversations
+collapses each thread of e\-mails into a single entry,
+.It
+.Tg index-style-compact
+.Em Compact
+shows one row per thread.
+.El
 .Pp
 If you're using a light color palette in your terminal, you should set
 .Em theme = "light"
@@ -156,6 +178,10 @@ See
 for a more detailed tutorial on using
 .Nm Ns
 \&.
+.Sh SHORTCUTS
+See
+.Xr meli.conf 5 SHORTCUTS
+for shortcuts and their default values.
 .Sh VIEWING MAIL
 Open attachments by typing their index in the attachments list and then
 .ShortcutPeriod a envelope_view open_attachment
@@ -181,7 +207,7 @@ If the path provided is a directory, the attachment is saved with its filename s
 If the 0th index is provided, the entire message is saved.
 If the path provided is a directory, the message is saved as an eml file with its filename set to the messages message-id.
 .Sh SEARCH
-Each e-mail storage backend has a default search method assigned.
+Each e\-mail storage backend has a default search method assigned.
 .Em IMAP
 uses the SEARCH command,
 .Em notmuch
@@ -230,9 +256,8 @@ alias:
 .Pc
 String keywords with spaces must be quoted.
 Quotes should always be escaped.
-.sp
-.Sy Important Notice about IMAP/JMAP
-.sp
+.Ss Important Notice about IMAP/JMAP
+.HorizontalRule
 To prevent downloading all your messages from your IMAP/JMAP server, don't set
 .Em search_backend
 to
@@ -243,7 +268,8 @@ will relay your queries to the IMAP server.
 Expect a delay between query and response.
 Sqlite3 on the contrary at reasonable mailbox sizes should have a non noticeable delay.
 .Ss QUERY ABNF SYNTAX
-.Bl -bullet
+.HorizontalRule
+.Bl -dash -compact
 .It
 .Li query = \&"(\&" query \&")\&" | from | to | cc | bcc | alladdresses | subject | flags | has_attachments | query \&"or\&" query | query \&"and\&" query | not query
 .It
@@ -276,14 +302,20 @@ Sqlite3 on the contrary at reasonable mailbox sizes should have a non noticeable
 .Sh FLAGS
 .Nm
 supports the basic maildir flags: passed, replied, seen, trashed, draft and flagged.
-Flags can be searched with the `flags:` prefix in a search query, and can be modified by
+Flags can be searched with the
+.Ns Ql flags:
+prefix in a search query, and can be modified by
 .Command flag set FLAG
 and
 .Command flag unset FLAG
 .Sh TAGS
 .Nm
 supports tagging in notmuch and IMAP/JMAP backends.
-Tags can be searched with the `tags:` or `flags:` prefix in a search query, and can be modified by
+Tags can be searched with the
+.Ns Ql tags:
+or
+.Ns Ql flags:
+prefix in a search query, and can be modified by
 .Command tag add TAG
 and
 .Command tag remove TAG
@@ -304,7 +336,8 @@ To reply to a mail, press
 \&.
 Both these actions open the mail composer view in a new tab.
 .Ss Editing text
-.Bl -bullet -compact
+.HorizontalRule
+.Bl -dash -compact
 .It
 Edit the header fields by selecting with the arrow keys and pressing
 .Shortcut Enter general focus_in_text_field
@@ -347,12 +380,14 @@ and to resume editing press the
 command again.
 .El
 .Ss Attachments
+.HorizontalRule
 Attachments may be handled with the
 .Cm add-attachment Ns
 ,
 .Cm remove-attachment
 commands (see below).
 .Ss Sending
+.HorizontalRule
 Finally, pressing
 .Shortcut s composing send_mail
 will send your message according to your settings
@@ -370,6 +405,7 @@ On complete failure to save your draft or sent message it will be saved in your
 .Em tmp
 directory instead and you will be notified of its location.
 .Ss Drafts
+.HorizontalRule
 To save your draft without sending it, issue
 .Em COMMAND
 .Cm close
@@ -381,8 +417,7 @@ To open a draft for further editing, select your draft in the mail listing and p
 .Sh CONTACTS
 .Nm
 supports three kinds of contact backends:
-.sp
-.Bl -enum -compact -offset indent
+.Bl -enum -compact
 .It
 an internal format that gets saved under
 .Pa $XDG_DATA_HOME/meli/account_name/addressbook Ns
@@ -404,7 +439,7 @@ compatible alias file in the option
 .sp
 See
 .Xr meli.conf 5 ACCOUNTS
-for the complete account configuration values.
+for the complete account contact configuration values.
 .Sh MODES
 .Bl -tag -compact -width 8n
 .It NORMAL
@@ -424,8 +459,9 @@ captures all input as text input, and is exited with
 .Cm Esc
 key.
 .El
-.Ss COMMAND Mode
+.Sh COMMAND
 .Ss Mail listing commands
+.HorizontalRule
 .Bl -tag -width 36n
 .It Cm set Ar plain | threaded | compact | conversations
 set the way mailboxes are displayed
@@ -469,25 +505,26 @@ Import mail from file into given mailbox.
 .It Cm copyto, moveto Ar MAILBOX_PATH
 Copy or move to other mailbox.
 .It Cm copyto, moveto Ar ACCOUNT Ar MAILBOX_PATH
-Copy or move to another account's  mailbox.
+Copy or move to another account's mailbox.
 .It Cm delete
 Delete selected threads.
 .It Cm export-mbox Ar FILEPATH
 Export selected threads to mboxcl2 file.
-.It Cm create-mailbox Ar ACCOUNT Ar MAILBOX_PATH
+.It Cm create\-mailbox Ar ACCOUNT Ar MAILBOX_PATH
 create mailbox with given path.
 Be careful with backends and separator sensitivity (eg IMAP)
-.It Cm subscribe-mailbox Ar ACCOUNT Ar MAILBOX_PATH
+.It Cm subscribe\-mailbox Ar ACCOUNT Ar MAILBOX_PATH
 subscribe to mailbox with given path
-.It Cm unsubscribe-mailbox Ar ACCOUNT Ar MAILBOX_PATH
+.It Cm unsubscribe\-mailbox Ar ACCOUNT Ar MAILBOX_PATH
 unsubscribe to mailbox with given path
-.It Cm rename-mailbox Ar ACCOUNT Ar MAILBOX_PATH_SRC Ar MAILBOX_PATH_DEST
+.It Cm rename\-mailbox Ar ACCOUNT Ar MAILBOX_PATH_SRC Ar MAILBOX_PATH_DEST
 rename mailbox
-.It Cm delete-mailbox Ar ACCOUNT Ar MAILBOX_PATH
+.It Cm delete\-mailbox Ar ACCOUNT Ar MAILBOX_PATH
 deletes mailbox in the mail backend.
-This action is unreversible.
+This action is irreversible.
 .El
 .Ss Mail view commands
+.HorizontalRule
 .Bl -tag -width 36n
 .It Cm pipe Ar EXECUTABLE Ar ARGS
 pipe pager contents to binary
@@ -501,7 +538,8 @@ unsubscribe automatically from list of viewed envelope
 open list archive with
 .Cm xdg-open
 .El
-.Ss composing mail commands
+.Ss Composing mail commands
+.HorizontalRule
 .Bl -tag -width 36n
 .It Cm mailto Ar MAILTO_ADDRESS
 Opens a composer tab with initial values parsed from the
@@ -536,7 +574,8 @@ for PGP configuration.
 .It Cm save-draft
 saves a copy of the draft in the Draft folder
 .El
-.Ss generic commands
+.Ss Generic commands
+.HorizontalRule
 .Bl -tag -width 36n
 .It Cm open-in-tab
 opens envelope view in new tab
@@ -560,10 +599,6 @@ Useful if you want to reload some settings without restarting
 .Nm Ns
 \&.
 .El
-.Sh SHORTCUTS
-See
-.Xr meli.conf 5 SHORTCUTS
-for shortcuts and their default values.
 .Sh EXIT STATUS
 .Nm
 exits with 0 on a successful run.
@@ -581,7 +616,9 @@ Specifies the editor to use
 .It Ev MELI_CONFIG
 Override the configuration file
 .It Ev NO_COLOR
-When present (regardless of its value), prevents the addition of ANSI color.
+When defined (regardless of its value), prevents the addition of
+.Tn ANSI
+color.
 The configuration value
 .Ic use_color
 overrides this.
@@ -638,75 +675,265 @@ Mailcap entries are searched for in the following files, in this order:
 .It
 .Pa /usr/local/etc/mailcap
 .El
+.Sh STANDARDS
+.Bl -dash -compact
+.It
+.Rs
+.%B XDG Base Directory Specification
+.%O Version 0.8
+.%A Waldo Bastian
+.%A Allison Karlitskaya
+.%A Lennart Poettering
+.%A Johannes Löthberg
+.%U https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
+.%D May 08, 2021
+.Re
+.It
+.Rs
+.%B maildir
+.%A Daniel J. Bernstein
+.%U https://cr.yp.to/proto/maildir.html
+.%D 1995
+.Re
+.It
+.Rs
+.%B RFC1524 A User Agent Configuration Mechanism For Multimedia Mail Format Information
+.%O mailcap file
+.%I Legacy
+.%D September 01, 1993
+.%A Dr. Nathaniel S. Borenstein
+.%U https://datatracker.ietf.org/doc/rfc1524/
+.Re
+.It
+.Rs
+.%B RFC2047 MIME (Multipurpose Internet Mail Extensions) Part Three: Message Header Extensions for Non-ASCII Text
+.%I IETF
+.%D November 01, 1996
+.%A Keith Moore
+.%U https://datatracker.ietf.org/doc/rfc2047/
+.Re
+.It
+.Rs
+.%B RFC2183 Communicating Presentation Information in Internet Messages: The Content-Disposition Header Field
+.%I Legacy
+.%D August 01, 1997
+.%A Rens Troost
+.%A Steve Dorner
+.%A Keith Moore
+.%U https://datatracker.ietf.org/doc/rfc2183/
+.Re
+.It
+.Rs
+.%B RFC2369 The Use of URLs as Meta-Syntax for Core Mail List Commands and their Transport through Message Header Fields
+.%I Legacy
+.%D July 01, 1998
+.%A Joshua D. Baer
+.%A Grant Neufeld
+.%U https://datatracker.ietf.org/doc/rfc2369/
+.Re
+.It
+.Rs
+.%B RFC2426 vCard MIME Directory Profile
+.%O vCard Version 3
+.%I IETF
+.%D September 01, 1998
+.%A Frank Dawson
+.%A Tim Howes
+.%U https://datatracker.ietf.org/doc/rfc2426/
+.Re
+.It
+.Rs
+.%B RFC3156 MIME Security with OpenPGP
+.%I IETF
+.%D August 01, 2001
+.%A Thomas Roessler
+.%A Michael Elkins
+.%A Raph Levien
+.%A Dave Del Torto
+.%U https://datatracker.ietf.org/doc/rfc3156/
+.Re
+.It
+.Rs
+.%B RFC3461 Simple Mail Transfer Protocol (SMTP) Service Extension for Delivery Status Notifications (DSNs)
+.%I IETF
+.%D January 23, 2003
+.%A Keith Moore
+.%U https://datatracker.ietf.org/doc/rfc3461/
+.Re
+.It
+.Rs
+.%B RFC3501 INTERNET MESSAGE ACCESS PROTOCOL - VERSION 4rev1
+.%I IETF
+.%D March 18, 2003
+.%A Mark Crispin
+.%U https://datatracker.ietf.org/doc/rfc3501/
+.Re
+.It
+.Rs
+.%B RFC3676 The Text/Plain Format and DelSp Parameters
+.%I IETF
+.%D February 19, 2004
+.%A Randall Gellens
+.%U https://datatracker.ietf.org/doc/rfc3676/
+.Re
+.It
+.Rs
+.%B RFC3691 Internet Message Access Protocol (IMAP) UNSELECT command
+.%I IETF
+.%D February 20, 2004
+.%A Alexey Melnikov
+.%U https://datatracker.ietf.org/doc/rfc3691/
+.Re
+.It
+.Rs
+.%B RFC3977 Network News Transfer Protocol (NNTP)
+.%I IETF
+.%D October 26, 2006
+.%A Clive Feather
+.%U https://datatracker.ietf.org/doc/rfc3977/
+.Re
+.It
+.Rs
+.%B RFC4549 Synchronization Operations for Disconnected IMAP4 Clients
+.%I IETF
+.%D June 16, 2006
+.%A Alexey Melnikov
+.%U https://datatracker.ietf.org/doc/rfc4549/
+.Re
+.It
+.Rs
+.%B RFC4616 The PLAIN Simple Authentication and Security Layer (SASL) Mechanism
+.%I IETF
+.%D August 31, 2006
+.%A Kurt Zeilenga
+.%U https://datatracker.ietf.org/doc/rfc4616/
+.Re
+.It
+.Rs
+.%B RFC4954 SMTP Service Extension for Authentication
+.%I IETF
+.%D July 23, 2007
+.%A Rob Siemborski
+.%A Alexey Melnikov
+.%U https://datatracker.ietf.org/doc/rfc4954/
+.Re
+.It
+.Rs
+.%B RFC5321 Simple Mail Transfer Protocol
+.%I IETF
+.%D October 01, 2008
+.%A Dr. John C. Klensin
+.%U https://datatracker.ietf.org/doc/rfc5321/
+.Re
+.It
+.Rs
+.%B RFC5322 Internet Message Format
+.%I IETF
+.%D October 01, 2008
+.%A Pete Resnick
+.%U https://datatracker.ietf.org/doc/rfc5322/
+.Re
+.It
+.Rs
+.%B RFC6048 Network News Transfer Protocol (NNTP) Additions to LIST Command
+.%I IETF
+.%D November 22, 2010
+.%A Julien ÉLIE
+.%U https://datatracker.ietf.org/doc/rfc6048/
+.Re
+.It
+.Rs
+.%B RFC6152 SMTP Service Extension for 8-bit MIME Transport
+.%I IETF
+.%D March 07, 2011
+.%A Dave Crocker
+.%A Dr. John C. Klensin
+.%A Dr. Marshall T. Rose
+.%A Ned Freed
+.%U https://datatracker.ietf.org/doc/rfc6152/
+.Re
+.It
+.Rs
+.%B RFC6350 vCard Format Specification
+.%O vCard Version 4
+.%I IETF
+.%D August 31, 2011
+.%A Simon Perreault
+.%U https://datatracker.ietf.org/doc/rfc6350/
+.Re
+.It
+.Rs
+.%B RFC6532 Internationalized Email Headers
+.%I IETF
+.%D February 17, 2012
+.%A Abel Yang
+.%A Shawn Steele
+.%A Ned Freed
+.%U https://datatracker.ietf.org/doc/rfc6532/
+.Re
+.It
+.Rs
+.%B RFC6868 Parameter Value Encoding in iCalendar and vCard
+.%I IETF
+.%D February 14, 2013
+.%A Cyrus Daboo
+.%U https://datatracker.ietf.org/doc/rfc6868/
+.Re
+.It
+.Rs
+.%B RFC7162 IMAP Extensions: Quick Flag Changes Resynchronization (CONDSTORE) and Quick Mailbox Resynchronization (QRESYNC)
+.%I IETF
+.%D May 23, 2014
+.%A Alexey Melnikov
+.%A Dave Cridland
+.%U https://datatracker.ietf.org/doc/rfc7162/
+.Re
+.It
+.Rs
+.%B RFC8620 The JSON Meta Application Protocol (JMAP)
+.%I IETF
+.%D July 18, 2019
+.%A Neil Jenkins
+.%A Chris Newman
+.%U https://datatracker.ietf.org/doc/rfc8620/
+.Re
+.It
+.Rs
+.%B RFC8621 The JSON Meta Application Protocol (JMAP) for Mail
+.%I IETF
+.%D August 08, 2019
+.%A Neil Jenkins
+.%A Chris Newman
+.%U https://datatracker.ietf.org/doc/rfc8621/
+.Re
+.El
 .Sh SEE ALSO
 .Xr meli.conf 5 ,
 .Xr meli-themes 5 ,
 .Xr meli 7 ,
 .Xr xdg-open 1 ,
 .Xr mailcap 5
-.Sh CONFORMING TO
-.Bl -bullet -compact
-.It
-XDG Standard
-.Lk https://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html Ns
-\&.
-.It
-mailcap file, RFC 1524: A User Agent Configuration Mechanism For Multimedia Mail Format Information
-.It
-RFC 5322: Internet Message Format
-.It
-RFC 6532: Internationalized Email Headers
-.It
-RFC 2047: MIME (Multipurpose Internet Mail Extensions) Part Three: Message Header Extensions for Non-ASCII Text
-.It
-RFC 3676: The Text/Plain Format and DelSp Parameters
-.It
-RFC 3156: MIME Security with OpenPGP
-.It
-RFC 2183: Communicating Presentation Information in Internet Messages: The Content-Disposition Header Field
-.It
-RFC 2369: The Use of URLs as Meta-Syntax for Core Mail List Commands and their Transport through Message Header Fields
-.It
-.Li maildir
-.Lk https://cr.yp.to/proto/maildir.html Ns
-\&.
-.It
-RFC 5321: Simple Mail Transfer Protocol
-.It
-RFC 3461: Simple Mail Transfer Protocol (SMTP) Service Extension for Delivery Status Notifications (DSNs)
-.It
-RFC 4954: SMTP Service Extension for Authentication
-.It
-RFC 6152: SMTP Service Extension for 8-bit MIME Transport
-.It
-RFC 4616: The PLAIN Simple Authentication and Security Layer (SASL) Mechanism
-.It
-RFC 3501: INTERNET MESSAGE ACCESS PROTOCOL - VERSION 4rev1
-.It
-RFC 3691: Internet Message Access Protocol (IMAP) UNSELECT command
-.It
-RFC 4549: Synch Ops for Disconnected IMAP4 Clients
-.It
-RFC 7162: IMAP Extensions: Quick Flag Changes Resynchronization (CONDSTORE) and Quick Mailbox Resynchronization (QRESYNC)
-.It
-RFC 8620: The JSON Meta Application Protocol (JMAP)
-.It
-RFC 8621: The JSON Meta Application Protocol (JMAP) for Mail
-.It
-RFC 3977: Network News Transfer Protocol (NNTP)
-.It
-RFC 6048: Network News Transfer Protocol (NNTP) Additions to LIST Command
-.It
-vCard Version 3, RFC 2426: vCard MIME Directory Profile
-.It
-vCard Version 4, RFC 6350: vCard Format Specification
-.It
-RFC 6868 Parameter Value Encoding in iCalendar and vCard
-.El
 .Sh AUTHORS
-Copyright 2017-2022
-.An Manos Pitsidianakis Aq manos@pitsidianak.is
-Released under the GPL, version 3 or greater.
-This software carries no warranty of any kind (See COPYING for full copyright and warranty notices).
+Copyright 2017\(en2024
+.An Manos Pitsidianakis Aq Mt manos@pitsidianak.is
 .Pp
-.Lk https://meli.delivery
+Released under the GPL, version 3 or greater.
+This software carries no warranty of any kind.
+.Po
+See
+.Pa COPYING
+for full copyright and warranty notices.
+.Pc
+.Ss Links
+.Bl -item -compact
+.It
+.Lk https://meli\-email.org "Website"
+.It
+.Lk https://git.meli\-email.org/meli/meli "Main\ git\ repository\ and\ issue\ tracker"
+.It
+.Lk https://codeberg.org/meli/meli "Official\ read-only\ git\ mirror\ on\ codeberg.org"
+.It
+.Lk https://github.com/meli/meli "Official\ read-only\ git\ mirror\ on\ github.com"
+.It
+.Lk https://crates.io/crates/meli "meli\ crate\ on\ crates.io"
+.El

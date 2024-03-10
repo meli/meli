@@ -40,22 +40,23 @@
 .Pc Ns
 ..
 .de Command
-.Bd -offset 1n -ragged
+.Bd -ragged -offset 1n
 .Cm \\$*
 .Ed
 ..
-.Dd November 11, 2022
+.\".Dd November 11, 2022
+.Dd March 10, 2024
 .Dt MELI 7
 .Os
 .Sh NAME
 .Nm meli
-.Nd Tutorial for the meli terminal e-mail client
+.Nd Tutorial for the meli terminal e\-mail client
 .Sh SYNOPSIS
 .Nm
 .Op ...
 .Sh DESCRIPTION
 .Nm
-is a terminal mail client aiming for extensive and user-frendly configurability.
+is a terminal mail client aiming for extensive and user\-friendly configurability.
 .Bd -literal -offset center
      ^^      .-=-=-=-.  ^^
  ^^        (`-=-=-=-=-`)         ^^
@@ -158,9 +159,9 @@ key.
 .It EMBED
 This is the mode of the embed terminal emulator.
 To exit an embedded application, issue
-.Aq Ctrl-C
+.Aq Ctrl\-C
 to kill it or
-.Aq Ctrl-Z
+.Aq Ctrl\-Z
 to stop the program and follow the instructions on
 .Nm
 to exit.
@@ -229,7 +230,7 @@ This is the view you will spend more time with in
 \&.
 .Pp
 Press
-.Shortcut ` listing toggle_menu_visibility
+.Shortcut \(ga listing toggle_menu_visibility
 to toggle the sidebars visibility.
 .Pp
 Press
@@ -237,16 +238,16 @@ Press
 to switch focus on the sidebar menu.
 Press
 .Shortcut Right listing focus_left
-to switch focus on the e-mail list.
+to switch focus on the e\-mail list.
 .Pp
-On the e-mail list, press
+On the e\-mail list, press
 .Shortcut k listing scroll_up
 to scroll up, and
 .Shortcut j listing scroll_down
 to scroll down.
 Press
 .Shortcut Enter listing open_entry
-to open an e-mail entry and
+to open an e\-mail entry and
 .Shortcut i listing exit_entry
 to exit it.
 .Bd -ragged
@@ -294,9 +295,9 @@ See
 for details.
 .Pp
 You can increase the sidebar's width with
-.Shortcut Ctrl-p listing increase_sidebar
+.Shortcut Ctrl\-p listing increase_sidebar
 and decrease with
-.ShortcutPeriod Ctrl-o listing decrease_sidebar
+.ShortcutPeriod Ctrl\-o listing decrease_sidebar
 \&.
 .Bd -ragged
 .Sy The status bar.
@@ -310,7 +311,7 @@ and decrease with
 The status bar shows which mode you are, and the status message of the current view.
 In the pictured example, it shows the status of a mailbox called
 .Dq Inbox
-with lots of e-mails.
+with lots of e\-mails.
 .Bd -ragged
 .Sy The number modifier buffer.
 .Ed
@@ -330,7 +331,7 @@ entries.
 Another use of the number buffer is opening URLs inside the pager.
 See
 .Sx PAGER
-for an explanation of interacting with URLs in e-mails.
+for an explanation of interacting with URLs in e\-mails.
 .Pp
 Pressing numbers in
 .Sy NORMAL
@@ -343,16 +344,16 @@ There are four different list styles:
 .Bl -hyphen -compact
 .It
 .Qq plain
-which shows one line per e-mail.
+which shows one line per e\-mail.
 .It
 .Qq threaded
 which shows a threaded view with drawn tree structure.
 .It
 .Qq compact
-which shows one line per thread which can include multiple e-mails.
+which shows one line per thread which can include multiple e\-mails.
 .It
 .Qq conversations
-which shows more than one line per thread which can include multiple e-mails with more details about the thread.
+which shows more than one line per thread which can include multiple e\-mails with more details about the thread.
 .El
 .Bd -ragged
 .Sy Plain view\&.
@@ -421,13 +422,13 @@ Simple set operations can be performed on a selection with these shortcut modifi
 .Bl -hyphen -compact
 .It
 Union modifier:
-.Shortcut Ctrl-u listing union_modifier
+.Shortcut Ctrl\-u listing union_modifier
 .It
 Difference modifier:
-.Shortcut Ctrl-d listing diff_modifier
+.Shortcut Ctrl\-d listing diff_modifier
 .It
 Intersection modifier:
-.Shortcut Ctrl-i listing intersection_modifier
+.Shortcut Ctrl\-i listing intersection_modifier
 .El
 .Pp
 To set an entry as
@@ -445,11 +446,11 @@ which also has its complement
 .sp
 action.
 .Pp
-For e-mail backends that support flags you can use the following commands on entries and selections to modify them:
+For e\-mail backends that support flags you can use the following commands on entries and selections to modify them:
 .Command flag set FLAG
 .Command flag unset FLAG
 .Pp
-For e-mail backends that support tags
+For e\-mail backends that support tags
 .Po
 like
 .Qq IMAP
@@ -471,9 +472,9 @@ You can clear the selection with the
 .Aq Esc
 key.
 .Sh PAGER
-You can open an e-mail entry by pressing
+You can open an e\-mail entry by pressing
 .ShortcutPeriod Enter listing open_entry
-\&. This brings up the e-mail view with the e-mail content inside a pager.
+\&. This brings up the e\-mail view with the e\-mail content inside a pager.
 .Bd -literal -offset center
 ┌────────────────────────────────────────────────────────────┐
 │Date: Sat, 21 May 2022 16:16:11 +0300                      ▀│
@@ -501,14 +502,14 @@ You can open an e-mail entry by pressing
 └────────────────────────────────────────────────────────────┘
 .Ed
 .Bd -ragged -offset 3n
-.Em The\ pager\ displaying\ an\ e-mail\&.
+.Em The\ pager\ displaying\ an\ e\-mail\&.
 .Ed
 .Pp
 The pager is simple to use.
 Scroll with the following:
 .Bl -hang -width 27n
 .It Go to next pager page
-.Shortcut  PageDown pager page_down
+.Shortcut PageDown pager page_down
 .It Go to previous pager page
 .Shortcut PageUp pager page_up
 .It Scroll down pager.
@@ -523,7 +524,7 @@ which will act as a multiplier.
 .Pp
 The pager can enter a special
 .Em url
-mode which will prefix all detected hyperlinks and e-mail addresses with a number inside square brackets
+mode which will prefix all detected hyperlinks and e\-mail addresses with a number inside square brackets
 .ShortcutPeriod u pager toggle_url_mode
 \&.
 Writing down a chosen number as a number modifier
@@ -554,13 +555,13 @@ for more details
 .Pc Ns
 \&.
 .Sh MAIL VIEW
-Other things you can do when viewing e-mail:
-.Bl -bullet -compact
+Other things you can do when viewing e\-mail:
+.Bl -dash -compact
 .It
 Most importantly, you can exit the mail view with:
 .Shortcut i listing exit_entry
 .It
-Add addresses from the e-mail headers to contacts:
+Add addresses from the e\-mail headers to contacts:
 .Shortcut c envelope_view add_addresses_to_contacts
 .It
 Open an attachment by entering its index as a number modifier and pressing:
@@ -576,39 +577,39 @@ Reply to envelope:
 .Shortcut R envelope_view reply
 .It
 Reply to author:
-.Shortcut Ctrl-r envelope_view reply_to_author
+.Shortcut Ctrl\-r envelope_view reply_to_author
 .It
 Reply to all/Reply to list/Follow up:
-.Shortcut Ctrl-g envelope_view reply_to_all
+.Shortcut Ctrl\-g envelope_view reply_to_all
 .It
-Forward email:
-.Shortcut Ctrl-f envelope_view forward
+Forward e\-mail:
+.Shortcut Ctrl\-f envelope_view forward
 .It
 Expand extra headers: (References and others)
 .Shortcut h envelope_view toggle_expand_headerk
 .It
 View envelope source in a pager: (toggles between raw and decoded source)
-.Shortcut M-r envelope_view view_raw_source
+.Shortcut M\-r envelope_view view_raw_source
 .It
 Return to envelope_view if viewing raw source or attachment:
 .Shortcut r envelope_view return_to_normal_view
 .El
 .Sh COMPOSING
-To compose an e-mail, you can either start with an empty draft by pressing
+To compose an e\-mail, you can either start with an empty draft by pressing
 .Shortcut m listing new_mail
 which opens a composer view in a new tab.
-To reply to a specific e-mail, when in envelope view you can select the specific action you want to take:
+To reply to a specific e\-mail, when in envelope view you can select the specific action you want to take:
 .sp
-.Bl -bullet -compact
+.Bl -dash -compact
 .It
 Reply to envelope.
 .Shortcut R envelope_view reply
 .It
 Reply to author.
-.Shortcut Ctrl-r envelope_view reply_to_author
+.Shortcut Ctrl\-r envelope_view reply_to_author
 .It
 Reply to all.
-.Shortcut Ctrl-g envelope_view reply_to_all
+.Shortcut Ctrl\-g envelope_view reply_to_all
 .El
 .sp
 To launch your editor, press
@@ -695,25 +696,25 @@ the\ actual\ embedding\ is\ seamless\&.
 .Ed
 .Ss composing mail commands
 .Bl -tag -width 36n
-.It Cm add-attachment Ar PATH
+.It Cm add\-attachment Ar PATH
 in composer, add
 .Ar PATH
 as an attachment
-.It Cm add-attachment < Ar CMD Ar ARGS
+.It Cm add\-attachment < Ar CMD Ar ARGS
 in composer, pipe
 .Ar CMD Ar ARGS
 output into an attachment
-.It Cm add-attachment-file-picker
+.It Cm add\-attachment\-file\-picker
 Launch command defined in the configuration value
 .Ic file_picker_command
 in
 .Xr meli.conf 5 TERMINAL
-.It Cm add-attachment-file-picker < Ar CMD Ar ARGS
+.It Cm add\-attachment\-file\-picker < Ar CMD Ar ARGS
 Launch command
 .Ar CMD Ar ARGS Ns
 \&.
 The command should print file paths in stderr, separated by NULL bytes.
-.It Cm remove-attachment Ar INDEX
+.It Cm remove\-attachment Ar INDEX
 remove attachment with given index
 .It Cm toggle sign
 toggle between signing and not signing this message.
@@ -721,7 +722,7 @@ If the gpg invocation fails then the mail won't be sent.
 See
 .Xr meli.conf 5 PGP
 for PGP configuration.
-.It Cm save-draft
+.It Cm save\-draft
 saves a copy of the draft in the Draft folder
 .El
 .\" [ref:TODO]: add contacts section
@@ -738,12 +739,26 @@ for documentation on how to theme
 .Xr xdg-open 1 ,
 .Xr mailcap 5
 .Sh AUTHORS
-Copyright 2017-2022
-.An Manos Pitsidianakis Aq manos@pitsidianak.is
+Copyright 2017\(en2024
+.An Manos Pitsidianakis Aq Mt manos@pitsidianak.is
+.Pp
 Released under the GPL, version 3 or greater.
 This software carries no warranty of any kind.
-(See COPYING for full copyright and warranty notices.)
-.Pp
-.Lk https://meli.delivery
-.Lk https://github.com/meli/meli
-.Lk https://crates.io/crates/meli
+.Po
+See
+.Pa COPYING
+for full copyright and warranty notices.
+.Pc
+.Ss Links
+.Bl -item -compact
+.It
+.Lk https://meli\-email.org "Website"
+.It
+.Lk https://git.meli\-email.org/meli/meli "Main\ git\ repository\ and\ issue\ tracker"
+.It
+.Lk https://codeberg.org/meli/meli "Official\ read-only\ git\ mirror\ on\ codeberg.org"
+.It
+.Lk https://github.com/meli/meli "Official\ read-only\ git\ mirror\ on\ github.com"
+.It
+.Lk https://crates.io/crates/meli "meli\ crate\ on\ crates.io"
+.El

@@ -17,7 +17,8 @@
 .\" You should have received a copy of the GNU General Public License
 .\" along with meli. If not, see <http://www.gnu.org/licenses/>.
 .\"
-.Dd November 11, 2022
+.\".Dd November 11, 2022
+.Dd March 10, 2024
 .Dt MELI-THEMES 5
 .Os
 .Sh NAME
@@ -31,15 +32,15 @@ comes with two themes,
 .Ic dark
 (default) and
 .Ic light .
-.sp
+.Pp
 Custom themes are defined as lists of key-values in the configuration files:
-.Bl -bullet  -compact
+.Bl -item -compact -offset 2
 .It
 .Pa $XDG_CONFIG_HOME/meli/config.toml
 .It
 .Pa $XDG_CONFIG_HOME/meli/themes/*.toml
 .El
-.sp
+.Pp
 The application theme is defined in the configuration as follows:
 .Bd -literal
 [terminal]
@@ -56,9 +57,9 @@ keys are settings for the
 .Ic compact
 mail listing style.
 A setting contains three fields: fg for foreground color, bg for background color, and attrs for text attribute.
-.sp
+.Pp
 .Dl \&"widget.key.label\&" = { fg = \&"Default\&", bg = \&"Default\&", attrs = \&"Default\&" }
-.sp
+.Pp
 Each field contains a value, which may be either a color/attribute, a link (key name) or a valid alias.
 An alias is a string starting with the \&"\&$\&" character and must be declared in advance in the
 .Ic color_aliases
@@ -69,10 +70,14 @@ An alias' value can be any valid value, including links and other aliases, as lo
 In the case of a link the setting's real value depends on the value of the referred key.
 This allows for defaults within a group of associated values.
 Cyclic references in a theme results in an error:
-.sp
+.Pp
 .Dl spooky theme contains a cycle: fg:  mail.listing.compact.even -> mail.listing.compact.highlighted -> mail.listing.compact.odd -> mail.listing.compact.even
 .Pp
-Two themes are included by default, `light` and `dark`.
+Two themes are included by default,
+.Ql light
+and
+.Ql dark Ns
+\&.
 .Sh EXAMPLES
 Specific settings from already defined themes can be overwritten:
 .Bd -literal
@@ -100,18 +105,18 @@ Custom themes can be included in your configuration files or be saved independen
 .Pa $XDG_CONFIG_HOME/meli/themes/
 directory as TOML files.
 To start creating a theme right away, you can begin by editing the default theme keys and values:
-.sp
+.Pp
 .Dl meli print-default-theme > ~/.config/meli/themes/new_theme.toml
-.sp
+.Pp
 .Pa new_theme.toml
 will now include all keys and values of the "dark" theme.
-.sp
+.Pp
 .Dl meli print-loaded-themes
-.sp
+.Pp
 will print all loaded themes with the links resolved.
 .Sh VALID ATTRIBUTE VALUES
 Case-sensitive.
-.Bl -bullet -compact
+.Bl -dash -compact
 .It
 "Default"
 .It
@@ -133,7 +138,7 @@ Any combo of the above separated by a bitwise XOR "\&|" eg "Dim | Italics"
 .El
 .Sh VALID COLOR VALUES
 Color values are of type String with the following valid contents:
-.Bl -bullet -compact
+.Bl -dash -compact
 .It
 "Default" is the terminal default. (Case-sensitive)
 .It
@@ -146,8 +151,10 @@ Three character shorthand is also valid, e.g. #09c → #0099cc (Case-insensitive
 name but with some modifications (for a full table see COLOR NAMES addendum) (Case-sensitive)
 .El
 .Sh NO COLOR
-To completely disable ANSI colors, there are two options:
-.Bl -bullet -compact
+To completely disable
+.Tn ANSI
+colors, there are two options:
+.Bl -dash -compact
 .It
 Set the
 .Ic use_color
@@ -157,17 +164,22 @@ option (section
 .It
 The
 .Ev NO_COLOR
-environmental variable, when present (regardless of its value), prevents the addition of ANSI color.
+environmental variable, when present (regardless of its value), prevents the addition of
+.Tn ANSI
+color.
 When the configuration value
 .Ic use_color
 is explicitly set to true by the user,
 .Ev NO_COLOR
 is ignored.
 .El
-.sp
-In this mode, cursor locations (i.e., currently selected entries/items) will use the "reverse video" ANSI attribute to invert the terminal's default foreground/background colors.
+.Pp
+In this mode, cursor locations (i.e., currently selected entries/items) will use the
+.Ql reverse video
+.Tn ANSI
+attribute to invert the terminal's default foreground/background colors.
 .Sh VALID KEYS
-.Bl -bullet  -compact
+.Bl -dash -compact
 .It
 theme_default
 .It
@@ -312,7 +324,7 @@ pager.highlight_search_current
 allbox tab(:);
 lb|lb|l|lb|lb
 l  l|l|l  l.
-name ↓:byte:_:name:byte ↓
+name \(da:byte:_:name:byte \(da
 Aqua:14:_:Black:0
 Aquamarine1:122:_:Maroon:1
 Aquamarine2:86:_:Green:2
@@ -348,7 +360,7 @@ DarkMagenta1:91:_:SpringGreen6:29
 allbox tab(:);
 lb|lb|l|lb|lb
 l  l|l|l  l.
-name ↓:byte:_:name:byte ↓
+name \(da:byte:_:name:byte \(da
 DarkOliveGreen1:192:_:Turquoise4:30
 DarkOliveGreen2:155:_:DeepSkyBlue3:31
 DarkOliveGreen3:191:_:DeepSkyBlue4:32
@@ -384,7 +396,7 @@ DeepPink4:125:_:Grey37:59
 allbox tab(:);
 lb|lb|l|lb|lb
 l  l|l|l  l.
-name ↓:byte:_:name:byte ↓
+name \(da:byte:_:name:byte \(da
 DeepPink6:162:_:MediumPurple6:60
 DeepPink7:89:_:SlateBlue2:61
 DeepPink8:53:_:SlateBlue3:62
@@ -420,7 +432,7 @@ Grey19:236:_:DeepPink7:89
 allbox tab(:);
 lb|lb|l|lb|lb
 l  l|l|l  l.
-name ↓:byte:_:name:byte ↓
+name \(da:byte:_:name:byte \(da
 Grey23:237:_:DarkMagenta:90
 Grey27:238:_:DarkMagenta1:91
 Grey3:232:_:DarkViolet1:92
@@ -456,7 +468,7 @@ HotPink2:169:_:LightGreen:119
 allbox tab(:);
 lb|lb|l|lb|lb
 l  l|l|l  l.
-name ↓:byte:_:name:byte ↓
+name \(da:byte:_:name:byte \(da
 HotPink3:132:_:LightGreen1:120
 HotPink4:168:_:PaleGreen1:121
 IndianRed:131:_:Aquamarine1:122
@@ -492,7 +504,7 @@ LightSlateGrey:103:_:DarkOliveGreen6:149
 allbox tab(:);
 lb|lb|l|lb|lb
 l  l|l|l  l.
-name ↓:byte:_:name:byte ↓
+name \(da:byte:_:name:byte \(da
 LightSteelBlue:147:_:DarkSeaGreen6:150
 LightSteelBlue1:189:_:DarkSeaGreen3:151
 LightSteelBlue3:146:_:LightCyan3:152
@@ -528,7 +540,7 @@ NavajoWhite3:144:_:LightGoldenrod3:179
 allbox tab(:);
 lb|lb|l|lb|lb
 l  l|l|l  l.
-name ↓:byte:_:name:byte ↓
+name \(da:byte:_:name:byte \(da
 Navy:4:_:Tan:180
 NavyBlue:17:_:MistyRose3:181
 Olive:3:_:Thistle3:182
@@ -564,7 +576,7 @@ Purple5:55:_:Salmon1:209
 allbox tab(:);
 lb|lb|l|lb|lb
 l  l|l|l  l.
-name ↓:byte:_:name:byte ↓
+name \(da:byte:_:name:byte \(da
 Red:9:_:LightCoral:210
 Red1:196:_:PaleVioletRed1:211
 Red2:124:_:Orchid2:212
@@ -600,7 +612,7 @@ Tan:180:_:Grey30:239
 allbox tab(:);
 lb|lb|l|lb|lb
 l  l|l|l  l.
-name ↓:byte:_:name:byte ↓
+name \(da:byte:_:name:byte \(da
 Teal:6:_:Grey35:240
 Thistle1:225:_:Grey39:241
 Thistle3:182:_:Grey42:242
@@ -621,16 +633,34 @@ Yellow6:148:_:Grey93:255
 .Sh SEE ALSO
 .Xr meli 1 ,
 .Xr meli.conf 5
-.Sh CONFORMING TO
-TOML Standard v.0.5.0
-.Lk https://toml.io/en/v0.5.0
-.sp
-.Lk https://no-color.org/
+.Sh STANDARDS
+.Bl -item -compact
+.It
+.Lk https://toml.io/en/v0.5.0 "TOML Standard v.0.5.0"
+.It
+.Lk https://no\-color.org/ "NO_COLOR: disabling ANSI color output by default"
+.El
 .Sh AUTHORS
-Copyright 2017-2019
-.An Manos Pitsidianakis Aq manos@pitsidianak.is
+Copyright 2017\(en2024
+.An Manos Pitsidianakis Aq Mt manos@pitsidianak.is
+.Pp
 Released under the GPL, version 3 or greater.
 This software carries no warranty of any kind.
-(See COPYING for full copyright and warranty notices.)
-.sp
-.Lk https://meli.delivery
+.Po
+See
+.Pa COPYING
+for full copyright and warranty notices.
+.Pc
+.Ss Links
+.Bl -item -compact
+.It
+.Lk https://meli\-email.org "Website"
+.It
+.Lk https://git.meli\-email.org/meli/meli "Main\ git\ repository\ and\ issue\ tracker"
+.It
+.Lk https://codeberg.org/meli/meli "Official\ read-only\ git\ mirror\ on\ codeberg.org"
+.It
+.Lk https://github.com/meli/meli "Official\ read-only\ git\ mirror\ on\ github.com"
+.It
+.Lk https://crates.io/crates/meli "meli\ crate\ on\ crates.io"
+.El
