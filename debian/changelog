@@ -1,13 +1,21 @@
 meli (0.8.5-rc.3-1) bookworm; urgency=low
 
--- Manos Pitsidianakis <manos@pitsidianak.is>  Sun, 10 Dec 2023 15:22:18 +0000
+  * Update to 0.8.5-rc.3
+
+ -- Manos Pitsidianakis <manos@pitsidianak.is>  Sun, 10 Dec 2023 15:22:18 +0000
 
 meli (0.8.5-rc.2-1) bookworm; urgency=low
 
+  * Update to 0.8.5-rc.2
+
  -- Manos Pitsidianakis <manos@pitsidianak.is>  Mon, 4 Dec 2023 19:34:00 +0200
+
 meli (0.8.4-1) bookworm; urgency=low
 
+  * Update to 0.8.4
+
  -- Manos Pitsidianakis <manos@pitsidianak.is>  Mon, 27 Nov 2023 19:34:00 +0200
+
 meli (0.7.2-1) bullseye; urgency=low
     Added
 
