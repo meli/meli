@@ -23,8 +23,6 @@
 //! [`backends`](./backends/index.html)
 use std::{collections::HashMap, path::Path};
 
-use serde::{Deserialize, Serialize};
-
 use crate::{
     backends::SpecialUsageMailbox,
     email::Address,
