@@ -630,6 +630,13 @@ impl From<std::num::ParseIntError> for Error {
     }
 }
 
+impl From<std::fmt::Error> for Error {
+    #[inline]
+    fn from(kind: std::fmt::Error) -> Self {
+        Self::new(kind.to_string()).set_source(Some(Arc::new(kind)))
+    }
+}
+
 #[cfg(feature = "http")]
 impl From<&isahc::error::ErrorKind> for NetworkErrorKind {
     #[inline]

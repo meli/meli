@@ -42,6 +42,7 @@ use crate::{
         },
     },
     error::ResultIntoError,
+    text::Truncate,
     utils::parsec::CRLF,
 };
 
@@ -479,7 +480,7 @@ pub fn list_mailbox_result(input: &[u8]) -> IResult<&[u8], ImapMailbox> {
             };
             f.separator = separator;
 
-            debug!(f)
+            f
         }),
     ))
 }
@@ -578,10 +579,14 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                 ret.uid =
                     Some(UID::from_str(unsafe { std::str::from_utf8_unchecked(uid) }).unwrap());
             } else {
-                return debug!(Err(Error::new(format!(
-                    "Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
+                log::debug!(
+                    "Unexpected input while parsing UID FETCH response. Got: `{}`",
                     String::from_utf8_lossy(input)
-                ))));
+                );
+                return Err(Error::new(format!(
+                    "Unexpected input while parsing UID FETCH response. Got: `{}`",
+                    String::from_utf8_lossy(input).as_ref().trim_at_boundary(40)
+                )));
             }
         } else if input[i..].starts_with(b"FLAGS (") {
             i += b"FLAGS (".len();
@@ -589,11 +594,17 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                 ret.flags = Some(flags);
                 i += (input.len() - i - rest.len()) + 1;
             } else {
-                return debug!(Err(Error::new(format!(
-                    "Unexpected input while parsing UID FETCH response. Could not parse FLAGS: \
-                     {:.40}.",
+                log::debug!(
+                    "Unexpected input while parsing UID FETCH response. Could not parse FLAGS: {}.",
                     String::from_utf8_lossy(&input[i..])
-                ))));
+                );
+                return Err(Error::new(format!(
+                    "Unexpected input while parsing UID FETCH response. Could not parse FLAGS: \
+                     `{}`.",
+                    String::from_utf8_lossy(&input[i..])
+                        .as_ref()
+                        .trim_at_boundary(40)
+                )));
             }
         } else if input[i..].starts_with(b"MODSEQ (") {
             i += b"MODSEQ (".len();
@@ -606,10 +617,14 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                     .and_then(std::num::NonZeroU64::new)
                     .map(ModSequence);
             } else {
-                return debug!(Err(Error::new(format!(
-                    "Unexpected input while parsing MODSEQ in UID FETCH response. Got: `{:.40}`",
+                log::debug!(
+                    "Unexpected input while parsing MODSEQ in UID FETCH response. Got: `{}`",
                     String::from_utf8_lossy(input)
-                ))));
+                );
+                return Err(Error::new(format!(
+                    "Unexpected input while parsing MODSEQ in UID FETCH response. Got: `{}`",
+                    String::from_utf8_lossy(input).as_ref().trim_at_boundary(40)
+                )));
             }
         } else if input[i..].starts_with(b"RFC822 {") {
             i += b"RFC822 ".len();
@@ -625,11 +640,16 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                 ret.body = Some(body);
                 i += input.len() - i - rest.len();
             } else {
-                return debug!(Err(Error::new(format!(
-                    "Unexpected input while parsing UID FETCH response. Could not parse RFC822: \
-                     {:.40}",
+                log::debug!(
+                    "Unexpected input while parsing UID FETCH response. Could not parse RFC822: {}",
                     String::from_utf8_lossy(&input[i..])
-                ))));
+                );
+                return Err(Error::new(format!(
+                    "Unexpected input while parsing UID FETCH response. Could not parse RFC822: {}",
+                    String::from_utf8_lossy(&input[i..])
+                        .as_ref()
+                        .trim_at_boundary(40)
+                )));
             }
         } else if input[i..].starts_with(b"ENVELOPE (") {
             i += b"ENVELOPE ".len();
@@ -637,11 +657,18 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                 ret.envelope = Some(envelope);
                 i += input.len() - i - rest.len();
             } else {
-                return debug!(Err(Error::new(format!(
+                log::debug!(
                     "Unexpected input while parsing UID FETCH response. Could not parse ENVELOPE: \
-                     {:.40}",
+                     {}",
                     String::from_utf8_lossy(&input[i..])
-                ))));
+                );
+                return Err(Error::new(format!(
+                    "Unexpected input while parsing UID FETCH response. Could not parse ENVELOPE: \
+                     {}",
+                    String::from_utf8_lossy(&input[i..])
+                        .as_ref()
+                        .trim_at_boundary(40)
+                )));
             }
         } else if input[i..].starts_with(b"BODYSTRUCTURE ") {
             i += b"BODYSTRUCTURE ".len();
@@ -660,11 +687,18 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                 }
                 i += input.len() - i - rest.len();
             } else {
-                return debug!(Err(Error::new(format!(
+                log::debug!(
                     "Unexpected input while parsing UID FETCH response. Could not parse \
-                     BODY[HEADER.FIELDS (REFERENCES)]: {:.40}",
+                     BODY[HEADER.FIELDS (REFERENCES)]: {}",
                     String::from_utf8_lossy(&input[i..])
-                ))));
+                );
+                return Err(Error::new(format!(
+                    "Unexpected input while parsing UID FETCH response. Could not parse \
+                     BODY[HEADER.FIELDS (REFERENCES)]: {}",
+                    String::from_utf8_lossy(&input[i..])
+                        .as_ref()
+                        .trim_at_boundary(40)
+                )));
             }
         } else if input[i..].starts_with(b"BODY[HEADER.FIELDS (\"REFERENCES\")] ") {
             i += b"BODY[HEADER.FIELDS (\"REFERENCES\")] ".len();
@@ -677,24 +711,33 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                 }
                 i += input.len() - i - rest.len();
             } else {
-                return debug!(Err(Error::new(format!(
+                log::debug!(
                     "Unexpected input while parsing UID FETCH response. Could not parse \
-                     BODY[HEADER.FIELDS (\"REFERENCES\"): {:.40}",
+                     BODY[HEADER.FIELDS (\"REFERENCES\"): {}",
                     String::from_utf8_lossy(&input[i..])
-                ))));
+                );
+                return Err(Error::new(format!(
+                    "Unexpected input while parsing UID FETCH response. Could not parse \
+                     BODY[HEADER.FIELDS (\"REFERENCES\"): {}",
+                    String::from_utf8_lossy(&input[i..])
+                        .as_ref()
+                        .trim_at_boundary(40)
+                )));
             }
         } else if input[i..].starts_with(b")\r\n") {
             i += b")\r\n".len();
             break;
         } else {
-            debug!(
+            log::debug!(
                 "Got unexpected token while parsing UID FETCH response:\n`{}`\n",
                 String::from_utf8_lossy(input)
             );
-            return debug!(Err(Error::new(format!(
-                "Got unexpected token while parsing UID FETCH response: `{:.40}`",
+            return Err(Error::new(format!(
+                "Got unexpected token while parsing UID FETCH response: `{}`",
                 String::from_utf8_lossy(&input[i..])
-            ))));
+                    .as_ref()
+                    .trim_at_boundary(40)
+            )));
         }
     }
     ret.raw_fetch_value = &input[..i];
@@ -870,7 +913,7 @@ pub fn untagged_responses(input: &[u8]) -> ImapParseResult<Option<UntaggedRespon
     let (input, _) = tag::<_, &[u8], (&[u8], nom::error::ErrorKind)>(b" ")(input)?;
     let (input, _tag) = take_until::<_, &[u8], (&[u8], nom::error::ErrorKind)>(CRLF)(input)?;
     let (input, _) = tag::<_, &[u8], (&[u8], nom::error::ErrorKind)>(CRLF)(input)?;
-    debug!(
+    log::trace!(
         "Parse untagged response from {:?}",
         String::from_utf8_lossy(orig_input)
     );
@@ -884,9 +927,10 @@ pub fn untagged_responses(input: &[u8]) -> ImapParseResult<Option<UntaggedRespon
                 b"RECENT" => Some(Recent(num)),
                 _ if _tag.starts_with(b"FETCH ") => Some(Fetch(fetch_response(orig_input)?.1)),
                 _ => {
-                    debug!(
-                        "unknown untagged_response: {}",
-                        String::from_utf8_lossy(_tag)
+                    log::error!(
+                        "unknown untagged_response: {}, message was {:?}",
+                        String::from_utf8_lossy(_tag),
+                        String::from_utf8_lossy(orig_input)
                     );
                     None
                 }
@@ -1018,13 +1062,13 @@ pub fn select_response(input: &[u8]) -> Result<SelectResponse> {
             } else if l.starts_with(b"* OK [NOMODSEQ") {
                 ret.highestmodseq = Some(Err(()));
             } else if !l.is_empty() {
-                debug!("select response: {}", String::from_utf8_lossy(l));
+                log::trace!("select response: {}", String::from_utf8_lossy(l));
             }
         }
         Ok(ret)
     } else {
         let ret = String::from_utf8_lossy(input).to_string();
-        debug!("BAD/NO response in select: {}", &ret);
+        log::error!("BAD/NO response in select: {}", &ret);
         Err(Error::new(ret))
     }
 }
@@ -1592,7 +1636,6 @@ mod tests {
         let response =
             &b"* 1040 FETCH (UID 1064 FLAGS ())\r\nM15 OK Fetch completed (0.001 + 0.299 secs).\r\n"[..];
         for l in response.split_rn() {
-            /* debug!("check line: {}", &l); */
             if required_responses.check(l) {
                 ret.extend_from_slice(l);
             }
