@@ -56,7 +56,8 @@ jobs:
             curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused --location --silent --show-error --fail "https://sh.rustup.rs" | sh -s -- --default-toolchain none -y
             source "${HOME}/.cargo/env"
             echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> $GITHUB_PATH
-            rustup toolchain install --profile minimal --component clippy,rustfmt ${{ matrix.rust }} --target ${{ matrix.target }}
+            rustup toolchain install --profile minimal --component clippy,rustfmt --target ${{ matrix.target }} -- "${{ matrix.rust }}"
+            rustup default ${{ matrix.rust }}
           fi
       - name: Configure cargo data directory
         # After this point, all cargo registry and crate data is stored in
