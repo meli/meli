@@ -226,6 +226,29 @@ impl GlobMatch for str {
     }
 }
 
+pub mod hex {
+    use std::fmt::Write;
+
+    use crate::error::Result;
+
+    pub fn bytes_to_hex(bytes: &[u8]) -> Result<String> {
+        let mut retval = String::with_capacity(bytes.len() / 2 + bytes.len() / 4);
+        for (i, c) in bytes.chunks(2).enumerate() {
+            if i % 16 == 0 {
+                writeln!(&mut retval)?;
+            } else if i % 4 == 0 {
+                write!(&mut retval, " ")?;
+            }
+            if c.len() == 2 {
+                write!(&mut retval, "{:02x}{:02x}", c[0], c[1])?;
+            } else {
+                write!(&mut retval, "{:02x}", c[0])?;
+            }
+        }
+        Ok(retval)
+    }
+}
+
 pub const _ALICE_CHAPTER_1: &str = r#"CHAPTER I. Down the Rabbit-Hole
 
 Alice was beginning to get very tired of sitting by her sister on the 

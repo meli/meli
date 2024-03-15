@@ -20,7 +20,7 @@
  */
 
 //! Connections layers (TCP/fd/TLS/Deflate) to use with remote backends.
-use std::{os::unix::io::AsRawFd, time::Duration};
+use std::{borrow::Cow, os::unix::io::AsRawFd, time::Duration};
 
 use flate2::{read::DeflateDecoder, write::DeflateEncoder, Compression};
 #[cfg(any(target_os = "openbsd", target_os = "netbsd", target_os = "haiku"))]
@@ -399,25 +399,33 @@ impl std::io::Read for Connection {
         };
         if self.is_trace_enabled() {
             let id = self.id();
-            if let Ok(len) = &res {
-                log::trace!(
-                    "{}{}{}{:?} read {:?} bytes:{:?}",
-                    if id.is_some() { "[" } else { "" },
-                    if let Some(id) = id.as_ref() { id } else { "" },
-                    if id.is_some() { "]: " } else { "" },
-                    self,
-                    len,
-                    String::from_utf8_lossy(&buf[..*len])
-                );
-            } else {
-                log::trace!(
-                    "{}{}{}{:?} could not read {:?}",
-                    if id.is_some() { "[" } else { "" },
-                    if let Some(id) = id.as_ref() { id } else { "" },
-                    if id.is_some() { "]: " } else { "" },
-                    self,
-                    &res
-                );
+            match &res {
+                Ok(len) => {
+                    let slice = &buf[..*len];
+                    log::trace!(
+                        "{}{}{}{:?} read {:?} bytes:{}",
+                        if id.is_some() { "[" } else { "" },
+                        if let Some(id) = id.as_ref() { id } else { "" },
+                        if id.is_some() { "]: " } else { "" },
+                        self,
+                        len,
+                        std::str::from_utf8(slice)
+                            .map(Cow::Borrowed)
+                            .or_else(|_| crate::text::hex::bytes_to_hex(slice).map(Cow::Owned))
+                            .unwrap_or(Cow::Borrowed("Could not convert to hex."))
+                    );
+                }
+                Err(err) if matches!(err.kind(), std::io::ErrorKind::WouldBlock) => {}
+                Err(err) => {
+                    log::trace!(
+                        "{}{}{}{:?} could not read {:?}",
+                        if id.is_some() { "[" } else { "" },
+                        if let Some(id) = id.as_ref() { id } else { "" },
+                        if id.is_some() { "]: " } else { "" },
+                        self,
+                        err,
+                    );
+                }
             }
         }
         res
@@ -429,13 +437,16 @@ impl std::io::Write for Connection {
         if self.is_trace_enabled() {
             let id = self.id();
             log::trace!(
-                "{}{}{}{:?} writing {} bytes:{:?}",
+                "{}{}{}{:?} writing {} bytes:{}",
                 if id.is_some() { "[" } else { "" },
                 if let Some(id) = id.as_ref() { id } else { "" },
                 if id.is_some() { "]: " } else { "" },
                 self,
                 buf.len(),
-                String::from_utf8_lossy(buf)
+                std::str::from_utf8(buf)
+                    .map(Cow::Borrowed)
+                    .or_else(|_| crate::text::hex::bytes_to_hex(buf).map(Cow::Owned))
+                    .unwrap_or(Cow::Borrowed("Could not convert to hex."))
             );
         }
         match self {
