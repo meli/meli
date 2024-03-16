@@ -33,6 +33,10 @@ pub use crate::{SortField, SortOrder};
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct AccountSettings {
     pub name: String,
+    /// Name of mailbox that is the root of the mailbox hierarchy.
+    ///
+    /// Note that this may have special or no meaning depending on the e-mail
+    /// backend.
     pub root_mailbox: String,
     pub format: String,
     pub identity: String,

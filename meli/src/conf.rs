@@ -165,7 +165,7 @@ pub struct FileAccount {
     pub identity: String,
     #[serde(default)]
     pub extra_identities: Vec<String>,
-    #[serde(default = "none")]
+    #[serde(default = "none", skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
 
     #[serde(default = "false_val")]
@@ -180,23 +180,23 @@ pub struct FileAccount {
     pub order: (SortField, SortOrder),
     #[serde(default = "false_val")]
     pub manual_refresh: bool,
-    #[serde(default = "none")]
+    #[serde(default = "none", skip_serializing_if = "Option::is_none")]
     pub refresh_command: Option<String>,
     #[serde(flatten)]
     pub conf_override: MailUIConf,
     #[serde(flatten)]
-    #[serde(deserialize_with = "extra_settings")]
-    pub extra: IndexMap<String, String>, /* use custom deserializer to convert any given value
-                                          * (eg bool, number, etc) to string */
+    #[serde(
+        deserialize_with = "extra_settings",
+        skip_serializing_if = "IndexMap::is_empty"
+    )]
+    /// Use custom deserializer to convert any given value (eg `bool`, number,
+    /// etc) to `String`.
+    pub extra: IndexMap<String, String>,
 }
 
 impl FileAccount {
     pub fn mailboxes(&self) -> &IndexMap<String, FileMailboxConf> {
         &self.mailboxes
-    }
-
-    pub fn mailbox(&self) -> &str {
-        &self.root_mailbox
     }
 
     pub fn search_backend(&self) -> &SearchBackend {

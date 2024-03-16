@@ -830,9 +830,10 @@ impl Account {
         ret
     }
 
-    pub fn mailboxes_order(&self) -> &Vec<MailboxHash> {
+    pub fn mailboxes_order(&self) -> &[MailboxHash] {
         &self.mailboxes_order
     }
+
     pub fn name(&self) -> &str {
         &self.name
     }
