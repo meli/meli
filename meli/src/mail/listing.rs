@@ -1989,7 +1989,7 @@ impl Component for Listing {
                         && self.menu_cursor_pos.menu == MenuEntryCursor::Status =>
                 {
                     self.cursor_pos = self.menu_cursor_pos;
-                    self.open_status(self.menu_cursor_pos.account, context);
+                    self.change_account(context);
                     self.set_dirty(true);
                     self.focus = ListingFocus::Mailbox;
                     self.ratio = self.prev_ratio;
@@ -3184,8 +3184,23 @@ impl Listing {
                         self.status(context),
                     )));
             }
-            MenuEntryCursor::Status => {
+            MenuEntryCursor::Status if context.is_online(account_hash).is_ok() => {
                 self.open_status(self.cursor_pos.account, context);
+            }
+            MenuEntryCursor::Status => {
+                self.component.unrealize(context);
+                self.component =
+                    Offline(OfflineListing::new((account_hash, MailboxHash::default())));
+                self.component.realize(self.id().into(), context);
+                self.component
+                    .process_event(&mut UIEvent::VisibilityChange(true), context);
+                self.status = None;
+                self.cursor_pos.menu = MenuEntryCursor::Mailbox(0);
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
+                        self.status(context),
+                    )));
             }
         }
         self.sidebar_divider = *account_settings!(context[account_hash].listing.sidebar_divider);

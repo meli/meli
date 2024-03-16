@@ -220,7 +220,13 @@ impl Component for OfflineListing {
                 if let Some(msg) = msg.clone() {
                     self.messages.push(msg);
                 }
-                self.dirty = true
+                self.set_dirty(true);
+            }
+            UIEvent::ChangeMode(UIMode::Normal)
+            | UIEvent::Resize
+            | UIEvent::ConfigReload { old_settings: _ }
+            | UIEvent::VisibilityChange(_) => {
+                self.set_dirty(true);
             }
             _ => {}
         }

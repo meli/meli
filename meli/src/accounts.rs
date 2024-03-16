@@ -116,6 +116,19 @@ impl IsOnline {
             };
         }
     }
+
+    pub fn is_recoverable(err: &Error) -> bool {
+        !(err.kind.is_authentication()
+            || err.kind.is_configuration()
+            || err.kind.is_bug()
+            || err.kind.is_external()
+            || (err.kind.is_network() && !err.kind.is_network_down())
+            || err.kind.is_not_implemented()
+            || err.kind.is_not_supported()
+            || err.kind.is_protocol_error()
+            || err.kind.is_protocol_not_supported()
+            || err.kind.is_value_error())
+    }
 }
 
 #[derive(Debug)]
@@ -732,6 +745,7 @@ impl Account {
         }
         None
     }
+
     pub fn refresh(&mut self, mailbox_hash: MailboxHash) -> Result<()> {
         if let Some(ref refresh_command) = self.settings.conf().refresh_command {
             let child = std::process::Command::new("sh")
@@ -773,7 +787,9 @@ impl Account {
     }
 
     pub fn watch(&mut self) {
-        if self.settings.account().manual_refresh {
+        if self.settings.account().manual_refresh
+            || matches!(self.is_online, IsOnline::Err { ref value, ..} if !IsOnline::is_recoverable(value))
+        {
             return;
         }
 
@@ -1292,17 +1308,7 @@ impl Account {
                 ref mut retries,
             } => {
                 let ret = Err(value.clone());
-                if value.kind.is_authentication()
-                    || value.kind.is_bug()
-                    || value.kind.is_configuration()
-                    || value.kind.is_external()
-                    || (value.kind.is_network() && !value.kind.is_network_down())
-                    || value.kind.is_not_implemented()
-                    || value.kind.is_not_supported()
-                    || value.kind.is_protocol_error()
-                    || value.kind.is_protocol_not_supported()
-                    || value.kind.is_value_error()
-                {
+                if !IsOnline::is_recoverable(value) {
                     return ret;
                 }
                 let wait = if value.kind.is_timeout()
@@ -1417,21 +1423,22 @@ impl Account {
                 JobRequest::Mailboxes { ref mut handle } => {
                     if let Ok(Some(mailboxes)) = handle.chan.try_recv() {
                         if let Err(err) = mailboxes.and_then(|mailboxes| self.init(mailboxes)) {
-                            if err.kind.is_authentication() {
+                            if !IsOnline::is_recoverable(&err) {
                                 self.main_loop_handler.send(ThreadEvent::UIEvent(
                                     UIEvent::Notification {
-                                        title: Some(
-                                            format!("{}: authentication error", &self.name).into(),
-                                        ),
-                                        source: None,
+                                        title: Some(self.name.clone().into()),
+                                        source: Some(err.clone()),
                                         body: err.to_string().into(),
                                         kind: Some(crate::types::NotificationType::Error(err.kind)),
                                     },
                                 ));
-                                self.is_online.set_err(err);
                                 self.main_loop_handler.send(ThreadEvent::UIEvent(
-                                    UIEvent::AccountStatusChange(self.hash, None),
+                                    UIEvent::AccountStatusChange(
+                                        self.hash,
+                                        Some(err.to_string().into()),
+                                    ),
                                 ));
+                                self.is_online.set_err(err);
                                 self.main_loop_handler
                                     .job_executor
                                     .set_job_success(job_id, false);
@@ -1551,13 +1558,17 @@ impl Account {
                     }
                 }
                 JobRequest::IsOnline { ref mut handle, .. } => {
+                    if matches!(self.is_online, IsOnline::Err { ref value, ..} if !IsOnline::is_recoverable(value))
+                    {
+                        return true;
+                    }
                     if let Ok(Some(is_online)) = handle.chan.try_recv() {
                         self.main_loop_handler.send(ThreadEvent::UIEvent(
                             UIEvent::AccountStatusChange(self.hash, None),
                         ));
                         match is_online {
                             Ok(()) => {
-                                if matches!(self.is_online, IsOnline::Err { ref value, ..} if !value.kind.is_authentication())
+                                if matches!(self.is_online, IsOnline::Err { .. })
                                     || matches!(self.is_online, IsOnline::Uninit)
                                 {
                                     self.watch();
@@ -1566,7 +1577,7 @@ impl Account {
                                 return true;
                             }
                             Err(value) => {
-                                self.is_online = IsOnline::Err { value, retries: 1 };
+                                self.is_online.set_err(value);
                             }
                         }
                     }
@@ -1585,12 +1596,15 @@ impl Account {
                     };
                 }
                 JobRequest::Refresh { ref mut handle, .. } => {
+                    if matches!(self.is_online, IsOnline::Err { ref value, ..} if !IsOnline::is_recoverable(value))
+                    {
+                        return true;
+                    }
                     match handle.chan.try_recv() {
                         Err(_) => { /* canceled */ }
                         Ok(None) => {}
                         Ok(Some(Ok(()))) => {
-                            if matches!(self.is_online, IsOnline::Err { ref value, ..} if !value.kind.is_authentication())
-                            {
+                            if matches!(self.is_online, IsOnline::Err { .. }) {
                                 self.watch();
                             }
                             self.is_online = IsOnline::True;
