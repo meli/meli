@@ -31,7 +31,11 @@ use std::{
     process::{Command, Stdio},
 };
 
-use melib::{backends::TagHash, search::Query, SortField, SortOrder, StderrLogger};
+use melib::{
+    backends::{MailboxHash, TagHash},
+    search::Query,
+    SortField, SortOrder, StderrLogger,
+};
 
 use crate::{
     conf::deserializers::non_empty_opt_string,
@@ -230,6 +234,7 @@ pub struct FileSettings {
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct AccountConf {
     pub account: AccountSettings,
+    pub sent_mailbox: Option<MailboxHash>,
     pub conf: FileAccount,
     pub conf_override: MailUIConf,
     pub mailbox_confs: IndexMap<String, FileMailboxConf>,
@@ -281,6 +286,7 @@ impl From<FileAccount> for AccountConf {
         let mailbox_confs = x.mailboxes.clone();
         Self {
             account: acc,
+            sent_mailbox: None,
             conf_override: x.conf_override.clone(),
             conf: x,
             mailbox_confs,

@@ -139,7 +139,6 @@ pub struct Account {
     pub mailbox_entries: IndexMap<MailboxHash, MailboxEntry>,
     pub mailboxes_order: Vec<MailboxHash>,
     pub tree: Vec<MailboxNode>,
-    pub sent_mailbox: Option<MailboxHash>,
     pub collection: Collection,
     pub address_book: AddressBook,
     pub settings: AccountConf,
@@ -323,7 +322,6 @@ impl Account {
             mailboxes_order: Default::default(),
             tree: Default::default(),
             address_book,
-            sent_mailbox: Default::default(),
             collection: backend.collection(),
             settings,
             main_loop_handler,
@@ -340,8 +338,6 @@ impl Account {
         let mut mailbox_entries: IndexMap<MailboxHash, MailboxEntry> =
             IndexMap::with_capacity_and_hasher(ref_mailboxes.len(), Default::default());
         let mut mailboxes_order: Vec<MailboxHash> = Vec::with_capacity(ref_mailboxes.len());
-
-        let mut sent_mailbox = None;
 
         /* Keep track of which mailbox config values we encounter in the actual
          * mailboxes returned by the backend. For each of the actual
@@ -368,11 +364,11 @@ impl Account {
                 };
                 match conf.mailbox_conf.usage {
                     Some(SpecialUsageMailbox::Sent) => {
-                        sent_mailbox = Some(f.hash());
+                        self.settings.sent_mailbox = Some(f.hash());
                     }
                     None => {
                         if f.special_usage() == SpecialUsageMailbox::Sent {
-                            sent_mailbox = Some(f.hash());
+                            self.settings.sent_mailbox = Some(f.hash());
                         }
                     }
                     _ => {}
@@ -398,7 +394,7 @@ impl Account {
                     tmp
                 };
                 if new.mailbox_conf.usage == Some(SpecialUsageMailbox::Sent) {
-                    sent_mailbox = Some(f.hash());
+                    self.settings.sent_mailbox = Some(f.hash());
                 }
 
                 mailbox_entries.insert(
@@ -499,7 +495,6 @@ impl Account {
         self.mailboxes_order = mailboxes_order;
         self.mailbox_entries = mailbox_entries;
         self.tree = tree;
-        self.sent_mailbox = sent_mailbox;
         Ok(())
     }
 
@@ -1541,10 +1536,11 @@ impl Account {
                                 .into_iter()
                                 .map(|e| (e.hash(), e))
                                 .collect::<HashMap<EnvelopeHash, Envelope>>();
-                            if let Some(updated_mailboxes) =
-                                self.collection
-                                    .merge(envelopes, mailbox_hash, self.sent_mailbox)
-                            {
+                            if let Some(updated_mailboxes) = self.collection.merge(
+                                envelopes,
+                                mailbox_hash,
+                                self.settings.sent_mailbox,
+                            ) {
                                 for f in updated_mailboxes {
                                     self.main_loop_handler.send(ThreadEvent::UIEvent(
                                         UIEvent::MailboxUpdate((self.hash, f)),
@@ -1890,8 +1886,8 @@ impl Account {
                             {
                                 self.tree.remove(pos);
                             }
-                            if self.sent_mailbox == Some(mailbox_hash) {
-                                self.sent_mailbox = None;
+                            if self.settings.sent_mailbox == Some(mailbox_hash) {
+                                self.settings.sent_mailbox = None;
                             }
                             self.collection
                                 .threads
