@@ -165,6 +165,12 @@ use crate::conf::deserializers::extra_settings;
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct FileAccount {
     pub root_mailbox: String,
+    /// The mailbox that is the default to open / view for this account. Must be
+    /// a valid mailbox path.
+    ///
+    /// If not specified, the default is [`Self::root_mailbox`].
+    #[serde(default = "none", skip_serializing_if = "Option::is_none")]
+    pub default_mailbox: Option<String>,
     pub format: String,
     pub identity: String,
     #[serde(default)]
@@ -234,6 +240,7 @@ pub struct FileSettings {
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct AccountConf {
     pub account: AccountSettings,
+    pub default_mailbox: Option<MailboxHash>,
     pub sent_mailbox: Option<MailboxHash>,
     pub conf: FileAccount,
     pub conf_override: MailUIConf,
@@ -286,6 +293,7 @@ impl From<FileAccount> for AccountConf {
         let mailbox_confs = x.mailboxes.clone();
         Self {
             account: acc,
+            default_mailbox: None,
             sent_mailbox: None,
             conf_override: x.conf_override.clone(),
             conf: x,
@@ -538,6 +546,7 @@ This is required so that you don't accidentally start meli and find out later th
                 mailboxes,
                 extra,
                 manual_refresh,
+                default_mailbox: _,
                 refresh_command: _,
                 search_backend: _,
                 conf_override: _,

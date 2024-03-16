@@ -350,9 +350,19 @@ impl Account {
             .keys()
             .cloned()
             .collect::<HashSet<String>>();
+        let mut default_mailbox = self
+            .settings
+            .conf
+            .default_mailbox
+            .clone()
+            .into_iter()
+            .collect::<HashSet<String>>();
         for f in ref_mailboxes.values_mut() {
             if let Some(conf) = self.settings.mailbox_confs.get_mut(f.path()) {
                 mailbox_conf_hash_set.remove(f.path());
+                if default_mailbox.remove(f.path()) {
+                    self.settings.default_mailbox = Some(f.hash());
+                }
                 conf.mailbox_conf.usage = if f.special_usage() != SpecialUsageMailbox::Normal {
                     Some(f.special_usage())
                 } else {
@@ -445,6 +455,23 @@ impl Account {
                         &self.name, mailbox_comma_sep_list_string,
                     )),
                 )));
+        }
+
+        match self.settings.conf.default_mailbox {
+            Some(ref v) if !default_mailbox.is_empty() => {
+                let err = Error::new(format!(
+                    "Account `{}` has default mailbox set as `{}` but it doesn't exist.",
+                    &self.name, v
+                ))
+                .set_kind(ErrorKind::Configuration);
+                self.is_online.set_err(err.clone());
+                self.main_loop_handler
+                    .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
+                        self.hash, None,
+                    )));
+                return Err(err);
+            }
+            _ => {}
         }
 
         let mut tree: Vec<MailboxNode> = Vec::new();
@@ -1392,6 +1419,12 @@ impl Account {
                 }
             }
         }
+    }
+
+    pub fn default_mailbox(&self) -> Option<MailboxHash> {
+        self.settings
+            .default_mailbox
+            .or_else(|| Some(*self.mailboxes_order.first()?))
     }
 
     pub fn mailbox_by_path(&self, path: &str) -> Result<MailboxHash> {

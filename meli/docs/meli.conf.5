@@ -217,6 +217,11 @@ Default values are shown in parentheses.
 The backend-specific path of the root_mailbox, usually
 .Sy INBOX Ns
 \&.
+.It Ic default_mailbox Ar String
+.Pq Em optional
+The mailbox that is the default to open or view for this account.
+Must be a valid mailbox path.
+If not specified, the default will be the root mailbox.
 .It Ic format Ar String Op maildir mbox imap notmuch jmap
 The format of the mail backend.
 .It Ic subscribed_mailboxes Ar [String,]

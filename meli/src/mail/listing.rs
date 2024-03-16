@@ -475,6 +475,18 @@ struct AccountMenuEntry {
     entries: SmallVec<[MailboxMenuEntry; 16]>,
 }
 
+impl AccountMenuEntry {
+    fn entry_by_hash(&self, needle: MailboxHash) -> Option<usize> {
+        self.entries.iter().enumerate().find_map(|(i, e)| {
+            if e.mailbox_hash == needle {
+                Some(i)
+            } else {
+                None
+            }
+        })
+    }
+}
+
 pub trait MailListingTrait: ListingTrait {
     fn as_component(&self) -> &dyn Component
     where
@@ -1568,7 +1580,15 @@ impl Component for Listing {
                         k if shortcut!(k == shortcuts[Shortcuts::LISTING]["next_account"]) => {
                             if self.cursor_pos.account + amount < self.accounts.len() {
                                 self.cursor_pos.account += amount;
-                                self.cursor_pos.menu = MenuEntryCursor::Mailbox(0);
+                                let _new_val = self.cursor_pos.account;
+                                self.cursor_pos.menu = if let Some(idx) = context.accounts[_new_val]
+                                    .default_mailbox()
+                                    .and_then(|h| self.accounts[_new_val].entry_by_hash(h))
+                                {
+                                    MenuEntryCursor::Mailbox(idx)
+                                } else {
+                                    MenuEntryCursor::Status
+                                };
                             } else {
                                 return true;
                             }
@@ -1576,7 +1596,15 @@ impl Component for Listing {
                         k if shortcut!(k == shortcuts[Shortcuts::LISTING]["prev_account"]) => {
                             if self.cursor_pos.account >= amount {
                                 self.cursor_pos.account -= amount;
-                                self.cursor_pos.menu = MenuEntryCursor::Mailbox(0);
+                                let _new_val = self.cursor_pos.account;
+                                self.cursor_pos.menu = if let Some(idx) = context.accounts[_new_val]
+                                    .default_mailbox()
+                                    .and_then(|h| self.accounts[_new_val].entry_by_hash(h))
+                                {
+                                    MenuEntryCursor::Mailbox(idx)
+                                } else {
+                                    MenuEntryCursor::Status
+                                };
                             } else {
                                 return true;
                             }
@@ -2076,9 +2104,17 @@ impl Component for Listing {
                                 } => {
                                     if *account > 0 {
                                         *account -= 1;
-                                        self.menu_cursor_pos.menu = MenuEntryCursor::Mailbox(
-                                            self.accounts[*account].entries.len().saturating_sub(1),
-                                        );
+                                        self.menu_cursor_pos.menu =
+                                            if self.accounts[*account].entries.is_empty() {
+                                                MenuEntryCursor::Status
+                                            } else {
+                                                MenuEntryCursor::Mailbox(
+                                                    self.accounts[*account]
+                                                        .entries
+                                                        .len()
+                                                        .saturating_sub(1),
+                                                )
+                                            };
                                     } else {
                                         return true;
                                     }
@@ -2111,7 +2147,12 @@ impl Component for Listing {
                                 } if !self.accounts[*account].entries.is_empty()
                                     && *menu == MenuEntryCursor::Status =>
                                 {
-                                    *menu = MenuEntryCursor::Mailbox(0);
+                                    if let Some(idx) = context.accounts[*account]
+                                        .default_mailbox()
+                                        .and_then(|h| self.accounts[*account].entry_by_hash(h))
+                                    {
+                                        *menu = MenuEntryCursor::Mailbox(idx);
+                                    }
                                 }
                                 // If current account has no mailboxes, go to next account
                                 CursorPos {
@@ -2250,15 +2291,32 @@ impl Component for Listing {
                         {
                             if self.menu_cursor_pos.account + amount >= self.accounts.len() {
                                 // Go to last mailbox.
-                                self.menu_cursor_pos.menu = MenuEntryCursor::Mailbox(
-                                    self.accounts[self.menu_cursor_pos.account]
-                                        .entries
-                                        .len()
-                                        .saturating_sub(1),
-                                );
+                                self.menu_cursor_pos.menu = if self.accounts
+                                    [self.menu_cursor_pos.account]
+                                    .entries
+                                    .is_empty()
+                                {
+                                    MenuEntryCursor::Status
+                                } else {
+                                    MenuEntryCursor::Mailbox(
+                                        self.accounts[self.menu_cursor_pos.account]
+                                            .entries
+                                            .len()
+                                            .saturating_sub(1),
+                                    )
+                                };
                             } else if self.menu_cursor_pos.account + amount < self.accounts.len() {
                                 self.menu_cursor_pos.account += amount;
-                                self.menu_cursor_pos.menu = MenuEntryCursor::Mailbox(0);
+                                let _new_val = self.menu_cursor_pos.account;
+                                self.menu_cursor_pos.menu = if let Some(idx) = context.accounts
+                                    [_new_val]
+                                    .default_mailbox()
+                                    .and_then(|h| self.accounts[_new_val].entry_by_hash(h))
+                                {
+                                    MenuEntryCursor::Mailbox(idx)
+                                } else {
+                                    MenuEntryCursor::Status
+                                };
                             } else {
                                 return true;
                             }
@@ -2268,7 +2326,16 @@ impl Component for Listing {
                         {
                             if self.menu_cursor_pos.account >= amount {
                                 self.menu_cursor_pos.account -= amount;
-                                self.menu_cursor_pos.menu = MenuEntryCursor::Mailbox(0);
+                                let _new_val = self.menu_cursor_pos.account;
+                                self.menu_cursor_pos.menu = if let Some(idx) = context.accounts
+                                    [_new_val]
+                                    .default_mailbox()
+                                    .and_then(|h| self.accounts[_new_val].entry_by_hash(h))
+                                {
+                                    MenuEntryCursor::Mailbox(idx)
+                                } else {
+                                    MenuEntryCursor::Status
+                                };
                             } else {
                                 return true;
                             }
@@ -2294,12 +2361,24 @@ impl Component for Listing {
                             menu: MenuEntryCursor::Mailbox(0)
                         }
                     ) {
+                        // Can't go anywhere upwards, we're on top already.
                         return true;
                     }
-                    if self.menu_cursor_pos.menu == MenuEntryCursor::Mailbox(0) {
-                        self.menu_cursor_pos.account = 0;
-                    } else {
-                        self.menu_cursor_pos.menu = MenuEntryCursor::Mailbox(0);
+                    match (
+                        self.menu_cursor_pos.menu,
+                        context.accounts[self.menu_cursor_pos.account]
+                            .default_mailbox()
+                            .and_then(|h| {
+                                self.accounts[self.menu_cursor_pos.account].entry_by_hash(h)
+                            }),
+                    ) {
+                        (MenuEntryCursor::Mailbox(0), _) => {
+                            self.menu_cursor_pos.account = 0;
+                        }
+                        (MenuEntryCursor::Mailbox(_), Some(v)) => {
+                            self.menu_cursor_pos.menu = MenuEntryCursor::Mailbox(v);
+                        }
+                        _ => return true,
                     }
                     if self.show_menu_scrollbar != ShowMenuScrollbar::Never {
                         self.menu_scrollbar_show_timer.rearm();
@@ -2337,11 +2416,20 @@ impl Component for Listing {
                             self.accounts[*account].entries.len().saturating_sub(1)
                     ) {
                         *account = self.accounts.len().saturating_sub(1);
-                        *menu = MenuEntryCursor::Mailbox(0);
-                    } else {
+                        *menu = if let Some(idx) = context.accounts[*account]
+                            .default_mailbox()
+                            .and_then(|h| self.accounts[*account].entry_by_hash(h))
+                        {
+                            MenuEntryCursor::Mailbox(idx)
+                        } else {
+                            MenuEntryCursor::Status
+                        };
+                    } else if !self.accounts[*account].entries.is_empty() {
                         *menu = MenuEntryCursor::Mailbox(
                             self.accounts[*account].entries.len().saturating_sub(1),
                         );
+                    } else {
+                        *menu = MenuEntryCursor::Status;
                     }
                     if self.show_menu_scrollbar != ShowMenuScrollbar::Never {
                         self.menu_scrollbar_show_timer.rearm();
