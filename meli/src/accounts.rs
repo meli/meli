@@ -22,7 +22,6 @@
 //! Account management from user configuration.
 
 use std::{
-    borrow::Cow,
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
     convert::TryFrom,
     fs,
@@ -36,10 +35,7 @@ use std::{
     time::Duration,
 };
 
-use futures::{
-    future::FutureExt,
-    stream::{Stream, StreamExt},
-};
+use futures::{future::FutureExt, stream::StreamExt};
 use indexmap::IndexMap;
 use melib::{
     backends::*,
@@ -62,6 +58,11 @@ use crate::{
 };
 
 mod backend_ops;
+mod jobs;
+mod mailbox;
+
+pub use jobs::*;
+pub use mailbox::*;
 
 #[macro_export]
 macro_rules! try_recv_timeout {
@@ -79,6 +80,7 @@ macro_rules! try_recv_timeout {
     }};
 }
 
+#[macro_export]
 macro_rules! is_variant {
     ($n:ident, $($var:tt)+) => {
         #[inline]
@@ -86,86 +88,6 @@ macro_rules! is_variant {
             matches!(self, Self::$($var)*)
         }
     };
-}
-
-#[derive(Clone, Debug, Default)]
-pub enum MailboxStatus {
-    Available,
-    Failed(Error),
-    /// first argument is done work, and second is total work
-    Parsing(usize, usize),
-    #[default]
-    None,
-}
-
-impl MailboxStatus {
-    is_variant! { is_available, Available }
-    is_variant! { is_parsing, Parsing(_, _) }
-}
-
-#[derive(Clone, Debug)]
-pub struct MailboxEntry {
-    pub status: MailboxStatus,
-    pub name: String,
-    pub path: String,
-    pub ref_mailbox: Mailbox,
-    pub conf: FileMailboxConf,
-}
-
-impl MailboxEntry {
-    pub fn new(
-        status: MailboxStatus,
-        name: String,
-        ref_mailbox: Mailbox,
-        conf: FileMailboxConf,
-    ) -> Self {
-        let mut ret = Self {
-            status,
-            name,
-            path: ref_mailbox.path().into(),
-            ref_mailbox,
-            conf,
-        };
-        match ret.conf.mailbox_conf.extra.get("encoding") {
-            None => {}
-            Some(v) if ["utf-8", "utf8"].iter().any(|e| v.eq_ignore_ascii_case(e)) => {}
-            Some(v) if ["utf-7", "utf7"].iter().any(|e| v.eq_ignore_ascii_case(e)) => {
-                ret.name = melib::backends::utf7::decode_utf7_imap(&ret.name);
-                ret.path = melib::backends::utf7::decode_utf7_imap(&ret.path);
-            }
-            Some(other) => {
-                log::warn!(
-                    "mailbox `{}`: unrecognized mailbox name charset: {}",
-                    &ret.name,
-                    other
-                );
-            }
-        }
-        ret
-    }
-
-    pub fn status(&self) -> String {
-        match self.status {
-            MailboxStatus::Available => format!(
-                "{} [{} messages]",
-                self.name(),
-                self.ref_mailbox.count().ok().unwrap_or((0, 0)).1
-            ),
-            MailboxStatus::Failed(ref e) => e.to_string(),
-            MailboxStatus::None => "Retrieving mailbox.".to_string(),
-            MailboxStatus::Parsing(done, total) => {
-                format!("Parsing messages. [{}/{}]", done, total)
-            }
-        }
-    }
-
-    pub fn name(&self) -> &str {
-        if let Some(name) = self.conf.mailbox_conf.alias.as_ref() {
-            name
-        } else {
-            self.ref_mailbox.name()
-        }
-    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -217,199 +139,6 @@ pub struct Account {
     pub backend_capabilities: MailBackendCapabilities,
 }
 
-pub enum JobRequest {
-    Mailboxes {
-        handle: JoinHandle<Result<HashMap<MailboxHash, Mailbox>>>,
-    },
-    Fetch {
-        mailbox_hash: MailboxHash,
-        #[allow(clippy::type_complexity)]
-        handle: JoinHandle<(
-            Option<Result<Vec<Envelope>>>,
-            Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>,
-        )>,
-    },
-    Generic {
-        name: Cow<'static, str>,
-        log_level: LogLevel,
-        handle: JoinHandle<Result<()>>,
-        on_finish: Option<crate::types::CallbackFn>,
-    },
-    IsOnline {
-        handle: JoinHandle<Result<()>>,
-    },
-    Refresh {
-        mailbox_hash: MailboxHash,
-        handle: JoinHandle<Result<()>>,
-    },
-    SetFlags {
-        env_hashes: EnvelopeHashBatch,
-        mailbox_hash: MailboxHash,
-        flags: SmallVec<[FlagOp; 8]>,
-        handle: JoinHandle<Result<()>>,
-    },
-    SaveMessage {
-        bytes: Vec<u8>,
-        mailbox_hash: MailboxHash,
-        handle: JoinHandle<Result<()>>,
-    },
-    SendMessage,
-    SendMessageBackground {
-        handle: JoinHandle<Result<()>>,
-    },
-    DeleteMessages {
-        env_hashes: EnvelopeHashBatch,
-        handle: JoinHandle<Result<()>>,
-    },
-    CreateMailbox {
-        path: String,
-        handle: JoinHandle<Result<(MailboxHash, HashMap<MailboxHash, Mailbox>)>>,
-    },
-    DeleteMailbox {
-        mailbox_hash: MailboxHash,
-        handle: JoinHandle<Result<HashMap<MailboxHash, Mailbox>>>,
-    },
-    //RenameMailbox,
-    SetMailboxPermissions {
-        mailbox_hash: MailboxHash,
-        handle: JoinHandle<Result<()>>,
-    },
-    SetMailboxSubscription {
-        mailbox_hash: MailboxHash,
-        new_value: bool,
-        handle: JoinHandle<Result<()>>,
-    },
-    Watch {
-        handle: JoinHandle<Result<()>>,
-    },
-}
-
-impl Drop for JobRequest {
-    fn drop(&mut self) {
-        match self {
-            Self::Generic { handle, .. } |
-            Self::IsOnline { handle, .. } |
-            Self::Refresh { handle, .. } |
-            Self::SetFlags { handle, .. } |
-            Self::SaveMessage { handle, .. } |
-            //JobRequest::RenameMailbox,
-            Self::SetMailboxPermissions { handle, .. } |
-            Self::SetMailboxSubscription { handle, .. } |
-            Self::Watch { handle, .. } |
-            Self::SendMessageBackground { handle, .. } => {
-                handle.cancel();
-            }
-            Self::DeleteMessages { handle, .. } => {
-                handle.cancel();
-            }
-            Self::CreateMailbox { handle, .. } => {
-                handle.cancel();
-            }
-            Self::DeleteMailbox { handle, .. } => {
-                handle.cancel();
-            }
-            Self::Fetch { handle, .. } => {
-                handle.cancel();
-            }
-            Self::Mailboxes { handle, .. } => {
-                handle.cancel();
-            }
-            Self::SendMessage => {}
-        }
-    }
-}
-
-impl std::fmt::Debug for JobRequest {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Self::Generic { name, .. } => write!(f, "JobRequest::Generic({})", name),
-            Self::Mailboxes { .. } => write!(f, "JobRequest::Mailboxes"),
-            Self::Fetch { mailbox_hash, .. } => {
-                write!(f, "JobRequest::Fetch({})", mailbox_hash)
-            }
-            Self::IsOnline { .. } => write!(f, "JobRequest::IsOnline"),
-            Self::Refresh { .. } => write!(f, "JobRequest::Refresh"),
-            Self::SetFlags {
-                env_hashes,
-                mailbox_hash,
-                flags,
-                ..
-            } => f
-                .debug_struct(stringify!(JobRequest::SetFlags))
-                .field("env_hashes", &env_hashes)
-                .field("mailbox_hash", &mailbox_hash)
-                .field("flags", &flags)
-                .finish(),
-            Self::SaveMessage { .. } => write!(f, "JobRequest::SaveMessage"),
-            Self::DeleteMessages { .. } => write!(f, "JobRequest::DeleteMessages"),
-            Self::CreateMailbox { .. } => write!(f, "JobRequest::CreateMailbox"),
-            Self::DeleteMailbox { mailbox_hash, .. } => {
-                write!(f, "JobRequest::DeleteMailbox({})", mailbox_hash)
-            }
-            //JobRequest::RenameMailbox,
-            Self::SetMailboxPermissions { .. } => {
-                write!(f, "JobRequest::SetMailboxPermissions")
-            }
-            Self::SetMailboxSubscription { .. } => {
-                write!(f, "JobRequest::SetMailboxSubscription")
-            }
-            Self::Watch { .. } => write!(f, "JobRequest::Watch"),
-            Self::SendMessage => write!(f, "JobRequest::SendMessage"),
-            Self::SendMessageBackground { .. } => {
-                write!(f, "JobRequest::SendMessageBackground")
-            }
-        }
-    }
-}
-
-impl std::fmt::Display for JobRequest {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Self::Generic { name, .. } => write!(f, "{}", name),
-            Self::Mailboxes { .. } => write!(f, "Get mailbox list"),
-            Self::Fetch { .. } => write!(f, "Mailbox fetch"),
-            Self::IsOnline { .. } => write!(f, "Online status check"),
-            Self::Refresh { .. } => write!(f, "Refresh mailbox"),
-            Self::SetFlags {
-                env_hashes, flags, ..
-            } => write!(
-                f,
-                "Set flags for {} message{}: {:?}",
-                env_hashes.len(),
-                if env_hashes.len() == 1 { "" } else { "s" },
-                flags
-            ),
-            Self::SaveMessage { .. } => write!(f, "Save message"),
-            Self::DeleteMessages { env_hashes, .. } => write!(
-                f,
-                "Delete {} message{}",
-                env_hashes.len(),
-                if env_hashes.len() == 1 { "" } else { "s" }
-            ),
-            Self::CreateMailbox { path, .. } => write!(f, "Create mailbox {}", path),
-            Self::DeleteMailbox { .. } => write!(f, "Delete mailbox"),
-            //JobRequest::RenameMailbox,
-            Self::SetMailboxPermissions { .. } => write!(f, "Set mailbox permissions"),
-            Self::SetMailboxSubscription { .. } => write!(f, "Set mailbox subscription"),
-            Self::Watch { .. } => write!(f, "Background watch"),
-            Self::SendMessageBackground { .. } | Self::SendMessage => {
-                write!(f, "Sending message")
-            }
-        }
-    }
-}
-
-impl JobRequest {
-    is_variant! { is_watch, Watch { .. } }
-    is_variant! { is_online, IsOnline { .. } }
-
-    pub fn is_fetch(&self, mailbox_hash: MailboxHash) -> bool {
-        matches!(self, Self::Fetch {
-                 mailbox_hash: h, ..
-             } if *h == mailbox_hash)
-    }
-}
-
 impl Drop for Account {
     fn drop(&mut self) {
         if let Ok(data_dir) = xdg::BaseDirectories::with_profile("meli", &self.name) {
@@ -459,15 +188,6 @@ impl Drop for Account {
                 */
         }
     }
-}
-
-#[derive(Clone, Debug, Default, Serialize)]
-pub struct MailboxNode {
-    pub hash: MailboxHash,
-    pub depth: usize,
-    pub indentation: u32,
-    pub has_sibling: bool,
-    pub children: Vec<MailboxNode>,
 }
 
 impl Account {
@@ -2406,226 +2126,5 @@ impl Index<&MailboxHash> for Account {
 impl IndexMut<&MailboxHash> for Account {
     fn index_mut(&mut self, index: &MailboxHash) -> &mut MailboxEntry {
         self.mailbox_entries.get_mut(index).unwrap()
-    }
-}
-
-fn build_mailboxes_order(
-    tree: &mut Vec<MailboxNode>,
-    mailbox_entries: &IndexMap<MailboxHash, MailboxEntry>,
-    mailboxes_order: &mut Vec<MailboxHash>,
-) {
-    tree.clear();
-    mailboxes_order.clear();
-    for (h, f) in mailbox_entries.iter() {
-        if f.ref_mailbox.parent().is_none() {
-            fn rec(
-                h: MailboxHash,
-                mailbox_entries: &IndexMap<MailboxHash, MailboxEntry>,
-                depth: usize,
-            ) -> MailboxNode {
-                let mut node = MailboxNode {
-                    hash: h,
-                    children: Vec::new(),
-                    depth,
-                    indentation: 0,
-                    has_sibling: false,
-                };
-                for &c in mailbox_entries[&h].ref_mailbox.children() {
-                    if mailbox_entries.contains_key(&c) {
-                        node.children.push(rec(c, mailbox_entries, depth + 1));
-                    }
-                }
-                node
-            }
-
-            tree.push(rec(*h, mailbox_entries, 0));
-        }
-    }
-
-    macro_rules! mailbox_eq_key {
-        ($mailbox:expr) => {{
-            if let Some(sort_order) = $mailbox.conf.mailbox_conf.sort_order {
-                (0, sort_order, $mailbox.ref_mailbox.path())
-            } else {
-                (1, 0, $mailbox.ref_mailbox.path())
-            }
-        }};
-    }
-    tree.sort_unstable_by(|a, b| {
-        if mailbox_entries[&b.hash]
-            .conf
-            .mailbox_conf
-            .sort_order
-            .is_none()
-            && mailbox_entries[&b.hash]
-                .ref_mailbox
-                .path()
-                .eq_ignore_ascii_case("INBOX")
-        {
-            std::cmp::Ordering::Greater
-        } else if mailbox_entries[&a.hash]
-            .conf
-            .mailbox_conf
-            .sort_order
-            .is_none()
-            && mailbox_entries[&a.hash]
-                .ref_mailbox
-                .path()
-                .eq_ignore_ascii_case("INBOX")
-        {
-            std::cmp::Ordering::Less
-        } else {
-            mailbox_eq_key!(mailbox_entries[&a.hash])
-                .cmp(&mailbox_eq_key!(mailbox_entries[&b.hash]))
-        }
-    });
-
-    let mut stack: SmallVec<[Option<&MailboxNode>; 16]> = SmallVec::new();
-    for n in tree.iter_mut() {
-        mailboxes_order.push(n.hash);
-        n.children.sort_unstable_by(|a, b| {
-            if mailbox_entries[&b.hash]
-                .conf
-                .mailbox_conf
-                .sort_order
-                .is_none()
-                && mailbox_entries[&b.hash]
-                    .ref_mailbox
-                    .path()
-                    .eq_ignore_ascii_case("INBOX")
-            {
-                std::cmp::Ordering::Greater
-            } else if mailbox_entries[&a.hash]
-                .conf
-                .mailbox_conf
-                .sort_order
-                .is_none()
-                && mailbox_entries[&a.hash]
-                    .ref_mailbox
-                    .path()
-                    .eq_ignore_ascii_case("INBOX")
-            {
-                std::cmp::Ordering::Less
-            } else {
-                mailbox_eq_key!(mailbox_entries[&a.hash])
-                    .cmp(&mailbox_eq_key!(mailbox_entries[&b.hash]))
-            }
-        });
-        stack.extend(n.children.iter().rev().map(Some));
-        while let Some(Some(next)) = stack.pop() {
-            mailboxes_order.push(next.hash);
-            stack.extend(next.children.iter().rev().map(Some));
-        }
-    }
-    drop(stack);
-    for node in tree.iter_mut() {
-        fn rec(
-            node: &mut MailboxNode,
-            mailbox_entries: &IndexMap<MailboxHash, MailboxEntry>,
-            mut indentation: u32,
-            has_sibling: bool,
-        ) {
-            node.indentation = indentation;
-            node.has_sibling = has_sibling;
-            let mut iter = (0..node.children.len())
-                .filter(|i| {
-                    mailbox_entries[&node.children[*i].hash]
-                        .ref_mailbox
-                        .is_subscribed()
-                })
-                .collect::<SmallVec<[_; 8]>>()
-                .into_iter()
-                .peekable();
-            indentation <<= 1;
-            if has_sibling {
-                indentation |= 1;
-            }
-            while let Some(i) = iter.next() {
-                let c = &mut node.children[i];
-                rec(c, mailbox_entries, indentation, iter.peek().is_some());
-            }
-        }
-
-        rec(node, mailbox_entries, 0, false);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_mailbox_utf7() {
-        #[derive(Debug)]
-        struct TestMailbox(String);
-
-        impl melib::BackendMailbox for TestMailbox {
-            fn hash(&self) -> MailboxHash {
-                unimplemented!()
-            }
-
-            fn name(&self) -> &str {
-                &self.0
-            }
-
-            fn path(&self) -> &str {
-                &self.0
-            }
-
-            fn children(&self) -> &[MailboxHash] {
-                unimplemented!()
-            }
-
-            fn clone(&self) -> Mailbox {
-                unimplemented!()
-            }
-
-            fn special_usage(&self) -> SpecialUsageMailbox {
-                unimplemented!()
-            }
-
-            fn parent(&self) -> Option<MailboxHash> {
-                unimplemented!()
-            }
-
-            fn permissions(&self) -> MailboxPermissions {
-                unimplemented!()
-            }
-
-            fn is_subscribed(&self) -> bool {
-                unimplemented!()
-            }
-
-            fn set_is_subscribed(&mut self, _: bool) -> Result<()> {
-                unimplemented!()
-            }
-
-            fn set_special_usage(&mut self, _: SpecialUsageMailbox) -> Result<()> {
-                unimplemented!()
-            }
-
-            fn count(&self) -> Result<(usize, usize)> {
-                unimplemented!()
-            }
-        }
-        for (n, d) in [
-            ("~peter/mail/&U,BTFw-/&ZeVnLIqe-", "~peter/mail/台北/日本語"),
-            ("&BB4EQgQ,BEAEMAQyBDsENQQ9BD0ESwQ1-", "Отправленные"),
-        ] {
-            let ref_mbox = TestMailbox(n.to_string());
-            let mut conf: melib::MailboxConf = Default::default();
-            conf.extra.insert("encoding".to_string(), "utf7".into());
-
-            let entry = MailboxEntry::new(
-                MailboxStatus::None,
-                n.to_string(),
-                Box::new(ref_mbox),
-                FileMailboxConf {
-                    mailbox_conf: conf,
-                    ..Default::default()
-                },
-            );
-            assert_eq!(&entry.path, d);
-        }
     }
 }
