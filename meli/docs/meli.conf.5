@@ -486,7 +486,12 @@ with
 .Tn Google
 that can use
 .Tn OAUTH2
-tokens.
+tokens,
+and set the option
+.Ic use_oauth2
+as
+.Ql true
+in the account configuration section.
 For convenience in the
 .Sy meli
 repository under the
@@ -533,6 +538,24 @@ should evaluate this command which if successful must only return a
 .Tn base64 Ns
 -encoded token ready to be passed to
 .Tn IMAP.
+.Pp
+Your account section should look like this:
+.Bd -literal
+[accounts."gmail"]
+root_mailbox = '[Gmail]'
+format = "imap"
+server_hostname='imap.gmail.com'
+server_username="username@gmail.com"
+use_oauth2 = true
+server_password_command = "TOKEN=$(py...th2_string --quiet --access_token=$TOKEN"
+server_port="993"
+listing.index_style = "Conversations"
+identity = "username@gmail.com"
+display_name = "Name Name"
+subscribed_mailboxes = ["*" ]
+composing.store_sent_mail = false
+composing.send_mail = { hostname = "smtp.gmail.com", port = 587, auth = { type = "xoauth2", token_command = "...", require_auth = true }, security = { type = "STARTTLS" } }
+.Ed
 .El
 .Ss JMAP only
 .HorizontalRule
