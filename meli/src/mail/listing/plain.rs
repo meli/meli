@@ -271,23 +271,12 @@ impl MailListingTrait for PlainListing {
         self.redraw_list(context, items);
         drop(env_lck);
 
-        if let Some(env_hash) = self.get_env_under_cursor(self.cursor_pos.2) {
+        if self.get_env_under_cursor(self.new_cursor_pos.2).is_some() {
             if !force && old_cursor_pos == self.new_cursor_pos {
                 self.kick_parent(self.parent, ListingMessage::UpdateView, context);
             } else if self.unfocused() {
-                let thread_hash = self.rows.env_to_thread[&env_hash];
                 self.force_draw = true;
                 self.dirty = true;
-                self.kick_parent(
-                    self.parent,
-                    ListingMessage::OpenEntryUnderCursor {
-                        thread_hash,
-                        env_hash,
-                        show_thread: false,
-                        go_to_first_unread: false,
-                    },
-                    context,
-                );
                 self.set_focus(Focus::Entry, context);
             }
         }
@@ -331,28 +320,32 @@ impl ListingTrait for PlainListing {
     }
 
     fn next_entry(&mut self, context: &mut Context) {
-        if self.get_env_under_cursor(self.cursor_pos.2 + 1).is_some() {
+        if self
+            .get_env_under_cursor(self.new_cursor_pos.2 + 1)
+            .is_some()
+        {
             // [ref:TODO]: makes this less ugly.
             self.movement = Some(PageMovement::Down(1));
+            self.perform_movement(None);
             self.force_draw = true;
             self.dirty = true;
-            self.cursor_pos.2 += 1;
-            self.new_cursor_pos.2 += 1;
             self.set_focus(Focus::Entry, context);
         }
     }
 
     fn prev_entry(&mut self, context: &mut Context) {
-        if self.cursor_pos.2 == 0 {
+        if self.new_cursor_pos.2 == 0 {
             return;
         }
-        if self.get_env_under_cursor(self.cursor_pos.2 - 1).is_some() {
+        if self
+            .get_env_under_cursor(self.new_cursor_pos.2 - 1)
+            .is_some()
+        {
             // [ref:TODO]: makes this less ugly.
             self.movement = Some(PageMovement::Up(1));
+            self.perform_movement(None);
             self.force_draw = true;
             self.dirty = true;
-            self.cursor_pos.2 -= 1;
-            self.new_cursor_pos.2 -= 1;
             self.set_focus(Focus::Entry, context);
         }
     }
@@ -418,52 +411,7 @@ impl ListingTrait for PlainListing {
             return;
         }
 
-        if let Some(mvm) = self.movement.take() {
-            match mvm {
-                PageMovement::Up(amount) => {
-                    self.new_cursor_pos.2 = self.new_cursor_pos.2.saturating_sub(amount);
-                }
-                PageMovement::PageUp(multiplier) => {
-                    self.new_cursor_pos.2 = self.new_cursor_pos.2.saturating_sub(rows * multiplier);
-                }
-                PageMovement::Down(amount) => {
-                    if self.new_cursor_pos.2 + amount + 1 < self.length {
-                        self.new_cursor_pos.2 += amount;
-                    } else {
-                        self.new_cursor_pos.2 = self.length - 1;
-                    }
-                }
-                PageMovement::PageDown(multiplier) => {
-                    if self.new_cursor_pos.2 + rows * multiplier + 1 < self.length {
-                        self.new_cursor_pos.2 += rows * multiplier;
-                    } else if self.new_cursor_pos.2 + rows * multiplier > self.length {
-                        self.new_cursor_pos.2 = self.length - 1;
-                    } else {
-                        self.new_cursor_pos.2 = (self.length.saturating_sub(1) / rows) * rows;
-                    }
-                }
-                PageMovement::Right(amount) => {
-                    self.data_columns.x_offset += amount;
-                    self.data_columns.x_offset = self.data_columns.x_offset.min(
-                        self.data_columns
-                            .widths
-                            .iter()
-                            .map(|w| w + 2)
-                            .sum::<usize>()
-                            .saturating_sub(2),
-                    );
-                }
-                PageMovement::Left(amount) => {
-                    self.data_columns.x_offset = self.data_columns.x_offset.saturating_sub(amount);
-                }
-                PageMovement::Home => {
-                    self.new_cursor_pos.2 = 0;
-                }
-                PageMovement::End => {
-                    self.new_cursor_pos.2 = self.length.saturating_sub(1);
-                }
-            }
-        }
+        self.perform_movement(Some(rows));
 
         if self.force_draw {
             grid.clear_area(area, self.color_cache.theme_default);
@@ -623,7 +571,7 @@ impl ListingTrait for PlainListing {
             }
             Focus::Entry => {
                 if let Some((thread_hash, env_hash)) = self
-                    .get_env_under_cursor(self.cursor_pos.2)
+                    .get_env_under_cursor(self.new_cursor_pos.2)
                     .map(|env_hash| (self.rows.env_to_thread[&env_hash], env_hash))
                 {
                     self.force_draw = true;
@@ -638,6 +586,7 @@ impl ListingTrait for PlainListing {
                         },
                         context,
                     );
+                    self.cursor_pos.2 = self.new_cursor_pos.2;
                 } else {
                     return;
                 }
@@ -1317,6 +1266,56 @@ impl PlainListing {
             }
         }
     }
+
+    fn perform_movement(&mut self, height: Option<usize>) {
+        let rows = height.unwrap_or(1);
+        if let Some(mvm) = self.movement.take() {
+            match mvm {
+                PageMovement::Up(amount) => {
+                    self.new_cursor_pos.2 = self.new_cursor_pos.2.saturating_sub(amount);
+                }
+                PageMovement::PageUp(multiplier) => {
+                    self.new_cursor_pos.2 = self.new_cursor_pos.2.saturating_sub(rows * multiplier);
+                }
+                PageMovement::Down(amount) => {
+                    if self.new_cursor_pos.2 + amount + 1 < self.length {
+                        self.new_cursor_pos.2 += amount;
+                    } else {
+                        self.new_cursor_pos.2 = self.length - 1;
+                    }
+                }
+                PageMovement::PageDown(multiplier) => {
+                    if self.new_cursor_pos.2 + rows * multiplier + 1 < self.length {
+                        self.new_cursor_pos.2 += rows * multiplier;
+                    } else if self.new_cursor_pos.2 + rows * multiplier > self.length {
+                        self.new_cursor_pos.2 = self.length - 1;
+                    } else {
+                        self.new_cursor_pos.2 = (self.length.saturating_sub(1) / rows) * rows;
+                    }
+                }
+                PageMovement::Right(amount) => {
+                    self.data_columns.x_offset += amount;
+                    self.data_columns.x_offset = self.data_columns.x_offset.min(
+                        self.data_columns
+                            .widths
+                            .iter()
+                            .map(|w| w + 2)
+                            .sum::<usize>()
+                            .saturating_sub(2),
+                    );
+                }
+                PageMovement::Left(amount) => {
+                    self.data_columns.x_offset = self.data_columns.x_offset.saturating_sub(amount);
+                }
+                PageMovement::Home => {
+                    self.new_cursor_pos.2 = 0;
+                }
+                PageMovement::End => {
+                    self.new_cursor_pos.2 = self.length.saturating_sub(1);
+                }
+            }
+        }
+    }
 }
 
 impl Component for PlainListing {
@@ -1358,7 +1357,9 @@ impl Component for PlainListing {
                 if let Some(mvm) = self.movement.as_ref() {
                     match mvm {
                         PageMovement::Up(amount) => {
-                            for c in self.cursor_pos.2.saturating_sub(*amount)..=self.cursor_pos.2 {
+                            for c in self.new_cursor_pos.2.saturating_sub(*amount)
+                                ..=self.new_cursor_pos.2
+                            {
                                 if let Some(env_hash) = self.get_env_under_cursor(c) {
                                     self.rows.update_selection_with_env(
                                         env_hash,
@@ -1374,8 +1375,8 @@ impl Component for PlainListing {
                                 }
                             }
                             if modifier == Modifier::Intersection {
-                                for c in (0..self.cursor_pos.2.saturating_sub(*amount))
-                                    .chain((self.cursor_pos.2 + 2)..self.length)
+                                for c in (0..self.new_cursor_pos.2.saturating_sub(*amount))
+                                    .chain((self.new_cursor_pos.2 + 2)..self.length)
                                 {
                                     if let Some(env_hash) = self.get_env_under_cursor(c) {
                                         self.rows
@@ -1385,8 +1386,8 @@ impl Component for PlainListing {
                             }
                         }
                         PageMovement::PageUp(multiplier) => {
-                            for c in self.cursor_pos.2.saturating_sub(rows * multiplier)
-                                ..=self.cursor_pos.2
+                            for c in self.new_cursor_pos.2.saturating_sub(rows * multiplier)
+                                ..=self.new_cursor_pos.2
                             {
                                 if let Some(env_hash) = self.get_env_under_cursor(c) {
                                     self.rows.update_selection_with_env(
@@ -1404,8 +1405,8 @@ impl Component for PlainListing {
                             }
                         }
                         PageMovement::Down(amount) => {
-                            for c in
-                                self.cursor_pos.2..self.length.min(self.cursor_pos.2 + amount + 1)
+                            for c in self.new_cursor_pos.2
+                                ..self.length.min(self.new_cursor_pos.2 + amount + 1)
                             {
                                 if let Some(env_hash) = self.get_env_under_cursor(c) {
                                     self.rows.update_selection_with_env(
@@ -1422,8 +1423,9 @@ impl Component for PlainListing {
                                 }
                             }
                             if modifier == Modifier::Intersection {
-                                for c in (0..self.cursor_pos.2).chain(
-                                    self.length.min(self.cursor_pos.2 + amount) + 1..self.length,
+                                for c in (0..self.new_cursor_pos.2).chain(
+                                    self.length.min(self.new_cursor_pos.2 + amount) + 1
+                                        ..self.length,
                                 ) {
                                     if let Some(env_hash) = self.get_env_under_cursor(c) {
                                         self.rows
@@ -1433,8 +1435,8 @@ impl Component for PlainListing {
                             }
                         }
                         PageMovement::PageDown(multiplier) => {
-                            for c in self.cursor_pos.2
-                                ..self.length.min(self.cursor_pos.2 + rows * multiplier)
+                            for c in self.new_cursor_pos.2
+                                ..self.length.min(self.new_cursor_pos.2 + rows * multiplier)
                             {
                                 if let Some(env_hash) = self.get_env_under_cursor(c) {
                                     self.rows.update_selection_with_env(
@@ -1451,8 +1453,8 @@ impl Component for PlainListing {
                                 }
                             }
                             if modifier == Modifier::Intersection {
-                                for c in (0..self.cursor_pos.2).chain(
-                                    self.length.min(self.cursor_pos.2 + rows * multiplier) + 1
+                                for c in (0..self.new_cursor_pos.2).chain(
+                                    self.length.min(self.new_cursor_pos.2 + rows * multiplier) + 1
                                         ..self.length,
                                 ) {
                                     if let Some(env_hash) = self.get_env_under_cursor(c) {
@@ -1464,7 +1466,7 @@ impl Component for PlainListing {
                         }
                         PageMovement::Right(_) | PageMovement::Left(_) => {}
                         PageMovement::Home => {
-                            for c in 0..=self.cursor_pos.2 {
+                            for c in 0..=self.new_cursor_pos.2 {
                                 if let Some(env_hash) = self.get_env_under_cursor(c) {
                                     self.rows.update_selection_with_env(
                                         env_hash,
@@ -1480,7 +1482,7 @@ impl Component for PlainListing {
                                 }
                             }
                             if modifier == Modifier::Intersection {
-                                for c in (self.cursor_pos.2)..self.length {
+                                for c in (self.new_cursor_pos.2)..self.length {
                                     if let Some(env_hash) = self.get_env_under_cursor(c) {
                                         self.rows
                                             .update_selection_with_env(env_hash, |e| *e = false);
@@ -1489,7 +1491,7 @@ impl Component for PlainListing {
                             }
                         }
                         PageMovement::End => {
-                            for c in self.cursor_pos.2..self.length {
+                            for c in self.new_cursor_pos.2..self.length {
                                 if let Some(env_hash) = self.get_env_under_cursor(c) {
                                     self.rows.update_selection_with_env(
                                         env_hash,
@@ -1505,7 +1507,7 @@ impl Component for PlainListing {
                                 }
                             }
                             if modifier == Modifier::Intersection {
-                                for c in 0..self.cursor_pos.2 {
+                                for c in 0..self.new_cursor_pos.2 {
                                     if let Some(env_hash) = self.get_env_under_cursor(c) {
                                         self.rows
                                             .update_selection_with_env(env_hash, |e| *e = false);

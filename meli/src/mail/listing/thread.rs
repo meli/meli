@@ -180,7 +180,7 @@ impl MailListingTrait for ThreadListing {
             .any(std::convert::identity);
         if is_selection_empty {
             return self
-                .get_env_under_cursor(self.cursor_pos.2)
+                .get_env_under_cursor(self.new_cursor_pos.2)
                 .into_iter()
                 .collect::<_>();
         }
@@ -251,12 +251,12 @@ impl MailListingTrait for ThreadListing {
         context: &Context,
         items: Box<dyn Iterator<Item = ThreadHash>>,
     ) {
-        let account = &context.accounts[&self.cursor_pos.0];
-        let threads = account.collection.get_threads(self.cursor_pos.1);
+        let account = &context.accounts[&self.new_cursor_pos.0];
+        let threads = account.collection.get_threads(self.new_cursor_pos.1);
         self.length = 0;
         self.rows.clear();
         if threads.len() == 0 {
-            let message: String = account[&self.cursor_pos.1].status();
+            let message: String = account[&self.new_cursor_pos.1].status();
             _ = self.data_columns.columns[0].resize_with_context(message.len(), 1, context);
             let area = self.data_columns.columns[0].area();
             self.data_columns.columns[0].grid_mut().write_string(
@@ -296,7 +296,7 @@ impl MailListingTrait for ThreadListing {
         let mut prev_group = ThreadHash::null();
         let mut hide_from: bool = false;
         let threaded_repeat_identical_from_values: bool = *mailbox_settings!(
-            context[self.cursor_pos.0][&self.cursor_pos.1]
+            context[self.new_cursor_pos.0][&self.new_cursor_pos.1]
                 .listing
                 .threaded_repeat_identical_from_values
         );
@@ -307,7 +307,7 @@ impl MailListingTrait for ThreadListing {
                 let envelope: EnvelopeRef = account.collection.get_env(env_hash);
                 use melib::search::QueryTrait;
                 if let Some(filter_query) = mailbox_settings!(
-                    context[self.cursor_pos.0][&self.cursor_pos.1]
+                    context[self.new_cursor_pos.0][&self.new_cursor_pos.1]
                         .listing
                         .filter
                 )
@@ -447,28 +447,32 @@ impl ListingTrait for ThreadListing {
     }
 
     fn next_entry(&mut self, context: &mut Context) {
-        if self.get_env_under_cursor(self.cursor_pos.2 + 1).is_some() {
+        if self
+            .get_env_under_cursor(self.new_cursor_pos.2 + 1)
+            .is_some()
+        {
             // [ref:TODO]: makes this less ugly.
             self.movement = Some(PageMovement::Down(1));
+            self.perform_movement(None);
             self.force_draw = true;
             self.dirty = true;
-            self.cursor_pos.2 += 1;
-            self.new_cursor_pos.2 += 1;
             self.set_focus(Focus::Entry, context);
         }
     }
 
     fn prev_entry(&mut self, context: &mut Context) {
-        if self.cursor_pos.2 == 0 {
+        if self.new_cursor_pos.2 == 0 {
             return;
         }
-        if self.get_env_under_cursor(self.cursor_pos.2 - 1).is_some() {
+        if self
+            .get_env_under_cursor(self.new_cursor_pos.2 - 1)
+            .is_some()
+        {
             // [ref:TODO]: makes this less ugly.
             self.movement = Some(PageMovement::Up(1));
+            self.perform_movement(None);
             self.force_draw = true;
             self.dirty = true;
-            self.cursor_pos.2 -= 1;
-            self.new_cursor_pos.2 -= 1;
             self.set_focus(Focus::Entry, context);
         }
     }
@@ -502,52 +506,7 @@ impl ListingTrait for ThreadListing {
             return;
         }
 
-        if let Some(mvm) = self.movement.take() {
-            match mvm {
-                PageMovement::Up(amount) => {
-                    self.new_cursor_pos.2 = self.new_cursor_pos.2.saturating_sub(amount);
-                }
-                PageMovement::PageUp(multiplier) => {
-                    self.new_cursor_pos.2 = self.new_cursor_pos.2.saturating_sub(rows * multiplier);
-                }
-                PageMovement::Down(amount) => {
-                    if self.new_cursor_pos.2 + amount + 1 < self.length {
-                        self.new_cursor_pos.2 += amount;
-                    } else {
-                        self.new_cursor_pos.2 = self.length - 1;
-                    }
-                }
-                PageMovement::PageDown(multiplier) => {
-                    if self.new_cursor_pos.2 + rows * multiplier + 1 < self.length {
-                        self.new_cursor_pos.2 += rows * multiplier;
-                    } else if self.new_cursor_pos.2 + rows * multiplier > self.length {
-                        self.new_cursor_pos.2 = self.length - 1;
-                    } else {
-                        self.new_cursor_pos.2 = (self.length.saturating_sub(1) / rows) * rows;
-                    }
-                }
-                PageMovement::Right(amount) => {
-                    self.data_columns.x_offset += amount;
-                    self.data_columns.x_offset = self.data_columns.x_offset.min(
-                        self.data_columns
-                            .widths
-                            .iter()
-                            .map(|w| w + 2)
-                            .sum::<usize>()
-                            .saturating_sub(2),
-                    );
-                }
-                PageMovement::Left(amount) => {
-                    self.data_columns.x_offset = self.data_columns.x_offset.saturating_sub(amount);
-                }
-                PageMovement::Home => {
-                    self.new_cursor_pos.2 = 0;
-                }
-                PageMovement::End => {
-                    self.new_cursor_pos.2 = self.length.saturating_sub(1);
-                }
-            }
-        }
+        self.perform_movement(Some(rows));
 
         if self.force_draw {
             grid.clear_area(area, self.color_cache.theme_default);
@@ -729,8 +688,8 @@ impl ListingTrait for ThreadListing {
             }
             Focus::Entry => {
                 if let Some((thread_hash, env_hash)) = self
-                    .get_env_under_cursor(self.cursor_pos.2)
-                    .map(|env_hash| (self.rows.env_to_thread[&env_hash], env_hash))
+                    .get_env_under_cursor(self.new_cursor_pos.2)
+                    .and_then(|env_hash| Some((*self.rows.env_to_thread.get(&env_hash)?, env_hash)))
                 {
                     self.force_draw = true;
                     self.dirty = true;
@@ -744,6 +703,7 @@ impl ListingTrait for ThreadListing {
                         },
                         context,
                     );
+                    self.cursor_pos.2 = self.new_cursor_pos.2;
                 } else {
                     return;
                 }
@@ -1226,6 +1186,56 @@ impl ThreadListing {
             );
         }
     }
+
+    fn perform_movement(&mut self, height: Option<usize>) {
+        let rows = height.unwrap_or(1);
+        if let Some(mvm) = self.movement.take() {
+            match mvm {
+                PageMovement::Up(amount) => {
+                    self.new_cursor_pos.2 = self.new_cursor_pos.2.saturating_sub(amount);
+                }
+                PageMovement::PageUp(multiplier) => {
+                    self.new_cursor_pos.2 = self.new_cursor_pos.2.saturating_sub(rows * multiplier);
+                }
+                PageMovement::Down(amount) => {
+                    if self.new_cursor_pos.2 + amount + 1 < self.length {
+                        self.new_cursor_pos.2 += amount;
+                    } else {
+                        self.new_cursor_pos.2 = self.length - 1;
+                    }
+                }
+                PageMovement::PageDown(multiplier) => {
+                    if self.new_cursor_pos.2 + rows * multiplier + 1 < self.length {
+                        self.new_cursor_pos.2 += rows * multiplier;
+                    } else if self.new_cursor_pos.2 + rows * multiplier > self.length {
+                        self.new_cursor_pos.2 = self.length - 1;
+                    } else {
+                        self.new_cursor_pos.2 = (self.length.saturating_sub(1) / rows) * rows;
+                    }
+                }
+                PageMovement::Right(amount) => {
+                    self.data_columns.x_offset += amount;
+                    self.data_columns.x_offset = self.data_columns.x_offset.min(
+                        self.data_columns
+                            .widths
+                            .iter()
+                            .map(|w| w + 2)
+                            .sum::<usize>()
+                            .saturating_sub(2),
+                    );
+                }
+                PageMovement::Left(amount) => {
+                    self.data_columns.x_offset = self.data_columns.x_offset.saturating_sub(amount);
+                }
+                PageMovement::Home => {
+                    self.new_cursor_pos.2 = 0;
+                }
+                PageMovement::End => {
+                    self.new_cursor_pos.2 = self.length.saturating_sub(1);
+                }
+            }
+        }
+    }
 }
 
 impl Component for ThreadListing {
@@ -1267,7 +1277,9 @@ impl Component for ThreadListing {
                 if let Some(mvm) = self.movement.as_ref() {
                     match mvm {
                         PageMovement::Up(amount) => {
-                            for c in self.cursor_pos.2.saturating_sub(*amount)..=self.cursor_pos.2 {
+                            for c in self.new_cursor_pos.2.saturating_sub(*amount)
+                                ..=self.new_cursor_pos.2
+                            {
                                 if let Some(env_hash) = self.get_env_under_cursor(c) {
                                     self.rows.update_selection_with_env(
                                         env_hash,
@@ -1283,8 +1295,8 @@ impl Component for ThreadListing {
                                 }
                             }
                             if modifier == Modifier::Intersection {
-                                for c in (0..self.cursor_pos.2.saturating_sub(*amount))
-                                    .chain((self.cursor_pos.2 + 2)..self.length)
+                                for c in (0..self.new_cursor_pos.2.saturating_sub(*amount))
+                                    .chain((self.new_cursor_pos.2 + 2)..self.length)
                                 {
                                     if let Some(env_hash) = self.get_env_under_cursor(c) {
                                         self.rows
@@ -1294,8 +1306,8 @@ impl Component for ThreadListing {
                             }
                         }
                         PageMovement::PageUp(multiplier) => {
-                            for c in self.cursor_pos.2.saturating_sub(rows * multiplier)
-                                ..=self.cursor_pos.2
+                            for c in self.new_cursor_pos.2.saturating_sub(rows * multiplier)
+                                ..=self.new_cursor_pos.2
                             {
                                 if let Some(env_hash) = self.get_env_under_cursor(c) {
                                     self.rows.update_selection_with_env(
@@ -1313,8 +1325,8 @@ impl Component for ThreadListing {
                             }
                         }
                         PageMovement::Down(amount) => {
-                            for c in
-                                self.cursor_pos.2..self.length.min(self.cursor_pos.2 + amount + 1)
+                            for c in self.new_cursor_pos.2
+                                ..self.length.min(self.new_cursor_pos.2 + amount + 1)
                             {
                                 if let Some(env_hash) = self.get_env_under_cursor(c) {
                                     self.rows.update_selection_with_env(
@@ -1331,8 +1343,9 @@ impl Component for ThreadListing {
                                 }
                             }
                             if modifier == Modifier::Intersection {
-                                for c in (0..self.cursor_pos.2).chain(
-                                    self.length.min(self.cursor_pos.2 + amount) + 1..self.length,
+                                for c in (0..self.new_cursor_pos.2).chain(
+                                    self.length.min(self.new_cursor_pos.2 + amount) + 1
+                                        ..self.length,
                                 ) {
                                     if let Some(env_hash) = self.get_env_under_cursor(c) {
                                         self.rows
@@ -1342,8 +1355,8 @@ impl Component for ThreadListing {
                             }
                         }
                         PageMovement::PageDown(multiplier) => {
-                            for c in self.cursor_pos.2
-                                ..self.length.min(self.cursor_pos.2 + rows * multiplier)
+                            for c in self.new_cursor_pos.2
+                                ..self.length.min(self.new_cursor_pos.2 + rows * multiplier)
                             {
                                 if let Some(env_hash) = self.get_env_under_cursor(c) {
                                     self.rows.update_selection_with_env(
@@ -1360,8 +1373,8 @@ impl Component for ThreadListing {
                                 }
                             }
                             if modifier == Modifier::Intersection {
-                                for c in (0..self.cursor_pos.2).chain(
-                                    self.length.min(self.cursor_pos.2 + rows * multiplier) + 1
+                                for c in (0..self.new_cursor_pos.2).chain(
+                                    self.length.min(self.new_cursor_pos.2 + rows * multiplier) + 1
                                         ..self.length,
                                 ) {
                                     if let Some(env_hash) = self.get_env_under_cursor(c) {
@@ -1373,7 +1386,7 @@ impl Component for ThreadListing {
                         }
                         PageMovement::Right(_) | PageMovement::Left(_) => {}
                         PageMovement::Home => {
-                            for c in 0..=self.cursor_pos.2 {
+                            for c in 0..=self.new_cursor_pos.2 {
                                 if let Some(env_hash) = self.get_env_under_cursor(c) {
                                     self.rows.update_selection_with_env(
                                         env_hash,
@@ -1389,7 +1402,7 @@ impl Component for ThreadListing {
                                 }
                             }
                             if modifier == Modifier::Intersection {
-                                for c in (self.cursor_pos.2)..self.length {
+                                for c in (self.new_cursor_pos.2)..self.length {
                                     if let Some(env_hash) = self.get_env_under_cursor(c) {
                                         self.rows
                                             .update_selection_with_env(env_hash, |e| *e = false);
@@ -1398,7 +1411,7 @@ impl Component for ThreadListing {
                             }
                         }
                         PageMovement::End => {
-                            for c in self.cursor_pos.2..self.length {
+                            for c in self.new_cursor_pos.2..self.length {
                                 if let Some(env_hash) = self.get_env_under_cursor(c) {
                                     self.rows.update_selection_with_env(
                                         env_hash,
@@ -1414,7 +1427,7 @@ impl Component for ThreadListing {
                                 }
                             }
                             if modifier == Modifier::Intersection {
-                                for c in 0..self.cursor_pos.2 {
+                                for c in 0..self.new_cursor_pos.2 {
                                     if let Some(env_hash) = self.get_env_under_cursor(c) {
                                         self.rows
                                             .update_selection_with_env(env_hash, |e| *e = false);
@@ -1434,7 +1447,7 @@ impl Component for ThreadListing {
                 while let Some(env_hash) = self.rows.row_updates.pop() {
                     self.update_line(context, env_hash);
                     let row: usize = self.rows.env_order[&env_hash];
-                    let envelope: EnvelopeRef = context.accounts[&self.cursor_pos.0]
+                    let envelope: EnvelopeRef = context.accounts[&self.new_cursor_pos.0]
                         .collection
                         .get_env(env_hash);
                     let row_attr = row_attr!(
@@ -1536,17 +1549,17 @@ impl Component for ThreadListing {
                 return true;
             }
             UIEvent::MailboxUpdate((ref idxa, ref idxf))
-                if (*idxa, *idxf) == (self.new_cursor_pos.0, self.cursor_pos.1) =>
+                if (*idxa, *idxf) == (self.new_cursor_pos.0, self.new_cursor_pos.1) =>
             {
                 self.refresh_mailbox(context, false);
                 self.set_dirty(true);
             }
-            UIEvent::StartupCheck(ref f) if *f == self.cursor_pos.1 => {
+            UIEvent::StartupCheck(ref f) if *f == self.new_cursor_pos.1 => {
                 self.refresh_mailbox(context, false);
                 self.set_dirty(true);
             }
             UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
-                let account = &context.accounts[&self.cursor_pos.0];
+                let account = &context.accounts[&self.new_cursor_pos.0];
                 if !account.collection.contains_key(new_hash) {
                     return false;
                 }
@@ -1568,7 +1581,7 @@ impl Component for ThreadListing {
                 }
             }
             UIEvent::EnvelopeUpdate(ref env_hash) => {
-                let account = &context.accounts[&self.cursor_pos.0];
+                let account = &context.accounts[&self.new_cursor_pos.0];
                 if !account.collection.contains_key(env_hash) {
                     return false;
                 }
@@ -1592,7 +1605,7 @@ impl Component for ThreadListing {
             {
                 if self.modifier_active && self.modifier_command.is_none() {
                     self.modifier_command = Some(Modifier::default());
-                } else if let Some(env_hash) = self.get_env_under_cursor(self.cursor_pos.2) {
+                } else if let Some(env_hash) = self.get_env_under_cursor(self.new_cursor_pos.2) {
                     self.rows.update_selection_with_env(env_hash, |e| *e = !*e);
                     self.set_dirty(true);
                 }
@@ -1612,13 +1625,13 @@ impl Component for ThreadListing {
                     return true;
                 }
                 Action::Listing(Search(ref filter_term)) if !self.unfocused() => {
-                    match context.accounts[&self.cursor_pos.0].search(
+                    match context.accounts[&self.new_cursor_pos.0].search(
                         filter_term,
                         self.sort,
-                        self.cursor_pos.1,
+                        self.new_cursor_pos.1,
                     ) {
                         Ok(job) => {
-                            let handle = context.accounts[&self.cursor_pos.0]
+                            let handle = context.accounts[&self.new_cursor_pos.0]
                                 .main_loop_handler
                                 .job_executor
                                 .spawn_specialized("search".into(), job);
