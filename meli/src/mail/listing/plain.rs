@@ -685,53 +685,15 @@ impl PlainListing {
         EntryStrings {
             date: DateString(self.format_date(context, e.date())),
             subject: SubjectString(subject),
-            flag: FlagString(format!(
-                "{selected}{unseen}{attachments}{whitespace}",
-                selected = if self.rows.selection.get(&e.hash()).cloned().unwrap_or(false) {
-                    mailbox_settings!(
-                        context[self.cursor_pos.0][&self.cursor_pos.1]
-                            .listing
-                            .selected_flag
-                    )
-                    .as_ref()
-                    .map(|s| s.as_str())
-                    .unwrap_or(super::DEFAULT_SELECTED_FLAG)
-                } else {
-                    ""
-                },
-                unseen = if !e.is_seen() {
-                    mailbox_settings!(
-                        context[self.cursor_pos.0][&self.cursor_pos.1]
-                            .listing
-                            .unseen_flag
-                    )
-                    .as_ref()
-                    .map(|s| s.as_str())
-                    .unwrap_or(super::DEFAULT_UNSEEN_FLAG)
-                } else {
-                    ""
-                },
-                attachments = if e.has_attachments() {
-                    mailbox_settings!(
-                        context[self.cursor_pos.0][&self.cursor_pos.1]
-                            .listing
-                            .attachment_flag
-                    )
-                    .as_ref()
-                    .map(|s| s.as_str())
-                    .unwrap_or(super::DEFAULT_ATTACHMENT_FLAG)
-                } else {
-                    ""
-                },
-                whitespace = if self.rows.selection.get(&e.hash()).cloned().unwrap_or(false)
-                    || !e.is_seen()
-                    || e.has_attachments()
-                {
-                    " "
-                } else {
-                    ""
-                },
-            )),
+            flag: FlagString::new(
+                e.flags(),
+                self.rows.selection.get(&e.hash()).cloned().unwrap_or(false),
+                /* snoozed */ false,
+                !e.is_seen(),
+                e.has_attachments(),
+                context,
+                (self.cursor_pos.0, self.cursor_pos.1),
+            ),
             from: FromString(Address::display_name_slice(e.from())),
             tags: TagString(tags, colors),
             highlight_self: false,

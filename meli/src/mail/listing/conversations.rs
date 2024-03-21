@@ -755,11 +755,19 @@ impl ConversationsListing {
             } else {
                 subject
             }),
-            flag: FlagString(format!(
-                "{}{}",
-                if thread.has_attachments() { "📎" } else { "" },
-                if thread.snoozed() { "💤" } else { "" }
-            )),
+            flag: FlagString::new(
+                root_envelope.flags(),
+                self.rows
+                    .selection
+                    .get(&root_envelope.hash())
+                    .cloned()
+                    .unwrap_or(false),
+                thread.snoozed(),
+                thread.unseen() > 0,
+                thread.has_attachments(),
+                context,
+                (self.cursor_pos.0, self.cursor_pos.1),
+            ),
             from: FromString(Address::display_name_slice(from)),
             tags: TagString(tags_string, colors),
             highlight_self: false,

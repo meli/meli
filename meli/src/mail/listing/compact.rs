@@ -972,96 +972,19 @@ impl CompactListing {
             } else {
                 SubjectString(subject)
             },
-            flag: FlagString(format!(
-                "{flag_passed}{flag_replied}{flag_seen}{flag_trashed}{flag_draft}{flag_flagged} \
-                 {selected}{snoozed}{unseen}{attachments}{whitespace}",
-                flag_passed = Some("P")
-                    .filter(|_| flags.contains(Flag::PASSED))
-                    .unwrap_or_default(),
-                flag_replied = Some("R")
-                    .filter(|_| flags.contains(Flag::REPLIED))
-                    .unwrap_or_default(),
-                flag_seen = Some("S")
-                    .filter(|_| flags.contains(Flag::SEEN))
-                    .unwrap_or_default(),
-                flag_trashed = Some("T")
-                    .filter(|_| flags.contains(Flag::TRASHED))
-                    .unwrap_or_default(),
-                flag_draft = Some("D")
-                    .filter(|_| flags.contains(Flag::DRAFT))
-                    .unwrap_or_default(),
-                flag_flagged = Some("F")
-                    .filter(|_| flags.contains(Flag::FLAGGED))
-                    .unwrap_or_default(),
-                selected = if self
-                    .rows
+            flag: FlagString::new(
+                flags,
+                self.rows
                     .selection
                     .get(&root_envelope.hash())
                     .cloned()
-                    .unwrap_or(false)
-                {
-                    mailbox_settings!(
-                        context[self.cursor_pos.0][&self.cursor_pos.1]
-                            .listing
-                            .selected_flag
-                    )
-                    .as_ref()
-                    .map(|s| s.as_str())
-                    .unwrap_or(super::DEFAULT_SELECTED_FLAG)
-                } else {
-                    ""
-                },
-                snoozed = if thread.snoozed() {
-                    mailbox_settings!(
-                        context[self.cursor_pos.0][&self.cursor_pos.1]
-                            .listing
-                            .thread_snoozed_flag
-                    )
-                    .as_ref()
-                    .map(|s| s.as_str())
-                    .unwrap_or(super::DEFAULT_SNOOZED_FLAG)
-                } else {
-                    ""
-                },
-                unseen = if thread.unseen() > 0 {
-                    mailbox_settings!(
-                        context[self.cursor_pos.0][&self.cursor_pos.1]
-                            .listing
-                            .unseen_flag
-                    )
-                    .as_ref()
-                    .map(|s| s.as_str())
-                    .unwrap_or(super::DEFAULT_UNSEEN_FLAG)
-                } else {
-                    ""
-                },
-                attachments = if thread.has_attachments() {
-                    mailbox_settings!(
-                        context[self.cursor_pos.0][&self.cursor_pos.1]
-                            .listing
-                            .attachment_flag
-                    )
-                    .as_ref()
-                    .map(|s| s.as_str())
-                    .unwrap_or(super::DEFAULT_ATTACHMENT_FLAG)
-                } else {
-                    ""
-                },
-                whitespace = if self
-                    .rows
-                    .selection
-                    .get(&root_envelope.hash())
-                    .cloned()
-                    .unwrap_or(false)
-                    || thread.unseen() > 0
-                    || thread.snoozed()
-                    || thread.has_attachments()
-                {
-                    " "
-                } else {
-                    ""
-                },
-            )),
+                    .unwrap_or(false),
+                thread.snoozed(),
+                thread.unseen() > 0,
+                thread.has_attachments(),
+                context,
+                (self.cursor_pos.0, self.cursor_pos.1),
+            ),
             from: FromString(Address::display_name_slice(from)),
             tags: TagString(tags_string, colors),
             highlight_self,

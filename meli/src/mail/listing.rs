@@ -31,7 +31,7 @@ use std::{
 
 use futures::future::try_join_all;
 use melib::{
-    backends::EnvelopeHashBatch, mbox::MboxMetadata, utils::datetime, FlagOp, UnixTimestamp,
+    backends::EnvelopeHashBatch, mbox::MboxMetadata, utils::datetime, Flag, FlagOp, UnixTimestamp,
 };
 use smallvec::SmallVec;
 
@@ -455,6 +455,86 @@ column_str!(struct FromString(String));
 column_str!(struct SubjectString(String));
 column_str!(struct FlagString(String));
 column_str!(struct TagString(String, SmallVec<[Option<Color>; 8]>));
+
+impl FlagString {
+    pub(self) fn new(
+        flags: Flag,
+        is_selected: bool,
+        is_snoozed: bool,
+        is_unseen: bool,
+        has_attachments: bool,
+        context: &Context,
+        coordinates: (AccountHash, MailboxHash),
+    ) -> Self {
+        Self(format!(
+            "{flag_passed}{flag_replied}{flag_seen}{flag_trashed}{flag_draft}{flag_flagged} \
+             {selected}{snoozed}{unseen}{attachments}{whitespace}",
+            flag_passed = Some("P")
+                .filter(|_| flags.contains(Flag::PASSED))
+                .unwrap_or_default(),
+            flag_replied = Some("R")
+                .filter(|_| flags.contains(Flag::REPLIED))
+                .unwrap_or_default(),
+            flag_seen = Some("S")
+                .filter(|_| flags.contains(Flag::SEEN))
+                .unwrap_or_default(),
+            flag_trashed = Some("T")
+                .filter(|_| flags.contains(Flag::TRASHED))
+                .unwrap_or_default(),
+            flag_draft = Some("D")
+                .filter(|_| flags.contains(Flag::DRAFT))
+                .unwrap_or_default(),
+            flag_flagged = Some("F")
+                .filter(|_| flags.contains(Flag::FLAGGED))
+                .unwrap_or_default(),
+            selected = if is_selected {
+                mailbox_settings!(context[coordinates.0][&coordinates.1].listing.selected_flag)
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or(DEFAULT_SELECTED_FLAG)
+            } else {
+                ""
+            },
+            snoozed = if is_snoozed {
+                mailbox_settings!(
+                    context[coordinates.0][&coordinates.1]
+                        .listing
+                        .thread_snoozed_flag
+                )
+                .as_ref()
+                .map(|s| s.as_str())
+                .unwrap_or(DEFAULT_SNOOZED_FLAG)
+            } else {
+                ""
+            },
+            unseen = if is_unseen {
+                mailbox_settings!(context[coordinates.0][&coordinates.1].listing.unseen_flag)
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or(DEFAULT_UNSEEN_FLAG)
+            } else {
+                ""
+            },
+            attachments = if has_attachments {
+                mailbox_settings!(
+                    context[coordinates.0][&coordinates.1]
+                        .listing
+                        .attachment_flag
+                )
+                .as_ref()
+                .map(|s| s.as_str())
+                .unwrap_or(DEFAULT_ATTACHMENT_FLAG)
+            } else {
+                ""
+            },
+            whitespace = if is_selected || is_unseen || is_snoozed || has_attachments {
+                " "
+            } else {
+                ""
+            },
+        ))
+    }
+}
 
 #[derive(Clone, Copy, Debug)]
 struct MailboxMenuEntry {
