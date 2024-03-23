@@ -167,7 +167,7 @@ impl Component for EmbeddedContainer {
         } else {
             let theme_default = crate::conf::value(context, "theme_default");
             grid.clear_area(area, theme_default);
-            match create_pty(area.width(), area.height(), self.command.clone()) {
+            match create_pty(area.width(), area.height(), &self.command) {
                 Ok(embedded_pty) => {
                     //embedded_pty.lock().unwrap().set_log_file(self.log_file.take());
                     self.embedded_pty = Some(EmbeddedPty::Running(embedded_pty));
@@ -187,8 +187,8 @@ impl Component for EmbeddedContainer {
                 Err(err) => {
                     context.replies.push_back(UIEvent::Notification {
                         title: Some("Failed to create pseudoterminal".into()),
-                        source: None,
                         body: err.to_string().into(),
+                        source: Some(err),
                         kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
                     });
                 }

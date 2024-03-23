@@ -726,12 +726,16 @@ impl Component for MailView {
                                             .spawn()
                                         {
                                             Ok(child) => {
-                                                context.children.push(child);
+                                                context
+                                                    .children
+                                                    .entry(url_launcher.to_string().into())
+                                                    .or_default()
+                                                    .push(child);
                                             }
                                             Err(err) => {
                                                 context.replies.push_back(UIEvent::StatusEvent(
                                                     StatusEvent::DisplayMessage(format!(
-                                                        "Couldn't launch {:?}: {}",
+                                                        "Couldn't launch {}: {}",
                                                         url_launcher, err
                                                     )),
                                                 ));
@@ -766,11 +770,15 @@ impl Component for MailView {
                                 .stdout(Stdio::piped())
                                 .spawn()
                             {
-                                Ok(child) => context.children.push(child),
+                                Ok(child) => context
+                                    .children
+                                    .entry(url_launcher.to_string().into())
+                                    .or_default()
+                                    .push(child),
                                 Err(err) => {
                                     context.replies.push_back(UIEvent::StatusEvent(
                                         StatusEvent::DisplayMessage(format!(
-                                            "Couldn't launch {:?}: {}",
+                                            "Couldn't launch {}: {}",
                                             url_launcher, err
                                         )),
                                     ));

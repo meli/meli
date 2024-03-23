@@ -1876,10 +1876,11 @@ impl Component for Composer {
                 };
 
                 if *account_settings!(context[self.account_hash].composing.embedded_pty) {
+                    let command = [editor, f.path().display().to_string()].join(" ");
                     match crate::terminal::embedded::create_pty(
                         self.embedded_dimensions.0,
                         self.embedded_dimensions.1,
-                        [editor, f.path().display().to_string()].join(" "),
+                        &command,
                     ) {
                         Ok(terminal) => {
                             self.embedded_pty = Some(EmbeddedPty {
@@ -1891,14 +1892,17 @@ impl Component for Composer {
                             context
                                 .replies
                                 .push_back(UIEvent::ChangeMode(UIMode::Embedded));
-                            context.replies.push_back(UIEvent::Fork(ForkType::Embedded(
-                                self.embedded_pty
+                            context.replies.push_back(UIEvent::Fork(ForkType::Embedded {
+                                id: "editor".into(),
+                                command: Some(command.into()),
+                                pid: self
+                                    .embedded_pty
                                     .as_ref()
                                     .unwrap()
                                     .lock()
                                     .unwrap()
                                     .child_pid,
-                            )));
+                            }));
                             self.mode = ViewMode::EmbeddedPty;
                         }
                         Err(err) => {

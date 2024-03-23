@@ -78,7 +78,7 @@ ioctl_none_bad!(
 
 /// Create a new pseudoterminal (PTY) with given width, size and execute
 /// `command` in it.
-pub fn create_pty(width: usize, height: usize, command: String) -> Result<Arc<Mutex<Terminal>>> {
+pub fn create_pty(width: usize, height: usize, command: &str) -> Result<Arc<Mutex<Terminal>>> {
     #[cfg(not(target_os = "macos"))]
     let (frontend_fd, backend_name): (nix::pty::PtyMaster, String) = {
         // Open a new PTY frontend

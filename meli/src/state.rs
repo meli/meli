@@ -35,6 +35,7 @@
 //! [`ThreadEvent`].
 
 use std::{
+    borrow::Cow,
     collections::BTreeSet,
     env,
     os::fd::{AsRawFd, FromRawFd, OwnedFd},
@@ -143,8 +144,8 @@ pub struct Context {
     receiver: Receiver<ThreadEvent>,
     input_thread: InputHandler,
     current_dir: PathBuf,
-    pub children: Vec<std::process::Child>,
-
+    /// Children processes
+    pub children: IndexMap<Cow<'static, str>, Vec<std::process::Child>>,
     pub temp_files: Vec<File>,
 }
 
@@ -250,7 +251,7 @@ impl Context {
             unrealized: IndexSet::default(),
             temp_files: Vec::new(),
             current_dir: std::env::current_dir().unwrap(),
-            children: vec![],
+            children: IndexMap::default(),
 
             input_thread: InputHandler {
                 pipe: input_thread_pipe,
@@ -293,18 +294,38 @@ impl Drop for State {
         // When done, restore the defaults to avoid messing with the terminal.
         self.screen.switch_to_main_screen();
         use nix::sys::wait::{waitpid, WaitPidFlag};
-        for child in self.context.children.iter_mut() {
-            if let Err(err) = waitpid(
-                nix::unistd::Pid::from_raw(child.id() as i32),
-                Some(WaitPidFlag::WNOHANG),
-            ) {
-                log::warn!("Failed to wait on subprocess {}: {}", child.id(), err);
-            }
+        for (id, pid, err) in self
+            .context
+            .children
+            .iter_mut()
+            .flat_map(|(i, v)| v.drain(..).map(move |v| (i, v)))
+            .filter_map(|(id, child)| {
+                if let Err(err) = waitpid(
+                    nix::unistd::Pid::from_raw(child.id() as i32),
+                    Some(WaitPidFlag::WNOHANG),
+                ) {
+                    Some((id, child.id(), err))
+                } else {
+                    None
+                }
+            })
+        {
+            log::trace!("Failed to wait on subprocess {} ({}): {}", id, pid, err);
         }
-        if let Some(ForkType::Embedded(child_pid)) = self.child.take() {
+        if let Some(ForkType::Embedded { id, command, pid }) = self.child.take() {
             /* Try wait, we don't want to block */
-            if let Err(e) = waitpid(child_pid, Some(WaitPidFlag::WNOHANG)) {
-                log::warn!("Failed to wait on subprocess {}: {}", child_pid, e);
+            if let Err(err) = waitpid(pid, Some(WaitPidFlag::WNOHANG)) {
+                log::trace!(
+                    "Failed to wait on embedded process {} {} ({}): {}",
+                    id,
+                    if let Some(v) = command.as_ref() {
+                        v.as_ref()
+                    } else {
+                        ""
+                    },
+                    pid,
+                    err
+                );
             }
         }
     }
@@ -428,7 +449,7 @@ impl State {
                 unrealized: IndexSet::default(),
                 temp_files: Vec::new(),
                 current_dir: std::env::current_dir()?,
-                children: vec![],
+                children: IndexMap::default(),
 
                 input_thread: InputHandler {
                     pipe: input_thread_pipe,
@@ -1005,8 +1026,12 @@ impl State {
                 self.context.restore_input();
                 return;
             }
-            UIEvent::Fork(ForkType::Generic(child)) => {
-                self.context.children.push(child);
+            UIEvent::Fork(ForkType::Generic {
+                id,
+                command: _,
+                child,
+            }) => {
+                self.context.children.entry(id).or_default().push(child);
                 return;
             }
             UIEvent::Fork(child) => {
@@ -1194,24 +1219,27 @@ impl State {
 
     pub fn try_wait_on_child(&mut self) -> Option<bool> {
         let should_return_flag = match self.child {
-            Some(ForkType::NewDraft(_, ref mut c)) => {
-                let w = c.try_wait();
+            Some(ForkType::Generic {
+                ref id,
+                ref command,
+                ref mut child,
+            }) => {
+                let w = child.try_wait();
                 match w {
                     Ok(Some(_)) => true,
                     Ok(None) => false,
                     Err(err) => {
-                        log::error!("Failed to wait on editor process: {err}");
-                        return None;
-                    }
-                }
-            }
-            Some(ForkType::Generic(ref mut c)) => {
-                let w = c.try_wait();
-                match w {
-                    Ok(Some(_)) => true,
-                    Ok(None) => false,
-                    Err(err) => {
-                        log::error!("Failed to wait on child process: {err}");
+                        log::error!(
+                            "Failed to wait on child process {} {} ({}): {}",
+                            id,
+                            if let Some(v) = command.as_ref() {
+                                v.as_ref()
+                            } else {
+                                ""
+                            },
+                            child.id(),
+                            err
+                        );
                         return None;
                     }
                 }

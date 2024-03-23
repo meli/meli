@@ -343,11 +343,15 @@ impl ViewFilter {
                     });
                 match res {
                     Ok((p, child)) => {
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::UpdateSubStatus(command)));
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::UpdateSubStatus(command.clone()),
+                        ));
                         context.temp_files.push(p);
-                        context.children.push(child);
+                        context
+                            .children
+                            .entry(command.into())
+                            .or_default()
+                            .push(child);
                     }
                     Err(err) => {
                         context.replies.push_back(UIEvent::StatusEvent(

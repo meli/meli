@@ -152,8 +152,8 @@ impl EnvelopeView {
                             format!("Failed to start html filter process: {}", filter_invocation,)
                                 .into(),
                         ),
-                        source: None,
                         body: err.to_string().into(),
+                        source: Some(err.into()),
                         kind: Some(NotificationType::Error(melib::ErrorKind::External)),
                     }));
                     // [ref:FIXME]: add `v` configurable shortcut
@@ -1294,15 +1294,15 @@ impl Component for EnvelopeView {
                 }
                 match save_attachment(&path, &self.mail.bytes) {
                     Err(err) => {
+                        log::error!("Failed to create file at {}: {err}", path.display());
                         context.replies.push_back(UIEvent::Notification {
                             title: Some(
                                 format!("Failed to create file at {}", path.display()).into(),
                             ),
-                            source: None,
                             body: err.to_string().into(),
+                            source: Some(err),
                             kind: Some(NotificationType::Error(melib::ErrorKind::External)),
                         });
-                        log::error!("Failed to create file at {}: {err}", path.display());
                         return true;
                     }
                     Ok(()) => {
@@ -1336,15 +1336,15 @@ impl Component for EnvelopeView {
                     }
                     match save_attachment(&path, &u.decode(Default::default())) {
                         Err(err) => {
+                            log::error!("Failed to create file at {}: {err}", path.display());
                             context.replies.push_back(UIEvent::Notification {
                                 title: Some(
                                     format!("Failed to create file at {}", path.display()).into(),
                                 ),
-                                source: None,
                                 body: err.to_string().into(),
+                                source: Some(err),
                                 kind: Some(NotificationType::Error(melib::ErrorKind::External)),
                             });
-                            log::error!("Failed to create file at {}: {err}", path.display());
                         }
                         Ok(()) => {
                             context.replies.push_back(UIEvent::Notification {
@@ -1365,15 +1365,15 @@ impl Component for EnvelopeView {
                     }
                     match save_attachment(&path, &self.mail.bytes) {
                         Err(err) => {
+                            log::error!("Failed to create file at {}: {err}", path.display());
                             context.replies.push_back(UIEvent::Notification {
                                 title: Some(
                                     format!("Failed to create file at {}", path.display()).into(),
                                 ),
-                                source: None,
                                 body: err.to_string().into(),
+                                source: Some(err),
                                 kind: Some(NotificationType::Error(melib::ErrorKind::External)),
                             });
-                            log::error!("Failed to create file at {}: {err}", path.display());
                             return true;
                         }
                         Ok(()) => {
@@ -1466,7 +1466,11 @@ impl Component for EnvelopeView {
                                 match res {
                                     Ok((p, child)) => {
                                         context.temp_files.push(p);
-                                        context.children.push(child);
+                                        context
+                                            .children
+                                            .entry(command.into())
+                                            .or_default()
+                                            .push(child);
                                     }
                                     Err(err) => {
                                         context.replies.push_back(UIEvent::StatusEvent(
@@ -1560,13 +1564,17 @@ impl Component for EnvelopeView {
                     .spawn()
                 {
                     Ok(child) => {
-                        context.children.push(child);
+                        context
+                            .children
+                            .entry(url_launcher.to_string().into())
+                            .or_default()
+                            .push(child);
                     }
                     Err(err) => {
                         context.replies.push_back(UIEvent::Notification {
                             title: Some(format!("Failed to launch {:?}", url_launcher).into()),
-                            source: None,
                             body: err.to_string().into(),
+                            source: Some(err.into()),
                             kind: Some(NotificationType::Error(melib::ErrorKind::External)),
                         });
                     }

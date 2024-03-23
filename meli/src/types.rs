@@ -100,9 +100,16 @@ pub enum ForkType {
     /// Already finished fork, we only want to restore input/output
     Finished,
     /// Embedded pty
-    Embedded(Pid),
-    Generic(std::process::Child),
-    NewDraft(File, std::process::Child),
+    Embedded {
+        id: Cow<'static, str>,
+        command: Option<Cow<'static, str>>,
+        pid: Pid,
+    },
+    Generic {
+        id: Cow<'static, str>,
+        command: Option<Cow<'static, str>>,
+        child: std::process::Child,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -140,8 +147,8 @@ pub enum UIEvent {
     Command(String),
     Notification {
         title: Option<Cow<'static, str>>,
-        source: Option<Error>,
         body: Cow<'static, str>,
+        source: Option<Error>,
         kind: Option<NotificationType>,
     },
     Action(Action),
