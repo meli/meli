@@ -23,8 +23,13 @@ pub mod mutt;
 #[cfg(feature = "vcard")]
 pub mod vcard;
 
-use std::{collections::HashMap, ops::Deref};
+use std::{
+    collections::HashMap,
+    hash::{Hash, Hasher},
+    ops::Deref,
+};
 
+use indexmap::IndexMap;
 use uuid::Uuid;
 
 use crate::utils::{
@@ -57,11 +62,7 @@ impl From<CardId> for String {
 
 impl From<String> for CardId {
     fn from(s: String) -> Self {
-        use std::{
-            collections::hash_map::DefaultHasher,
-            hash::{Hash, Hasher},
-            str::FromStr,
-        };
+        use std::{collections::hash_map::DefaultHasher, str::FromStr};
 
         if let Ok(u) = Uuid::parse_str(s.as_str()) {
             Self::Uuid(u)
@@ -80,7 +81,7 @@ pub struct AddressBook {
     display_name: String,
     created: UnixTimestamp,
     last_edited: UnixTimestamp,
-    pub cards: HashMap<CardId, Card>,
+    pub cards: IndexMap<CardId, Card>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -97,7 +98,7 @@ pub struct Card {
     key: String,
     color: u8,
     last_edited: UnixTimestamp,
-    extra_properties: HashMap<String, String>,
+    extra_properties: IndexMap<String, String>,
     /// If `true`, we can't make any changes because we do not manage this
     /// resource.
     external_resource: bool,
@@ -115,13 +116,24 @@ impl std::fmt::Display for Card {
     }
 }
 
+impl Hash for Card {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let mut serialized = serde_json::json! { self };
+        // The following anonymous let bind is just to make sure at compile-time that
+        // `id` field is present in Self and serialized["id"] will be a valid access.
+        let _: &CardId = &self.id;
+        serialized["id"] = serde_json::json! { CardId::Hash(0) };
+        serialized.to_string().hash(state);
+    }
+}
+
 impl AddressBook {
     pub fn new(display_name: String) -> Self {
         Self {
             display_name,
             created: now(),
             last_edited: now(),
-            cards: HashMap::default(),
+            cards: IndexMap::default(),
         }
     }
 
@@ -199,9 +211,9 @@ impl AddressBook {
 }
 
 impl Deref for AddressBook {
-    type Target = HashMap<CardId, Card>;
+    type Target = IndexMap<CardId, Card>;
 
-    fn deref(&self) -> &HashMap<CardId, Card> {
+    fn deref(&self) -> &IndexMap<CardId, Card> {
         &self.cards
     }
 }
@@ -223,6 +235,12 @@ macro_rules! set_fn {
     };
 }
 
+impl Default for Card {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Card {
     pub fn new() -> Self {
         Self {
@@ -240,7 +258,7 @@ impl Card {
 
             last_edited: now(),
             external_resource: false,
-            extra_properties: HashMap::default(),
+            extra_properties: IndexMap::default(),
             color: 0,
         }
     }
@@ -266,7 +284,7 @@ impl Card {
         self.extra_properties.get(key).map(String::as_str)
     }
 
-    pub fn extra_properties(&self) -> &HashMap<String, String> {
+    pub fn extra_properties(&self) -> &IndexMap<String, String> {
         &self.extra_properties
     }
 
@@ -299,8 +317,8 @@ impl Card {
     }
 }
 
-impl From<HashMap<String, String>> for Card {
-    fn from(mut map: HashMap<String, String>) -> Self {
+impl From<IndexMap<String, String>> for Card {
+    fn from(mut map: IndexMap<String, String>) -> Self {
         let mut card = Self::new();
         macro_rules! get {
             ($key:literal, $field:tt) => {
@@ -322,8 +340,9 @@ impl From<HashMap<String, String>> for Card {
     }
 }
 
-impl Default for Card {
-    fn default() -> Self {
-        Self::new()
+impl From<HashMap<String, String>> for Card {
+    fn from(map: HashMap<String, String>) -> Self {
+        let map: IndexMap<String, String> = map.into_iter().collect();
+        Self::from(map)
     }
 }

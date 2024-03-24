@@ -19,8 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::collections::HashMap;
-
+use indexmap::IndexMap;
 use melib::Card;
 
 use crate::{
@@ -200,7 +199,7 @@ impl Component for ContactManager {
                         None => {}
                         Some(true) => {
                             let fields = std::mem::take(&mut self.form).collect().unwrap();
-                            let fields: HashMap<String, String> = fields
+                            let fields: IndexMap<String, String> = fields
                                 .into_iter()
                                 .map(|(s, v)| {
                                     (

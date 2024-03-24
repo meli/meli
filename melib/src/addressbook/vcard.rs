@@ -186,7 +186,6 @@ impl<V: VCardVersion> TryInto<Card> for VCard<V> {
     fn try_into(mut self) -> crate::error::Result<Card> {
         let mut card = Card::new();
         card.set_id(CardId::Hash({
-            use std::hash::Hasher;
             let mut hasher = std::collections::hash_map::DefaultHasher::new();
             if let Some(val) = self.0.get("FN") {
                 hasher.write(val.value.as_bytes());

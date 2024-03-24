@@ -260,7 +260,7 @@ impl MailView {
         }
         let envelope: EnvelopeRef = account.collection.get_env(coordinates.2);
 
-        let mut entries = Vec::new();
+        let mut entries: IndexMap<Card, (Card, String)> = IndexMap::default();
         for addr in envelope.from().iter().chain(envelope.to().iter()) {
             let mut new_card: Card = Card::new();
             new_card
@@ -269,12 +269,12 @@ impl MailView {
             if let Some(display_name) = addr.get_display_name() {
                 new_card.set_name(display_name);
             }
-            entries.push((new_card, format!("{}", addr)));
+            entries.insert(new_card.clone(), (new_card, format!("{}", addr)));
         }
         drop(envelope);
         self.contact_selector = Some(Box::new(Selector::new(
             "select contacts to add",
-            entries,
+            entries.into_iter().map(|(_, v)| v).collect(),
             false,
             Some(Box::new(move |id: ComponentId, results: &[Card]| {
                 Some(UIEvent::FinishedUIDialog(id, Box::new(results.to_vec())))
