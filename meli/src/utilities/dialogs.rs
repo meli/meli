@@ -54,10 +54,13 @@ pub struct Selector<
     theme_default: ThemeAttribute,
 
     cursor: SelectorCursor,
+    scroll_x_cursor: usize,
+    movement: Option<PageMovement>,
     vertical_alignment: Alignment,
     horizontal_alignment: Alignment,
     title: String,
-
+    content: Screen<Virtual>,
+    initialized: bool,
     /// If `true`, user has finished their selection
     done: bool,
     done_fn: F,
@@ -127,6 +130,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
                  * cursor */
                 self.entries[c].1 = !self.entries[c].1;
                 self.dirty = true;
+                self.initialized = false;
                 return true;
             }
             (UIEvent::Input(Key::Char('\n')), SelectorCursor::Ok) if !self.single_only => {
@@ -169,6 +173,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
                 }
                 self.cursor = SelectorCursor::Entry(0);
                 self.dirty = true;
+                self.initialized = false;
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Entry(c))
@@ -181,6 +186,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
                 }
                 self.cursor = SelectorCursor::Entry(c - 1);
                 self.dirty = true;
+                self.initialized = false;
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Ok)
@@ -190,6 +196,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
                 let c = self.entries.len().saturating_sub(1);
                 self.cursor = SelectorCursor::Entry(c);
                 self.dirty = true;
+                self.initialized = false;
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Entry(c))
@@ -203,6 +210,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
                 }
                 self.cursor = SelectorCursor::Entry(c + 1);
                 self.dirty = true;
+                self.initialized = false;
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Entry(_))
@@ -211,6 +219,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
             {
                 self.cursor = SelectorCursor::Ok;
                 self.set_dirty(true);
+                self.initialized = false;
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Ok)
@@ -218,6 +227,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
             {
                 self.cursor = SelectorCursor::Cancel;
                 self.set_dirty(true);
+                self.initialized = false;
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Cancel)
@@ -225,15 +235,62 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
             {
                 self.cursor = SelectorCursor::Ok;
                 self.set_dirty(true);
+                self.initialized = false;
                 return true;
             }
             (UIEvent::Input(ref key), _)
-                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_left"])
-                    || shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_right"])
-                    || shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_up"])
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_left"]) =>
+            {
+                self.movement = Some(PageMovement::Left(1));
+                self.set_dirty(true);
+                self.initialized = false;
+                return true;
+            }
+            (UIEvent::Input(ref key), _)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_right"]) =>
+            {
+                self.movement = Some(PageMovement::Right(1));
+                self.set_dirty(true);
+                self.initialized = false;
+                return true;
+            }
+            (UIEvent::Input(ref key), _)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["prev_page"]) =>
+            {
+                self.movement = Some(PageMovement::PageUp(1));
+                self.set_dirty(true);
+                self.initialized = false;
+                return true;
+            }
+            (UIEvent::Input(ref key), _)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["next_page"]) =>
+            {
+                self.movement = Some(PageMovement::PageDown(1));
+                self.set_dirty(true);
+                self.initialized = false;
+                return true;
+            }
+            (UIEvent::Input(ref key), _)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["home_page"]) =>
+            {
+                self.movement = Some(PageMovement::Home);
+                self.set_dirty(true);
+                self.initialized = false;
+                return true;
+            }
+            (UIEvent::Input(ref key), _)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["end_page"]) =>
+            {
+                self.movement = Some(PageMovement::End);
+                self.set_dirty(true);
+                self.initialized = false;
+                return true;
+            }
+            (UIEvent::Input(ref key), _)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_up"])
                     || shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_down"]) =>
             {
-                return true
+                return true;
             }
             _ => {}
         }
@@ -256,6 +313,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
 
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
+        self.initialized = false;
     }
 
     fn id(&self) -> ComponentId {
@@ -456,9 +514,13 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             entries: identifiers,
             entry_titles,
             cursor: SelectorCursor::Unfocused,
+            scroll_x_cursor: 0,
+            movement: None,
             vertical_alignment: Alignment::Center,
             horizontal_alignment: Alignment::Center,
             title: title.to_string(),
+            content: Screen::<Virtual>::new(),
+            initialized: false,
             done: false,
             done_fn,
             dirty: true,
@@ -485,12 +547,11 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             .collect()
     }
 
-    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+    fn initialize(&mut self, context: &Context) {
         let mut highlighted_attrs = crate::conf::value(context, "widgets.options.highlighted");
         if !context.settings.terminal.use_color() {
             highlighted_attrs.attrs |= Attr::REVERSE;
         }
-
         let shortcuts = context.settings.shortcuts.general.key_values();
         let navigate_help_string = format!(
             "Navigate options with {} to go down, {} to go up, select with {}",
@@ -507,33 +568,38 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             + 3
             // buttons row
             + if self.single_only { 1 } else { 5 };
-        let dialog_area = area.align_inside(
-            (width, height),
-            self.horizontal_alignment,
-            self.vertical_alignment,
-        );
-        let inner_area = create_box(grid, dialog_area);
-        grid.clear_area(inner_area, self.theme_default);
+        if !self.content.resize_with_context(width, height, context) {
+            self.dirty = false;
+            return;
+        }
 
-        grid.write_string(
+        let inner_area = self.content.area();
+        let (_, y) = self.content.grid_mut().write_string(
             &self.title,
             self.theme_default.fg,
             self.theme_default.bg,
             self.theme_default.attrs | Attr::BOLD,
-            dialog_area.skip_cols(2),
+            inner_area.skip_cols(2),
             None,
         );
 
-        grid.write_string(
-            &navigate_help_string,
-            self.theme_default.fg,
-            self.theme_default.bg,
-            self.theme_default.attrs | Attr::ITALICS,
-            dialog_area.skip_cols(2).skip_rows(height),
-            None,
-        );
+        let y = self
+            .content
+            .grid_mut()
+            .write_string(
+                &navigate_help_string,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs | Attr::ITALICS,
+                inner_area.skip_cols(2).skip_rows(y + 2),
+                None,
+            )
+            .1
+            + y
+            + 2;
 
-        let inner_area = inner_area.skip_cols(1).skip_rows(1);
+        let inner_area = inner_area.skip_cols(1).skip_rows(y + 2);
+
         /* Extra room for buttons Okay/Cancel */
         if self.single_only {
             for (i, e) in self.entry_titles.iter().enumerate() {
@@ -542,7 +608,14 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
                 } else {
                     self.theme_default
                 };
-                grid.write_string(e, attr.fg, attr.bg, attr.attrs, inner_area.nth_row(i), None);
+                self.content.grid_mut().write_string(
+                    e,
+                    attr.fg,
+                    attr.bg,
+                    attr.attrs,
+                    inner_area.nth_row(i),
+                    None,
+                );
             }
         } else {
             for (i, e) in self.entry_titles.iter().enumerate() {
@@ -551,7 +624,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
                 } else {
                     self.theme_default
                 };
-                grid.write_string(
+                self.content.grid_mut().write_string(
                     &format!("[{}] {}", if self.entries[i].1 { "x" } else { " " }, e),
                     attr.fg,
                     attr.bg,
@@ -566,7 +639,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             } else {
                 self.theme_default
             };
-            let (x, y) = grid.write_string(
+            let (x, y) = self.content.grid_mut().write_string(
                 OK,
                 attr.fg,
                 attr.bg,
@@ -579,13 +652,152 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             } else {
                 self.theme_default
             };
-            grid.write_string(
+            self.content.grid_mut().write_string(
                 CANCEL,
                 attr.fg,
                 attr.bg,
                 attr.attrs,
                 inner_area.skip(CANCEL_OFFSET + x, y),
                 None,
+            );
+        }
+        self.initialized = true;
+    }
+
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        let mut highlighted_attrs = crate::conf::value(context, "widgets.options.highlighted");
+        if !context.settings.terminal.use_color() {
+            highlighted_attrs.attrs |= Attr::REVERSE;
+        }
+        if !self.initialized {
+            // [ref:FIXME]: don't re-initialize when the only change is highlight index.
+            self.initialize(context);
+        }
+        let (width, height) = self.content.area().size();
+        let dialog_area = area.align_inside(
+            (width + 2, height + 2),
+            self.horizontal_alignment,
+            self.vertical_alignment,
+        );
+        let inner_area = create_box(grid, dialog_area);
+        let rows = inner_area.height();
+        if let Some(mvm) = self.movement.take() {
+            match mvm {
+                PageMovement::Up(_) | PageMovement::Down(_) => {}
+                PageMovement::Right(amount) => {
+                    self.scroll_x_cursor = self.scroll_x_cursor.saturating_add(amount);
+                }
+                PageMovement::Left(amount) => {
+                    self.scroll_x_cursor = self.scroll_x_cursor.saturating_sub(amount);
+                }
+                PageMovement::PageUp(multiplier) => match self.cursor {
+                    SelectorCursor::Unfocused => {
+                        self.cursor = SelectorCursor::Entry(0);
+                        self.initialize(context);
+                    }
+                    SelectorCursor::Entry(c) => {
+                        self.cursor = SelectorCursor::Entry(c.saturating_sub(multiplier * rows));
+                        self.initialize(context);
+                    }
+                    SelectorCursor::Ok | SelectorCursor::Cancel
+                        if !self.entry_titles.is_empty() =>
+                    {
+                        self.cursor = SelectorCursor::Entry(
+                            self.entry_titles.len().saturating_sub(multiplier * rows),
+                        );
+                        self.initialize(context);
+                    }
+                    SelectorCursor::Ok | SelectorCursor::Cancel => {}
+                },
+                PageMovement::PageDown(multiplier) => match self.cursor {
+                    SelectorCursor::Unfocused => {
+                        self.cursor = SelectorCursor::Entry(
+                            self.entry_titles
+                                .len()
+                                .saturating_sub(1)
+                                .min(multiplier * rows),
+                        );
+                        self.initialize(context);
+                    }
+                    SelectorCursor::Entry(c)
+                        if c.saturating_add(multiplier * rows) < self.entry_titles.len()
+                            && !self.entry_titles.is_empty() =>
+                    {
+                        self.cursor = SelectorCursor::Entry(
+                            self.entry_titles
+                                .len()
+                                .saturating_sub(1)
+                                .min(c.saturating_add(multiplier * rows)),
+                        );
+                        self.initialize(context);
+                    }
+                    SelectorCursor::Entry(_) => {
+                        self.cursor = SelectorCursor::Ok;
+                        self.initialize(context);
+                    }
+                    SelectorCursor::Ok | SelectorCursor::Cancel => {}
+                },
+                PageMovement::Home if !self.entry_titles.is_empty() => {
+                    self.cursor = SelectorCursor::Entry(0);
+                    self.initialize(context);
+                }
+                PageMovement::End
+                    if matches!(self.cursor, SelectorCursor::Ok | SelectorCursor::Cancel) => {}
+                PageMovement::End
+                    if !matches!(self.cursor, SelectorCursor::Entry(c) if c +1 == self.entry_titles.len())
+                        && !self.entry_titles.is_empty() =>
+                {
+                    self.cursor = SelectorCursor::Entry(self.entry_titles.len().saturating_sub(1));
+                    self.initialize(context);
+                }
+                PageMovement::Home | PageMovement::End => {}
+            }
+        }
+        let skip_rows = match self.cursor {
+            SelectorCursor::Unfocused => 0,
+            SelectorCursor::Entry(e) if e >= rows => e.min(height.saturating_sub(rows)),
+            SelectorCursor::Entry(_) => 0,
+            SelectorCursor::Ok | SelectorCursor::Cancel => height.saturating_sub(rows),
+        };
+
+        self.scroll_x_cursor = self
+            .scroll_x_cursor
+            .min(width.saturating_sub(inner_area.width()));
+        grid.copy_area(
+            self.content.grid(),
+            inner_area,
+            self.content
+                .area()
+                .skip_cols(self.scroll_x_cursor)
+                .skip_rows(skip_rows),
+        );
+
+        if height > dialog_area.height() {
+            let inner_area = inner_area.skip_rows(1);
+            ScrollBar::default().set_show_arrows(true).draw(
+                grid,
+                inner_area.nth_col(inner_area.width().saturating_sub(1)),
+                context,
+                // position
+                skip_rows,
+                // visible_rows
+                inner_area.height(),
+                // length
+                height,
+            );
+        }
+        if width > dialog_area.width() {
+            let inner_area = inner_area.skip_cols(1);
+            ScrollBar::default().set_show_arrows(true).draw_horizontal(
+                grid,
+                inner_area.nth_row(inner_area.height().saturating_sub(1)),
+                context,
+                // position
+                self.scroll_x_cursor,
+                // visible_cols
+                inner_area.width(),
+                // length
+                width,
             );
         }
         context.dirty_areas.push_back(dialog_area);

@@ -356,6 +356,7 @@ impl Component for MailView {
 
     fn process_event(&mut self, mut event: &mut UIEvent, context: &mut Context) -> bool {
         if let Some(ref mut s) = self.contact_selector {
+            // [ref:FIXME]: contact_selector should not forward navigation events and return true
             if s.process_event(event, context) {
                 return true;
             }
