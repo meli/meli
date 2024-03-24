@@ -258,7 +258,7 @@ impl MailBackend for NntpType {
                 .lock()
                 .await
                 .get(&mailbox_hash)
-                .map(std::clone::Clone::clone)
+                .cloned()
                 .ok_or_else(|| {
                     Error::new(format!(
                         "Mailbox with hash {} not found in NNTP connection, this could possibly \

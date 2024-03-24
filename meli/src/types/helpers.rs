@@ -56,6 +56,7 @@ impl File {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(false)
             .open(&self.path)
             .chain_err_summary(|| format!("Could not create/open path {}", self.path.display()))
     }

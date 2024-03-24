@@ -411,7 +411,7 @@ impl MailBackend for ImapType {
             let inbox = timeout(uid_store.timeout, uid_store.mailboxes.lock())
                 .await?
                 .get(&mailbox_hash)
-                .map(std::clone::Clone::clone)
+                .cloned()
                 .unwrap();
             let mut conn = timeout(uid_store.timeout, main_conn.lock()).await?;
             watch::examine_updates(inbox, &mut conn, &uid_store).await?;

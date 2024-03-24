@@ -69,7 +69,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
         .await
         .values()
         .find(|f| f.parent.is_none() && (f.special_usage() == SpecialUsageMailbox::Inbox))
-        .map(std::clone::Clone::clone)
+        .cloned()
     {
         Some(mailbox) => mailbox,
         None => {

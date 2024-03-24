@@ -90,7 +90,6 @@ pub use melib::uuid;
 
 pub extern crate bitflags;
 pub extern crate serde_json;
-#[macro_use]
 pub extern crate smallvec;
 pub extern crate termion;
 
