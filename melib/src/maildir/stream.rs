@@ -54,7 +54,7 @@ impl MaildirStream {
         let chunk_size = 2048;
         path.push("new");
         for p in path.read_dir()?.flatten() {
-            move_to_cur(p.path()).ok().take();
+            move_to_cur(&p.path()).ok().take();
         }
         path.pop();
         path.push("cur");

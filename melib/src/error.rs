@@ -717,6 +717,24 @@ impl From<rusqlite::Error> for Error {
     }
 }
 
+#[cfg(any(feature = "maildir", feature = "mbox", feature = "notmuch"))]
+impl From<notify::Error> for Error {
+    #[inline]
+    fn from(err: notify::Error) -> Self {
+        let kind = match err.kind {
+            notify::ErrorKind::MaxFilesWatch
+            | notify::ErrorKind::WatchNotFound
+            | notify::ErrorKind::Generic(_) => ErrorKind::External,
+            notify::ErrorKind::Io(_) => ErrorKind::OSError,
+            notify::ErrorKind::PathNotFound => ErrorKind::Configuration,
+            notify::ErrorKind::InvalidConfig(_) => ErrorKind::Bug,
+        };
+        Self::new(err.to_string())
+            .set_source(Some(Arc::new(err)))
+            .set_kind(kind)
+    }
+}
+
 impl From<libloading::Error> for Error {
     #[inline]
     fn from(kind: libloading::Error) -> Self {

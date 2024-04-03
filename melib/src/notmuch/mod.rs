@@ -32,15 +32,16 @@ use std::{
 };
 
 use futures::Stream;
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use smallvec::SmallVec;
 
 use crate::{
     backends::*,
     conf::AccountSettings,
     email::{Envelope, EnvelopeHash, Flag},
-    error::{Error, Result},
+    error::{Error, ErrorKind, IntoError, Result},
     utils::shellexpand::ShellExpandTrait,
-    Collection, ErrorKind,
+    Collection,
 };
 
 macro_rules! call {
@@ -698,9 +699,6 @@ impl MailBackend for NotmuchDb {
     }
 
     fn watch(&self) -> ResultFuture<()> {
-        extern crate notify;
-        use notify::{watcher, RecursiveMode, Watcher};
-
         let account_hash = self.account_hash;
         let tag_index = self.collection.tag_index.clone();
         let lib = self.lib.clone();
@@ -712,8 +710,15 @@ impl MailBackend for NotmuchDb {
         let event_consumer = self.event_consumer.clone();
 
         let (tx, rx) = std::sync::mpsc::channel();
-        let mut watcher = watcher(tx, std::time::Duration::from_secs(2)).unwrap();
-        watcher.watch(&self.path, RecursiveMode::Recursive).unwrap();
+        let watcher = RecommendedWatcher::new(
+            tx,
+            notify::Config::default().with_poll_interval(std::time::Duration::from_secs(2)),
+        )
+        .and_then(|mut watcher| {
+            watcher.watch(&self.path, RecursiveMode::Recursive)?;
+            Ok(watcher)
+        })
+        .map_err(|err| err.set_err_details("Failed to create file change monitor."))?;
         Ok(Box::pin(async move {
             let _watcher = watcher;
             let rx = rx;

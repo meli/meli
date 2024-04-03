@@ -33,7 +33,6 @@ libz-sys = { version = "1.1", features = ["static"], optional = true }
 linkify = { version = "^0.10", default-features = false }
 melib = { path = "../melib", version = "0.8.5-rc.3", features = [] }
 nix = { version = "0.27", default-features = false, features = ["signal", "poll", "term", "ioctl", "process"] }
-notify = { version = "4.0.1", default-features = false } # >:c
 num_cpus = "1.12.0"
 serde = "1.0.71"
 serde_derive = "1.0.71"
