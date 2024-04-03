@@ -266,7 +266,11 @@ impl Component for NotificationCommand {
                             .spawn()
                         {
                             Ok(child) => {
-                                context.children.push(child);
+                                context
+                                    .children
+                                    .entry(stringify!(NotificationCommand).into())
+                                    .or_default()
+                                    .push(child);
                                 return false;
                             }
                             Err(err) => {
