@@ -638,162 +638,68 @@ impl ThreadView {
         context.dirty_areas.push_back(area);
     }
 
-    //fn draw_horz(&mut self, grid: &mut CellBuffer, area: Area, context: &mut
-    // Context) {    if self.entries.is_empty() {
-    //        return;
-    //    }
-    //    let upper_left = area.upper_left();
-    //    let bottom_right = area.bottom_right();
-    //    let total_rows = area.height();
+    fn draw_horz(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        if self.entries.is_empty() {
+            return;
+        }
 
-    //    let pager_ratio = *mailbox_settings!(
-    //        context[self.coordinates.0][&self.coordinates.1]
-    //            .pager
-    //            .pager_ratio
-    //    );
-    //    let mut bottom_entity_rows = (pager_ratio * total_rows) / 100;
+        let mid = self.content.area().width().min(area.height() / 2);
 
-    //    if bottom_entity_rows > total_rows {
-    //        bottom_entity_rows = total_rows.saturating_sub(1);
-    //    }
+        let theme_default = crate::conf::value(context, "theme_default");
+        // First draw the thread subject on the first row
+        if self.dirty {
+            grid.clear_area(area, theme_default);
+            let account = &context.accounts[&self.coordinates.0];
+            let threads = account.collection.get_threads(self.coordinates.1);
+            let thread_root = threads.thread_iter(self.thread_group).next().unwrap().1;
+            let thread_node = &threads.thread_nodes()[&thread_root];
+            let i = thread_node.message().unwrap_or_else(|| {
+                let mut iter_ptr = thread_node.children()[0];
+                while threads.thread_nodes()[&iter_ptr].message().is_none() {
+                    iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
+                }
+                threads.thread_nodes()[&iter_ptr].message().unwrap()
+            });
+            let envelope: EnvelopeRef = account.collection.get_env(i);
 
-    //    let mut mid = get_y(upper_left) + total_rows - bottom_entity_rows;
-    //    if mid >= get_y(bottom_right) {
-    //        mid = get_y(bottom_right) / 2;
-    //    }
-    //    let mid = mid;
+            grid.write_string(
+                &envelope.subject(),
+                theme_default.fg,
+                theme_default.bg,
+                theme_default.attrs,
+                area,
+                Some(0),
+            );
+            context.dirty_areas.push_back(area);
+        };
 
-    //    let theme_default = crate::conf::value(context, "theme_default");
-    //    // First draw the thread subject on the first row
-    //    let y = {
-    //        grid.clear_area(area, theme_default);
-    //        let account = &context.accounts[&self.coordinates.0];
-    //        let threads = account.collection.get_threads(self.coordinates.1);
-    //        let thread_root =
-    // threads.thread_iter(self.thread_group).next().unwrap().1;        let
-    // thread_node = &threads.thread_nodes()[&thread_root];        let i =
-    // thread_node.message().unwrap_or_else(|| {            let mut iter_ptr =
-    // thread_node.children()[0];            while
-    // threads.thread_nodes()[&iter_ptr].message().is_none() {
-    // iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];            }
-    //            threads.thread_nodes()[&iter_ptr].message().unwrap()
-    //        });
-    //        let envelope: EnvelopeRef = account.collection.get_env(i);
+        let area = area.skip_rows(2);
+        let (width, height) = self.content.area().size();
+        if height == 0 || height == self.cursor_pos || width == 0 {
+            return;
+        }
 
-    //        let (x, y) = grid.write_string(
-    //            &envelope.subject(),
-    //            theme_default.fg,
-    //            theme_default.bg,
-    //            theme_default.attrs,
-    //            area,
-    //            Some(get_x(upper_left)),
-    //        );
-    //        for x in x..=get_x(bottom_right) {
-    //            grid[(x, y)]
-    //                .set_ch(' ')
-    //                .set_fg(theme_default.fg)
-    //                .set_bg(theme_default.bg);
-    //        }
-    //        context.dirty_areas.push_back(area);
-    //        y + 2
-    //    };
-
-    //    for x in get_x(upper_left)..=get_x(bottom_right) {
-    //        set_and_join_box(grid, (x, y - 1), BoxBoundary::Horizontal);
-    //        grid[(x, y - 1)]
-    //            .set_fg(theme_default.fg)
-    //            .set_bg(theme_default.bg);
-    //    }
-
-    //    let (width, height) = self.content.area().size();
-    //    if height == 0 || height == self.cursor_pos || width == 0 {
-    //        return;
-    //    }
-
-    //    grid.clear_area(area.skip_rows(y).take_rows(mid + 1), theme_default);
-
-    //    match self.focus {
-    //        ThreadViewFocus::None => {
-    //            let area = area.skip_rows(y).take_rows(mid);
-    //            let rows = area.height() / 2;
-    //            if rows == 0 {
-    //                return;
-    //            }
-    //            let page_no = (self.new_cursor_pos).wrapping_div(rows);
-    //            let top_idx = page_no * rows;
-
-    //            grid.copy_area(
-    //                self.content.grid(),
-    //                area,
-    //                self.content.area().skip_rows(top_idx),
-    //            );
-    //            context.dirty_areas.push_back(area);
-    //        }
-    //        ThreadViewFocus::Thread => {
-    //            let area = {
-    //                let val = area.skip_rows(y);
-    //                if val.height() < 20 {
-    //                    area
-    //                } else {
-    //                    val
-    //                }
-    //            };
-    //            let rows = area.height() / 2;
-    //            if rows == 0 {
-    //                return;
-    //            }
-    //            let page_no = (self.new_cursor_pos).wrapping_div(rows);
-    //            let top_idx = page_no * rows;
-
-    //            grid.copy_area(
-    //                self.content.grid(),
-    //                area,
-    //                self.content.area().skip_rows(top_idx),
-    //            );
-    //            context.dirty_areas.push_back(area);
-    //        }
-    //        ThreadViewFocus::MailView => { /* show only envelope */ }
-    //    }
-
-    //    match self.focus {
-    //        ThreadViewFocus::None => {
-    //            {
-    //                let area = {
-    //                    let val = area.skip_rows(mid);
-    //                    if val.height() < 20 {
-    //                        area
-    //                    } else {
-    //                        val
-    //                    }
-    //                };
-    //                context.dirty_areas.push_back(area);
-    //                for x in get_x(area.upper_left())..=get_x(area.bottom_right())
-    // {                    set_and_join_box(grid, (x, mid),
-    // BoxBoundary::Horizontal);                    grid[(x, mid)]
-    //                        .set_fg(theme_default.fg)
-    //                        .set_bg(theme_default.bg);
-    //                }
-    //            }
-    //            {
-    //                let area = area.skip_rows(y).take_rows(mid - 1);
-    //                self.draw_list(grid, area, context);
-    //            }
-    //            let area = area.take_rows(mid);
-    //            self.entries[self.new_expanded_pos]
-    //                .mailview
-    //                .draw(grid, area, context);
-    //        }
-    //        ThreadViewFocus::Thread => {
-    //            self.dirty = true;
-    //            self.draw_list(grid, area.skip_rows(y), context);
-    //        }
-    //        ThreadViewFocus::MailView => {
-    //            self.entries[self.new_expanded_pos]
-    //                .mailview
-    //                .draw(grid, area, context);
-    //        }
-    //    }
-    //}
+        match self.focus {
+            ThreadViewFocus::None => {
+                self.draw_list(grid, area.take_rows(mid), context);
+                self.entries[self.new_expanded_pos].mailview.draw(
+                    grid,
+                    area.skip_rows(mid + 1),
+                    context,
+                );
+            }
+            ThreadViewFocus::Thread => {
+                self.dirty = true;
+                self.draw_list(grid, area.skip_rows(0), context);
+            }
+            ThreadViewFocus::MailView => {
+                self.entries[self.new_expanded_pos]
+                    .mailview
+                    .draw(grid, area, context);
+            }
+        }
+        context.dirty_areas.push_back(area);
+    }
 
     fn recalc_visible_entries(&mut self) {
         if self.entries.is_empty() {
@@ -893,6 +799,8 @@ impl Component for ThreadView {
             self.entries[self.new_expanded_pos]
                 .mailview
                 .draw(grid, area, context);
+        } else if Some(true) == self.horizontal {
+            self.draw_horz(grid, area, context);
         } else {
             self.draw_vert(grid, area, context);
         }
@@ -939,7 +847,7 @@ impl Component for ThreadView {
                 if let Some(ref mut v) = self.horizontal {
                     *v = !*v;
                 } else {
-                    self.horizontal = Some(false);
+                    self.horizontal = Some(true);
                 }
                 self.set_dirty(true);
                 true
