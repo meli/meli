@@ -899,6 +899,9 @@ impl Threads {
 
         {
             let envelopes_lck = envelopes.read().unwrap();
+            if !envelopes_lck.contains_key(&env_hash) {
+                return false;
+            }
             let message_id = envelopes_lck[&env_hash].message_id().raw();
             if self.message_ids.contains_key(message_id)
                 && !self.missing_message_ids.contains(message_id)
