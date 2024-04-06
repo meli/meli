@@ -1026,8 +1026,8 @@ impl Component for Composer {
                     guard.grid.set_dirty(false);
                     self.dirty = false;
                 }
-                return;
             }
+            return;
         } else {
             self.embedded_dimensions = (area.width(), area.height());
         }
