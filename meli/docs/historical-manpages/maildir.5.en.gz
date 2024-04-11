@@ -1,0 +1,354 @@
+'\" t
+.\"<!-- Copyright 1998 - 2007 Double Precision, Inc.  See COPYING for -->
+.\"<!-- distribution information. -->
+.\"     Title: maildir
+.\"    Author: Sam Varshavchik
+.\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
+.\"      Date: 07/24/2017
+.\"    Manual: Double Precision, Inc.
+.\"    Source: Courier Mail Server
+.\"  Language: English
+.\"
+.TH "MAILDIR" "5" "07/24/2017" "Courier Mail Server" "Double Precision, Inc\&."
+.\" -----------------------------------------------------------------
+.\" * Define some portability stuff
+.\" -----------------------------------------------------------------
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.\" http://bugs.debian.org/507673
+.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.ie \n(.g .ds Aq \(aq
+.el       .ds Aq '
+.\" -----------------------------------------------------------------
+.\" * set default formatting
+.\" -----------------------------------------------------------------
+.\" disable hyphenation
+.nh
+.\" disable justification (adjust text to left margin only)
+.ad l
+.\" -----------------------------------------------------------------
+.\" * MAIN CONTENT STARTS HERE *
+.\" -----------------------------------------------------------------
+.SH "NAME"
+maildir \- E\-mail directory
+.SH "SYNOPSIS"
+.sp
+$HOME/Maildir
+.SH "DESCRIPTION"
+.PP
+A
+\(lqMaildir\(rq
+is a structured directory that holds E\-mail messages\&. Maildirs were first implemented by the
+Qmail
+mail server\&. Qmail\*(Aqs maildirs were a simple data structure, nothing more than a single collection of E\-mail messages\&. The
+Courier
+mail server builds upon
+Qmail\*(Aqs maildirs to provide extended functionality, such as folders and quotas\&. This document describes the
+Courier
+mail server\*(Aqs extended maildirs, without explicitly identifying The
+Courier
+mail server\-specific extensions\&. See
+\fBmaildir\fR(5)
+in Qmail\*(Aqs documentation for the original definition of maildirs\&.
+.PP
+Traditionally, E\-mail folders were saved as plain text files, called
+\(lqmboxes\(rq\&. Mboxes have known limitations\&. Only one application can use an mbox at the same time\&. Locking is required in order to allow simultaneous concurrent access by different applications\&. Locking is often problematic, and not very reliable in network\-based filesystem requirements\&. Some network\-based filesystems don\*(Aqt offer any reliable locking mechanism at all\&. Furthermore, even bulletproof locking won\*(Aqt prevent occasional mbox corruption\&. A process can be killed or terminated in the middle of updating an mbox\&. This will likely result in corruption, and a loss of most messages in the mbox\&.
+.PP
+Maildirs allow multiple concurrent access by different applications\&. Maildirs do not require locking\&. Multiple applications can update a maildir at the same time, without stepping on each other\*(Aqs feet\&.
+.SS "Maildir contents"
+.PP
+A
+\(lqmaildir\(rq
+is a directory that\*(Aqs created by
+\m[blue]\fB\fBmaildirmake\fR(1)\fR\m[]\&\s-2\u[1]\d\s+2\&. Naturally, maildirs should not have any group or world permissions, unless you want other people to read your mail\&. A maildir contains three subdirectories:
+tmp,
+new, and
+cur\&. These three subdirectories comprise the primary folder, where new mail is delivered by the system\&.
+.PP
+Folders are additional subdirectories in the maildir whose names begin with a period: such as
+\&.Drafts
+or
+\&.Sent\&. Each folder itself contains the same three subdirectories,
+tmp,
+new, and
+cur, and an additional zero\-length file named
+maildirfolder, whose purpose is to inform any mail delivery agent that it\*(Aqs really delivering to a folder, and that the mail delivery agent should look in the parent directory for any maildir\-related information\&.
+.PP
+Folders are not physically nested\&. A folder subdirectory, such as
+\&.Sent
+does not itself contain any subfolders\&. The main maildir contains a single, flat list of subfolders\&. These folders are logically nested, and periods serve to separate folder hierarchies\&. For example,
+\&.Sent\&.2002
+is considered to be a subfolder called
+\(lq2002\(rq
+which is a subfolder of
+\(lqSent\(rq\&.
+.sp
+.it 1 an-trap
+.nr an-no-space-flag 1
+.nr an-break-flag 1
+.br
+.ps +1
+\fBFolder name encoding\fR
+.RS 4
+.PP
+Folder names can contain any Unicode character, except for control characters\&. US\-ASCII characters, U+0x0020 \- U+0x007F, except for the period, forward\-slash, and ampersand characters (U+0x002E, U+0x002F, and U+0x0026) represent themselves\&. The ampersand is represent by the two character sequence
+\(lq&\-\(rq\&. The period, forward slash, and non US\-ASCII Unicode characters are represented using the UTF\-7 character set, and encoded with a modified form of base64\-encoding\&.
+.PP
+The
+\(lq&\(rq
+character starts the modified base64\-encoded sequence; the sequence is terminated by the
+\(lq\-\(rq
+character\&. The sequence of 16\-bit Unicode characters is written in big\-endian order, and encoded using the base64\-encoding method described in section 5\&.2 of
+\m[blue]\fBRFC 1521\fR\m[]\&\s-2\u[2]\d\s+2, with the following modifications:
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+The
+\(lq=\(rq
+padding character is omitted\&. When decoding, an incomplete 16\-bit character is discarded\&.
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+The comma character,
+\(lq,\(rq
+is used in place of the
+\(lq/\(rq
+character in the base64 alphabet\&.
+.RE
+.PP
+For example, the word
+\(lqResume\(rq
+with both "e"s being the e\-acute character, U+0x00e9, is encoded as
+\(lqR&AOk\-sum&AOk\-\(rq
+(so a folder of that name would be a maildir subdirectory called
+\(lq\&.R&AOk\-sum&AOk\-\(rq)\&.
+.RE
+.sp
+.it 1 an-trap
+.nr an-no-space-flag 1
+.nr an-break-flag 1
+.br
+.ps +1
+\fBOther maildir contents\fR
+.RS 4
+.PP
+Software that uses maildirs may also create additional files besides the
+tmp,
+new, and
+cur
+subdirectories \-\- in the main maildir or a subfolder \-\- for its own purposes\&.
+.RE
+.SS "Messages"
+.PP
+E\-mail messages are stored in separate, individual files, one E\-mail message per file\&. The
+tmp
+subdirectory temporarily stores E\-mail messages that are in the process of being delivered to this maildir\&.
+tmp
+may also store other kinds of temporary files, as long as they are created in the same way that message files are created in
+tmp\&. The
+new
+subdirectory stores messages that have been delivered to this maildir, but have not yet been seen by any mail application\&. The
+cur
+subdirectory stores messages that have already been seen by mail applications\&.
+.SS "Adding new mail to maildirs"
+.PP
+The following process delivers a new message to the maildir:
+.PP
+A new unique filename is created using one of two possible forms:
+\(lqtime\&.MusecPpid\&.host\(rq, or
+\(lqtime\&.MusecPpid_unique\&.host\(rq\&.
+\(lqtime\(rq
+and
+\(lqusec\(rq
+is the current system time, obtained from
+\fBgettimeofday\fR(2)\&.
+\(lqpid\(rq
+is the process number of the process that is delivering this message to the maildir\&.
+\(lqhost\(rq
+is the name of the machine where the mail is being delivered\&. In the event that the same process creates multiple messages, a suffix unique to each message is appended to the process id; preferrably an underscore, followed by an increasing counter\&. This applies whether messages created by a process are all added to the same, or different, maildirs\&. This protocol allows multiple processes running on multiple machines on the same network to simultaneously create new messages without stomping on each other\&.
+.PP
+The filename created in the previous step is checked for existence by executing the
+\fBstat\fR(2)
+system call\&. If
+\fBstat\fR(2)
+results in ANYTHING OTHER than the system error
+ENOENT, the process must sleep for two seconds, then go back and create another unique filename\&. This is an extra step to insure that each new message has a completely unique filename\&.
+.PP
+Other applications that wish to use
+tmp
+for temporary storage should observe the same protocol (but see READING MAIL FROM MAILDIRS below, because old files in
+tmp
+will be eventually deleted)\&.
+.PP
+If the
+\fBstat\fR(2)
+system call returned
+ENOENT, the process may proceed to create the file in the
+tmp
+subdirectory, and save the entire message in the new file\&. The message saved MUST NOT have the
+\(lqFrom_\(rq
+header that is used to mboxes\&. The message also MUST NOT have any
+\(lqFrom_\(rq
+lines in the contents of the message prefixed by the
+\(lq>\(rq
+character\&.
+.PP
+When saving the message, the number of bytes returned by the
+\fBwrite\fR(2)
+system call must be checked, in order to make sure that the complete message has been written out\&.
+.PP
+After the message is saved, the file descriptor is
+\fBfstat\fR(2)\-ed\&. The file\*(Aqs device number, inode number, and the its byte size, are saved\&. The file is closed and is then immediately moved/renamed into the
+new
+subdirectory\&. The name of the file in
+new
+should be
+\(lqtime\&.MusecPpidVdevIino\&.host,S=\fIcnt\fR\(rq, or
+\(lqtime\&.MusecPpidVdevIino_unique\&.host,S=\fIcnt\fR\(rq\&.
+\(lqdev\(rq
+is the message\*(Aqs device number,
+\(lqino\(rq
+is the message\*(Aqs inode number (from the previous
+\fBfstat\fR(2)
+call); and
+\(lqcnt\(rq
+is the message\*(Aqs size, in bytes\&.
+.PP
+The
+\(lq,S=\fIcnt\fR\(rq
+part optimizes the
+\m[blue]\fBCourier\fR\m[]\&\s-2\u[3]\d\s+2
+mail server\*(Aqs maildir quota enhancement; it allows the size of all the mail stored in the maildir to be added up without issuing the
+\fBstat\fR(2)
+system call for each individual message (this can be quite a performance drain with certain network filesystems)\&.
+.SS "READING MAIL FROM MAILDIRS"
+.PP
+Applications that read mail from maildirs should do it in the following order:
+.PP
+When opening a maildir or a maildir folder, read the
+tmp
+subdirectory and delete any files in there that are at least 36 hours old\&.
+.PP
+Look for new messages in the
+new
+subdirectory\&. Rename
+\fInew/filename\fR, as
+\fIcur/filename:2,info\fR\&. Here,
+\fIinfo\fR
+represents the state of the message, and it consists of zero or more boolean flags chosen from the following:
+\(lqD\(rq
+\- this is a \*(Aqdraft\*(Aq message,
+\(lqR\(rq
+\- this message has been replied to,
+\(lqS\(rq
+\- this message has been viewed (seen),
+\(lqT\(rq
+\- this message has been marked to be deleted (trashed), but is not yet removed (messages are removed from maildirs simply by deleting their file),
+\(lqF\(rq
+\- this message has been marked by the user, for some purpose\&. These flags must be stored in alphabetical order\&. New messages contain only the
+:2,
+suffix, with no flags, indicating that the messages were not seen, replied, marked, or deleted\&.
+.PP
+Maildirs may have maximum size quotas defined, but these quotas are purely voluntary\&. If you need to implement mandatory quotas, you should use any quota facilities provided by the underlying filesystem that is used to store the maildirs\&. The maildir quota enhancement is designed to be used in certain situations where filesystem\-based quotas cannot be used for some reason\&. The implementation is designed to avoid the use of any locking\&. As such, at certain times the calculated quota may be imprecise, and certain anomalous situations may result in the maildir actually going over the stated quota\&. One such situation would be when applications create messages without updating the quota estimate for the maildir\&. Eventually it will be precisely recalculated, but wherever possible new messages should be created in compliance with the voluntary quota protocol\&.
+.PP
+The voluntary quota protocol involves some additional procedures that must be followed when creating or deleting messages within a given maildir or its subfolders\&. The
+\m[blue]\fB\fBdeliverquota\fR(8)\fR\m[]\&\s-2\u[4]\d\s+2
+command is a tiny application that delivers a single message to a maildir using the voluntary quota protocol, and hopefully it can be used as a measure of last resort\&. Alternatively, applications can use the
+libmaildir\&.a
+library to handle all the low\-level dirty details for them\&. The voluntary quota enhancement is described in the
+\m[blue]\fB\fBmaildirquota\fR(7)\fR\m[]\&\s-2\u[5]\d\s+2
+man page\&.
+.SS "Maildir Quotas"
+.PP
+This is a voluntary mechanism for enforcing "loose" quotas on the maximum sizes of maildirs\&. This mechanism is enforced in software, and not by the operating system\&. Therefore it is only effective as long as the maildirs themselves are not directly accessible by their users, since this mechanism is trivially disabled\&.
+.PP
+If possible, operating system\-enforced quotas are preferrable\&. Where operating system quota enforcement is not available, or not possible, this voluntary quota enforcement mechanism might be an acceptable compromise\&. Since it\*(Aqs enforced in software, all software that modifies or accesses the maildirs is required to voluntary obey and enforce a quota\&. The voluntary quota implementation is flexible enough to allow non quota\-aware applications to also access the maildirs, without any drastic consequences\&. There will be some non\-drastic consequences, though\&. Of course, non quota\-aware applications will not enforce any defined quotas\&. Furthermore, this voluntary maildir quota mechanism works by estimating the current size of the maildir, with periodic exact recalculation\&. Obviously non quota\-aware maildir applications will not update the maildir size estimation, so the estimate will be thrown off for some period of time, until the next recalculation\&.
+.PP
+This voluntary quota mechanism is designed to be a reasonable compromise between effectiveness, and performance\&. The entire purpose of using maildir\-based mail storage is to avoid any kind of locking, and to permit parallel access to mail by multiple applications\&. In order to compute the exact size of a maildir, the maildir must be locked somehow to prevent any modifications while its contents are added up\&. Obviously something like that defeats the original purpose of using maildirs, therefore the voluntary quota mechanism does not use locking, and that\*(Aqs why the current recorded maildir size is always considered to be an estimate\&. Regular size recalculations will compensate for any occasional race conditions that result in the estimate to be thrown off\&.
+.PP
+A quota for an existing maildir is installed by running maildirmake with the
+\-q
+option, and naming an existing maildir\&. The
+\-q
+option takes a parameter,
+\fIquota\fR, which is a comma\-separated list of quota specifications\&. A quota specification consists of a number followed by either \*(AqS\*(Aq, indicating the maximum message size in bytes, or \*(AqC\*(Aq, maximum number of messages\&. For example:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+\fBmaildirmake \-q 5000000S,1000C \&./Maildir\fR
+.fi
+.if n \{\
+.RE
+.\}
+.PP
+This sets the quota to 5,000,000 bytes or 1000 messages, whichever comes first\&.
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+\fBmaildirmake \-q 1000000S \&./Maildir\fR
+.fi
+.if n \{\
+.RE
+.\}
+.PP
+This sets the quota to 1,000,000 bytes, without limiting the number of messages\&.
+.PP
+A quota of an existing maildir can be changed by rerunning the
+\fBmaildirmake\fR
+command with a new
+\-q
+option\&. To delete a quota entirely, delete the
+\fIMaildir\fR/maildirsize
+file\&.
+.SH "SEE ALSO"
+.PP
+\m[blue]\fB\fBmaildirmake\fR(1)\fR\m[]\&\s-2\u[1]\d\s+2\&.
+.SH "AUTHOR"
+.PP
+\fBSam Varshavchik\fR
+.RS 4
+Author
+.RE
+.SH "NOTES"
+.IP " 1." 4
+\fBmaildirmake\fR(1)
+.RS 4
+\%http://www.courier-mta.org/maildirmake.html
+.RE
+.IP " 2." 4
+RFC 1521
+.RS 4
+\%http://www.rfc-editor.org/rfc/rfc1521.txt
+.RE
+.IP " 3." 4
+Courier
+.RS 4
+\%http://www.courier-mta.org
+.RE
+.IP " 4." 4
+\fBdeliverquota\fR(8)
+.RS 4
+\%http://www.courier-mta.org/deliverquota.html
+.RE
+.IP " 5." 4
+\fBmaildirquota\fR(7)
+.RS 4
+\%http://www.courier-mta.org/maildirquota.html
+.RE

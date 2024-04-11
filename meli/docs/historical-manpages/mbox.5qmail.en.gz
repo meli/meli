@@ -1,0 +1,235 @@
+.TH mbox 5
+.SH "NAME"
+mbox \- file containing mail messages
+.SH "INTRODUCTION"
+The most common format for storage of mail messages is
+.I mbox
+format.
+An
+.I mbox
+is a single file containing zero or more mail messages.
+.SH "MESSAGE FORMAT"
+A message encoded in
+.I mbox
+format begins with a
+.B From_
+line, continues with a series of
+.B \fRnon-\fBFrom_
+lines,
+and ends with a blank line.
+A
+.B From_
+line means any line that begins with the characters
+F, r, o, m, space:
+
+.EX
+     From god@heaven.af.mil Sat Jan  3 01:05:34 1996
+.br
+     Return-Path: <god@heaven.af.mil>
+.br
+     Delivered-To: djb@silverton.berkeley.edu
+.br
+     Date: 3 Jan 1996 01:05:34 -0000
+.br
+     From: God <god@heaven.af.mil>
+.br
+     To: djb@silverton.berkeley.edu (D. J. Bernstein)
+.br
+
+.br
+     How's that mail system project coming along?
+.br
+
+.EE
+
+The final line is a completely blank line (no spaces or tabs).
+Notice that blank lines may also appear elsewhere in the message.
+
+The
+.B From_
+line always looks like
+.B From
+.I envsender
+.I date
+.IR moreinfo .
+.I envsender
+is one word, without spaces or tabs;
+it is usually the envelope sender of the message.
+.I date
+is the delivery date of the message.
+It always contains exactly 24 characters in
+.B asctime
+format.
+.I moreinfo
+is optional; it may contain arbitrary information.
+
+Between the
+.B From_
+line and the blank line is a message in RFC 822 format,
+as described in
+.BR qmail-header(5) ,
+subject to
+.B >From quoting
+as described below.
+.SH "HOW A MESSAGE IS DELIVERED"
+Here is how a program appends a message to an
+.I mbox
+file.
+
+It first creates a
+.B From_
+line given the message's envelope sender and the current date.
+If the envelope sender is empty (i.e., if this is a bounce message),
+the program uses
+.B MAILER-DAEMON
+instead.
+If the envelope sender contains spaces, tabs, or newlines,
+the program replaces them with hyphens.
+
+The program then copies the message, applying
+.B >From quoting
+to each line.
+.B >From quoting
+ensures that the resulting lines are not
+.B From_
+lines:
+the program prepends a
+.B >
+to any
+.B From_
+line,
+.B >From_
+line,
+.B >>From_
+line,
+.B >>>From_
+line,
+etc.
+
+Finally the program appends a blank line to the message.
+If the last line of the message was a partial line,
+it writes two newlines;
+otherwise it writes one.
+.SH "HOW A MESSAGE IS READ"
+A reader scans through an
+.I mbox
+file looking for
+.B From_
+lines.
+Any
+.B From_
+line marks the beginning of a message.
+The reader should not attempt to take advantage of the fact that every
+.B From_
+line (past the beginning of the file)
+is preceded by a blank line.
+
+Once the reader finds a message,
+it extracts a (possibly corrupted) envelope sender
+and delivery date out of the
+.B From_
+line.
+It then reads until the next
+.B From_
+line or end of file, whichever comes first.
+It strips off the final blank line
+and
+deletes the
+quoting of
+.B >From_
+lines and
+.B >>From_
+lines and so on.
+The result is an RFC 822 message.
+.SH "COMMON MBOX VARIANTS"
+There are many variants of
+.I mbox
+format.
+The variant described above is
+.I mboxrd
+format, popularized by Rahul Dhesi in June 1995.
+
+The original
+.I mboxo
+format quotes only
+.B From_
+lines, not
+.B >From_
+lines.
+As a result it is impossible to tell whether
+
+.EX
+     From: djb@silverton.berkeley.edu (D. J. Bernstein)
+.br
+     To: god@heaven.af.mil
+.br
+
+.br
+     >From now through August I'll be doing beta testing.
+.br
+     Thanks for your interest.
+.EE
+
+was quoted in the original message.
+An
+.I mboxrd
+reader will always strip off the quoting.
+
+.I mboxcl
+format is like
+.I mboxo
+format, but includes a Content-Length field with the 
+number of bytes in the message.
+.I mboxcl2
+format is like
+.I mboxcl
+but has no
+.B >From
+quoting.
+These formats are used by SVR4 mailers.
+.I mboxcl2
+cannot be read safely by
+.I mboxrd
+readers.
+.SH "UNSPECIFIED DETAILS"
+There are many locking mechanisms for
+.I mbox
+files.
+.B qmail-local
+always uses
+.B flock
+on systems that have it, otherwise
+.BR lockf .
+
+The delivery date in a
+.B From_
+line does not specify a time zone.
+.B qmail-local
+always creates the delivery date in GMT
+so that 
+.I mbox
+files can be safely transported from one time zone to another.
+
+If the mtime on a nonempty 
+.I mbox
+file is greater than the atime,
+the file has new mail.
+If the mtime is smaller than the atime,
+the new mail has been read.
+If the atime equals the mtime,
+there is no way to tell whether the file has new mail,
+since
+.B qmail-local
+takes much less than a second to run.
+One solution is for a mail reader to artificially set the
+atime to the mtime plus 1.
+Then the file has new mail if and only if the atime is
+less than or equal to the mtime.
+
+Some mail readers place
+.B Status
+fields in each message to indicate which messages have been read.
+.SH "SEE ALSO"
+maildir(5),
+qmail-header(5),
+qmail-local(8)
