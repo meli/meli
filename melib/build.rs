@@ -21,15 +21,14 @@
 
 #![allow(clippy::needless_range_loop)]
 
-#[cfg(any(feature = "unicode-algorithms", feature = "unicode-algorithms-cached"))]
 include!("src/text/types.rs");
 
 fn main() -> Result<(), std::io::Error> {
-    #[cfg(any(feature = "unicode-algorithms", feature = "unicode-algorithms-cached"))]
     {
         const MOD_PATH: &str = "src/text/tables.rs";
+        println!("cargo:rerun-if-env-changed=UNICODE_REGENERATE_TABLES");
         println!("cargo:rerun-if-changed=build.rs");
-        println!("cargo:rerun-if-changed={}", MOD_PATH);
+        println!("cargo:rerun-if-changed={MOD_PATH}");
         /* Line break tables */
         use std::{
             fs::File,
@@ -54,7 +53,7 @@ fn main() -> Result<(), std::io::Error> {
             );
             return Ok(());
         }
-        if cfg!(feature = "unicode-algorithms-cached") {
+        if std::env::var("UNICODE_REGENERATE_TABLES").is_err() {
             const CACHED_MODULE: &[u8] = include_bytes!(concat!("./src/text/tables.rs.gz"));
 
             let mut gz = GzDecoder::new(CACHED_MODULE);

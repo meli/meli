@@ -20,14 +20,12 @@
  */
 
 use super::*;
-#[cfg(feature = "text-processing")]
 use crate::text::grapheme_clusters::TextProcessing;
 
 pub fn encode_header(value: &str) -> String {
     let mut ret = String::with_capacity(value.len());
     let mut is_current_window_ascii = true;
     let mut current_window_start = 0;
-    #[cfg(feature = "text-processing")]
     {
         let graphemes = value.graphemes_indices();
         for (idx, g) in graphemes {
@@ -76,63 +74,6 @@ pub fn encode_header(value: &str) -> String {
                         ret.push(' ');
                     }
                     current_window_start = idx;
-                }
-                (false, false) => {}
-            }
-        }
-    }
-    #[cfg(not(feature = "text-processing"))]
-    {
-        /* [ref:VERIFY] [ref:TODO]: test this. If it works as fine as the one above, there's no need to
-         * keep the above implementation. */
-        for (i, g) in value.char_indices() {
-            match (g.is_ascii(), is_current_window_ascii) {
-                (true, true) => {
-                    ret.push(g);
-                }
-                (true, false) => {
-                    /* If !g.is_whitespace()
-                     *
-                     * Whitespaces inside encoded tokens must be greedily taken,
-                     * instead of splitting each non-ascii word into separate encoded tokens. */
-                    if !g.is_whitespace() && value.is_char_boundary(i) {
-                        ret.push_str(&format!(
-                            "=?UTF-8?B?{}?=",
-                            BASE64_MIME
-                                .encode(value[current_window_start..i].as_bytes())
-                                .trim()
-                        ));
-                        if i != value.len() - 1 {
-                            ret.push(' ');
-                        }
-                        is_current_window_ascii = true;
-                        current_window_start = i;
-                        ret.push(g);
-                    }
-                }
-                (false, true) => {
-                    current_window_start = i;
-                    is_current_window_ascii = false;
-                }
-                /* RFC2047 recommends:
-                 * 'While there is no limit to the length of a multiple-line header field, each
-                 * line of a header field that contains one or more
-                 * 'encoded-word's is limited to 76 characters.'
-                 * This is a rough compliance.
-                 */
-                (false, false)
-                    if value.is_char_boundary(i) && value[current_window_start..i].len() > 76 =>
-                {
-                    ret.push_str(&format!(
-                        "=?UTF-8?B?{}?=",
-                        BASE64_MIME
-                            .encode(value[current_window_start..i].as_bytes())
-                            .trim()
-                    ));
-                    if i != value.len() - 1 {
-                        ret.push(' ');
-                    }
-                    current_window_start = i;
                 }
                 (false, false) => {}
             }

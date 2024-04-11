@@ -22,24 +22,6 @@ Library for handling mail.
 |------------------------------|-------------------------------------|--------------------------|
 | `sqlite`                     | `rusqlite`                          | Used in IMAP cache.      |
 |------------------------------|-------------------------------------|--------------------------|
-| `unicode-algorithms`         | `unicode-segmentation`              | Linebreaking algo etc    |
-|                              |                                     | For a fresh clean build, |
-|                              |                                     | Network access is        |
-|                              |                                     | required to fetch data   |
-|                              |                                     | from Unicode's website.  |
-|------------------------------|-------------------------------------|--------------------------|
-| `unicode-algorithms-cached`  | `unicode-segmentation`              | Linebreaking algo etc    |
-|                              |                                     | but it uses a cached     |
-|                              |                                     | version of Unicode data  |
-|                              |                                     | which might be stale.    |
-|                              |                                     |                          |
-|                              |                                     | Use this feature instead |
-|                              |                                     | of the previous one for  |
-|                              |                                     | building without network |
-|                              |                                     | access.                  |
-|------------------------------|-------------------------------------|--------------------------|
-| `unicode-algorithms`         | `unicode-segmentation`              |                          |
-|------------------------------|-------------------------------------|--------------------------|
 | `vcard`                      |                                     | vcard parsing            |
 |------------------------------|-------------------------------------|--------------------------|
 | `gpgme`                      |                                     | GPG use with libgpgme    |

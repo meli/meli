@@ -14,10 +14,7 @@ path = "fuzz_targets/envelope_parse.rs"
 
 [dependencies]
 libfuzzer-sys = "0.3"
-
-[dependencies.melib]
-path = "../melib"
-features = ["unicode-algorithms"]
+melib = { path = "../melib" }
 
 # Prevent this from interfering with workspaces
 [workspace]

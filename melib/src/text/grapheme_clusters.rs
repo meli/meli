@@ -29,12 +29,12 @@
 
 */
 
+use unicode_segmentation::UnicodeSegmentation;
+
 use super::{
     types::Reflow,
     wcwidth::{wcwidth, CodePointsIter},
 };
-extern crate unicode_segmentation;
-use self::unicode_segmentation::UnicodeSegmentation;
 
 pub trait TextProcessing: UnicodeSegmentation + CodePointsIter {
     fn split_graphemes(&self) -> Vec<&str> {

@@ -19,6 +19,8 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use unicode_segmentation::UnicodeSegmentation;
+
 pub mod grapheme_clusters;
 pub mod line_break;
 pub mod search;
@@ -43,8 +45,6 @@ impl Truncate for &str {
             return;
         }
 
-        extern crate unicode_segmentation;
-        use unicode_segmentation::UnicodeSegmentation;
         if let Some((last, _)) = UnicodeSegmentation::grapheme_indices(*self, true)
             .take(new_len)
             .last()
@@ -58,8 +58,6 @@ impl Truncate for &str {
             return self;
         }
 
-        extern crate unicode_segmentation;
-        use unicode_segmentation::UnicodeSegmentation;
         if let Some((last, _)) = UnicodeSegmentation::grapheme_indices(*self, true)
             .take(new_len)
             .last()
@@ -75,8 +73,6 @@ impl Truncate for &str {
             return "";
         }
 
-        extern crate unicode_segmentation;
-        use unicode_segmentation::UnicodeSegmentation;
         if let Some((first, _)) = UnicodeSegmentation::grapheme_indices(*self, true).nth(skip_len) {
             &self[first..]
         } else {
@@ -90,8 +86,6 @@ impl Truncate for &str {
             return;
         }
 
-        extern crate unicode_segmentation;
-        use unicode_segmentation::UnicodeSegmentation;
         if let Some((first, _)) = UnicodeSegmentation::grapheme_indices(*self, true).nth(skip_len) {
             *self = &self[first..];
         }
@@ -104,8 +98,6 @@ impl Truncate for String {
             return;
         }
 
-        extern crate unicode_segmentation;
-        use unicode_segmentation::UnicodeSegmentation;
         if let Some((last, _)) = UnicodeSegmentation::grapheme_indices(self.as_str(), true)
             .take(new_len)
             .last()
@@ -119,8 +111,6 @@ impl Truncate for String {
             return self;
         }
 
-        extern crate unicode_segmentation;
-        use unicode_segmentation::UnicodeSegmentation;
         if let Some((last, _)) = UnicodeSegmentation::grapheme_indices(self.as_str(), true)
             .take(new_len)
             .last()
@@ -136,8 +126,6 @@ impl Truncate for String {
             return "";
         }
 
-        extern crate unicode_segmentation;
-        use unicode_segmentation::UnicodeSegmentation;
         if let Some((first, _)) =
             UnicodeSegmentation::grapheme_indices(self.as_str(), true).nth(skip_len)
         {
@@ -153,8 +141,6 @@ impl Truncate for String {
             return;
         }
 
-        extern crate unicode_segmentation;
-        use unicode_segmentation::UnicodeSegmentation;
         if let Some((first, _)) =
             UnicodeSegmentation::grapheme_indices(self.as_str(), true).nth(skip_len)
         {

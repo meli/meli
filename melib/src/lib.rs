@@ -132,7 +132,6 @@ pub mod dbg {
     }
 }
 
-#[cfg(feature = "text-processing")]
 pub mod text;
 
 pub use utils::{

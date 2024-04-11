@@ -40,7 +40,7 @@ required-features = ["melib/imap"]
 [dependencies]
 crossbeam = { version = "^0.8" }
 meli = { path = "../meli", version = "0.8" }
-melib = { path = "../melib", version = "0.8", features = ["debug-tracing", "unicode-algorithms"] }
+melib = { path = "../melib", version = "0.8", features = ["debug-tracing" ] }
 nix = { version = "^0.24", default-features = false }
 signal-hook = { version = "^0.3", default-features = false, features = ["iterator"] }
 signal-hook-registry = { version = "1.2.0", default-features = false }

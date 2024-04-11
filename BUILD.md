@@ -3,7 +3,7 @@
 For a quick start, build and install locally:
 
 ```sh
- PREFIX=~/.local make install
+PREFIX=~/.local make install
 ```
 
 Available subcommands for `make` are listed with `make help`.
@@ -33,6 +33,9 @@ Some functionality is held behind "feature gates", or compile-time flags. The fo
   It uses the `pcre2` library.
   Since it's actual use in the code is very limited, it is not recommended to use this (off by default).
 - `static` and `*-static` bundle C libraries in dependencies so that you don't need them installed in your system (on by default).
+
+Though not a feature, the presence of the environment variable `UNICODE_REGENERATE_TABLES` in compile-time of the `melib` crate will force the regeneration of unicode tables.
+Otherwise the tables are included with the source code, and there's no real reason to regenerate them unless you intend to modify the code or update to a new Unicode version.
 
 ## Build Debian package (*deb*)
 

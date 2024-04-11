@@ -19,12 +19,11 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-extern crate unicode_segmentation;
 use std::{cmp::Ordering, collections::VecDeque, iter::Peekable, str::FromStr};
 
+use unicode_segmentation::UnicodeSegmentation;
 use LineBreakClass::*;
 
-use self::unicode_segmentation::UnicodeSegmentation;
 use super::{
     grapheme_clusters::TextProcessing,
     tables::LINE_BREAK_RULES,
