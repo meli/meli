@@ -74,7 +74,7 @@ pub enum SubCommand {
         destination_path: Option<PathBuf>,
     },
     #[structopt(display_order = 5)]
-    /// print compile time feature flags of this binary
+    /// Print compile time feature flags of this binary
     CompiledWith,
     /// Print log file location.
     PrintLogPath,
@@ -87,12 +87,16 @@ pub enum SubCommand {
 
 #[derive(Debug, StructOpt)]
 pub struct ManOpt {
-    #[structopt(default_value = "meli", possible_values=&["meli", "conf", "themes", "meli.7", "guide"], value_name="PAGE", parse(try_from_str = manpages::parse_manpage))]
     #[cfg(feature = "cli-docs")]
+    #[cfg_attr(feature = "cli-docs", structopt(default_value = "meli", possible_values=manpages::POSSIBLE_VALUES, value_name="PAGE", parse(try_from_str = manpages::parse_manpage)))]
+    /// Name of manual page.
     pub page: manpages::ManPages,
     /// If true, output text in stdout instead of spawning $PAGER.
-    #[structopt(long = "no-raw", alias = "no-raw", value_name = "bool")]
     #[cfg(feature = "cli-docs")]
+    #[cfg_attr(
+        feature = "cli-docs",
+        structopt(long = "no-raw", alias = "no-raw", value_name = "bool")
+    )]
     pub no_raw: Option<Option<bool>>,
 }
 
@@ -107,6 +111,19 @@ pub mod manpages {
     use melib::log;
 
     use crate::{Error, Result};
+
+    pub const POSSIBLE_VALUES: &[&str] = &[
+        "meli",
+        "meli.1",
+        "conf",
+        "meli.conf",
+        "meli.conf.5",
+        "themes",
+        "meli-themes",
+        "meli-themes.5",
+        "guide",
+        "meli.7",
+    ];
 
     pub fn parse_manpage(src: &str) -> Result<ManPages> {
         match src {
