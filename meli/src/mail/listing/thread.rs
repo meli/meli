@@ -1090,7 +1090,7 @@ impl ThreadListing {
         let columns = &mut self.data_columns.columns;
         for n in 0..=4 {
             let area = columns[n].area().nth_row(idx);
-            columns[0].grid_mut().clear_area(area, row_attr);
+            columns[n].grid_mut().clear_area(area, row_attr);
         }
 
         *self.rows.entries.get_mut(idx).unwrap() = ((thread_hash, env_hash), strings);
