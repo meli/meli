@@ -1,0 +1,62 @@
+{
+    "@context": ["https://doi.org/10.5063/schema/codemeta-2.0", "http://schema.org/"],
+    "@type": "SoftwareSourceCode",
+    "applicationCategory": "E-mail client",
+    "author": [
+        {
+            "@id": "https://pitsidianak.is/",
+            "@type": "Person",
+            "name": "epilys",
+            "email": "manos@pitsidianak.is",
+            "familyName": "Pitsidianakis",
+            "givenName": "Manos",
+            "url": "https://pitsidianak.is/"
+        }
+    ],
+    "codeRepository": "https://git.meli-email.org/meli/meli.git",
+    "dateCreated": "2016-04-25",
+    "dateModified": "2023-12-11",
+    "datePublished": "2017-07-23",
+    "description": "BSD/Linux/macos terminal email client with support for multiple accounts and Maildir / mbox / notmuch / IMAP / JMAP / NNTP (Usenet).",
+    "downloadUrl": "https://git.meli-email.org/meli/meli/archive/v0.8.5-rc.3.tar.gz",
+    "identifier": "https://meli-email.org/",
+    "isPartOf": "https://meli-email.org/",
+    "keywords": [
+        "e-mail",
+        "email",
+        "mail",
+        "terminal user interface",
+        "client",
+        "mua",
+        "mail user agent",
+        "smtp",
+        "imap",
+        "jmap",
+        "mbox",
+        "maildir",
+        "nntp"
+    ],
+    "license": [
+        "https://spdx.org/licenses/EUPL-1.2",
+        "https://spdx.org/licenses/GPL-3.0-or-later"
+    ],
+    "name": "meli",
+    "operatingSystem": [
+        "Linux",
+        "macOS",
+        "OpenBSD",
+        "NetBSD"
+    ],
+    "programmingLanguage": "Rust",
+    "relatedLink": [
+        "https://codeberg.org/meli/meli",
+        "https://github.com/meli/meli",
+        "https://lists.meli-email.org/"
+    ],
+    "version": "0.8.5-rc3",
+    "contIntegration": "https://git.meli-email.org/meli/meli/actions",
+    "developmentStatus": "active",
+    "issueTracker": "https://git.meli-email.org/meli/meli/issues",
+    "readme": "https://git.meli-email.org/meli/meli/raw/commit/dedee908d1e0b42773bade8e0604e94b14810e2d/README.md",
+    "buildInstructions": "https://git.meli-email.org/meli/meli/raw/commit/dedee908d1e0b42773bade8e0604e94b14810e2d/BUILD.md"
+}
