@@ -185,7 +185,10 @@ impl JobExecutor {
             jobs: Arc::new(Mutex::new(IndexMap::default())),
         };
         let mut workers = vec![];
-        for _ in 0..num_cpus::get().max(1) {
+        for _ in 0..std::thread::available_parallelism()
+            .map(Into::into)
+            .unwrap_or(1)
+        {
             let new_worker = Worker::new_fifo();
             ret.workers.push(new_worker.stealer());
             let p = Parker::new();
