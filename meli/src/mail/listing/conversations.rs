@@ -512,6 +512,7 @@ impl ListingTrait for ConversationsListing {
             context,
         );
 
+        self.force_draw = false;
         context.dirty_areas.push_back(area);
     }
 
@@ -1282,6 +1283,11 @@ impl Component for ConversationsListing {
         let shortcuts = self.shortcuts(context);
 
         match (&event, self.focus) {
+            (UIEvent::VisibilityChange(true), _) => {
+                self.force_draw = true;
+                self.set_dirty(true);
+                return true;
+            }
             (UIEvent::Input(ref k), Focus::Entry)
                 if shortcut!(k == shortcuts[Shortcuts::LISTING]["focus_right"]) =>
             {
