@@ -656,9 +656,15 @@ mod tests {
         assert_eq!(
             parse_command(b"set foo").unwrap_err().to_string(),
             BadValue {
-                inner: "Bad argument for `set`. Accepted arguments are [seen, unseen, plain, \
-                        threaded, compact, conversations]."
-                    .into(),
+                inner: "foo".into(),
+                suggestions: Some(&[
+                    "seen",
+                    "unseen",
+                    "plain",
+                    "threaded",
+                    "compact",
+                    "conversations"
+                ])
             }
             .to_string(),
         );

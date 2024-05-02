@@ -24,22 +24,37 @@
 use super::*;
 use crate::command::{argcheck::*, error::*};
 
+const FLAG_SUGGESTIONS: &[&str] = &[
+    "passed",
+    "replied",
+    "seen or read",
+    "junk or trash or trashed",
+    "draft",
+    "flagged",
+];
+
 macro_rules! command_err {
-    (nom $b:expr, $input: expr, $msg:literal) => {{
+    (nom $b:expr, $input: expr, $msg:expr, $suggs:expr) => {{
         let evaluated: IResult<&'_ [u8], _> = { $b };
         match evaluated {
             Err(_) => {
-                let err = CommandError::BadValue { inner: $msg.into() };
+                let err = CommandError::BadValue {
+                    inner: $msg.into(),
+                    suggestions: $suggs,
+                };
                 return Ok(($input, Err(err)));
             }
             Ok(v) => v,
         }
     }};
-    ($b:expr, $input: expr, $msg:literal) => {{
+    ($b:expr, $input: expr, $msg:expr, $suggs:expr) => {{
         let evaluated = { $b };
         match evaluated {
             Err(_) => {
-                let err = CommandError::BadValue { inner: $msg.into() };
+                let err = CommandError::BadValue {
+                    inner: $msg.into(),
+                    suggestions: $suggs,
+                };
                 return Ok(($input, Err(err)));
             }
             Ok(v) => v,
@@ -206,7 +221,7 @@ pub fn parse_command(input: &[u8]) -> Result<Action, CommandError> {
 /// assert_eq!(
 ///     &parsed.unwrap_err().to_string(),
 ///     "Bad value/argument: xunk is not a valid flag name. Possible values are: passed, replied, \
-///      seen or read, junk or trash or trashed, draft and flagged."
+///      seen or read, junk or trash or trashed, draft, flagged"
 /// );
 /// ```
 pub fn flag<'a>(input: &'a [u8]) -> IResult<&'a [u8], Result<Action, CommandError>> {
@@ -243,12 +258,8 @@ pub fn flag<'a>(input: &'a [u8]) -> IResult<&'a [u8], Result<Action, CommandErro
                     return Ok((
                         b"",
                         Err(CommandError::BadValue {
-                            inner: format!(
-                                "{flag} is not a valid flag name. Possible values are: passed, \
-                                 replied, seen or read, junk or trash or trashed, draft and \
-                                 flagged."
-                            )
-                            .into(),
+                            inner: format!("{flag} is not a valid flag name").into(),
+                            suggestions: Some(FLAG_SUGGESTIONS),
                         }),
                     ));
                 };
@@ -267,12 +278,8 @@ pub fn flag<'a>(input: &'a [u8]) -> IResult<&'a [u8], Result<Action, CommandErro
                     return Ok((
                         b"",
                         Err(CommandError::BadValue {
-                            inner: format!(
-                                "{flag} is not a valid flag name. Possible values are: passed, \
-                                 replied, seen or read, junk or trash or trashed, draft and \
-                                 flagged."
-                            )
-                            .into(),
+                            inner: format!("{flag} is not a valid flag name").into(),
+                            suggestions: Some(FLAG_SUGGESTIONS),
                         }),
                     ));
                 };
@@ -301,9 +308,13 @@ pub fn set(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
         let (input, _) = is_a(" ")(input)?;
         arg_chk!(inc check, input);
         let (input, ret) = command_err!(nom
-                                   alt((map(tag("seen"), |_| Listing(SetSeen)), map(tag("unseen"), |_| Listing(SetUnseen))))(input),
+                                   alt((
+                                           map(tag("seen"), |_| Listing(SetSeen)),
+                                           map(tag("unseen"), |_| Listing(SetUnseen)
+                                   )))(input),
                                    input,
-                                   "Bad argument for `set`. Accepted arguments are [seen, unseen, plain, threaded, compact, conversations].");
+                                   String::from_utf8_lossy(input.trim()).to_string(),
+                                   Some(&["seen", "unseen", "plain", "threaded", "compact", "conversations"]));
         arg_chk!(finish check, input);
         let (input, _) = eof(input)?;
         Ok((input, Ok(ret)))
@@ -408,7 +419,8 @@ pub fn goto(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     let (input, nth) = command_err!(nom
                                usize_c(input),
                                input,
-                               "Argument must be an integer.");
+                               "Argument must be an integer.",
+                               None);
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
     Ok((input, Ok(Action::ViewMailbox(nth))))
@@ -581,7 +593,8 @@ pub fn mailto(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     let (input, val) = command_err!(
         parser(val.as_bytes()),
         val.as_bytes(),
-        "Could not parse mailto value. If the value is valid, please report this bug."
+        "Could not parse mailto value. If the value is valid, please report this bug.",
+        None
     );
     Ok((input, Ok(Compose(Mailto(val)))))
 }
@@ -958,7 +971,8 @@ pub fn toggle(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
             return Ok((
                 input,
                 Err(CommandError::BadValue {
-                    inner: "Valid toggle values are thread_snooze, mouse, sign, encrypt.".into(),
+                    inner: String::from_utf8_lossy(input).to_string().into(),
+                    suggestions: Some(&["thread_snooze", "mouse", "sign", "encrypt"]),
                 }),
             ));
         }

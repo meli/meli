@@ -29,6 +29,7 @@ pub enum CommandError {
     },
     BadValue {
         inner: Cow<'static, str>,
+        suggestions: Option<&'static [&'static str]>,
     },
     WrongNumberOfArguments {
         too_many: bool,
@@ -63,7 +64,25 @@ impl std::fmt::Display for CommandError {
             Self::Parsing { inner, kind: _ } => {
                 write!(fmt, "Could not parse command: {}", inner)
             }
-            Self::BadValue { inner } => {
+            Self::BadValue {
+                inner,
+                suggestions: Some(suggs),
+            } => {
+                write!(fmt, "Bad value/argument: {}. Possible values are: ", inner)?;
+                let len = suggs.len();
+                for (i, val) in suggs.iter().enumerate() {
+                    if i == len.saturating_sub(1) {
+                        write!(fmt, "{}", val)?;
+                    } else {
+                        write!(fmt, "{}, ", val)?;
+                    }
+                }
+                write!(fmt, "")
+            }
+            Self::BadValue {
+                inner,
+                suggestions: None,
+            } => {
                 write!(fmt, "Bad value/argument: {}", inner)
             }
             Self::WrongNumberOfArguments {
@@ -121,3 +140,28 @@ impl std::fmt::Display for CommandError {
 }
 
 impl std::error::Error for CommandError {}
+
+#[cfg(test)]
+mod tests {
+    use super::CommandError;
+
+    #[test]
+    fn test_command_error_display() {
+        assert_eq!(
+            &CommandError::BadValue {
+                inner: "foo".into(),
+                suggestions: Some(&[
+                    "seen",
+                    "unseen",
+                    "plain",
+                    "threaded",
+                    "compact",
+                    "conversations"
+                ])
+            }
+            .to_string(),
+            "Bad value/argument: foo. Possible values are: seen, unseen, plain, threaded, \
+             compact, conversations"
+        );
+    }
+}
