@@ -151,7 +151,7 @@ fn run_app(opt: Opt) -> Result<()> {
         }
         #[cfg(feature = "cli-docs")]
         Some(SubCommand::InstallMan { destination_path }) => {
-            match args::manpages::ManPages::install(destination_path) {
+            match crate::manpages::ManPages::install(destination_path) {
                 Ok(p) => println!("Installed at {}.", p.display()),
                 Err(err) => return Err(err),
             }
