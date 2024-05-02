@@ -53,23 +53,6 @@ fn main() -> Result<(), std::io::Error> {
             );
             return Ok(());
         }
-        if std::env::var("UNICODE_REGENERATE_TABLES").is_err() {
-            const CACHED_MODULE: &[u8] = include_bytes!(concat!("./src/text/tables.rs.gz"));
-
-            let mut gz = GzDecoder::new(CACHED_MODULE);
-            use flate2::bufread::GzDecoder;
-            let mut v = String::with_capacity(
-                8, /*
-                  str::parse::<usize>(unsafe {
-                      std::str::from_utf8_unchecked(gz.header().unwrap().comment().unwrap())
-                  })
-                  .unwrap_or_else(|_| panic!("was not compressed with size comment header",)),*/
-            );
-            gz.read_to_string(&mut v)?;
-            let mut file = File::create(mod_path)?;
-            file.write_all(v.as_bytes())?;
-            return Ok(());
-        }
         let mut child = Command::new("curl")
             .args(["-o", "-", LINE_BREAK_TABLE_URL])
             .stdout(Stdio::piped())
