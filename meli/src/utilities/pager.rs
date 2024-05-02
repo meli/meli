@@ -877,4 +877,12 @@ impl Component for Pager {
     fn id(&self) -> ComponentId {
         self.id
     }
+
+    fn kill(&mut self, uuid: ComponentId, context: &mut Context) {
+        if self.id != uuid {
+            return;
+        }
+
+        context.replies.push_back(UIEvent::Action(Tab(Kill(uuid))));
+    }
 }

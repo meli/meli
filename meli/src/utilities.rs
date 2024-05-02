@@ -1386,7 +1386,7 @@ impl Component for Tabbed {
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Action(Tab(New(ref mut e))) if e.is_some() => {
+            UIEvent::Action(Tab(New(ref mut e @ Some(_)))) => {
                 self.add_component(e.take().unwrap(), context);
                 self.children[self.cursor_pos]
                     .process_event(&mut UIEvent::VisibilityChange(false), context);

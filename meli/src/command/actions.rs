@@ -70,6 +70,8 @@ pub enum TabAction {
     New(Option<Box<dyn Component>>),
     ManageMailboxes,
     ManageJobs,
+    #[cfg(feature = "cli-docs")]
+    Man(crate::manpages::ManPages),
 }
 
 #[derive(Debug)]

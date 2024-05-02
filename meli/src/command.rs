@@ -143,6 +143,11 @@ impl TokenStream {
                             tokens.append(&mut m);
                         }
                     }
+                    AlternativeStrings(v) => {
+                        for t in v.iter() {
+                            sugg.insert(format!("{}{}", if s.is_empty() { " " } else { "" }, t));
+                        }
+                    }
                     Seq(_s) => {}
                     RestOfStringValue => {
                         sugg.insert(String::new());
@@ -194,6 +199,20 @@ impl TokenStream {
                     }
                     if !cont {
                         *s = "";
+                    }
+                }
+                AlternativeStrings(v) => {
+                    for lit in v.iter() {
+                        if lit.starts_with(*s) && lit.len() != s.len() {
+                            sugg.insert(lit[s.len()..].to_string());
+                            tokens.push((s, *t.inner()));
+                            return tokens;
+                        } else if s.starts_with(lit) {
+                            tokens.push((&s[..lit.len()], *t.inner()));
+                            *s = &s[lit.len()..];
+                        } else {
+                            return vec![];
+                        }
                     }
                 }
                 Seq(_s) => {
@@ -251,6 +270,7 @@ pub enum Token {
     Literal(&'static str),
     Filepath,
     Alternatives(&'static [TokenStream]),
+    AlternativeStrings(&'static [&'static str]),
     Seq(&'static [TokenAdicity]),
     AccountName,
     MailboxPath,
@@ -487,6 +507,18 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                   desc: "view and manage mailbox preferences",
                   tokens: &[One(Literal("manage-mailboxes"))],
                   parser: parser::manage_mailboxes
+                },
+                { tags: ["man"],
+                  desc: "read documentation",
+                  tokens: {
+                      #[cfg(feature = "cli-docs")]
+                      {
+                          &[One(Literal("man")), One(AlternativeStrings(crate::manpages::POSSIBLE_VALUES))]
+                      }
+                      #[cfg(not(feature = "cli-docs"))]
+                      { &[] }
+                  },
+                  parser: parser::view_manpage
                 },
                 { tags: ["manage-jobs"],
                   desc: "view and manage jobs",

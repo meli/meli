@@ -914,6 +914,27 @@ impl State {
                     )))
                     .unwrap();
             }
+            #[cfg(feature = "cli-docs")]
+            Tab(Man(manpage)) => match manpage
+                .read(false)
+                .map(|text| crate::manpages::ManPages::remove_markup(&text).unwrap_or(text))
+            {
+                Ok(m) => self.rcv_event(UIEvent::Action(Tab(New(Some(Box::new(
+                    Pager::from_string(
+                        m,
+                        Some(&self.context),
+                        None,
+                        None,
+                        crate::conf::value(&self.context, "theme_default"),
+                    ),
+                )))))),
+                Err(err) => self.context.replies.push_back(UIEvent::Notification {
+                    title: None,
+                    body: "Encountered an error while retrieving manual page.".into(),
+                    source: Some(err),
+                    kind: Some(NotificationType::Error(ErrorKind::Bug)),
+                }),
+            },
             v => {
                 self.rcv_event(UIEvent::Action(v));
             }

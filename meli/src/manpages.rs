@@ -172,4 +172,20 @@ impl ManPages {
 
         Ok(v)
     }
+
+    /// Helper function to remove backspace markup from mandoc output.
+    pub fn remove_markup(input: &str) -> Result<String> {
+        use std::{
+            io::Write,
+            process::{Command, Stdio},
+        };
+        let mut child = Command::new("col")
+            .arg("-b")
+            .arg("-x")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()?;
+        child.stdin.as_mut().unwrap().write_all(input.as_bytes())?;
+        Ok(String::from_utf8_lossy(&child.wait_with_output()?.stdout).to_string())
+    }
 }
