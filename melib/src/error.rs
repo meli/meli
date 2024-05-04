@@ -55,7 +55,7 @@ pub enum NetworkErrorKind {
     RequestBodyNotRewindable,
     /// Connection (not request) timeout.
     Timeout,
-    /// TooManyRedirects
+    /// Too many redirects
     TooManyRedirects,
     /// Invalid TLS connection
     InvalidTLSConnection,

@@ -726,7 +726,7 @@ where
     ///   A map of an id to a Patch object to apply to the current Foo
     ///   object with that id, or null if no objects are to be updated.
     ///
-    ///   A *PatchObject* is of type `String[*]` and represents an unordered
+    ///   A [`PatchObject`] is of type `String[*]` and represents an unordered
     ///   set of patches.  The keys are a path in JSON Pointer format
     ///   `RFC6901`, with an implicit leading `/` (i.e., prefix each key
     ///   with `/` before applying the JSON Pointer evaluation algorithm).
@@ -741,8 +741,8 @@ where
     ///   * All parts prior to the last (i.e., the value after the final slash)
     ///     MUST already exist on the object being patched.
     ///
-    ///   * There MUST NOT be two patches in the PatchObject where the pointer
-    ///     of one is the prefix of the pointer of the other, e.g.,
+    ///   * There MUST NOT be two patches in the [`PatchObject`] where the
+    ///     pointer of one is the prefix of the pointer of the other, e.g.,
     ///     `alerts/1/offset` and `alerts`.
     ///
     ///   The value associated with each pointer determines how to apply
@@ -758,10 +758,10 @@ where
     ///   Any server-set properties MAY be included in the patch if their
     ///   value is identical to the current server value (before applying
     ///   the patches to the object).  Otherwise, the update MUST be
-    ///   rejected with an `invalidProperties` SetError.
+    ///   rejected with an `invalidProperties` [`SetError`].
     ///
     ///   This patch definition is designed such that an entire Foo object
-    ///   is also a valid PatchObject.  The client may choose to optimise
+    ///   is also a valid [`PatchObject`].  The client may choose to optimise
     ///   network usage by just sending the diff or may send the whole
     ///   object; the server processes it the same either way.
     pub update: Option<IndexMap<Argument<Id<OBJ>>, PatchObject>>,
@@ -876,7 +876,7 @@ pub struct SetResponse<OBJ: Object> {
     ///   successfully updated.
     ///
     ///   The value for each id is a Foo object containing any property that
-    ///   changed in a way *not* explicitly requested by the PatchObject
+    ///   changed in a way *not* explicitly requested by the [`PatchObject`]
     ///   sent to the server, or null if none.  This lets the client know of
     ///   any changes to server-set or computed properties.
     ///
@@ -889,17 +889,17 @@ pub struct SetResponse<OBJ: Object> {
     pub destroyed: Option<Vec<Id<OBJ>>>,
     /// o  notCreated: `Id[SetError]|null`
     ///
-    ///   A map of the creation id to a SetError object for each record that
+    ///   A map of the creation id to a [`SetError`] object for each record that
     ///   failed to be created, or null if all successful.
     pub not_created: Option<Vec<SetError>>,
     /// o  notUpdated: `Id[SetError]|null`
     ///
-    ///   A map of the Foo id to a SetError object for each record that
+    ///   A map of the Foo id to a [`SetError`] object for each record that
     ///   failed to be updated, or null if all successful.
     pub not_updated: Option<Vec<SetError>>,
     /// o  notDestroyed: `Id[SetError]|null`
     ///
-    ///   A map of the Foo id to a SetError object for each record that
+    ///   A map of the Foo id to a [`SetError`] object for each record that
     ///   failed to be destroyed, or null if all successful.//
     pub not_destroyed: Option<Vec<SetError>>,
 }
@@ -938,8 +938,8 @@ pub enum SetError {
     /// (update; destroy).  The id given to update/destroy cannot be found.
     NotFound(Option<String>),
 
-    /// (update).  The PatchObject given to update the record was not a valid
-    /// patch (see the patch description).
+    /// (update).  The [`PatchObject`] given to update the record was not a
+    /// valid patch (see the patch description).
     InvalidPatch(Option<String>),
 
     /// (update).  The client requested that an object be both updated and
@@ -1254,7 +1254,7 @@ pub struct QueryChangesResponse<OBJ: Object> {
     /// The array MUST be sorted in order of index, with the lowest index
     /// first.
 
-    /// An *AddedItem* object has the following properties:
+    /// An [`AddedItem`] object has the following properties:
 
     /// * id: `Id`
 

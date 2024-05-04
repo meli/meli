@@ -103,11 +103,13 @@ impl Method<MailboxObject> for MailboxGet {
 ///
 /// For `destroy`:
 ///
-/// - `mailboxHasChild`: The Mailbox still has at least one child Mailbox.  The
-///   client MUST remove these before it can delete the parent Mailbox.
+/// - `mailboxHasChild`: The [`Mailbox`](MailboxObject) still has at least one
+///   child [`Mailbox`](MailboxObject).  The client MUST remove these before it
+///   can delete the parent [`Mailbox`](MailboxObject).
 ///
-/// - `mailboxHasEmail`: The Mailbox has at least one Email assigned to it, and
-///   the `onDestroyRemoveEmails` argument was false.
+/// - `mailboxHasEmail`: The [`Mailbox`](MailboxObject) has at least one
+///   [`Email`](EmailObject) assigned to it, and the `onDestroyRemoveEmails`
+///   argument was false.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MailboxSet {
@@ -115,11 +117,13 @@ pub struct MailboxSet {
     pub set_call: Set<MailboxObject>,
     /// onDestroyRemoveEmails: `Boolean` (default: false)
     ///
-    /// If false, any attempt to destroy a Mailbox that still has Emails
-    /// in it will be rejected with a `mailboxHasEmail` SetError.  If
-    /// true, any Emails that were in the Mailbox will be removed from it,
-    /// and if in no other Mailboxes, they will be destroyed when the
-    /// Mailbox is destroyed.
+    /// If false, any attempt to destroy a [`Mailbox`](MailboxObject) that still
+    /// has [`Email`s](EmailObject) in it will be rejected with a
+    /// `mailboxHasEmail` [`SetError`].  If
+    /// true, any [`Email`s](EmailObject) that were in the
+    /// [`Mailbox`](MailboxObject) will be removed from it, and if in no
+    /// other [`Mailbox`es](MailboxObject), they will be destroyed when the
+    /// [`Mailbox`](MailboxObject) is destroyed.
     #[serde(default)]
     pub on_destroy_remove_emails: bool,
 }

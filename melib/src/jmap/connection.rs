@@ -237,7 +237,7 @@ impl JmapConnection {
             .set(Some(req_instant), Ok(session))
             .await;
 
-        /* Fetch account identities. */
+        // Fetch account identities.
 
         let mut id_list = {
             let mut req = Request::new(self.request_no.clone());

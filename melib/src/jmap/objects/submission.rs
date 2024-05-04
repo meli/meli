@@ -293,9 +293,9 @@ pub struct EmailSubmissionSet {
     /// A map of [`EmailSubmissionObject`] id to an object containing properties
     /// to update on the [`Email`](EmailObject) object referenced by the
     /// [`EmailSubmissionObject`] if the create/update/destroy succeeds.  (For
-    /// references to EmailSubmissions created in the same
-    /// `/set` invocation, this is equivalent to a creation-reference, so the id
-    /// will be the creation id prefixed with a `#`.)
+    /// references to [`EmailSubmissions`](EmailSubmissionObject) created in the
+    /// same `/set` invocation, this is equivalent to a creation-reference,
+    /// so the id will be the creation id prefixed with a `#`.)
     #[serde(default)]
     pub on_success_update_email: Option<IndexMap<Id<EmailSubmissionObject>, PatchObject>>,
     /// onSuccessDestroyEmail: `Id[]|null`

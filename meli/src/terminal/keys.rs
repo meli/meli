@@ -120,11 +120,11 @@ pub enum MouseButton {
     Middle,
     /// Mouse wheel is going up.
     ///
-    /// This event is typically only used with Mouse::Press.
+    /// This event is typically only used with [`MouseEvent::Press`].
     WheelUp,
     /// Mouse wheel is going down.
     ///
-    /// This event is typically only used with Mouse::Press.
+    /// This event is typically only used with [`MouseEvent::Press`].
     WheelDown,
 }
 

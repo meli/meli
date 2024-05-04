@@ -50,8 +50,8 @@ pub enum SubCommand {
     /// edit configuration files with `$EDITOR`/`$VISUAL`.
     EditConfig,
     /// create a sample configuration file with available configuration options.
-    /// If PATH is not specified, meli will try to create it in
-    /// $XDG_CONFIG_HOME/meli/config.toml
+    /// If `PATH` is not specified, meli will try to create it in
+    /// `$XDG_CONFIG_HOME/meli/config.toml`
     #[structopt(display_order = 1)]
     CreateConfig {
         #[structopt(value_name = "NEW_CONFIG_PATH", parse(from_os_str))]
@@ -69,8 +69,8 @@ pub enum SubCommand {
     Man(ManOpt),
 
     #[structopt(display_order = 4)]
-    /// Install manual pages to the first location provided by $MANPATH /
-    /// manpath(1), unless you specify the directory as an argument.
+    /// Install manual pages to the first location provided by `$MANPATH` /
+    /// `manpath(1)`, unless you specify the directory as an argument.
     InstallMan {
         #[structopt(value_name = "DESTINATION_PATH", parse(from_os_str))]
         destination_path: Option<PathBuf>,
@@ -93,7 +93,7 @@ pub struct ManOpt {
     #[cfg_attr(feature = "cli-docs", structopt(default_value = "meli", possible_values=manpages::POSSIBLE_VALUES, value_name="PAGE", parse(try_from_str = manpages::parse_manpage)))]
     /// Name of manual page.
     pub page: manpages::ManPages,
-    /// If true, output text in stdout instead of spawning $PAGER.
+    /// If true, output text in stdout instead of spawning `$PAGER`.
     #[cfg(feature = "cli-docs")]
     #[cfg_attr(
         feature = "cli-docs",

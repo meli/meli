@@ -33,52 +33,52 @@ pub struct IdentityObject {
     pub id: Id<IdentityObject>,
 
     ///  name: `String` (default: "")
-    /// The "From" name the client SHOULD use when creating a new Email
-    /// from this Identity.
+    /// The "From" name the client SHOULD use when creating a new
+    /// [`Email`](EmailObject) from this Identity.
     #[serde(default)]
     pub name: String,
 
     ///  email: `String` (immutable)
     /// The "From" email address the client MUST use when creating a new
-    /// Email from this Identity.  If the "mailbox" part of the address
-    /// (the section before the "@") is the single character "*" (e.g.,
-    /// "*@example.com"), the client may use any valid address ending in
-    /// that domain (e.g., "[email protected]").
+    /// [`Email`](EmailObject) from this Identity. If the "mailbox" part of the
+    /// address (the section before the "@") is the single character "*"
+    /// (e.g., "*@example.com"), the client may use any valid address ending
+    /// in that domain (e.g., "[email protected]").
     pub email: String,
 
     ///  replyTo: `EmailAddress[]|null` (default: null)
-    /// The Reply-To value the client SHOULD set when creating a new Email
-    /// from this Identity.
+    /// The Reply-To value the client SHOULD set when creating a new
+    /// [`Email`](EmailObject) from this Identity.
     #[serde(default)]
     pub reply_to: Option<Vec<EmailAddress>>,
 
     ///  bcc: `EmailAddress[]|null` (default: null)
-    /// The Bcc value the client SHOULD set when creating a new Email from
-    /// this Identity.
+    /// The Bcc value the client SHOULD set when creating a new
+    /// [`Email`](EmailObject) from this Identity.
     #[serde(default)]
     pub bcc: Option<Vec<EmailAddress>>,
 
     ///  textSignature: `String` (default: "")
     /// A signature the client SHOULD insert into new plaintext messages
-    // that will be sent from this Identity.  Clients MAY ignore this
-    // and/or combine this with a client-specific signature preference.
+    /// that will be sent from this Identity. Clients MAY ignore this
+    /// and/or combine this with a client-specific signature preference.
     #[serde(default)]
     pub text_signature: String,
 
     ///  htmlSignature: `String` (default: "")
     /// A signature the client SHOULD insert into new HTML messages that
-    /// will be sent from this Identity.  This text MUST be an HTML
-    /// snippet to be inserted into the "<body></body>" section of the
-    /// HTML.  Clients MAY ignore this and/or combine this with a client-
+    /// will be sent from this Identity. This text MUST be an HTML
+    /// snippet to be inserted into the `<body></body>` section of the
+    /// HTML. Clients MAY ignore this and/or combine this with a client-
     /// specific signature preference.
     #[serde(default)]
     pub html_signature: String,
 
     ///  mayDelete: `Boolean` (server-set)
-    /// Is the user allowed to delete this Identity?  Servers may wish to
-    /// set this to false for the user's username or other default
-    /// address.  Attempts to destroy an Identity with "mayDelete: false"
-    /// will be rejected with a standard "forbidden" SetError.
+    /// Is the user allowed to delete this Identity? Servers may wish to
+    /// set this to `false` for the user's username or other default
+    /// address. Attempts to destroy an Identity with "mayDelete: false"
+    /// will be rejected with a standard "forbidden" [`SetError`].
     #[serde(skip_serializing)]
     pub may_delete: bool,
 }
@@ -102,7 +102,7 @@ impl Method<IdentityObject> for IdentityChanges {
 ///
 /// ```text
 /// This is a standard "/set" method as described in [RFC8620],
-/// Section 5.3.  The following extra SetError types are defined:
+/// Section 5.3. The following extra [`SetError`] types are defined:
 /// For "create":
 ///  o  "forbiddenFrom": The user is not allowed to send from the address
 ///     given as the "email" property of the Identity.

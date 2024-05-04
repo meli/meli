@@ -48,7 +48,7 @@ pub struct EmailImport {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub if_in_state: Option<State<EmailObject>>,
     /// o  emails: `Id[EmailImport]`
-    /// A map of creation id (client specified) to EmailImport objects.
+    /// A map of creation id (client specified) to [`EmailImport`] objects.
     pub emails: IndexMap<Id<EmailObject>, EmailImportObject>,
 }
 
@@ -131,11 +131,11 @@ pub enum EmailImportError {
     /// `RFC5322`, or even just with the same Message-ID `RFC5322`, to
     /// coexist within an account.  In this case, it MUST reject attempts to
     /// import an Email considered to be a duplicate with an `alreadyExists`
-    /// SetError.
+    /// [`SetError`].
     AlreadyExists {
         description: Option<String>,
         /// An `existingId` property of type `Id` MUST be included on
-        /// the SetError object with the id of the existing Email.  If
+        /// the [`SetError`] object with the id of the existing Email.  If
         /// duplicates are allowed, the newly created Email object MUST
         /// have a separate id and independent mutable properties to the
         /// existing object.
@@ -143,21 +143,21 @@ pub enum EmailImportError {
     },
     /// If the `blobId`, `mailboxIds`, or `keywords` properties are invalid
     /// (e.g., missing, wrong type, id not found), the server MUST reject the
-    /// import with an `invalidProperties` SetError.
+    /// import with an `invalidProperties` [`SetError`].
     InvalidProperties {
         description: Option<String>,
         properties: Vec<String>,
     },
     /// If the Email cannot be imported because it would take the account
     /// over quota, the import should be rejected with an `overQuota`
-    /// SetError.
+    /// [`SetError`].
     OverQuota { description: Option<String> },
     /// If the blob referenced is not a valid message `RFC5322`, the server
     /// MAY modify the message to fix errors (such as removing NUL octets or
     /// fixing invalid headers).  If it does this, the `blobId` on the
     /// response MUST represent the new representation and therefore be
-    /// different to the `blobId` on the EmailImport object.  Alternatively,
-    /// the server MAY reject the import with an `invalidEmail` SetError.
+    /// different to the `blobId` on the [`EmailImport`] object.  Alternatively,
+    /// the server MAY reject the import with an `invalidEmail` [`SetError`].
     InvalidEmail { description: Option<String> },
     /// An `ifInState` argument was supplied, and it does not match the current
     /// state.
@@ -189,7 +189,7 @@ pub struct EmailImportResponse {
     pub created: Option<IndexMap<Id<EmailObject>, EmailImportResult>>,
 
     /// o  notCreated: `Id[SetError]|null`
-    /// A map of the creation id to a SetError object for each Email that
+    /// A map of the creation id to a [`SetError`] object for each Email that
     /// failed to be created, or null if all successful.  The possible
     /// errors are defined above.
     pub not_created: Option<IndexMap<Id<EmailObject>, EmailImportError>>,

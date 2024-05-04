@@ -273,7 +273,7 @@ impl From<Error> for BackendEvent {
 #[derive(Clone, Debug)]
 pub enum RefreshEventKind {
     Update(EnvelopeHash, Box<Envelope>),
-    /// Rename(old_hash, new_hash)
+    /// `Rename(old_hash, new_hash)`
     Rename(EnvelopeHash, EnvelopeHash),
     Create(Box<Envelope>),
     Remove(EnvelopeHash),
