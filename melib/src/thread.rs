@@ -1480,28 +1480,28 @@ fn print_threadnodes(
 }
 */
 
-#[derive(Serialize)]
-struct Node {
-    id: String,
-    subject: String,
-    from: String,
-    to: String,
-    date: UnixTimestamp,
-    references: String,
-    in_reply_to: String,
-}
+// #[derive(Serialize)]
+// struct Node {
+//     id: String,
+//     subject: String,
+//     from: String,
+//     to: String,
+//     date: UnixTimestamp,
+//     references: String,
+//     in_reply_to: String,
+// }
 
-#[derive(Serialize)]
-struct Link {
-    source: String,
-    target: String,
-}
+// #[derive(Serialize)]
+// struct Link {
+//     source: String,
+//     target: String,
+// }
 
-#[derive(Serialize)]
-struct Graph {
-    nodes: Vec<Node>,
-    links: Vec<Link>,
-}
+// #[derive(Serialize)]
+// struct Graph {
+//     nodes: Vec<Node>,
+//     links: Vec<Link>,
+// }
 
 /*
 fn save_graph(

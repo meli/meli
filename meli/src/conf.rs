@@ -610,7 +610,7 @@ impl Settings {
 
         for (id, x) in fs.accounts {
             let mut ac = AccountConf::from(x);
-            ac.account.name = id.clone();
+            ac.account.name.clone_from(&id);
 
             s.insert(id, ac);
         }

@@ -106,17 +106,18 @@ impl std::fmt::Debug for ParsingError<&'_ str> {
     }
 }
 
-struct DebugOkWrapper<'r, I, R: AsRef<[u8]>>(&'r IResult<I, R>);
+// For debugging.
+// struct DebugOkWrapper<'r, I, R: AsRef<[u8]>>(&'r IResult<I, R>);
 
-impl<R: AsRef<[u8]> + std::fmt::Debug> std::fmt::Debug for DebugOkWrapper<'_, &'_ [u8], R> {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if let Ok((a, b)) = self.0 {
-            write!(fmt, "Ok({}, {})", &to_str!(a), &to_str!(b.as_ref()))
-        } else {
-            write!(fmt, "{:?}", self.0)
-        }
-    }
-}
+// impl<R: AsRef<[u8]> + std::fmt::Debug> std::fmt::Debug for DebugOkWrapper<'_,
+// &'_ [u8], R> {     fn fmt(&self, fmt: &mut std::fmt::Formatter) ->
+// std::fmt::Result {         if let Ok((a, b)) = self.0 {
+//             write!(fmt, "Ok({}, {})", &to_str!(a), &to_str!(b.as_ref()))
+//         } else {
+//             write!(fmt, "{:?}", self.0)
+//         }
+//     }
+// }
 
 pub type IResult<I, O, E = ParsingError<I>> = std::result::Result<(I, O), nom::Err<E>>;
 
@@ -2156,7 +2157,7 @@ pub mod encodings {
         let s: Vec<u8> = match input[tag_end_idx + 1] {
             b'b' | b'B' => BASE64_MIME
                 .decode(encoded_text)
-                .map_or_else(|_| encoded_text.to_vec(), |v| v),
+                .unwrap_or_else(|_| encoded_text.to_vec()),
             b'q' | b'Q' => match quoted_printable_bytes_header(encoded_text) {
                 Ok((b"", s)) => s,
                 _ => {

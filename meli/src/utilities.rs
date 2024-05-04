@@ -717,7 +717,7 @@ impl Component for StatusBar {
                 self.dirty = true;
             }
             UIEvent::StatusEvent(StatusEvent::BufSet(s)) => {
-                self.display_buffer = s.clone();
+                self.display_buffer.clone_from(s);
                 self.dirty = true;
             }
             UIEvent::StatusEvent(StatusEvent::UpdateStatus(ref mut s)) => {

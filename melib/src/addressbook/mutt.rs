@@ -70,7 +70,7 @@ pub fn parse_mutt_contact<'a>() -> impl Parser<'a, Card> {
                 });
                 name.pop();
                 if name.trim().is_empty() {
-                    name = title.clone();
+                    name.clone_from(&title);
                 }
                 ret.set_title(title).set_email(email).set_name(name);
                 Ok::<Card, &'a str>(ret)

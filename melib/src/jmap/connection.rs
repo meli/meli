@@ -229,7 +229,11 @@ impl JmapConnection {
             return Err(err);
         }
 
-        *self.store.core_capabilities.lock().unwrap() = session.capabilities.clone();
+        self.store
+            .core_capabilities
+            .lock()
+            .unwrap()
+            .clone_from(&session.capabilities);
         let mail_account_id = session.mail_account_id();
         _ = self
             .store
