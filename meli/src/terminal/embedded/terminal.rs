@@ -256,6 +256,21 @@ impl EmbeddedGrid {
         }
     }
 
+    /*
+    pub fn to_string_debug(&self) -> String {
+        let mut out = String::with_capacity(4096);
+        out.push_str(&format!("screen_buffer: {:?}\n", self.screen_buffer));
+        let grid = self.buffer();
+        for y in 0..self.terminal_size().1 {
+            for x in 0..self.terminal_size().0 {
+                out.push(grid[(x, y)].ch());
+            }
+            out.push('\n');
+        }
+        out
+    }
+    */
+
     #[inline]
     pub fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
@@ -313,7 +328,6 @@ impl EmbeddedGrid {
     }
 
     pub fn process_byte(&mut self, stdin: &mut std::fs::File, byte: u8) {
-        let area = self.area();
         let Self {
             ref mut cursor,
             ref mut scroll_region,
@@ -337,12 +351,12 @@ impl EmbeddedGrid {
             initialized: _,
             ref mut dirty,
         } = self;
-        let mut grid = normal_screen.grid_mut();
+        let mut screen = normal_screen;
 
         let is_alternate = match *screen_buffer {
             ScreenBuffer::Normal => false,
             _ => {
-                grid = alternate_screen.grid_mut();
+                screen = alternate_screen;
                 true
             }
         };
@@ -353,7 +367,10 @@ impl EmbeddedGrid {
                 if !is_alternate {
                     cursor.0 = 0;
                     if cursor.1 >= terminal_size.1 {
-                        if !grid.resize(std::cmp::max(1, grid.cols()), grid.rows() + 2, None) {
+                        if !screen.resize(
+                            std::cmp::max(1, screen.grid().cols()),
+                            screen.grid().rows() + 2,
+                        ) {
                             return;
                         }
                         scroll_region.bottom += 1;
@@ -401,6 +418,11 @@ impl EmbeddedGrid {
                 (cursor_x!(), cursor_y!())
             };
         }
+        macro_rules! area {
+            () => {{
+                screen.area()
+            }};
+        }
 
         let mut state = &mut self.state;
         match (byte, &mut state) {
@@ -421,7 +443,9 @@ impl EmbeddedGrid {
                 // ESCD Linefeed
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
                 if cursor.1 == scroll_region.bottom {
-                    grid.scroll_up(scroll_region, scroll_region.top, 1);
+                    screen
+                        .grid_mut()
+                        .scroll_up(scroll_region, scroll_region.top, 1);
                     *dirty = true;
                 } else {
                     cursor.1 += 1;
@@ -435,7 +459,7 @@ impl EmbeddedGrid {
                 //log::trace!("erasing from {:?} to {:?}", cursor, terminal_size);
                 for y in cursor.1..terminal_size.1 {
                     for x in cursor.0..terminal_size.0 {
-                        grid[(x, y)] = Cell::default();
+                        screen.grid_mut()[(x, y)] = Cell::default();
                     }
                 }
                 *dirty = true;
@@ -445,7 +469,7 @@ impl EmbeddedGrid {
                 // ESCK Erase from the cursor to the end of the line
                 //log::trace!("sending {}", EscCode::from((&(*state), byte)));
                 for x in cursor.0..terminal_size.0 {
-                    grid[(x, cursor.1)] = Cell::default();
+                    screen.grid_mut()[(x, cursor.1)] = Cell::default();
                 }
                 *dirty = true;
                 *state = State::Normal;
@@ -486,7 +510,7 @@ impl EmbeddedGrid {
 
                 if cursor.1 + 1 < terminal_size.1 || !is_alternate {
                     if cursor.1 == scroll_region.bottom && is_alternate {
-                        grid.scroll_up(scroll_region, cursor.1, 1);
+                        screen.grid_mut().scroll_up(scroll_region, cursor.1, 1);
                         *dirty = true;
                     } else {
                         increase_cursor_y!();
@@ -568,12 +592,14 @@ impl EmbeddedGrid {
                         }
                     }
                 };
-                //log::trace!("c = {:?}\tcursor={:?}", c, cursor);
+
                 *codepoints = CodepointBuf::None;
                 if *auto_wrap_mode && *wrap_next {
                     *wrap_next = false;
                     if cursor.1 == scroll_region.bottom {
-                        grid.scroll_up(scroll_region, scroll_region.top, 1);
+                        screen
+                            .grid_mut()
+                            .scroll_up(scroll_region, scroll_region.top, 1);
                     } else {
                         cursor.1 += 1;
                     }
@@ -583,14 +609,15 @@ impl EmbeddedGrid {
                 //if c == '↪' {
                 //log::trace!("↪ cursor is {:?}", cursor_val!());
                 //}
-                grid[cursor_val!()].set_ch(c);
-                grid[cursor_val!()].set_fg(*fg_color);
-                grid[cursor_val!()].set_bg(*bg_color);
-                grid[cursor_val!()].set_attrs(*attrs);
+                screen.grid_mut()[cursor_val!()]
+                    .set_ch(c)
+                    .set_fg(*fg_color)
+                    .set_bg(*bg_color)
+                    .set_attrs(*attrs);
                 match wcwidth(u32::from(c)) {
                     Some(0) | None => {
                         /* Skip drawing zero width characters */
-                        grid[cursor_val!()].set_empty(true);
+                        screen.grid_mut()[cursor_val!()].set_empty(true);
                     }
                     Some(1) => {}
                     Some(n) => {
@@ -598,10 +625,11 @@ impl EmbeddedGrid {
                          * drawn over. Set it as empty to skip drawing it. */
                         for _ in 1..n {
                             increase_cursor_x!();
-                            grid[cursor_val!()].set_empty(true);
-                            grid[cursor_val!()].set_fg(*fg_color);
-                            grid[cursor_val!()].set_bg(*bg_color);
-                            grid[cursor_val!()].set_attrs(*attrs);
+                            screen.grid_mut()[cursor_val!()]
+                                .set_empty(true)
+                                .set_fg(*fg_color)
+                                .set_bg(*bg_color)
+                                .set_attrs(*attrs);
                         }
                     }
                 }
@@ -620,9 +648,10 @@ impl EmbeddedGrid {
                 *fg_color = Color::Default;
                 *bg_color = Color::Default;
                 *attrs = Attr::DEFAULT;
-                grid[cursor_val!()].set_fg(Color::Default);
-                grid[cursor_val!()].set_bg(Color::Default);
-                grid[cursor_val!()].set_attrs(Attr::DEFAULT);
+                screen.grid_mut()[cursor_val!()]
+                    .set_fg(Color::Default)
+                    .set_bg(Color::Default)
+                    .set_attrs(Attr::DEFAULT);
                 *dirty = true;
                 *state = State::Normal;
             }
@@ -651,12 +680,13 @@ impl EmbeddedGrid {
                     }
                     b"25" => {
                         *show_cursor = true;
-                        *prev_fg_color = Some(grid[cursor_val!()].fg());
-                        *prev_bg_color = Some(grid[cursor_val!()].bg());
-                        *prev_attrs = Some(grid[cursor_val!()].attrs());
-                        grid[cursor_val!()].set_fg(Color::Black);
-                        grid[cursor_val!()].set_bg(Color::White);
-                        grid[cursor_val!()].set_attrs(Attr::DEFAULT);
+                        *prev_fg_color = Some(screen.grid_mut()[cursor_val!()].fg());
+                        *prev_bg_color = Some(screen.grid_mut()[cursor_val!()].bg());
+                        *prev_attrs = Some(screen.grid_mut()[cursor_val!()].attrs());
+                        screen.grid_mut()[cursor_val!()]
+                            .set_fg(Color::Black)
+                            .set_bg(Color::White)
+                            .set_attrs(Attr::DEFAULT);
                         *dirty = true;
                     }
                     b"1047" | b"1049" => {
@@ -684,19 +714,19 @@ impl EmbeddedGrid {
                     b"25" => {
                         *show_cursor = false;
                         if let Some(fg_color) = prev_fg_color.take() {
-                            grid[cursor_val!()].set_fg(fg_color);
+                            screen.grid_mut()[cursor_val!()].set_fg(fg_color);
                         } else {
-                            grid[cursor_val!()].set_fg(*fg_color);
+                            screen.grid_mut()[cursor_val!()].set_fg(*fg_color);
                         }
                         if let Some(bg_color) = prev_bg_color.take() {
-                            grid[cursor_val!()].set_bg(bg_color);
+                            screen.grid_mut()[cursor_val!()].set_bg(bg_color);
                         } else {
-                            grid[cursor_val!()].set_bg(*bg_color);
+                            screen.grid_mut()[cursor_val!()].set_bg(*bg_color);
                         }
                         if let Some(attrs) = prev_attrs.take() {
-                            grid[cursor_val!()].set_attrs(attrs);
+                            screen.grid_mut()[cursor_val!()].set_attrs(attrs);
                         } else {
-                            grid[cursor_val!()].set_attrs(*attrs);
+                            screen.grid_mut()[cursor_val!()].set_attrs(*attrs);
                         }
                         *dirty = true;
                     }
@@ -723,7 +753,8 @@ impl EmbeddedGrid {
                 /* Erase in Display (ED), VT100. */
                 /* Erase Below (default). */
 
-                grid.clear_area(
+                let area = area!();
+                screen.grid_mut().clear_area(
                     area.skip_rows(std::cmp::min(
                         cursor.1 + 1 + scroll_region.top,
                         terminal_size.1.saturating_sub(1),
@@ -739,7 +770,7 @@ impl EmbeddedGrid {
                 /* Erase to right (Default) */
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
                 for x in cursor.0..terminal_size.0 {
-                    grid[(x, cursor.1)] = Cell::default();
+                    screen.grid_mut()[(x, cursor.1)] = Cell::default();
                 }
                 *dirty = true;
                 *state = State::Normal;
@@ -754,7 +785,7 @@ impl EmbeddedGrid {
                     1
                 };
 
-                grid.scroll_down(scroll_region, cursor.1, n);
+                screen.grid_mut().scroll_down(scroll_region, cursor.1, n);
 
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
                 *dirty = true;
@@ -770,7 +801,7 @@ impl EmbeddedGrid {
                     1
                 };
 
-                grid.scroll_up(scroll_region, cursor.1, n);
+                screen.grid_mut().scroll_up(scroll_region, cursor.1, n);
 
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
                 *dirty = true;
@@ -793,7 +824,7 @@ impl EmbeddedGrid {
                 /* Erase to right (Default) */
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
                 for x in cursor.0..terminal_size.0 {
-                    grid[(x, cursor.1)] = Cell::default();
+                    screen.grid_mut()[(x, cursor.1)] = Cell::default();
                 }
                 *dirty = true;
                 *state = State::Normal;
@@ -802,7 +833,7 @@ impl EmbeddedGrid {
                 /* Erase in Line (ED), VT100. */
                 /* Erase to left (Default) */
                 for x in 0..=cursor.0 {
-                    grid[(x, cursor.1)] = Cell::default();
+                    screen.grid_mut()[(x, cursor.1)] = Cell::default();
                 }
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
                 *dirty = true;
@@ -813,12 +844,13 @@ impl EmbeddedGrid {
                 /* Erase all */
                 for y in 0..terminal_size.1 {
                     for x in 0..terminal_size.0 {
-                        grid[(x, y)] = Cell::default();
+                        screen.grid_mut()[(x, y)] = Cell::default();
                     }
                 }
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
 
-                grid.clear_area(
+                let area = area!();
+                screen.grid_mut().clear_area(
                     area.take_cols(terminal_size.0).take_rows(terminal_size.1),
                     Default::default(),
                 );
@@ -829,7 +861,8 @@ impl EmbeddedGrid {
                 /* Erase in Display (ED), VT100. */
                 /* Erase Below (default). */
 
-                grid.clear_area(
+                let area = area!();
+                screen.grid_mut().clear_area(
                     area.skip_rows(std::cmp::min(
                         cursor.1 + 1 + scroll_region.top,
                         terminal_size.1.saturating_sub(1),
@@ -844,7 +877,8 @@ impl EmbeddedGrid {
                 /* Erase in Display (ED), VT100. */
                 /* Erase Above */
 
-                grid.clear_area(
+                let area = area!();
+                screen.grid_mut().clear_area(
                     area.take_rows(cursor.1.saturating_sub(1) + scroll_region.top),
                     Default::default(),
                 );
@@ -856,7 +890,8 @@ impl EmbeddedGrid {
                 /* Erase in Display (ED), VT100. */
                 /* Erase All */
 
-                grid.clear_area(area, Default::default());
+                let area = area!();
+                screen.grid_mut().clear_area(area, Default::default());
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
                 *dirty = true;
                 *state = State::Normal;
@@ -877,7 +912,7 @@ impl EmbeddedGrid {
                             break;
                         }
                     }
-                    grid[(cur_x, cur_y)] = Cell::default();
+                    screen.grid_mut()[(cur_x, cur_y)] = Cell::default();
                     cur_x += 1;
                     ctr += 1;
                 }
@@ -948,11 +983,11 @@ impl EmbeddedGrid {
                     /* scroll down */
                     for y in scroll_region.top..scroll_region.bottom {
                         for x in 0..terminal_size.1 {
-                            grid[(x, y)] = grid[(x, y + 1)];
+                            screen.grid_mut()[(x, y)] = screen.grid()[(x, y + 1)];
                         }
                     }
                     for x in 0..terminal_size.1 {
-                        grid[(x, scroll_region.bottom)] = Cell::default();
+                        screen.grid_mut()[(x, scroll_region.bottom)] = Cell::default();
                     }
                 } else if offset + cursor.1 < terminal_size.1 {
                     cursor.1 += offset;
@@ -1059,10 +1094,11 @@ impl EmbeddedGrid {
                 };
 
                 for i in 0..(terminal_size.0 - cursor.0 - offset) {
-                    grid[(cursor.0 + i, cursor.1)] = grid[(cursor.0 + i + offset, cursor.1)];
+                    screen.grid_mut()[(cursor.0 + i, cursor.1)] =
+                        screen.grid()[(cursor.0 + i + offset, cursor.1)];
                 }
                 for x in (terminal_size.0 - offset)..terminal_size.0 {
-                    grid[(x, cursor.1)].set_ch(' ');
+                    screen.grid_mut()[(x, cursor.1)].set_ch(' ');
                 }
                 //log::trace!(
                 //    "Delete {} Character(s) with cursor at {:?}  ",
@@ -1202,9 +1238,10 @@ impl EmbeddedGrid {
                         );
                     }
                 }
-                grid[cursor_val!()].set_fg(*fg_color);
-                grid[cursor_val!()].set_bg(*bg_color);
-                grid[cursor_val!()].set_attrs(*attrs);
+                screen.grid_mut()[cursor_val!()]
+                    .set_fg(*fg_color)
+                    .set_bg(*bg_color)
+                    .set_attrs(*attrs);
                 *dirty = true;
                 *state = State::Normal;
             }
@@ -1314,9 +1351,10 @@ impl EmbeddedGrid {
                         }
                     }
                 }
-                grid[cursor_val!()].set_fg(*fg_color);
-                grid[cursor_val!()].set_bg(*bg_color);
-                grid[cursor_val!()].set_attrs(*attrs);
+                screen.grid_mut()[cursor_val!()]
+                    .set_fg(*fg_color)
+                    .set_bg(*bg_color)
+                    .set_attrs(*attrs);
                 *dirty = true;
                 *state = State::Normal;
             }
@@ -1419,7 +1457,7 @@ impl EmbeddedGrid {
                 } else {
                     Color::Default
                 };
-                grid[cursor_val!()].set_fg(*fg_color);
+                screen.grid_mut()[cursor_val!()].set_fg(*fg_color);
                 *dirty = true;
                 *state = State::Normal;
             }
@@ -1435,7 +1473,7 @@ impl EmbeddedGrid {
                 } else {
                     Color::Default
                 };
-                grid[cursor_val!()].set_bg(*bg_color);
+                screen.grid_mut()[cursor_val!()].set_bg(*bg_color);
                 *dirty = true;
                 *state = State::Normal;
             }
@@ -1504,7 +1542,7 @@ impl EmbeddedGrid {
                     (Ok(r), Ok(g), Ok(b)) => Color::Rgb(r, g, b),
                     _ => Color::Default,
                 };
-                grid[cursor_val!()].set_fg(*fg_color);
+                screen.grid_mut()[cursor_val!()].set_fg(*fg_color);
                 *dirty = true;
                 *state = State::Normal;
             }
@@ -1528,7 +1566,7 @@ impl EmbeddedGrid {
                     (Ok(r), Ok(g), Ok(b)) => Color::Rgb(r, g, b),
                     _ => Color::Default,
                 };
-                grid[cursor_val!()].set_bg(*bg_color);
+                screen.grid_mut()[cursor_val!()].set_bg(*bg_color);
                 *dirty = true;
                 *state = State::Normal;
             }
@@ -1551,7 +1589,7 @@ impl EmbeddedGrid {
                     (Ok(r), Ok(g), Ok(b)) => Color::Rgb(r, g, b),
                     _ => Color::Default,
                 };
-                grid[cursor_val!()].set_fg(*fg_color);
+                screen.grid_mut()[cursor_val!()].set_fg(*fg_color);
                 *dirty = true;
                 *state = State::Normal;
             }
@@ -1574,7 +1612,7 @@ impl EmbeddedGrid {
                     (Ok(r), Ok(g), Ok(b)) => Color::Rgb(r, g, b),
                     _ => Color::Default,
                 };
-                grid[cursor_val!()].set_bg(*bg_color);
+                screen.grid_mut()[cursor_val!()].set_bg(*bg_color);
                 *dirty = true;
                 *state = State::Normal;
             }
