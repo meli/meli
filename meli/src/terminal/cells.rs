@@ -204,7 +204,13 @@ impl CellBuffer {
         }
 
         let blank = blank.unwrap_or(self.default_cell);
-        self.buf = vec![blank; newlen];
+        let oldbuf = std::mem::replace(&mut self.buf, vec![blank; newlen]);
+        let (oldcols, oldrows) = (self.cols, self.rows);
+        for y in 0..oldrows.min(newrows) {
+            let row_length = oldcols.min(newcols);
+            self.buf[y * newcols..(y * newcols + row_length)]
+                .copy_from_slice(&oldbuf[y * oldcols..(y * oldcols + row_length)]);
+        }
         self.cols = newcols;
         self.rows = newrows;
         true
