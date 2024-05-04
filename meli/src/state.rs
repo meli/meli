@@ -922,7 +922,7 @@ impl State {
                 Ok(m) => self.rcv_event(UIEvent::Action(Tab(New(Some(Box::new(
                     Pager::from_string(
                         m,
-                        Some(&self.context),
+                        &self.context,
                         None,
                         None,
                         crate::conf::value(&self.context, "theme_default"),

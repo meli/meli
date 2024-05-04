@@ -22,13 +22,13 @@
 use melib::text::{LineBreakText, Truncate};
 
 use super::*;
-use crate::terminal::embedded::EmbeddedGrid;
+use crate::{jobs::JoinHandle, terminal::embedded::EmbeddedGrid};
 
 /// A pager for text.
 /// `Pager` holds its own content in its own `CellBuffer` and when `draw` is
 /// called, it draws the current view of the text. It is responsible for
 /// scrolling etc.
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Default)]
 pub struct Pager {
     text: String,
     cursor: (usize, usize),
@@ -51,10 +51,37 @@ pub struct Pager {
     /// events.
     rows_lt_height: bool,
     filtered_content: Option<(String, Result<EmbeddedGrid>)>,
+    filter_job: Option<(String, JoinHandle<Result<EmbeddedGrid>>)>,
     text_lines: Vec<String>,
     line_breaker: LineBreakText,
     movement: Option<PageMovement>,
     id: ComponentId,
+}
+
+impl Clone for Pager {
+    fn clone(&self) -> Self {
+        Self {
+            filter_job: None,
+            text: self.text.clone(),
+            cursor: self.cursor,
+            reflow: self.reflow,
+            height: self.height,
+            width: self.width,
+            minimum_width: self.minimum_width,
+            search: self.search.clone(),
+            dirty: true,
+            colors: self.colors,
+            initialised: false,
+            show_scrollbar: self.show_scrollbar,
+            cols_lt_width: self.cols_lt_width,
+            rows_lt_height: self.rows_lt_height,
+            filtered_content: self.filtered_content.clone(),
+            text_lines: self.text_lines.clone(),
+            line_breaker: self.line_breaker.clone(),
+            movement: self.movement,
+            id: ComponentId::default(),
+        }
+    }
 }
 
 impl std::fmt::Display for Pager {
@@ -124,31 +151,19 @@ impl Pager {
 
     pub fn from_string(
         text: String,
-        context: Option<&Context>,
+        context: &Context,
         cursor_pos: Option<usize>,
         mut width: Option<usize>,
         colors: ThemeAttribute,
     ) -> Self {
-        let pager_filter: Option<&String> = if let Some(context) = context {
-            context.settings.pager.filter.as_ref()
-        } else {
-            None
-        };
+        let pager_filter: Option<&String> = context.settings.pager.filter.as_ref();
 
-        let pager_minimum_width: usize = if let Some(context) = context {
-            context.settings.pager.minimum_width
-        } else {
-            0
-        };
+        let pager_minimum_width: usize = context.settings.pager.minimum_width;
 
-        let reflow: Reflow = if let Some(context) = context {
-            if context.settings.pager.split_long_lines {
-                Reflow::All
-            } else {
-                Reflow::No
-            }
-        } else {
+        let reflow: Reflow = if context.settings.pager.split_long_lines {
             Reflow::All
+        } else {
+            Reflow::No
         };
 
         if let Some(ref mut width) = width.as_mut() {
@@ -174,20 +189,20 @@ impl Pager {
         };
 
         if let Some(bin) = pager_filter {
-            ret.filter(bin);
+            ret.filter(bin, context);
         }
 
         ret
     }
 
-    pub fn filter(&mut self, cmd: &str) {
-        let _f = |bin: &str, text: &str| -> Result<EmbeddedGrid> {
+    pub fn filter(&mut self, cmd: &str, context: &Context) {
+        async fn filter_fut(bin: String, text: String) -> Result<EmbeddedGrid> {
             use std::{
                 io::Write,
                 process::{Command, Stdio},
             };
             let mut filter_child = Command::new("sh")
-                .args(["-c", bin])
+                .args(["-c", &bin])
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .spawn()
@@ -208,13 +223,13 @@ impl Pager {
                 embedded.process_byte(&mut dev_null, b);
             }
             Ok(embedded)
-        };
-        let buf = _f(cmd, &self.text);
-        if let Some((width, height)) = buf.as_ref().ok().map(EmbeddedGrid::terminal_size) {
-            self.width = width;
-            self.height = height;
         }
-        self.filtered_content = Some((cmd.to_string(), buf));
+        let fut = Box::pin(filter_fut(cmd.to_string(), self.text.clone()));
+        let handle = context
+            .main_loop_handler
+            .job_executor
+            .spawn_blocking(format!("Running pager filter {cmd}").into(), fut);
+        self.filter_job = Some((cmd.to_string(), handle));
     }
 
     pub fn cursor_pos(&self) -> usize {
@@ -278,7 +293,7 @@ impl Pager {
         _context: &mut Context,
         up_to: usize,
     ) {
-        if self.line_breaker.is_finished() {
+        if self.line_breaker.is_finished() || self.filtered_content.is_some() {
             return;
         }
         let old_lines_no = self.text_lines.len();
@@ -317,15 +332,14 @@ impl Pager {
                             .area()
                             .skip_cols(self.cursor.0)
                             .skip_rows(self.cursor.1)
-                            .take_cols(content.terminal_size().0.saturating_sub(area.width()))
-                            .take_rows(content.terminal_size().1.saturating_sub(area.height())),
+                            .take_cols(content.terminal_size().0.min(area.width()))
+                            .take_rows(content.terminal_size().1.min(area.height())),
                     );
                     context
                         .replies
                         .push_back(UIEvent::StatusEvent(StatusEvent::UpdateSubStatus(
                             cmd.to_string(),
                         )));
-                    return;
                 }
                 Err(ref err) => {
                     let mut cmd = cmd.as_str();
@@ -338,6 +352,7 @@ impl Pager {
                         ))));
                 }
             }
+            return;
         }
 
         {
@@ -759,10 +774,34 @@ impl Component for Pager {
                 return true;
             }
             UIEvent::Action(View(Filter(ref cmd))) => {
-                self.filter(cmd);
+                self.filter(cmd, context);
                 self.initialised = false;
                 self.dirty = true;
                 return true;
+            }
+            UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id))
+                if self
+                    .filter_job
+                    .as_ref()
+                    .map(|(_, h)| h == job_id)
+                    .unwrap_or(false) =>
+            {
+                let (cmd, mut handle) = self.filter_job.take().unwrap();
+                match handle.chan.try_recv() {
+                    Err(_) => { /* search was canceled */ }
+                    Ok(None) => { /* something happened, perhaps a worker thread panicked */ }
+                    Ok(Some(buf)) => {
+                        if let Some((width, height)) =
+                            buf.as_ref().ok().map(EmbeddedGrid::terminal_size)
+                        {
+                            self.width = width;
+                            self.height = height;
+                        }
+                        self.filtered_content = Some((cmd, buf));
+                    }
+                }
+                self.initialised = false;
+                self.set_dirty(true);
             }
             UIEvent::Action(Action::Listing(ListingAction::Search(pattern))) => {
                 self.search = Some(SearchPattern {
@@ -854,7 +893,7 @@ impl Component for Pager {
     }
 
     fn is_dirty(&self) -> bool {
-        self.dirty
+        self.dirty || !self.initialised
     }
 
     fn set_dirty(&mut self, value: bool) {

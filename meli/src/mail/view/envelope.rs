@@ -1081,13 +1081,13 @@ impl Component for EnvelopeView {
             self.view_settings.body_theme = crate::conf::value(context, "mail.view.body");
             self.pager = Pager::from_string(
                 text,
-                Some(context),
+                context,
                 Some(cursor_pos),
                 None,
                 self.view_settings.body_theme,
             );
             if let Some(ref filter) = self.view_settings.pager_filter {
-                self.pager.filter(filter);
+                self.pager.filter(filter, context);
             }
         }
 
