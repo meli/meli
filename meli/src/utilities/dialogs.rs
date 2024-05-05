@@ -343,6 +343,7 @@ impl Component for UIConfirmationDialog {
                     self.unrealize(context);
                 }
                 self.set_dirty(true);
+                self.initialized = false;
                 return true;
             }
             (UIEvent::Input(Key::Char('\n')), SelectorCursor::Entry(c)) if !self.single_only => {
@@ -350,6 +351,7 @@ impl Component for UIConfirmationDialog {
                  * cursor */
                 self.entries[c].1 = !self.entries[c].1;
                 self.set_dirty(true);
+                self.initialized = false;
                 return true;
             }
             (UIEvent::Input(Key::Char('\n')), SelectorCursor::Ok) if !self.single_only => {
@@ -359,6 +361,7 @@ impl Component for UIConfirmationDialog {
                     self.unrealize(context);
                 }
                 self.set_dirty(true);
+                self.initialized = false;
                 return true;
             }
             (UIEvent::Input(Key::Esc), _) => {
@@ -372,6 +375,7 @@ impl Component for UIConfirmationDialog {
                 _ = self.done();
                 self.cancel(context);
                 self.set_dirty(true);
+                self.initialized = false;
                 return false;
             }
             (UIEvent::Input(Key::Char('\n')), SelectorCursor::Cancel) if !self.single_only => {
@@ -384,6 +388,7 @@ impl Component for UIConfirmationDialog {
                     self.unrealize(context);
                 }
                 self.set_dirty(true);
+                self.initialized = false;
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Entry(c))
@@ -396,6 +401,7 @@ impl Component for UIConfirmationDialog {
                 }
                 self.cursor = SelectorCursor::Entry(c - 1);
                 self.set_dirty(true);
+                self.initialized = false;
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Ok)
@@ -405,6 +411,7 @@ impl Component for UIConfirmationDialog {
                 let c = self.entries.len().saturating_sub(1);
                 self.cursor = SelectorCursor::Entry(c);
                 self.set_dirty(true);
+                self.initialized = false;
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Unfocused)
@@ -415,6 +422,7 @@ impl Component for UIConfirmationDialog {
                 }
                 self.cursor = SelectorCursor::Entry(0);
                 self.set_dirty(true);
+                self.initialized = false;
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Entry(c))
@@ -428,6 +436,7 @@ impl Component for UIConfirmationDialog {
                 }
                 self.cursor = SelectorCursor::Entry(c + 1);
                 self.set_dirty(true);
+                self.initialized = false;
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Entry(_))
@@ -436,6 +445,7 @@ impl Component for UIConfirmationDialog {
             {
                 self.cursor = SelectorCursor::Ok;
                 self.set_dirty(true);
+                self.initialized = false;
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Ok)
@@ -443,6 +453,7 @@ impl Component for UIConfirmationDialog {
             {
                 self.cursor = SelectorCursor::Cancel;
                 self.set_dirty(true);
+                self.initialized = false;
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Cancel)
@@ -450,6 +461,7 @@ impl Component for UIConfirmationDialog {
             {
                 self.cursor = SelectorCursor::Ok;
                 self.set_dirty(true);
+                self.initialized = false;
                 return true;
             }
             (UIEvent::Input(ref key), _)
@@ -554,10 +566,11 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
         }
         let shortcuts = context.settings.shortcuts.general.key_values();
         let navigate_help_string = format!(
-            "Navigate options with {} to go down, {} to go up, select with {}",
+            "Navigate options with {} to go down, {} to go up, select with {}, cancel with {}",
             shortcuts["scroll_down"],
             shortcuts["scroll_up"],
-            Key::Char('\n')
+            Key::Char('\n'),
+            Key::Esc
         );
         let width = std::cmp::max(
             self.entry_titles.iter().map(|e| e.len()).max().unwrap_or(0) + 3,
