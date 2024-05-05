@@ -18,7 +18,7 @@
     "dateModified": "2023-12-11",
     "datePublished": "2017-07-23",
     "description": "BSD/Linux/macos terminal email client with support for multiple accounts and Maildir / mbox / notmuch / IMAP / JMAP / NNTP (Usenet).",
-    "downloadUrl": "https://git.meli-email.org/meli/meli/archive/v0.8.5-rc.3.tar.gz",
+    "downloadUrl": "https://git.meli-email.org/meli/meli/archive/v0.8.5.tar.gz",
     "identifier": "https://meli-email.org/",
     "isPartOf": "https://meli-email.org/",
     "keywords": [
@@ -53,7 +53,7 @@
         "https://github.com/meli/meli",
         "https://lists.meli-email.org/"
     ],
-    "version": "0.8.5-rc3",
+    "version": "0.8.5",
     "contIntegration": "https://git.meli-email.org/meli/meli/actions",
     "developmentStatus": "active",
     "issueTracker": "https://git.meli-email.org/meli/meli/issues",

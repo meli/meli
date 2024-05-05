@@ -1243,7 +1243,7 @@ dependencies = [
 
 [[package]]
 name = "meli"
-version = "0.8.5-rc.3"
+version = "0.8.5"
 dependencies = [
  "async-task",
  "bitflags 2.4.0",
@@ -1278,7 +1278,7 @@ dependencies = [
 
 [[package]]
 name = "melib"
-version = "0.8.5-rc.3"
+version = "0.8.5"
 dependencies = [
  "async-stream",
  "base64 0.13.1",

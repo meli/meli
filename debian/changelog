@@ -1,3 +1,218 @@
+meli (0.8.5-1) bookworm; urgency=low
+
+  Contributors in alphabetical order:
+
+  - Andrei Zisu
+  - Ethra
+  - Geert Stappers
+  - Guillaume Ranquet
+  - Manos Pitsidianakis
+
+  Added
+  =====
+
+  - 0e3a0c4b Add safe UI widget area drawing API
+  - 0114e695 Add next_search_result and previous_search_result shortcuts
+  - 0b468d88 Improve Error messages
+  - 5af2e1ee Add subcommand to print config file location
+  - 62aee464 Add subcommand to print log file location
+  - e2cdebe8 Add option to highlight self in mailing list threads
+  - cd448924 Add clear-selection command
+  - 3a5306e9 View manpages in pager inside meli
+  - a37d5fc1 Implement a key to command mapping
+  - ce4ba06c Add a flag set/unset command
+  - 148f0433 Implement flag set/unset action in UI
+  - 417b24cd Print invalid command on error
+  - 4e941a9e Add default_mailbox setting
+  - 974502c6 Impl Hash for Card
+  - ba7a97e9 Add x axis scroll support
+  - ccf6f9a2 Remember previous set index_style preferences
+
+  Bug Fixes
+  =========
+
+  - bcec745c Fix command and status bar drawing
+  - 62b8465f Fix ThreadView for new TUI API
+  - 28fa66cc Fix ThreadedListing for new TUI API
+  - 2c6f180d Fix macos compilation
+  - 24971d19 Fix compilation with 1.70.0 cargo
+  - 34a2d52e Fix rustdoc::redundant_explicit_links
+  - f63774fa Fix new clippy lints (1.75)
+  - 33408146 Fix feature permutation mis-compilations found with cargo-hack
+  - e3351d27 Fix set unseen updating all mboxes
+  - 8185f2cf Add deny clippy lints and fix them
+  - 7861fb04 Fix typos found with typos tool
+  - 64e60cb0 Fix select modifier regression
+  - 60f26f9d Fix some old pre-intradoc rustdoc links
+  - 1fe36192 Make conf validation recognize AccountSettings extra keys
+  - c332c2f5 Fix new clippy lints (mostly clippy::blocks_in_conditions)
+  - 070930e6 Fix auto index build when missing
+  - 26928e3a Fix compilation for macos
+  - 3884c0da Small typographic fixups
+  - b820bd6d Remove unused imap_trace! and fix comp
+  - a88b8c5e Debian/changelog warning fix
+  - 4ce616ae Fix lints.yaml rustup install step
+  - 264782d2 Various unimportant minor style/doc fixups
+  - 475609fe Make {prev,next}_entry shortcut behavior consistent
+  - a69c674c Fix new 1.77 clippy lints
+  - 48cb9ee2 Fix compilation for macos
+  - 8a16cf6d Fix wrong column index crash
+  - bc1b6531 Fix constant redrawing
+  - 29cc1bce Remove obsolete file melib/src/text/tables.rs.gz
+  - ab041898 Fix new warnings for 1.78.0
+  - 46e40856 Fix UIConfirmationDialog highlight printing
+  - 3b93fa8e Don't draw messages above embedded terminal
+  - 684fae3e Copy old content to new buf when resizing
+  - 5d915baa Use Screen::resize instead of CellBuffer::resize
+  - 6a66afe9 Make add contact dialog scrollable on overflow
+  - aa5737a0 Prevent drawing pager on embedded mode
+  - 07072e2e Prevent panic if envelope is deleted
+  - 8ddd673d Update all mailboxes
+  - 3691cd29 Send EnvelopeUpdate event after self.collection.update_flags()
+  - 1fcb1d59 Remove rerun when build.rs changes
+  - 933bf157 Ack \ as an atom
+  - a1cbb198 Return Results instead of panicking
+  - b5ddc397 Remove unwrap() from get_events() loop
+
+  Changes
+  =======
+
+  - 61a0c3c2 Do not clear selection after action
+  - 9af284b8 Don't hide unread count for mailboxes that are partly truncated
+  - 35408b16 Run pager filter asynchronously
+  - e80ea9c9 Changed default manpage install path
+  - 742f038f Move sent_mailbox to settings
+  - 86bbf1ea Refresh NotmuchMailbox counts when setting flags
+  - f0866a39 Make config error more user-friendly
+  - 11f3077b Add more possible values for manpage names
+  - 1eca34b3 Set lowest priority to shortcut command UIEvents
+  - 484712b0 Check for unrecoverable errors in is_online
+  - 8ec6f220 Use ShellExpandTrait::expand in more user-provided paths
+
+  Refactoring
+  ===========
+
+  - 0500e451 Add missing EnvelopeRemove event handler
+  - ab14f819 Make write_string_to_grid a CellBuffer method
+  - e0adcdfe Move rest of methods under CellBuffer
+  - 0a74c7d0 Overhaul refactor
+  - 3b4acc15 Add tests
+  - 7eedd860 Remove address_list! macro
+  - f3e85738 Move build.rs scripts to build directory
+  - 77325486 Remove on-push hooks for actions w/ run on-pr
+  - 08518e1c Remove obsolete position.rs module
+  - ddab3179 Move tests to tests module
+  - 79520068 Remove doctests, add tests module
+  - 4e7b6656 Sqlite caching refactor
+  - b5fd3f57 Make self.view an Option
+  - a3aaec38 Remove unused imports
+  - 11a0586d Remove num_cpus dependency
+  - 8f3dee9b Extract mod manpages to standalone file
+  - 89c7972e Add suggestions to BadValue variant
+  - 35a9f33a Extract common FlagString logic
+  - 1b0bdd0a Split queries and mailbox into submodules
+  - 506ae9f5 Add ErrorKind::LinkedLibrary variant
+  - ebe1b3da Wrap *mut struct fields in NonNull<_>
+  - ca7d7bb9 Use message freeze/thaw for flag changes
+  - 4026e254 Add some doc comments
+  - 808aa494 Rename text_processing to text for the whole brevity thing
+  - bebb473d Derive extra traits for enums
+  - ab1b946f Don't print details if it's an empty string.
+  - f685726e Add backtrace field to ParsingError
+  - 73d5b24e Merge integration tests in one crate
+  - 31401fa3 Add LazyCountSet::contains method
+  - 0270db01 From<&[u8]> -> From<B: AsRef<[u9]>>
+  - 873a67d0 Replace erroneous use of set_err_kind with set_kind
+  - 51e3f163 Use Url instead of String in deserializing
+  - 8014af25 Reduce debug prints
+  - f31b5c40 Don't print raw bytes as escaped unicode
+  - 41e965b8 Split mbox/job stuff in submodules
+  - ec01a441 Turn some sync connections to unsync
+  - 3e914465 Store children process metadata
+  - c53a32de Re-enables horizontal thread view
+  - 36b7c00b Put doc text type names and co. in backtics
+  - 634bd191 Convert log prints to traces
+  - 1048ce68 Add hostname() utility function
+  - 7645ff1b Rename write_string{to_grid,}
+  - c2ae19d1 Return Option from current_pos
+  - b61fc3ab Add HelpView struct for shortcuts widget
+  - 3495ffd6 Change UIEvent::Notification structure
+  - 23c15261 Abstract envelope view filters away
+  - 031d0f7d Add area.is_empty() checks in cell iterators
+  - e37997d6 Store Link URL value in Link type
+  - b6f769b2 Add field names to row_attr! bool values
+  - 0da97dd8 Check row_updates in is_dirty()
+  - 6506fffb Rewrite email flag modifications
+  - 23507932 Update cache on set_flags
+  - 470cae6b Update thread cache on email flag modifications
+  - 84f3641e Re-add on-screen message display
+  - 54d21f25 Re-add contact list and editor support
+  - 458258e1 Re-enable compact listing style
+  - 1c1be7d6 Add display_name(), display_slice(), display_name_slice() methods
+  - 5dd71ef1 Upgrade JobsView component to new TUI API
+  - b5cc2a09 Upgrade MailboxManager component to new TUI API
+  - ed8a5de2 Re-enable EditAttachments component
+  - 77a8d9e2 Make ModSequence publicly accessible
+  - 64898a05 Make UIDStore constructor pub
+
+  Documentation
+  =============
+
+  - e4818803 Various manpage touchups and URL updates
+  - 38bca8f8 Mention use_oauth2=true for gmail oauth2
+  - 660022ce Add mailaddr.7 manpage
+  - c5e9e676 Add historical-manpages dir
+  - 5afc0785 Update README.md, DEVELOPMENT.md and create BUILD.md
+  - d018f07a Retouch manual pages
+  - 3adba40e Add macos manpage mirror url
+
+  Packaging
+  =========
+
+  - cd2ba80f Update metadata
+  - 5f8d7c80 Update deb-dist target command with author metadata
+  - 59c99fdc Update debian package metadata
+  - 97eb6363 Add dpkg --print-architecture to deb filename
+  - 7412c238 Bump meli version to 0.8.5-rc.3
+  - 500fe7f7 Update CHANGELOG.md
+  - 5ff4e8ae Run builds.yaml when any manifest file changes
+  - 0a617410 Split test.yaml to test.yaml and lints.yaml
+  - 3ba1603a Add manifest file only lints workflow
+  - 1617212c Add scripts/check_debian_changelog.sh lint
+  - c41f35fd Use actions/checkout@v3
+  - 876616d4 Use actions/upload-artifact@v3
+  - 2419f4bd Add debian package build workflow
+  - 10c3b0ea Bump version to 0.8.5-rc.1
+  - d16afc7d Bump version to 0.8.5-rc.2
+  - da251455 Bump meli version to 0.8.5-rc.2
+
+  Miscellaneous Tasks
+  ===================
+
+  - c4344529 Add .git-blame-ignore-revs file
+  - f70496f1 Add codemeta.json
+  - b3079715 Disable flakey test_smtp()
+  - 8a95febb Set debuginfo=0 in test/lint builds
+  - 81d1c053 Add mandoc_lint.sh
+  - 8de8addd Add cfg for musl builds
+  - 70fc2b45 Update nix dependency to 0.27
+  - fd64fe0b Update codeberg.org URL
+  - 30a3205e Add clippy::doc_markdown
+  - c7aee725 Add clippy::doc_markdown
+  - b8b24282 Update all instances of old domains with meli-email.org
+  - ae96038f Make unicode-segmentation a hard dependency
+  - 255e9376 Update linkify dep from 0.8.1 to 0.10.0
+  - dedee908 Update notify dep from 4.0.17 to 6.1.1
+  - c1c41c91 Update README.md and add Codeberg mirror
+  - 71f3ffe7 Update Makefile
+  - 63a63253 Use type alias for c_char
+  - c751b2e8 Re-enable conversations listing style
+  - 3a709794 Update minimum rust version from 1.65.0 to 1.68.2
+  - f900dbea Use cargo-derivefmt to sort derives alphabetically
+  - e19f3e57 Cargo-sort all Cargo.toml files
+
+ -- Manos Pitsidianakis <manos@pitsidianak.is>  Sun, 05 May 2024 18:46:42 +0300
+
 meli (0.8.5-rc.3-1) bookworm; urgency=low
 
   * Update to 0.8.5-rc.3
