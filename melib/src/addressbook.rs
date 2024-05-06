@@ -27,6 +27,7 @@ use std::{
     collections::HashMap,
     hash::{Hash, Hasher},
     ops::Deref,
+    path::Path,
 };
 
 use indexmap::IndexMap;
@@ -35,6 +36,7 @@ use uuid::Uuid;
 use crate::utils::{
     datetime::{now, timestamp_to_string, UnixTimestamp},
     parsec::Parser,
+    shellexpand::ShellExpandTrait,
 };
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
@@ -139,8 +141,8 @@ impl AddressBook {
 
     pub fn with_account(s: &crate::conf::AccountSettings) -> Self {
         let mut ret = Self::new(s.name.clone());
-        if let Some(mutt_alias_file) = s.extra.get("mutt_alias_file").map(String::as_str) {
-            match std::fs::read_to_string(std::path::Path::new(mutt_alias_file))
+        if let Some(mutt_alias_file) = s.extra.get("mutt_alias_file") {
+            match std::fs::read_to_string(Path::new(mutt_alias_file).expand())
                 .map_err(|err| err.to_string())
                 .and_then(|contents| {
                     contents
@@ -165,7 +167,8 @@ impl AddressBook {
         }
         #[cfg(feature = "vcard")]
         if let Some(vcard_path) = s.vcard_folder() {
-            match vcard::load_cards(std::path::Path::new(vcard_path)) {
+            let expanded_path = Path::new(vcard_path).expand();
+            match vcard::load_cards(&expanded_path) {
                 Ok(cards) => {
                     for c in cards {
                         ret.add_card(c);
@@ -173,6 +176,13 @@ impl AddressBook {
                 }
                 Err(err) => {
                     log::warn!("Could not load vcards from {:?}: {}", vcard_path, err);
+                    if expanded_path.display().to_string() != vcard_path {
+                        log::warn!(
+                            "Note: vcard_folder was expanded from {} to {}",
+                            vcard_path,
+                            expanded_path.display()
+                        );
+                    }
                 }
             }
         }

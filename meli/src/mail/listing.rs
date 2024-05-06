@@ -31,7 +31,8 @@ use std::{
 
 use futures::future::try_join_all;
 use melib::{
-    backends::EnvelopeHashBatch, mbox::MboxMetadata, utils::datetime, Flag, FlagOp, UnixTimestamp,
+    backends::EnvelopeHashBatch, mbox::MboxMetadata, utils::datetime, Flag, FlagOp,
+    ShellExpandTrait, UnixTimestamp,
 };
 use smallvec::SmallVec;
 
@@ -777,6 +778,7 @@ pub trait MailListingTrait: ListingTrait {
                     if path.is_relative() {
                         path = context.current_dir().join(&path);
                     }
+                    path = path.expand();
                     let account = &mut context.accounts[&account_hash];
                     let format = (*format).unwrap_or_default();
                     let collection = account.collection.clone();
@@ -1742,12 +1744,13 @@ impl Component for Listing {
                             return true;
                         }
                         Action::Listing(ListingAction::Import(file_path, mailbox_path)) => {
+                            let file_path = file_path.expand();
                             let account = &mut context.accounts[self.cursor_pos.account];
                             if let Err(err) = account
                                 .mailbox_by_path(mailbox_path)
                                 .and_then(|mailbox_hash| {
                                     Ok((
-                                        std::fs::read(file_path).chain_err_summary(|| {
+                                        std::fs::read(&file_path).chain_err_summary(|| {
                                             format!("Could not read {}", file_path.display())
                                         })?,
                                         mailbox_hash,

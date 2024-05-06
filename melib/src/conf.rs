@@ -27,6 +27,7 @@ use crate::{
     backends::SpecialUsageMailbox,
     email::Address,
     error::{Error, ErrorKind, Result},
+    ShellExpandTrait,
 };
 pub use crate::{SortField, SortOrder};
 
@@ -107,7 +108,7 @@ impl AccountSettings {
         #[cfg(feature = "vcard")]
         {
             if let Some(folder) = self.extra.remove("vcard_folder") {
-                let path = Path::new(&folder);
+                let path = Path::new(&folder).expand();
 
                 if !matches!(path.try_exists(), Ok(true)) {
                     return Err(Error::new(format!(

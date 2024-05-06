@@ -30,7 +30,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use melib::{error::*, uuid::Uuid};
+use melib::{error::*, uuid::Uuid, ShellExpandTrait};
 
 /// Temporary file that can optionally cleaned up when it is dropped.
 #[derive(Debug)]
@@ -105,7 +105,8 @@ impl File {
             path.set_extension(ext);
         }
         fn inner(path: &Path, bytes: &[u8], delete_on_drop: bool) -> Result<File> {
-            let mut f = std::fs::File::create(path)?;
+            let path = path.expand();
+            let mut f = std::fs::File::create(&path)?;
             let metadata = f.metadata()?;
             let mut permissions = metadata.permissions();
 
@@ -115,7 +116,7 @@ impl File {
             f.write_all(bytes)?;
             f.flush()?;
             Ok(File {
-                path: path.to_path_buf(),
+                path,
                 delete_on_drop,
             })
         }

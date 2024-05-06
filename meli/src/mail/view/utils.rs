@@ -21,10 +21,10 @@
 
 use std::{fs::File, io::Write, os::unix::fs::PermissionsExt, path::Path};
 
-use melib::Result;
+use melib::{Result, ShellExpandTrait};
 
 pub fn save_attachment(path: &Path, bytes: &[u8]) -> Result<()> {
-    let mut f = File::create(path)?;
+    let mut f = File::create(path.expand())?;
     let mut permissions = f.metadata()?.permissions();
     permissions.set_mode(0o600); // Read/write for owner only.
     f.set_permissions(permissions)?;

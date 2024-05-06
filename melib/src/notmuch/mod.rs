@@ -284,7 +284,15 @@ impl NotmuchDb {
         let mut dlpath = Cow::Borrowed("libnotmuch.so");
         let mut custom_dlpath = false;
         if let Some(lib_path) = s.extra.get("library_file_path") {
-            dlpath = Cow::Owned(lib_path.to_string());
+            let expanded_path = Path::new(lib_path).expand();
+            let expanded_path_string = expanded_path.display().to_string();
+            dlpath = if &expanded_path_string != lib_path
+                && expanded_path.try_exists().unwrap_or(false)
+            {
+                Cow::Owned(expanded_path_string)
+            } else {
+                Cow::Owned(lib_path.to_string())
+            };
             custom_dlpath = true;
         }
         let lib = Arc::new(NotmuchLibrary {
@@ -311,7 +319,7 @@ impl NotmuchDb {
             dlpath,
         });
         let mut path = Path::new(s.root_mailbox.as_str()).expand();
-        if !path.exists() {
+        if !path.try_exists().unwrap_or(false) {
             return Err(Error::new(format!(
                 "Notmuch `root_mailbox` {} for account {} does not exist.",
                 s.root_mailbox.as_str(),
@@ -328,7 +336,7 @@ impl NotmuchDb {
             .set_kind(ErrorKind::Configuration));
         }
         path.push(".notmuch");
-        if !path.exists() || !path.is_dir() {
+        if !path.try_exists().unwrap_or(false) || !path.is_dir() {
             return Err(Error::new(format!(
                 "Notmuch `root_mailbox` {} for account {} does not contain a `.notmuch` \
                  subdirectory.",
@@ -412,7 +420,7 @@ impl NotmuchDb {
 
     pub fn validate_config(s: &mut AccountSettings) -> Result<()> {
         let mut path = Path::new(s.root_mailbox.as_str()).expand();
-        if !path.exists() {
+        if !path.try_exists().unwrap_or(false) {
             return Err(Error::new(format!(
                 "Notmuch `root_mailbox` {} for account {} does not exist.",
                 s.root_mailbox.as_str(),
@@ -429,7 +437,7 @@ impl NotmuchDb {
             .set_kind(ErrorKind::Configuration));
         }
         path.push(".notmuch");
-        if !path.exists() || !path.is_dir() {
+        if !path.try_exists().unwrap_or(false) || !path.is_dir() {
             return Err(Error::new(format!(
                 "Notmuch `root_mailbox` {} for account {} does not contain a `.notmuch` \
                  subdirectory.",
@@ -442,7 +450,12 @@ impl NotmuchDb {
 
         let account_name = s.name.to_string();
         if let Some(lib_path) = s.extra.remove("library_file_path") {
-            if !Path::new(&lib_path).exists() || Path::new(&lib_path).is_dir() {
+            let expanded_path = Path::new(&lib_path).expand();
+            if (!Path::new(&lib_path).try_exists().unwrap_or(false)
+                || Path::new(&lib_path).is_dir())
+                && !Path::new(&expanded_path).try_exists().unwrap_or(false)
+                || Path::new(&expanded_path).is_dir()
+            {
                 return Err(Error::new(format!(
                     "Notmuch `library_file_path` setting value `{}` for account {} does not exist \
                      or is a directory.",

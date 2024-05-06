@@ -138,7 +138,7 @@ impl MaildirMailbox {
         accept_invalid: bool,
         settings: &AccountSettings,
     ) -> Result<Self> {
-        let pathbuf = PathBuf::from(&path);
+        let pathbuf = PathBuf::from(&path).expand();
         let mut h = DefaultHasher::new();
         pathbuf.hash(&mut h);
 

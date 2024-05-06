@@ -29,25 +29,36 @@ use std::{
 
 use smallvec::SmallVec;
 
+// [ref:needs_dev_doc]: ShellExpandTrait
+// [ref:needs_unit_test]: ShellExpandTrait
 pub trait ShellExpandTrait {
+    // [ref:needs_dev_doc]
     fn expand(&self) -> PathBuf;
+    // [ref:needs_dev_doc]
     fn complete(&self, force: bool) -> SmallVec<[String; 128]>;
 }
 
 impl ShellExpandTrait for Path {
     fn expand(&self) -> PathBuf {
+        // [ref:TODO]: ShellExpandTrait: add support for parameters in braces ${ }
+        // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_06_02
         let mut ret = PathBuf::new();
         for c in self.components() {
-            let c_to_str = c.as_os_str().to_str();
+            let c_to_str = c.as_os_str();
             match c_to_str {
-                Some("~") => {
+                tilde if tilde == "~" => {
                     if let Ok(home_dir) = std::env::var("HOME") {
                         ret.push(home_dir)
                     } else {
-                        return PathBuf::new();
+                        // POSIX says that if HOME is unset, the results of tilde expansion is
+                        // unspecified.
+                        // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_06_01
+                        // Abort expansion.
+                        return self.to_path_buf();
                     }
                 }
-                Some(var) if var.starts_with('$') => {
+                var if var.to_string_lossy().starts_with('$') => {
+                    let var = var.to_string_lossy();
                     let env_name = var.split_at(1).1;
                     if env_name.chars().all(char::is_uppercase) {
                         ret.push(std::env::var(env_name).unwrap_or_default());
@@ -55,12 +66,8 @@ impl ShellExpandTrait for Path {
                         ret.push(c);
                     }
                 }
-                Some(_) => {
+                _ => {
                     ret.push(c);
-                }
-                None => {
-                    /* path is invalid */
-                    return PathBuf::new();
                 }
             }
         }

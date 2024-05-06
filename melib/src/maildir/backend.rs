@@ -1078,11 +1078,11 @@ impl MaildirType {
             settings: &AccountSettings,
             p: P,
         ) -> Result<Vec<MailboxHash>> {
-            if !p.as_ref().exists() || !p.as_ref().is_dir() {
+            if !p.as_ref().try_exists().unwrap_or(false) || !p.as_ref().is_dir() {
                 return Err(Error::new(format!(
                     "Configuration error: Path \"{}\" {}",
                     p.as_ref().display(),
-                    if !p.as_ref().exists() {
+                    if !p.as_ref().try_exists().unwrap_or(false) {
                         "does not exist."
                     } else {
                         "is not a directory."
@@ -1147,7 +1147,7 @@ impl MaildirType {
             Ok(children)
         }
         let root_mailbox = PathBuf::from(&settings.root_mailbox).expand();
-        if !root_mailbox.exists() {
+        if !root_mailbox.try_exists().unwrap_or(false) {
             return Err(Error::new(format!(
                 "Configuration error ({}): root_mailbox `{}` is not a valid directory.",
                 settings.name,
@@ -1294,7 +1294,7 @@ impl MaildirType {
 
     pub fn validate_config(s: &mut AccountSettings) -> Result<()> {
         let root_mailbox = PathBuf::from(&s.root_mailbox).expand();
-        if !root_mailbox.exists() {
+        if !root_mailbox.try_exists().unwrap_or(false) {
             return Err(Error::new(format!(
                 "Configuration error ({}): root_mailbox `{}` is not a valid directory.",
                 s.name,

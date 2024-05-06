@@ -34,7 +34,7 @@ use std::{
 use melib::{
     backends::{MailboxHash, TagHash},
     search::Query,
-    SortField, SortOrder, StderrLogger,
+    ShellExpandTrait, SortField, SortOrder, StderrLogger,
 };
 
 use crate::{
@@ -311,7 +311,7 @@ pub fn get_config_file() -> Result<PathBuf> {
         .set_source(Some(std::sync::Arc::new(Box::new(err))))
     })?;
     match env::var("MELI_CONFIG") {
-        Ok(path) => Ok(PathBuf::from(path)),
+        Ok(path) => Ok(PathBuf::from(path).expand()),
         Err(_) => Ok(xdg_dirs
             .place_config_file("config.toml")
             .chain_err_summary(|| {

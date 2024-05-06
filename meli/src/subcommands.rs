@@ -27,13 +27,13 @@ use std::{
 };
 
 use crossbeam::channel::{Receiver, Sender};
-use melib::Result;
+use melib::{Result, ShellExpandTrait};
 
 use crate::*;
 
 pub fn create_config(path: Option<PathBuf>) -> Result<()> {
     let config_path = if let Some(path) = path {
-        path
+        path.expand()
     } else {
         conf::get_config_file()?
     };
@@ -131,7 +131,7 @@ pub fn compiled_with() -> Result<()> {
 
 pub fn test_config(path: Option<PathBuf>) -> Result<()> {
     let config_path = if let Some(path) = path {
-        path
+        path.expand()
     } else {
         crate::conf::get_config_file()?
     };
@@ -144,6 +144,7 @@ pub fn view(
     sender: Sender<ThreadEvent>,
     receiver: Receiver<ThreadEvent>,
 ) -> Result<State> {
+    let path = path.expand();
     if !path.exists() {
         return Err(Error::new(format!(
             "`{}` is not a valid path",

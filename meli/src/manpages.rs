@@ -28,7 +28,7 @@ use std::{
 };
 
 use flate2::bufread::GzDecoder;
-use melib::log;
+use melib::{log, ShellExpandTrait};
 
 use crate::{Error, Result};
 
@@ -87,6 +87,7 @@ impl ManPages {
     pub fn install(destination: Option<PathBuf>) -> Result<PathBuf> {
         fn path_valid(p: &Path, tries: &mut Vec<PathBuf>) -> bool {
             tries.push(p.into());
+            let p = p.expand();
             p.exists()
                 && p.is_dir()
                 && fs::metadata(p)
@@ -116,6 +117,7 @@ impl ManPages {
         else {
             return Err(format!("Could not write to any of these paths: {:?}", tries).into());
         };
+        path = path.expand();
 
         for (p, dir) in [
             (Self::Main, "man1"),

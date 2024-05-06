@@ -1298,7 +1298,7 @@ impl MboxType {
         event_consumer: BackendEventConsumer,
     ) -> Result<Box<dyn MailBackend>> {
         let path = Path::new(s.root_mailbox.as_str()).expand();
-        if !path.exists() {
+        if !path.try_exists().unwrap_or(false) {
             return Err(Error::new(format!(
                 "\"root_mailbox\" {} for account {} is not a valid path.",
                 s.root_mailbox.as_str(),
@@ -1371,8 +1371,8 @@ impl MboxType {
         for (k, f) in s.mailboxes.iter() {
             if let Some(path_str) = f.extra.get("path") {
                 let hash = MailboxHash(get_path_hash!(path_str));
-                let pathbuf: PathBuf = path_str.into();
-                if !pathbuf.exists() || pathbuf.is_dir() {
+                let pathbuf: PathBuf = Path::new(path_str).expand();
+                if !pathbuf.try_exists().unwrap_or(false) || pathbuf.is_dir() {
                     return Err(Error::new(format!(
                         "mbox mailbox configuration entry \"{}\" path value {} is not a file.",
                         k, path_str
@@ -1451,7 +1451,7 @@ impl MboxType {
             };
         }
         let path = Path::new(s.root_mailbox.as_str()).expand();
-        if !path.exists() {
+        if !path.try_exists().unwrap_or(false) {
             return Err(Error::new(format!(
                 "\"root_mailbox\" {} for account {} is not a valid path.",
                 s.root_mailbox.as_str(),
