@@ -215,9 +215,10 @@ enum InputMode {
     Paste(Vec<u8>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 /// Main process sends commands to the input thread.
 pub enum InputCommand {
+    #[default]
     /// Exit thread
     Kill,
 }
@@ -303,7 +304,7 @@ pub fn get_events(
                     continue 'poll_while;
                 };
                 let _ = nix::unistd::read(new_command_fd.as_raw_fd(), buf.as_mut());
-                match cmd.unwrap() {
+                match cmd.unwrap_or_default() {
                     InputCommand::Kill => return,
                 }
             }
