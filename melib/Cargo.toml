@@ -4,7 +4,7 @@ version = "0.8.5"
 authors = ["Manos Pitsidianakis <manos@pitsidianak.is>"]
 edition = "2021"
 build = "build.rs"
-rust-version = "1.68.2"
+rust-version = "1.70.0"
 
 homepage = "https://meli-email.org"
 repository = "https://git.meli-email.org/meli/meli.git"
