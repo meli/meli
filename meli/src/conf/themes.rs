@@ -47,11 +47,14 @@ use crate::{
     Context,
 };
 
+pub const LIGHT: &str = "light";
+pub const DARK: &str = "dark";
+
 #[inline(always)]
 pub fn value(context: &Context, key: &'static str) -> ThemeAttribute {
     let theme = match context.settings.terminal.theme.as_str() {
-        "light" => &context.settings.terminal.themes.light,
-        "dark" => &context.settings.terminal.themes.dark,
+        self::LIGHT => &context.settings.terminal.themes.light,
+        self::DARK => &context.settings.terminal.themes.dark,
         t => context
             .settings
             .terminal
@@ -66,8 +69,8 @@ pub fn value(context: &Context, key: &'static str) -> ThemeAttribute {
 #[inline(always)]
 pub fn fg_color(context: &Context, key: &'static str) -> Color {
     let theme = match context.settings.terminal.theme.as_str() {
-        "light" => &context.settings.terminal.themes.light,
-        "dark" => &context.settings.terminal.themes.dark,
+        self::LIGHT => &context.settings.terminal.themes.light,
+        self::DARK => &context.settings.terminal.themes.dark,
         t => context
             .settings
             .terminal
@@ -82,8 +85,8 @@ pub fn fg_color(context: &Context, key: &'static str) -> Color {
 #[inline(always)]
 pub fn bg_color(context: &Context, key: &'static str) -> Color {
     let theme = match context.settings.terminal.theme.as_str() {
-        "light" => &context.settings.terminal.themes.light,
-        "dark" => &context.settings.terminal.themes.dark,
+        self::LIGHT => &context.settings.terminal.themes.light,
+        self::DARK => &context.settings.terminal.themes.dark,
         t => context
             .settings
             .terminal
@@ -98,8 +101,8 @@ pub fn bg_color(context: &Context, key: &'static str) -> Color {
 #[inline(always)]
 pub fn attrs(context: &Context, key: &'static str) -> Attr {
     let theme = match context.settings.terminal.theme.as_str() {
-        "light" => &context.settings.terminal.themes.light,
-        "dark" => &context.settings.terminal.themes.dark,
+        self::LIGHT => &context.settings.terminal.themes.light,
+        self::DARK => &context.settings.terminal.themes.dark,
         t => context
             .settings
             .terminal
@@ -648,8 +651,8 @@ mod regexp {
         key: &'static str,
     ) -> SmallVec<[TextFormatter<'ctx>; 64]> {
         let theme = match context.settings.terminal.theme.as_str() {
-            "light" => &context.settings.terminal.themes.light,
-            "dark" => &context.settings.terminal.themes.dark,
+            self::LIGHT => &context.settings.terminal.themes.light,
+            self::DARK => &context.settings.terminal.themes.dark,
             t => context
                 .settings
                 .terminal
@@ -1213,8 +1216,8 @@ impl Themes {
     }
     pub fn validate(&self) -> Result<()> {
         let hash_set: HashSet<&'static str> = DEFAULT_KEYS.iter().copied().collect();
-        Self::validate_keys("light", &self.light, &hash_set)?;
-        Self::validate_keys("dark", &self.dark, &hash_set)?;
+        Self::validate_keys(self::LIGHT, &self.light, &hash_set)?;
+        Self::validate_keys(self::DARK, &self.dark, &hash_set)?;
         for (name, t) in self.other_themes.iter() {
             Self::validate_keys(name, t, &hash_set)?;
         }
@@ -1234,8 +1237,8 @@ impl Themes {
 
     pub fn key_to_string(&self, key: &str, unlink: bool) -> String {
         let theme = match key {
-            "light" => &self.light,
-            "dark" => &self.dark,
+            self::LIGHT => &self.light,
+            self::DARK => &self.dark,
             t => self.other_themes.get(t).unwrap_or(&self.dark),
         };
         let mut ret = String::new();
@@ -1270,10 +1273,10 @@ impl Themes {
 impl std::fmt::Display for Themes {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut ret = String::new();
-        ret.push_str(&self.key_to_string("dark", true));
+        ret.push_str(&self.key_to_string(self::DARK, true));
 
         ret.push_str("\n\n");
-        ret.push_str(&self.key_to_string("light", true));
+        ret.push_str(&self.key_to_string(self::LIGHT, true));
         for name in self.other_themes.keys() {
             ret.push_str("\n\n");
             ret.push_str(&self.key_to_string(name, true));
@@ -1803,8 +1806,8 @@ impl Serialize for Themes {
             other_themes.insert(name.to_string(), new_map);
         }
 
-        other_themes.insert("light".to_string(), light);
-        other_themes.insert("dark".to_string(), dark);
+        other_themes.insert(self::LIGHT.to_string(), light);
+        other_themes.insert(self::DARK.to_string(), dark);
         other_themes.serialize(serializer)
     }
 }

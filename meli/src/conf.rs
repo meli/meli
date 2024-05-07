@@ -525,7 +525,7 @@ This is required so that you don't accidentally start meli and find out later th
             }
         }
         match s.terminal.theme.as_str() {
-            "dark" | "light" => {}
+            themes::DARK | themes::LIGHT => {}
             t if s.terminal.themes.other_themes.contains_key(t) => {}
             t => {
                 return Err(Error::new(format!("Theme `{}` was not found.", t)));
