@@ -859,6 +859,16 @@ impl Envelope {
     pub fn tags_mut(&mut self) -> &mut IndexSet<TagHash> {
         &mut self.tags
     }
+
+    /// Returns `true` if `is_recipient` address is included in To:, Cc: or Bcc:
+    /// headers.
+    pub fn recipient_any(&self, is_recipient: &Address) -> bool {
+        self.to()
+            .iter()
+            .chain(self.cc().iter())
+            .chain(self.bcc().iter())
+            .any(|a| a == is_recipient)
+    }
 }
 
 impl Eq for Envelope {}
