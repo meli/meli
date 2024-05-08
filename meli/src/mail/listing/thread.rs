@@ -300,6 +300,16 @@ impl MailListingTrait for ThreadListing {
                 .listing
                 .threaded_repeat_identical_from_values
         );
+        let should_highlight_self = mailbox_settings!(
+            context[self.cursor_pos.0][&self.cursor_pos.1]
+                .listing
+                .highlight_self
+        )
+        .is_true();
+        let my_address: Address = context.accounts[&self.cursor_pos.0]
+            .settings
+            .account
+            .make_display_name();
         while let Some((indentation, thread_node_hash, has_sibling)) = iter.next() {
             let thread_node = &thread_nodes[&thread_node_hash];
 
@@ -321,6 +331,8 @@ impl MailListingTrait for ThreadListing {
                 prev_group = threads.find_group(thread_node.group);
 
                 let mut entry_strings = self.make_entry_string(&envelope, context);
+                entry_strings.highlight_self =
+                    should_highlight_self && envelope.recipient_any(&my_address);
                 entry_strings.subject = SubjectString(Self::make_thread_entry(
                     &envelope,
                     indentation,
@@ -516,6 +528,8 @@ impl ListingTrait for ThreadListing {
         let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
 
         let top_idx = page_no * rows;
+        let end_idx = self.length.saturating_sub(1).min(top_idx + rows - 1);
+        self.draw_rows(context, top_idx, end_idx);
 
         // If cursor position has changed, remove the highlight from the previous
         // position and apply it in the new one.
@@ -993,7 +1007,36 @@ impl ThreadListing {
                 }
             }
             {
-                let area = self.data_columns.columns[4].area();
+                let mut area = self.data_columns.columns[4].area();
+                if strings.highlight_self {
+                    let x = self.data_columns.columns[4]
+                        .grid_mut()
+                        .write_string(
+                            mailbox_settings!(
+                                context[self.cursor_pos.0][&self.cursor_pos.1]
+                                    .listing
+                                    .highlight_self_flag
+                            )
+                            .as_ref()
+                            .map(|s| s.as_str())
+                            .unwrap_or(super::DEFAULT_HIGHLIGHT_SELF_FLAG),
+                            self.color_cache.highlight_self.fg,
+                            row_attr.bg,
+                            row_attr.attrs | Attr::FORCE_TEXT,
+                            area,
+                            None,
+                        )
+                        .0;
+                    for row in self.data_columns.columns[4]
+                        .grid()
+                        .bounds_iter(area.nth_row(0).take_cols(x))
+                    {
+                        for c in row {
+                            self.data_columns.columns[4].grid_mut()[c].set_keep_fg(true);
+                        }
+                    }
+                    area = area.skip_cols(x + 1);
+                }
                 let (x, _) = self.data_columns.columns[4].grid_mut().write_string(
                     &strings.subject,
                     row_attr.fg,
@@ -1081,11 +1124,24 @@ impl ThreadListing {
         );
         self.seen_cache.insert(env_hash, envelope.is_seen());
 
-        let mut strings = self.make_entry_string(&envelope, context);
+        let should_highlight_self = mailbox_settings!(
+            context[self.cursor_pos.0][&self.cursor_pos.1]
+                .listing
+                .highlight_self
+        )
+        .is_true();
+        let mut entry_strings = self.make_entry_string(&envelope, context);
+        entry_strings.highlight_self = should_highlight_self && {
+            let my_address: Address = context.accounts[&self.cursor_pos.0]
+                .settings
+                .account
+                .make_display_name();
+            envelope.recipient_any(&my_address)
+        };
         drop(envelope);
         std::mem::swap(
             &mut self.rows.entries.get_mut(idx).unwrap().1.subject,
-            &mut strings.subject,
+            &mut entry_strings.subject,
         );
         let columns = &mut self.data_columns.columns;
         for n in 0..=4 {
@@ -1093,7 +1149,7 @@ impl ThreadListing {
             columns[n].grid_mut().clear_area(area, row_attr);
         }
 
-        *self.rows.entries.get_mut(idx).unwrap() = ((thread_hash, env_hash), strings);
+        *self.rows.entries.get_mut(idx).unwrap() = ((thread_hash, env_hash), entry_strings);
     }
 
     fn draw_relative_numbers(&mut self, grid: &mut CellBuffer, area: Area, top_idx: usize) {

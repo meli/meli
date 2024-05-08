@@ -325,6 +325,12 @@ impl MailListingTrait for CompactListing {
             .settings
             .account
             .make_display_name();
+        let should_highlight_self = mailbox_settings!(
+            context[self.cursor_pos.0][&self.cursor_pos.1]
+                .listing
+                .highlight_self
+        )
+        .is_true();
         'items_for_loop: for thread in items {
             let thread_node = &threads.thread_nodes()[&threads.thread_ref(thread).root()];
             let root_env_hash = if let Some(h) = thread_node.message().or_else(|| {
@@ -401,11 +407,7 @@ impl MailListingTrait for CompactListing {
                     }
                 }
 
-                highlight_self |= envelope
-                    .to()
-                    .iter()
-                    .chain(envelope.cc().iter())
-                    .any(|a| a == &my_address);
+                highlight_self |= should_highlight_self && envelope.recipient_any(&my_address);
                 for addr in envelope.from().iter() {
                     if from_address_set.contains(addr.address_spec_raw()) {
                         continue;
@@ -413,15 +415,6 @@ impl MailListingTrait for CompactListing {
                     from_address_set.insert(addr.address_spec_raw().to_vec());
                     from_address_list.push(addr.clone());
                 }
-            }
-            if !mailbox_settings!(
-                context[self.cursor_pos.0][&self.cursor_pos.1]
-                    .listing
-                    .highlight_self
-            )
-            .is_true()
-            {
-                highlight_self = false;
             }
 
             let row_attr = row_attr!(
@@ -1033,6 +1026,12 @@ impl CompactListing {
         let mut from_address_set: std::collections::HashSet<Vec<u8>> =
             std::collections::HashSet::new();
         let mut highlight_self: bool = false;
+        let should_highlight_self = mailbox_settings!(
+            context[self.cursor_pos.0][&self.cursor_pos.1]
+                .listing
+                .highlight_self
+        )
+        .is_true();
         let my_address: Address = context.accounts[&self.cursor_pos.0]
             .settings
             .account
@@ -1061,11 +1060,7 @@ impl CompactListing {
                     tags.insert(t);
                 }
             }
-            highlight_self |= envelope
-                .to()
-                .iter()
-                .chain(envelope.cc().iter())
-                .any(|a| a == &my_address);
+            highlight_self |= should_highlight_self && envelope.recipient_any(&my_address);
             for addr in envelope.from().iter() {
                 if from_address_set.contains(addr.address_spec_raw()) {
                     continue;
@@ -1073,15 +1068,6 @@ impl CompactListing {
                 from_address_set.insert(addr.address_spec_raw().to_vec());
                 from_address_list.push(addr.clone());
             }
-        }
-        if !mailbox_settings!(
-            context[self.cursor_pos.0][&self.cursor_pos.1]
-                .listing
-                .highlight_self
-        )
-        .is_true()
-        {
-            highlight_self = false;
         }
 
         let strings = self.make_entry_string(
@@ -1372,7 +1358,6 @@ impl CompactListing {
             let x = {
                 let mut area = columns[3].area().nth_row(idx).skip_cols(x);
                 if strings.highlight_self {
-                    // [ref:hardcoded_color_value]: add highlight_self theme attr
                     let x = columns[3]
                         .grid_mut()
                         .write_string(
@@ -1384,7 +1369,7 @@ impl CompactListing {
                             .as_ref()
                             .map(|s| s.as_str())
                             .unwrap_or(super::DEFAULT_HIGHLIGHT_SELF_FLAG),
-                            Color::BLUE,
+                            self.color_cache.highlight_self.fg,
                             row_attr.bg,
                             row_attr.attrs | Attr::FORCE_TEXT,
                             area,

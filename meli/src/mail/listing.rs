@@ -268,6 +268,7 @@ pub struct ColorCache {
     pub even_highlighted_selected: ThemeAttribute,
     pub odd_highlighted_selected: ThemeAttribute,
     pub tag_default: ThemeAttribute,
+    pub highlight_self: ThemeAttribute,
 
     // Conversations
     pub subject: ThemeAttribute,
@@ -277,6 +278,12 @@ pub struct ColorCache {
 
 impl ColorCache {
     pub fn new(context: &Context, style: IndexStyle) -> Self {
+        let default = Self {
+            theme_default: crate::conf::value(context, "theme_default"),
+            tag_default: crate::conf::value(context, "mail.listing.tag_default"),
+            highlight_self: crate::conf::value(context, "mail.listing.highlight_self"),
+            ..Self::default()
+        };
         let mut ret = match style {
             IndexStyle::Plain => Self {
                 even: crate::conf::value(context, "mail.listing.plain.even"),
@@ -298,9 +305,7 @@ impl ColorCache {
                     "mail.listing.plain.even_highlighted_selected",
                 ),
                 odd_selected: crate::conf::value(context, "mail.listing.plain.odd_selected"),
-                tag_default: crate::conf::value(context, "mail.listing.tag_default"),
-                theme_default: crate::conf::value(context, "theme_default"),
-                ..Self::default()
+                ..default
             },
             IndexStyle::Threaded => Self {
                 even_unseen: crate::conf::value(context, "mail.listing.plain.even_unseen"),
@@ -322,9 +327,7 @@ impl ColorCache {
                 ),
                 even: crate::conf::value(context, "mail.listing.plain.even"),
                 odd: crate::conf::value(context, "mail.listing.plain.odd"),
-                tag_default: crate::conf::value(context, "mail.listing.tag_default"),
-                theme_default: crate::conf::value(context, "theme_default"),
-                ..Self::default()
+                ..default
             },
             IndexStyle::Compact => Self {
                 even_unseen: crate::conf::value(context, "mail.listing.compact.even_unseen"),
@@ -349,12 +352,9 @@ impl ColorCache {
                 ),
                 even: crate::conf::value(context, "mail.listing.compact.even"),
                 odd: crate::conf::value(context, "mail.listing.compact.odd"),
-                tag_default: crate::conf::value(context, "mail.listing.tag_default"),
-                theme_default: crate::conf::value(context, "theme_default"),
-                ..Self::default()
+                ..default
             },
             IndexStyle::Conversations => Self {
-                theme_default: crate::conf::value(context, "mail.listing.conversations"),
                 subject: crate::conf::value(context, "mail.listing.conversations.subject"),
                 from: crate::conf::value(context, "mail.listing.conversations.from"),
                 date: crate::conf::value(context, "mail.listing.conversations.date"),
@@ -365,13 +365,13 @@ impl ColorCache {
                     context,
                     "mail.listing.conversations.highlighted_selected",
                 ),
-                tag_default: crate::conf::value(context, "mail.listing.tag_default"),
-                ..Self::default()
+                ..default
             },
         };
         if !context.settings.terminal.use_color() {
             ret.highlighted.attrs |= Attr::REVERSE;
             ret.tag_default.attrs |= Attr::REVERSE;
+            ret.highlight_self.attrs |= Attr::REVERSE;
             ret.even_highlighted.attrs |= Attr::REVERSE;
             ret.odd_highlighted.attrs |= Attr::REVERSE;
             ret.even_highlighted_selected.attrs |= Attr::REVERSE | Attr::DIM;

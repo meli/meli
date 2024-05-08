@@ -321,6 +321,7 @@ const DEFAULT_KEYS: &[&str] = &[
     "mail.listing.attachment_flag",
     "mail.listing.thread_snooze_flag",
     "mail.listing.tag_default",
+    "mail.listing.highlight_self",
     "pager.highlight_search",
     "pager.highlight_search_current",
 ];
@@ -1728,6 +1729,15 @@ impl Default for Themes {
                 fg: Color::White,
                 bg: Color::Byte(8),
                 attrs: Attr::BOLD
+            }
+        );
+        add!(
+            "mail.listing.highlight_self",
+            light = {
+                fg: Color::BLUE,
+            },
+            dark = {
+                fg: Color::BLUE,
             }
         );
 
