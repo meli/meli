@@ -169,6 +169,7 @@ mod tests {
         );
         assert_eq!("●".grapheme_width(), 1);
         assert_eq!("●📎".grapheme_width(), 3);
+        assert_eq!("●📎︎".grapheme_width(), 3);
         assert_eq!("●\u{FE0E}📎\u{FE0E}".grapheme_width(), 3);
         assert_eq!("🎃".grapheme_width(), 2);
         assert_eq!("👻".grapheme_width(), 2);

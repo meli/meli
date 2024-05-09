@@ -137,7 +137,7 @@ pub struct PlainListing {
     subsort: (SortField, SortOrder),
     rows: RowsState<(ThreadHash, EnvelopeHash)>,
     /// Cache current view.
-    data_columns: DataColumns<4>,
+    data_columns: DataColumns<5>,
 
     #[allow(clippy::type_complexity)]
     search_job: Option<(String, JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>)>,
@@ -442,6 +442,10 @@ impl ListingTrait for PlainListing {
                 }
                 context.dirty_areas.push_back(new_area);
             }
+            if *account_settings!(context[self.cursor_pos.0].listing.relative_list_indices) {
+                self.draw_relative_numbers(grid, area, top_idx);
+                context.dirty_areas.push_back(area);
+            }
             if !self.force_draw {
                 return;
             }
@@ -461,6 +465,9 @@ impl ListingTrait for PlainListing {
         /* copy table columns */
         self.data_columns
             .draw(grid, top_idx, self.cursor_pos.2, grid.bounds_iter(area));
+        if *account_settings!(context[self.cursor_pos.0].listing.relative_list_indices) {
+            self.draw_relative_numbers(grid, area, top_idx);
+        }
         /* apply each row colors separately */
         for i in top_idx..(top_idx + area.height()) {
             if let Some(row_attr) = self.rows.row_attr_cache.get(&i) {
@@ -696,6 +703,7 @@ impl PlainListing {
             ),
             from: FromString(Address::display_name_slice(e.from())),
             tags: TagString(tags, colors),
+            unseen: !e.is_seen(),
             highlight_self: false,
         }
     }
@@ -714,15 +722,28 @@ impl PlainListing {
             SmallVec<[u8; 1024]>,
             SmallVec<[u8; 1024]>,
             SmallVec<[u8; 1024]>,
+            SmallVec<[u8; 1024]>,
         ) = (
             SmallVec::new(),
             SmallVec::new(),
             SmallVec::new(),
             SmallVec::new(),
+            SmallVec::new(),
         );
-
+        let should_highlight_self = mailbox_settings!(
+            context[self.cursor_pos.0][&self.cursor_pos.1]
+                .listing
+                .highlight_self
+        )
+        .is_true();
+        let my_address: Address = context.accounts[&self.cursor_pos.0]
+            .settings
+            .account
+            .make_display_name();
         for i in iter {
-            if !context.accounts[&self.cursor_pos.0].contains_key(i) {
+            if !context.accounts[&self.cursor_pos.0].contains_key(i)
+                || !threads.envelope_to_thread.contains_key(&i)
+            {
                 log::debug!("key = {}", i);
                 log::debug!(
                     "name = {} {}",
@@ -755,7 +776,9 @@ impl PlainListing {
             );
             self.rows.row_attr_cache.insert(self.length, row_attr);
 
-            let entry_strings = self.make_entry_string(&envelope, context);
+            let mut entry_strings = self.make_entry_string(&envelope, context);
+            entry_strings.highlight_self =
+                should_highlight_self && { envelope.recipient_any(&my_address) };
             row_widths
                 .0
                 .push(digits_of_num!(self.length).try_into().unwrap_or(255));
@@ -774,20 +797,22 @@ impl PlainListing {
                     .unwrap_or(255),
             );
             row_widths.3.push(
-                (entry_strings.flag.grapheme_width()
-                    + entry_strings.subject.grapheme_width()
-                    + 1
-                    + entry_strings.tags.grapheme_width())
-                .try_into()
-                .unwrap_or(255),
+                entry_strings
+                    .flag
+                    .grapheme_width()
+                    .try_into()
+                    .unwrap_or(255),
+            ); /* flags */
+            row_widths.4.push(
+                (entry_strings.subject.grapheme_width() + 1 + entry_strings.tags.grapheme_width())
+                    .try_into()
+                    .unwrap_or(255),
             );
             min_width.1 = min_width.1.max(entry_strings.date.grapheme_width()); /* date */
             min_width.2 = min_width.2.max(entry_strings.from.grapheme_width()); /* from */
-            min_width.3 = min_width.3.max(
-                entry_strings.flag.grapheme_width()
-                    + entry_strings.subject.grapheme_width()
-                    + 1
-                    + entry_strings.tags.grapheme_width(),
+            min_width.3 = min_width.3.max(entry_strings.flag.grapheme_width()); /* flags */
+            min_width.4 = min_width.4.max(
+                entry_strings.subject.grapheme_width() + 1 + entry_strings.tags.grapheme_width(),
             ); /* tags + subject */
             self.rows.insert_thread(
                 threads.envelope_to_thread[&i],
@@ -805,6 +830,7 @@ impl PlainListing {
         self.data_columns.elasticities[1].set_rigid();
         self.data_columns.elasticities[2].set_grow(15, Some(35));
         self.data_columns.elasticities[3].set_rigid();
+        self.data_columns.elasticities[4].set_rigid();
         self.data_columns
             .cursor_config
             .set_handle(true)
@@ -822,12 +848,15 @@ impl PlainListing {
         _ = self.data_columns.columns[1].resize_with_context(min_width.1, self.rows.len(), context);
         /* from column */
         _ = self.data_columns.columns[2].resize_with_context(min_width.2, self.rows.len(), context);
-        /* subject column */
+        // flags column
         _ = self.data_columns.columns[3].resize_with_context(min_width.3, self.rows.len(), context);
+        // subject column
+        _ = self.data_columns.columns[4].resize_with_context(min_width.4, self.rows.len(), context);
         self.data_columns.segment_tree[0] = row_widths.0.into();
         self.data_columns.segment_tree[1] = row_widths.1.into();
         self.data_columns.segment_tree[2] = row_widths.2.into();
         self.data_columns.segment_tree[3] = row_widths.3.into();
+        self.data_columns.segment_tree[4] = row_widths.4.into();
 
         let iter = if self.filter_term.is_empty() {
             Box::new(self.local_collection.iter().cloned())
@@ -853,137 +882,159 @@ impl PlainListing {
 
             let row_attr = self.rows.row_attr_cache[&idx];
 
-            let (x, _) = {
-                let area = columns[0].area().nth_row(idx);
-                columns[0].grid_mut().write_string(
-                    &idx.to_string(),
-                    row_attr.fg,
-                    row_attr.bg,
-                    row_attr.attrs,
-                    area,
-                    None,
-                )
-            };
-            for c in {
-                let area = columns[0].area();
-                columns[0].grid_mut().row_iter(area, x..min_width.0, idx)
-            } {
-                columns[0].grid_mut()[c]
-                    .set_bg(row_attr.bg)
-                    .set_attrs(row_attr.attrs);
+            {
+                let mut area_col_0 = columns[0].area().nth_row(idx);
+                if !*account_settings!(context[self.cursor_pos.0].listing.relative_list_indices) {
+                    area_col_0 = area_col_0.skip_cols(columns[0].grid_mut().write_string(
+                        &idx.to_string(),
+                        row_attr.fg,
+                        row_attr.bg,
+                        row_attr.attrs,
+                        area_col_0,
+                        None,
+                    ));
+                    for c in columns[0].grid().row_iter(area_col_0, 0..min_width.0, 0) {
+                        columns[0].grid_mut()[c]
+                            .set_bg(row_attr.bg)
+                            .set_attrs(row_attr.attrs);
+                    }
+                }
             }
-            let (x, _) = {
-                let area = columns[1].area().nth_row(idx);
-                columns[1].grid_mut().write_string(
+            {
+                let mut area_col_1 = columns[1].area().nth_row(idx);
+                area_col_1 = area_col_1.skip_cols(columns[1].grid_mut().write_string(
                     &strings.date,
                     row_attr.fg,
                     row_attr.bg,
                     row_attr.attrs,
-                    area,
+                    area_col_1,
                     None,
-                )
-            };
-            for c in {
-                let area = columns[1].area();
-                columns[1].grid_mut().row_iter(area, x..min_width.1, idx)
-            } {
-                columns[1].grid_mut()[c]
-                    .set_bg(row_attr.bg)
-                    .set_attrs(row_attr.attrs);
+                ));
+                for c in columns[1].grid().row_iter(area_col_1, 0..min_width.1, 0) {
+                    columns[1].grid_mut()[c]
+                        .set_bg(row_attr.bg)
+                        .set_attrs(row_attr.attrs);
+                }
             }
-            let (x, _) = {
-                let area = columns[2].area().nth_row(idx);
-                columns[2].grid_mut().write_string(
+            {
+                let area_col_2 = columns[2].area().nth_row(idx);
+                let (skip_cols, _) = columns[2].grid_mut().write_string(
                     &strings.from,
                     row_attr.fg,
                     row_attr.bg,
                     row_attr.attrs,
-                    area,
+                    area_col_2,
                     None,
-                )
-            };
-            for c in {
-                let area = columns[2].area();
-                columns[2].grid_mut().row_iter(area, x..min_width.2, idx)
-            } {
-                columns[2].grid_mut()[c]
-                    .set_bg(row_attr.bg)
-                    .set_attrs(row_attr.attrs)
-                    .set_ch(' ');
+                );
+                #[cfg(feature = "regexp")]
+                {
+                    for text_formatter in crate::conf::text_format_regexps(context, "listing.from")
+                    {
+                        let t = columns[2].grid_mut().insert_tag(text_formatter.tag);
+                        for (start, end) in text_formatter.regexp.find_iter(strings.from.as_str()) {
+                            columns[2].grid_mut().set_tag(
+                                t,
+                                (start + skip_cols, idx),
+                                (end + skip_cols, idx),
+                            );
+                        }
+                    }
+                }
+                for c in columns[2]
+                    .grid()
+                    .row_iter(area_col_2, skip_cols..min_width.2, 0)
+                {
+                    columns[2].grid_mut()[c]
+                        .set_bg(row_attr.bg)
+                        .set_attrs(row_attr.attrs);
+                }
             }
-            let (x, _) = {
-                let area = columns[3].area().nth_row(idx);
-                columns[3].grid_mut().write_string(
+            {
+                let mut area_col_3 = columns[3].area().nth_row(idx);
+                area_col_3 = area_col_3.skip_cols(columns[3].grid_mut().write_string(
                     &strings.flag,
                     row_attr.fg,
                     row_attr.bg,
                     row_attr.attrs,
-                    area,
+                    area_col_3,
                     None,
-                )
-            };
-            let x = {
-                let area = columns[3].area().nth_row(idx).skip_cols(x);
-                columns[3]
-                    .grid_mut()
-                    .write_string(
-                        &strings.subject,
-                        row_attr.fg,
-                        row_attr.bg,
-                        row_attr.attrs,
-                        area,
-                        None,
-                    )
-                    .0
-                    + x
-            };
-            let mut x = x + 1;
-            for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
-                let color = color.unwrap_or(self.color_cache.tag_default.bg);
-                let _x = {
-                    let area = columns[3].area().nth_row(idx).skip_cols(x + 1);
-                    columns[3]
-                        .grid_mut()
-                        .write_string(
-                            t,
-                            self.color_cache.tag_default.fg,
-                            color,
-                            self.color_cache.tag_default.attrs,
-                            area,
-                            None,
+                ));
+                if strings.highlight_self {
+                    let (x, _) = columns[3].grid_mut().write_string(
+                        mailbox_settings!(
+                            context[self.cursor_pos.0][&self.cursor_pos.1]
+                                .listing
+                                .highlight_self_flag
                         )
-                        .0
-                        + x
-                        + 1
-                };
-                for c in {
-                    let area = columns[3].area();
-                    columns[3].grid_mut().row_iter(area, x..(x + 1), idx)
-                } {
-                    columns[3].grid_mut()[c].set_bg(color);
+                        .as_ref()
+                        .map(|s| s.as_str())
+                        .unwrap_or(super::DEFAULT_HIGHLIGHT_SELF_FLAG),
+                        self.color_cache.highlight_self.fg,
+                        row_attr.bg,
+                        row_attr.attrs | Attr::FORCE_TEXT,
+                        area_col_3,
+                        None,
+                    );
+                    for c in columns[3].grid().row_iter(area_col_3, 0..x, 0) {
+                        columns[3].grid_mut()[c].set_keep_fg(true);
+                    }
+                    area_col_3 = area_col_3.skip_cols(x + 1);
                 }
-                for c in {
-                    let area = columns[3].area();
-                    columns[3].grid_mut().row_iter(area, _x..(_x + 1), idx)
-                } {
-                    columns[3].grid_mut()[c].set_bg(color).set_keep_bg(true);
-                }
-                for c in {
-                    let area = columns[3].area();
-                    columns[3].grid_mut().row_iter(area, (x + 1)..(_x + 1), idx)
-                } {
+                for c in columns[3].grid().row_iter(area_col_3, 0..min_width.3, 0) {
                     columns[3].grid_mut()[c]
-                        .set_keep_fg(true)
-                        .set_keep_bg(true)
-                        .set_keep_attrs(true);
+                        .set_bg(row_attr.bg)
+                        .set_attrs(row_attr.attrs);
                 }
-                for c in {
-                    let area = columns[3].area();
-                    columns[3].grid_mut().row_iter(area, x..(x + 1), idx)
-                } {
-                    columns[3].grid_mut()[c].set_keep_bg(true);
+            }
+            {
+                let mut area_col_4 = columns[4].area().nth_row(idx);
+                area_col_4 = area_col_4.skip_cols(columns[4].grid_mut().write_string(
+                    &strings.subject,
+                    row_attr.fg,
+                    row_attr.bg,
+                    row_attr.attrs,
+                    area_col_4,
+                    None,
+                ));
+                #[cfg(feature = "regexp")]
+                {
+                    for text_formatter in
+                        crate::conf::text_format_regexps(context, "listing.subject")
+                    {
+                        let t = columns[4].grid_mut().insert_tag(text_formatter.tag);
+                        for (start, end) in
+                            text_formatter.regexp.find_iter(strings.subject.as_str())
+                        {
+                            columns[4].grid_mut().set_tag(t, (start, idx), (end, idx));
+                        }
+                    }
                 }
-                x = _x + 2;
+                area_col_4 = area_col_4.skip_cols(1);
+                for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
+                    let color = color.unwrap_or(self.color_cache.tag_default.bg);
+                    let (x, _) = columns[4].grid_mut().write_string(
+                        t,
+                        self.color_cache.tag_default.fg,
+                        color,
+                        self.color_cache.tag_default.attrs,
+                        area_col_4.skip_cols(1),
+                        None,
+                    );
+                    for c in columns[4].grid().row_iter(area_col_4, 0..(x + 1), 0) {
+                        columns[4].grid_mut()[c]
+                            .set_bg(color)
+                            .set_keep_fg(true)
+                            .set_keep_bg(true)
+                            .set_keep_attrs(true);
+                    }
+                    area_col_4 = area_col_4.skip_cols(x + 1);
+                }
+                for c in columns[4].grid().row_iter(area_col_4, 0..min_width.4, 0) {
+                    columns[4].grid_mut()[c]
+                        .set_ch(' ')
+                        .set_bg(row_attr.bg)
+                        .set_attrs(row_attr.attrs);
+                }
             }
         }
         if self.length == 0 && self.filter_term.is_empty() {
@@ -1033,21 +1084,9 @@ impl PlainListing {
         let strings = self.make_entry_string(&envelope, context);
         drop(envelope);
         let columns = &mut self.data_columns.columns;
-        {
-            let area = columns[0].area().nth_row(idx);
-            columns[0].grid_mut().clear_area(area, row_attr)
-        };
-        {
-            let area = columns[1].area().nth_row(idx);
-            columns[1].grid_mut().clear_area(area, row_attr);
-        }
-        {
-            let area = columns[2].area().nth_row(idx);
-            columns[2].grid_mut().clear_area(area, row_attr);
-        }
-        {
-            let area = columns[3].area().nth_row(idx);
-            columns[3].grid_mut().clear_area(area, row_attr);
+        for n in 0..=4 {
+            let area = columns[n].area().nth_row(idx);
+            columns[n].grid_mut().clear_area(area, row_attr);
         }
 
         let (x, _) = {
@@ -1062,8 +1101,8 @@ impl PlainListing {
             )
         };
         for c in {
-            let area = columns[0].area();
-            columns[0].grid_mut().row_iter(area, x..area.width(), idx)
+            let area = columns[0].area().nth_row(idx);
+            columns[0].grid_mut().row_iter(area, x..area.width(), 0)
         } {
             columns[0].grid_mut()[c]
                 .set_bg(row_attr.bg)
@@ -1081,8 +1120,8 @@ impl PlainListing {
             )
         };
         for c in {
-            let area = columns[1].area();
-            columns[1].grid_mut().row_iter(area, x..area.width(), idx)
+            let area = columns[1].area().nth_row(idx);
+            columns[1].grid_mut().row_iter(area, x..area.width(), 0)
         } {
             columns[1].grid_mut()[c]
                 .set_bg(row_attr.bg)
@@ -1100,85 +1139,101 @@ impl PlainListing {
             )
         };
         for c in {
-            let area = columns[2].area();
-            columns[2].grid_mut().row_iter(area, x..area.width(), idx)
+            let area = columns[2].area().nth_row(idx);
+            columns[2].grid_mut().row_iter(area, x..area.width(), 0)
         } {
             columns[2].grid_mut()[c]
                 .set_bg(row_attr.bg)
                 .set_attrs(row_attr.attrs);
         }
-        let (x, _) = {
-            let area = columns[3].area().nth_row(idx);
-            columns[3].grid_mut().write_string(
+        {
+            let mut area_col_3 = columns[3].area().nth_row(idx);
+            area_col_3 = area_col_3.skip_cols(columns[3].grid_mut().write_string(
                 &strings.flag,
                 row_attr.fg,
                 row_attr.bg,
                 row_attr.attrs,
-                area,
+                area_col_3,
                 None,
-            )
-        };
-        let (x, _) = {
-            let area = columns[3].area().nth_row(idx).skip_cols(x);
-            columns[3].grid_mut().write_string(
+            ));
+            if strings.highlight_self {
+                let (x, _) = columns[3].grid_mut().write_string(
+                    mailbox_settings!(
+                        context[self.cursor_pos.0][&self.cursor_pos.1]
+                            .listing
+                            .highlight_self_flag
+                    )
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or(super::DEFAULT_HIGHLIGHT_SELF_FLAG),
+                    self.color_cache.highlight_self.fg,
+                    row_attr.bg,
+                    row_attr.attrs | Attr::FORCE_TEXT,
+                    area_col_3,
+                    None,
+                );
+                for c in columns[3].grid().row_iter(area_col_3, 0..x, 0) {
+                    columns[3].grid_mut()[c].set_keep_fg(true);
+                }
+                area_col_3 = area_col_3.skip_cols(x + 1);
+            }
+            for c in columns[3]
+                .grid()
+                .row_iter(area_col_3, 0..area_col_3.width(), 0)
+            {
+                columns[3].grid_mut()[c]
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
+            }
+        }
+        {
+            let mut area_col_4 = columns[4].area().nth_row(idx);
+            area_col_4 = area_col_4.skip_cols(columns[4].grid_mut().write_string(
                 &strings.subject,
                 row_attr.fg,
                 row_attr.bg,
                 row_attr.attrs,
-                area,
+                area_col_4,
                 None,
-            )
-        };
-        let x = {
-            let mut x = x + 1;
+            ));
+            #[cfg(feature = "regexp")]
+            {
+                for text_formatter in crate::conf::text_format_regexps(context, "listing.subject") {
+                    let t = columns[4].grid_mut().insert_tag(text_formatter.tag);
+                    for (start, end) in text_formatter.regexp.find_iter(strings.subject.as_str()) {
+                        columns[4].grid_mut().set_tag(t, (start, idx), (end, idx));
+                    }
+                }
+            }
+            area_col_4 = area_col_4.skip_cols(1);
             for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
                 let color = color.unwrap_or(self.color_cache.tag_default.bg);
-                let (_x, _) = {
-                    let area = columns[3].area().nth_row(idx).skip_cols(x + 1);
-                    columns[3].grid_mut().write_string(
-                        t,
-                        self.color_cache.tag_default.fg,
-                        color,
-                        self.color_cache.tag_default.attrs,
-                        area,
-                        None,
-                    )
-                };
-                for c in {
-                    let area = columns[3].area();
-                    columns[3].grid_mut().row_iter(area, x..(x + 1), idx)
-                } {
-                    columns[3].grid_mut()[c].set_bg(color);
+                let (x, _) = columns[4].grid_mut().write_string(
+                    t,
+                    self.color_cache.tag_default.fg,
+                    color,
+                    self.color_cache.tag_default.attrs,
+                    area_col_4.skip_cols(1),
+                    None,
+                );
+                for c in columns[4].grid().row_iter(area_col_4, 0..(x + 1), 0) {
+                    columns[4].grid_mut()[c]
+                        .set_bg(color)
+                        .set_keep_fg(true)
+                        .set_keep_bg(true)
+                        .set_keep_attrs(true);
                 }
-                for c in {
-                    let area = columns[3].area();
-                    columns[3].grid_mut().row_iter(area, _x..(_x + 1), idx)
-                } {
-                    columns[3].grid_mut()[c].set_bg(color).set_keep_bg(true);
-                }
-                for c in {
-                    let area = columns[3].area();
-                    columns[3].grid_mut().row_iter(area, (x + 1)..(_x + 1), idx)
-                } {
-                    columns[3].grid_mut()[c].set_keep_fg(true).set_keep_bg(true);
-                }
-                for c in {
-                    let area = columns[3].area();
-                    columns[3].grid_mut().row_iter(area, x..(x + 1), idx)
-                } {
-                    columns[3].grid_mut()[c].set_keep_bg(true);
-                }
-                x = _x + 2;
+                area_col_4 = area_col_4.skip_cols(x + 1);
             }
-            x
-        };
-        for c in {
-            let area = columns[3].area();
-            columns[3].grid().row_iter(area, x..area.width(), idx)
-        } {
-            columns[3].grid_mut()[c]
-                .set_bg(row_attr.bg)
-                .set_attrs(row_attr.attrs);
+            for c in columns[4]
+                .grid()
+                .row_iter(area_col_4, 0..area_col_4.width(), 0)
+            {
+                columns[4].grid_mut()[c]
+                    .set_ch(' ')
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
+            }
         }
         *self.rows.entries.get_mut(idx).unwrap() = ((thread_hash, env_hash), strings);
     }
@@ -1226,6 +1281,49 @@ impl PlainListing {
                     kind: Some(crate::types::NotificationType::Error(err.kind)),
                 });
             }
+        }
+    }
+
+    fn draw_relative_numbers(&mut self, grid: &mut CellBuffer, area: Area, top_idx: usize) {
+        let width = self.data_columns.columns[0].area().width();
+        let area = area.take_cols(width);
+        for i in 0..area.height() {
+            if top_idx + i >= self.length {
+                break;
+            }
+            let row_attr = if let Some(env_hash) = self.get_env_under_cursor(top_idx + i) {
+                let unseen = self
+                    .rows
+                    .entries
+                    .get(top_idx + i)
+                    .map(|((_, _), strings)| strings.unseen)
+                    .unwrap_or(false);
+                row_attr!(
+                    self.color_cache,
+                    even: (top_idx + i) % 2 == 0,
+                    unseen: unseen,
+                    highlighted: self.cursor_pos.2 == (top_idx + i),
+                    selected: self.rows.selection[&env_hash]
+                )
+            } else {
+                row_attr!(self.color_cache, even: (top_idx + i) % 2 == 0, unseen: false, highlighted: true, selected: false)
+            };
+
+            grid.clear_area(area.nth_row(i), row_attr);
+            grid.write_string(
+                &if self.new_cursor_pos.2.saturating_sub(top_idx) == i {
+                    self.new_cursor_pos.2.to_string()
+                } else {
+                    (i as isize - (self.new_cursor_pos.2 - top_idx) as isize)
+                        .abs()
+                        .to_string()
+                },
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
+                area.nth_row(i),
+                None,
+            );
         }
     }
 

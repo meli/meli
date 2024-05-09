@@ -48,6 +48,7 @@ impl ScreenGeneration {
     pub const NIL: Self = Self((0, 0));
 
     #[inline]
+    #[must_use]
     pub fn next(self) -> Self {
         Self(uuid::Uuid::new_v4().as_u64_pair())
     }
@@ -521,6 +522,30 @@ impl<D: private::Sealed> From<&Screen<D>> for Area {
     }
 }
 
+/// Convenience trait to turn both single `usize` values and `(usize, _)`
+/// positions to `x` coordinate.
+pub trait IntoColumns: private::Sealed {
+    #[must_use]
+    fn into(self) -> usize;
+}
+
+impl private::Sealed for usize {}
+impl private::Sealed for Pos {}
+
+impl IntoColumns for usize {
+    #[must_use]
+    fn into(self) -> usize {
+        self
+    }
+}
+
+impl IntoColumns for Pos {
+    #[must_use]
+    fn into(self) -> usize {
+        get_x(self)
+    }
+}
+
 impl Area {
     #[inline]
     pub fn height(&self) -> usize {
@@ -545,6 +570,7 @@ impl Area {
 
     /// Get `n`th row of `area` or its last one.
     #[inline]
+    #[must_use]
     pub fn nth_row(&self, n: usize) -> Self {
         let Self {
             offset,
@@ -574,6 +600,7 @@ impl Area {
 
     /// Get `n`th col of `area` or its last one.
     #[inline]
+    #[must_use]
     pub fn nth_col(&self, n: usize) -> Self {
         let Self {
             offset,
@@ -602,6 +629,7 @@ impl Area {
     }
 
     /// Place box given by `(width, height)` in corner of `area`
+    #[must_use]
     pub fn place_inside(&self, (width, height): (usize, usize), upper: bool, left: bool) -> Self {
         if self.is_empty() || width < 3 || height < 3 {
             return *self;
@@ -644,6 +672,7 @@ impl Area {
 
     /// Place given area of dimensions `(width, height)` inside `area` according
     /// to given alignment
+    #[must_use]
     pub fn align_inside(
         &self,
         (width, height): (usize, usize),
@@ -677,6 +706,7 @@ impl Area {
 
     /// Place box given by `dimensions` in center of `area`
     #[inline]
+    #[must_use]
     pub fn center_inside(&self, dimensions: (usize, usize)) -> Self {
         self.align_inside(dimensions, Alignment::Center, Alignment::Center)
     }
@@ -712,6 +742,7 @@ impl Area {
     /// assert_eq!(body.height(), 18);
     /// ```
     #[inline]
+    #[must_use]
     pub fn skip_rows(&self, n: usize) -> Self {
         let n = std::cmp::min(n, self.height());
         if self.is_empty() || self.upper_left.1 + n > self.bottom_right.1 {
@@ -743,6 +774,7 @@ impl Area {
     /// assert_eq!(header, area.take_rows(2));
     /// ```
     #[inline]
+    #[must_use]
     pub fn skip_rows_from_end(&self, n: usize) -> Self {
         let n = std::cmp::min(n, self.height());
         if self.is_empty() || self.bottom_right.1 < n {
@@ -751,6 +783,21 @@ impl Area {
 
         Self {
             bottom_right: (self.bottom_right.0, self.bottom_right.1 - n),
+            ..*self
+        }
+    }
+
+    #[inline]
+    #[must_use]
+    fn _skip_cols_inner(&self, n: usize) -> Self {
+        let n = std::cmp::min(n, self.width());
+        if self.is_empty() || self.bottom_right.0 < self.upper_left.0 + n {
+            return self.into_empty();
+        }
+
+        Self {
+            offset: pos_inc(self.offset, (n, 0)),
+            upper_left: pos_inc(self.upper_left, (n, 0)),
             ..*self
         }
     }
@@ -772,17 +819,10 @@ impl Area {
     /// assert_eq!(indent.width(), 118);
     /// ```
     #[inline]
-    pub fn skip_cols(&self, n: usize) -> Self {
-        let n = std::cmp::min(n, self.width());
-        if self.is_empty() || self.bottom_right.0 < self.upper_left.0 + n {
-            return self.into_empty();
-        }
-
-        Self {
-            offset: pos_inc(self.offset, (n, 0)),
-            upper_left: pos_inc(self.upper_left, (n, 0)),
-            ..*self
-        }
+    #[must_use]
+    pub fn skip_cols(&self, n: impl IntoColumns) -> Self {
+        let n: usize = n.into();
+        self._skip_cols_inner(n)
     }
 
     /// Skip the last `n` rows and return the remaining area.
@@ -803,6 +843,7 @@ impl Area {
     /// assert_eq!(indent, area.take_cols(118));
     /// ```
     #[inline]
+    #[must_use]
     pub fn skip_cols_from_end(&self, n: usize) -> Self {
         let n = std::cmp::min(n, self.width());
         if self.is_empty() || self.bottom_right.0 < n {
@@ -816,6 +857,7 @@ impl Area {
 
     /// Shortcut for using `Area::skip_cols` and `Area::skip_rows` together.
     #[inline]
+    #[must_use]
     pub fn skip(&self, n_cols: usize, n_rows: usize) -> Self {
         self.skip_cols(n_cols).skip_rows(n_rows)
     }
@@ -837,6 +879,7 @@ impl Area {
     /// assert_eq!(header.height(), 2);
     /// ```
     #[inline]
+    #[must_use]
     pub fn take_rows(&self, n: usize) -> Self {
         let n = std::cmp::min(n, self.height());
         if self.is_empty() || self.bottom_right.1 < (self.height() - n) {
@@ -869,6 +912,7 @@ impl Area {
     /// assert_eq!(header.width(), 2);
     /// ```
     #[inline]
+    #[must_use]
     pub fn take_cols(&self, n: usize) -> Self {
         let n = std::cmp::min(n, self.width());
         if self.is_empty() || self.bottom_right.0 < (self.width() - n) {
@@ -886,41 +930,49 @@ impl Area {
 
     /// Shortcut for using `Area::take_cols` and `Area::take_rows` together.
     #[inline]
+    #[must_use]
     pub fn take(&self, n_cols: usize, n_rows: usize) -> Self {
         self.take_cols(n_cols).take_rows(n_rows)
     }
 
     #[inline]
+    #[must_use]
     pub const fn upper_left(&self) -> Pos {
         self.upper_left
     }
 
     #[inline]
+    #[must_use]
     pub const fn bottom_right(&self) -> Pos {
         self.bottom_right
     }
 
     #[inline]
+    #[must_use]
     pub const fn upper_right(&self) -> Pos {
         set_x(self.upper_left, get_x(self.bottom_right))
     }
 
     #[inline]
+    #[must_use]
     pub const fn bottom_left(&self) -> Pos {
         set_y(self.upper_left, get_y(self.bottom_right))
     }
 
     #[inline]
+    #[must_use]
     pub const fn offset(&self) -> Pos {
         self.offset
     }
 
     #[inline]
+    #[must_use]
     pub const fn generation(&self) -> ScreenGeneration {
         self.generation
     }
 
     #[inline]
+    #[must_use]
     pub const fn new_empty(generation: ScreenGeneration) -> Self {
         Self {
             offset: (0, 0),
@@ -934,6 +986,7 @@ impl Area {
     }
 
     #[inline]
+    #[must_use]
     pub const fn into_empty(self) -> Self {
         Self {
             offset: (0, 0),
@@ -945,6 +998,7 @@ impl Area {
     }
 
     #[inline]
+    #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.empty
             || (self.upper_left.0 > self.bottom_right.0 || self.upper_left.1 > self.bottom_right.1)
@@ -952,26 +1006,31 @@ impl Area {
 }
 
 #[inline(always)]
+#[must_use]
 const fn pos_inc(p: Pos, inc: (usize, usize)) -> Pos {
     (p.0 + inc.0, p.1 + inc.1)
 }
 
 #[inline(always)]
+#[must_use]
 const fn get_x(p: Pos) -> usize {
     p.0
 }
 
 #[inline(always)]
+#[must_use]
 const fn get_y(p: Pos) -> usize {
     p.1
 }
 
 #[inline(always)]
+#[must_use]
 const fn set_x(p: Pos, new_x: usize) -> Pos {
     (new_x, p.1)
 }
 
 #[inline(always)]
+#[must_use]
 const fn set_y(p: Pos, new_y: usize) -> Pos {
     (p.0, new_y)
 }

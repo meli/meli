@@ -138,7 +138,7 @@ pub struct CompactListing {
     sortcmd: bool,
     subsort: (SortField, SortOrder),
     /// Cache current view.
-    data_columns: DataColumns<4>,
+    data_columns: DataColumns<5>,
     rows_drawn: SegmentTree,
     rows: RowsState<(ThreadHash, EnvelopeHash)>,
 
@@ -234,13 +234,13 @@ impl MailListingTrait for CompactListing {
                 let message: String =
                     context.accounts[&self.cursor_pos.0][&self.cursor_pos.1].status();
                 if self.data_columns.columns[0].resize_with_context(message.len(), 1, context) {
-                    let area = self.data_columns.columns[0].area();
+                    let area_col_0 = self.data_columns.columns[0].area();
                     self.data_columns.columns[0].grid_mut().write_string(
                         message.as_str(),
                         self.color_cache.theme_default.fg,
                         self.color_cache.theme_default.bg,
                         self.color_cache.theme_default.attrs,
-                        area,
+                        area_col_0,
                         None,
                     );
                 }
@@ -299,14 +299,16 @@ impl MailListingTrait for CompactListing {
             self.sort = context.accounts[&self.cursor_pos.0].settings.account.order
         }
         self.length = 0;
-        let mut min_width = (0, 0, 0, 0);
+        let mut min_width = (0, 0, 0, 0, 0);
         #[allow(clippy::type_complexity)]
         let mut row_widths: (
             SmallVec<[u8; 1024]>,
             SmallVec<[u8; 1024]>,
             SmallVec<[u8; 1024]>,
             SmallVec<[u8; 1024]>,
+            SmallVec<[u8; 1024]>,
         ) = (
+            SmallVec::new(),
             SmallVec::new(),
             SmallVec::new(),
             SmallVec::new(),
@@ -456,22 +458,25 @@ impl MailListingTrait for CompactListing {
                     .try_into()
                     .unwrap_or(255),
             );
-            /* subject */
             row_widths.3.push(
-                (entry_strings.flag.grapheme_width()
-                    + entry_strings.subject.grapheme_width()
-                    + 1
-                    + entry_strings.tags.grapheme_width())
-                .try_into()
-                .unwrap_or(255),
+                entry_strings
+                    .flag
+                    .grapheme_width()
+                    .try_into()
+                    .unwrap_or(255),
+            );
+            row_widths.4.push(
+                (entry_strings.subject.grapheme_width() + 1 + entry_strings.tags.grapheme_width())
+                    .try_into()
+                    .unwrap_or(255),
             );
             min_width.1 = min_width.1.max(entry_strings.date.grapheme_width()); /* date */
             min_width.2 = min_width.2.max(entry_strings.from.grapheme_width()); /* from */
             min_width.3 = min_width.3.max(
-                entry_strings.flag.grapheme_width()
-                    + entry_strings.subject.grapheme_width()
-                    + 1
-                    + entry_strings.tags.grapheme_width(),
+                entry_strings.flag.grapheme_width() + usize::from(entry_strings.highlight_self),
+            );
+            min_width.4 = min_width.4.max(
+                entry_strings.subject.grapheme_width() + 1 + entry_strings.tags.grapheme_width(),
             ); /* subject */
             self.rows.insert_thread(
                 thread,
@@ -487,12 +492,13 @@ impl MailListingTrait for CompactListing {
             self.length += 1;
         }
 
-        min_width.0 = self.length.saturating_sub(1).to_string().len();
+        min_width.0 = digits_of_num!(self.length.saturating_sub(1));
 
         self.data_columns.elasticities[0].set_rigid();
         self.data_columns.elasticities[1].set_rigid();
         self.data_columns.elasticities[2].set_grow(15, Some(35));
         self.data_columns.elasticities[3].set_rigid();
+        self.data_columns.elasticities[4].set_rigid();
         self.data_columns
             .cursor_config
             .set_handle(true)
@@ -510,12 +516,15 @@ impl MailListingTrait for CompactListing {
         _ = self.data_columns.columns[1].resize_with_context(min_width.1, self.rows.len(), context);
         /* from column */
         _ = self.data_columns.columns[2].resize_with_context(min_width.2, self.rows.len(), context);
-        /* subject column */
+        // flags column
         _ = self.data_columns.columns[3].resize_with_context(min_width.3, self.rows.len(), context);
+        // subject column
+        _ = self.data_columns.columns[4].resize_with_context(min_width.4, self.rows.len(), context);
         self.data_columns.segment_tree[0] = row_widths.0.into();
         self.data_columns.segment_tree[1] = row_widths.1.into();
         self.data_columns.segment_tree[2] = row_widths.2.into();
         self.data_columns.segment_tree[3] = row_widths.3.into();
+        self.data_columns.segment_tree[4] = row_widths.4.into();
 
         self.rows_drawn = SegmentTree::from(
             std::iter::repeat(1)
@@ -527,13 +536,13 @@ impl MailListingTrait for CompactListing {
         if self.length == 0 && self.filter_term.is_empty() {
             let message: String = account[&self.cursor_pos.1].status();
             if self.data_columns.columns[0].resize_with_context(message.len(), 1, context) {
-                let area = self.data_columns.columns[0].area();
+                let area_col_0 = self.data_columns.columns[0].area();
                 self.data_columns.columns[0].grid_mut().write_string(
                     &message,
                     self.color_cache.theme_default.fg,
                     self.color_cache.theme_default.bg,
                     self.color_cache.theme_default.attrs,
-                    area,
+                    area_col_0,
                     None,
                 );
             }
@@ -681,6 +690,10 @@ impl ListingTrait for CompactListing {
                 }
                 context.dirty_areas.push_back(new_area);
             }
+            if *account_settings!(context[self.cursor_pos.0].listing.relative_list_indices) {
+                self.draw_relative_numbers(grid, area, top_idx, context);
+                context.dirty_areas.push_back(area);
+            }
             if !self.force_draw {
                 return;
             }
@@ -700,6 +713,9 @@ impl ListingTrait for CompactListing {
         /* copy table columns */
         self.data_columns
             .draw(grid, top_idx, self.cursor_pos.2, grid.bounds_iter(area));
+        if *account_settings!(context[self.cursor_pos.0].listing.relative_list_indices) {
+            self.draw_relative_numbers(grid, area, top_idx, context);
+        }
         /* apply each row colors separately */
         for i in top_idx..(top_idx + area.height()) {
             if let Some(row_attr) = self.rows.row_attr_cache.get(&i) {
@@ -980,6 +996,7 @@ impl CompactListing {
             ),
             from: FromString(Address::display_name_slice(from)),
             tags: TagString(tags_string, colors),
+            unseen: thread.unseen() > 0,
             highlight_self,
         }
     }
@@ -1070,7 +1087,7 @@ impl CompactListing {
             }
         }
 
-        let strings = self.make_entry_string(
+        let mut entry_strings = self.make_entry_string(
             &envelope,
             context,
             &tags_lck,
@@ -1081,161 +1098,22 @@ impl CompactListing {
             highlight_self,
             thread_hash,
         );
+        entry_strings.highlight_self = should_highlight_self && {
+            let my_address: Address = context.accounts[&self.cursor_pos.0]
+                .settings
+                .account
+                .make_display_name();
+            envelope.recipient_any(&my_address)
+        };
         drop(envelope);
         let columns = &mut self.data_columns.columns;
-        let min_width = (
-            columns[0].area().width(),
-            columns[1].area().width(),
-            columns[2].area().width(),
-            columns[3].area().width(),
-        );
-        let (x, _) = {
-            let area = columns[0].area().nth_row(idx);
-            columns[0].grid_mut().write_string(
-                &idx.to_string(),
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                area,
-                None,
-            )
-        };
-        for c in {
-            let area = columns[0].area();
-            columns[0].grid_mut().row_iter(area, x..min_width.0, idx)
-        } {
-            columns[0].grid_mut()[c]
-                .set_bg(row_attr.bg)
-                .set_attrs(row_attr.attrs)
-                .set_ch(' ');
+        for n in 0..=4 {
+            let area = columns[n].area().nth_row(idx);
+            columns[n].grid_mut().clear_area(area, row_attr);
         }
-        let (x, _) = {
-            let area = columns[1].area().nth_row(idx);
-            columns[1].grid_mut().write_string(
-                &strings.date,
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                area,
-                None,
-            )
-        };
-        for c in {
-            let area = columns[1].area();
-            columns[1].grid_mut().row_iter(area, x..min_width.1, idx)
-        } {
-            columns[1].grid_mut()[c]
-                .set_bg(row_attr.bg)
-                .set_attrs(row_attr.attrs)
-                .set_ch(' ');
-        }
-        let (x, _) = {
-            let area = columns[2].area().nth_row(idx);
-            columns[2].grid_mut().write_string(
-                &strings.from,
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                area,
-                None,
-            )
-        };
-        for c in {
-            let area = columns[2].area();
-            columns[2].grid_mut().row_iter(area, x..min_width.2, idx)
-        } {
-            columns[2].grid_mut()[c]
-                .set_bg(row_attr.bg)
-                .set_attrs(row_attr.attrs)
-                .set_ch(' ');
-        }
-        let (x, _) = {
-            let area = columns[3].area().nth_row(idx);
-            columns[3].grid_mut().write_string(
-                &strings.flag,
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                area,
-                None,
-            )
-        };
-        let (x, _) = {
-            let area = columns[3].area().nth_row(idx).skip_cols(x);
-            columns[3].grid_mut().write_string(
-                &strings.subject,
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                area,
-                None,
-            )
-        };
-        if let Some(c) = columns[3].grid_mut().get_mut(x, idx) {
-            c.set_bg(row_attr.bg).set_attrs(row_attr.attrs).set_ch(' ');
-        }
-        let x = {
-            let mut x = x + 1;
-            for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
-                let color = color.unwrap_or(self.color_cache.tag_default.bg);
-                let _x = {
-                    let area = columns[3].area().nth_row(idx).skip_cols(x + 1);
-                    columns[3]
-                        .grid_mut()
-                        .write_string(
-                            t,
-                            self.color_cache.tag_default.fg,
-                            color,
-                            self.color_cache.tag_default.attrs,
-                            area,
-                            None,
-                        )
-                        .0
-                        + x
-                        + 1
-                };
-                for c in {
-                    let area = columns[3].area();
-                    columns[3].grid_mut().row_iter(area, x..(x + 1), idx)
-                } {
-                    columns[3].grid_mut()[c].set_bg(color);
-                }
-                for c in {
-                    let area = columns[3].area();
-                    columns[3].grid_mut().row_iter(area, _x..(_x + 1), idx)
-                } {
-                    columns[3].grid_mut()[c].set_bg(color).set_keep_bg(true);
-                }
-                for c in {
-                    let area = columns[3].area();
-                    columns[3].grid_mut().row_iter(area, (x + 1)..(_x + 1), idx)
-                } {
-                    columns[3].grid_mut()[c]
-                        .set_keep_fg(true)
-                        .set_keep_bg(true)
-                        .set_keep_attrs(true);
-                }
-                for c in {
-                    let area = columns[3].area();
-                    columns[3].grid_mut().row_iter(area, x..(x + 1), idx)
-                } {
-                    columns[3].grid_mut()[c].set_keep_bg(true);
-                }
-                x = _x + 2;
-            }
-            x
-        };
-        for c in {
-            let area = columns[3].area();
-            columns[3].grid_mut().row_iter(area, x..min_width.3, idx)
-        } {
-            columns[3].grid_mut()[c]
-                .set_ch(' ')
-                .set_bg(row_attr.bg)
-                .set_attrs(row_attr.attrs);
-        }
-        *self.rows.entries.get_mut(idx).unwrap() = ((thread_hash, env_hash), strings);
         self.rows_drawn.update(idx, 1);
+
+        *self.rows.entries.get_mut(idx).unwrap() = ((thread_hash, env_hash), entry_strings);
     }
 
     fn draw_rows(&mut self, context: &Context, start: usize, end: usize) {
@@ -1253,6 +1131,7 @@ impl CompactListing {
             self.data_columns.columns[0].area().width(),
             self.data_columns.columns[1].area().width(),
             self.data_columns.columns[2].area().width(),
+            self.data_columns.columns[3].area().width(),
             self.data_columns.columns[3].area().width(),
         );
 
@@ -1344,127 +1223,105 @@ impl CompactListing {
                     }
                 }
             }
-            let (x, _) = {
-                let area = columns[3].area().nth_row(idx);
-                columns[3].grid_mut().write_string(
+            {
+                let mut area_col_3 = columns[3].area().nth_row(idx);
+                area_col_3 = area_col_3.skip_cols(columns[3].grid_mut().write_string(
                     &strings.flag,
                     row_attr.fg,
                     row_attr.bg,
                     row_attr.attrs,
-                    area,
+                    area_col_3,
                     None,
-                )
-            };
-            let x = {
-                let mut area = columns[3].area().nth_row(idx).skip_cols(x);
+                ));
                 if strings.highlight_self {
-                    let x = columns[3]
-                        .grid_mut()
-                        .write_string(
-                            mailbox_settings!(
-                                context[self.cursor_pos.0][&self.cursor_pos.1]
-                                    .listing
-                                    .highlight_self_flag
-                            )
-                            .as_ref()
-                            .map(|s| s.as_str())
-                            .unwrap_or(super::DEFAULT_HIGHLIGHT_SELF_FLAG),
-                            self.color_cache.highlight_self.fg,
-                            row_attr.bg,
-                            row_attr.attrs | Attr::FORCE_TEXT,
-                            area,
-                            None,
+                    let (x, _) = columns[3].grid_mut().write_string(
+                        mailbox_settings!(
+                            context[self.cursor_pos.0][&self.cursor_pos.1]
+                                .listing
+                                .highlight_self_flag
                         )
-                        .0;
-                    for row in columns[3].grid().bounds_iter(area.nth_row(0).take_cols(x)) {
-                        for c in row {
-                            columns[3].grid_mut()[c].set_keep_fg(true);
-                        }
-                    }
-                    area = area.skip_cols(x + 1);
-                }
-                columns[3]
-                    .grid_mut()
-                    .write_string(
-                        &strings.subject,
-                        row_attr.fg,
+                        .as_ref()
+                        .map(|s| s.as_str())
+                        .unwrap_or(super::DEFAULT_HIGHLIGHT_SELF_FLAG),
+                        self.color_cache.highlight_self.fg,
                         row_attr.bg,
-                        row_attr.attrs,
-                        area,
+                        row_attr.attrs | Attr::FORCE_TEXT,
+                        area_col_3,
                         None,
-                    )
-                    .0
-                    + x
-            };
-            #[cfg(feature = "regexp")]
-            {
-                for text_formatter in crate::conf::text_format_regexps(context, "listing.subject") {
-                    let t = columns[3].grid_mut().insert_tag(text_formatter.tag);
-                    for (start, end) in text_formatter.regexp.find_iter(strings.subject.as_str()) {
-                        columns[3].grid_mut().set_tag(t, (start, idx), (end, idx));
+                    );
+                    for c in columns[3].grid().row_iter(area_col_3, 0..x, 0) {
+                        columns[3].grid_mut()[c].set_keep_fg(true);
                     }
+                    area_col_3 = area_col_3.skip_cols(x + 1);
+                }
+                for c in columns[3].grid().row_iter(area_col_3, 0..min_width.3, 0) {
+                    columns[3].grid_mut()[c]
+                        .set_bg(row_attr.bg)
+                        .set_attrs(row_attr.attrs);
                 }
             }
-            let mut x = x + 1;
-            for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
-                let color = color.unwrap_or(self.color_cache.tag_default.bg);
-                let _x = {
-                    let area = columns[3].area().nth_row(idx).skip_cols(x + 1);
-                    columns[3]
-                        .grid_mut()
-                        .write_string(
-                            t,
-                            self.color_cache.tag_default.fg,
-                            color,
-                            self.color_cache.tag_default.attrs,
-                            area,
-                            None,
-                        )
-                        .0
-                        + x
-                        + 1
-                };
-                for c in {
-                    let area = columns[3].area();
-                    columns[3].grid_mut().row_iter(area, x..(x + 1), idx)
-                } {
-                    columns[3].grid_mut()[c].set_bg(color);
+            {
+                let mut area_col_4 = columns[4].area().nth_row(idx);
+                area_col_4 = area_col_4.skip_cols(columns[4].grid_mut().write_string(
+                    &strings.subject,
+                    row_attr.fg,
+                    row_attr.bg,
+                    row_attr.attrs,
+                    area_col_4,
+                    None,
+                ));
+                #[cfg(feature = "regexp")]
+                {
+                    for text_formatter in
+                        crate::conf::text_format_regexps(context, "listing.subject")
+                    {
+                        let t = columns[4].grid_mut().insert_tag(text_formatter.tag);
+                        for (start, end) in
+                            text_formatter.regexp.find_iter(strings.subject.as_str())
+                        {
+                            columns[4].grid_mut().set_tag(t, (start, idx), (end, idx));
+                        }
+                    }
                 }
-                for c in {
-                    let area = columns[3].area();
-                    columns[3].grid_mut().row_iter(area, _x..(_x + 1), idx)
-                } {
-                    columns[3].grid_mut()[c].set_bg(color).set_keep_bg(true);
+                area_col_4 = area_col_4.skip_cols(1);
+                for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
+                    let color = color.unwrap_or(self.color_cache.tag_default.bg);
+                    let (x, _) = columns[4].grid_mut().write_string(
+                        t,
+                        self.color_cache.tag_default.fg,
+                        color,
+                        self.color_cache.tag_default.attrs,
+                        area_col_4,
+                        None,
+                    );
+                    for c in columns[4].grid().row_iter(area_col_4, 0..(x + 1), 0) {
+                        columns[4].grid_mut()[c]
+                            .set_bg(color)
+                            .set_keep_fg(true)
+                            .set_keep_bg(true)
+                            .set_keep_attrs(true);
+                    }
+                    area_col_4 = area_col_4.skip_cols(x + 1);
                 }
-                for c in {
-                    let area = columns[3].area();
-                    columns[3].grid_mut().row_iter(area, (x + 1)..(_x + 1), idx)
-                } {
-                    columns[3].grid_mut()[c]
-                        .set_keep_fg(true)
-                        .set_keep_bg(true)
-                        .set_keep_attrs(true);
+                for c in columns[4].grid().row_iter(area_col_4, 0..min_width.4, 0) {
+                    columns[4].grid_mut()[c]
+                        .set_ch(' ')
+                        .set_bg(row_attr.bg)
+                        .set_attrs(row_attr.attrs);
                 }
-                for c in {
-                    let area = columns[3].area();
-                    columns[3].grid_mut().row_iter(area, x..(x + 1), idx)
-                } {
-                    columns[3].grid_mut()[c].set_keep_bg(true);
-                }
-                x = _x + 2;
             }
         }
         if self.length == 0 && self.filter_term.is_empty() {
             let account = &context.accounts[&self.cursor_pos.0];
             let message: String = account[&self.cursor_pos.1].status();
             if self.data_columns.columns[0].resize_with_context(message.len(), 1, context) {
-                let area = self.data_columns.columns[0].area();
+                let area_col_0 = self.data_columns.columns[0].area();
                 self.data_columns.columns[0].grid_mut().write_string(
                     message.as_str(),
                     self.color_cache.theme_default.fg,
                     self.color_cache.theme_default.bg,
                     self.color_cache.theme_default.attrs,
-                    area,
+                    area_col_0,
                     None,
                 );
             }
@@ -1514,6 +1371,53 @@ impl CompactListing {
                     kind: Some(crate::types::NotificationType::Error(err.kind)),
                 });
             }
+        }
+    }
+
+    fn draw_relative_numbers(
+        &mut self,
+        grid: &mut CellBuffer,
+        area: Area,
+        top_idx: usize,
+        context: &Context,
+    ) {
+        let width = self.data_columns.columns[0].area().width();
+        let area = area.take_cols(width);
+        let account = &context.accounts[&self.cursor_pos.0];
+        let threads = account.collection.get_threads(self.cursor_pos.1);
+        for i in 0..area.height() {
+            let idx = top_idx + i;
+            if idx >= self.length {
+                break;
+            }
+            let row_attr = if let Some(thread_hash) = self.get_thread_under_cursor(idx) {
+                let thread = threads.thread_ref(thread_hash);
+                row_attr!(
+                    self.color_cache,
+                    even: idx % 2 == 0,
+                    unseen: thread.unseen() > 0,
+                    highlighted: self.new_cursor_pos.2 == idx,
+                    selected: self.rows.is_thread_selected(thread_hash)
+                )
+            } else {
+                row_attr!(self.color_cache, even: (top_idx + i) % 2 == 0, unseen: false, highlighted: true, selected: false)
+            };
+
+            grid.clear_area(area.nth_row(i), row_attr);
+            grid.write_string(
+                &if self.new_cursor_pos.2.saturating_sub(top_idx) == i {
+                    self.new_cursor_pos.2.to_string()
+                } else {
+                    (i as isize - (self.new_cursor_pos.2 - top_idx) as isize)
+                        .abs()
+                        .to_string()
+                },
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
+                area.nth_row(i),
+                None,
+            );
         }
     }
 

@@ -388,6 +388,7 @@ pub struct EntryStrings {
     pub flag: FlagString,
     pub from: FromString,
     pub tags: TagString,
+    pub unseen: bool,
     pub highlight_self: bool,
 }
 

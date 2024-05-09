@@ -771,6 +771,7 @@ impl ConversationsListing {
             ),
             from: FromString(Address::display_name_slice(from)),
             tags: TagString(tags_string, colors),
+            unseen: thread.unseen() > 0,
             highlight_self: false,
         }
     }

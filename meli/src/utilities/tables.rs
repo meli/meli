@@ -214,7 +214,7 @@ impl<const N: usize> DataColumns<N> {
             width_accum += self.widths[i];
         }
         // add column gaps
-        width_accum += 2 * N.saturating_sub(1);
+        width_accum += N.saturating_sub(1);
         debug_assert!(growees >= growees_max);
         if width_accum >= screen_width || screen_height == 0 || screen_width == 0 || growees == 0 {
             self.width_accum = width_accum;
@@ -260,7 +260,7 @@ impl<const N: usize> DataColumns<N> {
                 break;
             }
             x_offset -= self.widths[col];
-            x_offset = x_offset.saturating_sub(2);
+            x_offset = x_offset.saturating_sub(1);
         }
 
         for col in start_col..N {
