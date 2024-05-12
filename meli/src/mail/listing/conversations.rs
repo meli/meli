@@ -878,10 +878,10 @@ impl ConversationsListing {
                 None,
             );
             if !strings.flag.is_empty() {
-                for c in grid.row_iter(area, x..(x + 3), 0) {
+                for c in grid.row_iter(area, x..(x + 1), 0) {
                     grid[c].set_bg(row_attr.bg);
                 }
-                x += 3;
+                x += 1;
             }
             let subject_attr = row_attr!(
                 subject,
