@@ -1334,12 +1334,24 @@ pub fn quoted(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
     }
 
     let mut i = 1;
+    let mut escape_next = false;
     while i < input.len() {
-        if input[i] == b'\"' && input[i - 1] != b'\\' {
-            return match crate::email::parser::encodings::phrase(&input[1..i], false) {
-                Ok((_, out)) => Ok((&input[i + 1..], out)),
-                e => e,
-            };
+        match (input[i], escape_next) {
+            (b'\\', false) => {
+                escape_next = true;
+            }
+            (b'\\', true) => {
+                escape_next = false;
+            }
+            (b'\"', false) => {
+                return match crate::email::parser::encodings::phrase(&input[1..i], false) {
+                    Ok((_, out)) => Ok((&input[i + 1..], out)),
+                    e => e,
+                };
+            }
+            _ => {
+                escape_next = false;
+            }
         }
         i += 1;
     }
