@@ -29,6 +29,7 @@ use std::{
     collections::HashSet,
     io::Read,
     process::{Command, Stdio},
+    sync::Arc,
 };
 
 use melib::{
@@ -303,24 +304,23 @@ impl From<FileAccount> for AccountConf {
 }
 
 pub fn get_config_file() -> Result<PathBuf> {
-    let xdg_dirs = xdg::BaseDirectories::with_prefix("meli").map_err(|err| {
-        Error::new(format!(
-            "Could not detect XDG directories for user: {}",
-            err
-        ))
-        .set_source(Some(std::sync::Arc::new(Box::new(err))))
-    })?;
-    match env::var("MELI_CONFIG") {
-        Ok(path) => Ok(PathBuf::from(path).expand()),
-        Err(_) => Ok(xdg_dirs
-            .place_config_file("config.toml")
-            .chain_err_summary(|| {
-                format!(
-                    "Cannot create configuration directory in {}",
-                    xdg_dirs.get_config_home().display()
-                )
-            })?),
+    if let Ok(path) = env::var("MELI_CONFIG") {
+        return Ok(PathBuf::from(path).expand());
     }
+    let xdg_dirs = xdg::BaseDirectories::with_prefix("meli").map_err(|err| {
+        Error::new("Could not detect XDG directories for user")
+            .set_source(Some(std::sync::Arc::new(Box::new(err))))
+            .set_kind(ErrorKind::NotSupported)
+    })?;
+    xdg_dirs
+        .place_config_file("config.toml")
+        .chain_err_summary(|| {
+            format!(
+                "Cannot create configuration directory in {}",
+                xdg_dirs.get_config_home().display()
+            )
+        })
+        .chain_err_kind(ErrorKind::OSError)
 }
 
 pub fn get_included_configs(conf_path: PathBuf) -> Result<Vec<PathBuf>> {
@@ -336,7 +336,7 @@ changequote(`"', `"')dnl
     let mut contents = String::new();
     while let Some((parent, p)) = stack.pop() {
         if !p.exists() || p.is_dir() {
-            return Err(format!(
+            return Err(Error::new(format!(
                 "Path {}{included}{in_parent} {msg}.",
                 p.display(),
                 included = if parent.is_some() {
@@ -354,8 +354,8 @@ changequote(`"', `"')dnl
                 } else {
                     "is a directory, not a text file"
                 }
-            )
-            .into());
+            ))
+            .set_kind(ErrorKind::Configuration));
         }
         contents.clear();
         let mut file = std::fs::File::open(&p)?;
@@ -368,11 +368,18 @@ changequote(`"', `"')dnl
             .spawn()
         {
             Ok(handle) => handle,
-            Err(error) => match error.kind() {
+            Err(err) => match err.kind() {
                 io::ErrorKind::NotFound => {
-                    return Err("`m4` executable not found. Please install.".into())
+                    return Err(Error::new(
+                        "`m4` executable not found in PATH. Please provide an m4 binary.",
+                    )
+                    .set_kind(ErrorKind::Platform))
                 }
-                _ => return Err(error.into()),
+                _ => {
+                    return Err(Error::new("Could not process configuration with `m4`")
+                        .set_source(Some(Arc::new(err)))
+                        .set_kind(ErrorKind::OSError))
+                }
             },
         };
 
@@ -426,7 +433,8 @@ impl FileSettings {
         if !config_path.exists() {
             let path_string = config_path.display().to_string();
             if path_string.is_empty() {
-                return Err(Error::new("No configuration found."));
+                return Err(Error::new("Given configuration path is empty.")
+                    .set_kind(ErrorKind::Configuration));
             }
             #[cfg(not(test))]
             let ask = Ask {
@@ -438,14 +446,17 @@ impl FileSettings {
             #[cfg(not(test))]
             if ask.run() {
                 create_config_file(&config_path)?;
-                return Err(Error::new(
-                    "Edit the sample configuration and relaunch meli.",
-                ));
+                return Err(
+                    Error::new("Edit the sample configuration and relaunch meli.")
+                        .set_kind(ErrorKind::Configuration),
+                );
             }
             #[cfg(test)]
             return Ok(Self::default());
             #[cfg(not(test))]
-            return Err(Error::new("No configuration file found."));
+            return Err(
+                Error::new("No configuration file found.").set_kind(ErrorKind::Configuration)
+            );
         }
 
         Self::validate(config_path, true, false)
@@ -492,14 +503,13 @@ This is required so that you don't accidentally start meli and find out later th
                 "{}\n\nEdit the {} and relaunch meli.",
                 if interactive { "" } else { err_msg },
                 path.display()
-            )));
+            ))
+            .set_kind(ErrorKind::Configuration));
         }
         let mut s: Self = toml::from_str(&s).map_err(|err| {
-            Error::new(format!(
-                "{}: Config file contains errors; {}",
-                path.display(),
-                err
-            ))
+            Error::new(format!("{}: Config file contains errors", path.display()))
+                .set_source(Some(Arc::new(err)))
+                .set_kind(ErrorKind::Configuration)
         })?;
         let backends = melib::backends::Backends::new();
         let Themes {
@@ -528,7 +538,8 @@ This is required so that you don't accidentally start meli and find out later th
             themes::DARK | themes::LIGHT => {}
             t if s.terminal.themes.other_themes.contains_key(t) => {}
             t => {
-                return Err(Error::new(format!("Theme `{}` was not found.", t)));
+                return Err(Error::new(format!("Theme `{}` was not found.", t))
+                    .set_kind(ErrorKind::Configuration));
             }
         }
 
@@ -576,7 +587,8 @@ This is required so that you don't accidentally start meli and find out later th
                 return Err(Error::new(format!(
                     "Unrecognised configuration values: {:?}",
                     s.extra
-                )));
+                ))
+                .set_kind(ErrorKind::Configuration));
             }
             if clear_extras {
                 acc.extra.clear();

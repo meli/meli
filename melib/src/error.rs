@@ -335,6 +335,7 @@ pub enum ErrorKind {
     Network(NetworkErrorKind),
     TimedOut,
     OSError,
+    Platform,
     NotImplemented,
     NotSupported,
     ValueError,
@@ -354,6 +355,7 @@ impl std::fmt::Display for ErrorKind {
                 fmt,
                 "Protocol is not supported. It could be the wrong type or version."
             ),
+            Self::Platform => write!(fmt, "Platform/Runtime environment; OS or hardware"),
             Self::TimedOut => write!(fmt, "Timed Out"),
             Self::OSError => write!(fmt, "OS Error"),
             Self::Configuration => write!(fmt, "Configuration"),
