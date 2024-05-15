@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+pub mod jscontact;
 pub mod mutt;
 #[cfg(feature = "vcard")]
 pub mod vcard;

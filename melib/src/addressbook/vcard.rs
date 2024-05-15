@@ -185,7 +185,7 @@ impl CardDeserializer {
 impl<V: VCardVersion> TryInto<Card> for VCard<V> {
     type Error = crate::error::Error;
 
-    fn try_into(mut self) -> crate::error::Result<Card> {
+    fn try_into(mut self) -> Result<Card> {
         let mut card = Card::new();
         card.set_id(CardId::Hash({
             let mut hasher = std::collections::hash_map::DefaultHasher::new();
