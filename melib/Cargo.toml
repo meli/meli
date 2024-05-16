@@ -83,5 +83,5 @@ vcard = []
 flate2 = { version = "1.0.16" }
 
 [dev-dependencies]
-mailin-embedded = { version = "0.7", features = ["rtls"] }
+mailin-embedded = { version = "0.8", features = ["rtls"] }
 stderrlog = "^0.5"
