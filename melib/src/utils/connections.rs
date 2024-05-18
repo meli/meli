@@ -132,6 +132,66 @@ macro_rules! syscall {
     }};
 }
 
+/// Hardcoded `setsockopt` arguments for type safety when calling
+/// [`Connection::setsockopt`] in an `unsafe` block.
+///
+/// Add new variants when you need to call `setsockopt` with new arguments.
+pub enum SockOpts {
+    /// Set TCP Keep Alive.
+    ///
+    /// Following text is sourced from <https://tldp.org/HOWTO/html_single/TCP-Keepalive-HOWTO/>.
+    ///
+    /// ```text
+    /// 4.2. The setsockopt function call
+    ///
+    /// All you need to enable keepalive for a specific socket is to set the specific socket option
+    /// on the socket itself. The prototype of the function is as follows:
+    ///
+    ///
+    ///   int setsockopt(int s, int level, int optname,
+    ///                  const void *optval, socklen_t optlen)
+    ///
+    ///
+    /// The first parameter is the socket, previously created with the socket(2); the second one
+    /// must be SOL_SOCKET, and the third must be SO_KEEPALIVE . The fourth parameter must be a
+    /// boolean integer value, indicating that we want to enable the option, while the last is the
+    /// size of the value passed before.
+    ///
+    /// According to the manpage, 0 is returned upon success, and -1 is returned on error (and
+    /// errno is properly set).
+    ///
+    /// There are also three other socket options you can set for keepalive when you write your
+    /// application. They all use the SOL_TCP level instead of SOL_SOCKET, and they override
+    /// system-wide variables only for the current socket. If you read without writing first, the
+    /// current system-wide parameters will be returned.
+    ///
+    ///     TCP_KEEPCNT: overrides tcp_keepalive_probes
+    ///
+    ///     TCP_KEEPIDLE: overrides tcp_keepalive_time
+    ///
+    ///     TCP_KEEPINTVL: overrides tcp_keepalive_intvl
+    /// ```
+    ///
+    /// Field `duration` overrides `tcp_keepalive_time`:
+    ///
+    /// ```text
+    /// tcp_keepalive_time
+    ///
+    ///    the interval between the last data packet sent (simple ACKs are not considered data) and the
+    ///    first keepalive probe; after the connection is marked to need keepalive, this counter is not
+    ///    used any further
+    /// ```
+    ///
+    /// The default value in the Linux kernel is 7200 seconds (2 hours).
+    KeepAlive {
+        enable: bool,
+        duration: Option<Duration>,
+    },
+    TcpNoDelay {
+        enable: bool,
+    },
+}
+
 impl Connection {
     pub const IO_BUF_SIZE: usize = 64 * 1024;
 
@@ -160,11 +220,14 @@ impl Connection {
     }
 
     pub fn new_tcp(inner: std::net::TcpStream) -> Self {
-        Self::Tcp {
+        let ret = Self::Tcp {
             inner,
             id: None,
             trace: false,
-        }
+        };
+        _ = ret.setsockopt(SockOpts::TcpNoDelay { enable: true });
+
+        ret
     }
 
     pub fn trace(mut self, val: bool) -> Self {
@@ -288,11 +351,11 @@ impl Connection {
             return Ok(None);
         }
         unsafe {
-            let raw: c_int = self.getsockopt(libc::SOL_SOCKET, libc::SO_KEEPALIVE)?;
+            let raw: c_int = self.__getsockopt(libc::SOL_SOCKET, libc::SO_KEEPALIVE)?;
             if raw == 0 {
                 return Ok(None);
             }
-            let secs: c_int = self.getsockopt(libc::IPPROTO_TCP, KEEPALIVE_OPTION)?;
+            let secs: c_int = self.__getsockopt(libc::IPPROTO_TCP, KEEPALIVE_OPTION)?;
             Ok(Some(Duration::new(secs as u64, 0)))
         }
     }
@@ -312,21 +375,13 @@ impl Connection {
         if matches!(self, Fd { .. }) {
             return Ok(());
         }
-        unsafe {
-            self.setsockopt(
-                libc::SOL_SOCKET,
-                libc::SO_KEEPALIVE,
-                keepalive.is_some() as c_int,
-            )?;
-            if let Some(dur) = keepalive {
-                // [ref:TODO]: checked cast here
-                self.setsockopt(libc::IPPROTO_TCP, KEEPALIVE_OPTION, dur.as_secs() as c_int)?;
-            }
-            Ok(())
-        }
+        self.setsockopt(SockOpts::KeepAlive {
+            enable: keepalive.is_some(),
+            duration: keepalive,
+        })
     }
 
-    unsafe fn setsockopt<T>(&self, opt: c_int, val: c_int, payload: T) -> std::io::Result<()>
+    unsafe fn inner_setsockopt<T>(&self, opt: c_int, val: c_int, payload: T) -> std::io::Result<()>
     where
         T: Copy,
     {
@@ -341,7 +396,44 @@ impl Connection {
         Ok(())
     }
 
-    unsafe fn getsockopt<T: Copy>(&self, opt: c_int, val: c_int) -> std::io::Result<T> {
+    fn setsockopt(&self, option: SockOpts) -> std::io::Result<()> {
+        match option {
+            SockOpts::KeepAlive {
+                enable: true,
+                duration,
+            } => {
+                unsafe {
+                    self.inner_setsockopt(libc::SOL_SOCKET, libc::SO_KEEPALIVE, <c_int>::from(true))
+                }?;
+                if let Some(dur) = duration {
+                    unsafe {
+                        self.inner_setsockopt(
+                            libc::IPPROTO_TCP,
+                            KEEPALIVE_OPTION,
+                            dur.as_secs() as c_int,
+                        )
+                    }?;
+                }
+                Ok(())
+            }
+            SockOpts::KeepAlive {
+                enable: false,
+                duration: _,
+            } => unsafe {
+                self.inner_setsockopt(libc::SOL_SOCKET, libc::SO_KEEPALIVE, <c_int>::from(false))
+            },
+            SockOpts::TcpNoDelay { enable } => unsafe {
+                self.inner_setsockopt(
+                    libc::SOL_TCP,
+                    libc::TCP_NODELAY,
+                    if enable { c_int::from(1_u8) } else { 0 },
+                )
+            },
+        }
+    }
+
+    #[inline]
+    unsafe fn __getsockopt<T: Copy>(&self, opt: c_int, val: c_int) -> std::io::Result<T> {
         let mut slot: T = std::mem::zeroed();
         let mut len = std::mem::size_of::<T>() as libc::socklen_t;
         syscall!(getsockopt(
