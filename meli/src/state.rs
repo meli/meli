@@ -469,6 +469,12 @@ impl State {
             s.screen.grid_mut().set_ascii_drawing(true);
             s.screen.overlay_grid_mut().set_ascii_drawing(true);
         }
+        if s.context.settings.terminal.use_text_presentation() {
+            s.screen.grid_mut().set_force_text_presentation(true);
+            s.screen
+                .overlay_grid_mut()
+                .set_force_text_presentation(true);
+        }
 
         s.screen.switch_to_alternate_screen(&s.context);
         for i in 0..s.context.accounts.len() {

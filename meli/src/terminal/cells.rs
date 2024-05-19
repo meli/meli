@@ -35,7 +35,7 @@ use melib::{
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use smallvec::SmallVec;
 
-use super::{Area, Color, Pos, ScreenGeneration};
+use super::{Area, Color, Pos, ScreenGeneration, TextPresentation};
 use crate::{state::Context, ThemeAttribute};
 
 /// In a scroll region up and down cursor movements shift the region vertically.
@@ -67,6 +67,8 @@ pub struct CellBuffer {
     pub default_cell: Cell,
     /// ASCII-only flag.
     pub ascii_drawing: bool,
+    /// Force text presentation for emojis.
+    pub force_text_presentation: bool,
     /// Use color.
     pub use_color: bool,
     /// If printing to this buffer and we run out of space, expand it.
@@ -84,6 +86,7 @@ impl std::fmt::Debug for CellBuffer {
             .field("buf cells", &self.buf.len())
             .field("default_cell", &self.default_cell)
             .field("ascii_drawing", &self.ascii_drawing)
+            .field("force_text_presentation", &self.force_text_presentation)
             .field("use_color", &self.use_color)
             .field("growable", &self.growable)
             .field("tag_table", &self.tag_table)
@@ -105,6 +108,7 @@ impl CellBuffer {
             default_cell: Cell::new_default(),
             growable: false,
             ascii_drawing: false,
+            force_text_presentation: false,
             use_color: false,
             tag_table: Default::default(),
             tag_associations: SmallVec::new(),
@@ -128,6 +132,7 @@ impl CellBuffer {
             default_cell,
             growable: false,
             ascii_drawing: false,
+            force_text_presentation: false,
             use_color: true,
             tag_table: Default::default(),
             tag_associations: SmallVec::new(),
@@ -146,9 +151,15 @@ impl CellBuffer {
         });
         Self {
             ascii_drawing: context.settings.terminal.ascii_drawing,
+            force_text_presentation: context.settings.terminal.use_text_presentation(),
             use_color: context.settings.terminal.use_color(),
             ..Self::new(default_cell, area)
         }
+    }
+
+    pub fn set_force_text_presentation(&mut self, new_val: bool) -> &mut Self {
+        self.force_text_presentation = new_val;
+        self
     }
 
     pub fn set_ascii_drawing(&mut self, new_val: bool) {
@@ -182,6 +193,7 @@ impl CellBuffer {
         };
         self.ascii_drawing = context.settings.terminal.ascii_drawing;
         self.use_color = context.settings.terminal.use_color();
+        self.force_text_presentation = context.settings.terminal.use_text_presentation();
 
         let newlen = newcols * newrows;
         if (self.cols, self.rows) == (newcols, newrows) || newlen >= Self::MAX_SIZE {
@@ -690,7 +702,12 @@ impl CellBuffer {
                 return (x - upper_left.0, y - upper_left.1);
             }
         }
-        for c in s.chars() {
+        let input = if self.force_text_presentation {
+            s.text_pr()
+        } else {
+            s.into()
+        };
+        for c in input.chars() {
             if c == crate::emoji_text_presentation_selector!() {
                 let prev_attrs = self[prev_coords].attrs();
                 self[prev_coords].set_attrs(prev_attrs | Attr::FORCE_TEXT);

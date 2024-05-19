@@ -32,9 +32,14 @@ pub mod cells;
 #[macro_use]
 pub mod keys;
 pub mod embedded;
+#[cfg(test)]
+mod tests;
 pub mod text_editing;
 
-use std::io::{BufRead, Write};
+use std::{
+    borrow::Cow,
+    io::{BufRead, Write},
+};
 
 pub use braille::BraillePixelIter;
 pub use screen::{Area, Screen, ScreenGeneration, StateStdout, Tty, Virtual};
@@ -179,5 +184,74 @@ impl Ask {
                 }
             }
         }
+    }
+}
+
+pub trait TextPresentation {
+    /// Return `input` string while trying to use text presentations of
+    /// symbols and emoji as much as possible. Might not work on all
+    /// non-text symbols and is experimental.
+    fn text_pr(&self) -> Cow<str>;
+}
+
+impl TextPresentation for str {
+    fn text_pr(&self) -> Cow<str> {
+        use std::str::FromStr;
+
+        use melib::text::grapheme_clusters::TextProcessing;
+        // [ref:FIXME]: add all relevant Unicode range/blocks to TextPresentation::text_pr()
+
+        // [ref:VERIFY]: Check whether our existing unicode tables can be used for TextPresentation::text_pr()
+
+        // [ref:DEBT]: TextPresentation::text_pr() is not tied to text submodule which can be updated for
+        // each Unicode release
+
+        let get_base_char = |grapheme: &Self| -> Option<char> {
+            char::from_str(grapheme.get(0..4).or_else(|| {
+                grapheme
+                    .get(0..3)
+                    .or_else(|| grapheme.get(0..2).or_else(|| grapheme.get(0..1)))
+            })?)
+            .ok()
+        };
+        let is_emoji = |base_char: char| -> bool {
+            [
+                0x2B00..0x2BFF,   // Miscellaneous Symbols and Arrows
+                0x1F300..0x1F5FF, // Miscellaneous Symbols and Pictographs
+                0x1F600..0x1F64F, // Emoticons
+                0x1F680..0x1F6FF, // Transport and Map
+                0x2600..0x26FF,   // Misc symbols
+                0x2700..0x27BF,   // Dingbats
+                0xFE00..0xFE0F,   // Variation Selectors
+                0x1F900..0x1F9FF, // Supplemental Symbols and Pictographs
+                0x1F1E6..0x1F1FF, // Flags
+            ]
+            .iter()
+            .any(|range| range.contains(&(base_char as u32)))
+        };
+
+        let graphemes = self.split_graphemes();
+        for g in &graphemes {
+            let Some(base_char) = get_base_char(g) else {
+                // Bail out
+                return Cow::from(self);
+            };
+            if is_emoji(base_char) {
+                let mut ret = String::with_capacity(self.len() + 1);
+                for g in &graphemes {
+                    ret.push_str(g);
+                    let Some(base_char) = get_base_char(g) else {
+                        // Bail out
+                        return Cow::from(self);
+                    };
+                    if is_emoji(base_char) {
+                        ret.push(emoji_text_presentation_selector!());
+                    }
+                }
+                return Cow::from(ret);
+            }
+        }
+
+        Cow::from(self)
     }
 }
