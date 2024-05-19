@@ -423,11 +423,34 @@ impl Connection {
                 self.inner_setsockopt(libc::SOL_SOCKET, libc::SO_KEEPALIVE, <c_int>::from(false))
             },
             SockOpts::TcpNoDelay { enable } => unsafe {
-                self.inner_setsockopt(
-                    libc::SOL_TCP,
-                    libc::TCP_NODELAY,
-                    if enable { c_int::from(1_u8) } else { 0 },
-                )
+                #[cfg(any(
+                    target_os = "openbsd",
+                    target_os = "netbsd",
+                    target_os = "haiku",
+                    target_os = "macos",
+                    target_os = "ios"
+                ))]
+                {
+                    self.inner_setsockopt(
+                        libc::IPPROTO_TCP,
+                        libc::TCP_NODELAY,
+                        if enable { c_int::from(1_u8) } else { 0 },
+                    )
+                }
+                #[cfg(not(any(
+                    target_os = "openbsd",
+                    target_os = "netbsd",
+                    target_os = "haiku",
+                    target_os = "macos",
+                    target_os = "ios"
+                )))]
+                {
+                    self.inner_setsockopt(
+                        libc::SOL_TCP,
+                        libc::TCP_NODELAY,
+                        if enable { c_int::from(1_u8) } else { 0 },
+                    )
+                }
             },
         }
     }
