@@ -83,9 +83,11 @@ use smol::{unblock, Async as AsyncWrapper};
 
 use crate::{
     email::{parser::BytesExt, Address, Envelope},
-    error::{Error, Result, ResultIntoError},
+    error::{Error, ErrorKind, Result, ResultIntoError},
     utils::connections::{std_net::connect as tcp_stream_connect, Connection},
 };
+#[cfg(test)]
+mod tests;
 
 /// Kind of server security (StartTLS/TLS/None) the client should attempt
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -126,6 +128,41 @@ pub enum Password {
     Raw(String),
     #[serde(alias = "command_evaluation", alias = "command_eval")]
     CommandEval(String),
+}
+
+impl Password {
+    pub async fn evaluate(&self) -> Result<Vec<u8>> {
+        match self {
+            Self::Raw(p) => Ok(p.as_bytes().to_vec()),
+            Self::CommandEval(command) => {
+                let _command = command.clone();
+
+                let mut output = unblock(move || {
+                    Command::new("sh")
+                        .args(["-c", &_command])
+                        .stdin(std::process::Stdio::piped())
+                        .stdout(std::process::Stdio::piped())
+                        .stderr(std::process::Stdio::piped())
+                        .output()
+                })
+                .await
+                .chain_err_summary(|| format!("Could not execute CommandEval value: {}", command))
+                .chain_err_kind(ErrorKind::OSError)?;
+                if !output.status.success() {
+                    return Err(Error::new(format!(
+                        "SMTP password evaluation command `{}` returned {}: {}",
+                        command,
+                        output.status,
+                        String::from_utf8_lossy(&output.stderr)
+                    )));
+                }
+                if output.stdout.ends_with(b"\n") {
+                    output.stdout.pop();
+                }
+                Ok(output.stdout)
+            }
+        }
+    }
 }
 
 /// Kind of server authentication the client should attempt
@@ -348,7 +385,7 @@ impl SmtpConnection {
                                     midhandshake_stream = Some(stream);
                                 }
                                 p => {
-                                    p.chain_err_kind(crate::error::ErrorKind::Network)?;
+                                    p.chain_err_kind(ErrorKind::Network)?;
                                 }
                             }
                         }
@@ -438,7 +475,7 @@ impl SmtpConnection {
                      {:?}",
                     pre_auth_extensions_reply
                 ))
-                .set_kind(crate::error::ErrorKind::Authentication));
+                .set_kind(ErrorKind::Authentication));
             }
             no_auth_needed =
                 ret.server_conf.auth == SmtpAuth::None || !ret.server_conf.auth.require_auth();
@@ -473,45 +510,18 @@ impl SmtpConnection {
                     auth_type,
                     ..
                 } => {
-                    let password = match password {
-                        Password::Raw(p) => p.as_bytes().to_vec(),
-                        Password::CommandEval(command) => {
-                            let _command = command.clone();
-
-                            let mut output = unblock(move || {
-                                Command::new("sh")
-                                    .args(["-c", &_command])
-                                    .stdin(std::process::Stdio::piped())
-                                    .stdout(std::process::Stdio::piped())
-                                    .stderr(std::process::Stdio::piped())
-                                    .output()
-                            })
-                            .await?;
-                            if !output.status.success() {
-                                return Err(Error::new(format!(
-                                    "SMTP password evaluation command `{}` returned {}: {}",
-                                    command,
-                                    output.status,
-                                    String::from_utf8_lossy(&output.stderr)
-                                )));
-                            }
-                            if output.stdout.ends_with(b"\n") {
-                                output.stdout.pop();
-                            }
-                            output.stdout
-                        }
-                    };
+                    let password = password.evaluate().await?;
                     if auth_type.login {
                         let username = username.to_string();
                         ret.send_command(&[b"AUTH LOGIN"]).await?;
                         ret.read_lines(&mut res, Some((ReplyCode::_334, &[])))
                             .await
-                            .chain_err_kind(crate::error::ErrorKind::Authentication)?;
+                            .chain_err_kind(ErrorKind::Authentication)?;
                         let buf = base64::encode(&username);
                         ret.send_command(&[buf.as_bytes()]).await?;
                         ret.read_lines(&mut res, Some((ReplyCode::_334, &[])))
                             .await
-                            .chain_err_kind(crate::error::ErrorKind::Authentication)?;
+                            .chain_err_kind(ErrorKind::Authentication)?;
                         let buf = base64::encode(&password);
                         ret.send_command(&[buf.as_bytes()]).await?;
                     } else {
@@ -535,7 +545,7 @@ impl SmtpConnection {
                     }
                     ret.read_lines(&mut res, Some((ReplyCode::_235, &[])))
                         .await
-                        .chain_err_kind(crate::error::ErrorKind::Authentication)?;
+                        .chain_err_kind(ErrorKind::Authentication)?;
                     ret.send_command(&[b"EHLO meli-email.org"]).await?;
                 }
                 SmtpAuth::XOAuth2 { token_command, .. } => {
@@ -568,7 +578,7 @@ impl SmtpConnection {
                         .await?;
                     ret.read_lines(&mut res, Some((ReplyCode::_235, &[])))
                         .await
-                        .chain_err_kind(crate::error::ErrorKind::Authentication)?;
+                        .chain_err_kind(ErrorKind::Authentication)?;
                     ret.send_command(&[b"EHLO meli-email.org"]).await?;
                 }
             }
@@ -1105,233 +1115,4 @@ async fn read_lines<'r>(
         )));
     }
     Ok(reply)
-}
-
-#[cfg(test)]
-mod test {
-    use std::net::IpAddr; //, Ipv4Addr, Ipv6Addr};
-    use std::{
-        sync::{Arc, Mutex},
-        thread,
-    };
-
-    use mailin_embedded::{
-        response::{INTERNAL_ERROR, OK},
-        Handler, Response, Server, SslConfig,
-    };
-
-    use super::*;
-
-    const ADDRESS: &str = "localhost:8825";
-    #[derive(Clone, Debug)]
-    enum Message {
-        Helo,
-        Mail {
-            from: String,
-        },
-        Rcpt {
-            from: String,
-            to: Vec<String>,
-        },
-        DataStart {
-            from: String,
-            to: Vec<String>,
-        },
-        Data {
-            #[allow(dead_code)]
-            from: String,
-            to: Vec<String>,
-            buf: Vec<u8>,
-        },
-    }
-
-    type QueuedMail = ((IpAddr, String), Message);
-
-    #[derive(Clone, Debug)]
-    struct MyHandler {
-        mails: Arc<Mutex<Vec<QueuedMail>>>,
-        stored: Arc<Mutex<Vec<(String, crate::Envelope)>>>,
-    }
-
-    impl Handler for MyHandler {
-        fn helo(&mut self, ip: IpAddr, domain: &str) -> Response {
-            eprintln!("helo ip {:?} domain {:?}", ip, domain);
-            self.mails
-                .lock()
-                .unwrap()
-                .push(((ip, domain.to_string()), Message::Helo));
-            OK
-        }
-
-        fn mail(&mut self, ip: IpAddr, domain: &str, from: &str) -> Response {
-            eprintln!("mail() ip {:?} domain {:?} from {:?}", ip, domain, from);
-            if let Some((_, message)) = self
-                .mails
-                .lock()
-                .unwrap()
-                .iter_mut()
-                .rev()
-                .find(|((i, d), _)| (i, d.as_str()) == (&ip, domain))
-            {
-                eprintln!("mail is {:?}", &message);
-                if matches!(message, Message::Helo) {
-                    *message = Message::Mail {
-                        from: from.to_string(),
-                    };
-                    return OK;
-                }
-            }
-            INTERNAL_ERROR
-        }
-
-        fn rcpt(&mut self, _to: &str) -> Response {
-            eprintln!("rcpt() to {:?}", _to);
-            if let Some((_, message)) = self.mails.lock().unwrap().last_mut() {
-                eprintln!("rcpt mail is {:?}", &message);
-                if let Message::Mail { from } = message {
-                    *message = Message::Rcpt {
-                        from: from.clone(),
-                        to: vec![_to.to_string()],
-                    };
-                    return OK;
-                } else if let Message::Rcpt { to, .. } = message {
-                    to.push(_to.to_string());
-                    return OK;
-                }
-            }
-            INTERNAL_ERROR
-        }
-
-        fn data_start(
-            &mut self,
-            _domain: &str,
-            _from: &str,
-            _is8bit: bool,
-            _to: &[String],
-        ) -> Response {
-            eprintln!(
-                "data_start() domain {:?} from {:?} is8bit {:?} to {:?}",
-                _domain, _from, _is8bit, _to
-            );
-            if let Some(((_, d), ref mut message)) = self.mails.lock().unwrap().last_mut() {
-                if d != _domain {
-                    return INTERNAL_ERROR;
-                }
-                eprintln!("data_start mail is {:?}", &message);
-                if let Message::Rcpt { from, to } = message {
-                    *message = Message::DataStart {
-                        from: from.to_string(),
-                        to: to.to_vec(),
-                    };
-                    return OK;
-                }
-            }
-            INTERNAL_ERROR
-        }
-
-        fn data(&mut self, _buf: &[u8]) -> std::result::Result<(), std::io::Error> {
-            if let Some(((_, _), ref mut message)) = self.mails.lock().unwrap().last_mut() {
-                if let Message::DataStart { from, to } = message {
-                    *message = Message::Data {
-                        from: from.to_string(),
-                        to: to.clone(),
-                        buf: _buf.to_vec(),
-                    };
-                    return Ok(());
-                } else if let Message::Data { buf, .. } = message {
-                    buf.extend(_buf.iter());
-                    return Ok(());
-                }
-            }
-            Ok(())
-        }
-
-        fn data_end(&mut self) -> Response {
-            let last = self.mails.lock().unwrap().pop();
-            if let Some(((ip, domain), Message::Data { from: _, to, buf })) = last {
-                for to in to {
-                    match crate::Envelope::from_bytes(&buf, None) {
-                        Ok(env) => {
-                            eprintln!("data_end env is {:?}", &env);
-                            eprintln!("data_end env.other_headers is {:?}", env.other_headers());
-                            self.stored.lock().unwrap().push((to.clone(), env));
-                        }
-                        Err(err) => {
-                            eprintln!("envelope parse error {}", err);
-                        }
-                    }
-                }
-                self.mails
-                    .lock()
-                    .unwrap()
-                    .push(((ip, domain), Message::Helo));
-                return OK;
-            }
-            eprintln!("last self.mails item was not Message::Data: {last:?}");
-            INTERNAL_ERROR
-        }
-    }
-
-    fn get_smtp_conf() -> SmtpServerConf {
-        SmtpServerConf {
-            hostname: "localhost".into(),
-            port: 8825,
-            envelope_from: "foo-chat@example.com".into(),
-            auth: SmtpAuth::None,
-            security: SmtpSecurity::None,
-            extensions: Default::default(),
-        }
-    }
-
-    #[test]
-    #[ignore]
-    fn test_smtp() {
-        stderrlog::new()
-            .quiet(false)
-            .verbosity(0)
-            .show_module_names(true)
-            .timestamp(stderrlog::Timestamp::Millisecond)
-            .init()
-            .unwrap();
-
-        let handler = MyHandler {
-            mails: Arc::new(Mutex::new(vec![])),
-            stored: Arc::new(Mutex::new(vec![])),
-        };
-        let handler2 = handler.clone();
-        let _smtp_handle = thread::spawn(move || {
-            let mut server = Server::new(handler2);
-
-            server
-                .with_name("test")
-                .with_ssl(SslConfig::None)
-                .unwrap()
-                .with_addr(ADDRESS)
-                .unwrap();
-            eprintln!("Running smtp server at {}", ADDRESS);
-            server.serve().expect("Could not run server");
-        });
-
-        let smtp_server_conf = get_smtp_conf();
-        let input_str = include_str!("../tests/data/test_sample_longmessage.eml");
-        match crate::Envelope::from_bytes(input_str.as_bytes(), None) {
-            Ok(_envelope) => {}
-            Err(err) => {
-                panic!("Could not parse message: {}", err);
-            }
-        }
-        let mut connection =
-            futures::executor::block_on(SmtpConnection::new_connection(smtp_server_conf)).unwrap();
-        futures::executor::block_on(connection.mail_transaction(
-            input_str,
-            /* tos */
-            Some(&[
-                Address::try_from("foo-chat@example.com").unwrap(),
-                Address::try_from("webmaster@example.com").unwrap(),
-            ]),
-        ))
-        .unwrap();
-        futures::executor::block_on(connection.quit()).unwrap();
-        assert_eq!(handler.stored.lock().unwrap().len(), 2);
-    }
 }

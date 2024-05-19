@@ -423,7 +423,10 @@ pub trait ResultIntoError<T> {
     where
         F: Fn() -> M,
         M: Into<Cow<'static, str>>;
-
+    fn chain_err_details<M, F>(self, msg_fn: F) -> Result<T>
+    where
+        F: Fn() -> M,
+        M: Into<Cow<'static, str>>;
     fn chain_err_kind(self, kind: ErrorKind) -> Result<T>;
 }
 
@@ -461,6 +464,15 @@ impl<T, I: Into<Error>> ResultIntoError<T> for std::result::Result<T, I> {
         M: Into<Cow<'static, str>>,
     {
         self.map_err(|err| err.set_err_summary(msg_fn()))
+    }
+
+    #[inline]
+    fn chain_err_details<M, F>(self, msg_fn: F) -> Result<T>
+    where
+        F: Fn() -> M,
+        M: Into<Cow<'static, str>>,
+    {
+        self.map_err(|err| err.set_err_details(msg_fn()))
     }
 
     #[inline]

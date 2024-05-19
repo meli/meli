@@ -36,11 +36,14 @@ use crate::{
         attachment_types::{Charset, ContentTransferEncoding, ContentType, MultipartType},
         attachments::AttachmentBuilder,
     },
+    error::{ErrorKind, ResultIntoError},
     utils::{datetime, shellexpand::ShellExpandTrait, xdg::query_mime_info},
 };
 
 pub mod mime;
 pub mod random;
+#[cfg(test)]
+mod tests;
 
 use super::parser;
 
@@ -82,20 +85,43 @@ impl Default for Draft {
 
 impl FromStr for Draft {
     type Err = Error;
+
     fn from_str(s: &str) -> Result<Self> {
         if s.is_empty() {
-            return Err(Error::new("Empty input in Draft::from_str"));
+            return Err(
+                Error::new("Empty input in Draft::from_str").set_kind(ErrorKind::ValueError)
+            );
         }
 
-        let (headers, _) = parser::mail(s.as_bytes())?;
+        let (headers, _) = parser::mail(s.as_bytes())
+            .chain_err_summary(|| "Could not parse e-mail into a Draft")
+            .chain_err_kind(ErrorKind::ValueError)?;
         let mut ret = Self::default();
 
         for (k, v) in headers {
-            ret.headers.insert(k, String::from_utf8(v.to_vec())?);
+            ret.headers.insert(
+                k,
+                String::from_utf8(v.to_vec())
+                    .chain_err_summary(|| "Invalid header value; must be ASCII or UTF-8")
+                    .chain_err_details(|| {
+                        format!("Header value was `{}`", String::from_utf8_lossy(v))
+                    })
+                    .chain_err_kind(ErrorKind::ValueError)?,
+            );
         }
         let body = Envelope::new(EnvelopeHash::default()).body_bytes(s.as_bytes());
 
-        ret.body = String::from_utf8(body.decode(Default::default()))?;
+        ret.body = String::from_utf8(body.decode(Default::default()))
+            .chain_err_summary(|| {
+                "Internal Error/Bug: Invalid e-mail body value; must be ASCII or UTF-8"
+            })
+            .chain_err_details(|| {
+                format!(
+                    "Body input was `{}`",
+                    String::from_utf8_lossy(&body.decode(Default::default()))
+                )
+            })
+            .chain_err_kind(ErrorKind::Bug)?;
 
         Ok(ret)
     }
@@ -567,116 +593,4 @@ where
         });
 
     Ok(attachment)
-}
-
-#[cfg(test)]
-mod tests {
-    use std::str::FromStr;
-
-    use super::*;
-
-    #[test]
-    fn test_new_draft() {
-        let mut default = Draft::default();
-        assert_eq!(Draft::from_str(&default.to_edit_string()).unwrap(), default);
-        default.set_body("αδφαφσαφασ".to_string());
-        assert_eq!(Draft::from_str(&default.to_edit_string()).unwrap(), default);
-        default.set_body("ascii only".to_string());
-        assert_eq!(Draft::from_str(&default.to_edit_string()).unwrap(), default);
-    }
-
-    #[test]
-    fn test_draft_update() {
-        let mut default = Draft::default();
-        default
-            .set_wrap_header_preamble(Some(("<!--".to_string(), "-->".to_string())))
-            .set_body("αδφαφσαφασ".to_string())
-            .set_header(HeaderName::SUBJECT, "test_update()".into())
-            .set_header(HeaderName::DATE, "Sun, 16 Jun 2013 17:56:45 +0200".into());
-
-        let original = default.clone();
-        let s = default.to_edit_string();
-        assert_eq!(
-            s,
-            "<!--\nDate: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \nSubject: \
-             test_update()\n-->\n\nαδφαφσαφασ"
-        );
-        assert!(!default.update(&s).unwrap());
-        assert_eq!(&original, &default);
-
-        default.set_wrap_header_preamble(Some(("".to_string(), "".to_string())));
-        let original = default.clone();
-        let s = default.to_edit_string();
-        assert_eq!(
-            s,
-            "Date: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \nSubject: \
-             test_update()\n\nαδφαφσαφασ"
-        );
-        assert!(!default.update(&s).unwrap());
-        assert_eq!(&original, &default);
-
-        default.set_wrap_header_preamble(None);
-        let original = default.clone();
-        let s = default.to_edit_string();
-        assert_eq!(
-            s,
-            "Date: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \nSubject: \
-             test_update()\n\nαδφαφσαφασ"
-        );
-        assert!(!default.update(&s).unwrap());
-        assert_eq!(&original, &default);
-
-        default.set_wrap_header_preamble(Some((
-            "{-\n\n\n===========".to_string(),
-            "</mixed>".to_string(),
-        )));
-        let original = default.clone();
-        let s = default.to_edit_string();
-        assert_eq!(
-            s,
-            "{-\n\n\n===========\nDate: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \
-             \nSubject: test_update()\n</mixed>\n\nαδφαφσαφασ"
-        );
-        assert!(!default.update(&s).unwrap());
-        assert_eq!(&original, &default);
-
-        default
-            .set_body(
-                "hellohello<!--\n<!--\n<--hellohello\nhellohello-->\n-->\n-->hello\n".to_string(),
-            )
-            .set_wrap_header_preamble(Some(("<!--".to_string(), "-->".to_string())));
-        let original = default.clone();
-        let s = default.to_edit_string();
-        #[rustfmt::skip]
-        assert_eq!(
-            s,
-            "<!--\nDate: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \nSubject: \
-             test_update()\n-->\n\nhellohello<!--\n<!--\n<--hellohello\nhellohello-->\n-->\n-->hello\n"
-        );
-        assert!(!default.update(&s).unwrap());
-        assert_eq!(&original, &default);
-    }
-
-    /*
-    #[test]
-    fn test_attachments() {
-        let mut default = Draft::default();
-        default.set_body("αδφαφσαφασ".to_string());
-
-        let mut file = std::fs::File::open("file path").unwrap();
-        let mut contents = Vec::new();
-        file.read_to_end(&mut contents).unwrap();
-
-        let mut attachment = AttachmentBuilder::new(b"");
-        attachment
-            .set_raw(contents)
-            .set_content_type(ContentType::Other {
-                name: Some("images.jpeg".to_string()),
-                tag: b"image/jpeg".to_vec(),
-            })
-            .set_content_transfer_encoding(ContentTransferEncoding::Base64);
-        default.attachments_mut().push(attachment);
-        println!("{}", default.finalise().unwrap());
-    }
-        */
 }

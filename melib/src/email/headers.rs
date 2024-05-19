@@ -23,6 +23,9 @@
 
 pub mod names;
 pub mod standards;
+#[cfg(test)]
+mod tests;
+
 use std::{
     borrow::Borrow,
     cmp::{Eq, PartialEq},
@@ -181,37 +184,5 @@ impl Deref for HeaderMap {
 impl DerefMut for HeaderMap {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_headers_case_sensitivity() {
-        let mut headers = HeaderMap::default();
-        headers.insert("from".try_into().unwrap(), "Myself <a@b.c>".into());
-        assert_eq!(&headers["From"], "Myself <a@b.c>");
-        assert_eq!(&headers["From"], &headers["from"]);
-        assert_eq!(&headers["fROm"], &headers["from"]);
-        headers.get_mut("from").unwrap().pop();
-        assert_eq!(&headers["From"], "Myself <a@b.c");
-        headers.insert("frOM".try_into().unwrap(), "nada".into());
-        assert_eq!(&headers["fROm"], "nada");
-    }
-
-    #[test]
-    fn test_headers_map_index() {
-        let mut headers = HeaderMap::default();
-        headers.insert(HeaderName::SUBJECT, "foobar".into());
-        headers.insert(HeaderName::MESSAGE_ID, "foobar@examplecom".into());
-        assert_eq!(&headers[0], "foobar");
-        assert_eq!(&headers[HeaderName::SUBJECT], "foobar");
-        assert_eq!(&headers[&HeaderName::SUBJECT], "foobar");
-        assert_eq!(&headers["subject"], "foobar");
-        assert_eq!(&headers["Subject"], "foobar");
-        assert_eq!(&headers[b"Subject".as_slice()], "foobar");
-        assert!(&headers[HeaderName::MESSAGE_ID] != "foobar");
     }
 }

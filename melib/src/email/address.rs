@@ -28,6 +28,8 @@ use std::{
 };
 
 use super::*;
+#[cfg(test)]
+mod tests;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GroupAddress {
@@ -658,33 +660,4 @@ macro_rules! make_address {
             }
         })
     };
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    const M_ID: &str = "<20170825132332.6734-1@mail.ntua.gr>";
-    const M_LEN: usize = M_ID.len();
-
-    #[test]
-    fn test_message_id_strbuilder() {
-        let (_, val) = parser::address::msg_id(M_ID.as_bytes()).unwrap();
-        assert_eq!(
-            val,
-            MessageID(
-                M_ID.as_bytes().to_vec(),
-                StrBuilder {
-                    offset: 1,
-                    length: 35,
-                }
-            )
-        );
-    }
-
-    #[test]
-    fn test_message_id_comparisons() {
-        let (_, val) = parser::address::msg_id(M_ID.as_bytes()).unwrap();
-        assert_eq!(val, M_ID);
-        assert_eq!(val, M_ID[1..][..M_LEN - 2]);
-    }
 }
