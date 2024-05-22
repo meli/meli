@@ -780,9 +780,10 @@ impl Component for EnvelopeView {
                     if let Some(pos) = s.as_bytes().iter().position(|b| *b == b'+' || *b == b'-') {
                         let offset = &s[pos..];
                         diff.0 = offset.starts_with('+');
-                        if let (Ok(hr_offset), Ok(min_offset)) =
-                            (offset[1..3].parse::<i64>(), offset[3..5].parse::<i64>())
-                        {
+                        if let (Some(hr_offset), Some(min_offset)) = (
+                            offset.get(1..3).and_then(|slice| slice.parse::<i64>().ok()),
+                            offset.get(3..5).and_then(|slice| slice.parse::<i64>().ok()),
+                        ) {
                             diff.1 .0 = hr_offset;
                             diff.1 .1 = min_offset;
                         }
