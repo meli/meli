@@ -172,3 +172,113 @@ pub fn view(
     )));
     Ok(state)
 }
+
+pub fn tool(path: Option<PathBuf>, opt: crate::args::ToolOpt) -> Result<()> {
+    use melib::utils::futures::timeout;
+
+    use crate::{args::ToolOpt, conf::composing::SendMail};
+
+    let config_path = if let Some(path) = path {
+        path.expand()
+    } else {
+        crate::conf::get_config_file()?
+    };
+    let conf = conf::FileSettings::validate(config_path, true, false)?;
+    let account = match opt {
+        ToolOpt::ImapShell { ref account } => account,
+        #[cfg(feature = "smtp")]
+        ToolOpt::SmtpShell { ref account } => account,
+        #[cfg(feature = "jmap")]
+        ToolOpt::JmapShell { ref account } => account,
+    };
+    if !conf.accounts.contains_key(&account.clone()) {
+        println!(
+            "The configuration file does not contain the account `{}`. It contains the following:",
+            account
+        );
+        for a in conf.accounts.keys() {
+            println!("{}", a);
+        }
+        return Err("Try again with a valid account name.".into());
+    }
+    let file_account_conf = conf.accounts[account].clone();
+    let account_conf: conf::AccountConf = file_account_conf.clone().into();
+    match opt {
+        #[cfg(feature = "smtp")]
+        ToolOpt::SmtpShell { .. } => {
+            let send_mail = file_account_conf
+                .conf_override
+                .composing
+                .send_mail
+                .as_ref()
+                .unwrap_or(&conf.composing.send_mail)
+                .clone();
+            let SendMail::Smtp(smtp_conf) = send_mail else {
+                panic!(
+                    "smtp shell requires an smtp configuration for account {}",
+                    account
+                );
+            };
+            std::thread::spawn(move || {
+                let ex = melib::smol::Executor::new();
+                futures::executor::block_on(ex.run(futures::future::pending::<()>()));
+            });
+
+            let mut conn = futures::executor::block_on(
+                melib::smtp::SmtpConnection::new_connection(smtp_conf),
+            )?;
+            let mut input = String::new();
+            let mut res = String::with_capacity(8 * 1024);
+            println!(
+                "Connected. Type a valid SMTP command such as EHLO and hit Return. Exit with \
+                 Ctrl+C or with the command QUIT."
+            );
+            loop {
+                use std::io;
+                input.clear();
+                res.clear();
+
+                match io::stdin().read_line(&mut input) {
+                    Ok(_) => {
+                        futures::executor::block_on(timeout(
+                            None,
+                            conn.send_command(&[input.trim().as_bytes()]),
+                        ))
+                        .unwrap()
+                        .unwrap();
+                        futures::executor::block_on(timeout(None, conn.read_lines(&mut res, None)))
+                            .unwrap()
+                            .unwrap();
+                        println!("\rC: {}", input.trim());
+                        print!("S: {}", res);
+                        if input.trim().eq_ignore_ascii_case("quit") {
+                            break;
+                        }
+                    }
+                    Err(error) => println!("error: {}", error),
+                }
+            }
+        }
+        ToolOpt::ImapShell { .. } => {
+            let mut imap = melib::imap::ImapType::new(
+                &account_conf.account,
+                Box::new(|_| true),
+                melib::BackendEventConsumer::new(std::sync::Arc::new(|_, _| ())),
+            )?;
+
+            std::thread::spawn(move || {
+                let ex = melib::smol::Executor::new();
+                futures::executor::block_on(ex.run(futures::future::pending::<()>()));
+            });
+            (imap.as_any_mut())
+                .downcast_mut::<melib::imap::ImapType>()
+                .unwrap()
+                .shell();
+        }
+        #[cfg(feature = "jmap")]
+        ToolOpt::JmapShell { .. } => {
+            unimplemented!("Sorry, no JMAP shell yet.");
+        }
+    }
+    Ok(())
+}

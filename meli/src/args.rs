@@ -63,19 +63,21 @@ pub enum SubCommand {
         #[structopt(value_name = "CONFIG_PATH", parse(from_os_str))]
         path: Option<PathBuf>,
     },
-    #[structopt(visible_alias="docs", aliases=&["docs", "manpage", "manpages"])]
     #[structopt(display_order = 3)]
+    /// Testing tools such as IMAP, SMTP shells for debugging.
+    Tools(ToolOpt),
+    #[structopt(visible_alias="docs", aliases=&["docs", "manpage", "manpages"])]
+    #[structopt(display_order = 4)]
     /// print documentation page and exit (Piping to a pager is recommended.).
     Man(ManOpt),
-
-    #[structopt(display_order = 4)]
+    #[structopt(display_order = 5)]
     /// Install manual pages to the first location provided by `$MANPATH` /
     /// `manpath(1)`, unless you specify the directory as an argument.
     InstallMan {
         #[structopt(value_name = "DESTINATION_PATH", parse(from_os_str))]
         destination_path: Option<PathBuf>,
     },
-    #[structopt(display_order = 5)]
+    #[structopt(display_order = 6)]
     /// Print compile time feature flags of this binary
     CompiledWith,
     /// Print log file location.
@@ -100,4 +102,22 @@ pub struct ManOpt {
         structopt(long = "no-raw", alias = "no-raw", value_name = "bool")
     )]
     pub no_raw: Option<Option<bool>>,
+}
+
+#[derive(Debug, StructOpt)]
+pub enum ToolOpt {
+    ImapShell {
+        #[structopt(value_name = "CONFIG_TOML_ACCOUNT_NAME")]
+        account: String,
+    },
+    #[cfg(feature = "smtp")]
+    SmtpShell {
+        #[structopt(value_name = "CONFIG_TOML_ACCOUNT_NAME")]
+        account: String,
+    },
+    #[cfg(feature = "jmap")]
+    JmapShell {
+        #[structopt(value_name = "CONFIG_TOML_ACCOUNT_NAME")]
+        account: String,
+    },
 }

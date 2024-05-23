@@ -95,6 +95,9 @@ fn run_app(opt: Opt) -> Result<()> {
         Some(SubCommand::TestConfig { path }) => {
             return subcommands::test_config(path);
         }
+        Some(SubCommand::Tools(toolopt)) => {
+            return subcommands::tool(opt.config, toolopt);
+        }
         Some(SubCommand::CreateConfig { path }) => {
             return subcommands::create_config(path);
         }
