@@ -220,6 +220,7 @@ impl TextPresentation for str {
         };
         let is_emoji = |base_char: char| -> bool {
             [
+                0x2600..0x26FF,   // Miscellaneous Symbols
                 0x2B00..0x2BFF,   // Miscellaneous Symbols and Arrows
                 0x1F300..0x1F5FF, // Miscellaneous Symbols and Pictographs
                 0x1F600..0x1F64F, // Emoticons
