@@ -54,7 +54,7 @@ use crate::{
     conf::{AccountConf, FileMailboxConf},
     jobs::{JobId, JoinHandle},
     types::{
-        ForkType,
+        ForkType, NotificationType,
         UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification},
     },
     MainLoopHandler, StatusEvent, ThreadEvent,
@@ -691,16 +691,16 @@ impl Account {
                     }
 
                     return Some(Notification {
-                        title: Some(format!("new e-mail from: {}", from).into()),
+                        title: Some(subject.into()),
                         body: format!(
-                            "{}\n{} {}",
-                            subject,
+                            "{}\n{} | {}",
+                            from,
                             self.name,
                             self.mailbox_entries[&mailbox_hash].name()
                         )
                         .into(),
                         source: None,
-                        kind: Some(crate::types::NotificationType::NewMail),
+                        kind: Some(NotificationType::NewMail),
                     });
                 }
                 RefreshEventKind::Remove(env_hash) => {
@@ -754,7 +754,7 @@ impl Account {
                     return Some(Notification {
                         title: Some("Account watch failed".into()),
                         body: err.to_string().into(),
-                        kind: Some(crate::types::NotificationType::Error(err.kind)),
+                        kind: Some(NotificationType::Error(err.kind)),
                         source: Some(err),
                     });
                 }
@@ -1462,7 +1462,7 @@ impl Account {
                                         title: Some(self.name.clone().into()),
                                         source: Some(err.clone()),
                                         body: err.to_string().into(),
-                                        kind: Some(crate::types::NotificationType::Error(err.kind)),
+                                        kind: Some(NotificationType::Error(err.kind)),
                                     },
                                 ));
                                 self.main_loop_handler.send(ThreadEvent::UIEvent(
@@ -1540,7 +1540,7 @@ impl Account {
                                     ),
                                     source: None,
                                     body: err.to_string().into(),
-                                    kind: Some(crate::types::NotificationType::Error(err.kind)),
+                                    kind: Some(NotificationType::Error(err.kind)),
                                 },
                             ));
                             self.mailbox_entries
@@ -1673,7 +1673,7 @@ impl Account {
                                 title: Some(format!("{}: could not set flag", &self.name).into()),
                                 source: None,
                                 body: err.to_string().into(),
-                                kind: Some(crate::types::NotificationType::Error(err.kind)),
+                                kind: Some(NotificationType::Error(err.kind)),
                             }));
                     }
                     Ok(Some(Ok(()))) => {
@@ -1758,7 +1758,7 @@ impl Account {
                                             file.path().display()
                                         )
                                         .into(),
-                                        kind: Some(crate::types::NotificationType::Info),
+                                        kind: Some(NotificationType::Info),
                                     },
                                 ));
                             }
@@ -1777,7 +1777,7 @@ impl Account {
                                 title: Some("Could not send message".into()),
                                 source: None,
                                 body: err.to_string().into(),
-                                kind: Some(crate::types::NotificationType::Error(err.kind)),
+                                kind: Some(NotificationType::Error(err.kind)),
                             }));
                     }
                 }
@@ -1793,7 +1793,7 @@ impl Account {
                                 ),
                                 source: None,
                                 body: err.to_string().into(),
-                                kind: Some(crate::types::NotificationType::Error(err.kind)),
+                                kind: Some(NotificationType::Error(err.kind)),
                             }));
                     }
                 }
@@ -1819,7 +1819,7 @@ impl Account {
                                         ),
                                         source: None,
                                         body: err.to_string().into(),
-                                        kind: Some(crate::types::NotificationType::Error(err.kind)),
+                                        kind: Some(NotificationType::Error(err.kind)),
                                     },
                                 ));
                             }
@@ -1907,7 +1907,7 @@ impl Account {
                                     ),
                                     source: None,
                                     body: err.to_string().into(),
-                                    kind: Some(crate::types::NotificationType::Error(err.kind)),
+                                    kind: Some(NotificationType::Error(err.kind)),
                                 },
                             ));
                         }
@@ -1964,7 +1964,7 @@ impl Account {
                                     ),
                                     source: None,
                                     body: "".into(),
-                                    kind: Some(crate::types::NotificationType::Info),
+                                    kind: Some(NotificationType::Info),
                                 },
                             ));
                         }
@@ -1990,7 +1990,7 @@ impl Account {
                                     ),
                                     source: None,
                                     body: err.to_string().into(),
-                                    kind: Some(crate::types::NotificationType::Error(err.kind)),
+                                    kind: Some(NotificationType::Error(err.kind)),
                                 },
                             ));
                         }
@@ -2006,7 +2006,7 @@ impl Account {
                                     ),
                                     source: None,
                                     body: "".into(),
-                                    kind: Some(crate::types::NotificationType::Info),
+                                    kind: Some(NotificationType::Info),
                                 },
                             ));
                         }
@@ -2035,7 +2035,7 @@ impl Account {
                                     ),
                                     source: None,
                                     body: err.to_string().into(),
-                                    kind: Some(crate::types::NotificationType::Error(err.kind)),
+                                    kind: Some(NotificationType::Error(err.kind)),
                                 },
                             ));
                         }
@@ -2061,7 +2061,7 @@ impl Account {
                                     ),
                                     source: None,
                                     body: "".into(),
-                                    kind: Some(crate::types::NotificationType::Info),
+                                    kind: Some(NotificationType::Info),
                                 },
                             ));
                         }
@@ -2085,7 +2085,7 @@ impl Account {
                                     ),
                                     source: None,
                                     body: err.to_string().into(),
-                                    kind: Some(crate::types::NotificationType::Error(err.kind)),
+                                    kind: Some(NotificationType::Error(err.kind)),
                                 },
                             ));
                         }
@@ -2107,7 +2107,7 @@ impl Account {
                                     title: Some(format!("{}: {} failed", &self.name, name,).into()),
                                     source: None,
                                     body: err.to_string().into(),
-                                    kind: Some(crate::types::NotificationType::Error(err.kind)),
+                                    kind: Some(NotificationType::Error(err.kind)),
                                 },
                             ));
                         }
@@ -2120,7 +2120,7 @@ impl Account {
                                         ),
                                         source: None,
                                         body: "".into(),
-                                        kind: Some(crate::types::NotificationType::Info),
+                                        kind: Some(NotificationType::Info),
                                     },
                                 ));
                             }
