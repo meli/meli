@@ -9,6 +9,7 @@ Try an [old online interactive web demo](https://meli-email.org/wasm2.html "onli
   - Main <https://git.meli-email.org/meli/meli> Report bugs and/or feature requests in [meli's issue tracker](https://git.meli-email.org/meli/meli/issues "meli gitea issue tracker")
   - Official mirror <https://codeberg.org/meli/meli>
   - Official mirror <https://github.com/meli/meli>
+  - Official mirror <https://ayllu-forge.org/meli/meli>
 
 **Table of contents**:
 
@@ -23,9 +24,9 @@ Try an [old online interactive web demo](https://meli-email.org/wasm2.html "onli
 
 ## Install
 
+- `cargo install meli` or `cargo install --git https://git.meli-email.org/meli/meli.git meli`
 - [pkgsrc](https://pkgsrc.se/mail/meli)
 - [openbsd ports](https://openports.pl/path/mail/meli)
-- `cargo install meli` or `cargo install --git https://git.meli-email.org/meli/meli.git meli`
 - [Pre-built debian package, static binaries](https://github.com/meli/meli/releases/ "github releases for meli")
 - [Nix](https://search.nixos.org/packages?show=meli&query=meli&from=0&size=30&sort=relevance&channel=unstable#disabled "nixos package search results for 'meli'")
 
