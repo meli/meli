@@ -1811,7 +1811,11 @@ impl Component for Listing {
                         _ => {}
                     },
                     UIEvent::Input(ref key)
-                        if shortcut!(key == shortcuts[Shortcuts::LISTING]["scroll_up"]) =>
+                        if shortcut!(key == shortcuts[Shortcuts::LISTING]["scroll_up"])
+                            || matches!(
+                                key,
+                                Key::Mouse(MouseEvent::Press(MouseButton::WheelUp, _, __))
+                            ) =>
                     {
                         let amount = if self.cmd_buf.is_empty() {
                             1
@@ -1834,7 +1838,11 @@ impl Component for Listing {
                         return true;
                     }
                     UIEvent::Input(ref key)
-                        if shortcut!(key == shortcuts[Shortcuts::LISTING]["scroll_down"]) =>
+                        if shortcut!(key == shortcuts[Shortcuts::LISTING]["scroll_down"])
+                            || matches!(
+                                key,
+                                Key::Mouse(MouseEvent::Press(MouseButton::WheelDown, _, __))
+                            ) =>
                     {
                         let amount = if self.cmd_buf.is_empty() {
                             1

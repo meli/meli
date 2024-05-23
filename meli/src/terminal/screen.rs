@@ -27,8 +27,9 @@ use termion::{clear, cursor, raw::IntoRawMode, screen::AlternateScreen};
 
 use crate::{
     terminal::{
-        cells::CellBuffer, Alignment, BracketModeEnd, BracketModeStart, Cell, Color, DisableMouse,
-        DisableSGRMouse, EnableMouse, EnableSGRMouse, Pos, RestoreWindowTitleIconFromStack,
+        cells::CellBuffer, Alignment, BracketModeEnd, BracketModeStart, Cell, Color,
+        DisableAlternateScrollMode, DisableMouse, DisableSGRMouse, EnableAlternateScrollMode,
+        EnableMouse, EnableSGRMouse, Pos, RestoreWindowTitleIconFromStack,
         SaveWindowTitleIconToStack,
     },
     Attr, Context,
@@ -88,6 +89,31 @@ impl Tty {
     #[inline]
     pub fn set_mouse(&mut self, mouse: bool) -> &mut Self {
         self.mouse = mouse;
+        let Some(stdout) = self.stdout.as_mut() else {
+            return self;
+        };
+        write!(
+            stdout,
+            "{enable_mouse}{enable_sgr_mouse}{enable_alt_scroll}",
+            enable_mouse = if mouse {
+                EnableMouse.as_ref()
+            } else {
+                DisableMouse.as_ref()
+            },
+            enable_sgr_mouse = if mouse {
+                EnableSGRMouse.as_ref()
+            } else {
+                DisableSGRMouse.as_ref()
+            },
+            enable_alt_scroll = if mouse {
+                EnableAlternateScrollMode.as_ref()
+            } else {
+                DisableAlternateScrollMode.as_ref()
+            },
+        )
+        .expect("Could not write to stdout");
+        _ = stdout.flush();
+
         self
     }
 
@@ -315,13 +341,18 @@ impl Screen<Tty> {
         let mouse = self.display.mouse;
         write!(
             stdout,
-            "{}{}{}{}{disable_sgr_mouse}{disable_mouse}",
+            "{}{}{}{}{disable_sgr_mouse}{disable_mouse}{disable_alt_scroll}",
             termion::screen::ToMainScreen,
             cursor::Show,
             RestoreWindowTitleIconFromStack,
             BracketModeEnd,
             disable_sgr_mouse = if mouse { DisableSGRMouse.as_ref() } else { "" },
             disable_mouse = if mouse { DisableMouse.as_ref() } else { "" },
+            disable_alt_scroll = if mouse {
+                DisableAlternateScrollMode.as_ref()
+            } else {
+                ""
+            },
         )
         .unwrap();
         self.flush();
@@ -336,7 +367,7 @@ impl Screen<Tty> {
 
         write!(
             &mut stdout,
-            "{save_title_to_stack}{}{}{}{window_title}{}{}{enable_mouse}{enable_sgr_mouse}",
+            "{save_title_to_stack}{}{}{}{window_title}{}{}{enable_mouse}{enable_sgr_mouse}{enable_alt_scroll}",
             termion::screen::ToAlternateScreen,
             cursor::Hide,
             clear::All,
@@ -355,6 +386,11 @@ impl Screen<Tty> {
             },
             enable_sgr_mouse = if self.display.mouse {
                 EnableSGRMouse.as_ref()
+            } else {
+                ""
+            },
+            enable_alt_scroll = if self.display.mouse {
+                EnableAlternateScrollMode.as_ref()
             } else {
                 ""
             },

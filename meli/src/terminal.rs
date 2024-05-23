@@ -97,12 +97,6 @@ macro_rules! derive_csi_sequence {
             }
         }
 
-        impl AsRef<[u8]> for $name {
-            fn as_ref(&self) -> &'static [u8] {
-                csi!($value).as_bytes()
-            }
-        }
-
         impl AsRef<str> for $name {
             fn as_ref(&self) -> &'static str {
                 csi!($value)
@@ -129,6 +123,16 @@ derive_csi_sequence!(
 derive_csi_sequence!(
     ///Ps = 1 0 0 6  Disable SGR Mouse Mode, xterm.
     (DisableSGRMouse, "?1006l")
+);
+
+derive_csi_sequence!(
+    ///Ps = 1 0 0 7  Enable Alternate Scroll Mode, xterm.
+    (EnableAlternateScrollMode, "?1007h")
+);
+
+derive_csi_sequence!(
+    ///Ps = 1 0 0 7  Disable Alternate Scroll Mode, xterm.
+    (DisableAlternateScrollMode, "?1007l")
 );
 
 derive_csi_sequence!(
