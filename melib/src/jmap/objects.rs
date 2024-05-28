@@ -19,22 +19,11 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
-
-mod email;
-pub use email::*;
-
-mod mailbox;
-pub use mailbox::*;
-
-mod thread;
-pub use thread::*;
-
-mod identity;
-pub use identity::*;
-
-mod submission;
-pub use submission::*;
+pub mod email;
+pub mod identity;
+pub mod mailbox;
+pub mod submission;
+pub mod thread;
 
 #[cfg(test)]
 mod tests;

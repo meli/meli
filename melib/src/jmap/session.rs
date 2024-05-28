@@ -26,9 +26,9 @@ use serde_json::Value;
 use url::Url;
 
 use crate::jmap::{
+    objects::identity::IdentityObject,
     protocol::JmapMailCapability,
     rfc8620::{Account, Id, Object, State},
-    IdentityObject,
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

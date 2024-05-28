@@ -19,7 +19,11 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
+use crate::jmap::{
+    objects::email::EmailAddress,
+    protocol::Method,
+    rfc8620::{Changes, Get, Id, Object, Set},
+};
 
 /// # Identity
 ///

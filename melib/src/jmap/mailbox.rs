@@ -21,8 +21,18 @@
 
 use std::sync::{Arc, Mutex, RwLock};
 
-use super::*;
-use crate::backends::{LazyCountSet, MailboxPermissions, SpecialUsageMailbox};
+use crate::{
+    backends::{BackendMailbox, LazyCountSet, MailboxPermissions, SpecialUsageMailbox},
+    error::Result,
+    jmap::{
+        objects::{
+            email::EmailObject,
+            mailbox::{JmapRights, MailboxObject},
+        },
+        rfc8620::{Id, State},
+    },
+    Mailbox, MailboxHash,
+};
 
 #[derive(Clone, Debug)]
 pub struct JmapMailbox {

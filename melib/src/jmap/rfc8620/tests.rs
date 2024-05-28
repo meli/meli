@@ -22,9 +22,18 @@
 
 use std::sync::Arc;
 
+use futures::lock::Mutex as FutureMutex;
 use serde_json::json;
 
-use crate::jmap::*;
+use crate::jmap::{
+    objects::{
+        email::{EmailImport, EmailImportObject, EmailObject},
+        mailbox::MailboxObject,
+        submission::{EmailSubmissionObject, EmailSubmissionSet},
+    },
+    protocol::Request,
+    rfc8620::{argument::Argument, BlobObject, Id, ResultField, Set},
+};
 
 #[test]
 fn test_jmap_argument_serde() {

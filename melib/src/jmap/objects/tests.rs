@@ -20,12 +20,17 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
-use serde_json::json;
-
-use super::*;
-
 #[test]
 fn test_jmap_query() {
+    use std::sync::Arc;
+
+    use futures::lock::Mutex as FutureMutex;
+
+    use crate::jmap::{
+        objects::email::{EmailFilterCondition, EmailObject, EmailQuery},
+        protocol::Request,
+        rfc8620::{filters::Filter, Query},
+    };
     let q: crate::search::Query = crate::search::Query::try_from(
         "subject:wah or (from:Manos and (subject:foo or subject:bar))",
     )
@@ -68,6 +73,16 @@ fn test_jmap_query() {
 
 #[test]
 fn test_jmap_undo_status() {
+    use serde_json::json;
+
+    use crate::jmap::{
+        objects::{
+            email::EmailObject,
+            identity::IdentityObject,
+            submission::{EmailSubmissionObject, UndoStatus},
+        },
+        rfc8620::{Account, Id},
+    };
     let account_id: Id<Account> = "blahblah".into();
     let ident_id: Id<IdentityObject> = "sdusssssss".into();
     let email_id: Id<EmailObject> = Id::from("683f9246-56d4-4d7d-bd0c-3d4de6db7cbf");
@@ -123,6 +138,16 @@ fn test_jmap_undo_status() {
 
 #[test]
 fn test_jmap_email_submission_object() {
+    use serde_json::json;
+
+    use crate::jmap::{
+        objects::{
+            email::{EmailImport, EmailObject},
+            identity::IdentityObject,
+            submission::{EmailSubmissionObject, UndoStatus},
+        },
+        rfc8620::{argument::Argument, Account, Id, ResultField},
+    };
     let account_id: Id<Account> = "blahblah".into();
     let ident_id: Id<IdentityObject> = "sdusssssss".into();
     let email_id: Id<EmailObject> = Id::from("683f9246-56d4-4d7d-bd0c-3d4de6db7cbf");
@@ -173,6 +198,16 @@ fn test_jmap_email_submission_object() {
 
 #[test]
 fn test_jmap_identity_methods() {
+    use std::sync::Arc;
+
+    use futures::lock::Mutex as FutureMutex;
+    use serde_json::json;
+
+    use crate::jmap::{
+        objects::identity::{IdentityGet, IdentityObject, IdentitySet},
+        protocol::Request,
+        rfc8620::{Id, Set},
+    };
     let account_id = "blahblah";
     let prev_seq = 33;
     let main_identity = "user@example.com";

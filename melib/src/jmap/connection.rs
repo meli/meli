@@ -19,13 +19,39 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::convert::TryFrom;
+use std::{convert::TryFrom, sync::Arc, time::Instant};
 
-use isahc::config::Configurable;
+use futures::lock::{MappedMutexGuard as FutureMappedMutexGuard, Mutex as FutureMutex};
+use isahc::{
+    config::{Configurable, RedirectPolicy},
+    AsyncReadResponseExt, HttpClient,
+};
+use smallvec::SmallVec;
+use url::Url;
 
-use super::*;
-use crate::error::NetworkErrorKind;
-use crate::jmap::{protocol::JmapMailCapability, rfc8620::capabilities::*};
+use crate::{
+    error::{Error, NetworkErrorKind, Result},
+    jmap::{
+        deserialize_from_str,
+        objects::{
+            email::{
+                EmailChanges, EmailFilterCondition, EmailGet, EmailObject, EmailQueryChanges,
+                EmailQueryChangesResponse,
+            },
+            identity::{IdentityGet, IdentityObject, IdentitySet},
+            mailbox::MailboxObject,
+        },
+        protocol::{self, JmapMailCapability, Request},
+        rfc8620::{
+            argument::Argument, capabilities::*, filters::Filter, AddedItem, Changes,
+            ChangesResponse, Get, GetResponse, Id, MethodResponse, QueryChanges,
+            QueryChangesResponse, ResultField, Set, State,
+        },
+        session::Session,
+        JmapServerConf, Store,
+    },
+    BackendEvent, Flag, MailboxHash, RefreshEvent, RefreshEventKind,
+};
 
 #[derive(Debug)]
 pub struct JmapConnection {

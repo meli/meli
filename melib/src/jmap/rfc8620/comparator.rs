@@ -19,7 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
+use std::marker::PhantomData;
+
+use crate::jmap::rfc8620::Object;
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

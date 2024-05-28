@@ -39,12 +39,12 @@ use crate::{
     jmap::{deserialize_from_str, protocol::Method, session::Session},
 };
 
-mod filters;
-pub use filters::*;
-mod comparator;
-pub use comparator::*;
-mod argument;
-pub use argument::*;
+pub mod argument;
+pub mod comparator;
+pub mod filters;
+
+use argument::Argument;
+use comparator::Comparator;
 
 #[cfg(test)]
 mod tests;
@@ -448,7 +448,7 @@ enum JmapError {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Query<F: FilterTrait<OBJ>, OBJ>
+pub struct Query<F: filters::FilterTrait<OBJ>, OBJ>
 where
     OBJ: Object + std::fmt::Debug + Serialize,
 {
@@ -470,7 +470,7 @@ where
     _ph: PhantomData<fn() -> OBJ>,
 }
 
-impl<F: FilterTrait<OBJ>, OBJ> Query<F, OBJ>
+impl<F: filters::FilterTrait<OBJ>, OBJ> Query<F, OBJ>
 where
     OBJ: Object + std::fmt::Debug + Serialize,
 {
@@ -498,7 +498,7 @@ where
     _impl!(calculate_total: bool);
 }
 
-impl<F: FilterTrait<OBJ>, OBJ> Default for Query<F, OBJ>
+impl<F: filters::FilterTrait<OBJ>, OBJ> Default for Query<F, OBJ>
 where
     OBJ: Object + std::fmt::Debug + Serialize,
 {
@@ -1141,7 +1141,7 @@ pub struct UploadResponse {
 ///   takes the following arguments:
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct QueryChanges<F: FilterTrait<OBJ>, OBJ>
+pub struct QueryChanges<F: filters::FilterTrait<OBJ>, OBJ>
 where
     OBJ: Object + std::fmt::Debug + Serialize,
 {
@@ -1185,7 +1185,7 @@ where
     _ph: PhantomData<fn() -> OBJ>,
 }
 
-impl<F: FilterTrait<OBJ>, OBJ> QueryChanges<F, OBJ>
+impl<F: filters::FilterTrait<OBJ>, OBJ> QueryChanges<F, OBJ>
 where
     OBJ: Object + std::fmt::Debug + Serialize,
 {

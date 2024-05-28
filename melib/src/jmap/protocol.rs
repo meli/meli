@@ -19,16 +19,36 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::jmap::{
-    mailbox::JmapMailbox,
-    rfc8620::{capabilities::*, Object, State},
-    *,
+use std::{
+    collections::{BTreeSet, HashMap},
+    convert::{TryFrom, TryInto},
+    sync::{Arc, Mutex},
 };
 
-use std::convert::{TryFrom, TryInto};
-
+use futures::lock::Mutex as FutureMutex;
+use isahc::AsyncReadResponseExt;
 use serde::Serialize;
 use serde_json::Value;
+use smallvec::SmallVec;
+
+use crate::{
+    email::Envelope,
+    error::Result,
+    jmap::{
+        deserialize_from_str,
+        mailbox::JmapMailbox,
+        objects::{
+            email::{EmailFilterCondition, EmailGet, EmailObject, EmailQuery},
+            mailbox::{MailboxGet, MailboxObject},
+        },
+        rfc8620::{
+            argument::Argument, capabilities::*, filters::Filter, Get, GetResponse, Id,
+            MethodResponse, Object, Query, QueryResponse, State,
+        },
+        JmapConnection, Store,
+    },
+    Flag, LazyCountSet, MailboxHash,
+};
 
 pub type UtcDate = String;
 

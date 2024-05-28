@@ -21,7 +21,11 @@
 
 use std::marker::PhantomData;
 
-use super::*;
+use crate::jmap::{
+    objects::email::{EmailGet, EmailObject},
+    protocol::Method,
+    rfc8620::{Changes, Get, Id, Object, ResultField},
+};
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]

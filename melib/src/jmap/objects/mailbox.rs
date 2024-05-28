@@ -19,7 +19,13 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
+use crate::{
+    jmap::{
+        protocol::Method,
+        rfc8620::{Get, Id, Object, Set},
+    },
+    MailboxHash,
+};
 
 impl Id<MailboxObject> {
     pub fn into_hash(&self) -> MailboxHash {

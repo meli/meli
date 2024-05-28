@@ -21,9 +21,15 @@
 
 use std::sync::Arc;
 
-use super::*;
+use futures::lock::Mutex as FutureMutex;
+use isahc::AsyncReadResponseExt;
 
-/// `BackendOp` implementor for Imap
+use crate::{
+    jmap::{connection::JmapConnection, download_request_format, Store},
+    BackendOp, EnvelopeHash, ResultFuture,
+};
+
+/// `BackendOp` implementor for JMAP
 #[derive(Clone, Debug)]
 pub struct JmapOp {
     hash: EnvelopeHash,

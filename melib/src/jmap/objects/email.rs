@@ -24,12 +24,24 @@ use std::marker::PhantomData;
 use indexmap::IndexMap;
 use serde::de::{Deserialize, Deserializer};
 use serde_json::{value::RawValue, Value};
+use smallvec::SmallVec;
 
-use super::*;
 use crate::{
     email::address::{Address, MailboxAddress},
-    jmap::rfc8620::bool_false,
+    jmap::{
+        deserialize_from_str,
+        objects::{mailbox::MailboxObject, thread::ThreadObject},
+        protocol::Method,
+        rfc8620::{
+            bool_false,
+            filters::{Filter, FilterCondition, FilterTrait},
+            u64_zero, BlobObject, Changes, Get, Id, Object, Query, QueryChanges,
+            QueryChangesResponse, ResultField, Set,
+        },
+        UtcDate,
+    },
     utils::datetime,
+    EnvelopeHash, StrBuilder,
 };
 
 mod import;

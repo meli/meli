@@ -22,9 +22,17 @@
 use indexmap::IndexMap;
 use serde_json::value::RawValue;
 
-use super::*;
+use crate::{
+    error::Result,
+    jmap::{
+        deserialize_from_str,
+        objects::{email::EmailObject, mailbox::MailboxObject, thread::ThreadObject},
+        protocol::Method,
+        rfc8620::{Account, BlobObject, Id, State},
+    },
+};
 
-/// #`import`
+/// # `import`
 ///
 ///    Objects of type `Foo` are imported via a call to `Foo/import`.
 ///
