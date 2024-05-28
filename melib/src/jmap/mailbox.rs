@@ -21,8 +21,9 @@
 
 use crate::{
     jmap::{
+        methods::{Get, Set},
+        objects::{Id, Object},
         protocol::Method,
-        rfc8620::{Get, Id, Object, Set},
     },
     MailboxHash,
 };
@@ -105,17 +106,19 @@ impl Method<MailboxObject> for MailboxGet {
 /// Section 5.3 but with the following additional request argument:
 ///
 ///
-/// The following extra [`SetError`] types are defined:
+/// The following extra [`crate::jmap::methods::SetError`] types are defined:
 ///
 /// For `destroy`:
 ///
-/// - `mailboxHasChild`: The [`Mailbox`](MailboxObject) still has at least one
-///   child [`Mailbox`](MailboxObject).  The client MUST remove these before it
-///   can delete the parent [`Mailbox`](MailboxObject).
+/// - `mailboxHasChild`: The [`Mailbox`](crate::jmap::mailbox::MailboxObject)
+///   still has at least one child
+///   [`Mailbox`](crate::jmap::mailbox::MailboxObject).  The client MUST remove
+///   these before it can delete the parent
+///   [`Mailbox`](crate::jmap::mailbox::MailboxObject).
 ///
-/// - `mailboxHasEmail`: The [`Mailbox`](MailboxObject) has at least one
-///   [`Email`](EmailObject) assigned to it, and the `onDestroyRemoveEmails`
-///   argument was false.
+/// - `mailboxHasEmail`: The [`Mailbox`](crate::jmap::mailbox::MailboxObject)
+///   has at least one [`Email`](crate::jmap::email::EmailObject) assigned to
+///   it, and the `onDestroyRemoveEmails` argument was false.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MailboxSet {
@@ -123,13 +126,16 @@ pub struct MailboxSet {
     pub set_call: Set<MailboxObject>,
     /// onDestroyRemoveEmails: `Boolean` (default: false)
     ///
-    /// If false, any attempt to destroy a [`Mailbox`](MailboxObject) that still
-    /// has [`Email`s](EmailObject) in it will be rejected with a
-    /// `mailboxHasEmail` [`SetError`].  If
-    /// true, any [`Email`s](EmailObject) that were in the
-    /// [`Mailbox`](MailboxObject) will be removed from it, and if in no
-    /// other [`Mailbox`es](MailboxObject), they will be destroyed when the
-    /// [`Mailbox`](MailboxObject) is destroyed.
+    /// If false, any attempt to destroy a
+    /// [`Mailbox`](crate::jmap::mailbox::MailboxObject) that still
+    /// has [`Email`s](crate::jmap::email::EmailObject) in it will be rejected
+    /// with a `mailboxHasEmail` [`crate::jmap::methods::SetError`].  If
+    /// true, any [`Email`s](crate::jmap::email::EmailObject) that were in the
+    /// [`Mailbox`](crate::jmap::mailbox::MailboxObject) will be removed from
+    /// it, and if in no
+    /// other [`Mailbox`es](crate::jmap::mailbox::MailboxObject), they will be
+    /// destroyed when the [`Mailbox`](crate::jmap::mailbox::MailboxObject)
+    /// is destroyed.
     #[serde(default)]
     pub on_destroy_remove_emails: bool,
 }

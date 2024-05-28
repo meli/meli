@@ -21,7 +21,7 @@
 
 use std::marker::PhantomData;
 
-use crate::jmap::rfc8620::Object;
+use crate::jmap::objects::Object;
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

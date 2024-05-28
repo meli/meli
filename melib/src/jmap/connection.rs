@@ -42,11 +42,12 @@ use crate::{
         filters::Filter,
         identity::{IdentityGet, IdentityObject, IdentitySet},
         mailbox::MailboxObject,
-        protocol::{self, JmapMailCapability, Request},
-        rfc8620::{
-            AddedItem, Changes, ChangesResponse, Get, GetResponse, Id, MethodResponse,
-            QueryChanges, QueryChangesResponse, ResultField, Set, State,
+        methods::{
+            AddedItem, Changes, ChangesResponse, Get, GetResponse, MethodResponse, QueryChanges,
+            QueryChangesResponse, ResultField, Set,
         },
+        objects::{Id, State},
+        protocol::{self, JmapMailCapability, Request},
         session::Session,
         JmapServerConf, Store,
     },

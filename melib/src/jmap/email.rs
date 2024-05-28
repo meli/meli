@@ -32,11 +32,12 @@ use crate::{
         deserialize_from_str,
         filters::{Filter, FilterCondition, FilterTrait},
         mailbox::MailboxObject,
-        protocol::Method,
-        rfc8620::{
-            bool_false, u64_zero, BlobObject, Changes, Get, Id, Object, Query, QueryChanges,
-            QueryChangesResponse, ResultField, Set,
+        methods::{
+            bool_false, u64_zero, Changes, Get, Query, QueryChanges, QueryChangesResponse,
+            ResultField, Set,
         },
+        objects::{BlobObject, Id, Object},
+        protocol::Method,
         thread::ThreadObject,
         UtcDate,
     },

@@ -25,7 +25,7 @@ use futures::lock::Mutex as FutureMutex;
 use isahc::AsyncReadResponseExt;
 
 use crate::{
-    jmap::{connection::JmapConnection, download_request_format, Store},
+    jmap::{connection::JmapConnection, methods::download_request_format, Store},
     BackendOp, EnvelopeHash, ResultFuture,
 };
 

@@ -88,10 +88,13 @@ use protocol::*;
 pub mod session;
 use session::*;
 
-pub mod rfc8620;
-use rfc8620::{
-    download_request_format, upload_request_format, BlobObject, Get, GetResponse, Id,
-    MethodResponse, Object, Query, QueryResponse, Set, SetResponse, State, UploadResponse,
+pub mod objects;
+use objects::{BlobObject, Id, Object, State};
+
+pub mod methods;
+use methods::{
+    upload_request_format, Get, GetResponse, MethodResponse, Query, QueryResponse, Set,
+    SetResponse, UploadResponse,
 };
 
 pub mod backend_mailbox;

@@ -21,10 +21,7 @@
 
 use std::hash::Hash;
 
-use crate::jmap::{
-    protocol::Method,
-    rfc8620::{Object, ResultField},
-};
+use crate::jmap::{methods::ResultField, objects::Object, protocol::Method};
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase", untagged)]

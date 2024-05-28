@@ -27,8 +27,8 @@ use url::Url;
 
 use crate::jmap::{
     identity::IdentityObject,
+    objects::{Account, Id, Object, State},
     protocol::JmapMailCapability,
-    rfc8620::{Account, Id, Object, State},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

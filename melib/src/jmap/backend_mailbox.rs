@@ -27,7 +27,7 @@ use crate::{
     jmap::{
         email::EmailObject,
         mailbox::{JmapRights, MailboxObject},
-        rfc8620::{Id, State},
+        objects::{Id, State},
     },
     Mailbox, MailboxHash,
 };

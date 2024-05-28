@@ -29,8 +29,8 @@ fn test_jmap_query() {
     use crate::jmap::{
         email::{EmailFilterCondition, EmailObject, EmailQuery},
         filters::Filter,
+        methods::Query,
         protocol::Request,
-        rfc8620::Query,
     };
     let q: crate::search::Query = crate::search::Query::try_from(
         "subject:wah or (from:Manos and (subject:foo or subject:bar))",
@@ -79,7 +79,7 @@ fn test_jmap_undo_status() {
     use crate::jmap::{
         email::EmailObject,
         identity::IdentityObject,
-        rfc8620::{Account, Id},
+        objects::{Account, Id},
         submission::{EmailSubmissionObject, UndoStatus},
     };
     let account_id: Id<Account> = "blahblah".into();
@@ -143,7 +143,8 @@ fn test_jmap_email_submission_object() {
         argument::Argument,
         email::{EmailImport, EmailObject},
         identity::IdentityObject,
-        rfc8620::{Account, Id, ResultField},
+        methods::ResultField,
+        objects::{Account, Id},
         submission::{EmailSubmissionObject, UndoStatus},
     };
     let account_id: Id<Account> = "blahblah".into();
@@ -203,8 +204,9 @@ fn test_jmap_identity_methods() {
 
     use crate::jmap::{
         identity::{IdentityGet, IdentityObject, IdentitySet},
+        methods::Set,
+        objects::Id,
         protocol::Request,
-        rfc8620::{Id, Set},
     };
     let account_id = "blahblah";
     let prev_seq = 33;
@@ -284,8 +286,9 @@ fn test_jmap_argument_serde() {
         argument::Argument,
         email::{EmailImport, EmailImportObject, EmailObject},
         mailbox::MailboxObject,
+        methods::{ResultField, Set},
+        objects::{BlobObject, Id},
         protocol::Request,
-        rfc8620::{BlobObject, Id, ResultField, Set},
         submission::{EmailSubmissionObject, EmailSubmissionSet},
     };
 

@@ -27,8 +27,9 @@ use crate::jmap::{
     argument::Argument,
     email::EmailObject,
     identity::IdentityObject,
+    methods::Set,
+    objects::{Account, BlobObject, Id, Object, PatchObject},
     protocol::Method,
-    rfc8620::{Account, BlobObject, Id, Object, PatchObject, Set},
     thread::ThreadObject,
 };
 

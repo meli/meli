@@ -21,8 +21,9 @@
 
 use crate::jmap::{
     email::EmailAddress,
+    methods::{Changes, Get, Set},
+    objects::{Id, Object},
     protocol::Method,
-    rfc8620::{Changes, Get, Id, Object, Set},
 };
 
 /// # Identity
@@ -38,27 +39,27 @@ pub struct IdentityObject {
 
     ///  name: `String` (default: "")
     /// The "From" name the client SHOULD use when creating a new
-    /// [`Email`](EmailObject) from this Identity.
+    /// [`Email`](crate::jmap::email::EmailObject) from this Identity.
     #[serde(default)]
     pub name: String,
 
     ///  email: `String` (immutable)
     /// The "From" email address the client MUST use when creating a new
-    /// [`Email`](EmailObject) from this Identity. If the "mailbox" part of the
-    /// address (the section before the "@") is the single character "*"
-    /// (e.g., "*@example.com"), the client may use any valid address ending
-    /// in that domain (e.g., "[email protected]").
+    /// [`Email`](crate::jmap::email::EmailObject) from this Identity. If the
+    /// "mailbox" part of the address (the section before the "@") is the
+    /// single character "*" (e.g., "*@example.com"), the client may use any
+    /// valid address ending in that domain (e.g., "[email protected]").
     pub email: String,
 
     ///  replyTo: `EmailAddress[]|null` (default: null)
     /// The Reply-To value the client SHOULD set when creating a new
-    /// [`Email`](EmailObject) from this Identity.
+    /// [`Email`](crate::jmap::email::EmailObject) from this Identity.
     #[serde(default)]
     pub reply_to: Option<Vec<EmailAddress>>,
 
     ///  bcc: `EmailAddress[]|null` (default: null)
     /// The Bcc value the client SHOULD set when creating a new
-    /// [`Email`](EmailObject) from this Identity.
+    /// [`Email`](crate::jmap::email::EmailObject) from this Identity.
     #[serde(default)]
     pub bcc: Option<Vec<EmailAddress>>,
 
@@ -82,7 +83,8 @@ pub struct IdentityObject {
     /// Is the user allowed to delete this Identity? Servers may wish to
     /// set this to `false` for the user's username or other default
     /// address. Attempts to destroy an Identity with "mayDelete: false"
-    /// will be rejected with a standard "forbidden" [`SetError`].
+    /// will be rejected with a standard "forbidden"
+    /// [`crate::jmap::methods::SetError`].
     #[serde(skip_serializing)]
     pub may_delete: bool,
 }
@@ -106,7 +108,7 @@ impl Method<IdentityObject> for IdentityChanges {
 ///
 /// ```text
 /// This is a standard "/set" method as described in [RFC8620],
-/// Section 5.3. The following extra [`SetError`] types are defined:
+/// Section 5.3. The following extra [`crate::jmap::methods::SetError`] types are defined:
 /// For "create":
 ///  o  "forbiddenFrom": The user is not allowed to send from the address
 ///     given as the "email" property of the Identity.

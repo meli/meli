@@ -28,8 +28,8 @@ use crate::{
         deserialize_from_str,
         email::EmailObject,
         mailbox::MailboxObject,
+        objects::{Account, BlobObject, Id, State},
         protocol::Method,
-        rfc8620::{Account, BlobObject, Id, State},
         thread::ThreadObject,
     },
 };
@@ -141,33 +141,35 @@ pub enum EmailImportError {
     /// `RFC5322`, or even just with the same Message-ID `RFC5322`, to
     /// coexist within an account.  In this case, it MUST reject attempts to
     /// import an Email considered to be a duplicate with an `alreadyExists`
-    /// [`SetError`].
+    /// [`SetError`](crate::jmap::methods::SetError`).
     AlreadyExists {
         description: Option<String>,
         /// An `existingId` property of type `Id` MUST be included on
-        /// the [`SetError`] object with the id of the existing Email.  If
-        /// duplicates are allowed, the newly created Email object MUST
-        /// have a separate id and independent mutable properties to the
-        /// existing object.
+        /// the [`SetError`](crate::jmap::methods::SetError`) object with the id
+        /// of the existing Email.  If duplicates are allowed, the newly
+        /// created Email object MUST have a separate id and independent
+        /// mutable properties to the existing object.
         existing_id: Id<EmailObject>,
     },
     /// If the `blobId`, `mailboxIds`, or `keywords` properties are invalid
     /// (e.g., missing, wrong type, id not found), the server MUST reject the
-    /// import with an `invalidProperties` [`SetError`].
+    /// import with an `invalidProperties`
+    /// [`SetError`](crate::jmap::methods::SetError`).
     InvalidProperties {
         description: Option<String>,
         properties: Vec<String>,
     },
     /// If the Email cannot be imported because it would take the account
     /// over quota, the import should be rejected with an `overQuota`
-    /// [`SetError`].
+    /// [`SetError`](crate::jmap::methods::SetError`).
     OverQuota { description: Option<String> },
     /// If the blob referenced is not a valid message `RFC5322`, the server
     /// MAY modify the message to fix errors (such as removing NUL octets or
     /// fixing invalid headers).  If it does this, the `blobId` on the
     /// response MUST represent the new representation and therefore be
     /// different to the `blobId` on the [`EmailImport`] object.  Alternatively,
-    /// the server MAY reject the import with an `invalidEmail` [`SetError`].
+    /// the server MAY reject the import with an `invalidEmail`
+    /// [`SetError`](crate::jmap::methods::SetError`).
     InvalidEmail { description: Option<String> },
     /// An `ifInState` argument was supplied, and it does not match the current
     /// state.
@@ -199,7 +201,8 @@ pub struct EmailImportResponse {
     pub created: Option<IndexMap<Id<EmailObject>, EmailImportResult>>,
 
     /// o  notCreated: `Id[SetError]|null`
-    /// A map of the creation id to a [`SetError`] object for each Email that
+    /// A map of the creation id to a
+    /// [`SetError`](crate::jmap::methods::SetError`) object for each Email that
     /// failed to be created, or null if all successful.  The possible
     /// errors are defined above.
     pub not_created: Option<IndexMap<Id<EmailObject>, EmailImportError>>,
