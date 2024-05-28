@@ -35,8 +35,8 @@ use crate::{
     email::Envelope,
     error::Result,
     jmap::{
+        backend_mailbox::JmapMailbox,
         deserialize_from_str,
-        mailbox::JmapMailbox,
         objects::{
             email::{EmailFilterCondition, EmailGet, EmailObject, EmailQuery},
             mailbox::{MailboxGet, MailboxObject},

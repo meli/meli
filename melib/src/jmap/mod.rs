@@ -95,9 +95,11 @@ use rfc8620::{
     QueryResponse, Set, SetResponse, State, UploadResponse,
 };
 
+pub mod backend_mailbox;
+use backend_mailbox::JmapMailbox;
+
 pub mod mailbox;
 pub mod objects;
-use mailbox::JmapMailbox;
 
 pub fn deserialize_from_str<'de, T: serde::de::Deserialize<'de>>(s: &'de str) -> Result<T> {
     let jd = &mut serde_json::Deserializer::from_str(s);
