@@ -25,6 +25,7 @@ use isahc::config::Configurable;
 
 use super::*;
 use crate::error::NetworkErrorKind;
+use crate::jmap::{protocol::JmapMailCapability, rfc8620::capabilities::*};
 
 #[derive(Debug)]
 pub struct JmapConnection {
@@ -188,46 +189,33 @@ impl JmapConnection {
             }
             Ok(s) => s,
         };
-        if !session.capabilities.contains_key(JMAP_CORE_CAPABILITY) {
-            let err = Error::new(format!(
-                "Server {} did not return JMAP Core capability ({core_capability}). Returned \
-                 capabilities were: {}",
-                &self.server_conf.server_url,
-                session
-                    .capabilities
-                    .keys()
-                    .map(String::as_str)
-                    .collect::<Vec<&str>>()
-                    .join(", "),
-                core_capability = JMAP_CORE_CAPABILITY
-            ));
-            _ = self
-                .store
-                .online_status
-                .set(Some(req_instant), Err(err.clone()))
-                .await;
-            return Err(err);
+        macro_rules! check_for_cap {
+            ($cap:ident) => {{
+                if !session.capabilities.contains_key($cap::URI) {
+                    let err = Error::new(format!(
+                        "Server {} did not return {name} ({uri}). Returned capabilities were: {}",
+                        &self.server_conf.server_url,
+                        session
+                            .capabilities
+                            .keys()
+                            .map(String::as_str)
+                            .collect::<Vec<&str>>()
+                            .join(", "),
+                        name = $cap::NAME,
+                        uri = $cap::URI
+                    ));
+                    _ = self
+                        .store
+                        .online_status
+                        .set(Some(req_instant), Err(err.clone()))
+                        .await;
+                    return Err(err);
+                }
+            }};
         }
-        if !session.capabilities.contains_key(JMAP_MAIL_CAPABILITY) {
-            let err = Error::new(format!(
-                "Server {} does not support JMAP Mail capability ({mail_capability}). Returned \
-                 capabilities were: {}",
-                &self.server_conf.server_url,
-                session
-                    .capabilities
-                    .keys()
-                    .map(String::as_str)
-                    .collect::<Vec<&str>>()
-                    .join(", "),
-                mail_capability = JMAP_MAIL_CAPABILITY
-            ));
-            _ = self
-                .store
-                .online_status
-                .set(Some(req_instant), Err(err.clone()))
-                .await;
-            return Err(err);
-        }
+
+        check_for_cap! { JmapCoreCapability };
+        check_for_cap! { JmapMailCapability };
 
         self.store
             .core_capabilities

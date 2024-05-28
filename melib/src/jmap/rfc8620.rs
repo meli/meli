@@ -49,6 +49,8 @@ pub use argument::*;
 #[cfg(test)]
 mod tests;
 
+pub mod capabilities;
+
 pub type PatchObject = Value;
 
 impl Object for PatchObject {

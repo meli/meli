@@ -19,16 +19,21 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use crate::jmap::{
+    mailbox::JmapMailbox,
+    rfc8620::{capabilities::*, Object, State},
+    *,
+};
+
 use std::convert::{TryFrom, TryInto};
 
 use serde::Serialize;
 use serde_json::Value;
 
-use super::{mailbox::JmapMailbox, *};
-
 pub type UtcDate = String;
 
-use super::rfc8620::{Object, State};
+crate::_impl_jmap_capability! { JmapMailCapability: "urn:ietf:params:jmap:mail", name: "Mail" }
+crate::_impl_jmap_capability! { JmapSubmissionCapability: "urn:ietf:params:jmap:submission", name: "Submission" }
 
 pub trait Response<OBJ: Object>: Send + Sync {
     const NAME: &'static str;
@@ -38,14 +43,16 @@ pub trait Method<OBJ: Object>: Serialize + Send + Sync {
     const NAME: &'static str;
 }
 
-static USING: &[&str] = &[JMAP_CORE_CAPABILITY, JMAP_MAIL_CAPABILITY];
+static USING: &[&str] = &[JmapCoreCapability::uri(), JmapMailCapability::uri()];
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Request {
     using: &'static [&'static str],
-    /* Why is this Value instead of Box<dyn Method<_>>? The Method trait cannot be made into a
-     * Trait object because its serialize() will be generic. */
+
+    /// This field is `Value` instead of `Box<dyn Method<_>>` because the
+    /// `Method` trait cannot be made into a trait object; that requires its
+    /// `serialize()` implementation to be generic.
     method_calls: Vec<Value>,
 
     #[serde(skip)]

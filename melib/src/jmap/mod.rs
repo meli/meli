@@ -55,30 +55,26 @@ use crate::{
 
 #[macro_export]
 macro_rules! _impl {
-        ($(#[$outer:meta])*$field:ident : $t:ty) => {
-            $(#[$outer])*
+    ($(#[$outer:meta])*$field:ident : $t:ty) => {
+        $(#[$outer])*
             pub fn $field(mut self, new_val: $t) -> Self {
                 self.$field = new_val;
                 self
             }
-        };
-        (get_mut $(#[$outer:meta])*$method:ident, $field:ident : $t:ty) => {
-            $(#[$outer])*
+    };
+    (get_mut $(#[$outer:meta])*$method:ident, $field:ident : $t:ty) => {
+        $(#[$outer])*
             pub fn $method(&mut self) -> &mut $t {
                 &mut self.$field
             }
-        };
-        (get $(#[$outer:meta])*$method:ident, $field:ident : $t:ty) => {
-            $(#[$outer])*
+    };
+    (get $(#[$outer:meta])*$method:ident, $field:ident : $t:ty) => {
+        $(#[$outer])*
             pub fn $method(&self) -> &$t {
                 &self.$field
             }
-        }
     }
-
-pub const JMAP_CORE_CAPABILITY: &str = "urn:ietf:params:jmap:core";
-pub const JMAP_MAIL_CAPABILITY: &str = "urn:ietf:params:jmap:mail";
-pub const JMAP_SUBMISSION_CAPABILITY: &str = "urn:ietf:params:jmap:submission";
+}
 
 pub mod operations;
 use operations::*;
@@ -376,7 +372,7 @@ impl MailBackend for JmapType {
             .store
             .core_capabilities
             .lock()
-            .map(|c| c.contains_key(JMAP_SUBMISSION_CAPABILITY))
+            .map(|c| c.contains_key(JmapSubmissionCapability::uri()))
             .unwrap_or(false);
         MailBackendCapabilities {
             supports_submission: CAPABILITIES.supports_submission || supports_submission,
@@ -404,7 +400,7 @@ impl MailBackend for JmapType {
         Ok(Box::pin(async_stream::try_stream! {
             let mut conn = connection.lock().await;
             conn.connect().await?;
-            let batch_size: u64 = conn.store.core_capabilities.lock().unwrap()[JMAP_CORE_CAPABILITY].max_objects_in_get;
+            let batch_size: u64 = conn.store.core_capabilities.lock().unwrap()[JmapCoreCapability::uri()].max_objects_in_get;
             let mut fetch_state = protocol::EmailFetchState::Start { batch_size };
             loop {
                 let res = fetch_state.fetch(

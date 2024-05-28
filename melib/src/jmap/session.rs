@@ -26,8 +26,9 @@ use serde_json::Value;
 use url::Url;
 
 use crate::jmap::{
+    protocol::JmapMailCapability,
     rfc8620::{Account, Id, Object, State},
-    IdentityObject, JMAP_MAIL_CAPABILITY,
+    IdentityObject,
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -59,10 +60,10 @@ impl Session {
         self.identities.keys().next().cloned()
     }
 
-    /// Return the account ID corresponding to the [`JMAP_MAIL_CAPABILITY`]
+    /// Return the account ID corresponding to the [`JmapMailCapability`]
     /// capability.
     pub fn mail_account_id(&self) -> Id<Account> {
-        self.primary_accounts[JMAP_MAIL_CAPABILITY].clone()
+        self.primary_accounts[JmapMailCapability::uri()].clone()
     }
 }
 
