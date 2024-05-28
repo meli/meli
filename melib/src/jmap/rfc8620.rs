@@ -46,9 +46,6 @@ pub mod filters;
 use argument::Argument;
 use comparator::Comparator;
 
-#[cfg(test)]
-mod tests;
-
 pub mod capabilities;
 
 pub type PatchObject = Value;
