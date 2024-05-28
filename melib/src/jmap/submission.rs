@@ -24,10 +24,11 @@ use serde::ser::{Serialize, SerializeStruct, Serializer};
 use serde_json::Value;
 
 use crate::jmap::{
+    argument::Argument,
     email::EmailObject,
     identity::IdentityObject,
     protocol::Method,
-    rfc8620::{argument::Argument, Account, BlobObject, Id, Object, PatchObject, Set},
+    rfc8620::{Account, BlobObject, Id, Object, PatchObject, Set},
     thread::ThreadObject,
 };
 

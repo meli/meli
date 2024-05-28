@@ -45,18 +45,18 @@ macro_rules! _impl_jmap_capability {
             #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
             pub struct $ident;
 
-        impl $crate::jmap::rfc8620::capabilities::Capability for $ident {
+        impl $crate::jmap::capabilities::Capability for $ident {
             const URI: &'static str = $key;
             const NAME: &'static str = $name;
         }
 
         impl $ident {
             pub const fn uri() -> &'static str {
-                <Self as $crate::jmap::rfc8620::capabilities::Capability>::URI
+                <Self as $crate::jmap::capabilities::Capability>::URI
             }
 
             pub const fn name() -> &'static str {
-                <Self as $crate::jmap::rfc8620::capabilities::Capability>::NAME
+                <Self as $crate::jmap::capabilities::Capability>::NAME
             }
         }
 
@@ -65,7 +65,7 @@ macro_rules! _impl_jmap_capability {
             where
                 S: ::serde::ser::Serializer,
             {
-                serializer.serialize_str(<Self as $crate::jmap::rfc8620::capabilities::Capability>::URI)
+                serializer.serialize_str(<Self as $crate::jmap::capabilities::Capability>::URI)
             }
         }
 
@@ -74,7 +74,7 @@ macro_rules! _impl_jmap_capability {
             where
                 D: ::serde::de::Deserializer<'de>,
             {
-                if <&'_ str>::deserialize(deserializer)? == <Self as $crate::jmap::rfc8620::capabilities::Capability>::URI {
+                if <&'_ str>::deserialize(deserializer)? == <Self as $crate::jmap::capabilities::Capability>::URI {
                     return Ok(Self);
                 }
 

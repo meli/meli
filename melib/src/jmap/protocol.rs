@@ -35,14 +35,14 @@ use crate::{
     email::Envelope,
     error::Result,
     jmap::{
+        argument::Argument,
         backend_mailbox::JmapMailbox,
+        capabilities::*,
         deserialize_from_str,
         email::{EmailFilterCondition, EmailGet, EmailObject, EmailQuery},
+        filters::Filter,
         mailbox::{MailboxGet, MailboxObject},
-        rfc8620::{
-            argument::Argument, capabilities::*, filters::Filter, Get, GetResponse, Id,
-            MethodResponse, Object, Query, QueryResponse, State,
-        },
+        rfc8620::{Get, GetResponse, Id, MethodResponse, Object, Query, QueryResponse, State},
         JmapConnection, Store,
     },
     Flag, LazyCountSet, MailboxHash,

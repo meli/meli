@@ -90,19 +90,26 @@ use session::*;
 
 pub mod rfc8620;
 use rfc8620::{
-    argument::Argument, capabilities::JmapCoreCapability, download_request_format, filters::Filter,
-    upload_request_format, BlobObject, Get, GetResponse, Id, MethodResponse, Object, Query,
-    QueryResponse, Set, SetResponse, State, UploadResponse,
+    download_request_format, upload_request_format, BlobObject, Get, GetResponse, Id,
+    MethodResponse, Object, Query, QueryResponse, Set, SetResponse, State, UploadResponse,
 };
 
 pub mod backend_mailbox;
 use backend_mailbox::JmapMailbox;
 
+pub mod argument;
+pub mod capabilities;
+pub mod comparator;
 pub mod email;
+pub mod filters;
 pub mod identity;
 pub mod mailbox;
 pub mod submission;
 pub mod thread;
+
+use argument::Argument;
+use capabilities::JmapCoreCapability;
+use filters::Filter;
 
 #[cfg(test)]
 mod tests;

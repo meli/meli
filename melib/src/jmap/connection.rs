@@ -32,18 +32,20 @@ use url::Url;
 use crate::{
     error::{Error, NetworkErrorKind, Result},
     jmap::{
+        argument::Argument,
+        capabilities::*,
         deserialize_from_str,
         email::{
             EmailChanges, EmailFilterCondition, EmailGet, EmailObject, EmailQueryChanges,
             EmailQueryChangesResponse,
         },
+        filters::Filter,
         identity::{IdentityGet, IdentityObject, IdentitySet},
         mailbox::MailboxObject,
         protocol::{self, JmapMailCapability, Request},
         rfc8620::{
-            argument::Argument, capabilities::*, filters::Filter, AddedItem, Changes,
-            ChangesResponse, Get, GetResponse, Id, MethodResponse, QueryChanges,
-            QueryChangesResponse, ResultField, Set, State,
+            AddedItem, Changes, ChangesResponse, Get, GetResponse, Id, MethodResponse,
+            QueryChanges, QueryChangesResponse, ResultField, Set, State,
         },
         session::Session,
         JmapServerConf, Store,

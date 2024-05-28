@@ -36,17 +36,11 @@ use url::Url;
 use crate::{
     email::parser::BytesExt,
     error::{Error, ErrorKind, Result},
-    jmap::{deserialize_from_str, protocol::Method, session::Session},
+    jmap::{
+        argument::Argument, comparator::Comparator, deserialize_from_str, filters,
+        protocol::Method, session::Session,
+    },
 };
-
-pub mod argument;
-pub mod comparator;
-pub mod filters;
-
-use argument::Argument;
-use comparator::Comparator;
-
-pub mod capabilities;
 
 pub type PatchObject = Value;
 

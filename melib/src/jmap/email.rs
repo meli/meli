@@ -30,12 +30,11 @@ use crate::{
     email::address::{Address, MailboxAddress},
     jmap::{
         deserialize_from_str,
+        filters::{Filter, FilterCondition, FilterTrait},
         mailbox::MailboxObject,
         protocol::Method,
         rfc8620::{
-            bool_false,
-            filters::{Filter, FilterCondition, FilterTrait},
-            u64_zero, BlobObject, Changes, Get, Id, Object, Query, QueryChanges,
+            bool_false, u64_zero, BlobObject, Changes, Get, Id, Object, Query, QueryChanges,
             QueryChangesResponse, ResultField, Set,
         },
         thread::ThreadObject,

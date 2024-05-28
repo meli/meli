@@ -28,8 +28,9 @@ fn test_jmap_query() {
 
     use crate::jmap::{
         email::{EmailFilterCondition, EmailObject, EmailQuery},
+        filters::Filter,
         protocol::Request,
-        rfc8620::{filters::Filter, Query},
+        rfc8620::Query,
     };
     let q: crate::search::Query = crate::search::Query::try_from(
         "subject:wah or (from:Manos and (subject:foo or subject:bar))",
@@ -139,9 +140,10 @@ fn test_jmap_email_submission_object() {
     use serde_json::json;
 
     use crate::jmap::{
+        argument::Argument,
         email::{EmailImport, EmailObject},
         identity::IdentityObject,
-        rfc8620::{argument::Argument, Account, Id, ResultField},
+        rfc8620::{Account, Id, ResultField},
         submission::{EmailSubmissionObject, UndoStatus},
     };
     let account_id: Id<Account> = "blahblah".into();
@@ -279,10 +281,11 @@ fn test_jmap_argument_serde() {
     use serde_json::json;
 
     use crate::jmap::{
+        argument::Argument,
         email::{EmailImport, EmailImportObject, EmailObject},
         mailbox::MailboxObject,
         protocol::Request,
-        rfc8620::{argument::Argument, BlobObject, Id, ResultField, Set},
+        rfc8620::{BlobObject, Id, ResultField, Set},
         submission::{EmailSubmissionObject, EmailSubmissionSet},
     };
 
