@@ -20,7 +20,7 @@
  */
 
 use crate::jmap::{
-    objects::email::EmailAddress,
+    email::EmailAddress,
     protocol::Method,
     rfc8620::{Changes, Get, Id, Object, Set},
 };

@@ -25,10 +25,8 @@ use crate::{
     backends::{BackendMailbox, LazyCountSet, MailboxPermissions, SpecialUsageMailbox},
     error::Result,
     jmap::{
-        objects::{
-            email::EmailObject,
-            mailbox::{JmapRights, MailboxObject},
-        },
+        email::EmailObject,
+        mailbox::{JmapRights, MailboxObject},
         rfc8620::{Id, State},
     },
     Mailbox, MailboxHash,

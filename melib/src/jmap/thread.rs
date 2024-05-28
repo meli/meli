@@ -22,7 +22,7 @@
 use std::marker::PhantomData;
 
 use crate::jmap::{
-    objects::email::{EmailGet, EmailObject},
+    email::{EmailGet, EmailObject},
     protocol::Method,
     rfc8620::{Changes, Get, Id, Object, ResultField},
 };

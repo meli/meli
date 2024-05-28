@@ -30,7 +30,7 @@ use crate::{
     email::address::{Address, MailboxAddress},
     jmap::{
         deserialize_from_str,
-        objects::{mailbox::MailboxObject, thread::ThreadObject},
+        mailbox::MailboxObject,
         protocol::Method,
         rfc8620::{
             bool_false,
@@ -38,6 +38,7 @@ use crate::{
             u64_zero, BlobObject, Changes, Get, Id, Object, Query, QueryChanges,
             QueryChangesResponse, ResultField, Set,
         },
+        thread::ThreadObject,
         UtcDate,
     },
     utils::datetime,

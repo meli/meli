@@ -33,14 +33,12 @@ use crate::{
     error::{Error, NetworkErrorKind, Result},
     jmap::{
         deserialize_from_str,
-        objects::{
-            email::{
-                EmailChanges, EmailFilterCondition, EmailGet, EmailObject, EmailQueryChanges,
-                EmailQueryChangesResponse,
-            },
-            identity::{IdentityGet, IdentityObject, IdentitySet},
-            mailbox::MailboxObject,
+        email::{
+            EmailChanges, EmailFilterCondition, EmailGet, EmailObject, EmailQueryChanges,
+            EmailQueryChangesResponse,
         },
+        identity::{IdentityGet, IdentityObject, IdentitySet},
+        mailbox::MailboxObject,
         protocol::{self, JmapMailCapability, Request},
         rfc8620::{
             argument::Argument, capabilities::*, filters::Filter, AddedItem, Changes,

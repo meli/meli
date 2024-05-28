@@ -26,9 +26,11 @@ use crate::{
     error::Result,
     jmap::{
         deserialize_from_str,
-        objects::{email::EmailObject, mailbox::MailboxObject, thread::ThreadObject},
+        email::EmailObject,
+        mailbox::MailboxObject,
         protocol::Method,
         rfc8620::{Account, BlobObject, Id, State},
+        thread::ThreadObject,
     },
 };
 

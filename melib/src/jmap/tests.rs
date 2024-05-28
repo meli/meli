@@ -27,7 +27,7 @@ fn test_jmap_query() {
     use futures::lock::Mutex as FutureMutex;
 
     use crate::jmap::{
-        objects::email::{EmailFilterCondition, EmailObject, EmailQuery},
+        email::{EmailFilterCondition, EmailObject, EmailQuery},
         protocol::Request,
         rfc8620::{filters::Filter, Query},
     };
@@ -76,12 +76,10 @@ fn test_jmap_undo_status() {
     use serde_json::json;
 
     use crate::jmap::{
-        objects::{
-            email::EmailObject,
-            identity::IdentityObject,
-            submission::{EmailSubmissionObject, UndoStatus},
-        },
+        email::EmailObject,
+        identity::IdentityObject,
         rfc8620::{Account, Id},
+        submission::{EmailSubmissionObject, UndoStatus},
     };
     let account_id: Id<Account> = "blahblah".into();
     let ident_id: Id<IdentityObject> = "sdusssssss".into();
@@ -141,12 +139,10 @@ fn test_jmap_email_submission_object() {
     use serde_json::json;
 
     use crate::jmap::{
-        objects::{
-            email::{EmailImport, EmailObject},
-            identity::IdentityObject,
-            submission::{EmailSubmissionObject, UndoStatus},
-        },
+        email::{EmailImport, EmailObject},
+        identity::IdentityObject,
         rfc8620::{argument::Argument, Account, Id, ResultField},
+        submission::{EmailSubmissionObject, UndoStatus},
     };
     let account_id: Id<Account> = "blahblah".into();
     let ident_id: Id<IdentityObject> = "sdusssssss".into();
@@ -204,7 +200,7 @@ fn test_jmap_identity_methods() {
     use serde_json::json;
 
     use crate::jmap::{
-        objects::identity::{IdentityGet, IdentityObject, IdentitySet},
+        identity::{IdentityGet, IdentityObject, IdentitySet},
         protocol::Request,
         rfc8620::{Id, Set},
     };

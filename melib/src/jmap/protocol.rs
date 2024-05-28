@@ -37,10 +37,8 @@ use crate::{
     jmap::{
         backend_mailbox::JmapMailbox,
         deserialize_from_str,
-        objects::{
-            email::{EmailFilterCondition, EmailGet, EmailObject, EmailQuery},
-            mailbox::{MailboxGet, MailboxObject},
-        },
+        email::{EmailFilterCondition, EmailGet, EmailObject, EmailQuery},
+        mailbox::{MailboxGet, MailboxObject},
         rfc8620::{
             argument::Argument, capabilities::*, filters::Filter, Get, GetResponse, Id,
             MethodResponse, Object, Query, QueryResponse, State,

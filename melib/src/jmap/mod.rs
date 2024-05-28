@@ -98,8 +98,14 @@ use rfc8620::{
 pub mod backend_mailbox;
 use backend_mailbox::JmapMailbox;
 
+pub mod email;
+pub mod identity;
 pub mod mailbox;
-pub mod objects;
+pub mod submission;
+pub mod thread;
+
+#[cfg(test)]
+mod tests;
 
 pub fn deserialize_from_str<'de, T: serde::de::Deserialize<'de>>(s: &'de str) -> Result<T> {
     let jd = &mut serde_json::Deserializer::from_str(s);
@@ -260,13 +266,13 @@ pub struct Store {
     pub main_identity: String,
     pub extra_identities: Vec<String>,
     pub byte_cache: Arc<FutureMutex<HashMap<EnvelopeHash, EnvelopeCache>>>,
-    pub id_store: Arc<FutureMutex<HashMap<EnvelopeHash, Id<objects::email::EmailObject>>>>,
-    pub reverse_id_store: Arc<FutureMutex<HashMap<Id<objects::email::EmailObject>, EnvelopeHash>>>,
+    pub id_store: Arc<FutureMutex<HashMap<EnvelopeHash, Id<email::EmailObject>>>>,
+    pub reverse_id_store: Arc<FutureMutex<HashMap<Id<email::EmailObject>, EnvelopeHash>>>,
     pub blob_id_store: Arc<FutureMutex<HashMap<EnvelopeHash, Id<BlobObject>>>>,
     pub collection: Collection,
     pub mailboxes: Arc<RwLock<HashMap<MailboxHash, JmapMailbox>>>,
     pub mailboxes_index: Arc<RwLock<HashMap<MailboxHash, HashSet<EnvelopeHash>>>>,
-    pub mailbox_state: Arc<FutureMutex<State<objects::mailbox::MailboxObject>>>,
+    pub mailbox_state: Arc<FutureMutex<State<mailbox::MailboxObject>>>,
     pub online_status: OnlineStatus,
     pub is_subscribed: Arc<IsSubscribedFn>,
     pub core_capabilities: Arc<Mutex<IndexMap<String, CapabilitiesObject>>>,
@@ -274,7 +280,7 @@ pub struct Store {
 }
 
 impl Store {
-    pub async fn add_envelope(&self, obj: objects::email::EmailObject) -> Envelope {
+    pub async fn add_envelope(&self, obj: email::EmailObject) -> Envelope {
         let mut flags = Flag::default();
         let mut labels: IndexSet<TagHash> = IndexSet::new();
         let id;
@@ -335,7 +341,7 @@ impl Store {
 
     pub async fn remove_envelope(
         &self,
-        obj_id: Id<objects::email::EmailObject>,
+        obj_id: Id<email::EmailObject>,
     ) -> Option<(EnvelopeHash, SmallVec<[MailboxHash; 8]>)> {
         let env_hash = self.reverse_id_store.lock().await.remove(&obj_id)?;
         self.id_store.lock().await.remove(&env_hash);
@@ -517,7 +523,7 @@ impl MailBackend for JmapType {
                 )
                 .await?;
 
-            let mailbox_id: Id<objects::mailbox::MailboxObject> = {
+            let mailbox_id: Id<mailbox::MailboxObject> = {
                 let mailboxes_lck = store.mailboxes.read().unwrap();
                 if let Some(mailbox) = mailboxes_lck.get(&mailbox_hash) {
                     mailbox.id.clone()
@@ -538,12 +544,12 @@ impl MailBackend for JmapType {
                 Ok(s) => s,
             };
             let mut req = Request::new(conn.request_no.clone());
-            let creation_id: Id<objects::email::EmailObject> = "1".to_string().into();
+            let creation_id: Id<email::EmailObject> = "1".to_string().into();
 
-            let import_call: objects::email::EmailImport = objects::email::EmailImport::new()
+            let import_call: email::EmailImport = email::EmailImport::new()
                 .account_id(mail_account_id)
                 .emails(indexmap! {
-                    creation_id.clone() => objects::email::EmailImportObject::new()
+                    creation_id.clone() => email::EmailImportObject::new()
                     .blob_id(upload_response.blob_id)
                     .mailbox_ids(indexmap! {
                         mailbox_id => true
@@ -561,16 +567,16 @@ impl MailBackend for JmapType {
                 }
                 Ok(s) => s,
             };
-            let m = objects::email::EmailImportResponse::try_from(v.method_responses.remove(0))
-                .map_err(|err| {
-                    let ierr: Result<objects::email::EmailImportError> =
-                        deserialize_from_str(&res_text);
+            let m = email::EmailImportResponse::try_from(v.method_responses.remove(0)).map_err(
+                |err| {
+                    let ierr: Result<email::EmailImportError> = deserialize_from_str(&res_text);
                     if let Ok(err) = ierr {
                         Error::new(format!("Could not save message: {:?}", err))
                     } else {
                         err
                     }
-                })?;
+                },
+            )?;
 
             if let Some(err) = m.not_created.and_then(|m| m.get(&creation_id).cloned()) {
                 return Err(Error::new(format!("Could not save message: {:?}", err)));
@@ -604,23 +610,21 @@ impl MailBackend for JmapType {
                 .clone();
 
             let mut f = Filter::Condition(
-                objects::email::EmailFilterCondition::new()
+                email::EmailFilterCondition::new()
                     .in_mailbox(Some(mailbox_id))
                     .into(),
             );
-            f &= Filter::<objects::email::EmailFilterCondition, objects::email::EmailObject>::from(
-                q,
-            );
+            f &= Filter::<email::EmailFilterCondition, email::EmailObject>::from(q);
             f
         } else {
-            Filter::<objects::email::EmailFilterCondition, objects::email::EmailObject>::from(q)
+            Filter::<email::EmailFilterCondition, email::EmailObject>::from(q)
         };
 
         Ok(Box::pin(async move {
             let mut conn = connection.lock().await;
             conn.connect().await?;
             let mail_account_id = conn.session_guard().await?.mail_account_id();
-            let email_call = objects::email::EmailQuery::new(
+            let email_call = email::EmailQuery::new(
                 Query::new()
                     .account_id(mail_account_id)
                     .filter(Some(filter))
@@ -642,10 +646,8 @@ impl MailBackend for JmapType {
                 Ok(s) => s,
             };
             store.online_status.update_timestamp(None).await;
-            let m = QueryResponse::<objects::email::EmailObject>::try_from(
-                v.method_responses.remove(0),
-            )?;
-            let QueryResponse::<objects::email::EmailObject> { ids, .. } = m;
+            let m = QueryResponse::<email::EmailObject>::try_from(v.method_responses.remove(0))?;
+            let QueryResponse::<email::EmailObject> { ids, .. } = m;
             let ret = ids.into_iter().map(|id| id.into_hash()).collect();
             Ok(ret)
         }))
@@ -670,16 +672,16 @@ impl MailBackend for JmapType {
         Ok(Box::pin(async move {
             let mut conn = connection.lock().await;
             let mail_account_id = conn.session_guard().await?.mail_account_id();
-            let mailbox_set_call = objects::mailbox::MailboxSet::new(
-                Set::<objects::mailbox::MailboxObject>::new()
+            let mailbox_set_call = mailbox::MailboxSet::new(
+                Set::<mailbox::MailboxObject>::new()
                     .account_id(mail_account_id)
                     .create(Some({
-                        let id: Id<objects::mailbox::MailboxObject> = path.as_str().into();
+                        let id: Id<mailbox::MailboxObject> = path.as_str().into();
                         indexmap! {
-                            id.clone().into() => objects::mailbox::MailboxObject {
+                            id.clone().into() => mailbox::MailboxObject {
                                 id,
                                 name: path.clone(),
-                                ..objects::mailbox::MailboxObject::default()
+                                ..mailbox::MailboxObject::default()
                             }
                         }
                     })),
@@ -767,7 +769,7 @@ impl MailBackend for JmapType {
                     mailboxes_lck[&destination_mailbox_hash].id.clone(),
                 )
             };
-            let mut update_map: IndexMap<Argument<Id<objects::email::EmailObject>>, Value> =
+            let mut update_map: IndexMap<Argument<Id<email::EmailObject>>, Value> =
                 IndexMap::default();
             let mut update_keywords: IndexMap<String, Value> = IndexMap::default();
             update_keywords.insert(
@@ -795,8 +797,8 @@ impl MailBackend for JmapType {
             let conn = connection.lock().await;
             let mail_account_id = conn.session_guard().await?.mail_account_id();
 
-            let email_set_call = objects::email::EmailSet::new(
-                Set::<objects::email::EmailObject>::new()
+            let email_set_call = email::EmailSet::new(
+                Set::<email::EmailObject>::new()
                     .account_id(mail_account_id)
                     .update(Some(update_map)),
             );
@@ -816,8 +818,7 @@ impl MailBackend for JmapType {
                 Ok(s) => s,
             };
             store.online_status.update_timestamp(None).await;
-            let m =
-                SetResponse::<objects::email::EmailObject>::try_from(v.method_responses.remove(0))?;
+            let m = SetResponse::<email::EmailObject>::try_from(v.method_responses.remove(0))?;
             if let Some(ids) = m.not_updated {
                 if !ids.is_empty() {
                     return Err(Error::new(format!(
@@ -842,12 +843,11 @@ impl MailBackend for JmapType {
         let store = self.store.clone();
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
-            let mut update_map: IndexMap<Argument<Id<objects::email::EmailObject>>, Value> =
+            let mut update_map: IndexMap<Argument<Id<email::EmailObject>>, Value> =
                 IndexMap::default();
-            let mut ids: Vec<Id<objects::email::EmailObject>> =
+            let mut ids: Vec<Id<email::EmailObject>> =
                 Vec::with_capacity(env_hashes.rest.len() + 1);
-            let mut id_map: IndexMap<Id<objects::email::EmailObject>, EnvelopeHash> =
-                IndexMap::default();
+            let mut id_map: IndexMap<Id<email::EmailObject>, EnvelopeHash> = IndexMap::default();
             let mut update_keywords: IndexMap<String, Value> = IndexMap::default();
             for op in flags.iter() {
                 match op {
@@ -908,15 +908,15 @@ impl MailBackend for JmapType {
             let conn = connection.lock().await;
             let mail_account_id = conn.session_guard().await?.mail_account_id();
 
-            let email_set_call = objects::email::EmailSet::new(
-                Set::<objects::email::EmailObject>::new()
+            let email_set_call = email::EmailSet::new(
+                Set::<email::EmailObject>::new()
                     .account_id(mail_account_id.clone())
                     .update(Some(update_map)),
             );
 
             let mut req = Request::new(conn.request_no.clone());
             req.add_call(&email_set_call).await;
-            let email_call = objects::email::EmailGet::new(
+            let email_call = email::EmailGet::new(
                 Get::new()
                     .ids(Some(Argument::Value(ids)))
                     .account_id(mail_account_id)
@@ -944,8 +944,7 @@ impl MailBackend for JmapType {
                 Ok(s) => s,
             };
             store.online_status.update_timestamp(None).await;
-            let m =
-                SetResponse::<objects::email::EmailObject>::try_from(v.method_responses.remove(0))?;
+            let m = SetResponse::<email::EmailObject>::try_from(v.method_responses.remove(0))?;
             if let Some(ids) = m.not_updated {
                 return Err(Error::new(
                     ids.into_iter()
@@ -964,10 +963,8 @@ impl MailBackend for JmapType {
                 }
                 drop(tag_index_lck);
             }
-            let e = GetResponse::<objects::email::EmailObject>::try_from(
-                v.method_responses.pop().unwrap(),
-            )?;
-            let GetResponse::<objects::email::EmailObject> { list, state, .. } = e;
+            let e = GetResponse::<email::EmailObject>::try_from(v.method_responses.pop().unwrap())?;
+            let GetResponse::<email::EmailObject> { list, state, .. } = e;
             {
                 let (is_empty, is_equal) = {
                     let mailboxes_lck = conn.store.mailboxes.read().unwrap();
@@ -984,11 +981,7 @@ impl MailBackend for JmapType {
                 };
                 if is_empty {
                     let mut mailboxes_lck = conn.store.mailboxes.write().unwrap();
-                    debug!(
-                        "{:?}: inserting state {}",
-                        objects::email::EmailObject::NAME,
-                        &state
-                    );
+                    debug!("{:?}: inserting state {}", email::EmailObject::NAME, &state);
                     mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
                         *mbox.email_state.lock().unwrap() = Some(state);
                     });
@@ -1040,31 +1033,30 @@ impl MailBackend for JmapType {
             //    "$draft" flag and moves it from the Drafts folder to the Sent folder.
             let (draft_mailbox_id, sent_mailbox_id) = {
                 let mailboxes_lck = store.mailboxes.read().unwrap();
-                let find_fn =
-                    |usage: SpecialUsageMailbox| -> Result<Id<objects::mailbox::MailboxObject>> {
-                        if let Some(sent_folder) =
-                            mailboxes_lck.values().find(|m| m.special_usage() == usage)
-                        {
-                            Ok(sent_folder.id.clone())
-                        } else if let Some(sent_folder) = mailboxes_lck
+                let find_fn = |usage: SpecialUsageMailbox| -> Result<Id<mailbox::MailboxObject>> {
+                    if let Some(sent_folder) =
+                        mailboxes_lck.values().find(|m| m.special_usage() == usage)
+                    {
+                        Ok(sent_folder.id.clone())
+                    } else if let Some(sent_folder) = mailboxes_lck
+                        .values()
+                        .find(|m| m.special_usage() == SpecialUsageMailbox::Inbox)
+                    {
+                        Ok(sent_folder.id.clone())
+                    } else {
+                        Ok(mailboxes_lck
                             .values()
-                            .find(|m| m.special_usage() == SpecialUsageMailbox::Inbox)
-                        {
-                            Ok(sent_folder.id.clone())
-                        } else {
-                            Ok(mailboxes_lck
-                                .values()
-                                .next()
-                                .ok_or_else(|| {
-                                    Error::new(format!(
-                                        "Account `{}` has no mailboxes.",
-                                        store.account_name
-                                    ))
-                                })?
-                                .id
-                                .clone())
-                        }
-                    };
+                            .next()
+                            .ok_or_else(|| {
+                                Error::new(format!(
+                                    "Account `{}` has no mailboxes.",
+                                    store.account_name
+                                ))
+                            })?
+                            .id
+                            .clone())
+                    }
+                };
 
                 (find_fn(SpecialUsageMailbox::Drafts)?, {
                     if let Some(h) = mailbox_hash {
@@ -1107,11 +1099,11 @@ impl MailBackend for JmapType {
             };
             {
                 let mut req = Request::new(conn.request_no.clone());
-                let creation_id: Id<objects::email::EmailObject> = "newid".into();
-                let import_call: objects::email::EmailImport = objects::email::EmailImport::new()
+                let creation_id: Id<email::EmailObject> = "newid".into();
+                let import_call: email::EmailImport = email::EmailImport::new()
                     .account_id(mail_account_id.clone())
                     .emails(indexmap! {
-                        creation_id => objects::email::EmailImportObject::new()
+                        creation_id => email::EmailImportObject::new()
                             .blob_id(upload_response.blob_id)
                             .keywords(indexmap! {
                                 "$draft".to_string() => true,
@@ -1147,11 +1139,11 @@ impl MailBackend for JmapType {
                 );
 
                 let mut req = Request::new(conn.request_no.clone());
-                let subm_set_call = objects::submission::EmailSubmissionSet::new(
-                    Set::<objects::submission::EmailSubmissionObject>::new()
+                let subm_set_call = submission::EmailSubmissionSet::new(
+                    Set::<submission::EmailSubmissionObject>::new()
                         .account_id(mail_account_id.clone())
                         .create(Some(indexmap! {
-                            Argument::from(Id::from("k1490")) => objects::submission::EmailSubmissionObject::new(
+                            Argument::from(Id::from("k1490")) => submission::EmailSubmissionObject::new(
                                 /* account_id: */ mail_account_id,
                                 /* identity_id: */ identity_id,
                                 /* email_id: */ email_id,

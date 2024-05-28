@@ -26,13 +26,11 @@ use futures::lock::Mutex as FutureMutex;
 use serde_json::json;
 
 use crate::jmap::{
-    objects::{
-        email::{EmailImport, EmailImportObject, EmailObject},
-        mailbox::MailboxObject,
-        submission::{EmailSubmissionObject, EmailSubmissionSet},
-    },
+    email::{EmailImport, EmailImportObject, EmailObject},
+    mailbox::MailboxObject,
     protocol::Request,
     rfc8620::{argument::Argument, BlobObject, Id, ResultField, Set},
+    submission::{EmailSubmissionObject, EmailSubmissionSet},
 };
 
 #[test]
