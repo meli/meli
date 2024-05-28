@@ -27,6 +27,7 @@ use url::Url;
 
 use crate::jmap::{
     identity::IdentityObject,
+    methods::{u64_zero, RequestUrlTemplate},
     objects::{Account, Id, Object, State},
     protocol::JmapMailCapability,
 };
@@ -41,10 +42,9 @@ pub struct Session {
     pub identities: IndexMap<Id<IdentityObject>, IdentityObject>,
     pub username: String,
     pub api_url: Arc<Url>,
-    pub download_url: Arc<Url>,
-
-    pub upload_url: Arc<Url>,
-    pub event_source_url: Arc<Url>,
+    pub download_url: Arc<RequestUrlTemplate>,
+    pub upload_url: Arc<RequestUrlTemplate>,
+    pub event_source_url: Arc<RequestUrlTemplate>,
     pub state: State<Session>,
     #[serde(flatten)]
     pub extra_properties: IndexMap<String, Value>,
@@ -70,20 +70,22 @@ impl Session {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CapabilitiesObject {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "u64_zero")]
     pub max_size_upload: u64,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "u64_zero")]
     pub max_concurrent_upload: u64,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "u64_zero")]
     pub max_size_request: u64,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "u64_zero")]
     pub max_concurrent_requests: u64,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "u64_zero")]
     pub max_calls_in_request: u64,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "u64_zero")]
     pub max_objects_in_get: u64,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "u64_zero")]
     pub max_objects_in_set: u64,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub collation_algorithms: Vec<String>,
+    #[serde(flatten, skip_serializing_if = "IndexMap::is_empty")]
+    pub extra_properties: IndexMap<String, Value>,
 }

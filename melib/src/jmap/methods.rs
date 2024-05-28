@@ -774,40 +774,87 @@ impl std::fmt::Display for SetError {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct RequestUrlTemplate {
+    pub text: String,
+    pub url: Url,
+}
+
+impl Serialize for RequestUrlTemplate {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.text)
+    }
+}
+
+impl<'de> ::serde::de::Deserialize<'de> for RequestUrlTemplate {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: ::serde::de::Deserializer<'de>,
+    {
+        use serde::de::{Error, Unexpected, Visitor};
+
+        struct _Visitor;
+
+        impl<'de> Visitor<'de> for _Visitor {
+            type Value = RequestUrlTemplate;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a string representing an URL")
+            }
+
+            fn visit_str<E>(self, s: &str) -> std::result::Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                let url = Url::parse(s).map_err(|err| {
+                    let err_s = format!("{}", err);
+                    Error::invalid_value(Unexpected::Str(s), &err_s.as_str())
+                })?;
+                let text = s.to_string();
+                Ok(RequestUrlTemplate { text, url })
+            }
+        }
+
+        deserializer.deserialize_str(_Visitor)
+    }
+}
+
 pub fn download_request_format(
-    download_url: &Url,
+    download_url: &RequestUrlTemplate,
     account_id: &Id<Account>,
     blob_id: &Id<BlobObject>,
     name: Option<String>,
 ) -> Result<Url> {
-    // https://jmap.fastmail.com/download/{accountId}/{blobId}/{name}
     let mut ret = String::with_capacity(
-        download_url.as_str().len()
+        download_url.text.len()
             + blob_id.len()
             + name.as_ref().map(|n| n.len()).unwrap_or(0)
             + account_id.len(),
     );
     let mut prev_pos = 0;
 
-    while let Some(pos) = download_url.as_str().as_bytes()[prev_pos..].find(b"{") {
-        ret.push_str(&download_url.as_str()[prev_pos..prev_pos + pos]);
+    while let Some(pos) = download_url.text.as_bytes()[prev_pos..].find(b"{") {
+        ret.push_str(&download_url.text[prev_pos..prev_pos + pos]);
         prev_pos += pos;
-        if download_url.as_str()[prev_pos..].starts_with("{accountId}") {
+        if download_url.text[prev_pos..].starts_with("{accountId}") {
             ret.push_str(account_id.as_str());
             prev_pos += "{accountId}".len();
-        } else if download_url.as_str()[prev_pos..].starts_with("{blobId}") {
+        } else if download_url.text[prev_pos..].starts_with("{blobId}") {
             ret.push_str(blob_id.as_str());
             prev_pos += "{blobId}".len();
-        } else if download_url.as_str()[prev_pos..].starts_with("{name}") {
+        } else if download_url.text[prev_pos..].starts_with("{name}") {
             ret.push_str(name.as_deref().unwrap_or(""));
             prev_pos += "{name}".len();
-        } else if download_url.as_str()[prev_pos..].starts_with("{type}") {
+        } else if download_url.text[prev_pos..].starts_with("{type}") {
             ret.push_str("application/octet-stream");
             prev_pos += "{name}".len();
         } else {
             log::error!(
                 "BUG: unknown parameter in download_url: {}",
-                &download_url.as_str()[prev_pos..]
+                &download_url.text[prev_pos..]
             );
             return Err(Error::new(
                 "Could not instantiate URL from JMAP server's URL template value",
@@ -818,16 +865,16 @@ pub fn download_request_format(
                  {}\nUnknown parameter found {}\n\nIf you believe these values are correct and \
                  should have been accepted, please report it as a bug! Otherwise inform the \
                  server administrator for this protocol violation.",
-                download_url,
+                download_url.text,
                 account_id,
                 blob_id,
-                &download_url.as_str()[prev_pos..]
+                &download_url.text[prev_pos..]
             ))
             .set_kind(ErrorKind::ProtocolError));
         }
     }
-    if prev_pos != download_url.as_str().len() {
-        ret.push_str(&download_url.as_str()[prev_pos..]);
+    if prev_pos != download_url.text.len() {
+        ret.push_str(&download_url.text[prev_pos..]);
     }
     Url::parse(&ret).map_err(|err| {
         Error::new("Could not instantiate URL from JMAP server's URL template value")
@@ -837,22 +884,24 @@ pub fn download_request_format(
                  {}\nresult: {ret}\n\nIf you believe these values are correct and should have \
                  been accepted, please report it as a bug! Otherwise inform the server \
                  administrator for this protocol violation.",
-                download_url, account_id, blob_id
+                download_url.text, account_id, blob_id
             ))
             .set_kind(ErrorKind::ProtocolError)
             .set_source(Some(Arc::new(err)))
     })
 }
 
-pub fn upload_request_format(upload_url: &Url, account_id: &Id<Account>) -> Result<Url> {
-    //"uploadUrl": "https://jmap.fastmail.com/upload/{accountId}/",
-    let mut ret = String::with_capacity(upload_url.as_str().len() + account_id.len());
+pub fn upload_request_format(
+    upload_url: &RequestUrlTemplate,
+    account_id: &Id<Account>,
+) -> Result<Url> {
+    let mut ret = String::with_capacity(upload_url.text.len() + account_id.len());
     let mut prev_pos = 0;
 
-    while let Some(pos) = upload_url.as_str().as_bytes()[prev_pos..].find(b"{") {
-        ret.push_str(&upload_url.as_str()[prev_pos..prev_pos + pos]);
+    while let Some(pos) = upload_url.text.as_bytes()[prev_pos..].find(b"{") {
+        ret.push_str(&upload_url.text[prev_pos..prev_pos + pos]);
         prev_pos += pos;
-        if upload_url.as_str()[prev_pos..].starts_with("{accountId}") {
+        if upload_url.text[prev_pos..].starts_with("{accountId}") {
             ret.push_str(account_id.as_str());
             prev_pos += "{accountId}".len();
             break;
@@ -861,8 +910,8 @@ pub fn upload_request_format(upload_url: &Url, account_id: &Id<Account>) -> Resu
             prev_pos += 1;
         }
     }
-    if prev_pos != upload_url.as_str().len() {
-        ret.push_str(&upload_url.as_str()[prev_pos..]);
+    if prev_pos != upload_url.text.len() {
+        ret.push_str(&upload_url.text[prev_pos..]);
     }
     Url::parse(&ret).map_err(|err| {
         Error::new("Could not instantiate URL from JMAP server's URL template value")
@@ -872,7 +921,7 @@ pub fn upload_request_format(upload_url: &Url, account_id: &Id<Account>) -> Resu
                  {ret}\n\nIf you believe these values are correct and should have been accepted, \
                  please report it as a bug! Otherwise inform the server administrator for this \
                  protocol violation.",
-                upload_url, account_id
+                upload_url.text, account_id
             ))
             .set_kind(ErrorKind::ProtocolError)
             .set_source(Some(Arc::new(err)))

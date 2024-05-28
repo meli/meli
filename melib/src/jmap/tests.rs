@@ -431,3 +431,268 @@ fn test_jmap_argument_serde() {
         }},
     );
 }
+
+#[test]
+fn test_jmap_request_url_template() {
+    use serde_json::json;
+    use url::Url;
+
+    use crate::jmap::{
+        methods::{download_request_format, upload_request_format, RequestUrlTemplate},
+        objects::{Account, BlobObject, Id},
+    };
+
+    const DOWNLOAD_TEMPLATE: &str = "https://jmap.example.com/download/{accountId}/{blobId}/{name}";
+    const UPLOAD_TEMPLATE: &str = "https://jmap.example.com/upload/{accountId}/";
+
+    let account_id: Id<Account> = "blahblah".into();
+    let blob_id: Id<BlobObject> = Id::from("683f9246-56d4-4d7d-bd0c-3d4de6db7cbf");
+    let download_template_url: RequestUrlTemplate =
+        serde_json::from_value(json!(DOWNLOAD_TEMPLATE)).unwrap();
+    assert_eq!(
+        download_request_format(
+            &download_template_url,
+            &account_id,
+            &blob_id,
+            Some("attachment.txt".into())
+        )
+        .unwrap(),
+        serde_json::from_str::<Url>(
+            &json!("https://jmap.example.com/download/blahblah/683f9246-56d4-4d7d-bd0c-3d4de6db7cbf/attachment.txt").to_string()
+        )
+        .unwrap()
+    );
+    assert_eq!(
+        download_request_format(
+            &download_template_url,
+            &account_id,
+            &blob_id,
+            Some("attachment filename.txt".into()),
+        )
+        .unwrap(),
+        serde_json::from_str::<Url>(
+            &json!("https://jmap.example.com/download/blahblah/683f9246-56d4-4d7d-bd0c-3d4de6db7cbf/attachment%20filename.txt").to_string()
+        )
+        .unwrap()
+    );
+
+    let upload_template_url: RequestUrlTemplate =
+        serde_json::from_value(json!(UPLOAD_TEMPLATE)).unwrap();
+    assert_eq!(
+        upload_request_format(&upload_template_url, &account_id).unwrap(),
+        serde_json::from_str::<Url>(
+            &json!("https://jmap.example.com/upload/blahblah/").to_string()
+        )
+        .unwrap()
+    );
+}
+
+#[test]
+fn test_jmap_session_serde() {
+    use serde_json::json;
+
+    use crate::jmap::{
+        objects::{Account, Id, State},
+        session::{CapabilitiesObject, Session},
+    };
+
+    const RFC_EXAMPLE: &str = r###"{
+     "capabilities": {
+       "urn:ietf:params:jmap:core": {
+         "maxSizeUpload": 50000000,
+         "maxConcurrentUpload": 8,
+         "maxSizeRequest": 10000000,
+         "maxConcurrentRequests": 8,
+         "maxCallsInRequest": 32,
+         "maxObjectsInGet": 256,
+         "maxObjectsInSet": 128,
+         "collationAlgorithms": [
+           "i;ascii-numeric",
+           "i;ascii-casemap",
+           "i;unicode-casemap"
+         ]
+       },
+       "urn:ietf:params:jmap:mail": {},
+       "urn:ietf:params:jmap:contacts": {},
+       "https://example.com/apis/foobar": {
+         "maxFoosFinangled": 42
+       }
+     },
+     "accounts": {
+       "A13824": {
+         "name": "john@example.com",
+         "isPersonal": true,
+         "isReadOnly": false,
+         "accountCapabilities": {
+           "urn:ietf:params:jmap:mail": {
+             "maxMailboxesPerEmail": null,
+             "maxMailboxDepth": 10
+           },
+           "urn:ietf:params:jmap:contacts": {
+           }
+         }
+       },
+       "A97813": {
+         "name": "jane@example.com",
+         "isPersonal": false,
+         "isReadOnly": true,
+         "accountCapabilities": {
+           "urn:ietf:params:jmap:mail": {
+             "maxMailboxesPerEmail": 1,
+             "maxMailboxDepth": 10
+           }
+         }
+       }
+     },
+     "primaryAccounts": {
+       "urn:ietf:params:jmap:mail": "A13824",
+       "urn:ietf:params:jmap:contacts": "A13824"
+     },
+     "username": "john@example.com",
+     "apiUrl": "https://jmap.example.com/api/",
+     "downloadUrl": "https://jmap.example.com/download/{accountId}/{blobId}/{name}?accept={type}",
+     "uploadUrl": "https://jmap.example.com/upload/{accountId}/",
+     "eventSourceUrl": "https://jmap.example.com/eventsource/?types={types}&closeafter={closeafter}&ping={ping}",
+     "state": "75128aab4b1b"
+   }"###;
+    let expected = Session {
+        capabilities: indexmap::indexmap! {
+            "urn:ietf:params:jmap:core".to_string() => CapabilitiesObject {
+                max_size_upload: 50000000,
+                max_concurrent_upload: 8,
+                max_size_request: 10000000,
+                max_concurrent_requests: 8,
+                max_calls_in_request: 32,
+                max_objects_in_get: 256,
+                max_objects_in_set: 128,
+                collation_algorithms: vec![
+                    "i;ascii-numeric".to_string(),
+                    "i;ascii-casemap".to_string(),
+                    "i;unicode-casemap".to_string(),
+                ],
+                extra_properties: indexmap::IndexMap::default(),
+            },
+            "urn:ietf:params:jmap:mail".to_string() => CapabilitiesObject {
+                max_size_upload: 0,
+                max_concurrent_upload: 0,
+                max_size_request: 0,
+                max_concurrent_requests: 0,
+                max_calls_in_request: 0,
+                max_objects_in_get: 0,
+                max_objects_in_set: 0,
+                collation_algorithms: vec![],
+                extra_properties: indexmap::IndexMap::default(),
+            },
+            "urn:ietf:params:jmap:contacts".to_string() => CapabilitiesObject {
+                max_size_upload: 0,
+                max_concurrent_upload: 0,
+                max_size_request: 0,
+                max_concurrent_requests: 0,
+                max_calls_in_request: 0,
+                max_objects_in_get: 0,
+                max_objects_in_set: 0,
+                collation_algorithms: vec![],
+                extra_properties: indexmap::IndexMap::default(),
+            },
+            "https://example.com/apis/foobar".to_string() => CapabilitiesObject {
+                max_size_upload: 0,
+                max_concurrent_upload: 0,
+                max_size_request: 0,
+                max_concurrent_requests: 0,
+                max_calls_in_request: 0,
+                max_objects_in_get: 0,
+                max_objects_in_set: 0,
+                collation_algorithms: vec![],
+                extra_properties: indexmap::indexmap! {
+                    "maxFoosFinangled".to_string() => json!(42),
+                },
+            },
+        },
+        accounts: indexmap::indexmap! {
+            Id::<Account>::from(
+                "A13824",
+            ) => Account {
+                name: "john@example.com".to_string(),
+                is_personal: true,
+                is_read_only: false,
+                account_capabilities: indexmap::indexmap! {
+                    "urn:ietf:params:jmap:mail".to_string() => json!({
+                        "maxMailboxDepth": 10,
+                        "maxMailboxesPerEmail": null
+                    }),
+                    "urn:ietf:params:jmap:contacts".to_string() => json!({}),
+                },
+                extra_properties: indexmap::indexmap! {},
+            },
+            Id::<Account>::from(
+                "A97813",
+            ) => Account {
+                name: "jane@example.com".to_string(),
+                is_personal: false,
+                is_read_only: true,
+                account_capabilities: indexmap::indexmap! {
+                    "urn:ietf:params:jmap:mail".to_string() => json!({
+                        "maxMailboxDepth": 10,
+                        "maxMailboxesPerEmail": 1
+                    }),
+                },
+                extra_properties: indexmap::indexmap! {},
+            },
+        },
+        primary_accounts: indexmap::indexmap! {
+            "urn:ietf:params:jmap:mail".to_string() => Id::<Account>::from(
+                "A13824",
+            ),
+            "urn:ietf:params:jmap:contacts".to_string() => Id::<Account>::from(
+                "A13824",
+            ),
+        },
+        identities: indexmap::indexmap! {},
+        username: "john@example.com".to_string(),
+        api_url: serde_json::from_value(json!("https://jmap.example.com/api/")).unwrap(),
+        download_url: serde_json::from_value(json!(
+            "https://jmap.example.com/download/{accountId}/{blobId}/{name}?accept={type}"
+        ))
+        .unwrap(),
+        upload_url: serde_json::from_value(json!("https://jmap.example.com/upload/{accountId}/"))
+            .unwrap(),
+        event_source_url: serde_json::from_value(json!(
+            "https://jmap.example.com/eventsource/?types={types}&closeafter={closeafter}&ping={ping}"
+        ))
+        .unwrap(),
+        state: State {
+            inner: "75128aab4b1b".into(),
+            _ph: std::marker::PhantomData,
+        },
+        extra_properties: indexmap::indexmap! {},
+    };
+    assert_eq!(
+        json!(serde_json::from_str::<Session>(RFC_EXAMPLE).unwrap()),
+        json!(expected)
+    );
+    assert_eq!(
+        json!(serde_json::from_str::<serde_json::Value>(RFC_EXAMPLE).unwrap()),
+        json!(expected)
+    );
+    assert_eq!(
+        json!(serde_json::from_str::<serde_json::Value>(RFC_EXAMPLE).unwrap()),
+        json!(serde_json::from_str::<Session>(RFC_EXAMPLE).unwrap()),
+    );
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(
+            &json!(serde_json::from_str::<serde_json::Value>(RFC_EXAMPLE).unwrap()).to_string()
+        )
+        .unwrap(),
+        json!(serde_json::from_str::<Session>(RFC_EXAMPLE).unwrap()),
+    );
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(
+            &json!(serde_json::from_str::<serde_json::Value>(RFC_EXAMPLE).unwrap()).to_string()
+        )
+        .unwrap(),
+        serde_json::from_str::<serde_json::Value>(
+            &json!(serde_json::from_str::<Session>(RFC_EXAMPLE).unwrap()).to_string()
+        )
+        .unwrap(),
+    );
+}
