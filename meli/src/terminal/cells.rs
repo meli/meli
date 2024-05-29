@@ -772,13 +772,14 @@ impl CellBuffer {
                 Some(2) => {
                     /* Grapheme takes more than one column, so the next cell will be
                      * drawn over. Set it as empty to skip drawing it. */
-                    x += 1;
-                    self[(x, y)] = Cell::default();
-                    self[(x, y)]
-                        .set_fg(fg_color)
-                        .set_bg(bg_color)
-                        .set_attrs(attrs)
-                        .set_empty(true);
+                    if let Some(c) = self.get_mut(x + 1, y) {
+                        x += 1;
+                        *c = Cell::default();
+                        c.set_fg(fg_color)
+                            .set_bg(bg_color)
+                            .set_attrs(attrs)
+                            .set_empty(true);
+                    }
                 }
                 _ => {}
             }
