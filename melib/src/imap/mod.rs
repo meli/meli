@@ -52,6 +52,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+pub extern crate imap_codec;
 pub use cache::ModSequence;
 use futures::{lock::Mutex as FutureMutex, stream::Stream};
 use imap_codec::imap_types::{

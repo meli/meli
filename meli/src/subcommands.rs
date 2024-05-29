@@ -260,6 +260,8 @@ pub fn tool(path: Option<PathBuf>, opt: crate::args::ToolOpt) -> Result<()> {
             }
         }
         ToolOpt::ImapShell { .. } => {
+            use melib::imap::{imap_codec::imap_types::command::CommandBody, RequiredResponses};
+
             let mut imap = melib::imap::ImapType::new(
                 &account_conf.account,
                 Box::new(|_| true),
@@ -270,10 +272,66 @@ pub fn tool(path: Option<PathBuf>, opt: crate::args::ToolOpt) -> Result<()> {
                 let ex = melib::smol::Executor::new();
                 futures::executor::block_on(ex.run(futures::future::pending::<()>()));
             });
-            (imap.as_any_mut())
+
+            let imap = (imap.as_any_mut())
                 .downcast_mut::<melib::imap::ImapType>()
+                .unwrap();
+            let mut conn = melib::imap::ImapConnection::new_connection(
+                &imap.server_conf,
+                "ImapType::shell".into(),
+                imap.uid_store.clone(),
+            );
+
+            futures::executor::block_on(timeout(imap.server_conf.timeout, conn.connect()))
                 .unwrap()
-                .shell();
+                .unwrap();
+            let mut res = Vec::with_capacity(8 * 1024);
+            futures::executor::block_on(timeout(
+                imap.server_conf.timeout,
+                conn.send_command(CommandBody::Noop),
+            ))
+            .unwrap()
+            .unwrap();
+            futures::executor::block_on(timeout(
+                imap.server_conf.timeout,
+                conn.read_response(&mut res, RequiredResponses::empty()),
+            ))
+            .unwrap()
+            .unwrap();
+
+            let mut input = String::new();
+            println!(
+                "Connected. Type a valid IMAP command such as LIST \"\" \"*\" and CAPABILITY hit \
+                 Return. Exit with Ctrl+C or with the command QUIT."
+            );
+            loop {
+                use std::io;
+                input.clear();
+                res.clear();
+
+                match io::stdin().read_line(&mut input) {
+                    Ok(_) => {
+                        futures::executor::block_on(timeout(
+                            imap.server_conf.timeout,
+                            conn.send_command_raw(input.as_bytes()),
+                        ))
+                        .unwrap()
+                        .unwrap();
+                        futures::executor::block_on(timeout(
+                            imap.server_conf.timeout,
+                            conn.read_lines(&mut res, Vec::new()),
+                        ))
+                        .unwrap()
+                        .unwrap();
+                        if input.trim().eq_ignore_ascii_case("logout") {
+                            break;
+                        }
+                        println!("\rC: {}", input.trim());
+                        print!("S: {}", String::from_utf8_lossy(&res));
+                    }
+                    Err(error) => println!("error: {}", error),
+                }
+            }
         }
         #[cfg(feature = "jmap")]
         ToolOpt::JmapShell { .. } => {
