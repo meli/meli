@@ -148,6 +148,7 @@ impl Component for OfflineListing {
                 error_message.attrs,
                 area,
                 None,
+                None,
             );
 
             let (_, mut y_offset) = grid.write_string(
@@ -155,7 +156,8 @@ impl Component for OfflineListing {
                 error_message.fg,
                 error_message.bg,
                 error_message.attrs,
-                area.skip_cols(x + 1),
+                area,
+                Some(x + 1),
                 Some(0),
             );
             y_offset += 1;
@@ -166,6 +168,7 @@ impl Component for OfflineListing {
                     text_unfocused.bg,
                     Attr::BOLD,
                     area.skip_rows(y_offset),
+                    None,
                     None,
                 );
             }
@@ -178,6 +181,7 @@ impl Component for OfflineListing {
                     text_unfocused.attrs,
                     area.skip_rows(y_offset + i),
                     None,
+                    None,
                 );
             }
         } else {
@@ -187,6 +191,7 @@ impl Component for OfflineListing {
                 conf::value(context, "highlight").bg,
                 conf::value(context, "highlight").attrs,
                 area,
+                None,
                 None,
             );
             let mut jobs: SmallVec<[_; 64]> = context.accounts[&self.cursor_pos.0]
@@ -201,6 +206,7 @@ impl Component for OfflineListing {
                     text_unfocused.bg,
                     text_unfocused.attrs,
                     area.skip_rows(i + 1),
+                    None,
                     None,
                 );
             }

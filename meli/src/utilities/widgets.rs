@@ -125,6 +125,7 @@ impl Component for Field {
                     theme_attr.attrs,
                     area,
                     None,
+                    None,
                 );
             }
         }
@@ -373,6 +374,7 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for 
                     theme_attr.attrs,
                     area.nth_row(i).skip_cols(1),
                     None,
+                    None,
                 );
                 /* draw field */
                 v.draw(
@@ -616,6 +618,7 @@ where
                     Attr::BOLD,
                     area.skip_cols(len),
                     None,
+                    None,
                 );
                 len += cur_len + 3;
             }
@@ -756,6 +759,7 @@ impl Component for AutoComplete {
                 Attr::DEFAULT,
                 area.nth_row(i).take_cols(width),
                 None,
+                None,
             );
             grid.write_string(
                 &e.description,
@@ -764,6 +768,7 @@ impl Component for AutoComplete {
                 Attr::ITALICS,
                 area.nth_row(i).skip_cols(x + 2).take_cols(width),
                 None,
+                None,
             );
             grid.write_string(
                 "▒",
@@ -771,6 +776,7 @@ impl Component for AutoComplete {
                 Color::Byte(7),
                 Attr::DEFAULT,
                 area.nth_row(i).skip_cols(width - 1),
+                None,
                 None,
             );
         }
@@ -1178,6 +1184,7 @@ impl Component for ProgressSpinner {
                     self.theme_attr.bg,
                     self.theme_attr.attrs,
                     area,
+                    None,
                     None,
                 );
             }

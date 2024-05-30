@@ -86,6 +86,7 @@ impl ContactManager {
             self.theme_default.attrs,
             area,
             None,
+            None,
         );
         area = area.skip_cols(x);
         let (x, y) = self.content.grid_mut().write_string(
@@ -94,6 +95,7 @@ impl ContactManager {
             self.theme_default.bg,
             self.theme_default.attrs,
             area,
+            None,
             None,
         );
         area = area.skip(x, y);
@@ -106,6 +108,7 @@ impl ContactManager {
                 self.theme_default.bg,
                 self.theme_default.attrs,
                 area,
+                None,
                 None,
             );
         }

@@ -95,6 +95,7 @@ impl Component for KeySelection {
                     theme_default.bg,
                     theme_default.attrs,
                     area.center_inside((15, 2)),
+                    None,
                     Some(0),
                 );
             }

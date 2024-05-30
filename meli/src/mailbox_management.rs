@@ -190,6 +190,7 @@ impl MailboxManager {
                     self.theme_default.attrs,
                     area,
                     None,
+                    None,
                 );
             }
 
@@ -201,6 +202,7 @@ impl MailboxManager {
                     self.theme_default.bg,
                     self.theme_default.attrs,
                     area,
+                    None,
                     None,
                 );
             }
@@ -214,6 +216,7 @@ impl MailboxManager {
                     self.theme_default.bg,
                     self.theme_default.attrs,
                     area,
+                    None,
                     None,
                 );
             }
@@ -231,6 +234,7 @@ impl MailboxManager {
                     self.theme_default.attrs,
                     area,
                     None,
+                    None,
                 );
             }
         }
@@ -246,6 +250,7 @@ impl MailboxManager {
                     self.theme_default.bg,
                     self.theme_default.attrs,
                     area,
+                    None,
                     None,
                 );
             }
@@ -415,6 +420,7 @@ impl Component for MailboxManager {
                     self.theme_default.attrs | Attr::BOLD,
                     area.skip_cols(x_offset),
                     None,
+                    None,
                 );
                 if self.sort_col as usize == i {
                     use SortOrder::*;
@@ -430,6 +436,7 @@ impl Component for MailboxManager {
                         self.theme_default.bg,
                         self.theme_default.attrs,
                         area.skip_cols(x_offset + h.len()),
+                        None,
                         None,
                     );
                 }

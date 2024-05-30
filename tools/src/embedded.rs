@@ -156,6 +156,7 @@ impl Component for EmbeddedContainer {
                             theme_default.attrs,
                             inner_area.skip_rows(i),
                             None,
+                            None,
                         );
                     }
                     context.dirty_areas.push_back(area);

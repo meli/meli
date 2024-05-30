@@ -226,6 +226,7 @@ impl MailListingTrait for PlainListing {
                         self.color_cache.theme_default.attrs,
                         area,
                         None,
+                        None,
                     );
                 }
                 return;
@@ -892,6 +893,7 @@ impl PlainListing {
                         row_attr.attrs,
                         area_col_0,
                         None,
+                        None,
                     ));
                     for c in columns[0].grid().row_iter(area_col_0, 0..min_width.0, 0) {
                         columns[0].grid_mut()[c]
@@ -909,6 +911,7 @@ impl PlainListing {
                     row_attr.attrs,
                     area_col_1,
                     None,
+                    None,
                 ));
                 for c in columns[1].grid().row_iter(area_col_1, 0..min_width.1, 0) {
                     columns[1].grid_mut()[c]
@@ -924,6 +927,7 @@ impl PlainListing {
                     row_attr.bg,
                     row_attr.attrs,
                     area_col_2,
+                    None,
                     None,
                 );
                 #[cfg(feature = "regexp")]
@@ -958,6 +962,7 @@ impl PlainListing {
                     row_attr.attrs,
                     area_col_3,
                     None,
+                    None,
                 ));
                 if strings.highlight_self {
                     let (x, _) = columns[3].grid_mut().write_string(
@@ -973,6 +978,7 @@ impl PlainListing {
                         row_attr.bg,
                         row_attr.attrs | Attr::FORCE_TEXT,
                         area_col_3,
+                        None,
                         None,
                     );
                     for c in columns[3].grid().row_iter(area_col_3, 0..x, 0) {
@@ -994,6 +1000,7 @@ impl PlainListing {
                     row_attr.bg,
                     row_attr.attrs,
                     area_col_4,
+                    None,
                     None,
                 ));
                 #[cfg(feature = "regexp")]
@@ -1018,6 +1025,7 @@ impl PlainListing {
                         color,
                         self.color_cache.tag_default.attrs,
                         area_col_4.skip_cols(1),
+                        None,
                         None,
                     );
                     for c in columns[4].grid().row_iter(area_col_4, 0..(x + 1), 0) {
@@ -1047,6 +1055,7 @@ impl PlainListing {
                     self.color_cache.theme_default.bg,
                     self.color_cache.theme_default.attrs,
                     area,
+                    None,
                     None,
                 );
             }
@@ -1098,6 +1107,7 @@ impl PlainListing {
                 row_attr.attrs,
                 area,
                 None,
+                None,
             )
         };
         for c in {
@@ -1116,6 +1126,7 @@ impl PlainListing {
                 row_attr.bg,
                 row_attr.attrs,
                 area,
+                None,
                 None,
             )
         };
@@ -1136,6 +1147,7 @@ impl PlainListing {
                 row_attr.attrs,
                 area,
                 None,
+                None,
             )
         };
         for c in {
@@ -1155,6 +1167,7 @@ impl PlainListing {
                 row_attr.attrs,
                 area_col_3,
                 None,
+                None,
             ));
             if strings.highlight_self {
                 let (x, _) = columns[3].grid_mut().write_string(
@@ -1170,6 +1183,7 @@ impl PlainListing {
                     row_attr.bg,
                     row_attr.attrs | Attr::FORCE_TEXT,
                     area_col_3,
+                    None,
                     None,
                 );
                 for c in columns[3].grid().row_iter(area_col_3, 0..x, 0) {
@@ -1195,6 +1209,7 @@ impl PlainListing {
                 row_attr.attrs,
                 area_col_4,
                 None,
+                None,
             ));
             #[cfg(feature = "regexp")]
             {
@@ -1214,6 +1229,7 @@ impl PlainListing {
                     color,
                     self.color_cache.tag_default.attrs,
                     area_col_4.skip_cols(1),
+                    None,
                     None,
                 );
                 for c in columns[4].grid().row_iter(area_col_4, 0..(x + 1), 0) {
@@ -1323,6 +1339,7 @@ impl PlainListing {
                 row_attr.attrs,
                 area.nth_row(i),
                 None,
+                None,
             );
         }
     }
@@ -1402,6 +1419,7 @@ impl Component for PlainListing {
                     self.color_cache.theme_default.bg,
                     self.color_cache.theme_default.attrs,
                     area,
+                    None,
                     Some(0),
                 );
 

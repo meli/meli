@@ -594,6 +594,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             self.theme_default.attrs | Attr::BOLD,
             inner_area.skip_cols(2),
             None,
+            None,
         );
 
         let y = self
@@ -605,6 +606,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
                 self.theme_default.bg,
                 self.theme_default.attrs | Attr::ITALICS,
                 inner_area.skip_cols(2).skip_rows(y + 2),
+                None,
                 None,
             )
             .1
@@ -628,6 +630,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
                     attr.attrs,
                     inner_area.nth_row(i),
                     None,
+                    None,
                 );
             }
         } else {
@@ -644,6 +647,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
                     attr.attrs,
                     inner_area.nth_row(i),
                     None,
+                    None,
                 );
             }
             let inner_area = inner_area.nth_row(self.entry_titles.len() + 2).skip_cols(2);
@@ -659,6 +663,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
                 attr.attrs | Attr::BOLD,
                 inner_area,
                 None,
+                None,
             );
             let attr = if matches!(self.cursor, SelectorCursor::Cancel) {
                 highlighted_attrs
@@ -671,6 +676,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
                 attr.bg,
                 attr.attrs,
                 inner_area.skip(CANCEL_OFFSET + x, y),
+                None,
                 None,
             );
         }

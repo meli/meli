@@ -242,6 +242,7 @@ impl MailListingTrait for CompactListing {
                         self.color_cache.theme_default.attrs,
                         area_col_0,
                         None,
+                        None,
                     );
                 }
                 return;
@@ -543,6 +544,7 @@ impl MailListingTrait for CompactListing {
                     self.color_cache.theme_default.bg,
                     self.color_cache.theme_default.attrs,
                     area_col_0,
+                    None,
                     None,
                 );
             }
@@ -1165,6 +1167,7 @@ impl CompactListing {
                     row_attr.attrs,
                     area,
                     None,
+                    None,
                 )
             };
             for c in {
@@ -1184,6 +1187,7 @@ impl CompactListing {
                     row_attr.attrs,
                     area,
                     None,
+                    None,
                 )
             };
             for c in {
@@ -1202,6 +1206,7 @@ impl CompactListing {
                     row_attr.bg,
                     row_attr.attrs,
                     area,
+                    None,
                     None,
                 )
             };
@@ -1232,6 +1237,7 @@ impl CompactListing {
                     row_attr.attrs,
                     area_col_3,
                     None,
+                    None,
                 ));
                 if strings.highlight_self {
                     let (x, _) = columns[3].grid_mut().write_string(
@@ -1247,6 +1253,7 @@ impl CompactListing {
                         row_attr.bg,
                         row_attr.attrs | Attr::FORCE_TEXT,
                         area_col_3,
+                        None,
                         None,
                     );
                     for c in columns[3].grid().row_iter(area_col_3, 0..x, 0) {
@@ -1268,6 +1275,7 @@ impl CompactListing {
                     row_attr.bg,
                     row_attr.attrs,
                     area_col_4,
+                    None,
                     None,
                 ));
                 #[cfg(feature = "regexp")]
@@ -1292,6 +1300,7 @@ impl CompactListing {
                         color,
                         self.color_cache.tag_default.attrs,
                         area_col_4,
+                        None,
                         None,
                     );
                     for c in columns[4].grid().row_iter(area_col_4, 0..(x + 1), 0) {
@@ -1322,6 +1331,7 @@ impl CompactListing {
                     self.color_cache.theme_default.bg,
                     self.color_cache.theme_default.attrs,
                     area_col_0,
+                    None,
                     None,
                 );
             }
@@ -1417,6 +1427,7 @@ impl CompactListing {
                 row_attr.attrs,
                 area.nth_row(i),
                 None,
+                None,
             );
         }
     }
@@ -1496,6 +1507,7 @@ impl Component for CompactListing {
                     self.color_cache.theme_default.bg,
                     self.color_cache.theme_default.attrs,
                     area,
+                    None,
                     Some(0),
                 );
 

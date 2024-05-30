@@ -373,6 +373,7 @@ impl Pager {
                     Attr::DEFAULT,
                     area2,
                     None,
+                    None,
                 );
                 if l.starts_with('⤷') {
                     grid[area2.upper_left()]
@@ -650,6 +651,7 @@ impl Component for Pager {
                     attribute.bg,
                     attribute.attrs,
                     area.nth_row(area.height().saturating_sub(1)),
+                    None,
                     None,
                 );
                 /* set search pattern to italics */

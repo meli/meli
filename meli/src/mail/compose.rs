@@ -716,6 +716,7 @@ To: {}
                 theme_default.attrs,
                 area.skip_rows(1),
                 None,
+                None,
             );
         } else {
             grid.write_string(
@@ -728,6 +729,7 @@ To: {}
                 },
                 theme_default.attrs,
                 area.skip_rows(1),
+                None,
                 None,
             );
         }
@@ -769,6 +771,7 @@ To: {}
                 theme_default.attrs,
                 area.skip_rows(2),
                 None,
+                None,
             );
         } else {
             grid.write_string(
@@ -781,6 +784,7 @@ To: {}
                 },
                 theme_default.attrs,
                 area.skip_rows(2),
+                None,
                 None,
             );
         }
@@ -796,6 +800,7 @@ To: {}
                 theme_default.attrs,
                 area.skip_rows(3),
                 None,
+                None,
             );
         } else {
             grid.write_string(
@@ -808,6 +813,7 @@ To: {}
                 },
                 theme_default.attrs,
                 area.skip_rows(3),
+                None,
                 None,
             );
             for (i, a) in self.draft.attachments().iter().enumerate() {
@@ -832,6 +838,7 @@ To: {}
                     theme_default.bg,
                     theme_default.attrs,
                     area.skip_rows(4 + i),
+                    None,
                     None,
                 );
             }
@@ -935,6 +942,7 @@ impl Component for Composer {
                 crate::conf::value(context, "highlight").attrs,
                 area.nth_row(0),
                 None,
+                None,
             );
         }
 
@@ -1019,6 +1027,7 @@ impl Component for Composer {
                             theme_default.bg,
                             theme_default.attrs,
                             inner_area.skip_rows(i),
+                            None,
                             None,
                         );
                     }

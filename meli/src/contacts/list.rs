@@ -178,6 +178,7 @@ impl ContactList {
                     self.theme_default.attrs,
                     area,
                     None,
+                    None,
                 )
             };
 
@@ -190,6 +191,7 @@ impl ContactList {
                     self.theme_default.attrs,
                     area,
                     None,
+                    None,
                 )
             };
 
@@ -201,6 +203,7 @@ impl ContactList {
                     self.theme_default.bg,
                     self.theme_default.attrs,
                     area,
+                    None,
                     None,
                 )
             };
@@ -218,6 +221,7 @@ impl ContactList {
                     self.theme_default.attrs,
                     area,
                     None,
+                    None,
                 )
             };
         }
@@ -233,6 +237,7 @@ impl ContactList {
                     self.theme_default.bg,
                     self.theme_default.attrs,
                     area,
+                    None,
                     None,
                 );
             }
@@ -298,6 +303,7 @@ impl ContactList {
             account_attrs.attrs,
             area,
             None,
+            None,
         );
         grid.write_string(
             &s,
@@ -305,6 +311,7 @@ impl ContactList {
             account_attrs.bg,
             account_attrs.attrs,
             area.skip_cols(area.width().saturating_sub(s.len())),
+            None,
             None,
         );
 
@@ -315,6 +322,7 @@ impl ContactList {
                 account_attrs.bg,
                 account_attrs.attrs,
                 area.skip_cols(area.width().saturating_sub(s.len() + 1)),
+                None,
                 None,
             );
         }
@@ -448,6 +456,7 @@ impl ContactList {
                 header_area
                     .skip_cols(x)
                     .take_cols(x + (self.data_columns.widths[i])),
+                None,
                 None,
             );
 

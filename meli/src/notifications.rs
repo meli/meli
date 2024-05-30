@@ -435,6 +435,7 @@ impl Component for DisplayMessageBox {
                     noto_colors.bg,
                     noto_colors.attrs,
                     box_displ_area.skip_rows(idx),
+                    None,
                     Some(0),
                 );
                 lines_no += 1 + y;
@@ -463,6 +464,7 @@ impl Component for DisplayMessageBox {
                     noto_colors.bg,
                     noto_colors.attrs,
                     box_displ_area.skip_rows(lines_no),
+                    None,
                     Some(0),
                 );
             }

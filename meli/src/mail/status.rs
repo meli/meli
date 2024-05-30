@@ -79,6 +79,7 @@ impl AccountStatus {
             self.theme_default.attrs | Attr::UNDERLINE,
             area,
             None,
+            None,
         );
         let area = self.content.area().skip(_x + 1, _y);
         let (_x, _y) = self.content.grid_mut().write_string(
@@ -87,6 +88,7 @@ impl AccountStatus {
             self.theme_default.bg,
             Attr::BOLD | Attr::UNDERLINE,
             area,
+            None,
             None,
         );
         let mut line = 2;
@@ -99,6 +101,7 @@ impl AccountStatus {
             Attr::BOLD,
             area,
             None,
+            None,
         );
         line += 2;
 
@@ -110,6 +113,7 @@ impl AccountStatus {
                 self.theme_default.bg,
                 self.theme_default.attrs,
                 area,
+                None,
                 None,
             );
             if let JobRequest::DeleteMailbox { mailbox_hash, .. }
@@ -125,6 +129,7 @@ impl AccountStatus {
                     self.theme_default.bg,
                     self.theme_default.attrs,
                     area,
+                    None,
                     None,
                 );
             }
@@ -142,6 +147,7 @@ impl AccountStatus {
             Attr::BOLD,
             area,
             None,
+            None,
         );
         let area = self.content.area().skip(_x + 1, _y + line);
         self.content.grid_mut().write_string(
@@ -155,6 +161,7 @@ impl AccountStatus {
             self.theme_default.attrs,
             area,
             None,
+            None,
         );
         line += 1;
         let area = self.content.area().skip(1, line);
@@ -164,6 +171,7 @@ impl AccountStatus {
             self.theme_default.bg,
             Attr::BOLD,
             area,
+            None,
             None,
         );
         let area = self.content.area().skip(_x + 1, _y + line);
@@ -194,6 +202,7 @@ impl AccountStatus {
             self.theme_default.attrs,
             area,
             None,
+            None,
         );
         line += 1;
 
@@ -204,6 +213,7 @@ impl AccountStatus {
             self.theme_default.bg,
             Attr::BOLD,
             area,
+            None,
             None,
         );
         for f in a
@@ -221,6 +231,7 @@ impl AccountStatus {
                 self.theme_default.attrs,
                 area,
                 None,
+                None,
             );
         }
         line += 2;
@@ -231,6 +242,7 @@ impl AccountStatus {
             self.theme_default.bg,
             Attr::BOLD,
             area,
+            None,
             None,
         );
         line += 2;
@@ -244,6 +256,7 @@ impl AccountStatus {
                     self.theme_default.bg,
                     self.theme_default.attrs,
                     area,
+                    None,
                     None,
                 );
                 line += 1;
@@ -259,6 +272,7 @@ impl AccountStatus {
                 self.theme_default.bg,
                 Attr::BOLD,
                 area,
+                None,
                 None,
             );
             let max_name_width = std::cmp::max(
@@ -277,6 +291,7 @@ impl AccountStatus {
                 self.theme_default.attrs,
                 area,
                 None,
+                None,
             );
             line += 1;
             for (name, status) in extensions.iter() {
@@ -287,6 +302,7 @@ impl AccountStatus {
                     self.theme_default.bg,
                     self.theme_default.attrs,
                     area,
+                    None,
                     None,
                 );
 
@@ -310,6 +326,7 @@ impl AccountStatus {
                         self.theme_default.attrs,
                         area,
                         None,
+                        None,
                     )
                 };
                 match status {
@@ -329,6 +346,7 @@ impl AccountStatus {
                                 self.theme_default.attrs,
                                 area,
                                 None,
+                                None,
                             );
                             let area = self
                                 .content
@@ -343,6 +361,7 @@ impl AccountStatus {
                                 self.theme_default.attrs,
                                 area,
                                 None,
+                                None,
                             );
                             let area = self
                                 .content
@@ -355,6 +374,7 @@ impl AccountStatus {
                                 self.theme_default.bg,
                                 self.theme_default.attrs,
                                 area,
+                                None,
                                 None,
                             );
                         }

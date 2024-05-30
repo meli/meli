@@ -750,22 +750,24 @@ impl Component for EnvelopeView {
                                     );
                                     let (_x, _y) =
                                         grid.write_string(
-                                        &format!("{}:", $header),
-                                        hdr_name_theme.fg,
-                                        hdr_name_theme.bg,
-                                        hdr_name_theme.attrs,
-                                        area.skip_rows(y),
-                                        Some(0),
-                                    );
+                                            &format!("{}:", $header),
+                                            hdr_name_theme.fg,
+                                            hdr_name_theme.bg,
+                                            hdr_name_theme.attrs,
+                                            area.skip_rows(y),
+                                            None,
+                                            Some(0)
+                                        );
                                     let (__x, __y) =
                                         grid.write_string(
-                                        &$string,
-                                        hdr_theme.fg,
-                                        hdr_theme.bg,
-                                        hdr_theme.attrs,
-                                        area.skip(_x+1, y+ _y),
-                                        Some(0),
-                                    );
+                                            &$string,
+                                            hdr_theme.fg,
+                                            hdr_theme.bg,
+                                            hdr_theme.attrs,
+                                            area.skip_rows(y + _y),
+                                            Some(_x + 1),
+                                            Some(2)
+                                        );
                                     y += _y +__y + 1;
                                 }
                             } else {
@@ -867,26 +869,34 @@ impl Component for EnvelopeView {
                     if let Some(id) = id {
                         if sticky || skip_header_ctr == 0 {
                             grid.clear_area(area.nth_row(y), hdr_area_theme);
-                            let (_x, _) = grid.write_string(
+                            let (_x, _y) = grid.write_string(
                                 "List-ID: ",
                                 hdr_name_theme.fg,
                                 hdr_name_theme.bg,
                                 hdr_name_theme.attrs,
                                 area.nth_row(y),
                                 None,
+                                Some(0),
                             );
-                            x = _x;
+                            if _y != 0 {
+                                x = _x;
+                            } else {
+                                x += _x;
+                            }
+                            y += _y;
                             let (_x, _y) = grid.write_string(
                                 id,
                                 hdr_theme.fg,
                                 hdr_theme.bg,
                                 hdr_theme.attrs,
-                                area.nth_row(y).skip_cols(_x),
-                                None,
+                                area.nth_row(y),
+                                Some(x),
+                                Some(0),
                             );
-                            x += _x;
                             if _y != 0 {
-                                x = 0;
+                                x = _x;
+                            } else {
+                                x += _x;
                             }
                             y += _y;
                         }
@@ -899,10 +909,15 @@ impl Component for EnvelopeView {
                                 hdr_name_theme.fg,
                                 hdr_name_theme.bg,
                                 hdr_name_theme.attrs,
-                                area.skip(x, y),
+                                area.skip(0, y),
+                                Some(x),
                                 Some(0),
                             );
-                            x += _x;
+                            if _y != 0 {
+                                x = _x;
+                            } else {
+                                x += _x;
+                            }
                             y += _y;
                         }
                         if archive.is_some() {
@@ -911,10 +926,15 @@ impl Component for EnvelopeView {
                                 hdr_theme.fg,
                                 hdr_theme.bg,
                                 hdr_theme.attrs,
-                                area.skip(x, y),
+                                area.skip(0, y),
+                                Some(x),
                                 Some(0),
                             );
-                            x += _x;
+                            if _y != 0 {
+                                x = _x;
+                            } else {
+                                x += _x;
+                            }
                             y += _y;
                         }
                         if post.is_some() {
@@ -923,10 +943,15 @@ impl Component for EnvelopeView {
                                 hdr_theme.fg,
                                 hdr_theme.bg,
                                 hdr_theme.attrs,
-                                area.skip(x, y),
+                                area.skip(0, y),
+                                Some(x),
                                 Some(0),
                             );
-                            x += _x;
+                            if _y != 0 {
+                                x = _x;
+                            } else {
+                                x += _x;
+                            }
                             y += _y;
                         }
                         if unsubscribe.is_some() {
@@ -935,10 +960,15 @@ impl Component for EnvelopeView {
                                 hdr_theme.fg,
                                 hdr_theme.bg,
                                 hdr_theme.attrs,
-                                area.skip(x, y),
+                                area.skip(0, y),
+                                Some(x),
                                 Some(0),
                             );
-                            x += _x;
+                            if _y != 0 {
+                                x = _x;
+                            } else {
+                                x += _x;
+                            }
                             y += _y;
                         }
                         if archive.is_some() || post.is_some() || unsubscribe.is_some() {
@@ -1117,6 +1147,7 @@ impl Component for EnvelopeView {
                 self.view_settings.theme_default.bg,
                 self.view_settings.theme_default.attrs,
                 l.skip_cols_from_end(8),
+                None,
                 None,
             );
         }

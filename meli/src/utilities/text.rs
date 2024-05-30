@@ -189,6 +189,7 @@ impl Component for TextField {
             theme_attr.attrs,
             area,
             None,
+            None,
         );
     }
 

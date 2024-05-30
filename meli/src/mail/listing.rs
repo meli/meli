@@ -3021,6 +3021,7 @@ impl Listing {
             account_attrs.attrs,
             area,
             None,
+            None,
         );
         area = self.menu.area().skip_rows(account_y);
 
@@ -3031,6 +3032,7 @@ impl Listing {
                 account_attrs.bg,
                 account_attrs.attrs,
                 area.skip_rows(1),
+                None,
                 None,
             );
             return 0;
@@ -3186,6 +3188,7 @@ impl Listing {
                 index_att.attrs,
                 area.nth_row(y + 1),
                 None,
+                None,
             );
             area = self.menu.area().skip_rows(account_y);
             {
@@ -3219,6 +3222,7 @@ impl Listing {
                     att.attrs,
                     area.nth_row(y + 1).skip_cols(x),
                     None,
+                    None,
                 )
                 .0
                 + x;
@@ -3233,6 +3237,7 @@ impl Listing {
                     att.bg,
                     att.attrs,
                     area.nth_row(y + 1).skip_cols(x),
+                    None,
                     None,
                 )
                 .0
@@ -3266,6 +3271,7 @@ impl Listing {
                         },
                     area.nth_row(y + 1)
                         .skip_cols(x.min(area.width().saturating_sub(count_string.len()))),
+                    None,
                     None,
                 )
                 .0

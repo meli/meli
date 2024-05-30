@@ -149,6 +149,7 @@ impl StatusBar {
             attribute.attrs,
             area,
             None,
+            None,
         );
         let offset = self.status.find('|').unwrap_or(self.status.len());
         for c in grid.row_iter(area, offset..(area.width()), 0) {
@@ -178,6 +179,7 @@ impl StatusBar {
                 attribute.attrs,
                 area.skip_cols(x + 1),
                 None,
+                None,
             );
         }
 
@@ -197,6 +199,7 @@ impl StatusBar {
             attribute.bg,
             attribute.attrs,
             area.skip_cols(skip),
+            None,
             None,
         );
 
@@ -236,6 +239,7 @@ impl StatusBar {
             command_bar.bg,
             command_bar.attrs,
             area,
+            None,
             None,
         );
         grid.change_theme(area, command_bar);
@@ -909,7 +913,7 @@ impl Tabbed {
                 tab_unfocused_attribute
             };
             let name = format!(" {c} ");
-            grid.write_string(&name, fg, bg, attrs, area.skip_cols(x), None);
+            grid.write_string(&name, fg, bg, attrs, area.skip_cols(x), None, None);
             x += name.len() + 1;
             if idx == self.pinned.saturating_sub(1) {
                 x += 2;
@@ -1002,6 +1006,7 @@ impl Component for Tabbed {
                     self.theme_default.attrs | Attr::BOLD,
                     inner_area.skip_cols(2),
                     None,
+                    None,
                 );
                 grid.write_string(
                     &format!(
@@ -1012,6 +1017,7 @@ impl Component for Tabbed {
                     self.theme_default.bg,
                     self.theme_default.attrs | Attr::ITALICS,
                     inner_area.skip(4 + x, y),
+                    None,
                     None,
                 );
                 let inner_area = inner_area.skip_rows(y + 1).skip_rows_from_end(1);
@@ -1118,6 +1124,7 @@ impl Component for Tabbed {
                 self.theme_default.attrs,
                 help_area.skip(2, 1),
                 None,
+                None,
             );
             let mut idx = 2;
             for (desc, shortcuts) in children_maps.iter() {
@@ -1128,6 +1135,7 @@ impl Component for Tabbed {
                     self.theme_default.bg,
                     self.theme_default.attrs,
                     help_area.skip(2, 2 + idx),
+                    None,
                     None,
                 );
                 idx += 2;
@@ -1144,6 +1152,7 @@ impl Component for Tabbed {
                         self.theme_default.attrs | Attr::BOLD,
                         help_area.skip(2, 2 + idx),
                         None,
+                        None,
                     );
                     let help_area = self.help_view.content.area();
                     self.help_view.content.grid_mut().write_string(
@@ -1152,6 +1161,7 @@ impl Component for Tabbed {
                         self.theme_default.bg,
                         self.theme_default.attrs,
                         help_area.skip(x + 4, 2 + idx),
+                        None,
                         None,
                     );
                     idx += 1;
@@ -1180,6 +1190,7 @@ impl Component for Tabbed {
                 self.theme_default.attrs | Attr::BOLD,
                 inner_area.skip_cols(2),
                 None,
+                None,
             );
             grid.write_string(
                 &format!(
@@ -1190,6 +1201,7 @@ impl Component for Tabbed {
                 self.theme_default.bg,
                 self.theme_default.attrs | Attr::ITALICS,
                 inner_area.skip(4 + x, y),
+                None,
                 None,
             );
             let inner_area = inner_area.skip_rows(y + 1).skip_rows_from_end(1);
@@ -1278,6 +1290,7 @@ impl Component for Tabbed {
                     self.theme_default.bg,
                     self.theme_default.attrs | Attr::ITALICS,
                     help_area.skip(2, 2),
+                    None,
                     None,
                 );
             }

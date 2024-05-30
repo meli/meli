@@ -61,6 +61,17 @@ impl Default for ScreenGeneration {
     }
 }
 
+impl std::fmt::Display for ScreenGeneration {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let pair = self.0;
+        write!(
+            fmt,
+            "{}",
+            uuid::Uuid::from_u64_pair(pair.0, pair.1).as_simple()
+        )
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Virtual;
 

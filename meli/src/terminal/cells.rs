@@ -633,6 +633,7 @@ impl CellBuffer {
         ret
     }
 
+    #[allow(clippy::too_many_arguments)]
     /// Write an `&str` to a `CellBuffer` in a specified `Area` with the passed
     /// colors.
     pub fn write_string(
@@ -641,13 +642,29 @@ impl CellBuffer {
         fg_color: Color,
         bg_color: Color,
         attrs: Attr,
-        area: Area,
+        og_area: Area,
+        skip_cols: Option<usize>,
         // The left-most x coordinate.
         line_break: Option<usize>,
     ) -> Pos {
+        let skip_cols = skip_cols.unwrap_or(0);
+        let area = og_area.skip_cols(skip_cols);
+
         debug_assert_eq!(area.generation(), self.generation());
         if area.generation() != self.generation() {
-            // [ref:TODO] log error
+            let backtrace = std::backtrace::Backtrace::force_capture();
+            log::error!(
+                "BUG: write_string() received an area argument of generation {} but the \
+                 CellBuffer has generation of {}.",
+                area.generation(),
+                self.generation()
+            );
+            log::error!(
+                "BUG: Please report this.\nString was: {:?}.\nArea was: {:?}\nBacktrace:\n{}",
+                s,
+                og_area,
+                backtrace
+            );
             return (0, 0);
         }
         if area.is_empty() {
@@ -665,7 +682,8 @@ impl CellBuffer {
         }
 
         let mut bounds = self.size();
-        let upper_left = area.upper_left();
+        let og_upper_left = og_area.upper_left();
+        let mut upper_left = area.upper_left();
         let bottom_right = area.bottom_right();
         let (mut x, mut y) = upper_left;
         let mut prev_coords = upper_left;
@@ -707,83 +725,129 @@ impl CellBuffer {
         } else {
             s.into()
         };
-        for c in input.chars() {
-            if c == crate::emoji_text_presentation_selector!() {
-                let prev_attrs = self[prev_coords].attrs();
-                self[prev_coords].set_attrs(prev_attrs | Attr::FORCE_TEXT);
-                continue;
-            }
+        // Outer loop goes through the iterator elements.
+        // Inner loop handles only one element at a time.
+        // It might need to repeat itself if the end of a line is reached and line
+        // breaking is permitted.
+        'char_loop: for c in input.chars() {
+            'inner_loop: loop {
+                macro_rules! cell_mut {
+                    ($x:expr, $y:expr) => {{
+                        let ret;
+                        if let Some(c) = self.get_mut($x, $y) {
+                            ret = c;
+                        } else {
+                            log::debug!(
+                                "Could not access cell (x, y) = ({}, {}) while writing char c = \
+                                 {:?} of string {:?} in area {:?}.",
+                                $x,
+                                $y,
+                                c,
+                                s,
+                                og_area
+                            );
+                            break 'char_loop;
+                        }
+                        ret
+                    }};
+                }
 
-            if c == '\r' {
-                continue;
-            }
-            if c == '\n' {
-                prev_coords = (x, y);
-                y += 1;
-                if let Some(_x) = line_break {
-                    x = _x + get_x(upper_left);
-                    continue;
-                } else {
-                    break;
+                if c == crate::emoji_text_presentation_selector!() {
+                    let prev_attrs = self[prev_coords].attrs();
+                    self[prev_coords].set_attrs(prev_attrs | Attr::FORCE_TEXT);
+                    continue 'char_loop;
                 }
-            }
-            if y > get_y(bottom_right)
-                || x > get_x(bottom_right)
-                || y > get_y(bounds)
-                || x > get_x(bounds)
-            {
-                if let Some(_x) = line_break {
-                    if !(y > get_y(bottom_right) || y > get_y(bounds)) {
-                        x = _x + get_x(upper_left);
-                        y += 1;
-                        continue;
-                    }
+
+                if c == '\r' {
+                    continue 'char_loop;
                 }
-                break;
-            }
-            prev_coords = (x, y);
-            if c == '\t' {
-                self[(x, y)].set_ch(' ');
-                x += 1;
-                if let Some(c) = self.get_mut(x, y) {
-                    c.set_ch(' ');
-                } else if let Some(_x) = line_break {
-                    if !(y > get_y(bottom_right) || y > get_y(bounds)) {
-                        x = _x + get_x(upper_left);
-                        y += 1;
-                        continue;
+                if c == '\n' {
+                    prev_coords = (x, y);
+                    y += 1;
+                    if let Some(_x) = line_break {
+                        x = if upper_left == og_upper_left {
+                            _x + get_x(upper_left)
+                        } else {
+                            upper_left = og_upper_left;
+                            _x + get_x(og_upper_left)
+                        };
+                        continue 'char_loop;
                     } else {
-                        break;
+                        break 'char_loop;
                     }
                 }
-            } else {
-                self[(x, y)].set_ch(c);
-            }
-            self[(x, y)]
-                .set_fg(fg_color)
-                .set_bg(bg_color)
-                .set_attrs(attrs);
+                if y > get_y(bottom_right)
+                    || x > get_x(bottom_right)
+                    || y > get_y(bounds)
+                    || x > get_x(bounds)
+                {
+                    if let Some(_x) = line_break {
+                        if !(y > get_y(bottom_right) || y > get_y(bounds)) {
+                            x = if upper_left == og_upper_left {
+                                _x + get_x(upper_left)
+                            } else {
+                                upper_left = og_upper_left;
+                                _x + get_x(og_upper_left)
+                            };
+                            y += 1;
+                            continue 'inner_loop;
+                        }
+                    }
+                    break 'char_loop;
+                }
+                prev_coords = (x, y);
+                if c == '\t' {
+                    cell_mut!(x, y).set_ch(' ');
+                    x += 1;
+                    if let Some(c) = self.get_mut(x, y) {
+                        c.set_ch(' ');
+                    } else if let Some(_x) = line_break {
+                        if !(y > get_y(bottom_right) || y > get_y(bounds)) {
+                            x = if upper_left == og_upper_left {
+                                _x + get_x(upper_left)
+                            } else {
+                                upper_left = og_upper_left;
+                                _x + get_x(og_upper_left)
+                            };
+                            y += 1;
+                            continue 'char_loop;
+                        } else {
+                            break 'char_loop;
+                        }
+                    }
+                } else {
+                    cell_mut!(x, y).set_ch(c);
+                }
+                cell_mut!(x, y)
+                    .set_fg(fg_color)
+                    .set_bg(bg_color)
+                    .set_attrs(attrs);
 
-            match wcwidth(u32::from(c)) {
-                Some(0) | None => {
-                    /* Skip drawing zero width characters */
-                    self[(x, y)].empty = true;
-                }
-                Some(2) => {
-                    /* Grapheme takes more than one column, so the next cell will be
-                     * drawn over. Set it as empty to skip drawing it. */
-                    if let Some(c) = self.get_mut(x + 1, y) {
-                        x += 1;
-                        *c = Cell::default();
-                        c.set_fg(fg_color)
-                            .set_bg(bg_color)
-                            .set_attrs(attrs)
-                            .set_empty(true);
+                match wcwidth(u32::from(c)) {
+                    Some(0) | None => {
+                        // Skip drawing zero width characters
+                        self[(x, y)].empty = true;
                     }
+                    Some(2) => {
+                        // Grapheme takes more than one column, so the next cell will be drawn
+                        // over. Set it as empty to skip drawing it.
+                        if let Some(c) = self.get_mut(x + 1, y) {
+                            x += 1;
+                            *c = Cell::default();
+                            c.set_fg(fg_color)
+                                .set_bg(bg_color)
+                                .set_attrs(attrs)
+                                .set_empty(true);
+                        }
+                    }
+                    _ => {}
                 }
-                _ => {}
+                x += 1;
+                break 'inner_loop;
             }
-            x += 1;
+        }
+        if y - upper_left.1 > 0 && line_break.is_some() {
+            return (x - og_upper_left.0, y - upper_left.1);
         }
         (x - upper_left.0, y - upper_left.1)
     }

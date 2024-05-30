@@ -372,6 +372,7 @@ impl ThreadView {
                         theme_default.attrs,
                         area,
                         None,
+                        None,
                     );
                 }
                 if highlight_reply_subjects[y].is_some() {
@@ -401,6 +402,7 @@ impl ThreadView {
                         },
                         theme_default.attrs,
                         area,
+                        None,
                         None,
                     );
                 }
@@ -604,6 +606,7 @@ impl ThreadView {
                 theme_default.bg,
                 theme_default.attrs,
                 area,
+                None,
                 Some(0),
             );
             context.dirty_areas.push_back(area);
@@ -668,6 +671,7 @@ impl ThreadView {
                 theme_default.bg,
                 theme_default.attrs,
                 area,
+                None,
                 Some(0),
             );
             context.dirty_areas.push_back(area);

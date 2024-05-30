@@ -132,6 +132,7 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
                     theme_default.attrs,
                     area,
                     None,
+                    None,
                 );
             } else {
                 grid.write_string(
@@ -140,6 +141,7 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
                     theme_default.bg,
                     theme_default.attrs,
                     area,
+                    None,
                     None,
                 );
                 for (i, a) in self.draft.attachments().iter().enumerate() {
@@ -173,6 +175,7 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
                         bg,
                         theme_default.attrs,
                         area.skip(2, 2 + i),
+                        None,
                         None,
                     );
                 }

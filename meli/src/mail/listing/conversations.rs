@@ -460,6 +460,7 @@ impl ListingTrait for ConversationsListing {
                 self.color_cache.theme_default.attrs,
                 area,
                 None,
+                None,
             );
             context.dirty_areas.push_back(area);
             return;
@@ -876,6 +877,7 @@ impl ConversationsListing {
                 row_attr.attrs,
                 area,
                 None,
+                None,
             );
             if !strings.flag.is_empty() {
                 for c in grid.row_iter(area, x..(x + 1), 0) {
@@ -898,6 +900,7 @@ impl ConversationsListing {
                 subject_attr.attrs,
                 area.skip_cols(x),
                 None,
+                None,
             );
             x += x_;
             let mut subject_overflowed = subject_overflowed > 0;
@@ -913,6 +916,7 @@ impl ConversationsListing {
                     color,
                     self.color_cache.tag_default.attrs,
                     area.skip_cols(1),
+                    None,
                     None,
                 );
                 if _y > 0 {
@@ -950,6 +954,7 @@ impl ConversationsListing {
                     date_attr.attrs,
                     area.skip(x, 1),
                     None,
+                    None,
                 )
                 .0;
             for c in grid.row_iter(area, x..(x + 4), 1) {
@@ -971,6 +976,7 @@ impl ConversationsListing {
                     from_attr.bg,
                     from_attr.attrs,
                     area.skip(x, 1),
+                    None,
                     None,
                 )
                 .0;
@@ -1044,6 +1050,7 @@ impl Component for ConversationsListing {
                     self.color_cache.theme_default.bg,
                     self.color_cache.theme_default.attrs,
                     area,
+                    None,
                     Some(0),
                 );
                 for c in grid.row_iter(area, x..area.width(), y) {
