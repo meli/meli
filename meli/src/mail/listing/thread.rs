@@ -312,7 +312,7 @@ impl MailListingTrait for ThreadListing {
         let my_address: Address = context.accounts[&self.cursor_pos.0]
             .settings
             .account
-            .make_display_name();
+            .main_identity_address();
         while let Some((indentation, thread_node_hash, has_sibling)) = iter.next() {
             let thread_node = &thread_nodes[&thread_node_hash];
 
@@ -1131,7 +1131,7 @@ impl ThreadListing {
             let my_address: Address = context.accounts[&self.cursor_pos.0]
                 .settings
                 .account
-                .make_display_name();
+                .main_identity_address();
             envelope.recipient_any(&my_address)
         };
         // [ref:FIXME]: generate new tree indentation for this new row subject

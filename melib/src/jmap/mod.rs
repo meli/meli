@@ -1206,7 +1206,7 @@ impl JmapType {
         let store = Arc::new(Store {
             account_name: Arc::new(s.name.clone()),
             account_hash,
-            main_identity: s.make_display_name().to_string(),
+            main_identity: s.main_identity_address().to_string(),
             extra_identities: s.extra_identities.clone(),
             online_status,
             event_consumer,

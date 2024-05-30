@@ -327,7 +327,7 @@ impl MailListingTrait for CompactListing {
         let my_address: Address = context.accounts[&self.cursor_pos.0]
             .settings
             .account
-            .make_display_name();
+            .main_identity_address();
         let should_highlight_self = mailbox_settings!(
             context[self.cursor_pos.0][&self.cursor_pos.1]
                 .listing
@@ -1054,7 +1054,7 @@ impl CompactListing {
         let my_address: Address = context.accounts[&self.cursor_pos.0]
             .settings
             .account
-            .make_display_name();
+            .main_identity_address();
         for (envelope, show_subject) in threads
             .thread_iter(thread_hash)
             .filter_map(|(_, h)| {
@@ -1104,7 +1104,7 @@ impl CompactListing {
             let my_address: Address = context.accounts[&self.cursor_pos.0]
                 .settings
                 .account
-                .make_display_name();
+                .main_identity_address();
             envelope.recipient_any(&my_address)
         };
         drop(envelope);

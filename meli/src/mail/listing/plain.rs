@@ -740,7 +740,7 @@ impl PlainListing {
         let my_address: Address = context.accounts[&self.cursor_pos.0]
             .settings
             .account
-            .make_display_name();
+            .main_identity_address();
         for i in iter {
             if !context.accounts[&self.cursor_pos.0].contains_key(i)
                 || !threads.envelope_to_thread.contains_key(&i)

@@ -27,6 +27,7 @@ use std::{
     process::{Command, Stdio},
 };
 
+use indexmap::IndexSet;
 use melib::{
     email::attachment_types::ContentType, list_management, mailto::Mailto, parser::BytesExt,
     utils::datetime, Card, Draft, FlagOp, HeaderName, SpecialUsageMailbox,
@@ -258,10 +259,28 @@ impl MailView {
                 )));
             return;
         }
+        // First retrieve user's identities, and remove them from the final address
+        // list.
+        let mut seen = {
+            let extra = account.settings.account().extra_identity_addresses();
+            let mut ret = IndexSet::with_capacity(extra.len() + 1);
+            ret.extend(extra);
+            ret.insert(account.settings.account().main_identity_address());
+            ret
+        };
         let envelope: EnvelopeRef = account.collection.get_env(coordinates.2);
 
         let mut entries: IndexMap<Card, (Card, String)> = IndexMap::default();
-        for addr in envelope.from().iter().chain(envelope.to().iter()) {
+        for addr in envelope
+            .from()
+            .iter()
+            .chain(envelope.to().iter())
+            .chain(envelope.cc().iter())
+        {
+            if seen.contains(addr) {
+                continue;
+            }
+            seen.insert(addr.clone());
             let mut new_card: Card = Card::new();
             new_card
                 .set_email(addr.get_email())
@@ -676,7 +695,7 @@ impl Component for MailView {
                                                 context.accounts[&coordinates.0]
                                                     .settings
                                                     .account()
-                                                    .make_display_name()
+                                                    .main_identity_address()
                                                     .to_string(),
                                             );
                                             /* Manually drop stuff because borrowck doesn't do it

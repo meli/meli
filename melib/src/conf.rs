@@ -58,8 +58,28 @@ pub struct AccountSettings {
 impl AccountSettings {
     /// Create the account's display name from fields
     /// [`AccountSettings::identity`] and [`AccountSettings::display_name`].
+    #[deprecated(
+        since = "0.8.5",
+        note = "Use AcountSettings::main_identity_address instead."
+    )]
     pub fn make_display_name(&self) -> Address {
         Address::new(self.display_name.clone(), self.identity.clone())
+    }
+
+    /// Return address associated with this account.
+    /// It combines the values from [`AccountSettings::identity`] and
+    /// [`AccountSettings::display_name`].
+    pub fn main_identity_address(&self) -> Address {
+        Address::new(self.display_name.clone(), self.identity.clone())
+    }
+
+    /// Return addresses of extra identites associated with this account,
+    /// if any.
+    pub fn extra_identity_addresses(&self) -> Vec<Address> {
+        self.extra_identities
+            .iter()
+            .map(|i| Address::new(None, i.clone()))
+            .collect()
     }
 
     pub fn order(&self) -> Option<(SortField, SortOrder)> {

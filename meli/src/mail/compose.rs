@@ -390,7 +390,7 @@ impl Composer {
             let ours = context.accounts[&coordinates.0]
                 .settings
                 .account()
-                .make_display_name();
+                .main_identity_address();
             to.remove(&ours);
             ret.draft.set_header(HeaderName::TO, {
                 let mut ret: String =
@@ -648,7 +648,7 @@ To: {}
                         c.accounts
                             .values()
                             .map(|acc| {
-                                let addr = acc.settings.account.make_display_name();
+                                let addr = acc.settings.account.main_identity_address();
                                 let desc =
                                     match account_settings!(c[acc.hash()].composing.send_mail) {
                                         crate::conf::composing::SendMail::ShellCommand(ref cmd) => {
@@ -892,7 +892,7 @@ impl Component for Composer {
                     context.accounts[&self.account_hash]
                         .settings
                         .account()
-                        .make_display_name()
+                        .main_identity_address()
                         .to_string(),
                 );
             }
