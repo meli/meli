@@ -30,7 +30,7 @@ use smallvec::SmallVec;
 use url::Url;
 
 use crate::{
-    error::{Error, NetworkErrorKind, Result},
+    error::{Error, ErrorKind, NetworkErrorKind, Result},
     jmap::{
         argument::Argument,
         capabilities::*,
@@ -117,13 +117,9 @@ impl JmapConnection {
 
         let mut jmap_session_resource_url = to_well_known(&self.server_conf.server_url);
 
-        let mut req = match self
-            .client
-            .get_async(jmap_session_resource_url.as_str())
-            .await
-        {
+        let mut req = match self.get_async(&jmap_session_resource_url).await {
             Err(err) => 'block: {
-                if matches!(NetworkErrorKind::from(err.kind()), NetworkErrorKind::ProtocolViolation if self.server_conf.server_url.scheme() == "http")
+                if matches!(err.kind, ErrorKind::Network(NetworkErrorKind::ProtocolViolation) if self.server_conf.server_url.scheme() == "http")
                 {
                     // attempt recovery by trying https://
                     self.server_conf.server_url.set_scheme("https").expect(
@@ -131,11 +127,7 @@ impl JmapConnection {
                          current scheme is http",
                     );
                     jmap_session_resource_url = to_well_known(&self.server_conf.server_url);
-                    if let Ok(s) = self
-                        .client
-                        .get_async(jmap_session_resource_url.as_str())
-                        .await
-                    {
+                    if let Ok(s) = self.get_async(&jmap_session_resource_url).await {
                         log::error!(
                             "Account {} server URL should start with `https`. Please correct your \
                              configuration value. Its current value is `{}`.",
