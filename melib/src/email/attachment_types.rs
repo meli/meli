@@ -243,7 +243,7 @@ impl<B: AsRef<[u8]>> From<B> for MultipartType {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub enum ContentType {
     Text {
         kind: Text,
@@ -268,6 +268,66 @@ pub enum ContentType {
         name: Option<String>,
         parameters: Vec<(Vec<u8>, Vec<u8>)>,
     },
+}
+
+impl std::fmt::Debug for ContentType {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        macro_rules! fmt_params {
+            ($p:expr) => {
+                &$p.iter()
+                    .map(|(b1, b2)| (String::from_utf8_lossy(b1), String::from_utf8_lossy(b2)))
+                    .collect::<Vec<(_, _)>>()
+            };
+        }
+        match self {
+            Self::Text {
+                kind,
+                parameters,
+                charset,
+            } => fmt
+                .debug_struct(stringify!(ContentType::Text))
+                .field("kind", &kind)
+                .field("parameters", fmt_params! { parameters })
+                .field("charset", &charset)
+                .finish(),
+            Self::Multipart {
+                boundary,
+                parameters,
+                kind,
+                parts,
+            } => fmt
+                .debug_struct(stringify!(ContentType::Multipart))
+                .field("kind", &kind)
+                .field("boundary", &String::from_utf8_lossy(boundary))
+                .field("parameters", fmt_params! { parameters })
+                .field("parts", &parts)
+                .finish(),
+            Self::MessageRfc822 => fmt
+                .debug_struct(stringify!(ContentType::MessageRfc822))
+                .finish(),
+            Self::PGPSignature => fmt
+                .debug_struct(stringify!(ContentType::PGPSignature))
+                .finish(),
+            Self::CMSSignature => fmt
+                .debug_struct(stringify!(ContentType::CMSSignature))
+                .finish(),
+            Self::Other {
+                tag,
+                name,
+                parameters,
+            } => fmt
+                .debug_struct(stringify!(ContentType::Other))
+                .field("tag", &String::from_utf8_lossy(tag))
+                .field("name", name)
+                .field("parameters", fmt_params! { parameters })
+                .finish(),
+            Self::OctetStream { name, parameters } => fmt
+                .debug_struct(stringify!(ContentType::OctetStream))
+                .field("name", name)
+                .field("parameters", fmt_params! { parameters })
+                .finish(),
+        }
+    }
 }
 
 impl Default for ContentType {
@@ -439,7 +499,7 @@ impl ContentType {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub enum Text {
     Plain,
     Html,
@@ -464,7 +524,18 @@ impl std::fmt::Display for Text {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+impl std::fmt::Debug for Text {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Plain => write!(fmt, "plain"),
+            Self::Html => write!(fmt, "html"),
+            Self::Rfc822 => write!(fmt, "rfc822"),
+            Self::Other { tag } => write!(fmt, "{}", String::from_utf8_lossy(tag)),
+        }
+    }
+}
+
+#[derive(Clone, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub enum ContentTransferEncoding {
     #[default]
     _8Bit,
@@ -474,6 +545,29 @@ pub enum ContentTransferEncoding {
     Other {
         tag: Vec<u8>,
     },
+}
+
+impl std::fmt::Debug for ContentTransferEncoding {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::_7Bit => fmt
+                .debug_struct(stringify!(ContentTransferEncoding::_7Bit))
+                .finish(),
+            Self::_8Bit => fmt
+                .debug_struct(stringify!(ContentTransferEncoding::_8Bit))
+                .finish(),
+            Self::Base64 => fmt
+                .debug_struct(stringify!(ContentTransferEncoding::Base64))
+                .finish(),
+            Self::QuotedPrintable => fmt
+                .debug_struct(stringify!(ContentTransferEncoding::QuotedPrintable))
+                .finish(),
+            Self::Other { tag } => fmt
+                .debug_struct(stringify!(ContentTransferEncoding::Other))
+                .field("tag", &String::from_utf8_lossy(tag))
+                .finish(),
+        }
+    }
 }
 
 impl std::fmt::Display for ContentTransferEncoding {
