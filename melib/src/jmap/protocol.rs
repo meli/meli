@@ -62,7 +62,11 @@ pub trait Method<OBJ: Object>: Serialize + Send + Sync {
     const NAME: &'static str;
 }
 
-static USING: &[&str] = &[JmapCoreCapability::uri(), JmapMailCapability::uri()];
+static USING: &[&str] = &[
+    JmapCoreCapability::uri(),
+    JmapMailCapability::uri(),
+    JmapSubmissionCapability::uri(),
+];
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
