@@ -110,7 +110,7 @@ macro_rules! standards {
     (
         $(
             $(#[$docs:meta])*
-            ($konst:ident, $upcase:ident, $name:literal, $lowername:literal );
+            ($konst:ident, $name:literal );
         )+
     ) => {
         #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -122,7 +122,7 @@ macro_rules! standards {
 
         $(
             $(#[$docs])*
-            pub const $upcase: Standard = Standard::$konst;
+            pub const $konst: Standard = Standard::$konst;
         )+
 
         impl Standard {
@@ -130,7 +130,7 @@ macro_rules! standards {
             pub const fn as_str(&self) -> &'static str {
                 match *self {
                     $(
-                        Self::$konst => $name,
+                        Self::$konst => concat!("RFC", $name),
                     )+
                 }
             }
@@ -139,7 +139,7 @@ macro_rules! standards {
             pub const fn url(&self) -> &str {
                 match *self {
                     $(
-                        Self::$konst => concat!("https://www.rfc-editor.org/rfc/", $lowername, ".html"),
+                        Self::$konst => concat!("https://datatracker.ietf.org/doc/html/rfc", $name, ".html"),
                     )+
                 }
 
@@ -150,7 +150,7 @@ macro_rules! standards {
             pub fn from_bytes(name_bytes: &[u8]) -> Option<Self> {
                 match name_bytes {
                     $(
-                        _ if name_bytes.eq_ignore_ascii_case($name.as_bytes()) => Some(Self::$konst),
+                        _ if name_bytes.eq_ignore_ascii_case($konst.as_str().as_bytes()) => Some(Self::$konst),
                     )+
                         _ => None,
                 }
@@ -160,52 +160,53 @@ macro_rules! standards {
 }
 
 standards! {
-    (RFC0850, RFC0850, "RFC0850", "rfc0850");
-    (RFC1808, RFC1808, "RFC1808", "rfc1808");
-    (RFC1849, RFC1849, "RFC1849", "rfc1849");
-    (RFC2068, RFC2068, "RFC2068", "rfc2068");
-    (RFC2076, RFC2076, "RFC2076", "rfc2076");
-    (RFC2110, RFC2110, "RFC2110", "rfc2110");
-    (RFC2156, RFC2156, "RFC2156", "rfc2156");
-    (RFC2557, RFC2557, "RFC2557", "rfc2557");
-    (RFC2616, RFC2616, "RFC2616", "rfc2616");
-    (RFC2980, RFC2980, "RFC2980", "rfc2980");
-    (RFC3798, RFC3798, "RFC3798", "rfc3798");
-    (RFC3834, RFC3834, "RFC3834", "rfc3834");
-    (RFC3865, RFC3865, "RFC3865", "rfc3865");
-    (RFC3977, RFC3977, "RFC3977", "rfc3977");
-    (RFC4021, RFC4021, "RFC4021", "rfc4021");
-    (RFC5064, RFC5064, "RFC5064", "rfc5064");
-    (RFC5321, RFC5321, "RFC5321", "rfc5321");
-    (RFC5322, RFC5322, "RFC5322", "rfc5322");
-    (RFC5337, RFC5337, "RFC5337", "rfc5337");
-    (RFC5504, RFC5504, "RFC5504", "rfc5504");
-    (RFC5518, RFC5518, "RFC5518", "rfc5518");
-    (RFC5536, RFC5536, "RFC5536", "rfc5536");
-    (RFC5537, RFC5537, "RFC5537", "rfc5537");
-    (RFC5703, RFC5703, "RFC5703", "rfc5703");
-    (RFC6017, RFC6017, "RFC6017", "rfc6017");
-    (RFC6068, RFC6068, "RFC6068", "rfc6068");
-    (RFC6109, RFC6109, "RFC6109", "rfc6109");
-    (RFC6376, RFC6376, "RFC6376", "rfc6376");
-    (RFC6477, RFC6477, "RFC6477", "rfc6477");
-    (RFC6758, RFC6758, "RFC6758", "rfc6758");
-    (RFC6854, RFC6854, "RFC6854", "rfc6854");
-    (RFC6857, RFC6857, "RFC6857", "rfc6857");
-    (RFC7208, RFC7208, "RFC7208", "rfc7208");
-    (RFC7259, RFC7259, "RFC7259", "rfc7259");
-    (RFC7293, RFC7293, "RFC7293", "rfc7293");
-    (RFC7444, RFC7444, "RFC7444", "rfc7444");
-    (RFC7681, RFC7681, "RFC7681", "rfc7681");
-    (RFC8058, RFC8058, "RFC8058", "rfc8058");
-    (RFC8255, RFC8255, "RFC8255", "rfc8255");
-    (RFC8315, RFC8315, "RFC8315", "rfc8315");
-    (RFC8460, RFC8460, "RFC8460", "rfc8460");
-    (RFC8601, RFC8601, "RFC8601", "rfc8601");
-    (RFC8617, RFC8617, "RFC8617", "rfc8617");
-    (RFC8689, RFC8689, "RFC8689", "rfc8689");
-    (RFC9057, RFC9057, "RFC9057", "rfc9057");
-    (RFC9228, RFC9228, "RFC9228", "rfc9228");
+    (RFC0850, "0850");
+    (RFC1808, "1808");
+    (RFC1849, "1849");
+    (RFC2068, "2068");
+    (RFC2076, "2076");
+    (RFC2110, "2110");
+    (RFC2156, "2156");
+    (RFC2183, "2183");
+    (RFC2557, "2557");
+    (RFC2616, "2616");
+    (RFC2980, "2980");
+    (RFC3798, "3798");
+    (RFC3834, "3834");
+    (RFC3865, "3865");
+    (RFC3977, "3977");
+    (RFC4021, "4021");
+    (RFC5064, "5064");
+    (RFC5321, "5321");
+    (RFC5322, "5322");
+    (RFC5337, "5337");
+    (RFC5504, "5504");
+    (RFC5518, "5518");
+    (RFC5536, "5536");
+    (RFC5537, "5537");
+    (RFC5703, "5703");
+    (RFC6017, "6017");
+    (RFC6068, "6068");
+    (RFC6109, "6109");
+    (RFC6376, "6376");
+    (RFC6477, "6477");
+    (RFC6758, "6758");
+    (RFC6854, "6854");
+    (RFC6857, "6857");
+    (RFC7208, "7208");
+    (RFC7259, "7259");
+    (RFC7293, "7293");
+    (RFC7444, "7444");
+    (RFC7681, "7681");
+    (RFC8058, "8058");
+    (RFC8255, "8255");
+    (RFC8315, "8315");
+    (RFC8460, "8460");
+    (RFC8601, "8601");
+    (RFC8617, "8617");
+    (RFC8689, "8689");
+    (RFC9057, "9057");
+    (RFC9228, "9228");
 }
 
 /// Status of field at the moment of writing.
@@ -268,7 +269,7 @@ standard_headers! {
     (ContentAlternative,                  CONTENT_ALTERNATIVE,                    "Content-Alternative",                    None,                           Protocol::MIME,                   Status::None,          &[Standard::RFC4021]);
     (ContentBase,                         CONTENT_BASE,                           "Content-Base",                           None,                           Protocol::MIME,                   Status::Obsoleted,     &[Standard::RFC2110, Standard::RFC2557]);
     (ContentDescription,                  CONTENT_DESCRIPTION,                    "Content-Description",                    None,                           Protocol::MIME,                   Status::None,          &[Standard::RFC4021]);
-    (ContentDisposition,                  CONTENT_DISPOSITION,                    "Content-Disposition",                    None,                           Protocol::MIME,                   Status::None,          &[Standard::RFC4021]);
+    (ContentDisposition,                  CONTENT_DISPOSITION,                    "Content-Disposition",                    None,                           Protocol::MIME,                   Status::None,          &[Standard::RFC2183, Standard::RFC4021]);
     (ContentDuration,                     CONTENT_DURATION,                       "Content-Duration",                       None,                           Protocol::MIME,                   Status::None,          &[Standard::RFC4021]);
     (ContentFeatures,                     CONTENT_FEATURES,                       "Content-Features",                       None,                           Protocol::MIME,                   Status::None,          &[Standard::RFC4021]);
     (ContentId,                           CONTENT_ID,                             "Content-ID",                             None,                           Protocol::MIME,                   Status::None,          &[Standard::RFC4021]);
