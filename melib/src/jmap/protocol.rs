@@ -20,33 +20,29 @@
  */
 
 use std::{
-    collections::{BTreeSet, HashMap},
-    convert::{TryFrom, TryInto},
-    sync::{Arc, Mutex},
+    collections::BTreeSet,
+    convert::TryFrom,
+    sync::{atomic::AtomicUsize, Arc},
 };
 
 use futures::lock::Mutex as FutureMutex;
-use isahc::AsyncReadResponseExt;
 use serde::Serialize;
 use serde_json::Value;
-use smallvec::SmallVec;
 
 use crate::{
     email::Envelope,
     error::Result,
     jmap::{
         argument::Argument,
-        backend_mailbox::JmapMailbox,
         capabilities::*,
         deserialize_from_str,
         email::{EmailFilterCondition, EmailGet, EmailObject, EmailQuery},
         filters::Filter,
-        mailbox::{MailboxGet, MailboxObject},
-        methods::{Get, GetResponse, MethodResponse, Query, QueryResponse},
-        objects::{Id, Object, State},
+        methods::{Get, GetResponse, MethodResponse, Query},
+        objects::{Object, State},
         JmapConnection, Store,
     },
-    Flag, LazyCountSet, MailboxHash,
+    Flag, MailboxHash,
 };
 
 pub type UtcDate = String;
@@ -80,21 +76,17 @@ pub struct Request {
 
     #[serde(skip)]
     #[allow(clippy::struct_field_names)]
-    request_no: Arc<FutureMutex<usize>>,
+    request_no: Arc<AtomicUsize>,
 }
 
 macro_rules! get_request_no {
     ($lock:expr) => {{
-        let mut lck = $lock.lock().await;
-        let ret = *lck;
-        *lck += 1;
-        drop(lck);
-        ret
+        $lock.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
     }};
 }
 
 impl Request {
-    pub fn new(request_no: Arc<FutureMutex<usize>>) -> Self {
+    pub fn new(request_no: Arc<AtomicUsize>) -> Self {
         Self {
             using: USING,
             method_calls: Vec::new(),
@@ -102,148 +94,12 @@ impl Request {
         }
     }
 
-    pub async fn add_call<M: Method<O>, O: Object>(&mut self, call: &M) -> usize {
+    pub fn add_call<M: Method<O>, O: Object>(&mut self, call: &M) -> usize {
         let seq = get_request_no!(self.request_no);
         self.method_calls
             .push(serde_json::to_value((M::NAME, call, &format!("m{seq}"))).unwrap());
         seq
     }
-
-    pub fn request_no(&self) -> Arc<FutureMutex<usize>> {
-        self.request_no.clone()
-    }
-
-    pub async fn request_no_value(&self) -> usize {
-        get_request_no!(self.request_no)
-    }
-}
-
-pub async fn get_mailboxes(
-    conn: &mut JmapConnection,
-    request: Option<Request>,
-) -> Result<HashMap<MailboxHash, JmapMailbox>> {
-    let mut req = request.unwrap_or_else(|| Request::new(conn.request_no.clone()));
-    let mail_account_id = conn.session_guard().await?.mail_account_id();
-    let mailbox_get: MailboxGet =
-        MailboxGet::new(Get::<MailboxObject>::new().account_id(mail_account_id));
-    req.add_call(&mailbox_get).await;
-    let res_text = conn.send_request(serde_json::to_string(&req)?).await?;
-
-    let v: MethodResponse = deserialize_from_str(&res_text)?;
-    conn.store.online_status.update_timestamp(None).await;
-    let m = GetResponse::<MailboxObject>::try_from(*v.method_responses.last().unwrap())?;
-    let GetResponse::<MailboxObject> {
-        list,
-        account_id,
-        state,
-        ..
-    } = m;
-    *conn.store.mailbox_state.lock().await = Some(state);
-    conn.last_method_response = Some(res_text);
-    // Is account set as `personal`? (`isPersonal` property). Then, even if
-    // `isSubscribed` is false on a mailbox, it should be regarded as
-    // subscribed.
-    let is_personal: bool = {
-        let session = conn.session_guard().await?;
-        session
-            .accounts
-            .get(&account_id)
-            .map(|acc| acc.is_personal)
-            .unwrap_or(false)
-    };
-    let mut ret: HashMap<MailboxHash, JmapMailbox> = list
-        .into_iter()
-        .map(|r| {
-            let MailboxObject {
-                id,
-                is_subscribed,
-                my_rights,
-                name,
-                parent_id,
-                role,
-                sort_order,
-                total_emails,
-                total_threads,
-                unread_emails,
-                unread_threads,
-            } = r;
-            let mut total_emails_set = LazyCountSet::default();
-            total_emails_set.set_not_yet_seen(total_emails.try_into().unwrap_or(0));
-            let total_emails = total_emails_set;
-            let mut unread_emails_set = LazyCountSet::default();
-            unread_emails_set.set_not_yet_seen(unread_emails.try_into().unwrap_or(0));
-            let unread_emails = unread_emails_set;
-            let hash = id.into_hash();
-            let parent_hash = parent_id.clone().map(|id| id.into_hash());
-            (
-                hash,
-                JmapMailbox {
-                    name: name.clone(),
-                    hash,
-                    path: name,
-                    children: Vec::new(),
-                    id,
-                    is_subscribed: is_subscribed || is_personal,
-                    my_rights,
-                    parent_id,
-                    parent_hash,
-                    role,
-                    usage: Default::default(),
-                    sort_order,
-                    total_emails: Arc::new(Mutex::new(total_emails)),
-                    total_threads,
-                    unread_emails: Arc::new(Mutex::new(unread_emails)),
-                    unread_threads,
-                    email_query_state: Arc::new(Mutex::new(None)),
-                },
-            )
-        })
-        .collect();
-    let cloned_keys = ret.keys().cloned().collect::<SmallVec<[MailboxHash; 24]>>();
-    for key in cloned_keys {
-        if let Some(parent_hash) = ret[&key].parent_hash {
-            ret.entry(parent_hash).and_modify(|e| e.children.push(key));
-        }
-    }
-    Ok(ret)
-}
-
-pub async fn get_message_list(
-    conn: &mut JmapConnection,
-    mailbox: &JmapMailbox,
-) -> Result<Vec<Id<EmailObject>>> {
-    let mail_account_id = conn.session_guard().await?.mail_account_id();
-    let email_call: EmailQuery = EmailQuery::new(
-        Query::new()
-            .account_id(mail_account_id)
-            .filter(Some(Filter::Condition(
-                EmailFilterCondition::new().in_mailbox(Some(mailbox.id.clone())),
-            )))
-            .position(0),
-    )
-    .collapse_threads(false);
-
-    let mut req = Request::new(conn.request_no.clone());
-    req.add_call(&email_call).await;
-
-    let res_text = conn
-        .post_async(None, serde_json::to_string(&req)?)
-        .await?
-        .text()
-        .await?;
-
-    let mut v: MethodResponse = match deserialize_from_str(&res_text) {
-        Err(err) => {
-            _ = conn.store.online_status.set(None, Err(err.clone())).await;
-            return Err(err);
-        }
-        Ok(s) => s,
-    };
-    conn.store.online_status.update_timestamp(None).await;
-    let m = QueryResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
-    let QueryResponse::<EmailObject> { ids, .. } = m;
-    conn.last_method_response = Some(res_text);
-    Ok(ids)
 }
 
 pub struct EmailFetcher {
@@ -261,7 +117,6 @@ pub enum EmailFetchState {
 impl EmailFetcher {
     pub async fn must_update_state(
         conn: &JmapConnection,
-        mailbox_hash: MailboxHash,
         state: State<EmailObject>,
     ) -> Result<bool> {
         {
@@ -276,7 +131,7 @@ impl EmailFetcher {
                 debug!("{:?}: inserting state {}", EmailObject::NAME, &state);
                 *conn.store.email_state.lock().await = Some(state);
             } else if !is_equal {
-                if let Some(ev) = conn.email_changes(mailbox_hash).await? {
+                if let Some(ev) = conn.email_changed(Some(state)).await? {
                     conn.add_backend_event(ev);
                 }
             }
@@ -310,7 +165,7 @@ impl EmailFetcher {
                     .collapse_threads(false);
 
                     let mut req = Request::new(conn.request_no.clone());
-                    let prev_seq = req.add_call(&email_query_call).await;
+                    let prev_seq = req.add_call(&email_query_call);
 
                     let email_call: EmailGet = EmailGet::new(
                         Get::new()
@@ -324,7 +179,7 @@ impl EmailFetcher {
                             .account_id(mail_account_id),
                     );
 
-                    let _prev_seq = req.add_call(&email_call).await;
+                    let _prev_seq = req.add_call(&email_call);
                     let res_text = conn.send_request(serde_json::to_string(&req)?).await?;
                     let mut v: MethodResponse = match deserialize_from_str(&res_text) {
                         Err(err) => {
@@ -337,9 +192,8 @@ impl EmailFetcher {
                     let e =
                         GetResponse::<EmailObject>::try_from(v.method_responses.pop().unwrap())?;
                     let GetResponse::<EmailObject> { list, state, .. } = e;
-                    conn.last_method_response = Some(res_text);
 
-                    if Self::must_update_state(&conn, mailbox_hash, state).await? {
+                    if Self::must_update_state(&conn, state).await? {
                         self.state = EmailFetchState::Start;
                         continue;
                     }

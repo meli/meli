@@ -211,6 +211,45 @@ pub fn upload_request_format(
     })
 }
 
+pub fn event_source_request_format(
+    event_source_url: &RequestUrlTemplate,
+    types: &str,
+    closeafter: &str,
+    ping: &str,
+) -> Result<Url> {
+    #[expect(clippy::literal_string_with_formatting_args)]
+    let ret = format_url!(event_source_url,
+            [
+                (types: "{types}"),
+                (closeafter: "{closeafter}"),
+                (ping: "{ping}"),
+            ],
+            opt [],
+            |rest| {
+    format!(
+                    "`event_source_url` template returned by server in session object could not be \
+                     instantiated:\nupload_url: {event_source_url}\ntypes: {types}\ncloseafter: {closeafter}\nping: {ping}\nUnknown parameter: \
+                     {rest}\n\nIf you believe these values are correct and should have been accepted, \
+                     please report it as a bug! Otherwise inform the server administrator for this \
+                     protocol violation.",
+                )
+            }
+        );
+
+    Url::parse(&ret).map_err(|err| {
+        Error::new("Could not instantiate URL from JMAP server's URL template value")
+            .set_details(format!(
+                "`event_source_url` template returned by server in session object could not be \
+                 instantiated:\nupload_url: {event_source_url}\ntypes: {types}\ncloseafter: \
+                 {closeafter}\nping: {ping}\nResult: {ret}\n\nIf you believe these values are \
+                 correct and should have been accepted, please report it as a bug! Otherwise \
+                 inform the server administrator for this protocol violation.",
+            ))
+            .set_kind(ErrorKind::ProtocolError)
+            .set_source(Some(Arc::new(err)))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
@@ -218,8 +257,44 @@ mod tests {
 
     use crate::jmap::{
         objects::{Account, BlobObject, Id},
-        url_template::{download_request_format, upload_request_format, RequestUrlTemplate},
+        url_template::{
+            download_request_format, event_source_request_format, upload_request_format,
+            RequestUrlTemplate,
+        },
     };
+
+    #[test]
+    fn test_jmap_url_template() {
+        assert_eq!(
+            event_source_request_format(
+                &serde_json::from_value::<RequestUrlTemplate>(json!(
+                    "https://example.com/jmap/event/"
+                ))
+                .unwrap(),
+                "Email,CalendarEvent",
+                "state",
+                "300"
+            )
+            .unwrap(),
+            serde_json::from_str::<Url>(&json!("https://example.com/jmap/event/").to_string())
+                .unwrap()
+        );
+
+        assert_eq!(
+            event_source_request_format(
+                &serde_json::from_value::<RequestUrlTemplate>(json!(
+                        "https://jmap.example.com/eventsource/?types={types}&closeafter={closeafter}&ping={ping}"
+                ))
+                .unwrap(),
+                "Email,CalendarEvent",
+                "state",
+                "300"
+            )
+            .unwrap(),
+            serde_json::from_str::<Url>(&json!("https://jmap.example.com/eventsource/?types=Email,CalendarEvent&closeafter=state&ping=300").to_string())
+            .unwrap()
+        );
+    }
 
     #[test]
     fn test_jmap_url_template_upload() {

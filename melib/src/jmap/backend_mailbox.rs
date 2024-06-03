@@ -49,7 +49,6 @@ pub struct JmapMailbox {
     pub unread_emails: Arc<Mutex<LazyCountSet>>,
     pub unread_threads: u64,
     pub usage: Arc<RwLock<SpecialUsageMailbox>>,
-    pub email_query_state: Arc<Mutex<Option<String>>>,
 }
 
 impl BackendMailbox for JmapMailbox {

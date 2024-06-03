@@ -20,12 +20,15 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
+
+use serde_json::json;
+
 #[test]
 fn test_jmap_query() {
-    use std::sync::Arc;
-
-    use futures::lock::Mutex as FutureMutex;
-
     use crate::jmap::{
         comparator::Comparator,
         email::{EmailFilterCondition, EmailObject, EmailQuery},
@@ -112,21 +115,19 @@ fn test_jmap_query() {
     )
     .collapse_threads(false);
 
-    let request_no = Arc::new(FutureMutex::new(0));
+    let request_no = Arc::new(AtomicUsize::new(0));
     let mut req = Request::new(request_no.clone());
-    futures::executor::block_on(req.add_call(&email_call));
+    req.add_call(&email_call);
 
     assert_eq!(
         r#"{"using":["urn:ietf:params:jmap:core","urn:ietf:params:jmap:mail","urn:ietf:params:jmap:submission"],"methodCalls":[["Email/query",{"accountId":"account_id","calculateTotal":false,"collapseThreads":false,"filter":{"conditions":[{"inMailbox":"mailbox_id"},{"conditions":[{"subject":"wah"},{"conditions":[{"from":"Manos"},{"conditions":[{"subject":"foo"},{"subject":"bar"}],"operator":"OR"}],"operator":"AND"}],"operator":"OR"}],"operator":"AND"},"position":0,"sort":[{"collation":null,"isAscending":false,"property":"receivedAt"}]},"m0"]]}"#,
         serde_json::to_string(&req).unwrap().as_str()
     );
-    assert_eq!(*futures::executor::block_on(request_no.lock()), 1);
+    assert_eq!(request_no.load(Ordering::SeqCst), 1);
 }
 
 #[test]
 fn test_jmap_undo_status() {
-    use serde_json::json;
-
     use crate::jmap::{
         email::EmailObject,
         identity::Identity,
@@ -248,21 +249,16 @@ fn test_jmap_email_submission_object() {
 
 #[test]
 fn test_jmap_identity_methods() {
-    use std::sync::Arc;
-
-    use futures::lock::Mutex as FutureMutex;
-    use serde_json::json;
-
     use crate::jmap::{
         identity::{Identity, IdentityGet, IdentitySet},
-        methods::Set,
+        methods::{Get, Set},
         objects::Id,
         protocol::Request,
     };
     let account_id = "blahblah";
     let prev_seq = 33;
     let main_identity = "user@example.com";
-    let mut req = Request::new(Arc::new(FutureMutex::new(prev_seq)));
+    let mut req = Request::new(Arc::new(AtomicUsize::new(prev_seq)));
 
     let identity_set = IdentitySet(
         Set::<Identity>::new(None)
@@ -281,10 +277,10 @@ fn test_jmap_identity_methods() {
                 }
             })),
     );
-    futures::executor::block_on(req.add_call(&identity_set));
+    req.add_call(&identity_set);
 
-    let identity_get = IdentityGet::new().account_id(account_id.into());
-    futures::executor::block_on(req.add_call(&identity_get));
+    let identity_get = IdentityGet::new(Get::new().account_id(account_id.into()));
+    req.add_call(&identity_get);
 
     assert_eq!(
         json! {&req},
@@ -326,11 +322,6 @@ fn test_jmap_identity_methods() {
 
 #[test]
 fn test_jmap_argument_serde() {
-    use std::sync::Arc;
-
-    use futures::lock::Mutex as FutureMutex;
-    use serde_json::json;
-
     use crate::jmap::{
         argument::Argument,
         email::{EmailImport, EmailImportObject, EmailObject},
@@ -347,7 +338,7 @@ fn test_jmap_argument_serde() {
     let sent_mailbox_id: Id<MailboxObject> = Id::new_random();
     let prev_seq = 33;
 
-    let mut req = Request::new(Arc::new(FutureMutex::new(prev_seq)));
+    let mut req = Request::new(Arc::new(AtomicUsize::new(prev_seq)));
     let creation_id: Id<EmailObject> = "1".into();
     let import_call: EmailImport =
         EmailImport::new()
@@ -364,7 +355,7 @@ fn test_jmap_argument_serde() {
                 }),
             });
 
-    let prev_seq = futures::executor::block_on(req.add_call(&import_call));
+    let prev_seq = req.add_call(&import_call);
 
     let subm_set_call: EmailSubmissionSet = EmailSubmissionSet::new(
                 Set::<EmailSubmissionObject>::new(None)
@@ -388,7 +379,7 @@ fn test_jmap_argument_serde() {
                     })
                 }
             ));
-    _ = futures::executor::block_on(req.add_call(&subm_set_call));
+    _ = req.add_call(&subm_set_call);
 
     assert_eq!(
         json! {&subm_set_call},
@@ -478,8 +469,6 @@ fn test_jmap_argument_serde() {
 
 #[test]
 fn test_jmap_session_serde() {
-    use serde_json::json;
-
     use crate::jmap::{
         objects::{Account, Id, State},
         session::{CapabilitiesObject, Session},
@@ -690,11 +679,6 @@ fn test_jmap_session_serde() {
 /// Check that `Set` method calls and `Set` responses are serialized and
 /// deserialized properly.
 fn test_jmap_server_set_method_and_response() {
-    use std::sync::Arc;
-
-    use futures::lock::Mutex as FutureMutex;
-    use serde_json::json;
-
     use crate::jmap::{
         mailbox,
         methods::{Set, SetError, SetResponse},
@@ -703,7 +687,7 @@ fn test_jmap_server_set_method_and_response() {
     };
     let account_id = "blahblah";
     let prev_seq = 33;
-    let mut req = Request::new(Arc::new(FutureMutex::new(prev_seq)));
+    let mut req = Request::new(Arc::new(AtomicUsize::new(prev_seq)));
     let path = "new_mbox";
 
     let mailbox_set_call = mailbox::MailboxSet::new(
@@ -721,7 +705,7 @@ fn test_jmap_server_set_method_and_response() {
             })),
     )
     .on_destroy_remove_emails(true);
-    futures::executor::block_on(req.add_call(&mailbox_set_call));
+    req.add_call(&mailbox_set_call);
 
     assert_eq!(
         json! {&req},
@@ -943,11 +927,6 @@ fn test_jmap_server_set_method_and_response() {
 /// Check that `Get` method calls and `Get` responses are serialized and
 /// deserialized properly.
 fn test_jmap_server_get_method_and_response() {
-    use std::sync::Arc;
-
-    use futures::lock::Mutex as FutureMutex;
-    use serde_json::json;
-
     use crate::jmap::{
         argument::Argument,
         email, mailbox,
@@ -956,14 +935,14 @@ fn test_jmap_server_get_method_and_response() {
     };
     let account_id = "blahblah";
     let prev_seq = 33;
-    let mut req = Request::new(Arc::new(FutureMutex::new(prev_seq)));
+    let mut req = Request::new(Arc::new(prev_seq.into()));
 
     let mailbox_get_call = mailbox::MailboxGet::new(
         Get::<mailbox::MailboxObject>::new()
             .account_id(account_id.into())
             .ids(None),
     );
-    futures::executor::block_on(req.add_call(&mailbox_get_call));
+    req.add_call(&mailbox_get_call);
 
     assert_eq!(
         json! {&req},

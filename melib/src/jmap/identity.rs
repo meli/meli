@@ -94,14 +94,38 @@ impl Object for Identity {
     const NAME: &'static str = "Identity";
 }
 
-pub type IdentityGet = Get<Identity>;
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IdentityChanges {
+    #[serde(flatten)]
+    pub changes_call: Changes<Identity>,
+}
+
+impl IdentityChanges {
+    pub fn new(changes_call: Changes<Identity>) -> Self {
+        Self { changes_call }
+    }
+}
+
+impl Method<Identity> for IdentityChanges {
+    const NAME: &'static str = "Identity/changes";
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IdentityGet {
+    #[serde(flatten)]
+    pub get_call: Get<Identity>,
+}
+
+impl IdentityGet {
+    pub fn new(get_call: Get<Identity>) -> Self {
+        Self { get_call }
+    }
+}
 
 impl Method<Identity> for IdentityGet {
     const NAME: &'static str = "Identity/get";
-}
-pub type IdentityChanges = Changes<Identity>;
-impl Method<Identity> for IdentityChanges {
-    const NAME: &'static str = "Identity/changes";
 }
 
 // [ref:TODO]: implement `forbiddenFrom` error for Identity/set.

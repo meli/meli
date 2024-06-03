@@ -21,16 +21,15 @@
 
 use std::{
     convert::TryFrom,
-    sync::Arc,
+    sync::{atomic::AtomicUsize, Arc},
     time::{Duration, Instant},
 };
 
-use futures::lock::{MappedMutexGuard as FutureMappedMutexGuard, Mutex as FutureMutex};
+use futures::lock::MappedMutexGuard as FutureMappedMutexGuard;
 use isahc::{
     config::{Configurable, DnsCache, RedirectPolicy, SslOption},
     http, AsyncReadResponseExt, HttpClient,
 };
-use smallvec::SmallVec;
 use url::Url;
 
 use crate::{
@@ -40,38 +39,28 @@ use crate::{
         argument::Argument,
         capabilities::*,
         deserialize_from_str,
-        email::{
-            EmailChanges, EmailFilterCondition, EmailGet, EmailObject, EmailQueryChanges,
-            EmailQueryChangesResponse,
-        },
-        filters::Filter,
+        email::{EmailChanges, EmailGet, EmailObject},
         identity::{Identity, IdentityGet, IdentitySet},
-        mailbox::MailboxObject,
-        methods::{
-            AddedItem, Changes, ChangesResponse, Get, GetResponse, MethodResponse, QueryChanges,
-            QueryChangesResponse, ResultField, Set,
-        },
+        methods::{Changes, ChangesResponse, Get, GetResponse, MethodResponse, ResultField, Set},
         objects::{Id, State},
         protocol::{self, JmapMailCapability, Request},
         session::Session,
         JmapServerConf, Store,
     },
-    BackendEvent, Flag, MailboxHash, RefreshEvent, RefreshEventKind,
+    BackendEvent, Flag, RefreshEvent, RefreshEventKind,
 };
 
 #[derive(Debug)]
 pub struct JmapConnection {
-    pub request_no: Arc<FutureMutex<usize>>,
+    pub request_no: Arc<AtomicUsize>,
     pub client: Arc<HttpClient>,
     pub server_conf: JmapServerConf,
     pub store: Arc<Store>,
-    pub last_method_response: Option<String>,
 }
 
 impl JmapConnection {
     pub fn new(server_conf: &JmapServerConf, store: Arc<Store>) -> Result<Self> {
         let client = HttpClient::builder()
-            .timeout(Duration::from_secs(10))
             .dns_cache(DnsCache::Forever)
             .connection_cache_size(8)
             .connection_cache_ttl(Duration::from_secs(30 * 60))
@@ -111,11 +100,10 @@ impl JmapConnection {
         let client = client.build()?;
         let server_conf = server_conf.clone();
         Ok(Self {
-            request_no: Arc::new(FutureMutex::new(0)),
+            request_no: Arc::new(AtomicUsize::new(0)),
             client: Arc::new(client),
             server_conf,
             store,
-            last_method_response: None,
         })
     }
 
@@ -332,8 +320,8 @@ impl JmapConnection {
 
         let mut id_list = {
             let mut req = Request::new(self.request_no.clone());
-            let identity_get = IdentityGet::new().account_id(mail_account_id.clone());
-            req.add_call(&identity_get).await;
+            let identity_get = IdentityGet::new(Get::new().account_id(mail_account_id.clone()));
+            req.add_call(&identity_get);
             let res_text = self
                 .post_async(None, serde_json::to_string(&req)?)
                 .await?
@@ -389,7 +377,7 @@ impl JmapConnection {
                         }
                     })),
             );
-            req.add_call(&identity_set).await;
+            req.add_call(&identity_set);
             let res_text = self
                 .post_async(None, serde_json::to_string(&req)?)
                 .await?
@@ -407,8 +395,8 @@ impl JmapConnection {
                 Ok(s) => s,
             };
             let mut req = Request::new(self.request_no.clone());
-            let identity_get = IdentityGet::new().account_id(mail_account_id.clone());
-            req.add_call(&identity_get).await;
+            let identity_get = IdentityGet::new(Get::new().account_id(mail_account_id.clone()));
+            req.add_call(&identity_get);
             let res_text = self
                 .post_async(None, serde_json::to_string(&req)?)
                 .await?
@@ -447,10 +435,16 @@ impl JmapConnection {
         (self.store.event_consumer)(self.store.account_hash, ev);
     }
 
-    pub async fn email_changes(&self, mailbox_hash: MailboxHash) -> Result<Option<BackendEvent>> {
-        let mut current_state: State<EmailObject> =
-            if let Some(s) = self.store.email_state.lock().await.clone() {
-                s
+    pub async fn email_changed(
+        &self,
+        new_state: Option<State<EmailObject>>,
+    ) -> Result<Option<BackendEvent>> {
+        let mut cached_state: State<EmailObject> =
+            if let Some(s) = self.store.email_state.lock().await.as_ref() {
+                if Some(s) == new_state.as_ref() {
+                    return Ok(None);
+                }
+                s.clone()
             } else {
                 return Ok(None);
             };
@@ -460,12 +454,12 @@ impl JmapConnection {
             let email_changes_call: EmailChanges = EmailChanges::new(
                 Changes::<EmailObject>::new()
                     .account_id(mail_account_id.clone())
-                    .since_state(current_state.clone()),
+                    .since_state(cached_state.clone()),
             );
 
             let mut req = Request::new(self.request_no.clone());
-            let prev_seq = req.add_call(&email_changes_call).await;
-            let email_get_call: EmailGet = EmailGet::new(
+            let prev_seq = req.add_call(&email_changes_call);
+            req.add_call(&EmailGet::new(
                 Get::new()
                     .ids(Some(Argument::reference::<
                         EmailChanges,
@@ -476,54 +470,27 @@ impl JmapConnection {
                         ResultField::<EmailChanges, EmailObject>::new("/created"),
                     )))
                     .account_id(mail_account_id.clone()),
-            );
+            ));
+            req.add_call(&EmailGet::new(
+                Get::new()
+                    .ids(Some(Argument::reference::<
+                        EmailChanges,
+                        EmailObject,
+                        EmailObject,
+                    >(
+                        prev_seq,
+                        ResultField::<EmailChanges, EmailObject>::new("/updated"),
+                    )))
+                    .account_id(mail_account_id.clone()),
+            ));
 
-            req.add_call(&email_get_call).await;
-            let mailbox = self
-                .store
-                .mailboxes
-                .read()
-                .unwrap()
-                .get(&mailbox_hash)
-                .map(|m| {
-                    let email_query_state = m.email_query_state.lock().unwrap().clone();
-                    let mailbox_id: Id<MailboxObject> = m.id.clone();
-                    (email_query_state, mailbox_id)
-                });
-            if let Some((Some(email_query_state), mailbox_id)) = mailbox {
-                let email_query_changes_call = EmailQueryChanges::new(
-                    QueryChanges::new(mail_account_id.clone(), email_query_state).filter(Some(
-                        Filter::Condition(
-                            EmailFilterCondition::new().in_mailbox(Some(mailbox_id.clone())),
-                        ),
-                    )),
-                );
-                let seq_no = req.add_call(&email_query_changes_call).await;
-                let email_get_call: EmailGet = EmailGet::new(
-                    Get::new()
-                        .ids(Some(Argument::reference::<
-                            EmailQueryChanges,
-                            EmailObject,
-                            EmailObject,
-                        >(
-                            seq_no,
-                            ResultField::<EmailQueryChanges, EmailObject>::new("/removed"),
-                        )))
-                        .account_id(mail_account_id.clone())
-                        .properties(Some(vec!["keywords".to_string(), "mailboxIds".to_string()])),
-                );
-                req.add_call(&email_get_call).await;
-            }
             let res_text = self
                 .post_async(None, serde_json::to_string(&req)?)
                 .await?
                 .text()
                 .await?;
             if cfg!(feature = "jmap-trace") {
-                log::trace!(
-                    "email_changes(): for mailbox {mailbox_hash} response {:?}",
-                    res_text
-                );
+                log::trace!("email_since_state(): response {res_text:?}");
             }
             let mut v: MethodResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
@@ -534,7 +501,7 @@ impl JmapConnection {
             };
             let mut changes_response =
                 ChangesResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
-            if changes_response.new_state == current_state {
+            if changes_response.new_state == cached_state {
                 return Ok(None);
             }
             for destroyed_id in std::mem::take(&mut changes_response.destroyed) {
@@ -550,29 +517,20 @@ impl JmapConnection {
                     }
                 }
             }
-            // [ref:TODO]: process changes_response.updated too
             let get_response = GetResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
 
             {
+                // Created
                 let GetResponse::<EmailObject> { list, .. } = get_response;
 
-                let mut mailbox_hashes: Vec<SmallVec<[MailboxHash; 8]>> =
-                    Vec::with_capacity(list.len());
-                for envobj in &list {
-                    let v = self
-                        .store
-                        .mailboxes
-                        .read()
-                        .unwrap()
+                for envobj in list {
+                    let mailbox_hashes = envobj
+                        .mailbox_ids
                         .iter()
-                        .filter(|(_, m)| envobj.mailbox_ids.contains_key(&m.id))
-                        .map(|(k, _)| *k)
-                        .collect::<SmallVec<[MailboxHash; 8]>>();
-                    mailbox_hashes.push(v);
-                }
-                for (obj, mailbox_hashes) in list.into_iter().zip(mailbox_hashes) {
-                    let env = self.store.add_envelope(obj).await;
-                    for mailbox_hash in mailbox_hashes.iter().skip(1).cloned() {
+                        .map(|(id, _)| id.into_hash())
+                        .collect::<Vec<_>>();
+                    let env = self.store.add_envelope(envobj).await;
+                    for mailbox_hash in mailbox_hashes {
                         let mut mailboxes_lck = self.store.mailboxes.write().unwrap();
                         mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
                             if !env.is_seen() {
@@ -586,99 +544,23 @@ impl JmapConnection {
                             kind: RefreshEventKind::Create(Box::new(env.clone())),
                         });
                     }
-                    if let Some(mailbox_hash) = mailbox_hashes.first().cloned() {
-                        let mut mailboxes_lck = self.store.mailboxes.write().unwrap();
-                        mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
-                            if !env.is_seen() {
-                                mbox.unread_emails.lock().unwrap().insert_new(env.hash());
-                            }
-                            mbox.total_emails.lock().unwrap().insert_new(env.hash());
-                        });
-                        events.push(RefreshEvent {
-                            account_hash: self.store.account_hash,
-                            mailbox_hash,
-                            kind: RefreshEventKind::Create(Box::new(env)),
-                        });
-                    }
                 }
             }
-            let reverse_id_store_lck = self.store.reverse_id_store.lock().await;
-            if !v.method_responses.is_empty() {
-                let response = v.method_responses.remove(0);
-                match EmailQueryChangesResponse::try_from(response) {
-                    Ok(EmailQueryChangesResponse {
-                        collapse_threads: _,
-                        query_changes_response:
-                            QueryChangesResponse {
-                                account_id: _,
-                                old_query_state,
-                                new_query_state,
-                                total: _,
-                                removed,
-                                added,
-                            },
-                    }) if old_query_state != new_query_state => {
-                        self.store
-                            .mailboxes
-                            .write()
-                            .unwrap()
-                            .entry(mailbox_hash)
-                            .and_modify(|mbox| {
-                                *mbox.email_query_state.lock().unwrap() = Some(new_query_state);
-                            });
-                        /*  If the "filter" or "sort" includes a mutable property, the server
-                        MUST include all Foos in the current results for which this
-                        property may have changed.  The position of these may have moved
-                        in the results, so they must be reinserted by the client to ensure
-                        its query cache is correct.  */
-                        for email_obj_id in removed
-                            .into_iter()
-                            .filter(|id| !added.iter().any(|item| item.id == *id))
-                        {
-                            if let Some(env_hash) = reverse_id_store_lck.get(&email_obj_id) {
-                                let mut mailboxes_lck = self.store.mailboxes.write().unwrap();
-                                mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
-                                    mbox.unread_emails.lock().unwrap().remove(*env_hash);
-                                    mbox.total_emails.lock().unwrap().insert_new(*env_hash);
-                                });
-                                events.push(RefreshEvent {
-                                    account_hash: self.store.account_hash,
-                                    mailbox_hash,
-                                    kind: RefreshEventKind::Remove(*env_hash),
-                                });
-                            }
-                        }
-                        for AddedItem {
-                            id: _email_obj_id,
-                            index: _,
-                        } in added
-                        {
-                            // [ref:TODO] do something with added items
-                        }
-                    }
-                    Ok(_) => {}
-                    Err(err) => {
-                        log::error!(
-                            "Could not deserialize EmailQueryChangesResponse from server response:
-- mailbox_hash: {mailbox_hash}
-- error: {err}
-- debug details:
-  Json request was: {:?}
-  Json reply was: {}",
-                            serde_json::to_string(&req),
-                            res_text
+            let get_response = GetResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
+
+            {
+                let reverse_id_store_lck = self.store.reverse_id_store.lock().await;
+                // Updated
+                let GetResponse::<EmailObject> { list, .. } = get_response;
+
+                let mut mailboxes_lck = self.store.mailboxes.write().unwrap();
+                for envobj in list {
+                    if let Some(env_hash) = reverse_id_store_lck.get(&envobj.id) {
+                        let new_flags = protocol::keywords_to_flags(
+                            envobj.keywords().keys().cloned().collect(),
                         );
-                    }
-                }
-                let GetResponse::<EmailObject> { list, .. } =
-                    GetResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
-                {
-                    let mut mailboxes_lck = self.store.mailboxes.write().unwrap();
-                    for envobj in list {
-                        if let Some(env_hash) = reverse_id_store_lck.get(&envobj.id) {
-                            let new_flags = protocol::keywords_to_flags(
-                                envobj.keywords().keys().cloned().collect(),
-                            );
+                        for mailbox_id in envobj.mailbox_ids.keys() {
+                            let mailbox_hash = mailbox_id.into_hash();
                             mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
                                 if new_flags.0.contains(Flag::SEEN) {
                                     mbox.unread_emails.lock().unwrap().remove(*env_hash);
@@ -689,14 +571,17 @@ impl JmapConnection {
                             events.push(RefreshEvent {
                                 account_hash: self.store.account_hash,
                                 mailbox_hash,
-                                kind: RefreshEventKind::NewFlags(*env_hash, new_flags),
+                                kind: RefreshEventKind::NewFlags(*env_hash, new_flags.clone()),
                             });
                         }
                     }
                 }
             }
+            if !v.method_responses.is_empty() {
+                panic!("{:?}", v.method_responses);
+            }
             if changes_response.has_more_changes {
-                current_state = changes_response.new_state;
+                cached_state = changes_response.new_state;
             } else {
                 *self.store.email_state.lock().await = Some(changes_response.new_state);
 

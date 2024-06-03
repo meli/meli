@@ -29,6 +29,11 @@ rusty_fork_test! {
     fn test_jmap_refresh() {
         tests::run_jmap_refresh();
     }
+
+    #[test]
+    fn test_jmap_watch() {
+        tests::run_jmap_watch();
+    }
 }
 
 pub mod server {
@@ -40,8 +45,8 @@ pub mod server {
     use futures::{
         channel::mpsc::UnboundedReceiver,
         future::{self, Either},
-        io::{AsyncReadExt, AsyncWriteExt},
-        StreamExt,
+        io::AsyncWriteExt,
+        AsyncBufReadExt, StreamExt,
     };
     use melib::{
         backends::prelude::*,
@@ -637,25 +642,65 @@ pub mod server {
             responses
         }
 
-        pub fn insert_email(&mut self, new: Box<Mail>) {
+        pub fn insert_email(&mut self, new: Box<Mail>) -> State<email::EmailObject> {
             let id: Id<email::EmailObject> = Id::new_random();
             let old_state = std::mem::replace(&mut self.email_state, State::new_random());
             self.envelopes.insert(id.clone(), *new);
-            self.email_state_changes
+            let _none = self
+                .email_state_changes
                 .insert(old_state, StateChange::Created(id));
+            assert!(_none.is_none());
+            self.email_state.clone()
         }
 
-        pub fn destroy_email(&mut self, id: Id<email::EmailObject>) {
+        pub fn destroy_email(&mut self, id: Id<email::EmailObject>) -> State<email::EmailObject> {
             let old_state = std::mem::replace(&mut self.email_state, State::new_random());
             self.envelopes.swap_remove(&id);
-            self.email_state_changes
+            let _none = self
+                .email_state_changes
                 .insert(old_state, StateChange::Destroyed(id));
+            assert!(_none.is_none());
+
+            self.email_state.clone()
+        }
+
+        pub fn set_flags(&mut self, msgid: String, flag_op: FlagOp) -> State<email::EmailObject> {
+            let id = self
+                .envelopes
+                .iter()
+                .find_map(|(h, e)| {
+                    if *e.message_id() == msgid.as_str() {
+                        Some(h.clone())
+                    } else {
+                        None
+                    }
+                })
+                .unwrap();
+            self.envelopes
+                .entry(id.clone())
+                .and_modify(|entry| match flag_op {
+                    FlagOp::Set(f) => {
+                        entry.envelope.set_flag(f, true);
+                    }
+                    FlagOp::UnSet(f) => {
+                        entry.envelope.set_flag(f, false);
+                    }
+                    _ => unimplemented!(),
+                });
+            let old_state = std::mem::replace(&mut self.email_state, State::new_random());
+            let _none = self
+                .email_state_changes
+                .insert(old_state, StateChange::Updated(id));
+            assert!(_none.is_none());
+
+            self.email_state.clone()
         }
     }
 
     #[derive(Debug)]
     pub enum ServerEvent {
         New(Box<Mail>),
+        SetFlags(String, FlagOp),
         Destroy(Id<email::EmailObject>),
         Quit,
     }
@@ -692,14 +737,44 @@ pub mod server {
 
             let mut event_receiver = Box::pin(event_receiver.into_future());
             let mut accept = Box::pin(tcp_listener.accept());
-            let mut buf = vec![0; 64 * 1024];
+            let mut event_streams = vec![];
             loop {
                 match future::select(accept.as_mut(), event_receiver.as_mut()).await {
                     Either::Left((request, _)) => {
                         accept = Box::pin(tcp_listener.accept());
-                        let (mut tcp_stream, _socket_addr) = request?;
-                        let bytes = tcp_stream.read(&mut buf).await?;
-                        let lossy = String::from_utf8_lossy(&buf[..bytes]);
+                        let mut buf = vec![];
+                        let (tcp_stream, _socket_addr) = request?;
+                        let mut tcp_stream = futures::io::BufReader::new(tcp_stream);
+                        'bufread: loop {
+                            use isahc::http::header::{self, HeaderName};
+
+                            let bytes = tcp_stream.fill_buf().await?;
+
+                            if bytes.is_empty() {
+                                break;
+                            }
+                            let amt = bytes.len();
+                            buf.extend(bytes);
+                            tcp_stream.consume_unpin(amt);
+                            let s = String::from_utf8_lossy(&buf);
+                            if s.starts_with("GET ") && s.ends_with("\r\n\r\n") {
+                                break;
+                            }
+                            let (headers, body) = s.split_once("\r\n\r\n").unwrap_or((&s, ""));
+                            for hdr in headers.split("\r\n") {
+                                let Some((hdrname, val)) = hdr.split_once(": ") else {
+                                    continue;
+                                };
+                                let hdrname = hdrname.parse::<HeaderName>().unwrap();
+                                if hdrname == header::CONTENT_LENGTH {
+                                    let content_length = val.trim().parse::<usize>().unwrap();
+                                    if body.len() == content_length {
+                                        break 'bufread;
+                                    }
+                                }
+                            }
+                        }
+                        let lossy = String::from_utf8_lossy(&buf);
                         eprintln!("loop_handler read:\n{lossy}");
                         tcp_stream.write_all(b"HTTP/1.1 200 OK\r\n").await?;
                         let response = if lossy.starts_with("GET /.well-known/jmap") {
@@ -716,6 +791,37 @@ pub mod server {
                             )
                             .unwrap()
                             .into_bytes()
+                        } else if lossy.starts_with("GET /eventsource/") {
+                            eprintln!("saving event stream");
+
+                            tcp_stream
+                                .write_all("Content-Type: text/event-stream\r\n\r\n".as_bytes())
+                                .await?;
+                            let state = state.lock().unwrap().email_state.clone();
+                            tcp_stream
+                                .write_all("event: state\r\ndata: ".as_bytes())
+                                .await?;
+                            tcp_stream
+                                .write_all(
+                                    serde_json::json! {
+                                        {
+                                            "@type": "StateChange",
+                                            "changed": {
+                                                "A13824": {
+                                                    "Email": state,
+                                                }
+                                            }
+                                        }
+
+                                    }
+                                    .to_string()
+                                    .as_bytes(),
+                                )
+                                .await?;
+                            tcp_stream.write_all("\r\n\r\n".as_bytes()).await?;
+                            tcp_stream.flush().await?;
+                            event_streams.push(tcp_stream);
+                            continue;
                         } else {
                             unimplemented!()
                         };
@@ -737,12 +843,94 @@ pub mod server {
                                 return Ok(());
                             }
                             ServerEvent::New(mail) => {
-                                let mut state = state.lock().unwrap();
-                                state.insert_email(mail);
+                                let new_state = {
+                                    let mut state = state.lock().unwrap();
+                                    state.insert_email(mail)
+                                };
+                                for event_stream in &mut event_streams {
+                                    event_stream
+                                        .write_all("event: state\r\ndata: ".as_bytes())
+                                        .await?;
+                                    event_stream
+                                        .write_all(
+                                            serde_json::json! {
+                                                {
+                                                    "@type": "StateChange",
+                                                    "changed": {
+                                                        "A13824": {
+                                                            "Email": new_state,
+                                                        }
+                                                    }
+                                                }
+
+                                            }
+                                            .to_string()
+                                            .as_bytes(),
+                                        )
+                                        .await?;
+                                    event_stream.write_all("\r\n\r\n".as_bytes()).await?;
+                                    event_stream.flush().await?;
+                                }
+                            }
+                            ServerEvent::SetFlags(msgid, flag_op) => {
+                                let new_state = {
+                                    let mut state = state.lock().unwrap();
+                                    state.set_flags(msgid, flag_op)
+                                };
+                                for event_stream in &mut event_streams {
+                                    event_stream
+                                        .write_all("event: state\r\ndata: ".as_bytes())
+                                        .await?;
+                                    event_stream
+                                        .write_all(
+                                            serde_json::json! {
+                                                {
+                                                    "@type": "StateChange",
+                                                    "changed": {
+                                                        "A13824": {
+                                                            "Email": new_state,
+                                                        }
+                                                    }
+                                                }
+
+                                            }
+                                            .to_string()
+                                            .as_bytes(),
+                                        )
+                                        .await?;
+                                    event_stream.write_all("\r\n\r\n".as_bytes()).await?;
+                                    event_stream.flush().await?;
+                                }
                             }
                             ServerEvent::Destroy(mail_id) => {
-                                let mut state = state.lock().unwrap();
-                                state.destroy_email(mail_id);
+                                let new_state = {
+                                    let mut state = state.lock().unwrap();
+                                    state.destroy_email(mail_id)
+                                };
+                                for event_stream in &mut event_streams {
+                                    event_stream
+                                        .write_all("event: state\r\n".as_bytes())
+                                        .await?;
+                                    event_stream
+                                        .write_all(
+                                            serde_json::json! {
+                                                {
+                                                    "@type": "StateChange",
+                                                    "changed": {
+                                                        "A13824": {
+                                                            "Email": new_state,
+                                                        }
+                                                    }
+                                                }
+
+                                            }
+                                            .to_string()
+                                            .as_bytes(),
+                                        )
+                                        .await?;
+                                    event_stream.write_all("\r\n\r\n".as_bytes()).await?;
+                                    event_stream.flush().await?;
+                                }
                             }
                         }
                     }
@@ -843,56 +1031,58 @@ mod tests {
         std::thread::spawn(move || {
             block_on(server.loop_handler()).unwrap();
         });
-        eprintln!(
-            "Assert that account is not online because we have not performed any operations yet."
-        );
-        assert_eq!(
-            &block_on(jmap.is_online().unwrap()).unwrap_err().to_string(),
-            "Account is uninitialised."
-        );
-        let mailboxes = block_on(jmap.mailboxes().unwrap()).unwrap();
-        assert_eq!(
-            mailboxes.len(),
-            1,
-            "Expected one mailbox, Inbox. Got: {mailboxes:?}"
-        );
-        let inbox_hash = *mailboxes.keys().next().unwrap();
-        eprintln!("Inbox hash: {inbox_hash:?}");
-        {
-            let events = backend_event_queue
-                .lock()
-                .unwrap()
-                .drain(..)
-                .collect::<Vec<_>>();
-            assert_eq!(
-                events.len(),
-                0,
-                "Unexpected events without having performed any changes: {events:?}"
+        let fut = async move {
+            eprintln!(
+                "Assert that account is not online because we have not performed any operations \
+                 yet."
             );
-        }
-        eprintln!("Refresh account and assert that no events arrive.");
-        block_on(jmap.refresh(inbox_hash).unwrap()).unwrap();
-        {
-            let events = backend_event_queue
-                .lock()
-                .unwrap()
-                .drain(..)
-                .collect::<Vec<_>>();
             assert_eq!(
-                events.len(),
-                0,
-                "Unexpected events after refreshing without having performed any changes: \
-                 {events:?}"
+                &jmap.is_online().unwrap().await.unwrap_err().to_string(),
+                "Account is uninitialised."
             );
-        }
+            let mailboxes = jmap.mailboxes().unwrap().await.unwrap();
+            assert_eq!(
+                mailboxes.len(),
+                1,
+                "Expected one mailbox, Inbox. Got: {mailboxes:?}"
+            );
+            let inbox_hash = *mailboxes.keys().next().unwrap();
+            eprintln!("Inbox hash: {inbox_hash:?}");
+            {
+                let events = backend_event_queue
+                    .lock()
+                    .unwrap()
+                    .drain(..)
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    events.len(),
+                    0,
+                    "Unexpected events without having performed any changes: {events:?}"
+                );
+            }
+            eprintln!("Refresh account and assert that no events arrive.");
+            jmap.refresh(inbox_hash).unwrap().await.unwrap();
+            {
+                let events = backend_event_queue
+                    .lock()
+                    .unwrap()
+                    .drain(..)
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    events.len(),
+                    0,
+                    "Unexpected events after refreshing without having performed any changes: \
+                     {events:?}"
+                );
+            }
 
-        eprintln!(
-            "Add new e-mail on server store and assert that a refresh results in a Refresh Create \
-             event."
-        );
-        let new_mail = Box::new(
-            Mail::new(
-                br#"From: "some name" <some@example.com>
+            eprintln!(
+                "Add new e-mail on server store and assert that a refresh results in a Refresh \
+                 Create event."
+            );
+            let new_mail = Box::new(
+                Mail::new(
+                    br#"From: "some name" <some@example.com>
 To: "me" <myself@example.com>
 Cc:
 Subject: RE: your e-mail
@@ -901,84 +1091,304 @@ Content-Type: text/plain
 
 hello world.
 "#
-                .to_vec(),
-                None,
-            )
-            .unwrap(),
-        );
-        let fetch_result: Vec<_> = block_on(jmap.fetch(inbox_hash).unwrap().collect::<Vec<_>>());
-        for res in fetch_result {
-            let res = res.unwrap();
-            assert_eq!(res, vec![]);
-        }
-        server_event_sender
-            .unbounded_send(ServerEvent::New(new_mail))
-            .unwrap();
-        block_on(jmap.refresh(inbox_hash).unwrap()).unwrap();
-        let env_1 = {
-            let events = backend_event_queue
+                    .to_vec(),
+                    None,
+                )
+                .unwrap(),
+            );
+            let fetch_result: Vec<_> = jmap.fetch(inbox_hash).unwrap().collect::<Vec<_>>().await;
+            for res in fetch_result {
+                let res = res.unwrap();
+                assert_eq!(res, vec![]);
+            }
+            server_event_sender
+                .unbounded_send(ServerEvent::New(new_mail))
+                .unwrap();
+            jmap.refresh(inbox_hash).unwrap().await.unwrap();
+            let env_1 = {
+                let events = backend_event_queue
+                    .lock()
+                    .unwrap()
+                    .drain(..)
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    events.len(),
+                    1,
+                    "Expected one Refresh Create event: {events:?}"
+                );
+                let backend_event = events.into_iter().next().unwrap().1;
+                let BackendEvent::Refresh(refresh_event) = backend_event else {
+                    panic!("Expected Refresh event, got: {backend_event:?}");
+                };
+                let RefreshEventKind::Create(env) = refresh_event.kind else {
+                    panic!("Expected Create event, got: {refresh_event:?}");
+                };
+                env
+            };
+            let fetch_result: Vec<_> = jmap.fetch(inbox_hash).unwrap().collect::<Vec<_>>().await;
+            for res in fetch_result {
+                let res = res.unwrap();
+                assert_eq!(res.len(), 1);
+                assert_eq!(res[0].hash(), env_1.hash());
+            }
+            eprintln!(
+                "Destroy e-mail on server store and assert that a refresh results in a Refresh \
+                 Remove event."
+            );
+            let id_1 = server_state
                 .lock()
                 .unwrap()
-                .drain(..)
-                .collect::<Vec<_>>();
-            assert_eq!(
-                events.len(),
-                1,
-                "Expected one Refresh Create event: {events:?}"
-            );
-            let backend_event = events.into_iter().next().unwrap().1;
-            let BackendEvent::Refresh(refresh_event) = backend_event else {
-                panic!("Expected Refresh event, got: {backend_event:?}");
-            };
-            let RefreshEventKind::Create(env) = refresh_event.kind else {
-                panic!("Expected Create event, got: {refresh_event:?}");
-            };
-            env
+                .envelopes
+                .keys()
+                .next()
+                .unwrap()
+                .clone();
+            server_event_sender
+                .unbounded_send(ServerEvent::Destroy(id_1))
+                .unwrap();
+            jmap.refresh(inbox_hash).unwrap().await.unwrap();
+            {
+                let events = backend_event_queue
+                    .lock()
+                    .unwrap()
+                    .drain(..)
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    events.len(),
+                    1,
+                    "Expected one Refresh Remove event: {events:?}"
+                );
+                let backend_event = events.into_iter().next().unwrap().1;
+                let BackendEvent::Refresh(refresh_event) = backend_event else {
+                    panic!("Expected Refresh event, got: {backend_event:?}");
+                };
+                let RefreshEventKind::Remove(env_hash) = refresh_event.kind else {
+                    panic!("Expected Remove event, got: {refresh_event:?}");
+                };
+                assert_eq!(env_hash, env_1.hash());
+            }
+            server_event_sender
+                .unbounded_send(ServerEvent::Quit)
+                .unwrap();
         };
-        let fetch_result: Vec<_> = block_on(jmap.fetch(inbox_hash).unwrap().collect::<Vec<_>>());
-        for res in fetch_result {
-            let res = res.unwrap();
-            assert_eq!(res.len(), 1);
-            assert_eq!(res[0].hash(), env_1.hash());
+        std::thread::spawn(move || {
+            block_on(fut);
+        })
+        .join()
+        .unwrap();
+    }
+
+    /// Test that `JmapType::watch` `Stream` returns the expected `Refresh`
+    /// events when altering the mail store in the JMAP server, using eventSourceUrl-type instead
+    /// of polling.
+    pub(crate) fn run_jmap_watch() {
+        let mut _logger = Logger::new_with(LogLevel::TRACE, true);
+        let temp_dir = TempDir::new().unwrap();
+        let backend_event_queue =
+            Arc::new(Mutex::new(std::collections::VecDeque::with_capacity(16)));
+
+        let backend_event_consumer = {
+            let backend_event_queue = Arc::clone(&backend_event_queue);
+
+            BackendEventConsumer::new(Arc::new(move |ah, be| {
+                eprintln!("BackendEventConsumer: ah {ah:?} be {be:?}");
+                backend_event_queue.lock().unwrap().push_back((ah, be));
+            }))
+        };
+
+        for var in [
+            "HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_CONFIG_DIRS",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_DIRS",
+            "XDG_DATA_HOME",
+        ] {
+            std::env::remove_var(var);
         }
-        eprintln!(
-            "Destroy e-mail on server store and assert that a refresh results in a Refresh Remove \
-             event."
+        for (var, dir) in [
+            ("HOME", temp_dir.path().to_path_buf()),
+            ("XDG_CACHE_HOME", temp_dir.path().join(".cache")),
+            ("XDG_STATE_HOME", temp_dir.path().join(".local/state")),
+            ("XDG_CONFIG_HOME", temp_dir.path().join(".config")),
+            ("XDG_DATA_HOME", temp_dir.path().join(".local/share")),
+        ] {
+            std::fs::create_dir_all(&dir).unwrap_or_else(|err| {
+                panic!("Could not create {} path, {}: {}", var, dir.display(), err);
+            });
+            std::env::set_var(var, &dir);
+        }
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let local_addr = listener.local_addr().unwrap();
+        let account_conf = AccountSettings {
+            name: "test".to_string(),
+            root_mailbox: "INBOX".to_string(),
+            format: "jmap".to_string(),
+            identity: "user@example.com".to_string(),
+            extra_identities: vec![],
+            read_only: false,
+            display_name: None,
+            subscribed_mailboxes: vec![],
+            mailboxes: indexmap::indexmap! {},
+            manual_refresh: false,
+            extra: indexmap::indexmap! {
+                "server_url".to_string() => format!("http://{}:{}", local_addr.ip(), local_addr.port()),
+                "server_username".to_string() => "user".to_string(),
+                "server_password".to_string() => "password".to_string(),
+                "use_token".to_string() => "true".to_string(),
+            },
+        };
+
+        let mut jmap =
+            JmapType::new(&account_conf, Default::default(), backend_event_consumer).unwrap();
+        let (server_event_sender, server_event_receiver) = unbounded();
+        let server = JmapServerStream::new(
+            smol::Async::new(listener).unwrap(),
+            server_event_receiver,
+            local_addr,
         );
-        let id_1 = server_state
-            .lock()
-            .unwrap()
-            .envelopes
-            .keys()
-            .next()
-            .unwrap()
-            .clone();
-        server_event_sender
-            .unbounded_send(ServerEvent::Destroy(id_1))
-            .unwrap();
-        block_on(jmap.refresh(inbox_hash).unwrap()).unwrap();
-        {
-            let events = backend_event_queue
+        let server_state = server.state.clone();
+        std::thread::spawn(move || {
+            block_on(server.loop_handler()).unwrap();
+        });
+        let fut = async move {
+            eprintln!(
+                "Assert that account is not online because we have not performed any operations \
+                 yet."
+            );
+            assert_eq!(
+                &jmap.is_online().unwrap().await.unwrap_err().to_string(),
+                "Account is uninitialised."
+            );
+            let mailboxes = jmap.mailboxes().unwrap().await.unwrap();
+            assert_eq!(
+                mailboxes.len(),
+                1,
+                "Expected one mailbox, Inbox. Got: {mailboxes:?}"
+            );
+            let inbox_hash = *mailboxes.keys().next().unwrap();
+            eprintln!("Inbox hash: {inbox_hash:?}");
+            {
+                let events = backend_event_queue
+                    .lock()
+                    .unwrap()
+                    .drain(..)
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    events.len(),
+                    0,
+                    "Unexpected events without having performed any changes: {events:?}"
+                );
+            }
+
+            eprintln!(
+                "Add new e-mail on server store and assert that watch() creates a Refresh Create \
+                 event."
+            );
+            let new_mail = Box::new(
+                Mail::new(
+                    br#"From: "some name" <some@example.com>
+To: "me" <myself@example.com>
+Cc:
+Subject: RE: your e-mail
+Message-ID: <h2g7f.z0gy2pgaen5m@example.com>
+Content-Type: text/plain
+
+hello world.
+"#
+                    .to_vec(),
+                    None,
+                )
+                .unwrap(),
+            );
+            let fetch_result: Vec<_> = jmap.fetch(inbox_hash).unwrap().collect::<Vec<_>>().await;
+            for res in fetch_result {
+                let res = res.unwrap();
+                assert_eq!(res, vec![]);
+            }
+            server_event_sender
+                .unbounded_send(ServerEvent::New(new_mail))
+                .unwrap();
+            let watch_fut = jmap.watch().unwrap().into_future();
+            let (backend_event, watch_fut) = watch_fut.await;
+            let env_1 = {
+                let Some(Ok(BackendEvent::Refresh(refresh_event))) = backend_event else {
+                    panic!("Expected Refresh event, got: {backend_event:?}");
+                };
+                let RefreshEventKind::Create(env) = refresh_event.kind else {
+                    panic!("Expected Create event, got: {refresh_event:?}");
+                };
+                env
+            };
+            let fetch_result: Vec<_> = jmap.fetch(inbox_hash).unwrap().collect::<Vec<_>>().await;
+            for res in fetch_result {
+                let res = res.unwrap();
+                assert_eq!(res.len(), 1);
+                assert_eq!(res[0].hash(), env_1.hash());
+            }
+            server_event_sender
+                .unbounded_send(ServerEvent::SetFlags(
+                    "h2g7f.z0gy2pgaen5m@example.com".to_string(),
+                    FlagOp::Set(Flag::SEEN),
+                ))
+                .unwrap();
+            let (backend_event, _watch_fut) = watch_fut.into_future().await;
+            {
+                let Some(Ok(BackendEvent::Refresh(refresh_event))) = backend_event else {
+                    panic!("Expected Refresh event, got: {backend_event:?}");
+                };
+                let RefreshEventKind::NewFlags(env_hash, flags) = refresh_event.kind else {
+                    panic!("Expected NewFlags event, got: {refresh_event:?}");
+                };
+                assert_eq!(env_hash, env_1.hash());
+                assert_eq!(flags, (Flag::SEEN, vec![]));
+            };
+            eprintln!(
+                "Destroy e-mail on server store and assert that a refresh results in a Refresh \
+                 Remove event."
+            );
+            let id_1 = server_state
                 .lock()
                 .unwrap()
-                .drain(..)
-                .collect::<Vec<_>>();
-            assert_eq!(
-                events.len(),
-                1,
-                "Expected one Refresh Remove event: {events:?}"
-            );
-            let backend_event = events.into_iter().next().unwrap().1;
-            let BackendEvent::Refresh(refresh_event) = backend_event else {
-                panic!("Expected Refresh event, got: {backend_event:?}");
-            };
-            let RefreshEventKind::Remove(env_hash) = refresh_event.kind else {
-                panic!("Expected Remove event, got: {refresh_event:?}");
-            };
-            assert_eq!(env_hash, env_1.hash());
-        }
-        server_event_sender
-            .unbounded_send(ServerEvent::Quit)
-            .unwrap();
+                .envelopes
+                .keys()
+                .next()
+                .unwrap()
+                .clone();
+            server_event_sender
+                .unbounded_send(ServerEvent::Destroy(id_1))
+                .unwrap();
+            jmap.refresh(inbox_hash).unwrap().await.unwrap();
+            {
+                let events = backend_event_queue
+                    .lock()
+                    .unwrap()
+                    .drain(..)
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    events.len(),
+                    1,
+                    "Expected one Refresh Remove event: {events:?}"
+                );
+                let backend_event = events.into_iter().next().unwrap().1;
+                let BackendEvent::Refresh(refresh_event) = backend_event else {
+                    panic!("Expected Refresh event, got: {backend_event:?}");
+                };
+                let RefreshEventKind::Remove(env_hash) = refresh_event.kind else {
+                    panic!("Expected Remove event, got: {refresh_event:?}");
+                };
+                assert_eq!(env_hash, env_1.hash());
+            }
+            server_event_sender
+                .unbounded_send(ServerEvent::Quit)
+                .unwrap();
+        };
+        std::thread::spawn(move || {
+            block_on(fut);
+        })
+        .join()
+        .unwrap();
     }
 }
