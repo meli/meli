@@ -442,6 +442,16 @@ impl ContentType {
         )
     }
 
+    pub fn is_text_plain(&self) -> bool {
+        matches!(
+            self,
+            Self::Text {
+                kind: Text::Plain,
+                ..
+            }
+        )
+    }
+
     pub fn make_boundary(parts: &[AttachmentBuilder]) -> String {
         use crate::email::compose::random::gen_boundary;
         let mut boundary = "bzz_bzz__bzz__".to_string();
