@@ -1061,6 +1061,8 @@ impl Component for EnvelopeView {
                     context,
                 ) {
                     self.filters.push(filter);
+                } else if let Ok(filter) = ViewFilter::new_attachment(&body, context) {
+                    self.filters.push(filter);
                 }
             } else if let Ok(filter) = ViewFilter::new_attachment(&body, context) {
                 self.filters.push(filter);
@@ -1072,33 +1074,44 @@ impl Component for EnvelopeView {
         }
         if !self.initialised {
             self.initialised = true;
-            let mut text = if let Some(ViewFilter {
-                filter_invocation,
-                body_text,
-                notice,
-                ..
-            }) = self.filters.last()
-            {
-                let mut text = if self.filters.len() == 1 {
-                    if filter_invocation.is_empty() {
-                        String::new()
-                    } else {
-                        format!("Text piped through `{filter_invocation}`\n\n")
-                    }
-                } else {
-                    notice
-                        .as_ref()
-                        .map(|s| s.to_string())
-                        .or_else(|| {
-                            if filter_invocation.is_empty() {
-                                None
-                            } else {
-                                Some(format!("Text piped through `{filter_invocation}`\n\n"))
+            let mut text = if !self.filters.is_empty() {
+                let mut text = String::new();
+                if let Some(last) = self.filters.last() {
+                    let mut stack = vec![last];
+                    while let Some(ViewFilter {
+                        filter_invocation,
+                        body_text,
+                        notice,
+                        ..
+                    }) = stack.pop()
+                    {
+                        text.push_str(
+                            &notice
+                                .as_ref()
+                                .map(|s| s.to_string())
+                                .or_else(|| {
+                                    if filter_invocation.is_empty() {
+                                        None
+                                    } else {
+                                        Some(format!("Text filtered by `{filter_invocation}`\n\n"))
+                                    }
+                                })
+                                .unwrap_or_default(),
+                        );
+                        match body_text {
+                            ViewFilterContent::Filtered { inner } => text.push_str(
+                                &self.options.convert(&mut self.links, &self.body, inner),
+                            ),
+                            ViewFilterContent::Error { inner } => text.push_str(&inner.to_string()),
+                            ViewFilterContent::Running { .. } => {
+                                text.push_str("Filter job running in background.")
                             }
-                        })
-                        .unwrap_or_default()
-                };
-                text.push_str(&self.options.convert(&mut self.links, &self.body, body_text));
+                            ViewFilterContent::InlineAttachments { parts } => {
+                                stack.extend(parts.iter());
+                            }
+                        }
+                    }
+                }
                 text
             } else {
                 self.options
@@ -1156,6 +1169,169 @@ impl Component for EnvelopeView {
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        if matches!(event, UIEvent::StatusEvent(StatusEvent::JobFinished(_))) {
+            match *event {
+                UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id))
+                    if self.active_jobs.contains(job_id) =>
+                {
+                    let mut caught = false;
+                    for d in self.display.iter_mut() {
+                        let succeeded: bool;
+                        match d {
+                            AttachmentDisplay::SignedPending {
+                                ref mut inner,
+                                handle,
+                                display,
+                                job_id: our_job_id,
+                            } if *our_job_id == *job_id => {
+                                caught = true;
+                                match handle.chan.try_recv() {
+                                    Err(_) => {
+                                        /* Job was canceled */
+                                        succeeded = false;
+                                        log::warn!("Could not verify signature: Job was canceled",);
+                                    }
+                                    Ok(None) => {
+                                        /* something happened,
+                                         * perhaps a worker thread
+                                         * panicked */
+                                        succeeded = false;
+                                        log::warn!(
+                                            "Could not verify signature: check logs for any errors",
+                                        );
+                                    }
+                                    Ok(Some(Ok(()))) => {
+                                        succeeded = true;
+                                        *d = AttachmentDisplay::SignedVerified {
+                                            inner: std::mem::replace(
+                                                inner,
+                                                Box::new(AttachmentBuilder::new(&[]).build()),
+                                            ),
+                                            display: std::mem::take(display),
+                                            description: String::new(),
+                                        };
+                                    }
+                                    Ok(Some(Err(error))) => {
+                                        succeeded = false;
+                                        log::error!("Could not verify signature: {}", error);
+                                        *d = AttachmentDisplay::SignedFailed {
+                                            inner: std::mem::replace(
+                                                inner,
+                                                Box::new(AttachmentBuilder::new(&[]).build()),
+                                            ),
+                                            display: std::mem::take(display),
+                                            error,
+                                        };
+                                    }
+                                }
+                            }
+                            AttachmentDisplay::EncryptedPending {
+                                ref mut inner,
+                                handle,
+                            } if handle.job_id == *job_id => {
+                                caught = true;
+                                match handle.chan.try_recv() {
+                                    Err(_) => {
+                                        /* Job was canceled */
+
+                                        succeeded = false;
+                                        log::warn!(
+                                            "Could not decrypt encrypted message: Job was canceled",
+                                        );
+                                    }
+                                    Ok(None) => {
+                                        /* something happened,
+                                         * perhaps a worker thread
+                                         * panicked */
+                                        succeeded = false;
+                                        log::warn!(
+                                            "Could not decrypt encrypted message: check logs for \
+                                             any errors",
+                                        );
+                                    }
+                                    Ok(Some(Ok((metadata, decrypted_bytes)))) => {
+                                        succeeded = true;
+                                        let plaintext = Box::new(
+                                            AttachmentBuilder::new(&decrypted_bytes).build(),
+                                        );
+                                        let mut plaintext_display = vec![];
+                                        Self::attachment_to_display_helper(
+                                            &plaintext,
+                                            &self.main_loop_handler,
+                                            &mut self.active_jobs,
+                                            &mut plaintext_display,
+                                            &self.view_settings,
+                                            (&self.force_charset).into(),
+                                        );
+                                        *d = AttachmentDisplay::EncryptedSuccess {
+                                            inner: std::mem::replace(
+                                                inner,
+                                                Box::new(AttachmentBuilder::new(&[]).build()),
+                                            ),
+                                            plaintext,
+                                            plaintext_display,
+                                            description: format!("{:?}", metadata),
+                                        };
+                                    }
+                                    Ok(Some(Err(error))) => {
+                                        succeeded = false;
+                                        log::error!(
+                                            "Could not decrypt encrypted message: {}",
+                                            error
+                                        );
+                                        *d = AttachmentDisplay::EncryptedFailed {
+                                            inner: std::mem::replace(
+                                                inner,
+                                                Box::new(AttachmentBuilder::new(&[]).build()),
+                                            ),
+                                            error,
+                                        };
+                                    }
+                                }
+                            }
+                            _ => continue,
+                        }
+                        context
+                            .main_loop_handler
+                            .job_executor
+                            .set_job_success(*job_id, succeeded);
+                    }
+                    if caught {
+                        self.links.clear();
+                        self.regenerate_body_text();
+                        self.initialised = false;
+                        self.set_dirty(true);
+                    }
+
+                    self.active_jobs.remove(job_id);
+                }
+                UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id))
+                    if self.filters.iter_mut().any(|filter| {
+                        if let Some(cb) = filter.event_handler {
+                            if cb(
+                                filter,
+                                &mut UIEvent::StatusEvent(StatusEvent::JobFinished(*job_id)),
+                                context,
+                            ) {
+                                return true;
+                            }
+                        };
+                        false
+                    }) =>
+                {
+                    log::trace!(
+                        "after calling job event handles, filters are: {:?}",
+                        &self.filters
+                    );
+                    self.links.clear();
+                    self.regenerate_body_text();
+                    self.initialised = false;
+                    self.set_dirty(true);
+                }
+                _ => {}
+            }
+            log::trace!("envelope.rs got job finished: {:?}", event);
+        }
         match (&mut self.force_charset, &event) {
             (ForceCharset::Dialog(selector), UIEvent::FinishedUIDialog(id, results))
                 if *id == selector.id() =>
@@ -1668,203 +1844,6 @@ impl Component for EnvelopeView {
                 )));
                 self.dirty = true;
                 return true;
-            }
-            UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id))
-                if self.active_jobs.contains(job_id) =>
-            {
-                let mut caught = false;
-                for d in self.display.iter_mut() {
-                    let succeeded: bool;
-                    match d {
-                        AttachmentDisplay::SignedPending {
-                            ref mut inner,
-                            handle,
-                            display,
-                            job_id: our_job_id,
-                        } if *our_job_id == *job_id => {
-                            caught = true;
-                            match handle.chan.try_recv() {
-                                Err(_) => {
-                                    /* Job was canceled */
-                                    succeeded = false;
-                                    *d = AttachmentDisplay::SignedFailed {
-                                        inner: std::mem::replace(
-                                            inner,
-                                            Box::new(AttachmentBuilder::new(&[]).build()),
-                                        ),
-                                        display: std::mem::take(display),
-                                        error: Error::new("Job was canceled.")
-                                            .set_kind(ErrorKind::None),
-                                    };
-                                }
-                                Ok(None) => {
-                                    /* something happened,
-                                     * perhaps a worker thread
-                                     * panicked */
-                                    succeeded = false;
-                                    *d = AttachmentDisplay::SignedFailed {
-                                        inner: std::mem::replace(
-                                            inner,
-                                            Box::new(AttachmentBuilder::new(&[]).build()),
-                                        ),
-                                        display: std::mem::take(display),
-                                        error: Error::new("Unspecified error, check logs.")
-                                            .set_kind(ErrorKind::External),
-                                    };
-                                }
-                                Ok(Some(Ok(()))) => {
-                                    *d = AttachmentDisplay::SignedVerified {
-                                        inner: std::mem::replace(
-                                            inner,
-                                            Box::new(AttachmentBuilder::new(&[]).build()),
-                                        ),
-                                        display: std::mem::take(display),
-                                        description: String::new(),
-                                    };
-                                    succeeded = true;
-                                }
-                                Ok(Some(Err(error))) => {
-                                    succeeded = false;
-                                    *d = AttachmentDisplay::SignedFailed {
-                                        inner: std::mem::replace(
-                                            inner,
-                                            Box::new(AttachmentBuilder::new(&[]).build()),
-                                        ),
-                                        display: std::mem::take(display),
-                                        error,
-                                    };
-                                }
-                            }
-                        }
-                        AttachmentDisplay::EncryptedPending {
-                            ref mut inner,
-                            handle,
-                        } if handle.job_id == *job_id => {
-                            caught = true;
-                            match handle.chan.try_recv() {
-                                Err(_) => {
-                                    /* Job was canceled */
-                                    succeeded = false;
-                                    let error =
-                                        Error::new("Job was canceled.").set_kind(ErrorKind::None);
-                                    let plaintext = format!("{}", error);
-                                    self.filters.clear();
-                                    if let Ok(f) = ViewFilter::new_attachment(
-                                        &AttachmentBuilder::new_plaintext(
-                                            plaintext.clone().into_bytes(),
-                                        )
-                                        .build(),
-                                        context,
-                                    ) {
-                                        self.filters.push(f);
-                                    }
-                                    *d = AttachmentDisplay::EncryptedFailed {
-                                        inner: Box::new(
-                                            AttachmentBuilder::new_plaintext(
-                                                plaintext.into_bytes(),
-                                            )
-                                            .build(),
-                                        ),
-                                        error,
-                                    };
-                                }
-                                Ok(None) => {
-                                    /* something happened,
-                                     * perhaps a worker thread
-                                     * panicked */
-                                    succeeded = false;
-                                    let error = Error::new("Unspecified error, check logs.")
-                                        .set_kind(ErrorKind::External);
-                                    let plaintext = format!("{}", error);
-                                    self.filters.clear();
-                                    if let Ok(f) = ViewFilter::new_attachment(
-                                        &AttachmentBuilder::new_plaintext(
-                                            plaintext.clone().into_bytes(),
-                                        )
-                                        .build(),
-                                        context,
-                                    ) {
-                                        self.filters.push(f);
-                                    }
-                                    *d = AttachmentDisplay::EncryptedFailed {
-                                        inner: Box::new(
-                                            AttachmentBuilder::new_plaintext(
-                                                plaintext.into_bytes(),
-                                            )
-                                            .build(),
-                                        ),
-                                        error,
-                                    };
-                                }
-                                Ok(Some(Ok((metadata, decrypted_bytes)))) => {
-                                    succeeded = true;
-                                    let plaintext =
-                                        Box::new(AttachmentBuilder::new(&decrypted_bytes).build());
-                                    let mut plaintext_display = vec![];
-                                    Self::attachment_to_display_helper(
-                                        &plaintext,
-                                        &self.main_loop_handler,
-                                        &mut self.active_jobs,
-                                        &mut plaintext_display,
-                                        &self.view_settings,
-                                        (&self.force_charset).into(),
-                                    );
-                                    self.filters.clear();
-                                    if let Ok(f) = ViewFilter::new_attachment(&plaintext, context) {
-                                        self.filters.push(f);
-                                    }
-                                    *d = AttachmentDisplay::EncryptedSuccess {
-                                        inner: std::mem::replace(
-                                            inner,
-                                            Box::new(AttachmentBuilder::new(&[]).build()),
-                                        ),
-                                        plaintext,
-                                        plaintext_display,
-                                        description: format!("{:?}", metadata),
-                                    };
-                                }
-                                Ok(Some(Err(err))) => {
-                                    succeeded = false;
-                                    let msg = "Could not decrypt encrypted message";
-                                    log::error!("{}: {}", msg, err);
-                                    let plaintext = format!("{}: {}", msg, err);
-                                    self.filters.clear();
-                                    if let Ok(f) = ViewFilter::new_attachment(
-                                        &AttachmentBuilder::new_plaintext(
-                                            plaintext.clone().into_bytes(),
-                                        )
-                                        .build(),
-                                        context,
-                                    ) {
-                                        self.filters.push(f);
-                                    }
-                                    *d = AttachmentDisplay::EncryptedFailed {
-                                        inner: Box::new(
-                                            AttachmentBuilder::new_plaintext(
-                                                plaintext.into_bytes(),
-                                            )
-                                            .build(),
-                                        ),
-                                        error: err,
-                                    };
-                                }
-                            }
-                        }
-                        _ => continue,
-                    }
-                    context
-                        .main_loop_handler
-                        .job_executor
-                        .set_job_success(*job_id, succeeded);
-                }
-                if caught {
-                    self.links.clear();
-                    self.regenerate_body_text();
-                    self.initialised = false;
-                    self.set_dirty(true);
-                }
-
-                self.active_jobs.remove(job_id);
             }
             _ => {}
         }
