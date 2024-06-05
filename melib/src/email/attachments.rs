@@ -119,6 +119,13 @@ impl AttachmentBuilder {
         builder
     }
 
+    pub fn new_plaintext(content: Vec<u8>) -> Self {
+        let mut ret = Self::new(&[]);
+        ret.set_raw(content).set_body_to_raw();
+
+        ret
+    }
+
     pub fn raw(&self) -> &[u8] {
         &self.raw
     }
