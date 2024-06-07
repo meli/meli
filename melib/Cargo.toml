@@ -28,7 +28,7 @@ encoding_rs = { version = "^0.8" }
 flate2 = { version = "1.0.16" }
 futures = "0.3.5"
 
-imap-codec = { version = "1.0.0", features = ["ext_condstore_qresync"], optional = true }
+imap-codec = { version = "2.0.0-alpha.1", features = ["ext_condstore_qresync"], optional = true }
 
 indexmap = { version = "^1.5", default-features = false, features = ["serde-1"] }
 isahc = { version = "^1.7.2", optional = true, default-features = false, features = ["http2", "json", "text-decoding"] }

@@ -290,7 +290,7 @@ pub async fn examine_updates(
                     }
                 }
             } else {
-                conn.send_command(CommandBody::search(None, SearchKey::Unseen, false))
+                conn.send_command(CommandBody::search(None, SearchKey::Unseen.into(), false))
                     .await?;
                 conn.read_response(&mut response, RequiredResponses::SEARCH)
                     .await?;
@@ -310,7 +310,7 @@ pub async fn examine_updates(
 
         if select_response.recent > 0 {
             /* UID SEARCH RECENT */
-            conn.send_command(CommandBody::search(None, SearchKey::Recent, true))
+            conn.send_command(CommandBody::search(None, SearchKey::Recent.into(), true))
                 .await?;
             conn.read_response(&mut response, RequiredResponses::SEARCH)
                 .await?;

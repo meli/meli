@@ -112,7 +112,7 @@ pub use compose::{attachment_from_file, Draft};
 pub use headers::*;
 #[cfg(feature = "imap")]
 use imap_codec::imap_types::{
-    core::{AString, Atom, NonEmptyVec},
+    core::{AString, Atom, Vec1},
     fetch::{MacroOrMessageDataItemNames, MessageDataItemName, Section},
     flag::Flag as ImapCodecFlag,
 };
@@ -136,7 +136,7 @@ pub(crate) fn common_attributes() -> MacroOrMessageDataItemNames<'static> {
         MessageDataItemName::BodyExt {
             section: Some(Section::HeaderFields(
                 None,
-                NonEmptyVec::from(AString::from(Atom::unvalidated("REFERENCES"))),
+                Vec1::from(AString::from(Atom::unvalidated("REFERENCES"))),
             )),
             partial: None,
             peek: true,

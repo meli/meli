@@ -52,7 +52,7 @@ use imap_codec::{
     imap_types::{
         auth::AuthMechanism,
         command::{Command, CommandBody},
-        core::{AString, LiteralMode, NonEmptyVec, Tag},
+        core::{AString, LiteralMode, Tag, Vec1},
         extensions::{compress::CompressionAlgorithm, enable::CapabilityEnable},
         mailbox::Mailbox,
         search::SearchKey,
@@ -730,9 +730,7 @@ impl ImapConnection {
                                 let mut ret = Vec::new();
                                 if capabilities.contains(&b"ENABLE"[..]) {
                                     self.send_command(CommandBody::Enable {
-                                        capabilities: NonEmptyVec::from(
-                                            CapabilityEnable::CondStore,
-                                        ),
+                                        capabilities: Vec1::from(CapabilityEnable::CondStore),
                                     })
                                     .await?;
                                     self.read_response(&mut ret, RequiredResponses::empty())
@@ -1162,7 +1160,7 @@ impl ImapConnection {
         debug_assert!(low > 0);
         self.send_command(CommandBody::search(
             None,
-            SearchKey::SequenceSet(SequenceSet::try_from(low..)?),
+            SearchKey::SequenceSet(SequenceSet::try_from(low..)?).into(),
             true,
         ))
         .await?;

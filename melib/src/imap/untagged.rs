@@ -94,7 +94,7 @@ impl ImapConnection {
                     );
                     self.send_command(CommandBody::search(
                         None,
-                        SearchKey::SequenceSet(SequenceSet::from(..)),
+                        SearchKey::SequenceSet(SequenceSet::from(..)).into(),
                         true,
                     ))
                     .await?;
@@ -337,7 +337,7 @@ impl ImapConnection {
             UntaggedResponse::Recent(_) => {
                 try_fail!(
                     mailbox_hash,
-                    self.send_command(CommandBody::search(None, SearchKey::Recent, true)).await
+                    self.send_command(CommandBody::search(None, SearchKey::Recent.into(), true)).await
                     self.read_response(&mut response, RequiredResponses::SEARCH).await
                 );
                 match super::protocol_parser::search_results_raw(&response)
@@ -497,7 +497,7 @@ impl ImapConnection {
                             mailbox_hash,
                             self.send_command(CommandBody::search(
                                 None,
-                                SearchKey::SequenceSet(SequenceSet::try_from(msg_seq)?),
+                                SearchKey::SequenceSet(SequenceSet::try_from(msg_seq)?).into(),
                                 true
                             ))
                             .await,

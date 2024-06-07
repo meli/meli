@@ -580,7 +580,7 @@ impl ImapConnection {
         let mut valid_envs = BTreeSet::default();
         // This should be UID SEARCH 1:<maxuid> but it's difficult to compare to cached
         // UIDs at the point of calling this function
-        self.send_command(CommandBody::search(None, SearchKey::All, true))
+        self.send_command(CommandBody::search(None, SearchKey::All.into(), true))
             .await?;
         self.read_response(&mut response, RequiredResponses::SEARCH)
             .await?;
