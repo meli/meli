@@ -379,7 +379,7 @@ impl ViewFilter {
                 id: ComponentId::default(),
             });
         } else if let ContentType::Multipart {
-            kind: MultipartType::Encrypted,
+            kind: MultipartType::Signed,
             ref parts,
             ..
         } = att.content_type
@@ -399,6 +399,90 @@ impl ViewFilter {
                     event_handler: None,
                     id: ComponentId::default(),
                 });
+            }
+            #[cfg(feature = "gpgme")]
+            {
+                for a in parts {
+                    if a.content_type == "application/octet-stream" {
+                        let content = a.raw();
+                        let bytes = content.trim().to_vec();
+                        let decrypt_fut = async {
+                            let (_metadata, bytes) = crate::mail::pgp::decrypt(
+                                melib::email::pgp::convert_attachment_to_rfc_spec(&bytes),
+                            )
+                            .await
+                            .map_err(|err| (err, bytes))?;
+                            Ok((AttachmentBuilder::new(&bytes).build(), bytes))
+                        };
+                        let mut job_handle = context
+                            .main_loop_handler
+                            .job_executor
+                            .spawn_specialized("gpg::decrypt".into(), decrypt_fut);
+                        let on_success_notice_cb = || "Decrypted content.\n\n".into();
+                        let mut retval = Self {
+                            filter_invocation: "gpg::decrypt".into(),
+                            content_type: att.content_type.clone(),
+                            notice: None,
+                            body_text: ViewFilterContent::Filtered {
+                                inner: String::new(),
+                            },
+                            unfiltered: a.raw().to_vec(),
+                            event_handler: Some(Self::job_process_event),
+                            id: ComponentId::default(),
+                        };
+                        if let Ok(Some(job_result)) = try_recv_timeout!(&mut job_handle.chan) {
+                            retval.event_handler = None;
+                            Self::process_job_result(
+                                &mut retval,
+                                Ok(Some(job_result)),
+                                Arc::new(on_success_notice_cb),
+                                context,
+                            );
+                            return Ok(retval);
+                        }
+                        return Ok(Self {
+                            body_text: ViewFilterContent::Running {
+                                job_id: job_handle.job_id,
+                                on_success_notice_cb: Arc::new(on_success_notice_cb),
+                                job_handle,
+                            },
+                            ..retval
+                        });
+                    }
+                }
+            }
+        } else if let ContentType::Multipart {
+            kind: MultipartType::Encrypted,
+            ref parts,
+            ..
+        } = att.content_type
+        {
+            #[cfg(not(feature = "gpgme"))]
+            {
+                let msg = "Cannot verify signature: meli must be compiled with libgpgme support.";
+                if let Some(Ok(mut res)) =
+                    parts
+                        .iter()
+                        .find_map(|part| match Self::new_attachment(part, context) {
+                            v @ Ok(_) => Some(v),
+                            Err(_) => None,
+                        })
+                {
+                    match res.notice {
+                        Some(ref mut notice) => {
+                            let notice = std::mem::take(notice);
+                            let mut notice = notice.into_owned();
+                            notice.push_str("\n");
+                            notice.push_str(msg);
+
+                            res.notice = Some(notice.into());
+                        }
+                        None => {
+                            res.notice = Some(msg.into());
+                        }
+                    }
+                    return Ok(res);
+                }
             }
             #[cfg(feature = "gpgme")]
             {
