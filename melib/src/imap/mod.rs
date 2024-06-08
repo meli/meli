@@ -46,6 +46,7 @@ use std::{
     collections::{hash_map::DefaultHasher, BTreeSet, HashMap, HashSet},
     convert::TryFrom,
     hash::Hasher,
+    num::NonZeroU32,
     pin::Pin,
     str::FromStr,
     sync::{Arc, Mutex},
@@ -57,8 +58,9 @@ pub use cache::ModSequence;
 use futures::{lock::Mutex as FutureMutex, stream::Stream};
 use imap_codec::imap_types::{
     command::CommandBody,
-    core::Literal,
+    core::{Atom, Literal},
     flag::{Flag as ImapCodecFlag, StoreResponse, StoreType},
+    mailbox::Mailbox as ImapTypesMailbox,
     sequence::{SequenceSet, ONE},
 };
 
@@ -735,6 +737,28 @@ impl MailBackend for ImapType {
                 return Ok(());
             }
 
+            // Conversion from UID (usize) to UID (NonZeroU32).
+            // TODO: Directly use NonZeroU32 for UID everywhere?
+            let sequence_set = {
+                let mut tmp = Vec::new();
+
+                for uid in uids.iter() {
+                    if let Ok(uid) = u32::try_from(*uid) {
+                        if let Ok(uid) = NonZeroU32::try_from(uid) {
+                            tmp.push(uid);
+                        } else {
+                            return Err(Error::new("Application error: UID was 0"));
+                        }
+                    } else {
+                        return Err(Error::new("Application error: UID exceeded u32"));
+                    }
+                }
+
+                // Safety: We know this can't fail due to the `is_empty` check above.
+                // TODO: This could be too easy to overlook.
+                SequenceSet::try_from(tmp).unwrap()
+            };
+
             let mut response = Vec::with_capacity(8 * 1024);
             let mut conn = connection.lock().await;
             conn.select_mailbox(mailbox_hash, &mut response, false)
@@ -744,57 +768,61 @@ impl MailBackend for ImapType {
                 let mut set_seen = false;
                 let command = {
                     let mut tag_lck = uid_store.collection.tag_index.write().unwrap();
-                    let mut cmd = format!("UID STORE {}", uids[0]);
-                    for uid in uids.iter().skip(1) {
-                        cmd = format!("{},{}", cmd, uid);
-                    }
-                    cmd = format!("{} +FLAGS (", cmd);
-                    for op in flags.iter().filter(|op| <bool>::from(*op)) {
-                        match op {
-                            FlagOp::Set(flag) if *flag == Flag::REPLIED => {
-                                cmd.push_str("\\Answered ");
+                    let flags = {
+                        let mut tmp = Vec::new();
+
+                        for op in flags.iter().filter(|op| <bool>::from(*op)) {
+                            match op {
+                                FlagOp::Set(flag) if *flag == Flag::REPLIED => {
+                                    tmp.push(ImapCodecFlag::Answered)
+                                }
+                                FlagOp::Set(flag) if *flag == Flag::FLAGGED => {
+                                    tmp.push(ImapCodecFlag::Flagged);
+                                }
+                                FlagOp::Set(flag) if *flag == Flag::TRASHED => {
+                                    tmp.push(ImapCodecFlag::Deleted);
+                                }
+                                FlagOp::Set(flag) if *flag == Flag::SEEN => {
+                                    tmp.push(ImapCodecFlag::Seen);
+                                    set_seen = true;
+                                }
+                                FlagOp::Set(flag) if *flag == Flag::DRAFT => {
+                                    tmp.push(ImapCodecFlag::Draft);
+                                }
+                                FlagOp::Set(_) => {
+                                    log::error!(
+                                        "Application error: more than one flag bit set in \
+                                         set_flags: {:?}",
+                                        flags
+                                    );
+                                    return Err(Error::new(format!(
+                                        "Application error: more than one flag bit set in \
+                                         set_flags: {:?}",
+                                        flags
+                                    ))
+                                    .set_kind(crate::ErrorKind::Bug));
+                                }
+                                FlagOp::SetTag(tag) => {
+                                    let hash = TagHash::from_bytes(tag.as_bytes());
+                                    tag_lck.entry(hash).or_insert_with(|| tag.to_string());
+                                    tmp.push(ImapCodecFlag::Keyword(Atom::try_from(tag.as_str())?));
+                                }
+                                _ => {}
                             }
-                            FlagOp::Set(flag) if *flag == Flag::FLAGGED => {
-                                cmd.push_str("\\Flagged ");
-                            }
-                            FlagOp::Set(flag) if *flag == Flag::TRASHED => {
-                                cmd.push_str("\\Deleted ");
-                            }
-                            FlagOp::Set(flag) if *flag == Flag::SEEN => {
-                                cmd.push_str("\\Seen ");
-                                set_seen = true;
-                            }
-                            FlagOp::Set(flag) if *flag == Flag::DRAFT => {
-                                cmd.push_str("\\Draft ");
-                            }
-                            FlagOp::Set(_) => {
-                                log::error!(
-                                    "Application error: more than one flag bit set in set_flags: \
-                                     {:?}",
-                                    flags
-                                );
-                                return Err(Error::new(format!(
-                                    "Application error: more than one flag bit set in set_flags: \
-                                     {:?}",
-                                    flags
-                                ))
-                                .set_kind(crate::ErrorKind::Bug));
-                            }
-                            FlagOp::SetTag(tag) => {
-                                let hash = TagHash::from_bytes(tag.as_bytes());
-                                tag_lck.entry(hash).or_insert_with(|| tag.to_string());
-                                cmd.push_str(tag);
-                                cmd.push(' ');
-                            }
-                            _ => {}
                         }
+
+                        tmp
+                    };
+
+                    CommandBody::Store {
+                        sequence_set: sequence_set.clone(),
+                        kind: StoreType::Add,
+                        response: StoreResponse::Answer,
+                        flags,
+                        uid: true,
                     }
-                    // pop last space
-                    cmd.pop();
-                    cmd.push(')');
-                    cmd
                 };
-                conn.send_command_raw(command.as_bytes()).await?;
+                conn.send_command(command).await?;
                 conn.read_response(&mut response, RequiredResponses::empty())
                     .await?;
                 if set_seen {
@@ -811,55 +839,58 @@ impl MailBackend for ImapType {
                 let mut set_unseen = false;
                 /* Set flags/tags to false */
                 let command = {
-                    let mut cmd = format!("UID STORE {}", uids[0]);
-                    for uid in uids.iter().skip(1) {
-                        cmd = format!("{},{}", cmd, uid);
-                    }
-                    cmd = format!("{} -FLAGS (", cmd);
-                    for op in flags.iter().filter(|op| !<bool>::from(*op)) {
-                        match op {
-                            FlagOp::UnSet(flag) if *flag == Flag::REPLIED => {
-                                cmd.push_str("\\Answered ");
+                    let flags = {
+                        let mut tmp = Vec::new();
+
+                        for op in flags.iter().filter(|op| !<bool>::from(*op)) {
+                            match op {
+                                FlagOp::UnSet(flag) if *flag == Flag::REPLIED => {
+                                    tmp.push(ImapCodecFlag::Answered);
+                                }
+                                FlagOp::UnSet(flag) if *flag == Flag::FLAGGED => {
+                                    tmp.push(ImapCodecFlag::Flagged);
+                                }
+                                FlagOp::UnSet(flag) if *flag == Flag::TRASHED => {
+                                    tmp.push(ImapCodecFlag::Deleted);
+                                }
+                                FlagOp::UnSet(flag) if *flag == Flag::SEEN => {
+                                    tmp.push(ImapCodecFlag::Seen);
+                                    set_unseen = true;
+                                }
+                                FlagOp::UnSet(flag) if *flag == Flag::DRAFT => {
+                                    tmp.push(ImapCodecFlag::Draft);
+                                }
+                                FlagOp::UnSet(_) => {
+                                    log::error!(
+                                        "Application error: more than one flag bit set in \
+                                         set_flags: {:?}",
+                                        flags
+                                    );
+                                    return Err(Error::new(format!(
+                                        "Application error: more than one flag bit set in \
+                                         set_flags: {:?}",
+                                        flags
+                                    )));
+                                }
+                                FlagOp::UnSetTag(tag) => {
+                                    tmp.push(ImapCodecFlag::Keyword(Atom::try_from(tag.as_str())?));
+                                }
+                                _ => {}
                             }
-                            FlagOp::UnSet(flag) if *flag == Flag::FLAGGED => {
-                                cmd.push_str("\\Flagged ");
-                            }
-                            FlagOp::UnSet(flag) if *flag == Flag::TRASHED => {
-                                cmd.push_str("\\Deleted ");
-                            }
-                            FlagOp::UnSet(flag) if *flag == Flag::SEEN => {
-                                cmd.push_str("\\Seen ");
-                                set_unseen = true;
-                            }
-                            FlagOp::UnSet(flag) if *flag == Flag::DRAFT => {
-                                cmd.push_str("\\Draft ");
-                            }
-                            FlagOp::UnSet(_) => {
-                                log::error!(
-                                    "Application error: more than one flag bit set in set_flags: \
-                                     {:?}",
-                                    flags
-                                );
-                                return Err(Error::new(format!(
-                                    "Application error: more than one flag bit set in set_flags: \
-                                     {:?}",
-                                    flags
-                                )));
-                            }
-                            FlagOp::UnSetTag(tag) => {
-                                cmd.push_str(tag);
-                                cmd.push(' ');
-                            }
-                            _ => {}
                         }
+
+                        tmp
+                    };
+
+                    CommandBody::Store {
+                        sequence_set,
+                        kind: StoreType::Remove,
+                        response: StoreResponse::Answer,
+                        flags,
+                        uid: true,
                     }
-                    // [ref:TODO] there should be a check that cmd is not empty here.
-                    // pop last space
-                    cmd.pop();
-                    cmd.push(')');
-                    cmd
                 };
-                conn.send_command_raw(command.as_bytes()).await?;
+                conn.send_command(command).await?;
                 conn.read_response(&mut response, RequiredResponses::empty())
                     .await?;
                 if set_unseen {
@@ -1126,7 +1157,7 @@ impl MailBackend for ImapType {
         let connection = self.connection.clone();
         let new_mailbox_fut = self.mailboxes();
         Ok(Box::pin(async move {
-            let command: String;
+            let command: CommandBody;
             let mut response = Vec::with_capacity(8 * 1024);
             {
                 let mailboxes = uid_store.mailboxes.lock().await;
@@ -1145,15 +1176,14 @@ impl MailBackend for ImapType {
                         (mailboxes[&mailbox_hash].separator as char).encode_utf8(&mut [0; 4]),
                     );
                 }
-                command = format!(
-                    "RENAME \"{}\" \"{}\"",
-                    mailboxes[&mailbox_hash].imap_path(),
-                    new_path
-                );
+                let from =
+                    ImapTypesMailbox::try_from(mailboxes[&mailbox_hash].imap_path().to_string())?;
+                let to = ImapTypesMailbox::try_from(new_path.to_string())?;
+                command = CommandBody::Rename { from, to };
             }
             {
                 let mut conn_lck = connection.lock().await;
-                conn_lck.send_command_raw(command.as_bytes()).await?;
+                conn_lck.send_command(command).await?;
                 conn_lck
                     .read_response(&mut response, RequiredResponses::empty())
                     .await?;
