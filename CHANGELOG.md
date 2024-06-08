@@ -21,6 +21,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- ### Miscellaneous Tasks -->
 
+
+## [v0.8.6](https://git.meli-email.org/meli/meli/releases/tag/v0.8.6) - 2024-06-08
+
+Contributors in alphabetical order:
+
+- euxane
+- Manos Pitsidianakis
+
+### Added
+
+- [735b44f2](https://git.meli-email.org/meli/meli/commit/735b44f2860307db1b664de43cea2b8c34a71b15) Add 'highlight_self' theme attribute
+- [e187bb3f](https://git.meli-email.org/meli/meli/commit/e187bb3f0dd0166d69df4d84f1f63e1d005b4cbe) Add tools subcommand with smtp shell for debugging
+- [571bd984](https://git.meli-email.org/meli/meli/commit/571bd984979031a08c3f908bda1f669b464afe78) Add proper imap-shell in tools subcommand for debugging
+- [0e1e5b9e](https://git.meli-email.org/meli/meli/commit/0e1e5b9ea72cd5a691fb1044bee8b0f60cb1d936) Add support for Alternate Scroll Mode (xterm)
+- [fe08d52a](https://git.meli-email.org/meli/meli/commit/fe08d52a7f4d9dfae1a9706b87aae8b77949c63d) Add force_text_emoji_presentation option
+
+### Bug Fixes
+
+- [3de4908d](https://git.meli-email.org/meli/meli/commit/3de4908d6b6fab293fedabde91e6f027fd08acfa) man.7 Fix typo for toggle_expand_headers
+- [a8c7582f](https://git.meli-email.org/meli/meli/commit/a8c7582fa36ebb025877f341ea4226ffa2ff46bb) Fix ENVELOPE parsing in untagged responses
+- [c65635ef](https://git.meli-email.org/meli/meli/commit/c65635ef600d09a354d2113d94f1aee153b2c721) Fix compilation for macos
+- [06ec2790](https://git.meli-email.org/meli/meli/commit/06ec2790d0f3fd429e68987b4dfe6151afbc3d5b) Fix str slice index panic
+- [f2b59a76](https://git.meli-email.org/meli/meli/commit/f2b59a7633d9578bfcadb205c8847d1409e8cfdc) Add RequestUrlTemplate type
+- [7eed944a](https://git.meli-email.org/meli/meli/commit/7eed944abc54dfc8acd53a4e6382f311c66b5d6c) Fix screwed up rfc8620 module split
+- [74a3539f](https://git.meli-email.org/meli/meli/commit/74a3539f882d4ccfbfc71e338f9fdcf4c8ed3e82) Fix degenerate OOB cell access
+- [e8e76970](https://git.meli-email.org/meli/meli/commit/e8e7697001a8a41caee8dc108f6f76a9ea988c1e) Fix edge case with strings/linebreaking
+- [81955187](https://git.meli-email.org/meli/meli/commit/819551876d594a5f4f6c4cdb481b0f8a8cfcf8cd) Fix decryption error not shown
+
+### Refactoring
+
+- [a9c3b151](https://git.meli-email.org/meli/meli/commit/a9c3b151f1a2418c6425ec953a2633892db6ff7d) Impl highlight_self in all index styles
+- [57e3e643](https://git.meli-email.org/meli/meli/commit/57e3e643a1590775e819a49e6f6a02e0c0000466) Remove excessive right padding in flags
+- [a4ebe3b7](https://git.meli-email.org/meli/meli/commit/a4ebe3b7d456c4283255d7cf5cc9d6903f1634d7) Add ErrorKind::Platform
+- [4bdfb3a3](https://git.meli-email.org/meli/meli/commit/4bdfb3a31b3164dacce1b0d39eea1c3308ae8e8b) Disable Nagle's algorithm by default
+- [4148aee5](https://git.meli-email.org/meli/meli/commit/4148aee59b1e0dda6a30fcf84c93b5a53733ae8a) Refactor smtp,draft errors and email tests
+- [ed5a6b04](https://git.meli-email.org/meli/meli/commit/ed5a6b04f4e28f7fbea09cbc45fb8f781282bccb) Add a symbols range to is_emoji check
+- [fc1122a2](https://git.meli-email.org/meli/meli/commit/fc1122a2aae9f52bb70cb71d1456669e4f7aa8f1) Rename to backend_mailbox.rs
+- [50ecade7](https://git.meli-email.org/meli/meli/commit/50ecade74a5c4654fa31e3008ca56652b6288e7a) Merge rfc8620/tests.rs to tests.rs
+- [a78f3f26](https://git.meli-email.org/meli/meli/commit/a78f3f261d89d5d991509dc71284f5ab13be734e) Move submodules to jmap/
+- [f7838b1d](https://git.meli-email.org/meli/meli/commit/f7838b1ddf30e30ab61b6c2bb0438ecc5d909886) Split to methods.rs and objects.rs
+- [74f0d12a](https://git.meli-email.org/meli/meli/commit/74f0d12afbec0d515743c4a1d177ac47a84a6c4f) Remove obsolete imapshell.rs and smtp_conn.rs
+- [dce3852f](https://git.meli-email.org/meli/meli/commit/dce3852fe55b5614ef7f2f03d4efb76b2ddc256e) Add capabilities module
+- [7ba7dc70](https://git.meli-email.org/meli/meli/commit/7ba7dc70c584d866b399184244457c0de83584d4) Imports cleanup in all modules
+- [45bfcf87](https://git.meli-email.org/meli/meli/commit/45bfcf870710ae29e311a5a99df10d39fadd4b3b) Minor refactors
+- [77867aee](https://git.meli-email.org/meli/meli/commit/77867aeed4e49d91b81fcb33b7bff5b0dd25daee) Unwrap object module
+- [33999fc6](https://git.meli-email.org/meli/meli/commit/33999fc6abbd553a345944edaec44b7f32a98e19) Re-add Submission to USING
+- [6be25ac3](https://git.meli-email.org/meli/meli/commit/6be25ac3df34ac8aec7721317feffca73f2fbadf) Don't use client field for get/posts
+
+### Documentation
+
+- [4722d7cc](https://git.meli-email.org/meli/meli/commit/4722d7ccb88c03e0dc4897f11b927c8e5d4b424a) Also mention server_password_command for jmap
+
+### Miscellaneous Tasks
+
+- [2bfe6086](https://git.meli-email.org/meli/meli/commit/2bfe60867835f17201bee348e03d073ae4d1e08e) Hide self from "add contacts" options
+- [9ca34a68](https://git.meli-email.org/meli/meli/commit/9ca34a6864f3b71aca5c1a0dfb36191b55b3f636) Update MSRV to 1.70.0
+- [50ff16c4](https://git.meli-email.org/meli/meli/commit/50ff16c44f1ecc85de904e43297149cb8a4cc73b) Add LIGHT, DARK constant theme keys
+- [1abce964](https://git.meli-email.org/meli/meli/commit/1abce964c7c78aead04ce85ba7e318602eeab6d6) Add Envelope::recipient_any method
+- [671d35e2](https://git.meli-email.org/meli/meli/commit/671d35e21ec3b2c62c6bca264acb37b5b2ae5aa9) Update mailin-embedded dependency to 0.8.2
+- [39fbb164](https://git.meli-email.org/meli/meli/commit/39fbb164edf318d65b8cc3c7cfca4911e4c88235) Change info_message_{next,prev} shortcuts to `<, >`
+- [58d73271](https://git.meli-email.org/meli/meli/commit/58d7327130aa2cefceb41d8dfc84015b6a9c7527) Change new mail text content
+- [f0d1b9cf](https://git.meli-email.org/meli/meli/commit/f0d1b9cfd12490bc3698f0fe6d9e4e7249d91a59) Add ayllu mirror link
+- [3bab5324](https://git.meli-email.org/meli/meli/commit/3bab5324c4273bf335b881b2e48ac4067bcb661e) Improve Debug impl for ContentType etc
+- [e9dd6bec](https://git.meli-email.org/meli/meli/commit/e9dd6becc3722fc2e3a95626a8d8b61f9c12fd45) Comment out content
+- [8dd87c1a](https://git.meli-email.org/meli/meli/commit/8dd87c1ac56b8277f89e4b9d76f5bc151e1a5f09) Add ContentType::is_text_plain()
+- [01bc62e0](https://git.meli-email.org/meli/meli/commit/01bc62e0adfc16e7878299f3c74076739da5652f) Add new_plaintext method
+
 ## [v0.8.5](https://git.meli-email.org/meli/meli/releases/tag/v0.8.5) - 2024-05-05
 
 Contributors in alphabetical order:
@@ -872,3 +939,4 @@ Notable changes:
 [v0.8.3]: https://git.meli-email.org/meli/meli/releases/tag/v0.8.3
 [v0.8.4]: https://git.meli-email.org/meli/meli/releases/tag/v0.8.4
 [v0.8.5]: https://git.meli-email.org/meli/meli/releases/tag/v0.8.5
+[v0.8.6]: https://git.meli-email.org/meli/meli/releases/tag/v0.8.6

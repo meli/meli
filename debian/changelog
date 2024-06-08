@@ -1,3 +1,76 @@
+meli (0.8.6-1) bookworm; urgency=low
+
+  Contributors in alphabetical order:
+
+  - euxane
+  - Manos Pitsidianakis
+
+  Added
+  =====
+
+  - 735b44f2 Add 'highlight_self' theme attribute
+  - e187bb3f Add tools subcommand with smtp shell for debugging
+  - 571bd984 Add proper imap-shell in tools subcommand for debugging
+  - 0e1e5b9e Add support for Alternate Scroll Mode (xterm)
+  - fe08d52a Add force_text_emoji_presentation option
+
+  Bug Fixes
+  =========
+
+  - 3de4908d man.7 Fix typo for toggle_expand_headers
+  - a8c7582f Fix ENVELOPE parsing in untagged responses
+  - c65635ef Fix compilation for macos
+  - 06ec2790 Fix str slice index panic
+  - f2b59a76 Add RequestUrlTemplate type
+  - 7eed944a Fix screwed up rfc8620 module split
+  - 74a3539f Fix degenerate OOB cell access
+  - e8e76970 Fix edge case with strings/linebreaking
+  - 81955187 Fix decryption error not shown
+
+  Refactoring
+  ===========
+
+  - a9c3b151 Impl highlight_self in all index styles
+  - 57e3e643 Remove excessive right padding in flags
+  - a4ebe3b7 Add ErrorKind::Platform
+  - 4bdfb3a3 Disable Nagle's algorithm by default
+  - 4148aee5 Refactor smtp,draft errors and email tests
+  - ed5a6b04 Add a symbols range to is_emoji check
+  - fc1122a2 Rename to backend_mailbox.rs
+  - 50ecade7 Merge rfc8620/tests.rs to tests.rs
+  - a78f3f26 Move submodules to jmap/
+  - f7838b1d Split to methods.rs and objects.rs
+  - 74f0d12a Remove obsolete imapshell.rs and smtp_conn.rs
+  - dce3852f Add capabilities module
+  - 7ba7dc70 Imports cleanup in all modules
+  - 45bfcf87 Minor refactors
+  - 77867aee Unwrap object module
+  - 33999fc6 Re-add Submission to USING
+  - 6be25ac3 Don't use client field for get/posts
+
+  Documentation
+  =============
+
+  - 4722d7cc Also mention server_password_command for jmap
+
+  Miscellaneous Tasks
+  ===================
+
+  - 2bfe6086 Hide self from "add contacts" options
+  - 9ca34a68 Update MSRV to 1.70.0
+  - 50ff16c4 Add LIGHT, DARK constant theme keys
+  - 1abce964 Add Envelope::recipient_any method
+  - 671d35e2 Update mailin-embedded dependency to 0.8.2
+  - 39fbb164 Change info_message_{next,prev} shortcuts to '<, >'
+  - 58d73271 Change new mail text content
+  - f0d1b9cf Add ayllu mirror link
+  - 3bab5324 Improve Debug impl for ContentType etc
+  - e9dd6bec Comment out content
+  - 8dd87c1a Add ContentType::is_text_plain()
+  - 01bc62e0 Add new_plaintext method
+
+ -- Manos Pitsidianakis <manos@pitsidianak.is>  Sat, 08 Jun 2024 11:47:40 +0300
+
 meli (0.8.5-1) bookworm; urgency=low
 
   Contributors in alphabetical order:
