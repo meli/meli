@@ -354,13 +354,13 @@ impl MailListingTrait for CompactListing {
                 continue 'items_for_loop;
             };
             if !context.accounts[&self.cursor_pos.0].contains_key(root_env_hash) {
-                log::debug!("key = {}", root_env_hash);
-                log::debug!(
-                    "name = {} {}",
-                    account[&self.cursor_pos.1].name(),
-                    context.accounts[&self.cursor_pos.0].name()
-                );
-                log::debug!("{:#?}", context.accounts);
+                //log::debug!("key = {}", root_env_hash);
+                //log::debug!(
+                //    "name = {} {}",
+                //    account[&self.cursor_pos.1].name(),
+                //    context.accounts[&self.cursor_pos.0].name()
+                //);
+                //log::debug!("{:#?}", context.accounts);
 
                 continue;
             }

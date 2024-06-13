@@ -365,7 +365,7 @@ impl ListingTrait for PlainListing {
             even: idx % 2 == 0,
             unseen: !envelope.is_seen(),
             highlighted: self.cursor_pos.2 == idx,
-            selected: self.rows.selection[&i]
+            selected: self.rows.selection.get(&i).copied().unwrap_or(false)
         );
 
         let x = self.data_columns.widths[0]
@@ -711,7 +711,6 @@ impl PlainListing {
 
     fn redraw_list(&mut self, context: &Context, iter: Box<dyn Iterator<Item = EnvelopeHash>>) {
         let account = &context.accounts[&self.cursor_pos.0];
-        let mailbox = &account[&self.cursor_pos.1];
         let threads = account.collection.get_threads(self.cursor_pos.1);
 
         self.rows.clear();
@@ -745,13 +744,14 @@ impl PlainListing {
             if !context.accounts[&self.cursor_pos.0].contains_key(i)
                 || !threads.envelope_to_thread.contains_key(&i)
             {
-                log::debug!("key = {}", i);
-                log::debug!(
-                    "name = {} {}",
-                    mailbox.name(),
-                    context.accounts[&self.cursor_pos.0].name()
-                );
-                log::debug!("{:#?}", context.accounts);
+                //let mailbox = &account[&self.cursor_pos.1];
+                //log::debug!("key = {}", i);
+                //log::debug!(
+                //    "name = {} {}",
+                //    mailbox.name(),
+                //    context.accounts[&self.cursor_pos.0].name()
+                //);
+                //log::debug!("{:#?}", context.accounts);
 
                 continue;
             }
@@ -870,6 +870,7 @@ impl PlainListing {
         let columns = &mut self.data_columns.columns;
         for ((idx, i), (_, strings)) in iter.enumerate().zip(self.rows.entries.iter()) {
             if !context.accounts[&self.cursor_pos.0].contains_key(i) {
+                //let mailbox = &account[&self.cursor_pos.1];
                 //log::debug!("key = {}", i);
                 //log::debug!(
                 //    "name = {} {}",
@@ -1086,7 +1087,7 @@ impl PlainListing {
             even: idx % 2 == 0,
             unseen: !envelope.is_seen(),
             highlighted: false,
-            selected: self.rows.selection[&env_hash]
+            selected: self.rows.selection.get(&env_hash).copied().unwrap_or(false)
         );
         self.rows.row_attr_cache.insert(idx, row_attr);
 
@@ -1319,7 +1320,7 @@ impl PlainListing {
                     even: (top_idx + i) % 2 == 0,
                     unseen: unseen,
                     highlighted: self.cursor_pos.2 == (top_idx + i),
-                    selected: self.rows.selection[&env_hash]
+                    selected: self.rows.selection.get(&env_hash).copied().unwrap_or(false)
                 )
             } else {
                 row_attr!(self.color_cache, even: (top_idx + i) % 2 == 0, unseen: false, highlighted: true, selected: false)
@@ -1610,7 +1611,7 @@ impl Component for PlainListing {
                         even: row % 2 == 0,
                         unseen: !envelope.is_seen(),
                         highlighted: false,
-                        selected: self.rows.selection[&env_hash]
+                        selected: self.rows.selection.get(&env_hash).copied().unwrap_or(false)
                     );
                     self.rows.row_attr_cache.insert(row, row_attr);
                     let page_no = (self.new_cursor_pos.2).wrapping_div(rows);

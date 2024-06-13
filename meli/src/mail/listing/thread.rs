@@ -349,7 +349,11 @@ impl MailListingTrait for ThreadListing {
                     entry_strings.from.clear();
                 }
                 hide_from = !threaded_repeat_identical_from_values
-                    && matches!(iter.peek(), Some((_, tnh, _)) if thread_nodes[tnh].message().map(|next| account.collection.get_env(next).from() == envelope.from() && threads.find_group(thread_nodes[tnh].group) == prev_group).unwrap_or(false));
+                    && matches!(
+                        iter.peek(),
+                        Some((_, tnh, _)) if thread_nodes[tnh].message().map(|next| account.collection.get_env(next).from() == envelope.from()
+                                             && threads.find_group(thread_nodes[tnh].group) == prev_group).unwrap_or(false)
+                    );
                 row_widths.1.push(
                     entry_strings
                         .date
