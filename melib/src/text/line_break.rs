@@ -933,7 +933,7 @@ mod alg {
             }
         }
         let count = words.len();
-        let mut minima = vec![std::usize::MAX - 1; count + 1];
+        let mut minima = vec![usize::MAX - 1; count + 1];
         minima[0] = 0;
         let mut offsets = Vec::with_capacity(words.len());
         offsets.push(0);

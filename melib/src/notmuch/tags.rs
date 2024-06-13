@@ -41,8 +41,8 @@ impl Drop for TagIterator<'_> {
 }
 
 impl<'m> TagIterator<'m> {
-    pub fn new(message: &'m Message<'m>) -> TagIterator<'m> {
-        TagIterator {
+    pub fn new(message: &'m Message<'m>) -> Self {
+        Self {
             tags: NonNull::new(unsafe {
                 call!(message.lib, notmuch_message_get_tags)(message.message.as_ptr())
             }),
@@ -127,6 +127,7 @@ impl<'m> TagIterator<'m> {
 
 impl<'m> Iterator for TagIterator<'m> {
     type Item = &'m CStr;
+
     fn next(&mut self) -> Option<Self::Item> {
         let tags = self.tags?;
         if unsafe { call!(self.message.lib, notmuch_tags_valid)(tags.as_ptr()) } == 1 {

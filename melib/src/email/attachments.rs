@@ -51,7 +51,7 @@ pub struct DecodeOptions<'att> {
 }
 
 impl<'att> From<Option<Charset>> for DecodeOptions<'att> {
-    fn from(force_charset: Option<Charset>) -> DecodeOptions<'att> {
+    fn from(force_charset: Option<Charset>) -> Self {
         Self {
             filter: None,
             force_charset,

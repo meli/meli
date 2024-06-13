@@ -978,7 +978,7 @@ pub trait ListingTrait: Component {
         let d = std::time::UNIX_EPOCH + std::time::Duration::from_secs(epoch);
         let now: std::time::Duration = std::time::SystemTime::now()
             .duration_since(d)
-            .unwrap_or_else(|_| std::time::Duration::new(std::u64::MAX, 0));
+            .unwrap_or_else(|_| std::time::Duration::new(u64::MAX, 0));
         match now.as_secs() {
             n if context.settings.listing.recent_dates && n < 60 * 60 => format!(
                 "{} minute{} ago",

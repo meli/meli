@@ -44,7 +44,7 @@ pub struct Message<'m> {
 }
 
 impl<'m> Message<'m> {
-    pub fn find_message(db: &'m DbConnection, msg_id: &CStr) -> Result<Message<'m>> {
+    pub fn find_message(db: &'m DbConnection, msg_id: &CStr) -> Result<Self> {
         let mut message: *mut ffi::notmuch_message_t = std::ptr::null_mut();
         let lib = db.lib.clone();
         unsafe {
@@ -54,7 +54,7 @@ impl<'m> Message<'m> {
                 std::ptr::addr_of_mut!(message),
             )
         };
-        Ok(Message {
+        Ok(Self {
             lib,
             message: NonNull::new(message).ok_or_else(|| {
                 Error::new(format!(

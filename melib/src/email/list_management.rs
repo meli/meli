@@ -54,7 +54,7 @@ impl<'a> From<&'a [u8]> for ListAction<'a> {
 }
 
 impl<'a> ListAction<'a> {
-    pub fn parse_options_list(input: &'a [u8]) -> Option<SmallVec<[ListAction<'a>; 4]>> {
+    pub fn parse_options_list(input: &'a [u8]) -> Option<SmallVec<[Self; 4]>> {
         parser::mailing_lists::rfc_2369_list_headers_action_list(input)
             .map(|(_, mut vec)| {
                 /* Prefer email options first, since this _is_ a mail client after all and
@@ -106,7 +106,7 @@ pub fn list_id(header: Option<&'_ str>) -> Option<&'_ str> {
 }
 
 impl<'a> ListActions<'a> {
-    pub fn detect(envelope: &'a Envelope) -> Option<ListActions<'a>> {
+    pub fn detect(envelope: &'a Envelope) -> Option<Self> {
         let mut ret = Self {
             id: list_id_header(envelope),
             ..Self::default()
