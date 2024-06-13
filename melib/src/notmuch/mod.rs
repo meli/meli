@@ -270,18 +270,20 @@ pub struct NotmuchDb {
 }
 
 impl NotmuchDb {
+    #[cfg(target_os = "linux")]
+    pub const DEFAULT_DYLIB_NAME: &'static str = "libnotmuch.so.5";
+    #[cfg(target_os = "macos")]
+    pub const DEFAULT_DYLIB_NAME: &'static str = "libnotmuch.5.dylib";
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    pub const DEFAULT_DYLIB_NAME: &'static str = "libnotmuch.so";
+
     #[allow(clippy::new_ret_no_self)]
     pub fn new(
         s: &AccountSettings,
         _is_subscribed: Box<dyn Fn(&str) -> bool>,
         event_consumer: BackendEventConsumer,
     ) -> Result<Box<dyn MailBackend>> {
-        #[cfg(target_os = "linux")]
-        let mut dlpath = Cow::Borrowed("libnotmuch.so.5");
-        #[cfg(target_os = "macos")]
-        let mut dlpath = Cow::Borrowed("libnotmuch.5.dylib");
-        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-        let mut dlpath = Cow::Borrowed("libnotmuch.so");
+        let mut dlpath = Cow::Borrowed(Self::DEFAULT_DYLIB_NAME);
         let mut custom_dlpath = false;
         if let Some(lib_path) = s.extra.get("library_file_path") {
             let expanded_path = Path::new(lib_path).expand();
