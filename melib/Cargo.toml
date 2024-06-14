@@ -22,6 +22,7 @@ async-fn-stream = { version = "=0.2.2" }
 async-io = { version = "2" }
 base64 = { version = "^0.13", optional = true }
 bitflags = { version = "2.4", features = ["serde"] }
+chrono = { version = "^0.4", default-features = false }
 data-encoding = { version = "2.1.1" }
 encoding = { version = "0.2.33", default-features = false }
 encoding_rs = { version = "^0.8" }
@@ -53,7 +54,7 @@ uuid = { version = "^1", features = ["serde", "v4", "v5"] }
 xdg = { version = "2.1.0" }
 
 [features]
-default = ["imap", "nntp", "maildir", "mbox", "vcard", "smtp"]
+default = ["imap", "nntp", "maildir", "mbox", "smtp"]
 
 debug-tracing = []
 gpgme = []
@@ -74,7 +75,6 @@ sqlite3 = ["sqlite3-static"]
 sqlite3-static = ["rusqlite", "rusqlite/bundled-full"]
 tls = ["native-tls"]
 tls-static = ["tls", "native-tls/vendored"]
-vcard = []
 
 [build-dependencies]
 flate2 = { version = "1.0.16" }

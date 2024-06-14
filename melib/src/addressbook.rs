@@ -21,7 +21,6 @@
 
 pub mod jscontact;
 pub mod mutt;
-#[cfg(feature = "vcard")]
 pub mod vcard;
 
 use std::{
@@ -166,7 +165,6 @@ impl AddressBook {
                 }
             }
         }
-        #[cfg(feature = "vcard")]
         if let Some(vcard_path) = s.vcard_folder() {
             let expanded_path = Path::new(vcard_path).expand();
             match vcard::load_cards(&expanded_path) {
@@ -325,6 +323,25 @@ impl Card {
     pub fn set_external_resource(&mut self, new_val: bool) -> &mut Self {
         self.external_resource = new_val;
         self
+    }
+
+    pub fn to_vcard_string(&self) -> String {
+        use crate::utils::vobject::{vcard::VcardBuilder, *};
+        write_component(
+            &VcardBuilder::new()
+                .with_email(self.email.clone())
+                .with_fullname(self.name.clone())
+                .with_title(self.title.clone())
+                .with_url(self.url.clone())
+                .with_uid(if let CardId::Uuid(v) = self.id {
+                    v.as_urn().to_string()
+                } else {
+                    String::new()
+                })
+                .with_nickname(Default::default(), self.additionalname.clone())
+                .build()
+                .unwrap(),
+        )
     }
 }
 

@@ -25,6 +25,7 @@ pub mod connections;
 pub mod datetime;
 pub mod futures;
 pub mod random;
+pub mod vobject;
 #[macro_use]
 pub mod logging;
 pub mod lock;

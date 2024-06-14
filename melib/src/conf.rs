@@ -92,7 +92,6 @@ impl AccountSettings {
         Some(self.order)
     }
 
-    #[cfg(feature = "vcard")]
     pub fn vcard_folder(&self) -> Option<&str> {
         self.extra.get("vcard_folder").map(String::as_str)
     }
@@ -131,7 +130,6 @@ impl AccountSettings {
     }
 
     pub fn validate_config(&mut self) -> Result<()> {
-        #[cfg(feature = "vcard")]
         {
             if let Some(folder) = self.extra.swap_remove("vcard_folder") {
                 let path = Path::new(&folder).expand();
