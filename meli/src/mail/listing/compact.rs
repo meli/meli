@@ -410,7 +410,8 @@ impl MailListingTrait for CompactListing {
                     }
                 }
 
-                highlight_self |= should_highlight_self && envelope.recipient_any(&my_address);
+                highlight_self |= should_highlight_self
+                    && (envelope.recipient_any(&my_address) || envelope.sender_any(&my_address));
                 for addr in envelope.from().iter() {
                     if from_address_set.contains(addr.address_spec_raw()) {
                         continue;
@@ -1079,7 +1080,8 @@ impl CompactListing {
                     tags.insert(t);
                 }
             }
-            highlight_self |= should_highlight_self && envelope.recipient_any(&my_address);
+            highlight_self |= should_highlight_self
+                && (envelope.recipient_any(&my_address) || envelope.sender_any(&my_address));
             for addr in envelope.from().iter() {
                 if from_address_set.contains(addr.address_spec_raw()) {
                     continue;
@@ -1105,7 +1107,7 @@ impl CompactListing {
                 .settings
                 .account
                 .main_identity_address();
-            envelope.recipient_any(&my_address)
+            envelope.recipient_any(&my_address) || envelope.sender_any(&my_address)
         };
         drop(envelope);
         let columns = &mut self.data_columns.columns;

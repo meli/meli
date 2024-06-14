@@ -334,8 +334,8 @@ impl MailListingTrait for ThreadListing {
                 prev_group = threads.find_group(thread_node.group);
 
                 let mut entry_strings = self.make_entry_string(&envelope, context);
-                entry_strings.highlight_self =
-                    should_highlight_self && envelope.recipient_any(&my_address);
+                entry_strings.highlight_self = should_highlight_self
+                    && (envelope.recipient_any(&my_address) || envelope.sender_any(&my_address));
                 entry_strings.subject = SubjectString(Self::make_thread_entry(
                     &envelope,
                     indentation,
@@ -1136,7 +1136,7 @@ impl ThreadListing {
                 .settings
                 .account
                 .main_identity_address();
-            envelope.recipient_any(&my_address)
+            envelope.recipient_any(&my_address) || envelope.sender_any(&my_address)
         };
         // [ref:FIXME]: generate new tree indentation for this new row subject
         // entry_strings.subject = SubjectString(Self::make_thread_entry(

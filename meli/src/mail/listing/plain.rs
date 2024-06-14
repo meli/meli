@@ -778,8 +778,8 @@ impl PlainListing {
             self.rows.row_attr_cache.insert(self.length, row_attr);
 
             let mut entry_strings = self.make_entry_string(&envelope, context);
-            entry_strings.highlight_self =
-                should_highlight_self && { envelope.recipient_any(&my_address) };
+            entry_strings.highlight_self = should_highlight_self
+                && (envelope.recipient_any(&my_address) || envelope.sender_any(&my_address));
             row_widths
                 .0
                 .push(digits_of_num!(self.length).try_into().unwrap_or(255));
