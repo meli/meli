@@ -869,6 +869,22 @@ impl Envelope {
             .chain(self.bcc().iter())
             .any(|a| a == is_recipient)
     }
+
+    /// Returns `true` if `is_sender` address is included in From:, Author:
+    /// headers.
+    pub fn sender_any(&self, is_sender: &Address) -> bool {
+        if self.from().iter().any(|a| a == is_sender) {
+            return true;
+        }
+        if let Some(author_raw) = self.other_headers.get(HeaderName::AUTHOR) {
+            if let Ok((_, value)) = parser::address::rfc2822address_list(author_raw.as_bytes()) {
+                if value.iter().any(|a| a == is_sender) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
 }
 
 impl Eq for Envelope {}
