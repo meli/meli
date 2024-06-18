@@ -252,7 +252,6 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--no-css",
-        type=bool,
         help="don't prepend <style> element",
         required=False,
         action="store_true",
@@ -342,7 +341,7 @@ if __name__ == "__main__":
                         )
                         url_ = url.replace("%N", name).replace("%S", section)
                         try:
-                            got = give_me_head(url_, name, section)
+                            got = give_me_head(url_)
                             if got:
                                 link["href"] = got
                                 found = True
