@@ -276,7 +276,7 @@ impl Serialize for EmailSubmissionObject {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct(stringify! {EmailSubmissionObject}, 4)?;
+        let mut state = serializer.serialize_struct(crate::identify!(EmailSubmissionObject), 4)?;
         state.serialize_field("identityId", &self.identity_id)?;
         state.serialize_field(
             if matches!(self.email_id, Argument::Value(_)) {

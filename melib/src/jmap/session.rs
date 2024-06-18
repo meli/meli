@@ -51,7 +51,7 @@ pub struct Session {
 }
 
 impl Object for Session {
-    const NAME: &'static str = stringify!(Session);
+    const NAME: &'static str = crate::identify!(Session);
 }
 
 impl Session {

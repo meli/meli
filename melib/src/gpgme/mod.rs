@@ -1312,7 +1312,7 @@ impl Key {
 
 impl std::fmt::Debug for Key {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        fmt.debug_struct("Key")
+        fmt.debug_struct(crate::identify!(Key))
             .field("fingerprint", &self.fingerprint())
             .field("uid", &self.primary_uid())
             .field("can_encrypt", &self.can_encrypt())

@@ -238,3 +238,58 @@ pub mod hostname {
         retval
     }
 }
+
+#[macro_export]
+/// For use with `debug_struct` in `Debug` implementations to prevent stale type
+/// names after renaming or typos during compilation.
+///
+/// # Example
+///
+/// ```no_run
+/// # use melib::identify;
+/// struct Envelope;
+///
+/// impl std::fmt::Debug for Envelope {
+///     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+///         f.debug_struct(identify!(Envelope))
+///             .field("Subject", &"foobar")
+///             .finish()
+///     }
+/// }
+/// ```
+///
+/// Using it with an invalid identifier will fail:
+///
+/// ```no_run,compile_fail
+/// # use melib::identify;
+/// struct Envelope;
+///
+/// impl std::fmt::Debug for Envelope {
+///     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+///         f.debug_struct(identify!(Enzelope))
+///             .field("Subject", &"foobar")
+///             .finish()
+///     }
+/// }
+/// ```
+///
+/// This will fail with:
+///
+/// ```text
+/// error[E0412]: cannot find type `Enzelope` in this scope
+///     |
+/// ___ | struct Envelope;
+///     | ------------------- similarly named struct `Envelope` defined here
+/// ...
+/// ___ |         f.debug_struct(identify!(Enzelope))
+///    |                                   ^^^^^^^^ help: a struct with a similar name exists: `Envelope`
+/// ```
+macro_rules! identify {
+    ($f:tt$($t:tt)*) => {{
+        const fn __debugify() -> ::core::marker::PhantomData<$f$($t)*> {
+            core::marker::PhantomData
+        }
+        let _: ::core::marker::PhantomData<Self> = __debugify();
+        stringify!($f$($t)*)
+    }};
+}

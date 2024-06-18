@@ -293,7 +293,7 @@ pub struct Envelope {
 
 impl std::fmt::Debug for Envelope {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.debug_struct("Envelope")
+        f.debug_struct(crate::identify!(Envelope))
             .field("Subject", &self.subject())
             .field("Date", &self.date)
             .field("From", &self.from)

@@ -74,7 +74,7 @@ impl std::fmt::Debug for Connection {
                 ref inner,
                 ref id,
             } => fmt
-                .debug_struct(stringify!(Connection))
+                .debug_struct(crate::identify!(Connection))
                 .field("variant", &stringify!(Tcp))
                 .field(stringify!(trace), trace)
                 .field(stringify!(id), id)
@@ -86,7 +86,7 @@ impl std::fmt::Debug for Connection {
                 ref inner,
                 ref id,
             } => fmt
-                .debug_struct(stringify!(Connection))
+                .debug_struct(crate::identify!(Connection))
                 .field("variant", &stringify!(Tls))
                 .field(stringify!(trace), trace)
                 .field(stringify!(id), id)
@@ -97,7 +97,7 @@ impl std::fmt::Debug for Connection {
                 ref inner,
                 ref id,
             } => fmt
-                .debug_struct(stringify!(Connection))
+                .debug_struct(crate::identify!(Connection))
                 .field("variant", &stringify!(Fd))
                 .field(stringify!(trace), trace)
                 .field(stringify!(id), id)
@@ -108,7 +108,7 @@ impl std::fmt::Debug for Connection {
                 ref inner,
                 ref id,
             } => fmt
-                .debug_struct(stringify!(Connection))
+                .debug_struct(crate::identify!(Connection))
                 .field("variant", &stringify!(Deflate))
                 .field(stringify!(trace), trace)
                 .field(stringify!(id), id)

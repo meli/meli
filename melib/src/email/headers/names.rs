@@ -94,7 +94,7 @@ impl std::fmt::Debug for InvalidHeaderName {
 
 impl std::fmt::Display for InvalidHeaderName {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(fmt, "{}", stringify!(InvalidHeaderName))
+        write!(fmt, "{}", crate::identify!(InvalidHeaderName))
     }
 }
 

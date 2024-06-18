@@ -233,7 +233,7 @@ impl Component for NotificationCommand {
                         Ok(child) => {
                             context
                                 .children
-                                .entry(stringify!(NotificationCommand).into())
+                                .entry(melib::identify!(NotificationCommand).into())
                                 .or_default()
                                 .push(child);
                         }
@@ -268,7 +268,7 @@ impl Component for NotificationCommand {
                             Ok(child) => {
                                 context
                                     .children
-                                    .entry(stringify!(NotificationCommand).into())
+                                    .entry(melib::identify!(NotificationCommand).into())
                                     .or_default()
                                     .push(child);
                                 return false;

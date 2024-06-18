@@ -188,7 +188,7 @@ pub struct CallbackFn(pub Box<dyn FnOnce(&mut crate::Context) + Send + 'static>)
 
 impl std::fmt::Debug for CallbackFn {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(fmt, "CallbackFn")
+        fmt.debug_struct(melib::identify!(CallbackFn)).finish()
     }
 }
 

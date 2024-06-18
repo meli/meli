@@ -79,8 +79,8 @@ pub struct CellBuffer {
 }
 
 impl std::fmt::Debug for CellBuffer {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.debug_struct(stringify!(CellBuffer))
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fmt.debug_struct(melib::identify!(CellBuffer))
             .field("cols", &self.cols)
             .field("rows", &self.rows)
             .field("buf cells", &self.buf.len())
@@ -1425,7 +1425,7 @@ pub struct BoundsIterator {
 
 impl std::fmt::Debug for BoundsIterator {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.debug_struct(stringify!(BoundsIterator))
+        f.debug_struct(melib::identify!(BoundsIterator))
             .field("rows", &self.rows)
             .field("cols", &self.cols)
             .field("width", &self.width)

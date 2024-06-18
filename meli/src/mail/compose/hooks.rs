@@ -36,8 +36,8 @@ pub enum HookFn {
 }
 
 impl std::fmt::Debug for HookFn {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.debug_struct(stringify!(HookFn))
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fmt.debug_struct(melib::identify!(HookFn))
             .field(
                 "kind",
                 &match self {

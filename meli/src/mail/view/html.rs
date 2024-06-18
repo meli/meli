@@ -37,7 +37,7 @@ pub struct HtmlView {
 
 impl std::fmt::Debug for HtmlView {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        fmt.debug_struct(stringify!(HtmlView))
+        fmt.debug_struct(melib::identify!(HtmlView))
             .field("pager", &self.pager)
             .field("bytes", &self.bytes.len())
             .field("coordinates", &self.coordinates)

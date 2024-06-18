@@ -153,7 +153,7 @@ pub struct StderrLogger {
 
 impl std::fmt::Debug for StderrLogger {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        fmt.debug_struct(stringify!(StderrLogger))
+        fmt.debug_struct(crate::identify!(StderrLogger))
             .field("level", &LogLevel::from(self.level.load(Ordering::SeqCst)))
             .field("print_level", &self.print_level)
             .field("print_module_names", &self.print_module_names)

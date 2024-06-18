@@ -324,8 +324,9 @@ impl BackendEventConsumer {
 }
 
 impl std::fmt::Debug for BackendEventConsumer {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, stringify!(BackendEventConsumer))
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fmt.debug_struct(crate::identify!(BackendEventConsumer))
+            .finish()
     }
 }
 
@@ -714,7 +715,7 @@ pub struct LazyCountSet {
 
 impl std::fmt::Debug for LazyCountSet {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.debug_struct("LazyCountSet")
+        f.debug_struct(crate::identify!(LazyCountSet))
             .field("not_yet_seen", &self.not_yet_seen)
             .field("set", &self.set.len())
             .field("total_len", &self.len())
@@ -786,7 +787,7 @@ pub struct IsSubscribedFn(pub Box<dyn Fn(&str) -> bool + Send + Sync>);
 
 impl std::fmt::Debug for IsSubscribedFn {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "IsSubscribedFn Box")
+        f.debug_struct(crate::identify!(IsSubscribedFn)).finish()
     }
 }
 

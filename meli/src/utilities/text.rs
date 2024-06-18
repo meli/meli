@@ -30,7 +30,7 @@ pub struct TextField {
 
 impl std::fmt::Debug for TextField {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        fmt.debug_struct(stringify!(TextField))
+        fmt.debug_struct(melib::identify!(TextField))
             .field("id", &self.id)
             .field("inner", &self.inner)
             .field("has AutoComplete", &self.autocomplete.is_some())

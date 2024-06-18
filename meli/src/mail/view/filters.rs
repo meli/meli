@@ -108,7 +108,7 @@ pub struct ViewFilter {
 
 impl std::fmt::Debug for ViewFilter {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        fmt.debug_struct(stringify!(ViewFilter))
+        fmt.debug_struct(melib::identify!(ViewFilter))
             .field("filter_invocation", &self.filter_invocation)
             .field("content_type", &self.content_type)
             .field("notice", &self.notice)

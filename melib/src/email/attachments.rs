@@ -408,7 +408,7 @@ impl std::fmt::Debug for Attachment {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut text = Vec::with_capacity(4096);
         self.get_text_recursive(&Text::Plain, &mut text);
-        f.debug_struct("Attachment")
+        f.debug_struct(crate::identify!(Attachment))
             .field("Content-Type", &self.content_type)
             .field("Content-Transfer-Encoding", &self.content_transfer_encoding)
             .field("bytes", &self.raw.len())

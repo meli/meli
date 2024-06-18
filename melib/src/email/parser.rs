@@ -73,7 +73,7 @@ impl std::fmt::Debug for ParsingError<&'_ [u8]> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         #[cfg(any(test, doc))]
         {
-            fmt.debug_struct("ParsingError")
+            fmt.debug_struct(stringify!(ParsingError))
                 .field("input", &to_str!(self.input))
                 .field("error", &self.error)
                 .field("backtrace", &self.backtrace)
@@ -81,7 +81,7 @@ impl std::fmt::Debug for ParsingError<&'_ [u8]> {
         }
         #[cfg(not(any(test, doc)))]
         {
-            fmt.debug_struct("ParsingError")
+            fmt.debug_struct(stringify!(ParsingError))
                 .field("input", &to_str!(self.input))
                 .field("error", &self.error)
                 .finish()
@@ -93,7 +93,7 @@ impl std::fmt::Debug for ParsingError<&'_ str> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         #[cfg(any(test, doc))]
         {
-            fmt.debug_struct("ParsingError")
+            fmt.debug_struct(stringify!(ParsingError))
                 .field("input", &self.input)
                 .field("error", &self.error)
                 .field("backtrace", &self.backtrace)
@@ -101,7 +101,7 @@ impl std::fmt::Debug for ParsingError<&'_ str> {
         }
         #[cfg(not(any(test, doc)))]
         {
-            fmt.debug_struct("ParsingError")
+            fmt.debug_struct(stringify!(ParsingError))
                 .field("input", &self.input)
                 .field("error", &self.error)
                 .finish()

@@ -444,7 +444,7 @@ impl std::fmt::Debug for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::Mailbox(m) => f
-                .debug_struct("Address::Mailbox")
+                .debug_struct(stringify!(Address::Mailbox))
                 .field("display_name", &m.display_name.display(&m.raw))
                 .field("address_spec", &m.address_spec.display(&m.raw))
                 .finish(),
@@ -452,7 +452,7 @@ impl std::fmt::Debug for Address {
                 let attachment_strings: Vec<String> =
                     g.mailbox_list.iter().map(|a| format!("{}", a)).collect();
 
-                f.debug_struct("Address::Group")
+                f.debug_struct(stringify!(Address::Group))
                     .field("display_name", &g.display_name.display(&g.raw))
                     .field("addresses", &attachment_strings.join(", "))
                     .finish()
