@@ -20,7 +20,6 @@
  */
 
 use std::{
-    borrow::Cow,
     collections::{hash_map::HashMap, BTreeMap, BTreeSet},
     ffi::{CStr, CString, OsStr},
     io::Read,
@@ -31,17 +30,12 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-use futures::Stream;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
-use smallvec::SmallVec;
 
 use crate::{
-    backends::*,
-    conf::AccountSettings,
-    email::{Envelope, EnvelopeHash, Flag},
+    backends::prelude::*,
     error::{Error, ErrorKind, IntoError, Result},
     utils::shellexpand::ShellExpandTrait,
-    Collection,
 };
 
 macro_rules! call {

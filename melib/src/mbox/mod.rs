@@ -130,26 +130,6 @@
 //! # Ok::<(), melib::Error>(())
 //! ```
 
-use nom::{
-    self,
-    bytes::complete::tag,
-    character::complete::digit1,
-    combinator::map_res,
-    error::{Error as NomError, ErrorKind as NomErrorKind},
-    IResult,
-};
-
-use crate::{
-    backends::*,
-    collection::Collection,
-    conf::AccountSettings,
-    email::{parser::BytesExt, *},
-    error::{Error, ErrorKind, IntoError, Result},
-    get_path_hash,
-    utils::shellexpand::ShellExpandTrait,
-};
-
-extern crate notify;
 use std::{
     collections::hash_map::HashMap,
     fs::File,
@@ -161,9 +141,23 @@ use std::{
     sync::{mpsc::channel, Arc, Mutex, RwLock},
 };
 
-use futures::Stream;
+use nom::{
+    self,
+    bytes::complete::tag,
+    character::complete::digit1,
+    combinator::map_res,
+    error::{Error as NomError, ErrorKind as NomErrorKind},
+    IResult,
+};
 use notify::{event::EventKind as NotifyEvent, RecommendedWatcher, RecursiveMode, Watcher};
-use smallvec::SmallVec;
+
+use crate::{
+    backends::prelude::*,
+    email::{parser::BytesExt, *},
+    error::{Error, ErrorKind, IntoError, Result},
+    get_path_hash,
+    utils::shellexpand::ShellExpandTrait,
+};
 
 pub mod write;
 

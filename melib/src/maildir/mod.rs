@@ -33,16 +33,12 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-use futures::stream::Stream;
-use smallvec::SmallVec;
 pub use stream::*;
 
 use crate::{
-    backends::*,
-    email::Flag,
+    backends::prelude::*,
     error::{Error, Result},
     utils::shellexpand::ShellExpandTrait,
-    AccountSettings, Envelope, EnvelopeHash,
 };
 
 /// `BackendOp` implementor for Maildir

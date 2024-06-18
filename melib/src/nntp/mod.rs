@@ -26,8 +26,6 @@
 //! Transfer Protocol (NNTP) Additions to LIST
 //! Command](https://datatracker.ietf.org/doc/html/rfc6048).
 
-use smallvec::SmallVec;
-
 use crate::get_path_hash;
 mod store;
 pub use store::*;
@@ -52,13 +50,9 @@ pub use connection::*;
 use futures::{lock::Mutex as FutureMutex, stream::Stream};
 
 use crate::{
-    backends::*,
-    conf::AccountSettings,
-    email::*,
-    error::{Error, Result, ResultIntoError},
+    backends::prelude::*,
+    error::{Error, ErrorKind, Result, ResultIntoError},
     utils::futures::timeout,
-    Collection, ErrorKind,
-    RefreshEventKind::NewFlags,
 };
 pub type UID = usize;
 
@@ -477,7 +471,10 @@ impl MailBackend for NntpType {
                                 BackendEvent::Refresh(RefreshEvent {
                                     account_hash: uid_store.account_hash,
                                     mailbox_hash,
-                                    kind: NewFlags(*env_hash, (current_val, vec![])),
+                                    kind: RefreshEventKind::NewFlags(
+                                        *env_hash,
+                                        (current_val, vec![]),
+                                    ),
                                 }),
                             );
                         }

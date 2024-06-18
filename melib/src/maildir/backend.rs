@@ -25,7 +25,6 @@
 //! specification. <https://cr.yp.to/proto/maildir.html>
 
 use std::{
-    borrow::Cow,
     collections::{hash_map::DefaultHasher, HashMap, HashSet},
     ffi::OsStr,
     fs,
@@ -38,18 +37,13 @@ use std::{
     time::Duration,
 };
 
-use futures::prelude::Stream;
 use notify::{event::EventKind as NotifyEvent, RecommendedWatcher, RecursiveMode, Watcher};
-use smallvec::SmallVec;
 
 use super::{MaildirMailbox, MaildirOp, MaildirPathTrait};
 use crate::{
-    backends::{RefreshEventKind::*, *},
-    conf::AccountSettings,
-    email::{Envelope, EnvelopeHash, Flag},
+    backends::{prelude::*, RefreshEventKind::*},
     error::{Error, ErrorKind, IntoError, Result},
     utils::shellexpand::ShellExpandTrait,
-    Collection,
 };
 
 #[derive(Clone, Debug, PartialEq)]

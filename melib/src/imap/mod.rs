@@ -65,10 +65,7 @@ use imap_codec::imap_types::{
 };
 
 use crate::{
-    backends::{
-        RefreshEventKind::{self, *},
-        *,
-    },
+    backends::{prelude::*, RefreshEventKind::*},
     collection::Collection,
     conf::AccountSettings,
     email::{parser::BytesExt, *},

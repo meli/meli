@@ -20,25 +20,42 @@
  */
 
 pub mod utf7;
-use std::{
-    any::Any,
-    borrow::Cow,
-    collections::{BTreeSet, HashMap},
-    future::Future,
-    ops::Deref,
-    pin::Pin,
-    sync::Arc,
-};
 
-use futures::stream::Stream;
-use smallvec::SmallVec;
+#[cfg(test)]
+mod tests;
 
-use super::email::{Envelope, EnvelopeHash, Flag};
-use crate::{
-    conf::AccountSettings,
-    error::{Error, ErrorKind, Result},
-    HeaderName, LogLevel,
-};
+pub mod prelude {
+    pub use futures::{
+        future::BoxFuture,
+        stream::{BoxStream, Stream},
+    };
+    pub type ResultFuture<T> = crate::Result<BoxFuture<'static, crate::Result<T>>>;
+    pub use std::{
+        any::Any,
+        borrow::Cow,
+        cell::RefCell,
+        collections::{BTreeSet, HashMap},
+        ops::Deref,
+        sync::Arc,
+    };
+
+    pub use smallvec::{self, SmallVec};
+
+    pub use super::{
+        AccountHash, BackendEvent, BackendEventConsumer, BackendMailbox, BackendOp,
+        EnvelopeHashBatch, FlagOp, IsSubscribedFn, LazyCountSet, MailBackend,
+        MailBackendCapabilities, MailBackendExtensionStatus, Mailbox, MailboxHash,
+        MailboxPermissions, ReadOnlyOp, RefreshEvent, RefreshEventKind, TagHash,
+    };
+    pub use crate::{
+        conf::AccountSettings,
+        email::{Envelope, EnvelopeHash, Flag},
+        error::{Error, ErrorKind, Result},
+        search::Query,
+        Collection, HeaderName, LogLevel, SpecialUsageMailbox,
+    };
+}
+use prelude::*;
 
 #[macro_export]
 macro_rules! get_path_hash {
@@ -308,7 +325,7 @@ impl BackendEventConsumer {
 
 impl std::fmt::Debug for BackendEventConsumer {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "BackendEventConsumer")
+        write!(f, stringify!(BackendEventConsumer))
     }
 }
 
@@ -369,19 +386,16 @@ pub enum MailBackendExtensionStatus {
     Enabled { comment: Option<&'static str> },
 }
 
-pub type ResultFuture<T> = Result<Pin<Box<dyn Future<Output = Result<T>> + Send + 'static>>>;
-
 pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     fn capabilities(&self) -> MailBackendCapabilities;
     fn is_online(&self) -> ResultFuture<()> {
         Ok(Box::pin(async { Ok(()) }))
     }
 
-    #[allow(clippy::type_complexity)]
     fn fetch(
         &mut self,
         mailbox_hash: MailboxHash,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>>;
+    ) -> Result<BoxStream<'static, Result<Vec<Envelope>>>>;
 
     fn refresh(&mut self, mailbox_hash: MailboxHash) -> ResultFuture<()>;
     fn watch(&self) -> ResultFuture<()>;
@@ -780,24 +794,5 @@ impl std::ops::Deref for IsSubscribedFn {
     type Target = Box<dyn Fn(&str) -> bool + Send + Sync>;
     fn deref(&self) -> &Box<dyn Fn(&str) -> bool + Send + Sync> {
         &self.0
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_lazy_count_set() {
-        let mut new = LazyCountSet::default();
-        assert_eq!(new.len(), 0);
-        new.set_not_yet_seen(10);
-        assert_eq!(new.len(), 10);
-        for i in 0..10 {
-            assert!(new.insert_existing(EnvelopeHash(i)));
-        }
-        assert_eq!(new.len(), 10);
-        assert!(!new.insert_existing(EnvelopeHash(10)));
-        assert_eq!(new.len(), 10);
     }
 }

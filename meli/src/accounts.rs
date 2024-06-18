@@ -38,13 +38,12 @@ use std::{
 use futures::{future::FutureExt, stream::StreamExt};
 use indexmap::IndexMap;
 use melib::{
-    backends::*,
-    email::*,
+    backends::{prelude::*, Backends},
     error::{Error, ErrorKind, Result},
     log,
     text::GlobMatch,
     thread::Threads,
-    AddressBook, Collection, LogLevel, SortField, SortOrder,
+    AddressBook, SortField, SortOrder,
 };
 use smallvec::SmallVec;
 

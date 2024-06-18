@@ -31,26 +31,20 @@ use std::{
     time::{Duration, Instant},
 };
 
-use futures::{
-    lock::{
-        MappedMutexGuard as FutureMappedMutexGuard, Mutex as FutureMutex,
-        MutexGuard as FutureMutexGuard,
-    },
-    Stream,
+use futures::lock::{
+    MappedMutexGuard as FutureMappedMutexGuard, Mutex as FutureMutex,
+    MutexGuard as FutureMutexGuard,
 };
 use indexmap::{IndexMap, IndexSet};
 use isahc::AsyncReadResponseExt;
 use serde_json::{json, Value};
-use smallvec::SmallVec;
 use url::Url;
 
 use crate::{
-    backends::*,
-    conf::AccountSettings,
+    backends::prelude::*,
     email::*,
     error::{Error, ErrorKind, Result},
     utils::futures::{sleep, timeout},
-    Collection,
 };
 
 #[macro_export]
