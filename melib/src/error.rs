@@ -393,6 +393,21 @@ impl ErrorKind {
     is_variant! { is_protocol_not_supported, ProtocolNotSupported }
     is_variant! { is_timeout, TimedOut }
     is_variant! { is_value_error, ValueError }
+
+    #[inline]
+    pub fn is_recoverable(&self) -> bool {
+        !(self.is_authentication()
+            || self.is_configuration()
+            || self.is_bug()
+            || self.is_external()
+            || (self.is_network() && !self.is_network_down())
+            || self.is_not_implemented()
+            || self.is_not_supported()
+            || self.is_not_found()
+            || self.is_protocol_error()
+            || self.is_protocol_not_supported()
+            || self.is_value_error())
+    }
 }
 
 #[macro_export]
@@ -532,6 +547,21 @@ impl Error {
     pub fn set_kind(mut self, new_val: ErrorKind) -> Self {
         self.kind = new_val;
         self
+    }
+
+    #[inline]
+    pub fn is_recoverable(&self) -> bool {
+        !(self.kind.is_authentication()
+            || self.kind.is_configuration()
+            || self.kind.is_bug()
+            || self.kind.is_external()
+            || (self.kind.is_network() && !self.kind.is_network_down())
+            || self.kind.is_not_implemented()
+            || self.kind.is_not_supported()
+            || self.kind.is_not_found()
+            || self.kind.is_protocol_error()
+            || self.kind.is_protocol_not_supported()
+            || self.kind.is_value_error())
     }
 }
 
