@@ -357,7 +357,9 @@ impl Component for MailView {
                 kind: Some(NotificationType::Error(err.kind)),
             });
             log::error!("Failed to open envelope: {err}");
-            self.init_futures(context);
+            if err.is_recoverable() {
+                self.init_futures(context);
+            }
             return;
         } else {
             grid.clear_area(area, self.theme_default);
