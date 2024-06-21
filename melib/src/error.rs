@@ -338,6 +338,7 @@ pub enum ErrorKind {
     Platform,
     NotImplemented,
     NotSupported,
+    NotFound,
     ValueError,
 }
 
@@ -361,6 +362,7 @@ impl std::fmt::Display for ErrorKind {
             Self::Configuration => write!(fmt, "Configuration"),
             Self::NotImplemented => write!(fmt, "Not implemented"),
             Self::NotSupported => write!(fmt, "Not supported"),
+            Self::NotFound => write!(fmt, "Not found"),
             Self::ValueError => write!(fmt, "Invalid value"),
         }
     }
@@ -385,6 +387,7 @@ impl ErrorKind {
     is_variant! { is_network_down, Network(ref k) if k.is_network_down() }
     is_variant! { is_not_implemented, NotImplemented }
     is_variant! { is_not_supported, NotSupported }
+    is_variant! { is_not_found, NotFound }
     is_variant! { is_oserror, OSError }
     is_variant! { is_protocol_error, ProtocolError }
     is_variant! { is_protocol_not_supported, ProtocolNotSupported }
