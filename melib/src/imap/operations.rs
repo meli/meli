@@ -79,34 +79,61 @@ impl BackendOp for ImapOp {
                     conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
                         .await?;
                 }
-                debug!(
+                log::trace!(
                     "fetch response is {} bytes and {} lines",
                     response.len(),
                     String::from_utf8_lossy(&response).lines().count()
                 );
                 let mut results = protocol_parser::fetch_responses(&response)?.1;
-                if results.len() != 1 {
+                if results.len() > 1 {
                     return Err(
                         Error::new(format!("Invalid/unexpected response: {:?}", response))
-                            .set_summary(format!("message with UID {} was not found?", uid)),
+                            .set_summary(format!("Message with UID {} was not found.", uid))
+                            .set_kind(ErrorKind::ProtocolError),
                     );
                 }
+                let Some(fetch_response) = results.pop() else {
+                    // https://datatracker.ietf.org/doc/html/rfc3501#section-6.4.8:
+                    //
+                    // A non-existent unique identifier is ignored without any error message
+                    // generated. Thus, it is possible for a UID FETCH command to return an OK
+                    // without any data or a UID COPY or UID STORE to return an OK without
+                    // performing any operations.
+                    return Err(Error::new("Not found")
+                        .set_summary(format!("Message with UID {} was not found.", uid))
+                        .set_kind(ErrorKind::NotFound));
+                };
                 let FetchResponse {
-                    uid: _uid,
+                    uid: Some(_uid),
                     flags: _flags,
-                    body,
+                    body: Some(body),
                     ..
-                } = results.pop().unwrap();
-                let _uid = _uid.unwrap();
-                assert_eq!(_uid, uid);
-                assert!(body.is_some());
+                } = fetch_response
+                else {
+                    return Err(Error::new("Invalid/unexpected response from server")
+                        .set_summary(format!("Message with UID {} was not found.", uid))
+                        .set_details(format!("Full response: {:?}", fetch_response))
+                        .set_kind(ErrorKind::ProtocolError));
+                };
+                if _uid != uid {
+                    return Err(Error::new("Invalid/unexpected response from server")
+                        .set_summary(format!("Message with UID {} was not found.", uid))
+                        .set_details(format!(
+                            "Requested UID {} but UID FETCH response was for UID {}. Full \
+                             response: {:?}",
+                            uid,
+                            _uid,
+                            String::from_utf8_lossy(&response)
+                        ))
+                        .set_kind(ErrorKind::ProtocolError));
+                }
                 let mut bytes_cache = uid_store.byte_cache.lock()?;
                 let cache = bytes_cache.entry(uid).or_default();
                 if let Some((_flags, _)) = _flags {
-                    //flags.lock().await.set(Some(_flags));
                     cache.flags = Some(_flags);
                 }
-                cache.bytes = Some(body.unwrap().to_vec());
+                cache.bytes = Some(body.to_vec());
+                return Ok(body.to_vec());
             }
             let mut bytes_cache = uid_store.byte_cache.lock()?;
             let cache = bytes_cache.entry(uid).or_default();
