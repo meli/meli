@@ -118,19 +118,6 @@ impl IsOnline {
             };
         }
     }
-
-    pub fn is_recoverable(err: &Error) -> bool {
-        !(err.kind.is_authentication()
-            || err.kind.is_configuration()
-            || err.kind.is_bug()
-            || err.kind.is_external()
-            || (err.kind.is_network() && !err.kind.is_network_down())
-            || err.kind.is_not_implemented()
-            || err.kind.is_not_supported()
-            || err.kind.is_protocol_error()
-            || err.kind.is_protocol_not_supported()
-            || err.kind.is_value_error())
-    }
 }
 
 #[derive(Debug)]
@@ -814,7 +801,7 @@ impl Account {
 
     pub fn watch(&mut self) {
         if self.settings.account().manual_refresh
-            || matches!(self.is_online, IsOnline::Err { ref value, ..} if !IsOnline::is_recoverable(value))
+            || matches!(self.is_online, IsOnline::Err { ref value, ..} if !value.is_recoverable())
         {
             return;
         }
@@ -1334,7 +1321,7 @@ impl Account {
                 ref mut retries,
             } => {
                 let ret = Err(value.clone());
-                if !IsOnline::is_recoverable(value) {
+                if !value.is_recoverable() {
                     return ret;
                 }
                 let wait = if value.kind.is_timeout()
@@ -1455,7 +1442,7 @@ impl Account {
                 JobRequest::Mailboxes { ref mut handle } => {
                     if let Ok(Some(mailboxes)) = handle.chan.try_recv() {
                         if let Err(err) = mailboxes.and_then(|mailboxes| self.init(mailboxes)) {
-                            if !IsOnline::is_recoverable(&err) {
+                            if !err.is_recoverable() {
                                 self.main_loop_handler.send(ThreadEvent::UIEvent(
                                     UIEvent::Notification {
                                         title: Some(self.name.clone().into()),
@@ -1591,7 +1578,7 @@ impl Account {
                     }
                 }
                 JobRequest::IsOnline { ref mut handle, .. } => {
-                    if matches!(self.is_online, IsOnline::Err { ref value, ..} if !IsOnline::is_recoverable(value))
+                    if matches!(self.is_online, IsOnline::Err { ref value, ..} if !value.is_recoverable())
                     {
                         return true;
                     }
@@ -1629,7 +1616,7 @@ impl Account {
                     };
                 }
                 JobRequest::Refresh { ref mut handle, .. } => {
-                    if matches!(self.is_online, IsOnline::Err { ref value, ..} if !IsOnline::is_recoverable(value))
+                    if matches!(self.is_online, IsOnline::Err { ref value, ..} if !value.is_recoverable())
                     {
                         return true;
                     }
