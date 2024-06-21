@@ -156,11 +156,21 @@ impl JmapConnection {
         if !req.status().is_success() {
             let kind: crate::error::NetworkErrorKind = req.status().into();
             let res_text = req.text().await.unwrap_or_default();
-            let err = Error::new(format!(
+            let mut err = Error::new(format!(
                 "Could not connect to JMAP server endpoint for {}. Reply from server: {}",
                 &self.server_conf.server_url, res_text
             ))
             .set_kind(kind.into());
+            if matches!(err.kind, ErrorKind::Network(NetworkErrorKind::Unauthorized)) {
+                err = err.set_details(
+                    "The server rejected your authentication credentials. Check your provider's \
+                     client connection documentation and see if the following common reasons for \
+                     this error apply:\n- Using the account password when a Bearer token is \
+                     required (You must set `use_token=true` in this case)\n- Using a Bearer \
+                     token is required when a password is expected (You must set \
+                     `use_token=false`)\n- Using invalid password or token value.",
+                );
+            }
             _ = self
                 .store
                 .online_status
