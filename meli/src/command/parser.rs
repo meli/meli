@@ -634,14 +634,18 @@ pub fn pipe<'a>(input: &'a [u8]) -> IResult<&'a [u8], Result<Action, CommandErro
     ))(input)
 }
 pub fn filter(input: &'_ [u8]) -> IResult<&'_ [u8], Result<Action, CommandError>> {
-    let mut check = arg_init! { min_arg:1, max_arg: 1, filter};
+    let mut check = arg_init! { min_arg:0, max_arg:255, filter};
     let (input, _) = tag("filter")(input.trim())?;
     arg_chk!(start check, input);
+    if let Ok((input, _)) = eof(input) {
+        arg_chk!(finish check, input);
+        return Ok((input, Ok(View(Filter(None)))));
+    }
     let (input, _) = is_a(" ")(input)?;
     arg_chk!(inc check, input);
     let (input, cmd) = map_res(not_line_ending, std::str::from_utf8)(input)?;
     arg_chk!(finish check, input);
-    Ok((input, Ok(View(Filter(cmd.to_string())))))
+    Ok((input, Ok(View(Filter(Some(cmd.to_string()))))))
 }
 pub fn add_attachment<'a>(input: &'a [u8]) -> IResult<&'a [u8], Result<Action, CommandError>> {
     alt((

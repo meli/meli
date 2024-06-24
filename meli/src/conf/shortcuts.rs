@@ -209,7 +209,8 @@ shortcut_key_values! { "pager",
         page_down |> "Go to next pager page." |>  Key::PageDown,
         page_up |> "Go to previous pager page." |>  Key::PageUp,
         scroll_down |> "Scroll down pager." |> Key::Char('j'),
-        scroll_up |> "Scroll up pager." |> Key::Char('k')
+        scroll_up |> "Scroll up pager." |> Key::Char('k'),
+        select_filter |> "Select content filter." |> Key::Char('f')
     }
 }
 

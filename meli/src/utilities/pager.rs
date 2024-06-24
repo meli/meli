@@ -775,7 +775,37 @@ impl Component for Pager {
                     ))));
                 return true;
             }
-            UIEvent::Action(View(Filter(ref cmd))) => {
+            ev if matches!(ev, UIEvent::Action(View(Filter(None))))
+                || matches!(ev, UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::PAGER]["select_filter"])) =>
+            {
+                let filters = context
+                    .settings
+                    .pager
+                    .named_filters
+                    .iter()
+                    .map(|(k, v)| (v.to_string(), k.to_string()))
+                    .collect::<Vec<_>>();
+                if !filters.is_empty() {
+                    context.replies.push_back(UIEvent::GlobalUIDialog {
+                        value: Box::new(UIDialog::new(
+                            "select filter",
+                            filters,
+                            true,
+                            Some(Box::new(move |_id: ComponentId, results: &[String]| {
+                                Some(UIEvent::Action(View(Filter(Some(
+                                    results.first().cloned()?,
+                                )))))
+                            })),
+                            context,
+                        )),
+                        parent: Some(self.id()),
+                    });
+                    self.dirty = true;
+                }
+                return true;
+            }
+            UIEvent::Action(View(Filter(Some(ref cmd)))) => {
                 self.filter(cmd, context);
                 self.initialised = false;
                 self.dirty = true;

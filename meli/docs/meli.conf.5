@@ -1258,18 +1258,25 @@ Open e-mail entry.
 .sp
 .Em pager
 .Bl -tag -width 36n
-.It Ic scroll_up
-Scroll up pager.
-.Pq Em k \" default value
+.It Ic page_down
+Go to next page.
+.Pq Em PageDown \" default value
+.It Ic page_up
+Go to previous page.
+.Pq Em PageUp \" default value
 .It Ic scroll_down
 Scroll down pager.
 .Pq Em j \" default value
-.It Ic page_up
-Go to previous pager page
-.Pq Em PageUp \" default value
-.It Ic page_down
-Go to next pager pag
-.Pq Em PageDown \" default value
+.It Ic scroll_up
+Scroll up pager.
+.Pq Em k \" default value
+.It Ic select_filter
+Select content filter.
+.Pq Em f \" default value
+.Pp
+See also
+.Ic named_filters
+setting.
 .El
 .sp
 .Em contact-list
@@ -1474,7 +1481,19 @@ A command to open html files.
 .It Ic filter Ar String
 .Pq Em optional
 A command to pipe mail output through for viewing in pager.
-.Pq Em none \" default value
+.It Ic named_filters Ar String[String]
+.Pq Em optional
+Named filter commands to use at will.
+.Pq Em empty \" default value
+.Pp
+Show menu with an empty
+.Cm filter
+command.
+Example:
+.Bd -literal
+[pager]
+named_filters = { diff = "pygmentize -l diff -f 256", par = "par 72" }
+.Ed
 .It Ic format_flowed Ar boolean
 .Pq Em optional
 Respect format=flowed
@@ -1512,6 +1531,8 @@ The URL will be given as the first argument of the command.
 .Pq Em optional
 Extra headers to display, if present, in the default header preamble of the
 pager.
+.Pq Em empty \" default value
+.Pp
 This setting is useful especially when used per-folder or per-account.
 For example, if you use
 .Sy rss2email
@@ -1533,7 +1554,6 @@ INBOX = {}
 .\"
 .\"
 .\"
-.Pq Em empty \" default value
 .El
 .\"
 .\"

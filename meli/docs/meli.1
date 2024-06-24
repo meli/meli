@@ -530,6 +530,15 @@ This action is irreversible.
 pipe pager contents to binary
 .It Cm filter Ar EXECUTABLE Ar ARGS
 filter and display pager contents through command
+.It Cm filter
+select a filter from
+.Ic pager.named_filters
+configuration value
+.Po
+See
+.Xr meli.conf 5 PAGER
+for its syntax
+.Pc
 .It Cm list-post
 post in list of viewed envelope
 .It Cm list-unsubscribe

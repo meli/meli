@@ -21,6 +21,7 @@
 
 //! Settings for the pager function.
 
+use indexmap::IndexMap;
 use melib::{Error, Result, ToggleFlag};
 
 use super::{default_vals::*, deserializers::*, DotAddressable};
@@ -59,6 +60,12 @@ pub struct PagerSettings {
     /// Default: None
     #[serde(default = "none", deserialize_with = "non_empty_opt_string")]
     pub filter: Option<String>,
+
+    /// Named filter commands to use at will.
+    ///
+    /// Default: empty
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub named_filters: IndexMap<String, String>,
 
     /// A command to pipe html output before displaying it in a pager
     /// Default: None
@@ -126,6 +133,7 @@ impl Default for PagerSettings {
             sticky_headers: false,
             pager_ratio: 80,
             filter: None,
+            named_filters: IndexMap::default(),
             html_filter: None,
             html_open: None,
             format_flowed: true,
@@ -150,6 +158,7 @@ impl DotAddressable for PagerSettings {
                     "sticky_headers" => self.sticky_headers.lookup(field, tail),
                     "pager_ratio" => self.pager_ratio.lookup(field, tail),
                     "filter" => self.filter.lookup(field, tail),
+                    "named_filters" => self.named_filters.lookup(field, tail),
                     "html_filter" => self.html_filter.lookup(field, tail),
                     "html_open" => self.html_open.lookup(field, tail),
                     "format_flowed" => self.format_flowed.lookup(field, tail),
