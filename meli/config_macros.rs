@@ -66,6 +66,8 @@ use melib::HeaderName;
 
     let cfg_attr_default_attr_regex = Regex::new(r"\s*default\s*[,]").unwrap();
     let cfg_attr_default_val_attr_regex = Regex::new(r#"\s*default\s*=\s*"[^"]*"\s*,\s*"#).unwrap();
+    let cfg_attr_skip_ser_attr_regex =
+        Regex::new(r#"\s*,?\s*skip_serializing_if\s*=\s*"[^"]*"\s*,?\s*"#).unwrap();
     let cfg_attr_feature_regex = Regex::new(r"[(](?:not[(]\s*)?feature").unwrap();
 
     'file_loop: for (filename, ident) in filenames {
@@ -120,6 +122,14 @@ use melib::HeaderName;
                                 f.tokens.clone().into_iter().next().unwrap()
                             {
                                 let mut attr_inner_value = f.tokens.to_string();
+                                if attr_inner_value.contains("skip_serializing_if") {
+                                    attr_inner_value = cfg_attr_skip_ser_attr_regex
+                                        .replace_all(&attr_inner_value, "")
+                                        .to_string();
+                                    let new_toks: proc_macro2::TokenStream =
+                                        attr_inner_value.parse().unwrap();
+                                    new_attr.tokens = quote! { #new_toks };
+                                }
                                 if cfg_attr_feature_regex.is_match(&attr_inner_value) {
                                     attr_inner_value = cfg_attr_default_val_attr_regex
                                         .replace_all(&attr_inner_value, "")
@@ -154,6 +164,11 @@ use melib::HeaderName;
                                 } else if attr_inner_value.starts_with("( default")
                                     || attr_inner_value.starts_with("(default")
                                 {
+                                    if attr_inner_value.ends_with("default)")
+                                        || attr_inner_value.ends_with("default )")
+                                    {
+                                        return None;
+                                    }
                                     let rest = g.stream().into_iter().skip(2);
                                     new_attr.tokens = quote! { ( #(#rest)*) };
                                     match new_attr.tokens.to_string().as_str() {
