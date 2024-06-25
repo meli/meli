@@ -309,6 +309,23 @@ impl MailBackend for ImapType {
                             };
                         }
                     }
+                    "LOGINDISABLED" => {
+                        if !(oauth2 || auth_anonymous) {
+                            *status = MailBackendExtensionStatus::Enabled {
+                                comment: Some(
+                                    "Use of LOGIN command is the default for given user \
+                                     configuration, but server rejects its use",
+                                ),
+                            };
+                        } else {
+                            *status = MailBackendExtensionStatus::Supported {
+                                comment: Some(
+                                    "Current user authentication is not performed with the LOGIN \
+                                     command",
+                                ),
+                            };
+                        }
+                    }
                     _ => {
                         if SUPPORTED_CAPABILITIES
                             .iter()

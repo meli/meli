@@ -380,15 +380,6 @@ impl ImapStream {
                 &server_conf.server_hostname
             ))
             .set_kind(ErrorKind::ProtocolNotSupported));
-        } else if capabilities
-            .iter()
-            .any(|cap| cap.eq_ignore_ascii_case(b"LOGINDISABLED"))
-        {
-            return Err(Error::new(format!(
-                "Could not connect to {}: server does not accept logins [LOGINDISABLED]",
-                &server_conf.server_hostname
-            ))
-            .set_kind(ErrorKind::Authentication));
         }
 
         (uid_store.event_consumer)(
@@ -452,6 +443,17 @@ impl ImapStream {
                 ret.send_literal(b"c2lyaGM=").await?;
             }
             _ => {
+                if capabilities
+                    .iter()
+                    .any(|cap| cap.eq_ignore_ascii_case(b"LOGINDISABLED"))
+                {
+                    return Err(Error::new(format!(
+                        "Could not connect to {}: server does not accept the LOGIN command \
+                         [LOGINDISABLED]",
+                        &server_conf.server_hostname
+                    ))
+                    .set_kind(ErrorKind::Authentication));
+                }
                 let username = AString::try_from(server_conf.server_username.as_str())
                     .chain_err_kind(ErrorKind::Bug)?;
                 let password = AString::try_from(server_conf.server_password.as_str())
