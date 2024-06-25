@@ -518,7 +518,11 @@ impl ImapStream {
                         }
                         if Some(pos + b"\r\n".len()) == ret.get(last_line_idx..).map(|r| r.len()) {
                             if let Some(seq) = termination_string {
-                                if ret[last_line_idx..].starts_with(seq) {
+                                // Some servers erroneously send "+" CRLF instead of "+" SP CRLF,
+                                // see https://github.com/modern-email/defects/issues/7
+                                if ret[last_line_idx..].starts_with(seq)
+                                    || (seq == b"+ " && ret[last_line_idx..].starts_with(b"+"))
+                                {
                                     if !keep_termination_string {
                                         ret.truncate(last_line_idx);
                                     }
