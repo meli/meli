@@ -442,7 +442,7 @@ impl ImapStream {
         let mut capabilities = None;
 
         loop {
-            ret.read_lines(&mut res, &[], false).await?;
+            ret.read_lines(&mut res, None, false).await?;
             let mut should_break = false;
             for l in res.split_rn() {
                 if l.starts_with(b"* CAPABILITY") {
@@ -487,16 +487,17 @@ impl ImapStream {
             ImapProtocol::IMAP { .. } => format!("M{} ", self.cmd_id - 1).into_bytes(),
             ImapProtocol::ManageSieve => Vec::new(),
         };
-        self.read_lines(ret, &id, true).await?;
+        self.read_lines(ret, Some(&id), true).await?;
         Ok(())
     }
 
     pub async fn read_lines(
         &mut self,
         ret: &mut Vec<u8>,
-        termination_string: &[u8],
+        termination_string: Option<&[u8]>,
         keep_termination_string: bool,
     ) -> Result<()> {
+        let termination_string = termination_string.filter(|t| !t.is_empty());
         let mut buf: Vec<u8> = vec![0; Connection::IO_BUF_SIZE];
         ret.clear();
         let mut last_line_idx: usize = 0;
@@ -516,14 +517,14 @@ impl ImapStream {
                             pos -= prev_line + b"\r\n".len();
                         }
                         if Some(pos + b"\r\n".len()) == ret.get(last_line_idx..).map(|r| r.len()) {
-                            if !termination_string.is_empty()
-                                && ret[last_line_idx..].starts_with(termination_string)
-                            {
-                                if !keep_termination_string {
-                                    ret.truncate(last_line_idx);
+                            if let Some(seq) = termination_string {
+                                if ret[last_line_idx..].starts_with(seq) {
+                                    if !keep_termination_string {
+                                        ret.truncate(last_line_idx);
+                                    }
+                                    break;
                                 }
-                                break;
-                            } else if termination_string.is_empty() {
+                            } else {
                                 break;
                             }
                         }
@@ -540,9 +541,8 @@ impl ImapStream {
     }
 
     pub async fn wait_for_continuation_request(&mut self) -> Result<()> {
-        let term = b"+ ";
         let mut ret = Vec::new();
-        self.read_lines(&mut ret, &term[..], false).await?;
+        self.read_lines(&mut ret, Some(b"+ "), false).await?;
         Ok(())
     }
 
@@ -899,11 +899,11 @@ impl ImapConnection {
     pub async fn read_lines(
         &mut self,
         ret: &mut Vec<u8>,
-        termination_string: Vec<u8>,
+        termination_string: Option<&[u8]>,
     ) -> Result<()> {
         self.stream
             .as_mut()?
-            .read_lines(ret, &termination_string, false)
+            .read_lines(ret, termination_string, false)
             .await?;
         Ok(())
     }

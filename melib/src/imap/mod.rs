@@ -1404,7 +1404,7 @@ impl ImapType {
                     .unwrap();
                     futures::executor::block_on(timeout(
                         self.server_conf.timeout,
-                        conn.read_lines(&mut res, Vec::new()),
+                        conn.read_lines(&mut res, None),
                     ))
                     .unwrap()
                     .unwrap();

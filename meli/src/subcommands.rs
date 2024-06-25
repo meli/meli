@@ -319,7 +319,7 @@ pub fn tool(path: Option<PathBuf>, opt: crate::args::ToolOpt) -> Result<()> {
                         .unwrap();
                         futures::executor::block_on(timeout(
                             imap.server_conf.timeout,
-                            conn.read_lines(&mut res, Vec::new()),
+                            conn.read_lines(&mut res, None),
                         ))
                         .unwrap()
                         .unwrap();
