@@ -136,7 +136,7 @@ pub struct Account {
     pub main_loop_handler: MainLoopHandler,
     pub active_jobs: HashMap<JobId, JobRequest>,
     pub active_job_instants: BTreeMap<std::time::Instant, JobId>,
-    pub event_queue: VecDeque<(MailboxHash, RefreshEvent)>,
+    pub event_queue: IndexMap<MailboxHash, VecDeque<RefreshEvent>>,
     pub backend_capabilities: MailBackendCapabilities,
 }
 
@@ -316,7 +316,7 @@ impl Account {
             main_loop_handler,
             active_jobs,
             active_job_instants,
-            event_queue: VecDeque::with_capacity(8),
+            event_queue: IndexMap::default(),
             backend_capabilities: backend.capabilities(),
             backend: Arc::new(RwLock::new(backend)),
         })
@@ -518,7 +518,10 @@ impl Account {
         if !self.mailbox_entries[&mailbox_hash].status.is_available()
             && !self.mailbox_entries[&mailbox_hash].status.is_parsing()
         {
-            self.event_queue.push_back((mailbox_hash, event));
+            self.event_queue
+                .entry(mailbox_hash)
+                .or_default()
+                .push_back(event);
             return None;
         }
 
@@ -644,13 +647,15 @@ impl Account {
                         return None;
                     }
 
+                    let mbox_update_event = UIEvent::MailboxUpdate((self.hash, mailbox_hash));
+
                     if self.mailbox_entries[&mailbox_hash]
                         .conf
                         .mailbox_conf
                         .ignore
                         .is_true()
                     {
-                        return Some(UIEvent::MailboxUpdate((self.hash, mailbox_hash)));
+                        return Some(mbox_update_event);
                     }
 
                     let thread_hash = self.collection.get_env(env_hash).thread();
@@ -669,25 +674,38 @@ impl Account {
                             .thread_ref(thread)
                             .snoozed()
                         {
-                            return Some(UIEvent::MailboxUpdate((self.hash, mailbox_hash)));
+                            return Some(mbox_update_event);
                         }
                     }
                     if is_seen || is_draft {
-                        return Some(UIEvent::MailboxUpdate((self.hash, mailbox_hash)));
+                        return Some(mbox_update_event);
                     }
 
-                    return Some(Notification {
-                        title: Some(subject.into()),
-                        body: format!(
-                            "{}\n{} | {}",
-                            from,
-                            self.name,
-                            self.mailbox_entries[&mailbox_hash].name()
-                        )
-                        .into(),
-                        source: None,
-                        kind: Some(NotificationType::NewMail),
-                    });
+                    if !matches!(
+                        self.mailbox_entries[&mailbox_hash]
+                            .ref_mailbox
+                            .special_usage(),
+                        SpecialUsageMailbox::Normal
+                            | SpecialUsageMailbox::Inbox
+                            | SpecialUsageMailbox::Flagged
+                    ) {
+                        return Some(mbox_update_event);
+                    }
+                    self.main_loop_handler
+                        .send(ThreadEvent::UIEvent(Notification {
+                            title: Some(subject.into()),
+                            body: format!(
+                                "{}\n{} | {}",
+                                from,
+                                self.name,
+                                self.mailbox_entries[&mailbox_hash].name()
+                            )
+                            .into(),
+                            source: None,
+                            kind: Some(NotificationType::NewMail),
+                        }));
+
+                    return Some(mbox_update_event);
                 }
                 RefreshEventKind::Remove(env_hash) => {
                     if !self.collection.contains_key(&env_hash) {
@@ -1513,6 +1531,14 @@ impl Account {
                             self.main_loop_handler.send(ThreadEvent::UIEvent(
                                 UIEvent::MailboxUpdate((self.hash, mailbox_hash)),
                             ));
+                            if self.event_queue.contains_key(&mailbox_hash) {
+                                for ev in
+                                    self.event_queue.entry(mailbox_hash).or_default().drain(..)
+                                {
+                                    self.main_loop_handler.send(ThreadEvent::UIEvent(ev.into()));
+                                }
+                                self.event_queue.remove(&mailbox_hash);
+                            }
                             return true;
                         }
                         Ok(Some((Some(Err(err)), _))) => {
