@@ -19,28 +19,10 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::{
-    backends::{BackendEvent, MailboxHash, RefreshEvent},
-    email::parser::BytesExt,
-    error::*,
-    imap::{
-        protocol_parser::{self, ImapLineSplit, ImapResponse, RequiredResponses, SelectResponse},
-        Capabilities, ImapServerConf, UIDStore,
-    },
-    text::Truncate,
-    utils::{
-        connections::{std_net::connect as tcp_stream_connect, Connection},
-        futures::timeout,
-    },
-    LogLevel,
-};
-extern crate native_tls;
 use std::{
     borrow::Cow,
-    collections::HashSet,
     convert::TryFrom,
     future::Future,
-    iter::FromIterator,
     pin::Pin,
     sync::Arc,
     time::{Duration, Instant, SystemTime},
@@ -62,8 +44,25 @@ use imap_codec::{
     },
     CommandCodec,
 };
+use indexmap::IndexSet;
 use native_tls::TlsConnector;
 pub use smol::Async as AsyncWrapper;
+
+use crate::{
+    backends::{BackendEvent, MailboxHash, RefreshEvent},
+    email::parser::BytesExt,
+    error::*,
+    imap::{
+        protocol_parser::{self, ImapLineSplit, ImapResponse, RequiredResponses, SelectResponse},
+        Capabilities, ImapServerConf, UIDStore,
+    },
+    text::Truncate,
+    utils::{
+        connections::{std_net::connect as tcp_stream_connect, Connection},
+        futures::timeout,
+    },
+    LogLevel,
+};
 
 const IMAP_PROTOCOL_TIMEOUT: Duration = Duration::from_secs(60 * 28);
 
@@ -343,32 +342,47 @@ impl ImapStream {
         );
         ret.send_command(CommandBody::Capability).await?;
         ret.read_response(&mut res).await?;
-        let capabilities: std::result::Result<Vec<&[u8]>, _> = res
-            .split_rn()
-            .find(|l| l.starts_with(b"* CAPABILITY"))
-            .ok_or_else(|| Error::new(""))
-            .and_then(|res| {
-                protocol_parser::capabilities(res)
-                    .map_err(|_| Error::new(""))
-                    .map(|(_, v)| v)
-            });
 
-        let capabilities = match capabilities {
-            Err(_err) => {
-                log::debug!(
-                    "Could not connect to {}: expected CAPABILITY response but got: {} `{}`",
-                    &server_conf.server_hostname,
-                    _err,
-                    String::from_utf8_lossy(&res)
-                );
-                return Err(Error::new(format!(
-                    "Could not connect to {}: expected CAPABILITY response but got: `{}`",
-                    &server_conf.server_hostname,
-                    String::from_utf8_lossy(&res).as_ref().trim_at_boundary(40)
-                ))
-                .set_kind(ErrorKind::ProtocolError));
+        fn parse_capabilities(bytes: &[u8], hostname: &str) -> Result<IndexSet<Box<[u8]>>> {
+            protocol_parser::capabilities(bytes)
+                .map(|(_, v)| {
+                    v.into_iter()
+                        .map(|v| v.to_vec().into_boxed_slice())
+                        .collect()
+                })
+                .map_err(|err| {
+                    Error::new(format!(
+                        "Could not connect to {}: could not parse CAPABILITY response: `{}`",
+                        hostname,
+                        String::from_utf8_lossy(bytes).as_ref().trim_at_boundary(40)
+                    ))
+                    .set_source(Some(Arc::new(Error::from(err))))
+                    .set_kind(ErrorKind::ProtocolError)
+                })
+        }
+
+        let mut capabilities: IndexSet<Box<[u8]>> = {
+            let capabilities = res
+                .split_rn()
+                .find(|l| l.starts_with(b"* CAPABILITY"))
+                .ok_or_else(|| {
+                    Error::new(format!(
+                        "Could not connect to {}: could not parse CAPABILITY response: `{}`",
+                        server_conf.server_hostname,
+                        String::from_utf8_lossy(&res).as_ref().trim_at_boundary(40)
+                    ))
+                    .set_details("Response does not start with `* CAPABILITY`.")
+                    .set_kind(ErrorKind::ProtocolError)
+                })
+                .and_then(|res| parse_capabilities(res, &server_conf.server_hostname));
+
+            match capabilities {
+                Err(err) => {
+                    log::debug!("{}: {}", uid_store.account_name, err);
+                    return Err(err);
+                }
+                Ok(v) => v,
             }
-            Ok(v) => v,
         };
 
         if !capabilities
@@ -392,6 +406,7 @@ impl ImapStream {
             ImapProtocol::IMAP {
                 extension_use: ImapExtensionUse { oauth2, .. },
             } if oauth2 => {
+                // [ref:FIXME]: differentiate between OAUTH2 and XOAUTH2
                 if !capabilities
                     .iter()
                     .any(|cap| cap.eq_ignore_ascii_case(b"AUTH=XOAUTH2"))
@@ -467,18 +482,16 @@ impl ImapStream {
             }
         }
         let tag_start = format!("M{} ", (ret.cmd_id - 1));
-        let mut capabilities = None;
+        let mut got_new_capabilities = false;
 
         loop {
             ret.read_lines(&mut res, None, false).await?;
             let mut should_break = false;
             for l in res.split_rn() {
                 if l.starts_with(b"* CAPABILITY") {
-                    capabilities = protocol_parser::capabilities(l)
-                        .map(|(_, capabilities)| {
-                            HashSet::from_iter(capabilities.into_iter().map(|s: &[u8]| s.to_vec()))
-                        })
-                        .ok();
+                    got_new_capabilities = true;
+                    capabilities
+                        .extend(parse_capabilities(l, &server_conf.server_hostname)?.into_iter());
                 }
 
                 if l.starts_with(tag_start.as_bytes()) {
@@ -497,17 +510,16 @@ impl ImapStream {
             }
         }
 
-        if let Some(capabilities) = capabilities {
-            Ok((capabilities, ret))
-        } else {
-            /* sending CAPABILITY after LOGIN automatically is an RFC recommendation, so
-             * check for lazy servers */
-            ret.send_command(CommandBody::Capability).await?;
-            ret.read_response(&mut res).await?;
-            let capabilities = protocol_parser::capabilities(&res)?.1;
-            let capabilities = HashSet::from_iter(capabilities.into_iter().map(|s| s.to_vec()));
-            Ok((capabilities, ret))
+        if got_new_capabilities {
+            return Ok((capabilities, ret));
         }
+
+        // sending CAPABILITY after LOGIN automatically is an RFC recommendation, so
+        // check for lazy servers.
+        ret.send_command(CommandBody::Capability).await?;
+        ret.read_response(&mut res).await?;
+        capabilities.extend(parse_capabilities(&res, &server_conf.server_hostname)?.into_iter());
+        Ok((capabilities, ret))
     }
 
     pub async fn read_response(&mut self, ret: &mut Vec<u8>) -> Result<()> {

@@ -80,7 +80,7 @@ pub type MessageSequenceNumber = ImapNum;
 
 pub static SUPPORTED_CAPABILITIES: &[&str] = &[
     "AUTH=ANONYMOUS",
-    "AUTH=OAUTH2",
+    "AUTH=XOAUTH2",
     "COMPRESS=DEFLATE",
     "CONDSTORE",
     "ENABLE",
@@ -115,7 +115,7 @@ pub struct ImapServerConf {
     pub timeout: Option<Duration>,
 }
 
-type Capabilities = HashSet<Vec<u8>>;
+type Capabilities = indexmap::IndexSet<Box<[u8]>>;
 
 #[macro_export]
 macro_rules! get_conf_val {
