@@ -105,9 +105,15 @@ impl AccountStatus {
         );
         line += 2;
 
-        for (job_id, req) in a.active_jobs.iter() {
+        let mut total = a.active_jobs.len();
+        if let Some((job_id, req)) = a
+            .active_jobs
+            .iter()
+            .find(|(_, req)| matches!(req, JobRequest::Watch { .. }))
+        {
+            total -= 1;
             let area = self.content.area().skip(1, line);
-            let (x, y) = self.content.grid_mut().write_string(
+            self.content.grid_mut().write_string(
                 &format!("{} {}", req, job_id),
                 self.theme_default.fg,
                 self.theme_default.bg,
@@ -116,28 +122,28 @@ impl AccountStatus {
                 None,
                 None,
             );
-            if let JobRequest::DeleteMailbox { mailbox_hash, .. }
-            | JobRequest::SetMailboxPermissions { mailbox_hash, .. }
-            | JobRequest::SetMailboxSubscription { mailbox_hash, .. }
-            | JobRequest::Refresh { mailbox_hash, .. }
-            | JobRequest::Fetch { mailbox_hash, .. } = req
-            {
-                let area = self.content.area().skip(x + 1, y + line);
-                self.content.grid_mut().write_string(
-                    a.mailbox_entries[mailbox_hash].name(),
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
-                    area,
-                    None,
-                    None,
-                );
-            }
-
             line += 1;
         }
 
-        line += 2;
+        if a.active_jobs.is_empty() || total != 0 {
+            let area = self.content.area().skip(1, line);
+            self.content.grid_mut().write_string(
+                &if a.active_jobs.is_empty() && total == 0 {
+                    Cow::Borrowed("None.")
+                } else if total == a.active_jobs.len() {
+                    Cow::Owned(format!("{} tasks", total))
+                } else {
+                    Cow::Owned(format!("and other {} tasks", total))
+                },
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs,
+                area,
+                None,
+                None,
+            );
+            line += 1;
+        }
 
         let area = self.content.area().skip(1, line);
         let (_x, _y) = self.content.grid_mut().write_string(
