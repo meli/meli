@@ -94,7 +94,9 @@ pub enum ImapProtocol {
 }
 
 #[derive(Clone, Copy, Debug)]
+#[non_exhaustive]
 pub struct ImapExtensionUse {
+    pub auth_anonymous: bool,
     pub condstore: bool,
     pub idle: bool,
     pub deflate: bool,
@@ -104,6 +106,7 @@ pub struct ImapExtensionUse {
 impl Default for ImapExtensionUse {
     fn default() -> Self {
         Self {
+            auth_anonymous: false,
             condstore: true,
             idle: true,
             deflate: true,
@@ -425,6 +428,29 @@ impl ImapStream {
                 ))
                 .await?;
             }
+            ImapProtocol::IMAP {
+                extension_use: ImapExtensionUse { auth_anonymous, .. },
+            } if auth_anonymous => {
+                if !capabilities
+                    .iter()
+                    .any(|cap| cap.eq_ignore_ascii_case(b"AUTH=ANONYMOUS"))
+                {
+                    return Err(Error::new(format!(
+                        "Could not connect to {}: AUTH=ANONYMOUS is enabled but server did not \
+                         return AUTH=ANONYMOUS capability. Returned capabilities were: {}",
+                        &server_conf.server_hostname,
+                        capabilities
+                            .iter()
+                            .map(|capability| String::from_utf8_lossy(capability).to_string())
+                            .collect::<Vec<String>>()
+                            .join(" ")
+                    ))
+                    .set_kind(ErrorKind::Authentication));
+                }
+                ret.send_command_raw(b"AUTHENTICATE ANONYMOUS").await?;
+                ret.wait_for_continuation_request().await?;
+                ret.send_literal(b"c2lyaGM=").await?;
+            }
             _ => {
                 let username = AString::try_from(server_conf.server_username.as_str())
                     .chain_err_kind(ErrorKind::Bug)?;
@@ -724,6 +750,7 @@ impl ImapConnection {
                             deflate,
                             idle: _idle,
                             oauth2: _,
+                            auth_anonymous: _,
                         },
                 } => {
                     if capabilities.contains(&b"CONDSTORE"[..]) && condstore {

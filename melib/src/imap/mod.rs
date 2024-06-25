@@ -79,6 +79,7 @@ pub type UIDVALIDITY = UID;
 pub type MessageSequenceNumber = ImapNum;
 
 pub static SUPPORTED_CAPABILITIES: &[&str] = &[
+    "AUTH=ANONYMOUS",
     "AUTH=OAUTH2",
     "COMPRESS=DEFLATE",
     "CONDSTORE",
@@ -257,6 +258,7 @@ impl MailBackend for ImapType {
                     deflate,
                     condstore,
                     oauth2,
+                    auth_anonymous,
                 },
         } = self.server_conf.protocol
         {
@@ -291,6 +293,15 @@ impl MailBackend for ImapType {
                     }
                     "AUTH=OAUTH2" => {
                         if oauth2 {
+                            *status = MailBackendExtensionStatus::Enabled { comment: None };
+                        } else {
+                            *status = MailBackendExtensionStatus::Supported {
+                                comment: Some("Disabled by user configuration"),
+                            };
+                        }
+                    }
+                    "AUTH=ANONYMOUS" => {
+                        if auth_anonymous {
                             *status = MailBackendExtensionStatus::Enabled { comment: None };
                         } else {
                             *status = MailBackendExtensionStatus::Supported {
@@ -1339,6 +1350,7 @@ impl ImapType {
                     condstore: get_conf_val!(s["use_condstore"], true)?,
                     deflate: get_conf_val!(s["use_deflate"], true)?,
                     oauth2: use_oauth2,
+                    auth_anonymous: get_conf_val!(s["use_auth_anonymous"], false)?,
                 },
             },
             timeout,
@@ -1608,6 +1620,7 @@ impl ImapType {
         get_conf_val!(s["use_idle"], true)?;
         get_conf_val!(s["use_condstore"], true)?;
         get_conf_val!(s["use_deflate"], true)?;
+        get_conf_val!(s["use_auth_anonymous"], false)?;
         let _timeout = get_conf_val!(s["timeout"], 16_u64)?;
         let extra_keys = s
             .extra
