@@ -67,18 +67,18 @@ terminal e-mail client
 Configuration for
 .Sy meli
 is written in
-.Tn TOML
+.Em TOML
 which has a few things to consider (quoting the specification):
 .sp
 .Bl -dash -compact
 .It
-.Tn TOML
+.Em TOML
 is case sensitive.
 .It
 A
-.Tn TOML
+.Em TOML
 file must be a valid
-.Tn UTF-8
+.Em UTF-8
 encoded Unicode document.
 .It
 White-space means
@@ -99,13 +99,13 @@ or
 .El
 .sp
 Refer to
-.Tn TOML
+.Em TOML
 documentation for valid
-.Tn TOML
+.Em TOML
 syntax.
 .sp
 Though not part of
-.Tn TOML
+.Em TOML
 syntax,
 .Nm
 can have nested configuration files by using the following
@@ -371,7 +371,7 @@ format = "notmuch"
 .\"
 .Ss IMAP only
 .HorizontalRule
-.Tn IMAP
+.Em IMAP
 specific options are:
 .Bl -tag -width 36n
 .It Ic server_hostname Ar String
@@ -400,59 +400,59 @@ is unspecified, it becomes false by default.
 .It Ic use_tls Ar boolean
 .Pq Em optional
 Connect with
-.Tn TLS
+.Em TLS
 .Po
 or upgrade from plain connection to
-.Tn TLS
+.Em TLS
 if
-.Tn STARTTLS
+.Em STARTTLS
 is set.
 .Pc
 .Pq Em true \" default value
 .It Ic danger_accept_invalid_certs Ar boolean
 .Pq Em optional
 Do not validate
-.Tn TLS
+.Em TLS
 certificates.
 .Pq Em false \" default value
 .It Ic use_idle Ar boolean
 .Pq Em optional
 Use
-.Tn IDLE
+.Em IDLE
 extension.
 .Pq Em true \" default value
 .It Ic use_condstore Ar boolean
 .Pq Em optional
 Use
-.Tn CONDSTORE
+.Em CONDSTORE
 extension.
 .Pq Em true \" default value
 .It Ic use_deflate Ar boolean
 .Pq Em optional
 Use
-.Tn COMPRESS=DEFLATE
+.Em COMPRESS=DEFLATE
 extension
 .Po if built with
-.Tn DEFLATE
+.Em DEFLATE
 support
 .Pc
 .Pq Em true \" default value
 .It Ic use_oauth2 Ar boolean
 .Pq Em optional
 Use
-.Tn OAUTH2
+.Em OAUTH2
 authentication.
 Can only be used with
 .Ic server_password_command
 which should return a base64-encoded
-.Tn OAUTH2
+.Em OAUTH2
 token ready to be passed to
-.Tn IMAP Ns
+.Em IMAP Ns
 \&.
 For help on setup with
-.Tn Gmail Ns
+.Em Gmail Ns
 , see
-.Tn Gmail
+.Em Gmail
 section below.
 .Pq Em false \" default value
 .It Ic use_auth_anonymous Ar boolean
@@ -471,27 +471,27 @@ seconds means there is no timeout.
 .El
 .Ss Gmail
 .HorizontalRule
-.Tn Gmail
+.Em Gmail
 has non-standard
-.Tn IMAP
+.Em IMAP
 behaviors that need to be worked around.
 .Ss Gmail - sending mail
 .HorizontalRule
 Option
 .Ic store_sent_mail
 should be disabled since
-.Tn Gmail
+.Em Gmail
 auto-saves sent mail by its own.
 .Ss Gmail OAUTH2
 .HorizontalRule
 To use
-.Tn OAUTH2 Ns
+.Em OAUTH2 Ns
 , you must go through a process to register your own private
 .Qq application
 with
-.Tn Google
+.Em Google
 that can use
-.Tn OAUTH2
+.Em OAUTH2
 tokens,
 and set the option
 .Ic use_oauth2
@@ -507,14 +507,14 @@ directory you can find a
 file named
 .Li oauth2.py
 to generate and request the appropriate data to perform
-.Tn OAUTH2
+.Em OAUTH2
 authentication.
 .sp
 Steps:
 .Bl -dash -compact
 .It
 In
-.Tn Google API Ns
+.Em Google API Ns
 s, create a custom OAuth client ID and note down the Client ID and Client
 Secret.
 You may need to create a consent screen; follow the steps described in the
@@ -541,9 +541,9 @@ enter a command like this
 On startup,
 .Sy meli
 should evaluate this command which if successful must only return a
-.Tn base64 Ns
+.Em base64 Ns
 -encoded token ready to be passed to
-.Tn IMAP.
+.Em IMAP.
 .Pp
 Your account section should look like this:
 .Bd -literal
@@ -565,7 +565,7 @@ composing.send_mail = { hostname = "smtp.gmail.com", port = 587, auth = { type =
 .El
 .Ss JMAP only
 .HorizontalRule
-.Tn JMAP
+.Em JMAP
 specific options
 .Bl -tag -width 36n
 .It Ic server_url Ar String
@@ -584,19 +584,19 @@ Use instead of
 .It Ic danger_accept_invalid_certs Ar boolean
 .Pq Em optional
 Do not validate
-.Tn TLS
+.Em TLS
 certificates.
 .Pq Em false \" default value
 .El
 .Ss mbox only
 .HorizontalRule
-.Tn mbox
+.Em mbox
 specific options:
 .Bl -tag -width 36n
 .It Ic prefer_mbox_type Ar String
 .Pq Em optional
 Prefer specific
-.Tn mbox
+.Em mbox
 format reader for each message.
 Default is
 .Qq Li mboxcl2
@@ -639,7 +639,7 @@ mailboxes."Python mailing list" = { path = "~/.mail/python.mbox", subscribe = tr
 .\"
 .Ss NNTP
 .HorizontalRule
-.Tn NNTP
+.Em NNTP
 specific options
 .Bl -tag -width 36n
 .It Ic server_hostname Ar String
@@ -656,7 +656,7 @@ require authentication in every case
 .It Ic use_tls Ar boolean
 .Pq Em optional
 Connect with
-.Tn TLS Ns
+.Em TLS Ns
 \&.
 .Pq Em false \" default value
 .It Ic server_port Ar number
@@ -666,7 +666,7 @@ The port to connect to
 .It Ic danger_accept_invalid_certs Ar boolean
 .Pq Em optional
 Do not validate
-.Tn TLS
+.Em TLS
 certificates.
 .Pq Em false \" default value
 .It Ic store_flags_locally Ar boolean
@@ -693,7 +693,7 @@ Example:
 .\"
 .Pp
 To submit articles directly to the
-.Tn NNTP
+.Em NNTP
 server, you must set the special value
 .Em server_submission
 in the
@@ -715,7 +715,7 @@ composing.send_mail = "server_submission"
 .It Ic alias Ar String
 .Pq Em optional
 Show a different name for this mailbox in the
-.Tn UI Ns
+.Em UI Ns
 \&.
 .It Ic autoload Ar boolean
 .Pq Em optional
@@ -800,10 +800,10 @@ Example:
 .It Ic encoding Ar String
 .Pq Em optional
 Override the default
-.Tn UTF-8
+.Em UTF-8
 charset for the mailbox name.
 Useful only for
-.Tn UTF-7
+.Em UTF-7
 mailboxes.
 .Pq Em "utf7", "utf-7", "utf8", "utf-8" \" default value
 .El
@@ -824,7 +824,7 @@ exit code must be
 for success
 .Pc
 or settings for an
-.Tn SMTP
+.Em SMTP
 server connection.
 See section
 .Sx SMTP Connections
@@ -876,14 +876,14 @@ This can be useful when for example you're writing Markdown; you can set the
 value to
 .Em ["<!--",\ "-->"]
 which wraps the headers in an
-.Tn HTML
+.Em HTML
 comment.
 .Pq Em None \" default value
 .It Ic store_sent_mail Ar boolean
 .Pq Em optional
 Store sent mail after successful submission.
 This setting is meant to be disabled for non-standard behaviour in
-.Tn Gmail Ns
+.Em Gmail Ns
 , which auto-saves sent mail on its own.
 .Pq Em true \" default value
 .It Ic attribution_format_string Ar String
@@ -910,7 +910,7 @@ with the replied envelope's date.
 Whether the
 .Xr strftime 3
 call for the attribution string uses the
-.Tn POSIX
+.Em POSIX
 locale instead of the user's active locale.
 .Pq Em true \" default value
 .It Ic forward_as_attachment Ar boolean or "ask"
@@ -1939,7 +1939,7 @@ If true, box drawing will be done with ASCII characters.
 .It Ic use_color Ar boolean
 .Pq Em optional
 If false, no
-.Tn ANSI
+.Em ANSI
 colors are used.
 .Pq Em true \" default value
 .It Ic force_text_presentation Ar boolean
@@ -1961,7 +1961,7 @@ when composing new mail.
 .Pq Em None \" default value
 .It Ic themes Ar hash table String[String[Attribute]]
 Define
-.Tn UI
+.Em UI
 themes.
 See
 .Xr meli-themes 5
@@ -2130,7 +2130,7 @@ server port
 address to set as sender in SMTP transactions
 .Pq Em none \" default value
 .It Ic auth Ar SmtpAuth
-.Tn SMTP
+.Em SMTP
 server authentication.
 See
 .Sx SmtpAuth
@@ -2146,7 +2146,7 @@ subsection
 .It Ic extensions Ar SmtpExtensions
 .Pq Em optional
 set support for
-.Tn SMTP
+.Em SMTP
 extensions if they are advertised by the server.
 .Po see \" default value
 .Sx SmtpExtensions
@@ -2176,7 +2176,7 @@ For type
 .Bl -tag -width 36n
 .It Ic token_command Ar String
 Command to evaluate that returns an
-.Tn XOAUTH2
+.Em XOAUTH2
 token.
 .It Ic require_auth Ar boolean
 .Pq Em optional
@@ -2205,7 +2205,7 @@ auth = { type = "none" }
 .Ed
 .sp
 For
-.Tn Gmail
+.Em Gmail
 (see
 .Sx Gmail OAUTH2
 for details on the authentication token command):
@@ -2249,9 +2249,9 @@ Default security type is
 .It Ic type Ar "none" | "auto" | "starttls" | "tls"
 .It Ic danger_accept_invalid_certs Ar boolean
 Accept invalid
-.Tn SSL
+.Em SSL
 /
-.Tn TLS
+.Em TLS
 certificates
 .Pq Em false \" default value
 .El
@@ -2281,7 +2281,7 @@ RFC3461
 .Sh STANDARDS
 .Bl -item -compact
 .It
-.Tn TOML
+.Em TOML
 Standard
 .Li v.0.5.0
 .Lk https://toml.io/en/v0.5.0
