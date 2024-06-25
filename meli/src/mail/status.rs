@@ -235,35 +235,6 @@ impl AccountStatus {
             );
         }
         line += 2;
-        let area = self.content.area().skip(1, line);
-        self.content.grid_mut().write_string(
-            "Subscribed mailboxes:",
-            self.theme_default.fg,
-            self.theme_default.bg,
-            Attr::BOLD,
-            area,
-            None,
-            None,
-        );
-        line += 2;
-        for mailbox_node in a.list_mailboxes() {
-            let f: &Mailbox = &a[&mailbox_node.hash].ref_mailbox;
-            if f.is_subscribed() {
-                let area = self.content.area().skip(1, line);
-                self.content.grid_mut().write_string(
-                    f.path(),
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
-                    area,
-                    None,
-                    None,
-                );
-                line += 1;
-            }
-        }
-
-        line += 1;
         if let Some(ref extensions) = a.backend_capabilities.extensions {
             let area = self.content.area().skip(1, line);
             self.content.grid_mut().write_string(
