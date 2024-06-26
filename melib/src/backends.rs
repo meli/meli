@@ -378,6 +378,7 @@ pub struct MailBackendCapabilities {
     pub supports_tags: bool,
     pub supports_submission: bool,
     pub extra_submission_headers: &'static [HeaderName],
+    pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Copy, Debug)]

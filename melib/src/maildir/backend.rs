@@ -180,6 +180,7 @@ impl MailBackend for MaildirType {
             supports_tags: false,
             supports_submission: false,
             extra_submission_headers: &[],
+            metadata: None,
         };
         CAPABILITIES
     }

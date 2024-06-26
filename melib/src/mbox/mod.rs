@@ -834,6 +834,7 @@ impl MailBackend for MboxType {
             supports_tags: false,
             supports_submission: false,
             extra_submission_headers: &[],
+            metadata: None,
         };
         CAPABILITIES
     }

@@ -346,6 +346,7 @@ impl MailBackend for ImapType {
             supports_tags: true,
             supports_submission: false,
             extra_submission_headers: &[],
+            metadata: None,
         }
     }
 

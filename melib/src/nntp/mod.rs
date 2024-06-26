@@ -212,6 +212,7 @@ impl MailBackend for NntpType {
             supports_tags: false,
             supports_submission,
             extra_submission_headers: &[HeaderName::NEWSGROUPS],
+            metadata: None,
         }
     }
 

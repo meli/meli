@@ -170,6 +170,23 @@ impl AccountStatus {
             None,
         );
         line += 1;
+        self.content.grid_mut().write_string(
+            &format!(
+                "Metadata: {}",
+                a.backend_capabilities
+                    .metadata
+                    .as_ref()
+                    .map(|v| v.to_string())
+                    .unwrap_or_default()
+            ),
+            self.theme_default.fg,
+            self.theme_default.bg,
+            self.theme_default.attrs,
+            area,
+            None,
+            None,
+        );
+        line += 1;
         let area = self.content.area().skip(1, line);
         let (_x, _y) = self.content.grid_mut().write_string(
             "Search backend: ",
@@ -272,6 +289,8 @@ impl AccountStatus {
             );
             line += 1;
             for (name, status) in extensions.iter() {
+                use MailBackendExtensionStatus as Ext;
+
                 let area = self.content.area().skip(1, line);
                 self.content.grid_mut().write_string(
                     name.trim_at_boundary(30),
@@ -285,15 +304,9 @@ impl AccountStatus {
 
                 let (x, y) = {
                     let (status, color) = match status {
-                        MailBackendExtensionStatus::Unsupported { comment: _ } => {
-                            ("not supported", Color::Red)
-                        }
-                        MailBackendExtensionStatus::Supported { comment: _ } => {
-                            ("supported", Color::Green)
-                        }
-                        MailBackendExtensionStatus::Enabled { comment: _ } => {
-                            ("enabled", Color::Green)
-                        }
+                        Ext::Unsupported { comment: _ } => ("not supported", Color::Red),
+                        Ext::Supported { comment: _ } => ("supported", Color::Green),
+                        Ext::Enabled { comment: _ } => ("enabled", Color::Green),
                     };
                     let area = self.content.area().skip(max_name_width + 6, line);
                     self.content.grid_mut().write_string(
@@ -306,57 +319,55 @@ impl AccountStatus {
                         None,
                     )
                 };
-                match status {
-                    MailBackendExtensionStatus::Unsupported { comment }
-                    | MailBackendExtensionStatus::Supported { comment }
-                    | MailBackendExtensionStatus::Enabled { comment } => {
-                        if let Some(s) = comment {
-                            let area = self
-                                .content
-                                .area()
-                                .skip(max_name_width + 6, line)
-                                .skip(x, y);
-                            let (_x, _y) = self.content.grid_mut().write_string(
-                                " (",
-                                self.theme_default.fg,
-                                self.theme_default.bg,
-                                self.theme_default.attrs,
-                                area,
-                                None,
-                                None,
-                            );
-                            let area = self
-                                .content
-                                .area()
-                                .skip(max_name_width + 6, line)
-                                .skip(x, y)
-                                .skip(_x, _y);
-                            let (__x, __y) = self.content.grid_mut().write_string(
-                                s,
-                                self.theme_default.fg,
-                                self.theme_default.bg,
-                                self.theme_default.attrs,
-                                area,
-                                None,
-                                None,
-                            );
-                            let area = self
-                                .content
-                                .area()
-                                .skip(max_name_width + 6, line)
-                                .skip(x + _x + __x, y + _y + __y);
-                            self.content.grid_mut().write_string(
-                                ")",
-                                self.theme_default.fg,
-                                self.theme_default.bg,
-                                self.theme_default.attrs,
-                                area,
-                                None,
-                                None,
-                            );
-                        }
-                    }
-                };
+
+                if let Ext::Unsupported { comment: Some(s) }
+                | Ext::Supported { comment: Some(s) }
+                | Ext::Enabled { comment: Some(s) } = status
+                {
+                    let area = self
+                        .content
+                        .area()
+                        .skip(max_name_width + 6, line)
+                        .skip(x, y);
+                    let (_x, _y) = self.content.grid_mut().write_string(
+                        " (",
+                        self.theme_default.fg,
+                        self.theme_default.bg,
+                        self.theme_default.attrs,
+                        area,
+                        None,
+                        None,
+                    );
+                    let area = self
+                        .content
+                        .area()
+                        .skip(max_name_width + 6, line)
+                        .skip(x, y)
+                        .skip(_x, _y);
+                    let (__x, __y) = self.content.grid_mut().write_string(
+                        s,
+                        self.theme_default.fg,
+                        self.theme_default.bg,
+                        self.theme_default.attrs,
+                        area,
+                        None,
+                        None,
+                    );
+                    let area = self
+                        .content
+                        .area()
+                        .skip(max_name_width + 6, line)
+                        .skip(x + _x + __x, y + _y + __y);
+                    self.content.grid_mut().write_string(
+                        ")",
+                        self.theme_default.fg,
+                        self.theme_default.bg,
+                        self.theme_default.attrs,
+                        area,
+                        None,
+                        None,
+                    );
+                }
                 line += 1;
             }
         }

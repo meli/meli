@@ -381,6 +381,7 @@ impl MailBackend for JmapType {
             supports_tags: true,
             supports_submission: true,
             extra_submission_headers: &[],
+            metadata: None,
         };
         let supports_submission: bool = self
             .store
