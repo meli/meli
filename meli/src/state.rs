@@ -202,12 +202,16 @@ impl Context {
 
     #[cfg(test)]
     pub fn new_mock(dir: &tempfile::TempDir) -> Self {
+        use crate::conf::tests::{ConfigFile, IMAP_CONFIG};
+
         let (sender, receiver) =
             crossbeam::channel::bounded(32 * ::std::mem::size_of::<ThreadEvent>());
         let job_executor = Arc::new(JobExecutor::new(sender.clone()));
         let input_thread = unbounded();
         let input_thread_pipe = crate::types::pipe().unwrap();
         let backends = Backends::new();
+        let config_file = ConfigFile::new(IMAP_CONFIG, dir).unwrap();
+        std::env::set_var("MELI_CONFIG", &config_file.path);
         let settings = Box::new(Settings::new().unwrap());
         let accounts = vec![{
             let name = "test".to_string();

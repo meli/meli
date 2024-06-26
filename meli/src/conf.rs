@@ -1301,16 +1301,49 @@ mod dotaddressable {
     }
 }
 
-#[test]
-fn test_config_parse() {
-    use std::{fmt::Write, fs, path::PathBuf};
+#[cfg(test)]
+pub mod tests {
+    use std::{
+        fmt::Write as FmtWrite,
+        fs::{self, OpenOptions},
+        io::Write,
+        path::PathBuf,
+    };
 
-    struct ConfigFile {
-        path: PathBuf,
-        file: fs::File,
+    use crate::conf::FileSettings;
+
+    pub struct ConfigFile {
+        pub path: PathBuf,
+        pub file: fs::File,
     }
 
-    const TEST_CONFIG: &str = r#"
+    impl ConfigFile {
+        pub fn new(
+            content: &str,
+            dir: &tempfile::TempDir,
+        ) -> std::result::Result<Self, std::io::Error> {
+            let mut filename = String::with_capacity(2 * 16);
+            for byte in melib::utils::random::random_u64().to_be_bytes() {
+                write!(&mut filename, "{:02X}", byte).unwrap();
+            }
+            let mut path = dir.path().to_path_buf();
+            path.push(&*filename);
+            let mut file = OpenOptions::new()
+                .create_new(true)
+                .append(true)
+                .open(&path)?;
+            file.write_all(content.as_bytes())?;
+            Ok(Self { path, file })
+        }
+    }
+
+    impl Drop for ConfigFile {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
+
+    pub const TEST_CONFIG: &str = r#"
 [accounts.account-name]
 root_mailbox = "/path/to/root/mailbox"
 format = "Maildir"
@@ -1333,7 +1366,7 @@ listing.index_style = "Compact"
 identity="username@hostname.local"
 "#;
 
-    const EXTRA_CONFIG: &str = r#"
+    pub const EXTRA_CONFIG: &str = r#"
 [accounts.mbox]
 root_mailbox = "/"
 format = "mbox"
@@ -1342,8 +1375,8 @@ identity="username@hostname.local"
 
 [composing]
 send_mail = 'false'
-"#;
-    const IMAP_CONFIG: &str = r#"
+    "#;
+    pub const IMAP_CONFIG: &str = r#"
 [accounts.imap]
 root_mailbox = "INBOX"
 format = "imap"
@@ -1354,86 +1387,64 @@ server_password_command = "false"
 
 [composing]
 send_mail = 'false'
-"#;
+    "#;
 
     const EXAMPLE_CONFIG: &str = include_str!("../docs/samples/sample-config.toml");
 
-    impl ConfigFile {
-        fn new(content: &str) -> std::result::Result<Self, std::io::Error> {
-            let mut filename = String::with_capacity(2 * 16);
-            for byte in melib::utils::random::random_u64().to_be_bytes() {
-                write!(&mut filename, "{:02X}", byte).unwrap();
+    #[test]
+    fn test_config_parse() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let mut new_file = ConfigFile::new(TEST_CONFIG, &tempdir).unwrap();
+        let err = FileSettings::validate(new_file.path.clone(), false, true).unwrap_err();
+        assert!(err.summary.as_ref().starts_with(
+            "You must set a global `composing` option. If you override `composing` in each \
+             account, you can use a dummy global like follows"
+        ));
+        new_file
+            .file
+            .write_all(b"[composing]\nsend_mail = 'false'\n")
+            .unwrap();
+        let err = FileSettings::validate(new_file.path.clone(), false, true).unwrap_err();
+        assert_eq!(
+            err.summary.as_ref(),
+            "Configuration error (account-name): root_mailbox `/path/to/root/mailbox` is not a \
+             valid directory."
+        );
+
+        /* Test unrecognised configuration entries error */
+
+        let new_file = ConfigFile::new(EXTRA_CONFIG, &tempdir).unwrap();
+        let err = FileSettings::validate(new_file.path.clone(), false, true).unwrap_err();
+        assert_eq!(
+            err.summary.as_ref(),
+            "Unrecognised configuration values: {\"index_style\": \"Compact\"}"
+        );
+
+        /* Test IMAP config */
+
+        let new_file = ConfigFile::new(IMAP_CONFIG, &tempdir).unwrap();
+        FileSettings::validate(new_file.path.clone(), false, true)
+            .expect("could not parse IMAP config");
+
+        /* Test sample config */
+
+        let example_config = EXAMPLE_CONFIG.replace("\n#", "\n");
+        let re = regex::Regex::new(r#"root_mailbox\s*=\s*"[^"]*""#).unwrap();
+        let example_config = re.replace_all(
+            &example_config,
+            &format!(r#"root_mailbox = "{}""#, tempdir.path().to_str().unwrap()),
+        );
+
+        let new_file = ConfigFile::new(&example_config, &tempdir).unwrap();
+        let config = FileSettings::validate(new_file.path.clone(), false, true)
+            .expect("Could not parse example config!");
+        for (accname, acc) in config.accounts.iter() {
+            if !acc.extra.is_empty() {
+                panic!(
+                    "In example config, account `{}` has unrecognised configuration entries: {:?}",
+                    accname, acc.extra
+                );
             }
-            let mut path = std::env::temp_dir();
-            path.push(&*filename);
-            let mut file = OpenOptions::new()
-                .create_new(true)
-                .append(true)
-                .open(&path)?;
-            file.write_all(content.as_bytes())?;
-            Ok(Self { path, file })
-        }
-    }
-
-    impl Drop for ConfigFile {
-        fn drop(&mut self) {
-            let _ = fs::remove_file(&self.path);
-        }
-    }
-
-    let mut new_file = ConfigFile::new(TEST_CONFIG).unwrap();
-    let err = FileSettings::validate(new_file.path.clone(), false, true).unwrap_err();
-    assert!(err.summary.as_ref().starts_with(
-        "You must set a global `composing` option. If you override `composing` in each account, \
-         you can use a dummy global like follows"
-    ));
-    new_file
-        .file
-        .write_all(b"[composing]\nsend_mail = 'false'\n")
-        .unwrap();
-    let err = FileSettings::validate(new_file.path.clone(), false, true).unwrap_err();
-    assert_eq!(
-        err.summary.as_ref(),
-        "Configuration error (account-name): root_mailbox `/path/to/root/mailbox` is not a valid \
-         directory."
-    );
-
-    /* Test unrecognised configuration entries error */
-
-    let new_file = ConfigFile::new(EXTRA_CONFIG).unwrap();
-    let err = FileSettings::validate(new_file.path.clone(), false, true).unwrap_err();
-    assert_eq!(
-        err.summary.as_ref(),
-        "Unrecognised configuration values: {\"index_style\": \"Compact\"}"
-    );
-
-    /* Test IMAP config */
-
-    let new_file = ConfigFile::new(IMAP_CONFIG).unwrap();
-    FileSettings::validate(new_file.path.clone(), false, true)
-        .expect("could not parse IMAP config");
-
-    /* Test sample config */
-
-    let example_config = EXAMPLE_CONFIG.replace("\n#", "\n");
-    let re = regex::Regex::new(r#"root_mailbox\s*=\s*"[^"]*""#).unwrap();
-    let example_config = re.replace_all(
-        &example_config,
-        &format!(
-            r#"root_mailbox = "{}""#,
-            std::env::temp_dir().to_str().unwrap()
-        ),
-    );
-
-    let new_file = ConfigFile::new(&example_config).unwrap();
-    let config = FileSettings::validate(new_file.path.clone(), false, true)
-        .expect("Could not parse example config!");
-    for (accname, acc) in config.accounts.iter() {
-        if !acc.extra.is_empty() {
-            panic!(
-                "In example config, account `{}` has unrecognised configuration entries: {:?}",
-                accname, acc.extra
-            );
         }
     }
 }
