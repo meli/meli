@@ -133,6 +133,26 @@ impl<'i> ParsingError<&'i str> {
             backtrace: self.backtrace,
         }
     }
+
+    pub fn new(input: &'i str, error: Cow<'static, str>) -> Self {
+        ParsingError {
+            input,
+            error,
+            #[cfg(any(test, doc))]
+            backtrace: Backtrace::capture(),
+        }
+    }
+}
+
+impl<'i> ParsingError<&'i [u8]> {
+    pub fn new(input: &'i [u8], error: Cow<'static, str>) -> Self {
+        ParsingError {
+            input,
+            error,
+            #[cfg(any(test, doc))]
+            backtrace: Backtrace::capture(),
+        }
+    }
 }
 
 impl<I> From<(I, &'static str)> for ParsingError<I> {

@@ -461,6 +461,13 @@ Use
 .Em AUTH=ANONYMOUS
 extension for authentication.
 .Pq Em false \" default value
+.It Ic use_id Ar boolean
+.Pq Em optional
+Use
+.Em ID
+extension to retrieve server metadata, viewable at the account status page.
+Enabling this does not send any information to the server.
+.Pq Em false \" default value
 .It Ic timeout Ar integer
 .Pq Em optional
 Timeout to use for server connections in seconds.

@@ -53,6 +53,8 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use protocol_parser::id_ext::IDResponse;
+
 pub extern crate imap_codec;
 pub use cache::ModSequence;
 use futures::{lock::Mutex as FutureMutex, stream::Stream};
@@ -84,6 +86,7 @@ pub static SUPPORTED_CAPABILITIES: &[&str] = &[
     "COMPRESS=DEFLATE",
     "CONDSTORE",
     "ENABLE",
+    "ID",
     "IDLE",
     "IMAP4REV1",
     "LIST-EXTENDED",
@@ -150,6 +153,7 @@ macro_rules! get_conf_val {
 pub struct UIDStore {
     pub account_hash: AccountHash,
     pub account_name: Arc<str>,
+    pub server_id: Arc<Mutex<Option<IDResponse>>>,
     pub keep_offline_cache: Arc<Mutex<bool>>,
     pub capabilities: Arc<Mutex<Capabilities>>,
     pub hash_index: Arc<Mutex<HashMap<EnvelopeHash, (UID, MailboxHash)>>>,
@@ -181,6 +185,7 @@ impl UIDStore {
         Self {
             account_hash,
             account_name,
+            server_id: Default::default(),
             keep_offline_cache: Arc::new(Mutex::new(false)),
             capabilities: Default::default(),
             uidvalidity: Default::default(),
@@ -259,6 +264,7 @@ impl MailBackend for ImapType {
                     condstore,
                     oauth2,
                     auth_anonymous,
+                    id,
                 },
         } = self.server_conf.protocol
         {
@@ -326,6 +332,15 @@ impl MailBackend for ImapType {
                             };
                         }
                     }
+                    "ID" => {
+                        if id {
+                            *status = MailBackendExtensionStatus::Enabled { comment: None };
+                        } else {
+                            *status = MailBackendExtensionStatus::Supported {
+                                comment: Some("Disabled by user configuration"),
+                            };
+                        }
+                    }
                     _ => {
                         if SUPPORTED_CAPABILITIES
                             .iter()
@@ -338,6 +353,13 @@ impl MailBackend for ImapType {
             }
         }
         extensions.sort_by(|a, b| a.0.cmp(&b.0));
+        let metadata = self
+            .uid_store
+            .server_id
+            .lock()
+            .unwrap()
+            .as_ref()
+            .and_then(|id| serde_json::to_value(id).ok());
         MailBackendCapabilities {
             is_async: true,
             is_remote: true,
@@ -346,7 +368,7 @@ impl MailBackend for ImapType {
             supports_tags: true,
             supports_submission: false,
             extra_submission_headers: &[],
-            metadata: None,
+            metadata,
         }
     }
 
@@ -1369,6 +1391,7 @@ impl ImapType {
                     deflate: get_conf_val!(s["use_deflate"], true)?,
                     oauth2: use_oauth2,
                     auth_anonymous: get_conf_val!(s["use_auth_anonymous"], false)?,
+                    id: get_conf_val!(s["use_id"], false)?,
                 },
             },
             timeout,
@@ -1639,6 +1662,7 @@ impl ImapType {
         get_conf_val!(s["use_condstore"], true)?;
         get_conf_val!(s["use_deflate"], true)?;
         get_conf_val!(s["use_auth_anonymous"], false)?;
+        get_conf_val!(s["use_id"], false)?;
         let _timeout = get_conf_val!(s["timeout"], 16_u64)?;
         let extra_keys = s
             .extra

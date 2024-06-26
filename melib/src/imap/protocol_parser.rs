@@ -23,6 +23,7 @@
 
 use std::{convert::TryFrom, str::FromStr};
 
+pub mod id_ext;
 #[cfg(test)]
 mod tests;
 

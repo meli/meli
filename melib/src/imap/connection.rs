@@ -53,7 +53,10 @@ use crate::{
     email::parser::BytesExt,
     error::*,
     imap::{
-        protocol_parser::{self, ImapLineSplit, ImapResponse, RequiredResponses, SelectResponse},
+        protocol_parser::{
+            self, id_ext::id_ext_response, ImapLineSplit, ImapResponse, RequiredResponses,
+            SelectResponse,
+        },
         Capabilities, ImapServerConf, UIDStore,
     },
     text::Truncate,
@@ -100,6 +103,7 @@ pub struct ImapExtensionUse {
     pub idle: bool,
     pub deflate: bool,
     pub oauth2: bool,
+    pub id: bool,
 }
 
 impl Default for ImapExtensionUse {
@@ -110,6 +114,7 @@ impl Default for ImapExtensionUse {
             idle: true,
             deflate: true,
             oauth2: false,
+            id: false,
         }
     }
 }
@@ -510,15 +515,40 @@ impl ImapStream {
             }
         }
 
-        if got_new_capabilities {
-            return Ok((capabilities, ret));
+        if !got_new_capabilities {
+            // sending CAPABILITY after LOGIN automatically is an RFC recommendation, so
+            // check for lazy servers.
+            ret.send_command(CommandBody::Capability).await?;
+            ret.read_response(&mut res).await?;
+            capabilities
+                .extend(parse_capabilities(&res, &server_conf.server_hostname)?.into_iter());
         }
 
-        // sending CAPABILITY after LOGIN automatically is an RFC recommendation, so
-        // check for lazy servers.
-        ret.send_command(CommandBody::Capability).await?;
-        ret.read_response(&mut res).await?;
-        capabilities.extend(parse_capabilities(&res, &server_conf.server_hostname)?.into_iter());
+        if matches!(
+            server_conf.protocol,
+            ImapProtocol::IMAP {
+                extension_use: ImapExtensionUse { id: true, .. },
+                ..
+            }
+        ) && capabilities.contains(b"ID".as_slice())
+        {
+            ret.send_command(CommandBody::Id { parameters: None })
+                .await?;
+            ret.read_response(&mut res).await?;
+            match id_ext_response(&res) {
+                Err(err) => {
+                    log::warn!(
+                        "Could not parse ID command response from server. Consider turning ID use \
+                         off. Error was: {}",
+                        err
+                    );
+                }
+                Ok((_, None)) => {}
+                Ok((_, res @ Some(_))) => {
+                    *uid_store.server_id.lock().unwrap() = res;
+                }
+            }
+        }
         Ok((capabilities, ret))
     }
 
@@ -762,9 +792,10 @@ impl ImapConnection {
                         ImapExtensionUse {
                             condstore,
                             deflate,
-                            idle: _idle,
+                            idle: _,
                             oauth2: _,
                             auth_anonymous: _,
+                            id: _,
                         },
                 } => {
                     if capabilities.contains(&b"CONDSTORE"[..]) && condstore {
