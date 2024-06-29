@@ -29,6 +29,7 @@ Try an [old online interactive web demo](https://meli-email.org/wasm2.html "onli
 - [openbsd ports](https://openports.pl/path/mail/meli)
 - [Pre-built debian package, static binaries](https://github.com/meli/meli/releases/ "github releases for meli")
 - [Nix](https://search.nixos.org/packages?show=meli&query=meli&from=0&size=30&sort=relevance&channel=unstable#disabled "nixos package search results for 'meli'")
+- [MacPorts](https://ports.macports.org/port/meli/)
 
 ## Build
 
