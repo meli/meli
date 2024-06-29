@@ -1250,9 +1250,12 @@ impl Themes {
                     ret,
                     "\"{}\" = {{ fg = {}, bg = {}, attrs = {} }}",
                     k,
-                    toml::to_string(&unlink_fg(theme, &ColorField::Fg, k)).unwrap(),
-                    toml::to_string(&unlink_bg(theme, &ColorField::Bg, k)).unwrap(),
-                    toml::to_string(&unlink_attrs(theme, k)).unwrap(),
+                    toml::Value::try_from(unlink_fg(theme, &ColorField::Fg, k))
+                        .expect("Could not serialize Color"),
+                    toml::Value::try_from(unlink_bg(theme, &ColorField::Bg, k))
+                        .expect("Could not serialize Color"),
+                    toml::Value::try_from(unlink_attrs(theme, k))
+                        .expect("Could not serialize Attribute"),
                 );
             }
         } else {
@@ -1261,9 +1264,9 @@ impl Themes {
                     ret,
                     "\"{}\" = {{ fg = {}, bg = {}, attrs = {} }}",
                     k,
-                    toml::to_string(&theme[k].fg).unwrap(),
-                    toml::to_string(&theme[k].bg).unwrap(),
-                    toml::to_string(&theme[k].attrs).unwrap(),
+                    toml::Value::try_from(&theme[k].fg).expect("Could not serialize Color"),
+                    toml::Value::try_from(&theme[k].bg).expect("Could not serialize Color"),
+                    toml::Value::try_from(&theme[k].attrs).expect("Could not serialize Attribute")
                 );
             }
         }

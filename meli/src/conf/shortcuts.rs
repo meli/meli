@@ -83,7 +83,9 @@ impl DotAddressable for Shortcuts {
                     ))),
                 }
             }
-            None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
+            None => Ok(toml::Value::try_from(self)
+                .map_err(|err| err.to_string())?
+                .to_string()),
         }
     }
 }
@@ -148,7 +150,7 @@ macro_rules! shortcut_key_values {
                             ))),
                         }
                     }
-                    None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
+                    None => Ok(toml::Value::try_from(self).map_err(|err| err.to_string())?.to_string()),
                 }
             }
         }

@@ -1061,7 +1061,9 @@ mod dotaddressable {
                     std::any::type_name::<Self>()
                 )))
             } else {
-                Ok(toml::to_string(self).map_err(|err| err.to_string())?)
+                Ok(toml::Value::try_from(self)
+                    .map_err(|err| err.to_string())?
+                    .to_string())
             }
         }
     }
@@ -1112,7 +1114,9 @@ mod dotaddressable {
                         ))),
                     }
                 }
-                None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
+                None => Ok(toml::Value::try_from(self)
+                    .map_err(|err| err.to_string())?
+                    .to_string()),
             }
         }
     }
@@ -1140,7 +1144,9 @@ mod dotaddressable {
                         ))),
                     }
                 }
-                None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
+                None => Ok(toml::Value::try_from(self)
+                    .map_err(|err| err.to_string())?
+                    .to_string()),
             }
         }
     }
@@ -1161,7 +1167,9 @@ mod dotaddressable {
                         ))),
                     }
                 }
-                None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
+                None => Ok(toml::Value::try_from(self)
+                    .map_err(|err| err.to_string())?
+                    .to_string()),
             }
         }
     }
@@ -1196,7 +1204,9 @@ mod dotaddressable {
                         ))),
                     }
                 }
-                None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
+                None => Ok(toml::Value::try_from(self)
+                    .map_err(|err| err.to_string())?
+                    .to_string()),
             }
         }
     }
@@ -1215,7 +1225,9 @@ mod dotaddressable {
                         ))),
                     }
                 }
-                None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
+                None => Ok(toml::Value::try_from(self)
+                    .map_err(|err| err.to_string())?
+                    .to_string()),
             }
         }
     }
@@ -1245,7 +1257,9 @@ mod dotaddressable {
                         ))),
                     }
                 }
-                None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
+                None => Ok(toml::Value::try_from(self)
+                    .map_err(|err| err.to_string())?
+                    .to_string()),
             }
         }
     }
@@ -1272,7 +1286,9 @@ mod dotaddressable {
                         ))),
                     }
                 }
-                None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
+                None => Ok(toml::Value::try_from(self)
+                    .map_err(|err| err.to_string())?
+                    .to_string()),
             }
         }
     }
@@ -1295,7 +1311,9 @@ mod dotaddressable {
                         ))),
                     }
                 }
-                None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
+                None => Ok(toml::Value::try_from(self)
+                    .map_err(|err| err.to_string())?
+                    .to_string()),
             }
         }
     }
