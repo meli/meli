@@ -204,6 +204,7 @@ impl<T> RowsState<T> {
             self.env_order.insert(new_hash, row);
         }
         if let Some(thread) = self.env_to_thread.remove(&old_hash) {
+            self.env_to_thread.insert(new_hash, thread);
             self.thread_to_env
                 .entry(thread)
                 .or_default()
@@ -213,7 +214,7 @@ impl<T> RowsState<T> {
         let selection_status = self.selection.remove(&old_hash).unwrap_or(false);
         self.selection.insert(new_hash, selection_status);
         self.all_envelopes.remove(&old_hash);
-        self.all_envelopes.insert(old_hash);
+        self.all_envelopes.insert(new_hash);
     }
 }
 
