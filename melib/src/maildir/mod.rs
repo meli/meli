@@ -22,6 +22,7 @@
 #[macro_use]
 mod backend;
 pub use self::backend::*;
+pub mod watch;
 
 mod stream;
 use std::{
@@ -67,26 +68,33 @@ impl MaildirOp {
             hash,
         }
     }
-    fn path(&self) -> Result<PathBuf> {
-        let map = self.hash_index.lock().unwrap();
-        let map = &map[&self.mailbox_hash];
-        debug!("looking for {} in {} map", self.hash, self.mailbox_hash);
-        if !map.contains_key(&self.hash) {
-            debug!("doesn't contain it though len = {}\n{:#?}", map.len(), map);
-            for e in map.iter() {
-                debug!("{:#?}", e);
-            }
-            return Err(Error::new("File not found"));
-        }
 
-        Ok(if let Some(modif) = &map[&self.hash].modified {
-            match modif {
-                PathMod::Path(ref path) => path.clone(),
-                PathMod::Hash(hash) => map[hash].to_path_buf(),
+    pub fn path(&self) -> Option<PathBuf> {
+        let map = self.hash_index.lock().unwrap();
+        let map = map.get(&self.mailbox_hash)?;
+        log::trace!("looking for {} in {} map", self.hash, self.mailbox_hash);
+        let mut hash = self.hash;
+        loop {
+            let Some(p) = map.get(&hash) else {
+                log::trace!("doesn't contain it though len = {}\n{:#?}", map.len(), map);
+                for e in map.iter() {
+                    log::debug!("{:#?}", e);
+                }
+                return None;
+            };
+            if let Some(ref modif) = p.modified {
+                match modif {
+                    PathMod::Path(ref path) => return Some(path.to_path_buf()),
+                    PathMod::Hash(next_hash) => {
+                        hash = *next_hash;
+                    }
+                }
+            } else if p.removed {
+                return None;
+            } else {
+                return Some(p.buf.to_path_buf());
             }
-        } else {
-            map.get(&self.hash).unwrap().to_path_buf()
-        })
+        }
     }
 }
 
@@ -95,10 +103,15 @@ impl BackendOp for MaildirOp {
         let _self = self.clone();
         Ok(Box::pin(async move {
             smol::unblock(move || {
+                let Some(path) = _self.path() else {
+                    return Err(Error::new("Not found")
+                        .set_summary(format!("Message with hash {} was not found.", _self.hash))
+                        .set_kind(ErrorKind::NotFound));
+                };
                 let file = std::fs::OpenOptions::new()
                     .read(true)
                     .write(false)
-                    .open(_self.path()?)?;
+                    .open(path)?;
                 let mut buf_reader = BufReader::new(file);
                 let mut contents = Vec::new();
                 buf_reader.read_to_end(&mut contents)?;
@@ -255,6 +268,9 @@ impl BackendMailbox for MaildirMailbox {
 
 pub trait MaildirPathTrait {
     fn flags(&self) -> Flag;
+    fn to_mailbox_hash(&self) -> MailboxHash;
+    fn to_envelope_hash(&self) -> EnvelopeHash;
+    fn is_in_new(&self) -> bool;
 }
 
 impl MaildirPathTrait for Path {
@@ -285,5 +301,39 @@ impl MaildirPathTrait for Path {
         }
 
         flag
+    }
+
+    fn to_mailbox_hash(&self) -> MailboxHash {
+        let mut path = self.to_path_buf();
+        if path.is_file() {
+            path.pop();
+        }
+        if path.is_dir() && (path.ends_with("cur") || path.ends_with("tmp") | path.ends_with("new"))
+        {
+            path.pop();
+        }
+
+        let mut hasher = DefaultHasher::new();
+        path.hash(&mut hasher);
+        MailboxHash(hasher.finish())
+    }
+
+    fn to_envelope_hash(&self) -> EnvelopeHash {
+        debug_assert!(self.is_file());
+        let mut hasher = DefaultHasher::default();
+        self.hash(&mut hasher);
+        EnvelopeHash(hasher.finish())
+    }
+
+    fn is_in_new(&self) -> bool {
+        use std::{ffi::OsStr, path::Component};
+
+        if self.is_dir() {
+            false
+        } else {
+            let mut iter = self.components().rev();
+            iter.next();
+            iter.next() == Some(Component::Normal(OsStr::new("new")))
+        }
     }
 }

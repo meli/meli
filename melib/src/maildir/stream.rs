@@ -95,7 +95,7 @@ impl MaildirStream {
         let mut unseen_total: usize = 0;
         let mut buf = Vec::with_capacity(4096);
         for file in chunk {
-            let env_hash = get_file_hash(&file);
+            let env_hash = file.to_envelope_hash();
             {
                 map.lock()
                     .unwrap()
