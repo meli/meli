@@ -1371,6 +1371,7 @@ dependencies = [
  "smol",
  "socket2 0.5.5",
  "stderrlog",
+ "tempfile",
  "unicode-segmentation",
  "url",
  "uuid",

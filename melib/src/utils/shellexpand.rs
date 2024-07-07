@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-//! A `ShellExpandTrait` to expand paths like a shell.
+//! A [`ShellExpandTrait`] to expand paths like a shell.
 
 use std::{
     ffi::OsStr,
@@ -27,15 +27,48 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use smallvec::SmallVec;
+/// The return type of [`ShellExpandTrait`].
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Completions {
+    /// Completion entries, e.g. strings that if appended to the path being
+    /// completed, would result in all valid paths that exist with the path
+    /// as a prefix.
+    Entries(Vec<String>),
+    /// Path is a file and there are no completions.
+    IsFile,
+    /// Path is a directory and there are no completions.
+    IsDirectory,
+    /// Path is invalid and there are no completions.
+    IsInvalid,
+}
 
-// [ref:needs_dev_doc]: ShellExpandTrait
-// [ref:needs_unit_test]: ShellExpandTrait
+impl IntoIterator for Completions {
+    type Item = String;
+    type IntoIter = <Vec<String> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        match self {
+            Self::Entries(e) => e.into_iter(),
+            _ => Vec::default().into_iter(),
+        }
+    }
+}
+
+/// Utility trait to expand paths like an interactive shell does.
 pub trait ShellExpandTrait {
-    // [ref:needs_dev_doc]
+    /// Expands `~` to the content of `${HOME}` and environment variables to
+    /// their content.
     fn expand(&self) -> PathBuf;
-    // [ref:needs_dev_doc]
-    fn complete(&self, force: bool) -> SmallVec<[String; 128]>;
+    /// Returns what completions are available for this path depending on the
+    /// input options given.
+    ///
+    /// `force`: whether to force completion if `self` is a directory. If
+    /// `false` and `self` is a directory, it returns
+    /// `Completions::IsDirectory`. Otherwise the return value depends on
+    /// the value of `treat_as_dir`.
+    /// `treat_as_dir`: whether to treat the last path component in `self` as a
+    /// pattern or a directory name.
+    fn complete(&self, force: bool, treat_as_dir: bool) -> Completions;
 }
 
 impl ShellExpandTrait for Path {
@@ -46,9 +79,9 @@ impl ShellExpandTrait for Path {
         for c in self.components() {
             let c_to_str = c.as_os_str();
             match c_to_str {
-                tilde if tilde == "~" => {
+                tilde if tilde == "~" && ret.as_os_str().is_empty() => {
                     if let Ok(home_dir) = std::env::var("HOME") {
-                        ret.push(home_dir)
+                        ret.push(home_dir);
                     } else {
                         // POSIX says that if HOME is unset, the results of tilde expansion is
                         // unspecified.
@@ -74,29 +107,131 @@ impl ShellExpandTrait for Path {
         ret
     }
 
+    fn complete(&self, force: bool, treat_as_dir: bool) -> Completions {
+        #[cfg(not(target_os = "linux"))]
+        {
+            impls::inner_complete_generic(self, force, treat_as_dir)
+        }
+        #[cfg(target_os = "linux")]
+        {
+            impls::inner_complete_linux(self, force, treat_as_dir)
+        }
+    }
+}
+
+pub mod impls {
+    //! Inner implementations for [`ShellExpandTrait`]'s complete function.
+    use super::*;
+
+    /// Completing implementation for all platforms.
+    pub fn inner_complete_generic(_self: &Path, force: bool, treat_as_dir: bool) -> Completions {
+        let mut entries = Vec::new();
+        let (prefix, _match) = {
+            if _self.exists()
+                && !treat_as_dir
+                && (!force || _self.as_os_str().as_bytes().ends_with(b"/"))
+            {
+                return Completions::IsDirectory;
+            } else if treat_as_dir {
+                (_self, OsStr::from_bytes(b""))
+            } else {
+                let last_component = _self
+                    .components()
+                    .last()
+                    .map(|c| c.as_os_str())
+                    .unwrap_or_else(|| OsStr::from_bytes(b""));
+                let prefix = if let Some(p) = _self.parent() {
+                    p
+                } else {
+                    return Completions::IsInvalid;
+                };
+                (prefix, last_component)
+            }
+        };
+
+        if let Ok(iter) = std::fs::read_dir(prefix) {
+            for entry in iter.flatten() {
+                if entry.path().as_os_str().as_bytes() != b"."
+                    && entry.path().as_os_str().as_bytes() != b".."
+                    && entry
+                        .path()
+                        .as_os_str()
+                        .ext_trim_prefix(prefix.as_os_str())
+                        .ext_starts_with(_match)
+                {
+                    if entry.path().is_dir() && !entry.path().as_os_str().as_bytes().ends_with(b"/")
+                    {
+                        let mut s = unsafe {
+                            String::from_utf8_unchecked(
+                                entry
+                                    .path()
+                                    .as_os_str()
+                                    .ext_trim_prefix(prefix.as_os_str())
+                                    .as_bytes()[_match.as_bytes().len()..]
+                                    .to_vec(),
+                            )
+                        };
+                        s.push('/');
+                        entries.push(s);
+                    } else {
+                        entries.push(unsafe {
+                            String::from_utf8_unchecked(
+                                entry
+                                    .path()
+                                    .as_os_str()
+                                    .ext_trim_prefix(prefix.as_os_str())
+                                    .as_bytes()[_match.as_bytes().len()..]
+                                    .to_vec(),
+                            )
+                        });
+                    }
+                }
+            }
+        }
+
+        if force && treat_as_dir {
+            for entry in &mut entries {
+                let entry: &mut String = entry;
+                if entry.starts_with(std::path::MAIN_SEPARATOR) {
+                    entry.remove(0);
+                }
+            }
+        }
+
+        entries.sort();
+        Completions::Entries(entries)
+    }
+
     #[cfg(target_os = "linux")]
-    fn complete(&self, force: bool) -> SmallVec<[String; 128]> {
+    /// Completing implementation for Linux only, because it uses the
+    /// [`getdents64`](::libc::SYS_getdents64) to get results faster, since we
+    /// only care for raw name byte matching.
+    pub fn inner_complete_linux(_self: &Path, force: bool, treat_as_dir: bool) -> Completions {
         use std::os::unix::io::AsRawFd;
 
-        use libc::dirent64;
         use nix::fcntl::OFlag;
 
         const BUF_SIZE: ::libc::size_t = 8 << 10;
 
-        let (prefix, _match) = if self.as_os_str().as_bytes().ends_with(b"/.") {
-            (self.components().as_path(), OsStr::from_bytes(b"."))
-        } else if self.exists() && (!force || self.as_os_str().as_bytes().ends_with(b"/")) {
-            return SmallVec::new();
+        let (prefix, _match): (&Path, &OsStr) = if _self.as_os_str().as_bytes().ends_with(b"/.") {
+            (_self.components().as_path(), OsStr::from_bytes(b"."))
+        } else if _self.exists()
+            && !treat_as_dir
+            && (!force || _self.as_os_str().as_bytes().ends_with(b"/"))
+        {
+            return Completions::IsDirectory;
+        } else if treat_as_dir {
+            (_self, OsStr::from_bytes(b""))
         } else {
-            let last_component = self
+            let last_component = _self
                 .components()
                 .last()
                 .map(|c| c.as_os_str())
                 .unwrap_or_else(|| OsStr::from_bytes(b""));
-            let prefix = if let Some(p) = self.parent() {
+            let prefix = if let Some(p) = _self.parent() {
                 p
             } else {
-                return SmallVec::new();
+                return Completions::IsInvalid;
             };
             (prefix, last_component)
         };
@@ -119,24 +254,24 @@ impl ShellExpandTrait for Path {
             Err(err) => {
                 debug!(prefix);
                 debug!(err);
-                return SmallVec::new();
+                return Completions::IsInvalid;
             }
         };
 
-        let mut buf: Vec<u8> = Vec::with_capacity(BUF_SIZE);
-        let mut entries = SmallVec::new();
+        let mut buf: Vec<u8> = vec![0; BUF_SIZE * std::mem::size_of::<::libc::dirent64>()];
+        let mut entries = Vec::new();
         loop {
             let n: i64 = unsafe {
                 ::libc::syscall(
                     ::libc::SYS_getdents64,
                     dir.as_raw_fd(),
                     buf.as_ptr(),
-                    BUF_SIZE - 256,
+                    BUF_SIZE,
                 )
             };
 
             let Ok(n) = usize::try_from(n) else {
-                return SmallVec::new();
+                return Completions::IsInvalid;
             };
             if n == 0 {
                 break;
@@ -146,7 +281,7 @@ impl ShellExpandTrait for Path {
             }
             let mut pos = 0;
             while pos < n {
-                let dir = unsafe { std::mem::transmute::<&[u8], &[dirent64]>(&buf[pos..]) };
+                let dir = unsafe { std::mem::transmute::<&[u8], &[::libc::dirent64]>(&buf[pos..]) };
                 let entry = unsafe { std::ffi::CStr::from_ptr(dir[0].d_name.as_ptr()) };
                 if entry.to_bytes() != b"."
                     && entry.to_bytes() != b".."
@@ -179,71 +314,53 @@ impl ShellExpandTrait for Path {
             // It sometimes writes a partial list of entries even if the
             // full list would fit."
         }
-        entries
+
+        entries.sort();
+        Completions::Entries(entries)
     }
 
-    #[cfg(not(target_os = "linux"))]
-    fn complete(&self, force: bool) -> SmallVec<[String; 128]> {
-        let mut entries = SmallVec::new();
-        let (prefix, _match) = {
-            if self.exists() && (!force || self.as_os_str().as_bytes().ends_with(b"/")) {
-                // println!("{} {:?}", self.display(), self.components().last());
-                return entries;
-            } else {
-                let last_component = self
-                    .components()
-                    .last()
-                    .map(|c| c.as_os_str())
-                    .unwrap_or_else(|| OsStr::from_bytes(b""));
-                let prefix = if let Some(p) = self.parent() {
-                    p
-                } else {
-                    return entries;
-                };
-                (prefix, last_component)
-            }
-        };
-        if force && self.is_dir() && !self.as_os_str().as_bytes().ends_with(b"/") {
-            entries.push("/".to_string());
-        }
-
-        if let Ok(iter) = std::fs::read_dir(prefix) {
-            for entry in iter.flatten() {
-                if entry.path().as_os_str().as_bytes() != b"."
-                    && entry.path().as_os_str().as_bytes() != b".."
-                    && entry
-                        .path()
-                        .as_os_str()
-                        .as_bytes()
-                        .starts_with(_match.as_bytes())
-                {
-                    if entry.path().is_dir() && !entry.path().as_os_str().as_bytes().ends_with(b"/")
-                    {
-                        let mut s = unsafe {
-                            String::from_utf8_unchecked(
-                                entry.path().as_os_str().as_bytes()[_match.as_bytes().len()..]
-                                    .to_vec(),
-                            )
-                        };
-                        s.push('/');
-                        entries.push(s);
-                    } else {
-                        entries.push(unsafe {
-                            String::from_utf8_unchecked(
-                                entry.path().as_os_str().as_bytes()[_match.as_bytes().len()..]
-                                    .to_vec(),
-                            )
-                        });
-                    }
-                }
-            }
-        }
-        entries
+    trait AsBytesExt {
+        fn as_bytes_ext(&self) -> &[u8];
     }
-}
 
-#[test]
-fn test_shellexpandtrait() {
-    assert!(Path::new("~").expand().complete(false).is_empty());
-    assert!(!Path::new("~").expand().complete(true).is_empty());
+    impl AsBytesExt for [u8] {
+        #[inline]
+        fn as_bytes_ext(&self) -> &[u8] {
+            self
+        }
+    }
+
+    impl AsBytesExt for OsStr {
+        #[inline]
+        fn as_bytes_ext(&self) -> &[u8] {
+            self.as_bytes()
+        }
+    }
+
+    trait TrimExt {
+        fn ext_trim_prefix<'s>(&'s self, prefix: &Self) -> &'s Self;
+        fn ext_starts_with<B: AsBytesExt + ?Sized>(&self, prefix: &B) -> bool;
+    }
+
+    impl TrimExt for OsStr {
+        #[inline]
+        fn ext_trim_prefix<'s>(&'s self, prefix: &Self) -> &'s Self {
+            Self::from_bytes(
+                self.as_bytes()
+                    .strip_prefix(prefix.as_bytes())
+                    .and_then(|s| s.strip_prefix(b"/"))
+                    .unwrap_or_else(|| {
+                        self.as_bytes()
+                            .strip_prefix(b"/")
+                            .unwrap_or_else(|| self.as_bytes())
+                    }),
+            )
+        }
+
+        #[inline]
+        fn ext_starts_with<B: AsBytesExt + ?Sized>(&self, prefix: &B) -> bool {
+            let prefix = prefix.as_bytes_ext();
+            self.as_bytes().starts_with(prefix)
+        }
+    }
 }

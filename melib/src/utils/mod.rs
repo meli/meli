@@ -32,6 +32,8 @@ pub mod percent_encoding;
 pub mod shellexpand;
 #[cfg(feature = "sqlite3")]
 pub mod sqlite3;
+#[cfg(test)]
+mod tests;
 pub mod xdg;
 
 pub mod html_escape {

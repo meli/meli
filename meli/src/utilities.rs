@@ -317,15 +317,10 @@ impl Component for StatusBar {
                     }
                 }));
                 */
-                if let Some(p) = self
-                    .ex_buffer
-                    .as_str()
-                    .split_whitespace()
-                    .last()
-                    .map(std::path::Path::new)
-                {
+                if let Some(p) = self.ex_buffer.as_str().split_whitespace().last() {
+                    let path = std::path::Path::new(p);
                     suggestions.extend(
-                        p.complete(true)
+                        path.complete(true, p.ends_with('/'))
                             .into_iter()
                             .map(|m| format!("{}{}", self.ex_buffer.as_str(), m).into()),
                     );

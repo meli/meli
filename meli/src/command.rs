@@ -548,7 +548,7 @@ pub fn command_completion_suggestions(input: &str) -> Vec<String> {
         }
         if let Some((s, Filepath)) = _m.last() {
             let p = std::path::Path::new(s);
-            sugg.extend(p.complete(true).into_iter());
+            sugg.extend(p.complete(true, s.ends_with('/')).into_iter());
         }
     }
     sugg.into_iter()
