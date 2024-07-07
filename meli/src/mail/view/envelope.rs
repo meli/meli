@@ -21,7 +21,7 @@
 
 use std::process::{Command, Stdio};
 
-use melib::utils::xdg::query_default_app;
+use melib::utils::{shellexpand::ShellExpandTrait, xdg::query_default_app};
 
 use super::*;
 use crate::ThreadEvent;
@@ -1492,7 +1492,7 @@ impl Component for EnvelopeView {
             }
             UIEvent::Action(View(ViewAction::ExportMail(ref path))) => {
                 // Save entire message as eml
-                let mut path = std::path::Path::new(path).to_path_buf();
+                let mut path = std::path::Path::new(path).to_path_buf().expand();
 
                 if path.is_dir() {
                     path.push(format!("{}.eml", self.mail.message_id_raw()));
@@ -1526,7 +1526,7 @@ impl Component for EnvelopeView {
                 return true;
             }
             UIEvent::Action(View(ViewAction::SaveAttachment(a_i, ref path))) => {
-                let mut path = std::path::Path::new(path).to_path_buf();
+                let mut path = std::path::Path::new(path).to_path_buf().expand();
 
                 if let Some(u) = self.open_attachment(a_i, context) {
                     if path.is_dir() {
