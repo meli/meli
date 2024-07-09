@@ -605,10 +605,14 @@ impl From<io::ErrorKind> for ErrorKind {
 }
 
 impl From<io::Error> for Error {
-    #[inline]
     fn from(err: io::Error) -> Self {
-        let kind = err.kind().into();
-        Self::new(err.to_string())
+        let s = err.to_string();
+        let kind = if s.contains("failed to lookup address information") {
+            ErrorKind::Network(NetworkErrorKind::HostLookupFailed)
+        } else {
+            err.kind().into()
+        };
+        Self::new(s)
             .set_details(err.kind().to_string())
             .set_source(Some(Arc::new(err)))
             .set_kind(kind)
