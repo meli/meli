@@ -348,7 +348,7 @@ pub mod impls {
             Self::from_bytes(
                 self.as_bytes()
                     .strip_prefix(prefix.as_bytes())
-                    .and_then(|s| s.strip_prefix(b"/"))
+                    .and_then(|s| s.strip_prefix(b"/").or(Some(s)))
                     .unwrap_or_else(|| {
                         self.as_bytes()
                             .strip_prefix(b"/")
