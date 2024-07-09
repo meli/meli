@@ -348,11 +348,11 @@ impl Account {
             .into_iter()
             .collect::<HashSet<String>>();
         for f in ref_mailboxes.values_mut() {
+            if default_mailbox.remove(f.path()) {
+                self.settings.default_mailbox = Some(f.hash());
+            }
             if let Some(conf) = self.settings.mailbox_confs.get_mut(f.path()) {
                 mailbox_conf_hash_set.remove(f.path());
-                if default_mailbox.remove(f.path()) {
-                    self.settings.default_mailbox = Some(f.hash());
-                }
                 conf.mailbox_conf.usage = if f.special_usage() != SpecialUsageMailbox::Normal {
                     Some(f.special_usage())
                 } else {

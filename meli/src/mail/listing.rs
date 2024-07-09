@@ -2832,6 +2832,16 @@ impl Listing {
             cmd_buf: String::with_capacity(4),
         };
         ret.component.realize(ret.id().into(), context);
+        {
+            let _new_val = ret.cursor_pos.account;
+            if let Some(idx) = context.accounts[_new_val]
+                .default_mailbox()
+                .and_then(|h| ret.accounts[_new_val].entry_by_hash(h))
+            {
+                ret.cursor_pos.menu = MenuEntryCursor::Mailbox(idx);
+                ret.menu_cursor_pos.menu = MenuEntryCursor::Mailbox(idx);
+            }
+        }
         ret.change_account(context);
         ret
     }
@@ -3335,6 +3345,20 @@ impl Listing {
                 index_style: previous_index_styles.get(&f.hash).copied(),
             })
             .collect::<_>();
+        if let (
+            ListingComponent::Offline(_),
+            MenuEntryCursor::Mailbox(ref mut idx),
+            Some(default),
+        ) = (
+            &self.component,
+            &mut self.cursor_pos.menu,
+            context.accounts[self.cursor_pos.account]
+                .default_mailbox()
+                .and_then(|h| self.accounts[self.cursor_pos.account].entry_by_hash(h)),
+        ) {
+            *idx = default;
+            self.menu_cursor_pos.menu = MenuEntryCursor::Mailbox(default);
+        }
         match self.cursor_pos.menu {
             MenuEntryCursor::Mailbox(idx) => {
                 // Account might have no mailboxes yet if it's offline
