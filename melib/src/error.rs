@@ -604,6 +604,12 @@ impl From<io::ErrorKind> for ErrorKind {
     }
 }
 
+impl From<std::convert::Infallible> for Error {
+    fn from(_: std::convert::Infallible) -> Self {
+        unreachable!()
+    }
+}
+
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Self {
         let s = err.to_string();
