@@ -179,7 +179,7 @@ impl Context {
                     accounts[account_pos][&mailbox_node.hash].name()
                 );
             }
-            accounts[account_pos].watch();
+            accounts[account_pos].watch(None);
 
             replies.push_back(UIEvent::AccountStatusChange(
                 accounts[account_pos].hash(),
@@ -483,7 +483,7 @@ impl State {
         s.screen.switch_to_alternate_screen(&s.context);
         for i in 0..s.context.accounts.len() {
             if !s.context.accounts[i].backend_capabilities.is_remote {
-                s.context.accounts[i].watch();
+                s.context.accounts[i].watch(None);
             }
             if s.context.is_online_idx(i).is_ok() && s.context.accounts[i].is_empty() {
                 //return Err(Error::new(format!(

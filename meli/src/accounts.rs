@@ -39,10 +39,11 @@ use futures::{future::FutureExt, stream::StreamExt};
 use indexmap::IndexMap;
 use melib::{
     backends::{prelude::*, Backends},
-    error::{Error, ErrorKind, Result},
+    error::{Error, ErrorKind, NetworkErrorKind, Result},
     log,
     text::GlobMatch,
     thread::Threads,
+    utils::{futures::sleep, random},
     AddressBook, SortField, SortOrder,
 };
 use smallvec::SmallVec;
@@ -743,7 +744,7 @@ impl Account {
                     return Some(EnvelopeRemove(env_hash, thread_hash));
                 }
                 RefreshEventKind::Rescan => {
-                    self.watch();
+                    self.watch(None);
                 }
                 RefreshEventKind::Failure(err) => {
                     log::trace!("RefreshEvent Failure: {}", err.to_string());
@@ -754,7 +755,7 @@ impl Account {
                         let j = self.active_jobs.remove(&job_id);
                         drop(j);
                     }
-                    self.watch();
+                    self.watch(None);
                     return Some(Notification {
                         title: Some("Account watch failed".into()),
                         body: err.to_string().into(),
@@ -817,7 +818,7 @@ impl Account {
         Ok(())
     }
 
-    pub fn watch(&mut self) {
+    pub fn watch(&mut self, wait: Option<Duration>) {
         if self.settings.account().manual_refresh
             || matches!(self.is_online, IsOnline::Err { ref value, ..} if !value.is_recoverable())
         {
@@ -827,6 +828,12 @@ impl Account {
         if !self.active_jobs.values().any(|j| j.is_watch()) {
             match self.backend.read().unwrap().watch() {
                 Ok(fut) => {
+                    let fut = async move {
+                        if let Some(wait) = wait {
+                            sleep(wait).await;
+                        }
+                        fut.await
+                    };
                     let handle = if self.backend_capabilities.is_async {
                         self.main_loop_handler
                             .job_executor
@@ -1351,7 +1358,7 @@ impl Account {
                         *retries *= 2;
                     }
                     Some(Duration::from_millis(
-                        oldval * (4 * u64::from(melib::utils::random::random_u8())),
+                        oldval * (4 * u64::from(random::random_u8())),
                     ))
                 } else {
                     None
@@ -1363,8 +1370,6 @@ impl Account {
         if !self.active_jobs.values().any(JobRequest::is_online) {
             let online_fut = self.backend.read().unwrap().is_online();
             if let Ok(online_fut) = online_fut {
-                use melib::utils::futures::sleep;
-
                 let handle = match (wait, self.backend_capabilities.is_async) {
                     (Some(wait), true) => self.main_loop_handler.job_executor.spawn_specialized(
                         "is_online".into(),
@@ -1617,7 +1622,7 @@ impl Account {
                                 if matches!(self.is_online, IsOnline::Err { .. })
                                     || matches!(self.is_online, IsOnline::Uninit)
                                 {
-                                    self.watch();
+                                    self.watch(None);
                                 }
                                 self.is_online = IsOnline::True;
                                 return true;
@@ -1651,7 +1656,7 @@ impl Account {
                         Ok(None) => {}
                         Ok(Some(Ok(()))) => {
                             if matches!(self.is_online, IsOnline::Err { .. }) {
-                                self.watch();
+                                self.watch(None);
                             }
                             self.is_online = IsOnline::True;
                             self.main_loop_handler.send(ThreadEvent::UIEvent(
@@ -2083,8 +2088,13 @@ impl Account {
                 JobRequest::Watch { ref mut handle } => {
                     log::trace!("JobRequest::Watch finished??? ");
                     if let Ok(Some(Err(err))) = handle.chan.try_recv() {
-                        if err.kind.is_timeout() {
-                            self.watch();
+                        if err.kind.is_timeout()
+                            || matches!(
+                                err.kind,
+                                ErrorKind::Network(NetworkErrorKind::HostLookupFailed)
+                            )
+                        {
+                            self.watch(Some(Duration::from_secs(3)));
                         } else {
                             self.main_loop_handler
                                 .job_executor
