@@ -614,19 +614,19 @@ impl State {
                     continue;
                 }
                 if let Some((x_start, x_end)) = segment.take() {
-                    self.screen.draw(x_start, x_end, y);
+                    self.screen.draw(x_start..(x_end + 1), y);
                 }
                 match segment {
-                    ref mut s @ None => {
-                        *s = Some((x_start, x_end));
+                    None => {
+                        segment = Some((x_start, x_end));
                     }
-                    ref mut s @ Some(_) if s.unwrap().1 < x_start => {
-                        self.screen.draw(s.unwrap().0, s.unwrap().1, y);
-                        *s = Some((x_start, x_end));
+                    Some((p_x_start, p_x_end)) if p_x_end < x_start => {
+                        self.screen.draw(p_x_start..(p_x_end + 1), y);
+                        segment = Some((x_start, x_end));
                     }
-                    ref mut s @ Some(_) if s.unwrap().1 < x_end => {
-                        self.screen.draw(s.unwrap().0, s.unwrap().1, y);
-                        *s = Some((s.unwrap().1, x_end));
+                    Some((p_x_start, p_x_end)) if p_x_end < x_end => {
+                        self.screen.draw(p_x_start..(p_x_end + 1), y);
+                        segment = Some((p_x_end, x_end));
                     }
                     Some((_, ref mut x)) => {
                         *x = x_end;
@@ -634,7 +634,7 @@ impl State {
                 }
             }
             if let Some((x_start, x_end)) = segment {
-                self.screen.draw(x_start, x_end, y);
+                self.screen.draw(x_start..(x_end + 1), y);
             }
         }
 
@@ -652,8 +652,7 @@ impl State {
                                 .grid()
                                 .bounds_iter(self.message_box.cached_area())
                             {
-                                self.screen
-                                    .draw(row.cols().start, row.cols().end, row.row_index());
+                                self.screen.draw(row.cols(), row.row_index());
                             }
                         }
                     }
@@ -666,8 +665,7 @@ impl State {
                     .overlay_grid()
                     .bounds_iter(self.message_box.cached_area())
                 {
-                    self.screen
-                        .draw_overlay(row.cols().start, row.cols().end, row.row_index());
+                    self.screen.draw_overlay(row.cols(), row.row_index());
                 }
             }
             self.message_box.set_dirty(false);
@@ -679,8 +677,7 @@ impl State {
                     .grid()
                     .bounds_iter(self.message_box.cached_area())
                 {
-                    self.screen
-                        .draw(row.cols().start, row.cols().end, row.row_index());
+                    self.screen.draw(row.cols(), row.row_index());
                 }
             }
             self.message_box.set_dirty(false);
@@ -710,8 +707,7 @@ impl State {
                 );
             }
             for row in self.screen.overlay_grid().bounds_iter(overlay_area) {
-                self.screen
-                    .draw_overlay(row.cols().start, row.cols().end, row.row_index());
+                self.screen.draw_overlay(row.cols(), row.row_index());
             }
         }
         self.flush();

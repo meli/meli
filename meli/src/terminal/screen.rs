@@ -39,7 +39,8 @@ pub type StateStdout = termion::screen::AlternateScreen<
     termion::raw::RawTerminal<BufWriter<Box<dyn Write + 'static>>>,
 >;
 
-type DrawHorizontalSegmentFn = fn(&mut CellBuffer, &mut StateStdout, usize, usize, usize) -> ();
+type DrawHorizontalSegmentFn =
+    fn(&mut CellBuffer, &mut StateStdout, std::ops::Range<usize>, usize) -> ();
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
@@ -292,25 +293,19 @@ impl Screen<Tty> {
     }
 
     #[inline]
-    pub fn draw(&mut self, x_start: usize, x_end: usize, y: usize) {
+    pub fn draw(&mut self, xs: std::ops::Range<usize>, y: usize) {
         let Some(stdout) = self.display.stdout.as_mut() else {
             return;
         };
-        (self.display.draw_horizontal_segment_fn)(&mut self.grid, stdout, x_start, x_end, y);
+        (self.display.draw_horizontal_segment_fn)(&mut self.grid, stdout, xs, y);
     }
 
     #[inline]
-    pub fn draw_overlay(&mut self, x_start: usize, x_end: usize, y: usize) {
+    pub fn draw_overlay(&mut self, xs: std::ops::Range<usize>, y: usize) {
         let Some(stdout) = self.display.stdout.as_mut() else {
             return;
         };
-        (self.display.draw_horizontal_segment_fn)(
-            &mut self.overlay_grid,
-            stdout,
-            x_start,
-            x_end,
-            y,
-        );
+        (self.display.draw_horizontal_segment_fn)(&mut self.overlay_grid, stdout, xs, y);
     }
 
     /// On `SIGWNICH` the `State` redraws itself according to the new
@@ -423,21 +418,20 @@ impl Screen<Tty> {
     pub fn draw_horizontal_segment(
         grid: &mut CellBuffer,
         stdout: &mut StateStdout,
-        x_start: usize,
-        x_end: usize,
+        xs: std::ops::Range<usize>,
         y: usize,
     ) {
         write!(
             stdout,
             "{}",
-            cursor::Goto(x_start as u16 + 1, (y + 1) as u16)
+            cursor::Goto(xs.start as u16 + 1, (y + 1) as u16)
         )
         .unwrap();
         let mut current_fg = Color::Default;
         let mut current_bg = Color::Default;
         let mut current_attrs = Attr::DEFAULT;
         write!(stdout, "\x1B[m").unwrap();
-        for x in x_start..=x_end {
+        for x in xs {
             let c = &grid[(x, y)];
             if c.attrs() != current_attrs {
                 c.attrs().write(current_attrs, stdout).unwrap();
@@ -463,19 +457,18 @@ impl Screen<Tty> {
     pub fn draw_horizontal_segment_no_color(
         grid: &mut CellBuffer,
         stdout: &mut StateStdout,
-        x_start: usize,
-        x_end: usize,
+        xs: std::ops::Range<usize>,
         y: usize,
     ) {
         write!(
             stdout,
             "{}",
-            cursor::Goto(x_start as u16 + 1, (y + 1) as u16)
+            cursor::Goto(xs.start as u16 + 1, (y + 1) as u16)
         )
         .unwrap();
         let mut current_attrs = Attr::DEFAULT;
         write!(stdout, "\x1B[m").unwrap();
-        for x in x_start..=x_end {
+        for x in xs {
             let c = &grid[(x, y)];
             if c.attrs() != current_attrs {
                 c.attrs().write(current_attrs, stdout).unwrap();
