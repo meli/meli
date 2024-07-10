@@ -683,30 +683,16 @@ impl State {
             self.message_box.set_dirty(false);
         }
 
-        if !self.overlay.is_empty() && can_draw_above_screen {
+        if let (Some((_, overlay_widget)), true) =
+            (self.overlay.get_index_mut(0), can_draw_above_screen)
+        {
             let area: Area = self.screen.area();
-            let overlay_area = area.center_inside((
-                if self.screen.cols() / 3 > 30 {
-                    self.screen.cols() / 3
-                } else {
-                    self.screen.cols()
-                },
-                if self.screen.rows() / 5 > 10 {
-                    self.screen.rows() / 5
-                } else {
-                    self.screen.rows()
-                },
-            ));
             {
                 let (grid, overlay_grid) = self.screen.grid_and_overlay_grid_mut();
                 overlay_grid.copy_area(grid, area, area);
-                self.overlay.get_index_mut(0).unwrap().1.draw(
-                    overlay_grid,
-                    overlay_area,
-                    &mut self.context,
-                );
+                overlay_widget.draw(overlay_grid, area, &mut self.context);
             }
-            for row in self.screen.overlay_grid().bounds_iter(overlay_area) {
+            for row in self.screen.overlay_grid().bounds_iter(area) {
                 self.screen.draw_overlay(row.cols(), row.row_index());
             }
         }
