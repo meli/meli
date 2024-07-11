@@ -588,12 +588,23 @@ Server password
 .Pq Em optional
 Use instead of
 .Ic server_password
+.It Ic use_token Ar boolean
+Authenticate using the API Bearer token method.
+If enabled, the token value must be provided as the configured password.
+.Pq Em false \" default value
 .It Ic danger_accept_invalid_certs Ar boolean
 .Pq Em optional
 Do not validate
 .Em TLS
 certificates.
 .Pq Em false \" default value
+.It Ic timeout Ar integer
+.Pq Em optional
+Timeout to use for server connections in seconds.
+A timeout of
+.Li 0
+seconds means there is no timeout.
+.Pq Em 16 \" default value
 .El
 .Ss mbox only
 .HorizontalRule
