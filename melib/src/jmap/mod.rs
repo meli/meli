@@ -153,33 +153,40 @@ macro_rules! get_conf_val {
                 $s.name.as_str(),
                 $var
             ))
+            .set_kind(ErrorKind::Configuration)
         })
     };
-    ($s:ident[$var:literal], $t:ty) => {
+    ($s:ident[$var:literal], $t:ty, $hd: literal) => {
         get_conf_val!($s[$var]).and_then(|v| {
             <$t>::from_str(&v).map_err(|e| {
                 Error::new(format!(
-                    "Configuration error ({}): Invalid value for field `{}`: {}\n{}",
+                    "Configuration error ({}): Invalid value for field `{}` which accepts \
+                     {human_desc}: {}\n{}",
                     $s.name.as_str(),
                     $var,
                     v,
-                    e
+                    e,
+                    human_desc = $hd,
                 ))
+                .set_kind(ErrorKind::ValueError)
             })
         })
     };
-    ($s:ident[$var:literal], $default:expr) => {
+    ($s:ident[$var:literal], $default:expr, $hd: literal) => {
         $s.extra
             .get($var)
             .map(|v| {
                 <_>::from_str(v).map_err(|e| {
                     Error::new(format!(
-                        "Configuration error ({}): Invalid value for field `{}`: {}\n{}",
+                        "Configuration error ({}): Invalid value for field `{}` which accepts \
+                         {human_desc}: {}\n{}",
                         $s.name.as_str(),
                         $var,
                         v,
-                        e
+                        e,
+                        human_desc = $hd,
                     ))
+                    .set_kind(ErrorKind::ValueError)
                 })
             })
             .unwrap_or_else(|| Ok($default))
@@ -188,7 +195,7 @@ macro_rules! get_conf_val {
 
 impl JmapServerConf {
     pub fn new(s: &AccountSettings) -> Result<Self> {
-        let use_token: bool = get_conf_val!(s["use_token"], false)?;
+        let use_token: bool = get_conf_val!(s["use_token"], false, "true or false")?;
 
         if use_token
             && !(s.extra.contains_key("server_password_command")
@@ -202,12 +209,21 @@ impl JmapServerConf {
             )));
         }
         Ok(Self {
-            server_url: get_conf_val!(s["server_url"], Url)?,
-            server_username: get_conf_val!(s["server_username"], String)?,
+            server_url: get_conf_val!(s["server_url"], Url, "a string containing a URL")?,
+            server_username: get_conf_val!(s["server_username"], String, "a string")?,
             server_password: s.server_password()?,
             use_token,
-            danger_accept_invalid_certs: get_conf_val!(s["danger_accept_invalid_certs"], false)?,
-            timeout: get_conf_val!(s["timeout"], 16_u64).map(|t| {
+            danger_accept_invalid_certs: get_conf_val!(
+                s["danger_accept_invalid_certs"],
+                false,
+                "true or false"
+            )?,
+            timeout: get_conf_val!(
+                s["timeout"],
+                16_u64,
+                "integers setting an amount of seconds (a value of zero disables the timeout)"
+            )
+            .map(|t| {
                 if t == 0 {
                     None
                 } else {
@@ -1236,47 +1252,54 @@ impl JmapType {
                         $s.name.as_str(),
                         $var
                     ))
+                    .set_kind(ErrorKind::Configuration)
                 })
             };
-            ($s:ident[$var:literal], $t:ty) => {
+            ($s:ident[$var:literal], $t:ty, $hd: literal) => {
                 get_conf_val!($s[$var]).and_then(|v| {
                     <$t>::from_str(&v).map_err(|e| {
                         Error::new(format!(
-                            "Configuration error ({}): Invalid value for field `{}`: {}\n{}",
+                            "Configuration error ({}): Invalid value for field `{}` which accepts \
+                             {human_desc}: {}\n{}",
                             $s.name.as_str(),
                             $var,
                             v,
-                            e
+                            e,
+                            human_desc = $hd,
                         ))
+                        .set_kind(ErrorKind::ValueError)
                     })
                 })
             };
-            ($s:ident[$var:literal], $default:expr) => {
+            ($s:ident[$var:literal], $default:expr, $hd: literal) => {
                 $s.extra
                     .remove($var)
                     .map(|v| {
                         <_>::from_str(&v).map_err(|e| {
                             Error::new(format!(
-                                "Configuration error ({}): Invalid value for field `{}`: {}\n{}",
+                                "Configuration error ({}): Invalid value for field `{}` which \
+                                 accepts {human_desc}: {}\n{}",
                                 $s.name.as_str(),
                                 $var,
                                 v,
-                                e
+                                e,
+                                human_desc = $hd,
                             ))
+                            .set_kind(ErrorKind::ValueError)
                         })
                     })
                     .unwrap_or_else(|| Ok($default))
             };
         }
-        get_conf_val!(s["server_url"], Url)?;
+        get_conf_val!(s["server_url"], Url, "a string containing a URL")?;
         get_conf_val!(s["server_username"])?;
 
-        get_conf_val!(s["use_token"], false)?;
+        get_conf_val!(s["use_token"], false, "true or false")?;
         // either of these two needed
         get_conf_val!(s["server_password"])
             .or_else(|_| get_conf_val!(s["server_password_command"]))?;
 
-        get_conf_val!(s["danger_accept_invalid_certs"], false)?;
+        get_conf_val!(s["danger_accept_invalid_certs"], false, "true or false")?;
         Ok(())
     }
 }
