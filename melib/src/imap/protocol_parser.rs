@@ -26,6 +26,7 @@ use std::{convert::TryFrom, str::FromStr};
 pub mod id_ext;
 #[cfg(test)]
 mod tests;
+pub mod utils;
 
 use nom::{
     branch::{alt, permutation},
@@ -1270,15 +1271,12 @@ pub fn envelope_addresses<'a>(
 // ("Terry Gray" NIL "gray" "cac.washington.edu")
 pub fn envelope_address(input: &[u8]) -> IResult<&[u8], Address> {
     const WS: &[u8] = b"\r\n\t ";
-    let (input, name) = alt((quoted, map(tag("NIL"), |_| Vec::new())))(input)?;
+    let (input, name) = utils::nil_to_default(quoted)(input)?;
     let (input, _) = is_a(WS)(input)?;
-    let (input, _) = alt((quoted, map(tag("NIL"), |_| Vec::new())))(input)?;
+    let (input, _) = utils::nil_to_default(quoted)(input)?;
     let (input, _) = is_a(WS)(input)?;
-    let (input, mailbox_name) = alt((quoted, map(tag("NIL"), |_| Vec::new())))(input)?;
-    let (input, host_name) = opt(preceded(
-        is_a(WS),
-        alt((quoted, map(tag("NIL"), |_| Vec::new()))),
-    ))(input)?;
+    let (input, mailbox_name) = utils::nil_to_default(quoted)(input)?;
+    let (input, host_name) = opt(preceded(is_a(WS), utils::nil_to_default(quoted)))(input)?;
     Ok((
         input,
         Address::Mailbox(MailboxAddress {
@@ -1368,8 +1366,9 @@ pub fn quoted(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
     ))
 }
 
+#[inline]
 pub fn quoted_or_nil(input: &[u8]) -> IResult<&[u8], Option<Vec<u8>>> {
-    alt((map(tag("NIL"), |_| None), map(quoted, Some)))(input.ltrim())
+    utils::nil_to_none(quoted)(input.ltrim())
 }
 
 pub fn uid_fetch_envelopes_response<'a>(
