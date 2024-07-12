@@ -3265,28 +3265,35 @@ impl Listing {
                 (None, Some(coll)) => format!(" ({}) v", coll),
             };
 
-            let x = self
+            let skip_cols = {
+                let val = area.width().saturating_sub(count_string.len());
+                let skip_cols = x.min(val);
+                if skip_cols == val && matches!(self.show_menu_scrollbar, ShowMenuScrollbar::True) {
+                    skip_cols.saturating_sub(1)
+                } else {
+                    skip_cols
+                }
+            };
+            let (x, _) = self.menu.grid_mut().write_string(
+                &count_string,
+                unread_count_att.fg,
+                unread_count_att.bg,
+                unread_count_att.attrs
+                    | if l.count.unwrap_or(0) > 0 {
+                        Attr::BOLD
+                    } else {
+                        Attr::DEFAULT
+                    },
+                area.nth_row(y + 1).skip_cols(skip_cols),
+                None,
+                None,
+            );
+            area = self.menu.area().skip_rows(account_y);
+            for c in self
                 .menu
                 .grid_mut()
-                .write_string(
-                    &count_string,
-                    unread_count_att.fg,
-                    unread_count_att.bg,
-                    unread_count_att.attrs
-                        | if l.count.unwrap_or(0) > 0 {
-                            Attr::BOLD
-                        } else {
-                            Attr::DEFAULT
-                        },
-                    area.nth_row(y + 1)
-                        .skip_cols(x.min(area.width().saturating_sub(count_string.len()))),
-                    None,
-                    None,
-                )
-                .0
-                + x.min(area.width().saturating_sub(count_string.len()));
-            area = self.menu.area().skip_rows(account_y);
-            for c in self.menu.grid_mut().row_iter(area, x..area.width(), y + 1) {
+                .row_iter(area, (x + skip_cols)..area.width(), y + 1)
+            {
                 self.menu.grid_mut()[c]
                     .set_fg(att.fg)
                     .set_bg(att.bg)
