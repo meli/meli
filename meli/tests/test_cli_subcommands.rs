@@ -114,6 +114,38 @@ fn test_cli_subcommands() {
         }
     }
 
+    fn test_subcommand_config_stdio() {
+        {
+            let mut cmd = Command::cargo_bin("meli").unwrap();
+            let output = cmd.arg("create-config").arg("-").output().unwrap().assert();
+            output.code(0).stdout(predicates::str::is_empty().not());
+        }
+        {
+            let mut cmd = Command::cargo_bin("meli").unwrap();
+            let output = cmd
+                .arg("test-config")
+                .arg("-")
+                .write_stdin(
+                    br#"
+[accounts.imap]
+root_mailbox = "INBOX"
+format = "imap"
+identity="username@example.com"
+server_username = "null"
+server_hostname = "example.com"
+server_password_command = "false"
+
+[composing]
+send_mail = 'false'
+    "#,
+                )
+                .output()
+                .unwrap()
+                .assert();
+            output.code(0).stdout(predicates::str::is_empty());
+        }
+    }
+
     fn test_subcommand_man() {
         for (man, title) in [
             ("meli.1", "MELI(1)"),
@@ -176,6 +208,7 @@ fn test_cli_subcommands() {
     test_subcommand_succeeds("compiled-with");
     test_subcommand_succeeds("man");
     test_subcommand_man();
+    test_subcommand_config_stdio();
 
     let tmp_dir = TempDir::new().unwrap();
 

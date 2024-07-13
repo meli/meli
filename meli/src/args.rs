@@ -21,9 +21,28 @@
 
 //! Command line arguments.
 
+use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+
 use super::*;
 #[cfg(feature = "cli-docs")]
 use crate::manpages;
+
+fn try_path_or_stdio(input: &OsStr) -> PathOrStdio {
+    if input.as_bytes() == b"-" {
+        PathOrStdio::Stdio
+    } else {
+        PathOrStdio::Path(PathBuf::from(input))
+    }
+}
+
+/// `Pathbuf` or standard stream (`-` operand).
+#[derive(Debug)]
+pub enum PathOrStdio {
+    /// Path
+    Path(PathBuf),
+    /// standard stream (`-` operand)
+    Stdio,
+}
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "meli", about = "terminal mail client", version_short = "v")]
@@ -51,17 +70,21 @@ pub enum SubCommand {
     EditConfig,
     /// create a sample configuration file with available configuration options.
     /// If `PATH` is not specified, meli will try to create it in
-    /// `$XDG_CONFIG_HOME/meli/config.toml`
+    /// `$XDG_CONFIG_HOME/meli/config.toml`. Path `-` will output to standard
+    /// output instead.
     #[structopt(display_order = 1)]
     CreateConfig {
-        #[structopt(value_name = "NEW_CONFIG_PATH", parse(from_os_str))]
-        path: Option<PathBuf>,
+        #[structopt(value_name = "NEW_CONFIG_PATH", parse(from_os_str = try_path_or_stdio))]
+        path: Option<PathOrStdio>,
     },
     /// test a configuration file for syntax issues or missing options.
+    /// If `PATH` is not specified, meli will try to read it from
+    /// `$XDG_CONFIG_HOME/meli/config.toml`. Path `-` will read input from
+    /// standard input instead.
     #[structopt(display_order = 2)]
     TestConfig {
-        #[structopt(value_name = "CONFIG_PATH", parse(from_os_str))]
-        path: Option<PathBuf>,
+        #[structopt(value_name = "CONFIG_PATH", parse(from_os_str = try_path_or_stdio))]
+        path: Option<PathOrStdio>,
     },
     #[structopt(display_order = 3)]
     /// Testing tools such as IMAP, SMTP shells for debugging.

@@ -428,6 +428,8 @@ define(`include', `builtin_include(substr($1,1,decr(decr(len($1)))))dnl')dnl
 }
 
 impl FileSettings {
+    pub const EXAMPLE_CONFIG: &'static str = include_str!("../docs/samples/sample-config.toml");
+
     pub fn new() -> Result<Self> {
         let config_path = get_config_file()?;
         if !config_path.exists() {
@@ -462,6 +464,131 @@ impl FileSettings {
         Self::validate(config_path, true, false)
     }
 
+    /// Validate configuration from `input` string.
+    pub fn validate_string(s: String, interactive: bool, clear_extras: bool) -> Result<Self> {
+        let map: toml::value::Table = toml::from_str(&s).map_err(|err| {
+            Error::new("Config file is invalid TOML")
+                .set_source(Some(Arc::new(err)))
+                .set_kind(ErrorKind::ValueError)
+        })?;
+
+        // Check that a global composing option is set and return a user-friendly
+        // error message because the default serde one is confusing.
+        if !map.contains_key("composing") {
+            let err_msg = r#"You must set a global `composing` option. If you override `composing` in each account, you can use a dummy global like follows:
+
+[composing]
+send_mail = 'false'
+
+This is required so that you don't accidentally start meli and find out later that you can't send emails."#;
+            if interactive {
+                println!("{}", err_msg);
+                let ask = Ask {
+                    message: "Would you like to append this dummy value in your configuration \
+                              input and continue?"
+                        .to_string(),
+                };
+                if ask.run() {
+                    let mut s = s;
+                    s.push_str("[composing]\nsend_mail = 'false'\n");
+                    return Self::validate_string(s, interactive, clear_extras);
+                }
+            }
+            return Err(Error::new(err_msg).set_kind(ErrorKind::Configuration));
+        }
+        let mut s: Self = toml::from_str(&s).map_err(|err| {
+            Error::new("Input contains errors")
+                .set_source(Some(Arc::new(err)))
+                .set_kind(ErrorKind::Configuration)
+        })?;
+        let backends = melib::backends::Backends::new();
+        let Themes {
+            light: default_light,
+            dark: default_dark,
+            ..
+        } = Themes::default();
+        for (k, v) in default_light.keys.into_iter() {
+            if !s.terminal.themes.light.contains_key(&k) {
+                s.terminal.themes.light.insert(k, v);
+            }
+        }
+        for theme in s.terminal.themes.other_themes.values_mut() {
+            for (k, v) in default_dark.keys.clone().into_iter() {
+                if !theme.contains_key(&k) {
+                    theme.insert(k, v);
+                }
+            }
+        }
+        for (k, v) in default_dark.keys.into_iter() {
+            if !s.terminal.themes.dark.contains_key(&k) {
+                s.terminal.themes.dark.insert(k, v);
+            }
+        }
+        match s.terminal.theme.as_str() {
+            themes::DARK | themes::LIGHT => {}
+            t if s.terminal.themes.other_themes.contains_key(t) => {}
+            t => {
+                return Err(Error::new(format!("Theme `{}` was not found.", t))
+                    .set_kind(ErrorKind::Configuration));
+            }
+        }
+
+        s.terminal.themes.validate()?;
+        for (name, acc) in s.accounts.iter_mut() {
+            let FileAccount {
+                root_mailbox,
+                format,
+                identity,
+                extra_identities,
+                read_only,
+                display_name,
+                order,
+                subscribed_mailboxes,
+                mailboxes,
+                extra,
+                manual_refresh,
+                default_mailbox: _,
+                refresh_command: _,
+                search_backend: _,
+                conf_override: _,
+            } = acc.clone();
+
+            let lowercase_format = format.to_lowercase();
+            let mut s = AccountSettings {
+                name: name.to_string(),
+                root_mailbox,
+                format: format.clone(),
+                identity,
+                extra_identities,
+                read_only,
+                display_name,
+                order,
+                subscribed_mailboxes,
+                manual_refresh,
+                mailboxes: mailboxes
+                    .into_iter()
+                    .map(|(k, v)| (k, v.mailbox_conf))
+                    .collect(),
+                extra: extra.into_iter().collect(),
+            };
+            s.validate_config()?;
+            backends.validate_config(&lowercase_format, &mut s)?;
+            if !s.extra.is_empty() {
+                return Err(Error::new(format!(
+                    "Unrecognised configuration values: {:?}",
+                    s.extra
+                ))
+                .set_kind(ErrorKind::Configuration));
+            }
+            if clear_extras {
+                acc.extra.clear();
+            }
+        }
+
+        Ok(s)
+    }
+
+    /// Validate `path` and print errors.
     pub fn validate(path: PathBuf, interactive: bool, clear_extras: bool) -> Result<Self> {
         let s = pp::pp(&path)?;
         let map: toml::value::Table = toml::from_str(&s).map_err(|err| {
@@ -880,7 +1007,7 @@ pub fn create_config_file(p: &Path) -> Result<()> {
         .create_new(true)
         .open(p)
         .chain_err_summary(|| format!("Cannot create configuration file in {}", p.display()))?;
-    file.write_all(include_bytes!("../docs/samples/sample-config.toml"))
+    file.write_all(FileSettings::EXAMPLE_CONFIG.as_bytes())
         .and_then(|()| file.flush())
         .chain_err_summary(|| format!("Could not write to configuration file  {}", p.display()))?;
     println!("Written example configuration to {}", p.display());
@@ -1407,8 +1534,6 @@ server_password_command = "false"
 send_mail = 'false'
     "#;
 
-    const EXAMPLE_CONFIG: &str = include_str!("../docs/samples/sample-config.toml");
-
     #[test]
     fn test_config_parse() {
         let tempdir = tempfile::tempdir().unwrap();
@@ -1446,7 +1571,7 @@ send_mail = 'false'
 
         /* Test sample config */
 
-        let example_config = EXAMPLE_CONFIG.replace("\n#", "\n");
+        let example_config = FileSettings::EXAMPLE_CONFIG.replace("\n#", "\n");
         let re = regex::Regex::new(r#"root_mailbox\s*=\s*"[^"]*""#).unwrap();
         let example_config = re.replace_all(
             &example_config,

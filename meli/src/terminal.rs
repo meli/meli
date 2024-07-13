@@ -260,3 +260,8 @@ impl TextPresentation for str {
         Cow::from(self)
     }
 }
+
+/// Returns `true` if standard output corresponds to an interactive TTY session.
+pub fn is_tty() -> bool {
+    unsafe { libc::isatty(libc::STDOUT_FILENO) == 1 }
+}

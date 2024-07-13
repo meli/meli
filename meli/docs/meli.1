@@ -69,9 +69,25 @@ Start meli with given configuration file.
 Create configuration file in
 .Pa path
 if given, or at
-.Pa $XDG_CONFIG_HOME/meli/config.toml
+.Pa $XDG_CONFIG_HOME/meli/config.toml Ns
+\&.
+If
+.Ar path
+is
+.Ar \-
+the result is printed to the standard output stream.
 .It Cm test-config Op Ar path
-Test a configuration file for syntax issues or missing options.
+Test a configuration for syntax issues or missing options.
+The configuration is read from
+.Pa path
+if given, or from
+.Pa $XDG_CONFIG_HOME/meli/config.toml Ns
+\&.
+If
+.Ar path
+is
+.Ar \-
+the configuration is read from the standard input stream.
 .It Cm man Op Ar page
 Print documentation page and exit (Piping to a pager is recommended).
 .It Cm install-man Op Ar path

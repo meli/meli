@@ -29,13 +29,16 @@ use std::{
 use crossbeam::channel::{Receiver, Sender};
 use melib::{Result, ShellExpandTrait};
 
-use crate::*;
+use crate::{args::PathOrStdio, *};
 
-pub fn create_config(path: Option<PathBuf>) -> Result<()> {
-    let config_path = if let Some(path) = path {
-        path.expand()
-    } else {
-        conf::get_config_file()?
+pub fn create_config(path: Option<PathOrStdio>) -> Result<()> {
+    let config_path = match path {
+        Some(PathOrStdio::Stdio) => {
+            std::io::stdout().write_all(conf::FileSettings::EXAMPLE_CONFIG.as_bytes())?;
+            return Ok(());
+        }
+        Some(PathOrStdio::Path(path)) => path.expand(),
+        None => conf::get_config_file()?,
     };
     if config_path.exists() {
         return Err(Error::new(format!(
@@ -53,12 +56,12 @@ pub fn edit_config() -> Result<()> {
         .map_err(|err| {
             format!("Could not find any value in environment variables EDITOR and VISUAL. {err}")
         })?;
-    let config_path = crate::conf::get_config_file()?;
+    let config_path = conf::get_config_file()?;
 
     let mut cmd = Command::new(editor);
 
     let mut handle = &mut cmd;
-    for c in crate::conf::get_included_configs(config_path)? {
+    for c in conf::get_included_configs(config_path)? {
         handle = handle.arg(&c);
     }
     let mut handle = handle
@@ -76,17 +79,8 @@ pub fn man(page: manpages::ManPages, source: bool) -> Result<String> {
 }
 
 #[cfg(feature = "cli-docs")]
-pub fn pager(v: String, no_raw: Option<Option<bool>>) -> Result<()> {
-    if let Some(no_raw) = no_raw {
-        match no_raw {
-            Some(true) => {}
-            None if (unsafe { libc::isatty(libc::STDOUT_FILENO) == 1 }) => {}
-            Some(false) | None => {
-                println!("{v}");
-                return Ok(());
-            }
-        }
-    } else if unsafe { libc::isatty(libc::STDOUT_FILENO) != 1 } {
+pub fn pager(v: String, no_raw: bool) -> Result<()> {
+    if no_raw || !terminal::is_tty() {
         println!("{v}");
         return Ok(());
     }
@@ -105,7 +99,7 @@ pub fn pager(v: String, no_raw: Option<Option<bool>>) -> Result<()> {
 }
 
 #[cfg(not(feature = "cli-docs"))]
-pub fn man(_: crate::args::ManOpt) -> Result<()> {
+pub fn man(_: args::ManOpt) -> Result<()> {
     Err(Error::new("error: this version of meli was not build with embedded documentation (cargo feature `cli-docs`). You might have it installed as manpages (eg `man meli`), otherwise check https://meli-email.org"))
 }
 
@@ -129,11 +123,19 @@ pub fn compiled_with() -> Result<()> {
     Ok(())
 }
 
-pub fn test_config(path: Option<PathBuf>) -> Result<()> {
-    let config_path = if let Some(path) = path {
-        path.expand()
-    } else {
-        crate::conf::get_config_file()?
+pub fn test_config(path: Option<PathOrStdio>) -> Result<()> {
+    let config_path = match path {
+        Some(PathOrStdio::Stdio) => {
+            let mut input = String::new();
+            std::io::stdin().read_to_string(&mut input)?;
+            if input.trim().is_empty() {
+                return Err(Error::new("Input was empty.").set_kind(ErrorKind::ValueError));
+            }
+            conf::FileSettings::validate_string(input, true, false)?;
+            return Ok(());
+        }
+        Some(PathOrStdio::Path(path)) => path.expand(),
+        None => conf::get_config_file()?,
     };
     conf::FileSettings::validate(config_path, true, false)?;
     Ok(())
@@ -173,7 +175,7 @@ pub fn view(
     Ok(state)
 }
 
-pub fn tool(path: Option<PathBuf>, opt: crate::args::ToolOpt) -> Result<()> {
+pub fn tool(path: Option<PathBuf>, opt: args::ToolOpt) -> Result<()> {
     use melib::utils::futures::timeout;
 
     use crate::{args::ToolOpt, conf::composing::SendMail};
@@ -181,7 +183,7 @@ pub fn tool(path: Option<PathBuf>, opt: crate::args::ToolOpt) -> Result<()> {
     let config_path = if let Some(path) = path {
         path.expand()
     } else {
-        crate::conf::get_config_file()?
+        conf::get_config_file()?
     };
     let conf = conf::FileSettings::validate(config_path, true, false)?;
     let account = match opt {
