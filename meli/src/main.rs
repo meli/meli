@@ -29,51 +29,8 @@
 //! backend needs. The split is done to theoretically be able to create
 //! different frontends with the same innards.
 
-use std::os::raw::c_int;
-
 use args::*;
 use meli::*;
-
-fn notify(
-    signals: &[c_int],
-    sender: crossbeam::channel::Sender<ThreadEvent>,
-) -> std::result::Result<crossbeam::channel::Receiver<c_int>, std::io::Error> {
-    use std::time::Duration;
-    let (alarm_pipe_r, alarm_pipe_w) =
-        nix::unistd::pipe().map_err(|err| std::io::Error::from_raw_os_error(err as i32))?;
-    let alarm_handler = move |info: &nix::libc::siginfo_t| {
-        let value = unsafe { info.si_value().sival_ptr as u8 };
-        let _ = nix::unistd::write(alarm_pipe_w, &[value]);
-    };
-    unsafe {
-        signal_hook_registry::register_sigaction(signal_hook::consts::SIGALRM, alarm_handler)?;
-    }
-    let (s, r) = crossbeam::channel::bounded(100);
-    let mut signals = signal_hook::iterator::Signals::new(signals)?;
-    let _ = nix::fcntl::fcntl(
-        alarm_pipe_r,
-        nix::fcntl::FcntlArg::F_SETFL(nix::fcntl::OFlag::O_NONBLOCK),
-    );
-    std::thread::spawn(move || {
-        let mut ctr = 0;
-        loop {
-            ctr %= 3;
-            if ctr == 0 {
-                let _ = sender
-                    .send_timeout(ThreadEvent::Pulse, Duration::from_millis(500))
-                    .ok();
-            }
-
-            for signal in signals.pending() {
-                let _ = s.send_timeout(signal, Duration::from_millis(500)).ok();
-            }
-
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            ctr += 1;
-        }
-    });
-    Ok(r)
-}
 
 fn main() {
     let opt = Opt::from_args();
@@ -180,7 +137,7 @@ fn run_app(opt: Opt) -> Result<()> {
         signal_hook::consts::SIGCHLD,
     ];
 
-    let signal_recvr = notify(signals, sender.clone())?;
+    let signal_recvr = signal_handlers::notify(signals, sender.clone())?;
 
     /* Create the application State. */
     let mut state;

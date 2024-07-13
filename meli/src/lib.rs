@@ -107,6 +107,7 @@ pub use melib::{
 pub mod args;
 #[cfg(feature = "cli-docs")]
 pub mod manpages;
+pub mod signal_handlers;
 pub mod subcommands;
 
 #[macro_use]
