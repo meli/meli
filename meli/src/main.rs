@@ -43,86 +43,18 @@ fn main() {
     });
 }
 
-fn run_app(opt: Opt) -> Result<()> {
+fn run_app(mut opt: Opt) -> Result<()> {
     if let Some(config_location) = opt.config.as_ref() {
         std::env::set_var("MELI_CONFIG", config_location);
     }
 
-    match opt.subcommand {
-        Some(SubCommand::TestConfig { path }) => {
-            return subcommands::test_config(path);
-        }
-        Some(SubCommand::Tools(toolopt)) => {
-            return subcommands::tool(opt.config, toolopt);
-        }
-        Some(SubCommand::CreateConfig { path }) => {
-            return subcommands::create_config(path);
-        }
-        Some(SubCommand::EditConfig) => {
-            return subcommands::edit_config();
-        }
-        Some(SubCommand::PrintConfigPath) => {
-            let config_path = crate::conf::get_config_file()?;
-            println!("{}", config_path.display());
-            return Ok(());
-        }
-        #[cfg(not(feature = "cli-docs"))]
-        Some(SubCommand::Man(ManOpt {})) => {
-            return Err(Error::new("error: this version of meli was not build with embedded documentation (cargo feature `cli-docs`). You might have it installed as manpages (eg `man meli`), otherwise check https://meli-email.org"));
-        }
-        #[cfg(feature = "cli-docs")]
-        Some(SubCommand::Man(ManOpt { page, no_raw })) => {
-            return subcommands::man(page, false).and_then(|s| subcommands::pager(s, no_raw));
-        }
-        Some(SubCommand::CompiledWith) => {
-            return subcommands::compiled_with();
-        }
-        Some(SubCommand::PrintLoadedThemes) => {
-            let s = conf::FileSettings::new()?;
-            print!("{}", s.terminal.themes);
-            return Ok(());
-        }
-        Some(SubCommand::PrintDefaultTheme) => {
-            print!("{}", conf::Themes::default().key_to_string("dark", false));
-            return Ok(());
-        }
-        Some(SubCommand::View { .. }) => {}
-        Some(SubCommand::PrintAppDirectories) => {
-            println!(
-                "{}",
-                xdg::BaseDirectories::with_prefix("meli")
-                    .expect(
-                        "Could not find your XDG directories. If this is unexpected, please \
-                         report it as a bug."
-                    )
-                    .get_data_file("")
-                    .display()
-            );
-            let mut temp_dir = std::env::temp_dir();
-            temp_dir.push("meli");
-            println!("{}", temp_dir.display());
-            return Ok(());
-        }
-        #[cfg(not(feature = "cli-docs"))]
-        Some(SubCommand::InstallMan {
-            destination_path: _,
-        }) => {
-            return Err(Error::new("error: this version of meli was not build with embedded documentation (cargo feature `cli-docs`). You might have it installed as manpages (eg `man meli`), otherwise check https://meli-email.org"));
-        }
-        #[cfg(feature = "cli-docs")]
-        Some(SubCommand::InstallMan { destination_path }) => {
-            match crate::manpages::ManPages::install(destination_path) {
-                Ok(p) => println!("Installed at {}.", p.display()),
-                Err(err) => return Err(err),
-            }
-            return Ok(());
-        }
-        Some(SubCommand::PrintLogPath) => {
-            let settings = crate::conf::Settings::new()?;
-            println!("{}", settings._logger.log_dest().display());
-            return Ok(());
-        }
-        None => {}
+    let view_subcmd = if matches!(opt.subcommand, Some(SubCommand::View { .. })) {
+        opt.subcommand.take()
+    } else {
+        None
+    };
+    if let Some(result) = opt.execute() {
+        return result;
     }
 
     /* Create a channel to communicate with other threads. The main process is
@@ -142,7 +74,7 @@ fn run_app(opt: Opt) -> Result<()> {
     /* Create the application State. */
     let mut state;
 
-    if let Some(SubCommand::View { path }) = opt.subcommand {
+    if let Some(SubCommand::View { path }) = view_subcmd {
         state = subcommands::view(path, sender, receiver.clone())?;
     } else {
         state = State::new(None, sender, receiver.clone())?;

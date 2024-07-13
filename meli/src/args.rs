@@ -121,3 +121,96 @@ pub enum ToolOpt {
         account: String,
     },
 }
+
+impl Opt {
+    /// Execute `self.subcommand` if any, and return its result. Otherwise
+    /// return `None`.
+    pub fn execute(self) -> Option<Result<()>> {
+        macro_rules! ret_err {
+            ($sth:expr) => {
+                match $sth {
+                    Ok(v) => v,
+                    Err(err) => return Some(Err(err.into())),
+                }
+            };
+        }
+        Some(match self.subcommand? {
+            SubCommand::View { .. } => { return None ; }
+            SubCommand::TestConfig { path } => {
+                subcommands::test_config(path)
+            }
+            SubCommand::Tools(toolopt) => {
+                 subcommands::tool(self.config, toolopt)
+            }
+            SubCommand::CreateConfig { path } => {
+                subcommands::create_config(path)
+            }
+            SubCommand::EditConfig => {
+                subcommands::edit_config()
+            }
+            SubCommand::PrintConfigPath => {
+                let config_path = ret_err!(crate::conf::get_config_file());
+                println!("{}", config_path.display());
+                Ok(())
+            }
+            #[cfg(not(feature = "cli-docs"))]
+            SubCommand::Man(ManOpt {}) => {
+                 Err(Error::new("error: this version of meli was not build with embedded documentation (cargo feature `cli-docs`). You might have it installed as manpages (eg `man meli`), otherwise check https://meli-email.org"))
+            }
+            #[cfg(feature = "cli-docs")]
+            SubCommand::Man(ManOpt {
+                page,
+                no_raw,
+            }) => {
+                subcommands::man(page, false).and_then(|s| subcommands::pager(s, no_raw))
+            }
+            SubCommand::CompiledWith => {
+                subcommands::compiled_with()
+            }
+            SubCommand::PrintLoadedThemes => {
+                let s = ret_err!(conf::FileSettings::new());
+                print!("{}", s.terminal.themes);
+                Ok(())
+            }
+            SubCommand::PrintDefaultTheme => {
+                print!("{}", conf::Themes::default().key_to_string("dark", false));
+                Ok(())
+            }
+            SubCommand::PrintAppDirectories => {
+                println!(
+                    "{}",
+                    xdg::BaseDirectories::with_prefix("meli")
+                        .expect(
+                            "Could not find your XDG directories. If this is unexpected, please \
+                         report it as a bug."
+                        )
+                        .get_data_file("")
+                        .display()
+                );
+                let mut temp_dir = std::env::temp_dir();
+                temp_dir.push("meli");
+                println!("{}", temp_dir.display());
+                Ok(())
+            }
+            #[cfg(not(feature = "cli-docs"))]
+            SubCommand::InstallMan {
+                destination_path: _,
+            } => {
+                Err(Error::new("error: this version of meli was not build with embedded documentation (cargo feature `cli-docs`). You might have it installed as manpages (eg `man meli`), otherwise check https://meli-email.org"))
+            }
+            #[cfg(feature = "cli-docs")]
+            SubCommand::InstallMan { destination_path } => {
+                match crate::manpages::ManPages::install(destination_path) {
+                    Ok(p) => println!("Installed at {}.", p.display()),
+                    Err(err) => return Some(Err(err)),
+                }
+                Ok(())
+            }
+            SubCommand::PrintLogPath => {
+                let settings = ret_err!(crate::conf::Settings::new());
+                println!("{}", settings._logger.log_dest().display());
+                Ok(())
+            }
+        })
+    }
+}
