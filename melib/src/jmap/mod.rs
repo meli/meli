@@ -1300,6 +1300,11 @@ impl JmapType {
             .or_else(|_| get_conf_val!(s["server_password_command"]))?;
 
         get_conf_val!(s["danger_accept_invalid_certs"], false, "true or false")?;
+        get_conf_val!(
+            s["timeout"],
+            16_u64,
+            "integers setting an amount of seconds (a value of zero disables the timeout)"
+        )?;
         Ok(())
     }
 }
