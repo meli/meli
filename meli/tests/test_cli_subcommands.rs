@@ -114,11 +114,68 @@ fn test_cli_subcommands() {
         }
     }
 
+    fn test_subcommand_man() {
+        for (man, title) in [
+            ("meli.1", "MELI(1)"),
+            ("meli.conf.5", "MELI.CONF(5)"),
+            ("meli-themes.5", "MELI-THEMES(5)"),
+            ("meli.7", "MELI(7)"),
+        ] {
+            for gzipped in [true, false] {
+                for no_raw in [true, false] {
+                    let mut cmd = Command::cargo_bin("meli").unwrap();
+                    let args = match (no_raw, gzipped) {
+                        (true, true) => &["man", "--no-raw", "--gzipped", man][..],
+                        (true, false) => &["man", "--no-raw", man],
+                        (false, false) => &["man", man],
+                        (false, true) => &["man", "--gzipped", man],
+                    };
+                    let output = cmd.args(args).output().unwrap().assert();
+                    output.code(0).stdout(predicate::function(|x: &[u8]| {
+                        use std::io::Read;
+
+                        use flate2::bufread::GzDecoder;
+
+                        let mut gz = GzDecoder::new(x);
+                        let content = if gzipped {
+                            let size = gz.header().unwrap().comment().unwrap();
+
+                            let mut v = String::with_capacity(
+                                str::parse::<usize>(
+                                    std::str::from_utf8(size)
+                                        .expect("was not compressed with size comment header"),
+                                )
+                                .expect("was not compressed with size comment header"),
+                            );
+                            gz.read_to_string(&mut v)
+                                .expect("expected gzipped output but could not decode it.");
+                            v
+                        } else {
+                            assert_eq!(gz.header(), None);
+                            let mut v = String::with_capacity(0);
+                            gz.read_to_string(&mut v).unwrap_err();
+                            String::from_utf8(x.to_vec()).expect("invalid utf-8 content")
+                        };
+                        if !no_raw && gzipped {
+                            assert!(content.contains(man));
+                        } else {
+                            assert!(content.contains('\u{8}'));
+                            assert!(content.contains(title));
+                        }
+
+                        true
+                    }));
+                }
+            }
+        }
+    }
+
     version();
     help();
     test_subcommand_succeeds("help");
     test_subcommand_succeeds("compiled-with");
     test_subcommand_succeeds("man");
+    test_subcommand_man();
 
     let tmp_dir = TempDir::new().unwrap();
 

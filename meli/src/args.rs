@@ -91,17 +91,18 @@ pub enum SubCommand {
 
 #[derive(Debug, StructOpt)]
 pub struct ManOpt {
+    /// If set, output text in stdout instead of spawning `$PAGER`.
+    #[cfg(feature = "cli-docs")]
+    #[cfg_attr(feature = "cli-docs", structopt(long = "no-raw", alias = "no-raw"))]
+    pub no_raw: bool,
+    /// If set, output compressed gzip manpage in binary form in stdout.
+    #[cfg(feature = "cli-docs")]
+    #[cfg_attr(feature = "cli-docs", structopt(long = "gzipped"))]
+    pub gzipped: bool,
     #[cfg(feature = "cli-docs")]
     #[cfg_attr(feature = "cli-docs", structopt(default_value = "meli", possible_values=manpages::POSSIBLE_VALUES, value_name="PAGE", parse(try_from_str = manpages::parse_manpage)))]
     /// Name of manual page.
     pub page: manpages::ManPages,
-    /// If true, output text in stdout instead of spawning `$PAGER`.
-    #[cfg(feature = "cli-docs")]
-    #[cfg_attr(
-        feature = "cli-docs",
-        structopt(long = "no-raw", alias = "no-raw", value_name = "bool")
-    )]
-    pub no_raw: Option<Option<bool>>,
 }
 
 #[derive(Debug, StructOpt)]
@@ -161,6 +162,22 @@ impl Opt {
             SubCommand::Man(ManOpt {
                 page,
                 no_raw,
+                gzipped: true,
+            }) => {
+                use std::io::Write;
+
+                ret_err!(std::io::stdout().write_all(if no_raw {
+                    page.text_gz()
+                } else {
+                    page.mdoc_gz()
+                }));
+                Ok(())
+            }
+            #[cfg(feature = "cli-docs")]
+            SubCommand::Man(ManOpt {
+                page,
+                no_raw,
+                gzipped: false,
             }) => {
                 subcommands::man(page, false).and_then(|s| subcommands::pager(s, no_raw))
             }

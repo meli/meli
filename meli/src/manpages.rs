@@ -84,6 +84,19 @@ impl std::fmt::Display for ManPages {
 }
 
 impl ManPages {
+    const MANPAGES: [&'static [u8]; 4] = [
+        include_bytes!(concat!(env!("OUT_DIR"), "/meli.txt.gz")),
+        include_bytes!(concat!(env!("OUT_DIR"), "/meli.conf.txt.gz")),
+        include_bytes!(concat!(env!("OUT_DIR"), "/meli-themes.txt.gz")),
+        include_bytes!(concat!(env!("OUT_DIR"), "/meli.7.txt.gz")),
+    ];
+    const MANPAGES_MDOC: [&'static [u8]; 4] = [
+        include_bytes!(concat!(env!("OUT_DIR"), "/meli.mdoc.gz")),
+        include_bytes!(concat!(env!("OUT_DIR"), "/meli.conf.mdoc.gz")),
+        include_bytes!(concat!(env!("OUT_DIR"), "/meli-themes.mdoc.gz")),
+        include_bytes!(concat!(env!("OUT_DIR"), "/meli.7.mdoc.gz")),
+    ];
+
     pub fn install(destination: Option<PathBuf>) -> Result<PathBuf> {
         fn path_valid(p: &Path, tries: &mut Vec<PathBuf>) -> bool {
             tries.push(p.into());
@@ -145,24 +158,19 @@ impl ManPages {
         Ok(path)
     }
 
-    pub fn read(self, source: bool) -> Result<String> {
-        const MANPAGES: [&[u8]; 4] = [
-            include_bytes!(concat!(env!("OUT_DIR"), "/meli.txt.gz")),
-            include_bytes!(concat!(env!("OUT_DIR"), "/meli.conf.txt.gz")),
-            include_bytes!(concat!(env!("OUT_DIR"), "/meli-themes.txt.gz")),
-            include_bytes!(concat!(env!("OUT_DIR"), "/meli.7.txt.gz")),
-        ];
-        const MANPAGES_MDOC: [&[u8]; 4] = [
-            include_bytes!(concat!(env!("OUT_DIR"), "/meli.mdoc.gz")),
-            include_bytes!(concat!(env!("OUT_DIR"), "/meli.conf.mdoc.gz")),
-            include_bytes!(concat!(env!("OUT_DIR"), "/meli-themes.mdoc.gz")),
-            include_bytes!(concat!(env!("OUT_DIR"), "/meli.7.mdoc.gz")),
-        ];
+    pub fn mdoc_gz(self) -> &'static [u8] {
+        Self::MANPAGES_MDOC[self as usize]
+    }
 
+    pub fn text_gz(self) -> &'static [u8] {
+        Self::MANPAGES[self as usize]
+    }
+
+    pub fn read(self, source: bool) -> Result<String> {
         let mut gz = GzDecoder::new(if source {
-            MANPAGES_MDOC[self as usize]
+            self.mdoc_gz()
         } else {
-            MANPAGES[self as usize]
+            self.text_gz()
         });
         let mut v = String::with_capacity(
             str::parse::<usize>(unsafe {
