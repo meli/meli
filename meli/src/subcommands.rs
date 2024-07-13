@@ -19,17 +19,19 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#[cfg(feature = "cli-docs")]
-use std::io::prelude::*;
 use std::{
+    io::prelude::*,
     path::PathBuf,
     process::{Command, Stdio},
 };
 
 use crossbeam::channel::{Receiver, Sender};
-use melib::{Result, ShellExpandTrait};
+use melib::{utils::futures::timeout, Result, ShellExpandTrait};
 
-use crate::{args::PathOrStdio, *};
+use crate::{
+    args::{PathOrStdio, ToolOpt},
+    *,
+};
 
 pub fn create_config(path: Option<PathOrStdio>) -> Result<()> {
     let config_path = match path {
@@ -175,11 +177,7 @@ pub fn view(
     Ok(state)
 }
 
-pub fn tool(path: Option<PathBuf>, opt: args::ToolOpt) -> Result<()> {
-    use melib::utils::futures::timeout;
-
-    use crate::{args::ToolOpt, conf::composing::SendMail};
-
+pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
     let config_path = if let Some(path) = path {
         path.expand()
     } else {
@@ -208,6 +206,8 @@ pub fn tool(path: Option<PathBuf>, opt: args::ToolOpt) -> Result<()> {
     match opt {
         #[cfg(feature = "smtp")]
         ToolOpt::SmtpShell { .. } => {
+            use crate::conf::composing::SendMail;
+
             let send_mail = file_account_conf
                 .conf_override
                 .composing

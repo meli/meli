@@ -386,6 +386,7 @@ impl ViewFilter {
         {
             #[cfg(not(feature = "gpgme"))]
             {
+                _ = parts;
                 return Ok(Self {
                     filter_invocation: String::new(),
                     content_type: att.content_type.clone(),

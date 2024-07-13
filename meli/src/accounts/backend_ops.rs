@@ -53,8 +53,9 @@ impl Account {
         Ok(job_id)
     }
 
-    #[cfg(not(feature = "sqlite3"))]
-    pub(super) fn update_cached_env(&mut self, _: Envelope, _: Option<EnvelopeHash>) {}
+    //     #[cfg(not(feature = "sqlite3"))]
+    //     pub(super) fn update_cached_env(&mut self, _: Envelope, _:
+    // Option<EnvelopeHash>) {}
 
     #[cfg(feature = "sqlite3")]
     pub(super) fn update_cached_env(&mut self, env: Envelope, old_hash: Option<EnvelopeHash>) {
