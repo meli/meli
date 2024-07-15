@@ -83,7 +83,7 @@ regex = "1"
 syn = { version = "1", features = [] }
 
 [dev-dependencies]
-assert_cmd = { version = "2" }
+assert_cmd = { version = "=2.0.13" }
 flate2 = { version = "1" }
 predicates = { version = "3" }
 regex = "1"
