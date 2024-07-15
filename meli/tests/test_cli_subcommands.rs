@@ -137,7 +137,8 @@ server_password_command = "false"
 
 [composing]
 send_mail = 'false'
-    "#,
+    "#
+                    .as_slice(),
                 )
                 .output()
                 .unwrap()
@@ -153,14 +154,18 @@ send_mail = 'false'
             ("meli-themes.5", "MELI-THEMES(5)"),
             ("meli.7", "MELI(7)"),
         ] {
+            let true_true: &[&str] = &["man", "--no-raw", "--gzipped", man];
+            let true_false: &[&str] = &["man", "--no-raw", man];
+            let false_false: &[&str] = &["man", man];
+            let false_true: &[&str] = &["man", "--gzipped", man];
             for gzipped in [true, false] {
                 for no_raw in [true, false] {
                     let mut cmd = Command::cargo_bin("meli").unwrap();
                     let args = match (no_raw, gzipped) {
-                        (true, true) => &["man", "--no-raw", "--gzipped", man][..],
-                        (true, false) => &["man", "--no-raw", man],
-                        (false, false) => &["man", man],
-                        (false, true) => &["man", "--gzipped", man],
+                        (true, true) => true_true,
+                        (true, false) => true_false,
+                        (false, false) => false_false,
+                        (false, true) => false_true,
                     };
                     let output = cmd.args(args).output().unwrap().assert();
                     output.code(0).stdout(predicate::function(|x: &[u8]| {
