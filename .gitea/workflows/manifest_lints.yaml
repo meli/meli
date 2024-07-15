@@ -76,8 +76,8 @@ jobs:
         if: success() || failure()
         run: |
           source "${HOME}/.cargo/env"
-          cargo-msrv --output-format json --log-level trace --log-target stdout --path meli verify
-          cargo-msrv --output-format json --log-level trace --log-target stdout --path melib verify
+          cargo-msrv --output-format json --log-level trace --log-target stdout --path meli verify -- cargo check --all-targets
+          cargo-msrv --output-format json --log-level trace --log-target stdout --path melib verify -- cargo check --all-targets
       - name: cargo-sort
         if: success() || failure()
         run: |
