@@ -490,7 +490,7 @@ impl EmbeddedGrid {
                 buf.push(c);
             }
             (b';', State::Osc1(ref mut buf1_p)) => {
-                let buf1 = std::mem::replace(buf1_p, SmallVec::new());
+                let buf1 = std::mem::take(buf1_p);
                 let buf2 = SmallVec::new();
                 *state = State::Osc2(buf1, buf2);
             }
@@ -1129,7 +1129,7 @@ impl EmbeddedGrid {
                 *state = State::Normal;
             }
             (b';', State::Csi1(ref mut buf1_p)) => {
-                let buf1 = std::mem::replace(buf1_p, SmallVec::new());
+                let buf1 = std::mem::take(buf1_p);
                 let buf2 = SmallVec::new();
                 *state = State::Csi2(buf1, buf2);
             }
@@ -1362,8 +1362,8 @@ impl EmbeddedGrid {
                 buf.push(c);
             }
             (b';', State::Csi2(ref mut buf1_p, ref mut buf2_p)) => {
-                let buf1 = std::mem::replace(buf1_p, SmallVec::new());
-                let buf2 = std::mem::replace(buf2_p, SmallVec::new());
+                let buf1 = std::mem::take(buf1_p);
+                let buf2 = std::mem::take(buf2_p);
                 let buf3 = SmallVec::new();
                 *state = State::Csi3(buf1, buf2, buf3);
             }
@@ -1481,9 +1481,9 @@ impl EmbeddedGrid {
                 buf.push(c);
             }
             (b';', State::Csi3(ref mut buf1_p, ref mut buf2_p, ref mut buf3_p)) => {
-                let buf1 = std::mem::replace(buf1_p, SmallVec::new());
-                let buf2 = std::mem::replace(buf2_p, SmallVec::new());
-                let buf3 = std::mem::replace(buf3_p, SmallVec::new());
+                let buf1 = std::mem::take(buf1_p);
+                let buf2 = std::mem::take(buf2_p);
+                let buf3 = std::mem::take(buf3_p);
                 let buf4 = SmallVec::new();
                 *state = State::Csi4(buf1, buf2, buf3, buf4);
             }
@@ -1491,10 +1491,10 @@ impl EmbeddedGrid {
                 buf.push(c);
             }
             (b';', State::Csi4(ref mut buf1_p, ref mut buf2_p, ref mut buf3_p, ref mut buf4_p)) => {
-                let buf1 = std::mem::replace(buf1_p, SmallVec::new());
-                let buf2 = std::mem::replace(buf2_p, SmallVec::new());
-                let buf3 = std::mem::replace(buf3_p, SmallVec::new());
-                let buf4 = std::mem::replace(buf4_p, SmallVec::new());
+                let buf1 = std::mem::take(buf1_p);
+                let buf2 = std::mem::take(buf2_p);
+                let buf3 = std::mem::take(buf3_p);
+                let buf4 = std::mem::take(buf4_p);
                 let buf5 = SmallVec::new();
                 *state = State::Csi5(buf1, buf2, buf3, buf4, buf5);
             }
@@ -1511,11 +1511,11 @@ impl EmbeddedGrid {
                     ref mut buf5_p,
                 ),
             ) => {
-                let buf1 = std::mem::replace(buf1_p, SmallVec::new());
-                let buf2 = std::mem::replace(buf2_p, SmallVec::new());
-                let buf3 = std::mem::replace(buf3_p, SmallVec::new());
-                let buf4 = std::mem::replace(buf4_p, SmallVec::new());
-                let buf5 = std::mem::replace(buf5_p, SmallVec::new());
+                let buf1 = std::mem::take(buf1_p);
+                let buf2 = std::mem::take(buf2_p);
+                let buf3 = std::mem::take(buf3_p);
+                let buf4 = std::mem::take(buf4_p);
+                let buf5 = std::mem::take(buf5_p);
                 let buf6 = SmallVec::new();
                 *state = State::Csi6(buf1, buf2, buf3, buf4, buf5, buf6);
             }
