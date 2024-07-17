@@ -36,7 +36,7 @@ impl From<ValidationError> for Error {
             summary: error.to_string().into(),
             details: None,
             source: Some(Arc::new(error)),
-            kind: ErrorKind::Configuration,
+            kind: ErrorKind::Bug,
         }
     }
 }
