@@ -1136,6 +1136,14 @@ impl EmbeddedGrid {
                 let buf2 = SmallVec::new();
                 *state = State::Csi2(buf1, buf2);
             }
+            (b':', State::Csi1(ref buf1_p)) if buf1_p.as_slice() == b"58".as_slice() => {
+                *state = State::Csi58;
+            }
+            (b':', State::Csi1(ref mut buf1_p)) if buf1_p.as_slice() == b"4".as_slice() => {
+                let buf1 = std::mem::take(buf1_p);
+                let buf2 = SmallVec::new();
+                *state = State::Csi2(buf1, buf2);
+            }
             (b'm', State::Csi1(ref buf1)) => {
                 // Character Attributes.
                 match buf1.as_slice() {
@@ -1183,6 +1191,7 @@ impl EmbeddedGrid {
                     b"24" => {
                         /* Not underlined, ECMA-48 3rd. */
                         *attrs &= !Attr::UNDERLINE;
+                        *attrs &= !Attr::UNDERCURL;
                     }
                     b"25" => {
                         /* Steady (not blinking), ECMA-48 3rd. */
@@ -1216,7 +1225,7 @@ impl EmbeddedGrid {
                     b"46" => *bg_color = Color::Cyan,
                     b"47" => *bg_color = Color::White,
                     b"49" => *bg_color = Color::Default,
-
+                    b"59" => { /*reset the underline color*/ }
                     b"90" => *fg_color = Color::Black,
                     b"91" => *fg_color = Color::Red,
                     b"92" => *fg_color = Color::Green,
@@ -1245,6 +1254,32 @@ impl EmbeddedGrid {
                     .set_fg(*fg_color)
                     .set_bg(*bg_color)
                     .set_attrs(*attrs);
+                *dirty = true;
+                *state = State::Normal;
+            }
+            (b'm', State::Csi2(ref buf1, ref buf2))
+                if buf1.as_slice() == b"4".as_slice() && buf2.as_slice() == b"0".as_slice() =>
+            {
+                *attrs &= !Attr::UNDERCURL;
+                screen.grid_mut()[cursor_val!()].set_attrs(*attrs);
+                *dirty = true;
+                *state = State::Normal;
+            }
+            (b'm', State::Csi2(ref buf1, ref buf2))
+                if buf1.as_slice() == b"4".as_slice()
+                    && ([&b"1"[..], &b"2"[..], &b"3"[..], &b"4"[..], &b"5"[..]]
+                        .contains(&buf2.as_slice())) =>
+            {
+                if buf2.as_slice() == b"1".as_slice() {
+                    *attrs |= Attr::UNDERLINE;
+                } else {
+                    // <ESC>[4:2m  # double underline
+                    // <ESC>[4:3m  # curly underline
+                    // <ESC>[4:4m  # dotted underline
+                    // <ESC>[4:5m  # dashed underline
+                    *attrs |= Attr::UNDERCURL;
+                }
+                screen.grid_mut()[cursor_val!()].set_attrs(*attrs);
                 *dirty = true;
                 *state = State::Normal;
             }
@@ -1295,6 +1330,7 @@ impl EmbeddedGrid {
                         b"24" => {
                             /* Not underlined, ECMA-48 3rd. */
                             *attrs &= !Attr::UNDERLINE;
+                            *attrs &= !Attr::UNDERCURL;
                         }
                         b"25" => {
                             /* Steady (not blinking), ECMA-48 3rd. */
@@ -1483,6 +1519,22 @@ impl EmbeddedGrid {
                 *dirty = true;
                 *state = State::Normal;
             }
+            (b'm', State::Csi3(ref buf1, ref buf2, ref _buf3))
+                if buf1.as_ref() == b"58" && buf2.as_ref() == b"5" =>
+            {
+                /* Set underline color */
+                //*fg_color = if let Ok(byte) =
+                //    unsafe { std::str::from_utf8_unchecked(buf3) }.parse::<u8>()
+                //{
+                //    //log::trace!("parsed buf as {}", byte);
+                //    Color::Byte(byte)
+                //} else {
+                //    Color::Default
+                //};
+                //screen.grid_mut()[cursor_val!()].set_fg(*fg_color);
+                //*dirty = true;
+                *state = State::Normal;
+            }
             (c, State::Csi3(_, _, ref mut buf)) if c.is_ascii_digit() => {
                 buf.push(c);
             }
@@ -1587,6 +1639,30 @@ impl EmbeddedGrid {
             }
             (
                 b'm',
+                State::Csi6(
+                    ref mut buf1,
+                    ref mut buf2,
+                    ref mut _color_space_buf,
+                    ref mut _r_buf,
+                    ref mut _g_buf,
+                    ref mut _b_buf,
+                ),
+            ) if buf1.as_ref() == b"58" && buf2.as_ref() == b"2" => {
+                /* Set underline color */
+                // *bg_color = match (
+                //     unsafe { std::str::from_utf8_unchecked(r_buf) }.parse::<u8>(),
+                //     unsafe { std::str::from_utf8_unchecked(g_buf) }.parse::<u8>(),
+                //     unsafe { std::str::from_utf8_unchecked(b_buf) }.parse::<u8>(),
+                // ) {
+                //     (Ok(r), Ok(g), Ok(b)) => Color::Rgb(r, g, b),
+                //     _ => Color::Default,
+                // };
+                // screen.grid_mut()[cursor_val!()].set_bg(*bg_color);
+                // *dirty = true;
+                *state = State::Normal;
+            }
+            (
+                b'm',
                 State::Csi5(
                     ref mut buf1,
                     ref mut buf2,
@@ -1631,6 +1707,21 @@ impl EmbeddedGrid {
                 *dirty = true;
                 *state = State::Normal;
             }
+            (
+                b'm',
+                State::Csi5(
+                    ref mut buf1,
+                    ref mut buf2,
+                    ref mut _r_buf,
+                    ref mut _g_buf,
+                    ref mut _b_buf,
+                ),
+            ) if buf1.as_ref() == b"58" && buf2.as_ref() == b"2" => {
+                /* Set underline color */
+                // screen.grid_mut()[cursor_val!()].set_fg(*fg_color);
+                // *dirty = true;
+                *state = State::Normal;
+            }
             (b'q', State::Csi1(buf))
                 if buf.len() == 2 && buf[1] == b' ' && (b'0'..=b'6').contains(&buf[0]) =>
             {
@@ -1645,6 +1736,90 @@ impl EmbeddedGrid {
                   Ps = 5  ⇒  blinking bar, xterm.
                   Ps = 6  ⇒  steady bar, xterm.
                 */
+                *state = State::Normal;
+            }
+            (b'2', State::Csi58) => {
+                *state = State::Csi58_2;
+            }
+            (b'5', State::Csi58) => {
+                *state = State::Csi58_5;
+            }
+            (b':', State::Csi58_2) => {
+                *state = State::Csi58_2_1 {
+                    ps_1: SmallVec::new(),
+                };
+            }
+            (b':', State::Csi58_5) => {
+                *state = State::Csi58_5_ {
+                    ps: SmallVec::new(),
+                };
+            }
+            (c, State::Csi58_5_ { ref mut ps }) if c.is_ascii_digit() => {
+                ps.push(c);
+            }
+            (b'm', State::Csi58_5_ { ps: _ }) => {
+                *state = State::Normal;
+            }
+            (c, State::Csi58_2_1 { ref mut ps_1 }) if c.is_ascii_digit() => {
+                ps_1.push(c);
+            }
+            (b':', State::Csi58_2_1 { ref mut ps_1 }) => {
+                *state = State::Csi58_2_2 {
+                    ps_1: std::mem::take(ps_1),
+                    ps_2: SmallVec::new(),
+                };
+            }
+            (
+                c,
+                State::Csi58_2_2 {
+                    ps_1: _,
+                    ref mut ps_2,
+                },
+            ) if c.is_ascii_digit() => {
+                ps_2.push(c);
+            }
+            (
+                b':',
+                State::Csi58_2_2 {
+                    ref mut ps_1,
+                    ref mut ps_2,
+                },
+            ) => {
+                *state = State::Csi58_2_3 {
+                    ps_1: std::mem::take(ps_1),
+                    ps_2: std::mem::take(ps_2),
+                    ps_3: SmallVec::new(),
+                };
+            }
+            (
+                c,
+                State::Csi58_2_3 {
+                    ps_1: _,
+                    ps_2: _,
+                    ref mut ps_3,
+                },
+            ) if c.is_ascii_digit() => {
+                ps_3.push(c);
+            }
+            (
+                b':',
+                State::Csi58_2_3 {
+                    ref mut ps_1,
+                    ref mut ps_2,
+                    ref mut ps_3,
+                },
+            ) if ps_1.is_empty() => {
+                std::mem::swap(ps_1, ps_2);
+                std::mem::swap(ps_2, ps_3);
+            }
+            (
+                b'm',
+                State::Csi58_2_3 {
+                    ps_1: _,
+                    ps_2: _,
+                    ps_3: _,
+                },
+            ) => {
                 *state = State::Normal;
             }
             (_, State::Csi) => {
@@ -1728,7 +1903,21 @@ impl EmbeddedGrid {
                 );
                 *state = State::Normal;
             }
-            (_, State::CsiQ(_)) => {
+            (
+                _,
+                State::CsiQ(_)
+                | State::Csi58
+                | State::Csi58_2
+                | State::Csi58_5
+                | State::Csi58_2_1 { ps_1: _ }
+                | State::Csi58_2_2 { ps_1: _, ps_2: _ }
+                | State::Csi58_2_3 {
+                    ps_1: _,
+                    ps_2: _,
+                    ps_3: _,
+                }
+                | State::Csi58_5_ { ps: _ },
+            ) => {
                 log::trace!(
                     "state: {:?} ignoring unknown code {} byte {}",
                     &state,

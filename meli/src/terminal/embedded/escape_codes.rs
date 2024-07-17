@@ -52,6 +52,26 @@ pub enum State {
         SmallVec<[u8; 8]>,
         SmallVec<[u8; 8]>,
     ),
+    // `CSI 58 : 2 : Ps : Ps : Ps m`
+    // `CSI 58 : 5 : Ps m`
+    Csi58,
+    Csi58_2,
+    Csi58_5,
+    Csi58_2_1 {
+        ps_1: SmallVec<[u8; 8]>,
+    },
+    Csi58_2_2 {
+        ps_1: SmallVec<[u8; 8]>,
+        ps_2: SmallVec<[u8; 8]>,
+    },
+    Csi58_2_3 {
+        ps_1: SmallVec<[u8; 8]>,
+        ps_2: SmallVec<[u8; 8]>,
+        ps_3: SmallVec<[u8; 8]>,
+    },
+    Csi58_5_ {
+        ps: SmallVec<[u8; 8]>,
+    },
     CsiQ(SmallVec<[u8; 8]>),
     #[default]
     Normal,
