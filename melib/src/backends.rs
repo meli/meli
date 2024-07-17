@@ -734,21 +734,13 @@ impl LazyCountSet {
     }
 
     pub fn insert_existing(&mut self, new_val: EnvelopeHash) -> bool {
-        if self.not_yet_seen == 0 {
-            false
-        } else {
-            if !self.set.contains(&new_val) {
-                self.not_yet_seen -= 1;
-            }
-            self.set.insert(new_val);
-            true
-        }
+        self.not_yet_seen = 0;
+        self.set.insert(new_val)
     }
 
     pub fn insert_existing_set(&mut self, set: BTreeSet<EnvelopeHash>) {
-        let old_len = self.set.len();
         self.set.extend(set);
-        self.not_yet_seen = self.not_yet_seen.saturating_sub(self.set.len() - old_len);
+        self.not_yet_seen = 0;
     }
 
     pub fn is_empty(&self) -> bool {
@@ -767,10 +759,12 @@ impl LazyCountSet {
     }
 
     pub fn insert_new(&mut self, new_val: EnvelopeHash) {
+        self.not_yet_seen = 0;
         self.set.insert(new_val);
     }
 
     pub fn insert_set(&mut self, set: BTreeSet<EnvelopeHash>) {
+        self.not_yet_seen = 0;
         self.set.extend(set);
     }
 

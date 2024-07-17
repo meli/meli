@@ -32,6 +32,6 @@ fn test_lazy_count_set() {
         assert!(new.insert_existing(EnvelopeHash(i)));
     }
     assert_eq!(new.len(), 10);
-    assert!(!new.insert_existing(EnvelopeHash(10)));
-    assert_eq!(new.len(), 10);
+    assert!(new.insert_existing(EnvelopeHash(10)));
+    assert_eq!(new.len(), 11);
 }
