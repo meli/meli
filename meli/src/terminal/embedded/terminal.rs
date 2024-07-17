@@ -1129,6 +1129,9 @@ impl EmbeddedGrid {
                 *state = State::Normal;
             }
             (b';', State::Csi1(ref mut buf1_p)) => {
+                if buf1_p.is_empty() {
+                    buf1_p.push(b'0');
+                }
                 let buf1 = std::mem::take(buf1_p);
                 let buf2 = SmallVec::new();
                 *state = State::Csi2(buf1, buf2);
@@ -1363,6 +1366,9 @@ impl EmbeddedGrid {
             }
             (b';', State::Csi2(ref mut buf1_p, ref mut buf2_p)) => {
                 let buf1 = std::mem::take(buf1_p);
+                if buf2_p.is_empty() {
+                    buf2_p.push(b'0');
+                }
                 let buf2 = std::mem::take(buf2_p);
                 let buf3 = SmallVec::new();
                 *state = State::Csi3(buf1, buf2, buf3);
@@ -1483,6 +1489,9 @@ impl EmbeddedGrid {
             (b';', State::Csi3(ref mut buf1_p, ref mut buf2_p, ref mut buf3_p)) => {
                 let buf1 = std::mem::take(buf1_p);
                 let buf2 = std::mem::take(buf2_p);
+                if buf3_p.is_empty() {
+                    buf3_p.push(b'0');
+                }
                 let buf3 = std::mem::take(buf3_p);
                 let buf4 = SmallVec::new();
                 *state = State::Csi4(buf1, buf2, buf3, buf4);
@@ -1494,6 +1503,9 @@ impl EmbeddedGrid {
                 let buf1 = std::mem::take(buf1_p);
                 let buf2 = std::mem::take(buf2_p);
                 let buf3 = std::mem::take(buf3_p);
+                if buf4_p.is_empty() {
+                    buf4_p.push(b'0');
+                }
                 let buf4 = std::mem::take(buf4_p);
                 let buf5 = SmallVec::new();
                 *state = State::Csi5(buf1, buf2, buf3, buf4, buf5);
@@ -1515,6 +1527,9 @@ impl EmbeddedGrid {
                 let buf2 = std::mem::take(buf2_p);
                 let buf3 = std::mem::take(buf3_p);
                 let buf4 = std::mem::take(buf4_p);
+                if buf5_p.is_empty() {
+                    buf5_p.push(b'0');
+                }
                 let buf5 = std::mem::take(buf5_p);
                 let buf6 = SmallVec::new();
                 *state = State::Csi6(buf1, buf2, buf3, buf4, buf5, buf6);
