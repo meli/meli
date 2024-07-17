@@ -1177,14 +1177,15 @@ bitflags::bitflags! {
     /// let comb = Attr::UNDERLINE | Attr::REVERSE;
     /// ```
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub struct Attr: u8 {
+    pub struct Attr: u16 {
         /// Terminal default.
         const DEFAULT    = 0;
         const BOLD       = 1;
         const DIM        = Self::BOLD.bits() << 1;
         const ITALICS    = Self::DIM.bits() << 1;
         const UNDERLINE  = Self::ITALICS.bits() << 1;
-        const BLINK      = Self::UNDERLINE.bits() << 1;
+        const UNDERCURL  = Self::UNDERLINE.bits() << 1;
+        const BLINK      = Self::UNDERCURL.bits() << 1;
         const REVERSE    = Self::BLINK.bits() << 1;
         const HIDDEN     = Self::REVERSE.bits() << 1;
         const FORCE_TEXT = Self::HIDDEN.bits() << 1;
@@ -1205,6 +1206,7 @@ impl std::fmt::Display for Attr {
             Self::DIM => write!(f, "Dim"),
             Self::ITALICS => write!(f, "Italics"),
             Self::UNDERLINE => write!(f, "Underline"),
+            Self::UNDERCURL => write!(f, "Undercurl"),
             Self::BLINK => write!(f, "Blink"),
             Self::REVERSE => write!(f, "Reverse"),
             Self::HIDDEN => write!(f, "Hidden"),
@@ -1235,6 +1237,13 @@ impl std::fmt::Display for Attr {
                     }
                     ctr += 1;
                     Self::UNDERLINE.fmt(f)?;
+                }
+                if combination.intersects(Self::UNDERCURL) {
+                    if ctr > 0 {
+                        write!(f, "|")?;
+                    }
+                    ctr += 1;
+                    Self::UNDERCURL.fmt(f)?;
                 }
                 if combination.intersects(Self::BLINK) {
                     if ctr > 0 {
@@ -1301,6 +1310,7 @@ impl Attr {
             "Bold" => Ok(Self::BOLD),
             "Italics" => Ok(Self::ITALICS),
             "Underline" => Ok(Self::UNDERLINE),
+            "Undercurl" => Ok(Self::UNDERCURL),
             "Blink" => Ok(Self::BLINK),
             "Reverse" => Ok(Self::REVERSE),
             "Hidden" => Ok(Self::HIDDEN),
@@ -1313,7 +1323,7 @@ impl Attr {
                 Ok(ret)
             }
             _ => Err(de::Error::custom(
-                r#"Text attribute value must either be a single attribute (eg "Bold") or a combination of attributes separated by "|" (eg "Bold|Underline"). Valid attributes are "Default", "Bold", "Italics", "Underline", "Blink", "Reverse" and "Hidden"."#,
+                r#"Text attribute value must either be a single attribute (eg "Bold") or a combination of attributes separated by "|" (eg "Bold|Underline"). Valid attributes are "Default", "Bold", "Italics", "Underline", "Undercurl", "Blink", "Reverse" and "Hidden"."#,
             )),
         }
     }
@@ -1350,6 +1360,16 @@ impl Attr {
                 (true, true) | (false, false) => Ok(()),
                 (false, true) => write!(stdout, "\x1B[24m"),
                 (true, false) => write!(stdout, "\x1B[4m"),
+            }
+        })
+        .and_then(|_| {
+            match (
+                self.intersects(Self::UNDERCURL),
+                prev.intersects(Self::UNDERCURL),
+            ) {
+                (true, true) | (false, false) => Ok(()),
+                (false, true) => write!(stdout, "\x1B[4:0m"),
+                (true, false) => write!(stdout, "\x1B[4:3m"),
             }
         })
         .and_then(
