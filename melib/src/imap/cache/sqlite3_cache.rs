@@ -421,7 +421,7 @@ impl ImapCache for Sqlite3Cache {
             .cloned()
             .unwrap_or_default();
         if self.mailbox_state(mailbox_hash)?.is_none() {
-            return Err(Error::new("Mailbox is not in cache").set_kind(ErrorKind::Bug));
+            return Err(Error::new("Mailbox is not in cache").set_kind(ErrorKind::NotFound));
         }
         let Self {
             ref mut connection,
@@ -479,7 +479,7 @@ impl ImapCache for Sqlite3Cache {
         flags: SmallVec<[FlagOp; 8]>,
     ) -> Result<()> {
         if self.mailbox_state(mailbox_hash)?.is_none() {
-            return Err(Error::new("Mailbox is not in cache").set_kind(ErrorKind::Bug));
+            return Err(Error::new("Mailbox is not in cache").set_kind(ErrorKind::NotFound));
         }
         let Self {
             ref mut connection,
@@ -537,7 +537,7 @@ impl ImapCache for Sqlite3Cache {
         refresh_events: &[(UID, RefreshEvent)],
     ) -> Result<()> {
         if self.mailbox_state(mailbox_hash)?.is_none() {
-            return Err(Error::new("Mailbox is not in cache").set_kind(ErrorKind::Bug));
+            return Err(Error::new("Mailbox is not in cache").set_kind(ErrorKind::NotFound));
         }
         {
             let Self {

@@ -23,7 +23,7 @@ use std::sync::Arc;
 use imap_codec::imap_types::search::SearchKey;
 
 use super::*;
-use crate::backends::SpecialUsageMailbox;
+use crate::{backends::SpecialUsageMailbox, imap::cache::ignore_not_found};
 
 /// Arguments for IMAP watching functions
 pub struct ImapWatchKit {
@@ -91,7 +91,9 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
         if let Some(v) = uidvalidities.get(&mailbox_hash) {
             if *v != select_response.uidvalidity {
                 if let Ok(Some(mut cache_handle)) = uid_store.cache_handle() {
-                    cache_handle.clear(mailbox_hash, &select_response)?;
+                    cache_handle
+                        .clear(mailbox_hash, &select_response)
+                        .or_else(ignore_not_found)?;
                 }
                 conn.add_refresh_event(RefreshEvent {
                     account_hash: uid_store.account_hash,
@@ -221,7 +223,9 @@ pub async fn examine_updates(
             if let Some(v) = uidvalidities.get(&mailbox_hash) {
                 if *v != select_response.uidvalidity {
                     if let Ok(Some(mut cache_handle)) = cache_handle {
-                        cache_handle.clear(mailbox_hash, &select_response)?;
+                        cache_handle
+                            .clear(mailbox_hash, &select_response)
+                            .or_else(ignore_not_found)?;
                     }
                     conn.add_refresh_event(RefreshEvent {
                         account_hash: uid_store.account_hash,
@@ -372,16 +376,15 @@ pub async fn examine_updates(
             }
         }
         if let Ok(Some(mut cache_handle)) = cache_handle {
-            if cache_handle.mailbox_state(mailbox_hash)?.is_some() {
-                cache_handle
-                    .insert_envelopes(mailbox_hash, &v)
-                    .chain_err_summary(|| {
-                        format!(
-                            "Could not save envelopes in cache for mailbox {}",
-                            mailbox.imap_path()
-                        )
-                    })?;
-            }
+            cache_handle
+                .insert_envelopes(mailbox_hash, &v)
+                .or_else(ignore_not_found)
+                .chain_err_summary(|| {
+                    format!(
+                        "Could not save envelopes in cache for mailbox {}",
+                        mailbox.imap_path()
+                    )
+                })?;
         }
 
         for FetchResponse { uid, envelope, .. } in v {
