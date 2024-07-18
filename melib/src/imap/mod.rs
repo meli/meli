@@ -96,6 +96,7 @@ pub static SUPPORTED_CAPABILITIES: &[&str] = &[
     "LOGINDISABLED",
     "MOVE",
     "SPECIAL-USE",
+    "UIDPLUS",
     "UNSELECT",
 ];
 
@@ -688,6 +689,7 @@ impl MailBackend for ImapType {
                 data,
             )?)
             .await?;
+            // [ref:TODO]: check for APPENDUID [RFC4315 - UIDPLUS]
             conn.read_response(&mut response, RequiredResponses::empty())
                 .await?;
             Ok(())
@@ -745,6 +747,7 @@ impl MailBackend for ImapType {
                     .await?;
                 conn.read_response(&mut response, RequiredResponses::empty())
                     .await?;
+                // [ref:TODO]: check for COPYUID [RFC4315 - UIDPLUS]
                 if move_ {
                     conn.send_command(CommandBody::store(
                         uids.as_slice(),
@@ -965,24 +968,81 @@ impl MailBackend for ImapType {
         mailbox_hash: MailboxHash,
     ) -> ResultFuture<()> {
         let flag_future = self.set_flags(
-            env_hashes,
+            env_hashes.clone(),
             mailbox_hash,
             smallvec::smallvec![FlagOp::Set(Flag::TRASHED)],
         )?;
+        let uid_store = self.uid_store.clone();
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
             flag_future.await?;
             let mut response = Vec::with_capacity(8 * 1024);
             let mut conn = connection.lock().await;
-            conn.send_command(CommandBody::Expunge).await?;
-            conn.read_response(&mut response, RequiredResponses::empty())
-                .await?;
-            imap_log!(
-                trace,
-                conn,
-                "EXPUNGE response: {}",
-                &String::from_utf8_lossy(&response)
-            );
+            let has_uid_plus = conn
+                .uid_store
+                .capabilities
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|cap| cap.eq_ignore_ascii_case(b"UIDPLUS"));
+            if has_uid_plus {
+                let uids: Vec<UID> = {
+                    let hash_index_lck = uid_store.hash_index.lock().unwrap();
+                    env_hashes
+                        .iter()
+                        .filter_map(|env_hash| {
+                            hash_index_lck.get(&env_hash).cloned().map(|(uid, _)| uid)
+                        })
+                        .collect()
+                };
+
+                if uids.is_empty() {
+                    return Ok(());
+                }
+
+                // Conversion from UID (usize) to UID (NonZeroU32).
+                // TODO: Directly use NonZeroU32 for UID everywhere?
+                let sequence_set = {
+                    let mut tmp = Vec::new();
+
+                    for uid in uids.iter() {
+                        if let Ok(uid) = u32::try_from(*uid) {
+                            if let Ok(uid) = NonZeroU32::try_from(uid) {
+                                tmp.push(uid);
+                            } else {
+                                return Err(Error::new("Application error: UID was 0"));
+                            }
+                        } else {
+                            return Err(Error::new("Application error: UID exceeded u32"));
+                        }
+                    }
+
+                    // Safety: We know this can't fail due to the `is_empty` check above.
+                    // TODO: This could be too easy to overlook.
+                    SequenceSet::try_from(tmp).unwrap()
+                };
+
+                conn.send_command(CommandBody::ExpungeUid { sequence_set })
+                    .await?;
+                conn.read_response(&mut response, RequiredResponses::empty())
+                    .await?;
+                imap_log!(
+                    trace,
+                    conn,
+                    "EXPUNGE response: {}",
+                    &String::from_utf8_lossy(&response)
+                );
+            } else {
+                conn.send_command(CommandBody::Expunge).await?;
+                conn.read_response(&mut response, RequiredResponses::empty())
+                    .await?;
+                imap_log!(
+                    trace,
+                    conn,
+                    "EXPUNGE response: {}",
+                    &String::from_utf8_lossy(&response)
+                );
+            }
             Ok(())
         }))
     }
