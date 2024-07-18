@@ -150,12 +150,12 @@ impl AccountStatus {
             "Tag support: ",
             self.theme_default.fg,
             self.theme_default.bg,
-            Attr::BOLD,
+            self.theme_default.attrs | Attr::BOLD,
             area,
             None,
             None,
         );
-        let area = self.content.area().skip(_x + 1, _y + line);
+        let area = self.content.area().skip(_x + 1, line);
         self.content.grid_mut().write_string(
             if a.backend_capabilities.supports_tags {
                 "yes"
@@ -170,19 +170,26 @@ impl AccountStatus {
             None,
         );
         line += 1;
+        let area = self.content.area().skip(1, line);
+        let (_x, _) = self.content.grid_mut().write_string(
+            "Metadata: ",
+            self.theme_default.fg,
+            self.theme_default.bg,
+            self.theme_default.attrs | Attr::BOLD,
+            area,
+            None,
+            None,
+        );
         self.content.grid_mut().write_string(
-            &format!(
-                "Metadata: {}",
-                a.backend_capabilities
-                    .metadata
-                    .as_ref()
-                    .map(|v| v.to_string())
-                    .unwrap_or_default()
-            ),
+            &a.backend_capabilities
+                .metadata
+                .as_ref()
+                .map(|v| v.to_string())
+                .unwrap_or_default(),
             self.theme_default.fg,
             self.theme_default.bg,
             self.theme_default.attrs,
-            area,
+            area.skip_cols(_x),
             None,
             None,
         );
