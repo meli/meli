@@ -462,6 +462,20 @@ impl ImapStream {
                 ret.wait_for_continuation_request().await?;
                 ret.send_literal(b"c2lyaGM=").await?;
             }
+            _ if capabilities
+                .iter()
+                .any(|cap| cap.eq_ignore_ascii_case(b"AUTH=PLAIN")) =>
+            {
+                let credentials = format!(
+                    "\0{}\0{}",
+                    &server_conf.server_username, &server_conf.server_password
+                );
+                ret.send_command(CommandBody::authenticate_with_ir(
+                    AuthMechanism::Plain,
+                    credentials.as_bytes(),
+                ))
+                .await?;
+            }
             _ => {
                 if capabilities
                     .iter()

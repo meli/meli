@@ -82,6 +82,7 @@ pub type MessageSequenceNumber = ImapNum;
 
 pub static SUPPORTED_CAPABILITIES: &[&str] = &[
     "AUTH=ANONYMOUS",
+    "AUTH=PLAIN",
     "AUTH=XOAUTH2",
     "COMPRESS=DEFLATE",
     "CONDSTORE",
