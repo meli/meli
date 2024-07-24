@@ -19,11 +19,15 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{convert::TryFrom, sync::Arc, time::Instant};
+use std::{
+    convert::TryFrom,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use futures::lock::{MappedMutexGuard as FutureMappedMutexGuard, Mutex as FutureMutex};
 use isahc::{
-    config::{Configurable, RedirectPolicy},
+    config::{Configurable, DnsCache, RedirectPolicy, SslOption},
     AsyncReadResponseExt, HttpClient,
 };
 use smallvec::SmallVec;
@@ -66,17 +70,20 @@ pub struct JmapConnection {
 impl JmapConnection {
     pub fn new(server_conf: &JmapServerConf, store: Arc<Store>) -> Result<Self> {
         let client = HttpClient::builder()
-            .timeout(std::time::Duration::from_secs(10))
+            .timeout(Duration::from_secs(10))
+            .dns_cache(DnsCache::Forever)
             .connection_cache_size(8)
-            .connection_cache_ttl(std::time::Duration::from_secs(30 * 60))
+            .connection_cache_ttl(Duration::from_secs(30 * 60))
             .default_header("Content-Type", "application/json")
             .ssl_options(if server_conf.danger_accept_invalid_certs {
-                isahc::config::SslOption::DANGER_ACCEPT_INVALID_CERTS
-                    | isahc::config::SslOption::DANGER_ACCEPT_INVALID_HOSTS
-                    | isahc::config::SslOption::DANGER_ACCEPT_REVOKED_CERTS
+                SslOption::DANGER_ACCEPT_INVALID_CERTS
+                    | SslOption::DANGER_ACCEPT_INVALID_HOSTS
+                    | SslOption::DANGER_ACCEPT_REVOKED_CERTS
             } else {
-                isahc::config::SslOption::NONE
+                SslOption::NONE
             })
+            .tcp_nodelay()
+            .tcp_keepalive(Duration::new(60 * 9, 0))
             .redirect_policy(RedirectPolicy::Limit(10));
         let client = if server_conf.use_token {
             client
