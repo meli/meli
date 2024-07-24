@@ -85,6 +85,13 @@ impl JmapConnection {
             .tcp_nodelay()
             .tcp_keepalive(Duration::new(60 * 9, 0))
             .redirect_policy(RedirectPolicy::Limit(10));
+        let client = if let Some(dur) = server_conf.timeout.filter(|dur| *dur != Duration::ZERO) {
+            client
+                .timeout(dur)
+                .connect_timeout(dur + Duration::from_secs(300))
+        } else {
+            client
+        };
         let client = if server_conf.use_token {
             client
                 .authentication(isahc::auth::Authentication::none())
