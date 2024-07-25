@@ -491,9 +491,9 @@ threaded:shows threads as a tree structure
 plain:shows one row per mail, regardless of threading
 .TE
 .Bl -tag -width 36n
-.It Cm sort Ar subject | date \  Ar asc | desc
+.It Cm sort Oo Ar subject | date Oc Ar asc | desc
 sort mail listing
-.It Cm subsort Ar subject | date \  Ar asc | desc
+.It Cm subsort Oo Ar subject | date Oc Ar asc | desc
 sorts only the first level of replies.
 .It Cm go Ar n
 where
@@ -514,7 +514,7 @@ select threads matching
 query.
 .It Cm clear-selection
 Clear current selection.
-.It Cm set seen, set unseen
+.It Cm set Ar seen | unseen
 Set seen status of message.
 .It Cm import Ar FILEPATH Ar MAILBOX_PATH
 Import mail from file into given mailbox.
@@ -523,7 +523,7 @@ Copy or move to other mailbox.
 .It Cm copyto, moveto Ar ACCOUNT Ar MAILBOX_PATH
 Copy or move to another account's mailbox.
 .It Cm delete
-Delete selected threads.
+Delete selected entries.
 .It Cm export-mbox Ar FILEPATH
 Export selected threads to mboxcl2 file.
 .It Cm create\-mailbox Ar ACCOUNT Ar MAILBOX_PATH
@@ -542,9 +542,9 @@ This action is irreversible.
 .Ss Mail view commands
 .HorizontalRule
 .Bl -tag -width 36n
-.It Cm pipe Ar EXECUTABLE Ar ARGS
+.It Cm pipe Ar EXECUTABLE Oo Ar ARGS Oc
 pipe pager contents to binary
-.It Cm filter Ar EXECUTABLE Ar ARGS
+.It Cm filter Ar EXECUTABLE Oo Ar ARGS Oc
 filter and display pager contents through command
 .It Cm filter
 select a filter from
