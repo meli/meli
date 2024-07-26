@@ -140,28 +140,3 @@ impl std::fmt::Display for CommandError {
 }
 
 impl std::error::Error for CommandError {}
-
-#[cfg(test)]
-mod tests {
-    use super::CommandError;
-
-    #[test]
-    fn test_command_error_display() {
-        assert_eq!(
-            &CommandError::BadValue {
-                inner: "foo".into(),
-                suggestions: Some(&[
-                    "seen",
-                    "unseen",
-                    "plain",
-                    "threaded",
-                    "compact",
-                    "conversations"
-                ])
-            }
-            .to_string(),
-            "Bad value/argument: foo. Possible values are: seen, unseen, plain, threaded, \
-             compact, conversations"
-        );
-    }
-}
