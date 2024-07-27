@@ -153,7 +153,7 @@ use notify::{event::EventKind as NotifyEvent, RecommendedWatcher, RecursiveMode,
 use crate::{
     backends::prelude::*,
     email::{parser::BytesExt, *},
-    error::{Error, ErrorKind, IntoError, Result},
+    error::{Error, ErrorKind, IntoError, Result, WrapResultIntoError},
     get_path_hash,
     utils::shellexpand::ShellExpandTrait,
 };
@@ -343,17 +343,29 @@ pub enum MboxMetadata {
 
 /// Choose between "mboxo", "mboxrd", "mboxcl", "mboxcl2". For new mailboxes,
 /// prefer "mboxcl2" which does not alter the mail body.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub enum MboxFormat {
     MboxO,
     MboxRd,
     MboxCl,
+    #[default]
     MboxCl2,
 }
 
-impl Default for MboxFormat {
-    fn default() -> Self {
-        Self::MboxCl2
+impl std::str::FromStr for MboxFormat {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        match s {
+            "mboxo" => Ok(Self::MboxO),
+            "mboxrd" => Ok(Self::MboxRd),
+            "mboxcl" => Ok(Self::MboxCl),
+            "mboxcl2" => Ok(Self::MboxCl2),
+            _ => Err(
+                Error::new("Expected one of `mboxo`, `mboxrd`, `mboxcl`, `mboxcl2`")
+                    .set_kind(ErrorKind::ValueError),
+            ),
+        }
     }
 }
 
@@ -1315,18 +1327,15 @@ impl MboxType {
             account_name: s.name.to_string(),
             event_consumer,
             path,
-            prefer_mbox_type: match prefer_mbox_type.as_str() {
-                "auto" => None,
-                "mboxo" => Some(MboxFormat::MboxO),
-                "mboxrd" => Some(MboxFormat::MboxRd),
-                "mboxcl" => Some(MboxFormat::MboxCl),
-                "mboxcl2" => Some(MboxFormat::MboxCl2),
-                _ => {
-                    return Err(Error::new(format!(
+            prefer_mbox_type: if prefer_mbox_type.as_str() == "auto" {
+                None
+            } else {
+                Some(MboxFormat::from_str(&prefer_mbox_type).wrap_err(|| {
+                    format!(
                         "{} invalid `prefer_mbox_type` value: `{}`",
                         s.name, prefer_mbox_type,
-                    )))
-                }
+                    )
+                })?)
             },
             collection: Collection::default(),
             mailbox_index: Default::default(),
