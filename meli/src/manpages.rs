@@ -55,7 +55,7 @@ pub fn parse_manpage(src: &str) -> Result<ManPages> {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 /// Choose manpage
 pub enum ManPages {
     /// meli(1)

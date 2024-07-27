@@ -248,6 +248,12 @@ impl Component for Box<dyn Component> {
     }
 }
 
+impl PartialEq for Box<dyn Component> {
+    fn eq(&self, other: &Self) -> bool {
+        self == other || self.id() == other.id()
+    }
+}
+
 bitflags::bitflags! {
     /// Attributes of a [`Component`] widget.
     ///

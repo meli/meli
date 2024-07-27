@@ -27,19 +27,19 @@ use melib::{email::mailto::Mailto, Flag, SortField, SortOrder};
 
 use crate::components::{Component, ComponentId};
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum FlagAction {
     Set(Flag),
     Unset(Flag),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum TagAction {
     Add(String),
     Remove(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum ListingAction {
     SetPlain,
     SetThreaded,
@@ -63,7 +63,7 @@ pub enum ListingAction {
     ToggleThreadSnooze,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum TabAction {
     Close,
     Kill(ComponentId),
@@ -74,14 +74,14 @@ pub enum TabAction {
     Man(crate::manpages::ManPages),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum MailingListAction {
     ListPost,
     ListArchive,
     ListUnsubscribe,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum ViewAction {
     Pipe(String, Vec<String>),
     Filter(Option<String>),
@@ -90,7 +90,7 @@ pub enum ViewAction {
     AddAddressesToContacts,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum ComposeAction {
     AddAttachment(String),
     AddAttachmentFilePicker(Option<String>),
@@ -102,13 +102,13 @@ pub enum ComposeAction {
     Mailto(Mailto),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum AccountAction {
     ReIndex,
     PrintAccountSetting(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum MailboxOperation {
     Create(NewMailboxPath),
     Delete(MailboxPath),
@@ -119,7 +119,7 @@ pub enum MailboxOperation {
     SetPermissions(MailboxPath),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Action {
     Listing(ListingAction),
     ViewMailbox(usize),
