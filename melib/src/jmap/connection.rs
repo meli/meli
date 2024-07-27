@@ -278,8 +278,11 @@ impl JmapConnection {
             let mut req = Request::new(self.request_no.clone());
             let identity_get = IdentityGet::new().account_id(mail_account_id.clone());
             req.add_call(&identity_get).await;
-            let mut res_text = self.post_async(None, serde_json::to_string(&req)?).await?;
-            let res_text = res_text.text().await?;
+            let res_text = self
+                .post_async(None, serde_json::to_string(&req)?)
+                .await?
+                .text()
+                .await?;
             let mut v: MethodResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
                     _ = self
@@ -331,8 +334,11 @@ impl JmapConnection {
                     })),
             );
             req.add_call(&identity_set).await;
-            let mut res_text = self.post_async(None, serde_json::to_string(&req)?).await?;
-            let res_text = res_text.text().await?;
+            let res_text = self
+                .post_async(None, serde_json::to_string(&req)?)
+                .await?
+                .text()
+                .await?;
             let _: MethodResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
                     _ = self
@@ -347,8 +353,11 @@ impl JmapConnection {
             let mut req = Request::new(self.request_no.clone());
             let identity_get = IdentityGet::new().account_id(mail_account_id.clone());
             req.add_call(&identity_get).await;
-            let mut res_text = self.post_async(None, serde_json::to_string(&req)?).await?;
-            let res_text = res_text.text().await?;
+            let res_text = self
+                .post_async(None, serde_json::to_string(&req)?)
+                .await?
+                .text()
+                .await?;
             let mut v: MethodResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
                     _ = self
@@ -457,9 +466,11 @@ impl JmapConnection {
             } else {
                 return Ok(());
             }
-            let mut res = self.post_async(None, serde_json::to_string(&req)?).await?;
-
-            let res_text = res.text().await?;
+            let res_text = self
+                .post_async(None, serde_json::to_string(&req)?)
+                .await?
+                .text()
+                .await?;
             if cfg!(feature = "jmap-trace") {
                 log::trace!(
                     "email_changes(): for mailbox {mailbox_hash} response {:?}",
@@ -642,9 +653,7 @@ impl JmapConnection {
         if cfg!(feature = "jmap-trace") {
             log::trace!("send_request(): request {:?}", request);
         }
-        let mut res = self.post_async(None, request).await?;
-
-        let res_text = res.text().await?;
+        let res_text = self.post_async(None, request).await?.text().await?;
         if cfg!(feature = "jmap-trace") {
             log::trace!("send_request(): response {:?}", res_text);
         }

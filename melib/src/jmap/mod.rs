@@ -537,11 +537,13 @@ impl MailBackend for JmapType {
                 let g = conn.session_guard().await?;
                 (g.upload_url.clone(), g.mail_account_id())
             };
-            let mut res = conn
+            let res_text = conn
                 .post_async(
                     Some(&upload_request_format(&upload_url, &mail_account_id)?),
                     bytes,
                 )
+                .await?
+                .text()
                 .await?;
 
             let mailbox_id: Id<mailbox::MailboxObject> = {
@@ -555,7 +557,6 @@ impl MailBackend for JmapType {
                     )));
                 }
             };
-            let res_text = res.text().await?;
 
             let upload_response: UploadResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
@@ -578,8 +579,12 @@ impl MailBackend for JmapType {
                 });
 
             req.add_call(&import_call).await;
-            let mut res = conn.post_async(None, serde_json::to_string(&req)?).await?;
-            let res_text = res.text().await?;
+
+            let res_text = conn
+                .post_async(None, serde_json::to_string(&req)?)
+                .await?
+                .text()
+                .await?;
 
             let mut v: MethodResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
@@ -656,9 +661,12 @@ impl MailBackend for JmapType {
             let mut req = Request::new(conn.request_no.clone());
             req.add_call(&email_call).await;
 
-            let mut res = conn.post_async(None, serde_json::to_string(&req)?).await?;
+            let res_text = conn
+                .post_async(None, serde_json::to_string(&req)?)
+                .await?
+                .text()
+                .await?;
 
-            let res_text = res.text().await?;
             let mut v: MethodResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
                     _ = conn.store.online_status.set(None, Err(err.clone())).await;
@@ -832,9 +840,11 @@ impl MailBackend for JmapType {
             let mut req = Request::new(conn.request_no.clone());
             let _prev_seq = req.add_call(&email_set_call).await;
 
-            let mut res = conn.post_async(None, serde_json::to_string(&req)?).await?;
-
-            let res_text = res.text().await?;
+            let res_text = conn
+                .post_async(None, serde_json::to_string(&req)?)
+                .await?
+                .text()
+                .await?;
 
             let mut v: MethodResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
@@ -951,17 +961,12 @@ impl MailBackend for JmapType {
 
             req.add_call(&email_call).await;
 
-            let mut res = conn.post_async(None, serde_json::to_string(&req)?).await?;
+            let res_text = conn
+                .post_async(None, serde_json::to_string(&req)?)
+                .await?
+                .text()
+                .await?;
 
-            let res_text = res.text().await?;
-            /*
-             *{"methodResponses":[["Email/set",{"notUpdated":null,"notDestroyed":null,"
-             * oldState":"86","newState":"87","accountId":"u148940c7","updated":{"
-             * M045926eed54b11423918f392":{"id":"M045926eed54b11423918f392"}},"created":
-             * null,"destroyed":null,"notCreated":null},"m3"]],"sessionState":"cyrus-0;
-             * p-5;vfs-0"}
-             */
-            //debug!("res_text = {}", &res_text);
             let mut v: MethodResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
                     _ = conn.store.online_status.set(None, Err(err.clone())).await;
@@ -1109,13 +1114,14 @@ impl MailBackend for JmapType {
                 ));
             };
             let upload_url = { conn.session_guard().await?.upload_url.clone() };
-            let mut res = conn
+            let res_text = conn
                 .post_async(
                     Some(&upload_request_format(&upload_url, &mail_account_id)?),
                     bytes,
                 )
+                .await?
+                .text()
                 .await?;
-            let res_text = res.text().await?;
 
             let upload_response: UploadResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
@@ -1143,8 +1149,11 @@ impl MailBackend for JmapType {
 
                 req.add_call(&import_call).await;
 
-                let mut res = conn.post_async(None, serde_json::to_string(&req)?).await?;
-                let res_text = res.text().await?;
+                let res_text = conn
+                    .post_async(None, serde_json::to_string(&req)?)
+                    .await?
+                    .text()
+                    .await?;
                 let v: MethodResponse = match deserialize_from_str(&res_text) {
                     Err(err) => {
                         _ = conn.store.online_status.set(None, Err(err.clone())).await;
@@ -1189,8 +1198,11 @@ impl MailBackend for JmapType {
 
                 req.add_call(&subm_set_call).await;
 
-                let mut res = conn.post_async(None, serde_json::to_string(&req)?).await?;
-                let res_text = res.text().await?;
+                let res_text = conn
+                    .post_async(None, serde_json::to_string(&req)?)
+                    .await?
+                    .text()
+                    .await?;
 
                 // [ref:TODO] parse/return any error.
                 let _: MethodResponse = match deserialize_from_str(&res_text) {

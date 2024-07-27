@@ -71,16 +71,16 @@ impl BackendOp for JmapOp {
                 let g = store.online_status.session_guard().await?;
                 (g.download_url.clone(), g.mail_account_id())
             };
-            let mut res = conn
+            let res_text = conn
                 .get_async(&download_request_format(
                     &download_url,
                     &mail_account_id,
                     &blob_id,
                     None,
                 )?)
+                .await?
+                .text()
                 .await?;
-
-            let res_text = res.text().await?;
 
             store.byte_cache.lock().await.entry(hash).or_default().bytes = Some(res_text.clone());
             Ok(res_text.into_bytes())

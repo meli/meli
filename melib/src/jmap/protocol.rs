@@ -228,9 +228,12 @@ pub async fn get_message_list(
     let mut req = Request::new(conn.request_no.clone());
     req.add_call(&email_call).await;
 
-    let mut res = conn.post_async(None, serde_json::to_string(&req)?).await?;
+    let res_text = conn
+        .post_async(None, serde_json::to_string(&req)?)
+        .await?
+        .text()
+        .await?;
 
-    let res_text = res.text().await?;
     let mut v: MethodResponse = match deserialize_from_str(&res_text) {
         Err(err) => {
             _ = conn.store.online_status.set(None, Err(err.clone())).await;
@@ -244,31 +247,6 @@ pub async fn get_message_list(
     conn.last_method_response = Some(res_text);
     Ok(ids)
 }
-
-/*
-pub async fn get_message(conn: &JmapConnection, ids: &[String]) -> Result<Vec<Envelope>> {
-    let email_call: EmailGet = EmailGet::new(
-        Get::new()
-            .ids(Some(Argument::value(ids.to_vec())))
-            .account_id(conn.mail_account_id().to_string()),
-    );
-
-    let mut req = Request::new(conn.request_no.clone());
-    req.add_call(&email_call);
-    let mut res = conn
-        .post_async(None, serde_json::to_string(&req)?)
-        .await?;
-
-    let res_text = res.text().await?;
-    let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
-    let e = GetResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
-    let GetResponse::<EmailObject> { list, .. } = e;
-    Ok(list
-        .into_iter()
-        .map(std::convert::Into::into)
-        .collect::<Vec<Envelope>>())
-}
-*/
 
 #[derive(Clone, Copy)]
 pub enum EmailFetchState {
