@@ -448,6 +448,18 @@ pub trait ResultIntoError<T> {
     fn chain_err_kind(self, kind: ErrorKind) -> Result<T>;
 }
 
+pub trait WrapResultIntoError<T, I>
+where
+    I: Send + Sync + std::error::Error + 'static,
+{
+    /// Wrap a result into a new [`Error`] that sets its source to the original
+    /// value.
+    fn wrap_err<M, F>(self, msg_fn: F) -> Result<T>
+    where
+        F: Fn() -> M,
+        M: Into<Cow<'static, str>>;
+}
+
 impl<I: Into<Error>> IntoError for I {
     #[inline]
     fn set_err_summary<M>(self, msg: M) -> Error
@@ -496,6 +508,22 @@ impl<T, I: Into<Error>> ResultIntoError<T> for std::result::Result<T, I> {
     #[inline]
     fn chain_err_kind(self, kind: ErrorKind) -> Result<T> {
         self.map_err(|err| err.set_err_kind(kind))
+    }
+}
+
+impl<T, I> WrapResultIntoError<T, I> for std::result::Result<T, I>
+where
+    I: Send + Sync + std::error::Error + 'static,
+{
+    #[inline]
+    /// Wrap a result into a new [`Error`] that sets its source to the original
+    /// value.
+    fn wrap_err<M, F>(self, msg_fn: F) -> Result<T>
+    where
+        F: Fn() -> M,
+        M: Into<Cow<'static, str>>,
+    {
+        self.map_err(|err| Error::new(msg_fn()).set_source(Some(Arc::new(err))))
     }
 }
 
