@@ -26,7 +26,7 @@ jobs:
         include:
           - build: linux-amd64
             os: ubuntu-latest
-            rust: stable
+            rust: 1.79.0
             artifact_name: 'meli-linux-amd64'
             target: x86_64-unknown-linux-gnu
     steps:
