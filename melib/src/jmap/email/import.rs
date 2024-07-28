@@ -192,7 +192,7 @@ pub struct EmailImportResponse {
     /// o  newState: `String`
     /// The state string that will now be returned by `Email/get` on this
     /// account.
-    pub new_state: Option<State<EmailObject>>,
+    pub new_state: State<EmailObject>,
 
     /// o  created: `Id[Email]|null`
     /// A map of the creation id to an object containing the `id`,
