@@ -28,10 +28,71 @@ use smallvec::SmallVec;
 
 use crate::{is_variant, jobs::JoinHandle};
 
-pub enum JobRequest {
+pub enum MailboxJobRequest {
     Mailboxes {
         handle: JoinHandle<Result<HashMap<MailboxHash, Mailbox>>>,
     },
+    CreateMailbox {
+        path: String,
+        handle: JoinHandle<Result<(MailboxHash, HashMap<MailboxHash, Mailbox>)>>,
+    },
+    DeleteMailbox {
+        mailbox_hash: MailboxHash,
+        handle: JoinHandle<Result<HashMap<MailboxHash, Mailbox>>>,
+    },
+    SetMailboxPermissions {
+        mailbox_hash: MailboxHash,
+        handle: JoinHandle<Result<()>>,
+    },
+    SetMailboxSubscription {
+        mailbox_hash: MailboxHash,
+        new_value: bool,
+        handle: JoinHandle<Result<()>>,
+    },
+}
+
+impl Drop for MailboxJobRequest {
+    fn drop(&mut self) {
+        match self {
+            Self::CreateMailbox { handle, .. } => handle.cancel(),
+            Self::SetMailboxPermissions { handle, .. }
+            | Self::SetMailboxSubscription { handle, .. } => handle.cancel(),
+            Self::DeleteMailbox { handle, .. } | Self::Mailboxes { handle } => handle.cancel(),
+        };
+    }
+}
+
+impl std::fmt::Debug for MailboxJobRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::CreateMailbox { .. } => write!(f, "JobRequest::CreateMailbox"),
+            Self::DeleteMailbox { mailbox_hash, .. } => {
+                write!(f, "JobRequest::DeleteMailbox({})", mailbox_hash)
+            }
+            Self::SetMailboxPermissions { .. } => {
+                write!(f, "JobRequest::SetMailboxPermissions")
+            }
+            Self::SetMailboxSubscription { .. } => {
+                write!(f, "JobRequest::SetMailboxSubscription")
+            }
+            Self::Mailboxes { .. } => write!(f, "JobRequest::Mailboxes"),
+        }
+    }
+}
+
+impl std::fmt::Display for MailboxJobRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Mailboxes { .. } => write!(f, "Get mailbox list"),
+            Self::CreateMailbox { path, .. } => write!(f, "Create mailbox {}", path),
+            Self::DeleteMailbox { .. } => write!(f, "Delete mailbox"),
+            Self::SetMailboxPermissions { .. } => write!(f, "Set mailbox permissions"),
+            Self::SetMailboxSubscription { .. } => write!(f, "Set mailbox subscription"),
+        }
+    }
+}
+
+pub enum JobRequest {
     Fetch {
         mailbox_hash: MailboxHash,
         #[allow(clippy::type_complexity)]
@@ -72,60 +133,31 @@ pub enum JobRequest {
         env_hashes: EnvelopeHashBatch,
         handle: JoinHandle<Result<()>>,
     },
-    CreateMailbox {
-        path: String,
-        handle: JoinHandle<Result<(MailboxHash, HashMap<MailboxHash, Mailbox>)>>,
-    },
-    DeleteMailbox {
-        mailbox_hash: MailboxHash,
-        handle: JoinHandle<Result<HashMap<MailboxHash, Mailbox>>>,
-    },
-    //RenameMailbox,
-    SetMailboxPermissions {
-        mailbox_hash: MailboxHash,
-        handle: JoinHandle<Result<()>>,
-    },
-    SetMailboxSubscription {
-        mailbox_hash: MailboxHash,
-        new_value: bool,
-        handle: JoinHandle<Result<()>>,
-    },
     Watch {
         handle: JoinHandle<Result<()>>,
     },
+    Mailbox(MailboxJobRequest),
 }
 
 impl Drop for JobRequest {
     fn drop(&mut self) {
         match self {
-            Self::Generic { handle, .. } |
-            Self::IsOnline { handle, .. } |
-            Self::Refresh { handle, .. } |
-            Self::SetFlags { handle, .. } |
-            Self::SaveMessage { handle, .. } |
-            //JobRequest::RenameMailbox,
-            Self::SetMailboxPermissions { handle, .. } |
-            Self::SetMailboxSubscription { handle, .. } |
-            Self::Watch { handle, .. } |
-            Self::SendMessageBackground { handle, .. } => {
+            Self::Generic { handle, .. }
+            | Self::IsOnline { handle, .. }
+            | Self::Refresh { handle, .. }
+            | Self::SetFlags { handle, .. }
+            | Self::SaveMessage { handle, .. }
+            | Self::Watch { handle, .. }
+            | Self::SendMessageBackground { handle, .. } => {
                 handle.cancel();
             }
             Self::DeleteMessages { handle, .. } => {
                 handle.cancel();
             }
-            Self::CreateMailbox { handle, .. } => {
-                handle.cancel();
-            }
-            Self::DeleteMailbox { handle, .. } => {
-                handle.cancel();
-            }
             Self::Fetch { handle, .. } => {
                 handle.cancel();
             }
-            Self::Mailboxes { handle, .. } => {
-                handle.cancel();
-            }
-            Self::SendMessage => {}
+            Self::SendMessage | Self::Mailbox(_) => {}
         }
     }
 }
@@ -134,7 +166,7 @@ impl std::fmt::Debug for JobRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::Generic { name, .. } => write!(f, "JobRequest::Generic({})", name),
-            Self::Mailboxes { .. } => write!(f, "JobRequest::Mailboxes"),
+            Self::Mailbox(inner) => std::fmt::Debug::fmt(inner, f),
             Self::Fetch { mailbox_hash, .. } => {
                 write!(f, "JobRequest::Fetch({})", mailbox_hash)
             }
@@ -153,17 +185,6 @@ impl std::fmt::Debug for JobRequest {
                 .finish(),
             Self::SaveMessage { .. } => write!(f, "JobRequest::SaveMessage"),
             Self::DeleteMessages { .. } => write!(f, "JobRequest::DeleteMessages"),
-            Self::CreateMailbox { .. } => write!(f, "JobRequest::CreateMailbox"),
-            Self::DeleteMailbox { mailbox_hash, .. } => {
-                write!(f, "JobRequest::DeleteMailbox({})", mailbox_hash)
-            }
-            //JobRequest::RenameMailbox,
-            Self::SetMailboxPermissions { .. } => {
-                write!(f, "JobRequest::SetMailboxPermissions")
-            }
-            Self::SetMailboxSubscription { .. } => {
-                write!(f, "JobRequest::SetMailboxSubscription")
-            }
             Self::Watch { .. } => write!(f, "JobRequest::Watch"),
             Self::SendMessage => write!(f, "JobRequest::SendMessage"),
             Self::SendMessageBackground { .. } => {
@@ -177,7 +198,7 @@ impl std::fmt::Display for JobRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::Generic { name, .. } => write!(f, "{}", name),
-            Self::Mailboxes { .. } => write!(f, "Get mailbox list"),
+            Self::Mailbox(inner) => std::fmt::Display::fmt(inner, f),
             Self::Fetch { .. } => write!(f, "Mailbox fetch"),
             Self::IsOnline { .. } => write!(f, "Online status check"),
             Self::Refresh { .. } => write!(f, "Refresh mailbox"),
@@ -197,11 +218,6 @@ impl std::fmt::Display for JobRequest {
                 env_hashes.len(),
                 if env_hashes.len() == 1 { "" } else { "s" }
             ),
-            Self::CreateMailbox { path, .. } => write!(f, "Create mailbox {}", path),
-            Self::DeleteMailbox { .. } => write!(f, "Delete mailbox"),
-            //JobRequest::RenameMailbox,
-            Self::SetMailboxPermissions { .. } => write!(f, "Set mailbox permissions"),
-            Self::SetMailboxSubscription { .. } => write!(f, "Set mailbox subscription"),
             Self::Watch { .. } => write!(f, "Background watch"),
             Self::SendMessageBackground { .. } | Self::SendMessage => {
                 write!(f, "Sending message")
