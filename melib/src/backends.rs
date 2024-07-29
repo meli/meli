@@ -25,17 +25,21 @@ pub mod utf7;
 mod tests;
 
 pub mod prelude {
+    pub use async_fn_stream::try_fn_stream;
     pub use futures::{
         future::BoxFuture,
+        lock::Mutex as FutureMutex,
         stream::{BoxStream, Stream},
     };
     pub type ResultFuture<T> = crate::Result<BoxFuture<'static, crate::Result<T>>>;
+    pub type ResultStream<T> = crate::Result<BoxStream<'static, crate::Result<T>>>;
     pub use std::{
         any::Any,
         borrow::Cow,
         cell::RefCell,
         collections::{BTreeSet, HashMap},
         ops::Deref,
+        pin::Pin,
         sync::Arc,
     };
 
@@ -394,12 +398,7 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     fn is_online(&self) -> ResultFuture<()> {
         Ok(Box::pin(async { Ok(()) }))
     }
-
-    fn fetch(
-        &mut self,
-        mailbox_hash: MailboxHash,
-    ) -> Result<BoxStream<'static, Result<Vec<Envelope>>>>;
-
+    fn fetch(&mut self, mailbox_hash: MailboxHash) -> ResultStream<Vec<Envelope>>;
     fn refresh(&mut self, mailbox_hash: MailboxHash) -> ResultFuture<()>;
     fn watch(&self) -> ResultFuture<()>;
     fn mailboxes(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>>;
@@ -411,6 +410,23 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         mailbox_hash: MailboxHash,
         flags: Option<Flag>,
     ) -> ResultFuture<()>;
+    fn save_batch(
+        &self,
+        batch: Vec<(Vec<u8>, MailboxHash, Option<Flag>)>,
+    ) -> ResultStream<Result<()>> {
+        let mut futures = batch
+            .into_iter()
+            .map(|(bytes, mailbox_hash, flags)| self.save(bytes, mailbox_hash, flags))
+            .collect::<Result<Vec<Pin<Box<_>>>>>()?;
+        Ok(Box::pin(try_fn_stream(|emitter| async move {
+            while !futures.is_empty() {
+                let max_len = futures.len().min(100);
+                futures::future::try_join_all(futures.drain(0..max_len)).await?;
+                emitter.emit(Ok(())).await;
+            }
+            Ok(())
+        })))
+    }
 
     fn copy_messages(
         &mut self,
@@ -479,6 +495,23 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     ) -> ResultFuture<()> {
         Err(Error::new("Submission not supported in this backend.")
             .set_kind(ErrorKind::NotSupported))
+    }
+    fn submit_batch(
+        &self,
+        batch: Vec<(Vec<u8>, Option<MailboxHash>, Option<Flag>)>,
+    ) -> ResultStream<Result<()>> {
+        let mut futures = batch
+            .into_iter()
+            .map(|(bytes, mailbox_hash, flags)| self.submit(bytes, mailbox_hash, flags))
+            .collect::<Result<Vec<Pin<Box<_>>>>>()?;
+        Ok(Box::pin(try_fn_stream(|emitter| async move {
+            while !futures.is_empty() {
+                let max_len = futures.len().min(100);
+                futures::future::try_join_all(futures.drain(0..max_len)).await?;
+                emitter.emit(Ok(())).await;
+            }
+            Ok(())
+        })))
     }
 }
 

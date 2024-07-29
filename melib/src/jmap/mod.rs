@@ -25,7 +25,6 @@
 use std::{
     collections::{HashMap, HashSet},
     convert::TryFrom,
-    pin::Pin,
     str::FromStr,
     sync::{Arc, Mutex, RwLock},
     time::{Duration, Instant},
@@ -422,13 +421,10 @@ impl MailBackend for JmapType {
         }))
     }
 
-    fn fetch(
-        &mut self,
-        mailbox_hash: MailboxHash,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>> {
+    fn fetch(&mut self, mailbox_hash: MailboxHash) -> ResultStream<Vec<Envelope>> {
         let store = self.store.clone();
         let connection = self.connection.clone();
-        Ok(Box::pin(async_stream::try_stream! {
+        Ok(Box::pin(try_fn_stream(|emitter| async move {
             let mut conn = connection.lock().await;
             conn.connect().await?;
             // Suggested minimum from RFC8620 Section 2 "The JMAP Session Resource" is 500.
@@ -440,11 +436,11 @@ impl MailBackend for JmapType {
             loop {
                 let res = fetch_state.fetch(&mut conn, &store, mailbox_hash).await?;
                 if res.is_empty() {
-                    return;
+                    return Ok(());
                 }
-                yield res;
+                emitter.emit(res).await;
             }
-        }))
+        })))
     }
 
     fn refresh(&mut self, mailbox_hash: MailboxHash) -> ResultFuture<()> {

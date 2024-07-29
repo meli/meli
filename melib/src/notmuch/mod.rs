@@ -25,7 +25,6 @@ use std::{
     io::Read,
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
-    pin::Pin,
     ptr::NonNull,
     sync::{Arc, Mutex, RwLock},
 };
@@ -575,10 +574,7 @@ impl MailBackend for NotmuchDb {
         Ok(Box::pin(async { Ok(()) }))
     }
 
-    fn fetch(
-        &mut self,
-        mailbox_hash: MailboxHash,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>> {
+    fn fetch(&mut self, mailbox_hash: MailboxHash) -> ResultStream<Vec<Envelope>> {
         struct FetchState {
             mailbox_hash: MailboxHash,
             database: Arc<DbConnection>,
@@ -670,11 +666,15 @@ impl MailBackend for NotmuchDb {
             tag_index,
             iter: v.into_iter(),
         };
-        Ok(Box::pin(async_stream::try_stream! {
-            while let Some(res) = state.fetch().await.map_err(|err| { log::debug!("fetch err {:?}", &err); err})? {
-                yield res;
+        Ok(Box::pin(try_fn_stream(|emitter| async move {
+            while let Some(res) = state.fetch().await.map_err(|err| {
+                log::debug!("fetch err {:?}", &err);
+                err
+            })? {
+                emitter.emit(res).await;
             }
-        }))
+            Ok(())
+        })))
     }
 
     fn refresh(&mut self, _mailbox_hash: MailboxHash) -> ResultFuture<()> {

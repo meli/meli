@@ -47,7 +47,6 @@ use std::{
     convert::TryFrom,
     hash::Hasher,
     num::NonZeroU32,
-    pin::Pin,
     str::FromStr,
     sync::{Arc, Mutex},
     time::{Duration, SystemTime},
@@ -57,7 +56,6 @@ use protocol_parser::id_ext::IDResponse;
 
 pub extern crate imap_codec;
 pub use cache::ModSequence;
-use futures::{lock::Mutex as FutureMutex, stream::Stream};
 use imap_codec::imap_types::{
     command::CommandBody,
     core::{Atom, Literal},
@@ -374,10 +372,7 @@ impl MailBackend for ImapType {
         }
     }
 
-    fn fetch(
-        &mut self,
-        mailbox_hash: MailboxHash,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>> {
+    fn fetch(&mut self, mailbox_hash: MailboxHash) -> ResultStream<Vec<Envelope>> {
         let cache_handle = {
             match self.uid_store.cache_handle().chain_err_summary(|| {
                 format!(
@@ -418,43 +413,42 @@ impl MailBackend for ImapType {
             cache_handle,
         };
 
-        /* do this in a closure to prevent recursion limit error in async_stream
-         * macro */
-        let prepare_cl = |f: &ImapMailbox| {
-            f.set_warm(true);
-            if let Ok(mut exists) = f.exists.lock() {
-                let total = exists.len();
-                exists.clear();
-                exists.set_not_yet_seen(total);
-            }
-            if let Ok(mut unseen) = f.unseen.lock() {
-                let total = unseen.len();
-                unseen.clear();
-                unseen.set_not_yet_seen(total);
-            }
-        };
-        Ok(Box::pin(async_stream::try_stream! {
+        Ok(Box::pin(try_fn_stream(|emitter| async move {
             let id = state.connection.lock().await.id.clone();
             {
                 let f = &state.uid_store.mailboxes.lock().await[&mailbox_hash];
-                prepare_cl(f);
+                f.set_warm(true);
+                if let Ok(mut exists) = f.exists.lock() {
+                    let total = exists.len();
+                    exists.clear();
+                    exists.set_not_yet_seen(total);
+                }
+                if let Ok(mut unseen) = f.unseen.lock() {
+                    let total = unseen.len();
+                    unseen.clear();
+                    unseen.set_not_yet_seen(total);
+                }
                 if f.no_select {
-                    yield vec![];
-                    return;
+                    emitter.emit(vec![]).await;
+                    return Ok(());
                 }
             };
             loop {
                 let res = fetch_hlpr(&mut state).await.map_err(|err| {
-                    log::trace!("{} fetch_hlpr at stage {:?} err {:?}", id,  state.stage, &err);
+                    log::trace!(
+                        "{} fetch_hlpr at stage {:?} err {:?}",
+                        id,
+                        state.stage,
+                        &err
+                    );
                     err
                 })?;
-                yield res;
+                emitter.emit(res).await;
                 if state.stage == FetchStage::Finished {
-                    return;
+                    return Ok(());
                 }
-
             }
-        }))
+        })))
     }
 
     fn refresh(&mut self, mailbox_hash: MailboxHash) -> ResultFuture<()> {

@@ -42,7 +42,7 @@ pub struct MaildirStream {
 }
 
 impl MaildirStream {
-    #[allow(clippy::type_complexity, clippy::new_ret_no_self)]
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         mailbox_hash: MailboxHash,
         unseen: Arc<Mutex<usize>>,
@@ -50,7 +50,7 @@ impl MaildirStream {
         mut path: PathBuf,
         map: HashIndexes,
         mailbox_index: Arc<Mutex<HashMap<EnvelopeHash, MailboxHash>>>,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>> {
+    ) -> ResultStream<Vec<Envelope>> {
         let chunk_size = 2048;
         path.push("new");
         for p in path.read_dir()?.flatten() {

@@ -136,7 +136,6 @@ use std::{
     io::{BufReader, Read},
     os::unix::io::AsRawFd,
     path::{Path, PathBuf},
-    pin::Pin,
     str::FromStr,
     sync::{mpsc::channel, Arc, Mutex, RwLock},
 };
@@ -843,10 +842,7 @@ impl MailBackend for MboxType {
         Ok(Box::pin(async { Ok(()) }))
     }
 
-    fn fetch(
-        &mut self,
-        mailbox_hash: MailboxHash,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>> {
+    fn fetch(&mut self, mailbox_hash: MailboxHash) -> ResultStream<Vec<Envelope>> {
         struct FetchState {
             mailbox_hash: MailboxHash,
             mailbox_index: Arc<Mutex<HashMap<EnvelopeHash, MailboxHash>>>,
@@ -929,17 +925,18 @@ impl MailBackend for MboxType {
             offset: 0,
             file_offset: 0,
         };
-        Ok(Box::pin(async_stream::try_stream! {
+        Ok(Box::pin(try_fn_stream(|emitter| async move {
             loop {
                 if let Some(res) = state.fetch().await.map_err(|err| {
                     debug!("fetch err {:?}", &err);
-                    err})? {
-                    yield res;
+                    err
+                })? {
+                    emitter.emit(res).await;
                 } else {
-                    return;
+                    return Ok(());
                 }
             }
-        }))
+        })))
     }
 
     fn refresh(&mut self, _mailbox_hash: MailboxHash) -> ResultFuture<()> {

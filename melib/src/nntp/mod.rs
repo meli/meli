@@ -26,6 +26,14 @@
 //! Transfer Protocol (NNTP) Additions to LIST
 //! Command](https://datatracker.ietf.org/doc/html/rfc6048).
 
+use std::{
+    collections::{hash_map::DefaultHasher, BTreeSet, HashMap, HashSet},
+    hash::Hasher,
+    str::FromStr,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
+
 use crate::get_path_hash;
 mod store;
 pub use store::*;
@@ -37,17 +45,7 @@ pub use mailbox::*;
 mod operations;
 pub use operations::*;
 mod connection;
-use std::{
-    collections::{hash_map::DefaultHasher, BTreeSet, HashMap, HashSet},
-    hash::Hasher,
-    pin::Pin,
-    str::FromStr,
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
-};
-
 pub use connection::*;
-use futures::{lock::Mutex as FutureMutex, stream::Stream};
 
 use crate::{
     backends::prelude::*,
@@ -219,17 +217,14 @@ impl MailBackend for NntpType {
         }
     }
 
-    fn fetch(
-        &mut self,
-        mailbox_hash: MailboxHash,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>> {
+    fn fetch(&mut self, mailbox_hash: MailboxHash) -> ResultStream<Vec<Envelope>> {
         let mut state = FetchState {
             mailbox_hash,
             uid_store: self.uid_store.clone(),
             connection: self.connection.clone(),
             total_low_high: None,
         };
-        Ok(Box::pin(async_stream::try_stream! {
+        Ok(Box::pin(try_fn_stream(|emitter| async move {
             {
                 let f = &state.uid_store.mailboxes.lock().await[&state.mailbox_hash];
                 f.exists.lock().unwrap().clear();
@@ -237,12 +232,13 @@ impl MailBackend for NntpType {
             };
             loop {
                 if let Some(ret) = state.fetch_envs().await? {
-                    yield ret;
+                    emitter.emit(ret).await;
                     continue;
                 }
                 break;
             }
-        }))
+            Ok(())
+        })))
     }
 
     fn refresh(&mut self, mailbox_hash: MailboxHash) -> ResultFuture<()> {

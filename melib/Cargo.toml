@@ -19,7 +19,7 @@ name = "melib"
 path = "src/lib.rs"
 
 [dependencies]
-async-stream = "^0.3"
+async-fn-stream = "=0.2.2"
 base64 = { version = "^0.13", optional = true }
 bitflags = { version = "2.4", features = ["serde"] }
 data-encoding = { version = "2.1.1" }
