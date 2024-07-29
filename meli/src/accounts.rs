@@ -63,6 +63,8 @@ use crate::{
 mod backend_ops;
 mod jobs;
 mod mailbox;
+#[cfg(test)]
+mod tests;
 
 pub use jobs::*;
 pub use mailbox::*;
