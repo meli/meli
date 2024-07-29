@@ -211,7 +211,7 @@ impl MailListingTrait for PlainListing {
 
         // Get mailbox as a reference.
         //
-        match context.accounts[&self.cursor_pos.0].load(self.cursor_pos.1) {
+        match context.accounts[&self.cursor_pos.0].load(self.cursor_pos.1, true) {
             Ok(()) => {}
             Err(_) => {
                 self.length = 0;

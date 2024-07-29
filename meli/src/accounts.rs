@@ -896,7 +896,7 @@ impl Account {
         self.hash
     }
 
-    pub fn load(&mut self, mailbox_hash: MailboxHash) -> result::Result<(), usize> {
+    pub fn load(&mut self, mailbox_hash: MailboxHash, force: bool) -> result::Result<(), usize> {
         if mailbox_hash.is_null() {
             return Err(0);
         }
@@ -912,7 +912,7 @@ impl Account {
                 Ok(())
             }
             MailboxStatus::None => {
-                if !self.active_jobs.values().any(|j| j.is_fetch(mailbox_hash)) {
+                if force && !self.active_jobs.values().any(|j| j.is_fetch(mailbox_hash)) {
                     let mailbox_job = self.backend.write().unwrap().fetch(mailbox_hash);
                     match mailbox_job {
                         Ok(mailbox_job) => {
