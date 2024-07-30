@@ -1,3 +1,130 @@
+meli (0.8.7-1) bookworm; urgency=low
+
+  Contributors in alphabetical order:
+
+  - Andrei Zisu
+  - Damian Poddebniak
+  - Herby Gillot
+  - Manos Pitsidianakis
+
+  Added
+  =====
+
+  - 9fcb0a04 Add cargo-deny configuration file deny.toml
+  - 7e8d19af Add Envelope::sender_any
+  - 9ab404c5 Add pgp signed attachment support
+  - b4579075 Allow XOAUTH2 string passed as string
+  - 0ffe7fa5 Add text/plain or text/html arg for text decoding
+  - e107d613 Add prelude module for import cleanup
+  - 7200589a Add ErrorKind::NotFound
+  - 8c880dc7 Add {Error,ErrorKind}::is_recoverable()
+  - eb27773b Add pager.named_filters setting
+  - 84d93d65 Add support for ID extension (opt-in)
+  - af6838c2 Add metadata field to MailBackendCapabilities
+  - d1499242 Add From<Infallible> impl
+  - 814af0e9 Add --gzipped flag to man subcommand
+  - 475860c9 Accept - for stdio in `{create,test}_config`
+  - 86f9b213 Add timeout conf field in validate()
+  - dd525bd9 Use Error::is_recoverable
+  - 6e1fea80 Show suggestions on Unauthorized error
+  - 38620866 Detect DNS lookup std::io::Error
+  - a330ff96 Retry on DNS failure
+  - 2429f17b On invalid conf value, print what value is expected
+  - 6379fbe8 Add support for Undercurl attribute
+  - a13bf13f Add stub Undercurl support
+  - f5f1e068 Add UIDPLUS support
+  - afccebf3 Add AUTH=PLAIN support
+  - 9fb5bc41 Impl AUTH=ANONYMOUS (RFC4505)
+
+  Bug Fixes
+  =========
+
+  - ff3fe077 Fix new 1.79.0 clippy lints
+  - 430cbdfd Fix python errors
+  - e3c1656e Fix LOGINDISABLED support
+  - a82d1e1e Fix RowsState::rename_env stale data
+  - 8dc4465c Fix toml value ser after update of toml dependency
+  - 39e903b1 Fix issues with ShellExpandTrait
+  - 608301dc Expand save-to paths asap
+  - 100fa8b3 Fix edge case in ShellExpandTrait
+  - a85b3a08 Allow default_mailbox to be any mailbox
+  - 0dc24623 Fix one by off error on menu unread count
+  - 073aef86 Fix lints/errors when compiling specific feature combos
+  - 12695a00 Fix MSRV breakage
+  - 27ac3061 Fix tag support not being printed
+  - 97af00cd Respect timeout value from user configuration
+  - 824de287 Fix make_address! use
+  - f2e9cac3 Use suggested minimum for maxObjectsInGet
+  - 41d07fbc NewState in EmailImportResponse cannot be null
+  - 197132cc Support fetching with BODY[] for buggy servers
+  - 91fdef98 Return NotFound on cache miss
+  - 96cc02a0 Do not use ErrorKind::Configuration
+  - e96e9789 Don't discard pre-auth capabilities
+  - 122a2a4d Drain event_queue when mailbox made available
+
+  Changes
+  =======
+
+  - 27c4876f Prevent log flooding when drawing listing entries
+  - 7bdc8f52 Highlight_self also when self is sender
+  - c4f7b77a Rework attachment rendering logic with filters
+  - 1cce8c11 Accept invalid "+" CRLF cont req
+  - c04b593b Use BODY instead of RFC822
+  - 084a222a Remove subscribed mailboxes list
+  - 5b6c1aa8 Don't show all background jobs
+  - f9a3b333 Return NotFound on empty FETCH
+  - 15f3a3fb Retry fetch envelope only if err.is_recoverable()
+  - 15eeac51 Enable dns_cache, tcp_keepalive & tcp_nodelay
+  - 06437e60 Set not_yet_seen to 0 when inserting existing
+  - 0b113cdb Use MELI_FEATURES in all cargo invocations
+
+  Refactoring
+  ===========
+
+  - 7856ea33 Transition more to imap-codec
+  - 6f61176a Remove unecessary mut modifier
+  - 3251e7bd Scrub skip_serializing_if from attributes
+  - ebc1fa3b Move module to self dir
+  - 5110813e Refactor MaildirOp and watch()
+  - a9122c6e Draw with x range argument
+  - 3ebf5510 Pass entire screen area when drawing overlay
+  - 2dc1721a Move signal handling stuff to submodule
+  - 738f7c46 Execute Opt subcommand in Opt::execute()
+  - 46df4b57 Remove unused function stub
+  - 52c75e92 Use HeaderName constants
+  - 6da4e2ec Replace stringify! in Debug impls with type checked macro
+  - 85a55ed6 Add some missing ErrorKinds to errors
+  - 8b568f6e Add if_in_state argument in Set::new()
+  - 1e2e3da0 Treat color input `; ;` as `; 0 ;`
+  - 7c47f702 Extract test and parser modules to files
+  - d40ee692 Extract tests mod from protocol_parser
+  - 1e50911c Add utils module to protocol_parser
+  - d3a45b34 Make default shared lib name a const
+  - a9e9d952 Change termination_string arg to Option
+  - fd76df78 Use MELI_CONFIG env var in mock tests
+  - 8552e499 Replace std::mem::{replace,take}
+
+  Documentation
+  =============
+
+  - dfc2bb43 Add link to MacPorts page for `meli`
+  - 97aa6a8e Replace obsolete .Tn macro with .Em
+  - a8e82a30 Add missing entries from JMAP
+
+  Miscellaneous Tasks
+  ===================
+
+  - bbe2cffa Add rust-bindgen's friends.sh to scripts/
+  - a8956baf Update to `imap-codec` v2.0.0-alpha.1
+  - c99633e1 Update futures dependency 0.3.28 -> 0.3.30
+  - fe604bf0 Update "openssl" dependency to 0.10.64
+  - 9daf9437 Add test_cli_subcommands.rs
+  - 9f783d9a Pin assert_cmd ver to 2.0.13
+  - b7da1d0f Check all targets in cargo-msrv verify test
+  - 8a74920d Pin rust version to 1.79.0
+
+ -- Manos Pitsidianakis <manos@pitsidianak.is>  Tue, 30 Jul 2024 14:21:31 +0300
+
 meli (0.8.6-1) bookworm; urgency=low
 
   Contributors in alphabetical order:

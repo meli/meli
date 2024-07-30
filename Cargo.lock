@@ -1302,7 +1302,7 @@ dependencies = [
 
 [[package]]
 name = "meli"
-version = "0.8.6"
+version = "0.8.7"
 dependencies = [
  "assert_cmd",
  "async-task",
@@ -1339,7 +1339,7 @@ dependencies = [
 
 [[package]]
 name = "melib"
-version = "0.8.6"
+version = "0.8.7"
 dependencies = [
  "async-stream",
  "base64 0.13.1",
