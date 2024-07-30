@@ -196,7 +196,7 @@ pub struct EmailObject {
     #[serde(deserialize_with = "deserialize_header")]
     pub headers: IndexMap<String, String>,
     #[serde(default)]
-    pub html_body: Vec<HtmlBody>,
+    pub html_body: Vec<EmailBodyPart>,
     #[serde(default)]
     pub preview: Option<String>,
     #[serde(default)]
@@ -204,7 +204,7 @@ pub struct EmailObject {
     #[serde(default)]
     pub subject: Option<String>,
     #[serde(default)]
-    pub text_body: Vec<TextBody>,
+    pub text_body: Vec<EmailBodyPart>,
     #[serde(default)]
     pub thread_id: Id<ThreadObject>,
     #[serde(flatten)]
@@ -380,54 +380,28 @@ impl From<EmailObject> for crate::Envelope {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct HtmlBody {
-    pub blob_id: Id<BlobObject>,
+pub struct EmailBodyPart {
+    #[serde(default)]
+    pub part_id: Option<String>,
+    #[serde(default)]
+    pub blob_id: Option<Id<BlobObject>>,
+    #[serde(default)]
+    pub size: u64,
+    #[serde(default)]
+    pub headers: Value,
+    #[serde(default)]
+    pub name: Option<String>,
+    pub r#type: String,
     #[serde(default)]
     pub charset: Option<String>,
     #[serde(default)]
-    pub cid: Option<String>,
-    #[serde(default)]
     pub disposition: Option<String>,
     #[serde(default)]
-    pub headers: Value,
+    pub cid: Option<String>,
     #[serde(default)]
     pub language: Option<Vec<String>>,
     #[serde(default)]
     pub location: Option<String>,
-    #[serde(default)]
-    pub name: Option<String>,
-    #[serde(default)]
-    pub part_id: Option<String>,
-    pub size: u64,
-    #[serde(alias = "type")]
-    pub content_type: String,
-    #[serde(default)]
-    pub sub_parts: Vec<Value>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TextBody {
-    pub blob_id: Id<BlobObject>,
-    #[serde(default)]
-    pub charset: Option<String>,
-    #[serde(default)]
-    pub cid: Option<String>,
-    #[serde(default)]
-    pub disposition: Option<String>,
-    #[serde(default)]
-    pub headers: Value,
-    #[serde(default)]
-    pub language: Option<Vec<String>>,
-    #[serde(default)]
-    pub location: Option<String>,
-    #[serde(default)]
-    pub name: Option<String>,
-    #[serde(default)]
-    pub part_id: Option<String>,
-    pub size: u64,
-    #[serde(alias = "type")]
-    pub content_type: String,
     #[serde(default)]
     pub sub_parts: Vec<Value>,
 }
