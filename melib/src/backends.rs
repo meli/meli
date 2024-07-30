@@ -258,6 +258,7 @@ impl Backends {
                         ""
                     },
                 ))
+                .set_kind(ErrorKind::Configuration)
             })?
             .validate_conf_fn)(s)
     }

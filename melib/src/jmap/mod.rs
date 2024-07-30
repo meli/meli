@@ -679,9 +679,10 @@ impl MailBackend for JmapType {
         _mailbox_hash: MailboxHash,
         _new_path: String,
     ) -> ResultFuture<Mailbox> {
-        Err(Error::new(
-            "Renaming mailbox is currently unimplemented for the JMAP backend.",
-        ))
+        Err(
+            Error::new("Renaming mailbox is currently unimplemented for the JMAP backend.")
+                .set_kind(ErrorKind::NotImplemented),
+        )
     }
 
     fn create_mailbox(
@@ -735,9 +736,10 @@ impl MailBackend for JmapType {
         &mut self,
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
-        Err(Error::new(
-            "Deleting a mailbox is currently unimplemented for the JMAP backend.",
-        ))
+        Err(
+            Error::new("Deleting a mailbox is currently unimplemented for the JMAP backend.")
+                .set_kind(ErrorKind::NotImplemented),
+        )
     }
 
     fn set_mailbox_subscription(
@@ -747,7 +749,8 @@ impl MailBackend for JmapType {
     ) -> ResultFuture<()> {
         Err(Error::new(
             "Setting mailbox subscription is currently unimplemented for the JMAP backend.",
-        ))
+        )
+        .set_kind(ErrorKind::NotImplemented))
     }
 
     fn set_mailbox_permissions(
@@ -757,7 +760,8 @@ impl MailBackend for JmapType {
     ) -> ResultFuture<()> {
         Err(Error::new(
             "Setting mailbox permissions is currently unimplemented for the JMAP backend.",
-        ))
+        )
+        .set_kind(ErrorKind::NotImplemented))
     }
 
     fn copy_messages(
@@ -1031,9 +1035,10 @@ impl MailBackend for JmapType {
         _env_hashes: EnvelopeHashBatch,
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<()> {
-        Err(Error::new(
-            "Deleting messages is currently unimplemented for the JMAP backend.",
-        ))
+        Err(
+            Error::new("Deleting messages is currently unimplemented for the JMAP backend.")
+                .set_kind(ErrorKind::NotImplemented),
+        )
     }
 
     // [ref:TODO] add support for BLOB extension

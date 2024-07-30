@@ -60,10 +60,11 @@ macro_rules! get_conf_val {
     ($s:ident[$var:literal]) => {
         $s.extra.get($var).ok_or_else(|| {
             Error::new(format!(
-                "Configuration error ({}): NNTP connection requires the field `{}` set",
+                "{}: NNTP connection requires the field `{}` set",
                 $s.name.as_str(),
                 $var
             ))
+            .set_kind(ErrorKind::Configuration)
         })
     };
     ($s:ident[$var:literal], $default:expr) => {
@@ -72,12 +73,14 @@ macro_rules! get_conf_val {
             .map(|v| {
                 <_>::from_str(v).map_err(|e| {
                     Error::new(format!(
-                        "Configuration error ({}) NNTP: Invalid value for field `{}`: {}\n{}",
+                        "{}: NNTP connection has invalid configuration",
                         $s.name.as_str(),
-                        $var,
-                        v,
-                        e
                     ))
+                    .set_kind(ErrorKind::Configuration)
+                    .set_source(Some(Arc::new(
+                        Error::new(format!("Invalid value for field `{}`: {}\n{}", $var, v, e))
+                            .set_kind(ErrorKind::ValueError),
+                    )))
                 })
             })
             .unwrap_or_else(|| Ok($default))
@@ -346,7 +349,6 @@ impl MailBackend for NntpType {
                     return Ok(());
                 }
             }
-            //conn.select_group(mailbox_hash, false, &mut res).await?;
             Ok(())
         }))
     }
@@ -370,13 +372,12 @@ impl MailBackend for NntpType {
         Ok(Box::pin(async move {
             match timeout(Some(Duration::from_secs(60 * 16)), connection.lock()).await {
                 Ok(mut conn) => {
-                    debug!("is_online");
-                    match debug!(timeout(Some(Duration::from_secs(60 * 16)), conn.connect()).await)
-                    {
+                    log::trace!("is_online");
+                    match timeout(Some(Duration::from_secs(60 * 16)), conn.connect()).await {
                         Ok(Ok(())) => Ok(()),
                         Err(err) | Ok(Err(err)) => {
                             conn.stream = Err(err.clone());
-                            debug!(conn.connect().await)
+                            conn.connect().await
                         }
                     }
                 }
@@ -510,18 +511,20 @@ impl MailBackend for NntpType {
         &mut self,
         _path: String,
     ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
-        Err(Error::new(
-            "Creating mailbox is currently unimplemented for nntp backend.",
-        ))
+        Err(
+            Error::new("Creating mailbox is not supported for nntp backend.")
+                .set_kind(ErrorKind::NotImplemented),
+        )
     }
 
     fn delete_mailbox(
         &mut self,
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
-        Err(Error::new(
-            "Deleting a mailbox is currently unimplemented for nntp backend.",
-        ))
+        Err(
+            Error::new("Deleting a mailbox is not supported for nntp backend.")
+                .set_kind(ErrorKind::NotSupported),
+        )
     }
 
     fn set_mailbox_subscription(
@@ -529,9 +532,10 @@ impl MailBackend for NntpType {
         _mailbox_hash: MailboxHash,
         _new_val: bool,
     ) -> ResultFuture<()> {
-        Err(Error::new(
-            "Setting mailbox description is currently unimplemented for nntp backend.",
-        ))
+        Err(
+            Error::new("Setting mailbox subscription is not supported for nntp backend.")
+                .set_kind(ErrorKind::NotSupported),
+        )
     }
 
     fn rename_mailbox(
@@ -539,9 +543,10 @@ impl MailBackend for NntpType {
         _mailbox_hash: MailboxHash,
         _new_path: String,
     ) -> ResultFuture<Mailbox> {
-        Err(Error::new(
-            "Renaming mailbox is currently unimplemented for nntp backend.",
-        ))
+        Err(
+            Error::new("Renaming mailbox is not supported for nntp backend.")
+                .set_kind(ErrorKind::NotSupported),
+        )
     }
 
     fn set_mailbox_permissions(
@@ -549,9 +554,10 @@ impl MailBackend for NntpType {
         _mailbox_hash: MailboxHash,
         _val: crate::backends::MailboxPermissions,
     ) -> ResultFuture<()> {
-        Err(Error::new(
-            "Setting mailbox permissions is currently unimplemented for nntp backend.",
-        ))
+        Err(
+            Error::new("Setting mailbox permissions is not supported for nntp backend.")
+                .set_kind(ErrorKind::NotSupported),
+        )
     }
 
     fn search(
@@ -559,9 +565,8 @@ impl MailBackend for NntpType {
         _query: crate::search::Query,
         _mailbox_hash: Option<MailboxHash>,
     ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
-        Err(Error::new(
-            "Searching is currently unimplemented for nntp backend.",
-        ))
+        Err(Error::new("Searching is not supported for nntp backend.")
+            .set_kind(ErrorKind::NotSupported))
     }
 
     fn submit(
@@ -606,29 +611,6 @@ impl NntpType {
         event_consumer: BackendEventConsumer,
     ) -> Result<Box<dyn MailBackend>> {
         let server_hostname = get_conf_val!(s["server_hostname"])?;
-        /*let server_username = get_conf_val!(s["server_username"], "")?;
-        let server_password = if !s.extra.contains_key("server_password_command") {
-            get_conf_val!(s["server_password"], "")?.to_string()
-        } else {
-            let invocation = get_conf_val!(s["server_password_command"])?;
-            let output = std::process::Command::new("sh")
-                .args(&["-c", invocation])
-                .stdin(std::process::Stdio::piped())
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .output()?;
-            if !output.status.success() {
-                return Err(Error::new(format!(
-                    "({}) server_password_command `{}` returned {}: {}",
-                    s.name,
-                    get_conf_val!(s["server_password_command"])?,
-                    output.status,
-                    String::from_utf8_lossy(&output.stderr)
-                )));
-            }
-            std::str::from_utf8(&output.stdout)?.trim_end().to_string()
-        };
-        */
         let server_port = get_conf_val!(s["server_port"], 119)?;
         let use_tls = get_conf_val!(s["use_tls"], server_port == 563)?;
         let use_starttls = use_tls && get_conf_val!(s["use_starttls"], false)?;
@@ -688,10 +670,10 @@ impl NntpType {
             );
         }
         if mailboxes.is_empty() {
-            return Err(Error::new(format!(
-                "{} has no newsgroups configured.",
-                account_name
-            )));
+            return Err(
+                Error::new(format!("{} has no newsgroups configured.", account_name))
+                    .set_kind(ErrorKind::Configuration),
+            );
         }
         let uid_store: Arc<UIDStore> = Arc::new(UIDStore {
             mailboxes: Arc::new(FutureMutex::new(mailboxes)),
@@ -762,7 +744,8 @@ impl NntpType {
                         "Could not get newsgroups {}: expected LIST ACTIVE response but got: {}",
                         &conn.uid_store.account_name, res
                     )
-                })?;
+                })
+                .chain_err_kind(ErrorKind::ProtocolError)?;
             let mut mailboxes_lck = conn.uid_store.mailboxes.lock().await;
             for l in res.split_rn().skip(1) {
                 let s = l.split_whitespace().collect::<SmallVec<[&str; 4]>>();
@@ -786,10 +769,11 @@ impl NntpType {
                 keys.insert($var);
                 $s.extra.remove($var).ok_or_else(|| {
                     Error::new(format!(
-                        "Configuration error ({}): NNTP connection requires the field `{}` set",
+                        "{}: NNTP connection requires the field `{}` set",
                         $s.name.as_str(),
                         $var
                     ))
+                    .set_kind(ErrorKind::Configuration)
                 })
             }};
             ($s:ident[$var:literal], $default:expr) => {{
@@ -799,13 +783,17 @@ impl NntpType {
                     .map(|v| {
                         <_>::from_str(&v).map_err(|e| {
                             Error::new(format!(
-                                "Configuration error ({}) NNTP: Invalid value for field `{}`: \
-                                 {}\n{}",
+                                "{}: NNTP connection has invalid configuration",
                                 $s.name.as_str(),
-                                $var,
-                                v,
-                                e
                             ))
+                            .set_kind(ErrorKind::Configuration)
+                            .set_source(Some(Arc::new(
+                                Error::new(format!(
+                                    "Invalid value for field `{}`: {}\n{}",
+                                    $var, v, e
+                                ))
+                                .set_kind(ErrorKind::ValueError),
+                            )))
                         })
                     })
                     .unwrap_or_else(|| Ok($default))
@@ -819,7 +807,8 @@ impl NntpType {
                 "{}: store_flags_locally is on but this copy of melib isn't built with sqlite3 \
                  support.",
                 &s.name
-            )));
+            ))
+            .set_kind(ErrorKind::Configuration));
         }
         get_conf_val!(s["require_auth"], false)?;
         get_conf_val!(s["server_hostname"])?;
@@ -828,10 +817,10 @@ impl NntpType {
             get_conf_val!(s["server_password"], String::new())?;
         } else if s.extra.contains_key("server_password") {
             return Err(Error::new(format!(
-                "Configuration error ({}): both server_password and server_password_command are \
-                 set, cannot choose",
+                "{}: both server_password and server_password_command are set, cannot choose",
                 s.name.as_str(),
-            )));
+            ))
+            .set_kind(ErrorKind::Configuration));
         }
         let _ = get_conf_val!(s["server_password_command"]);
         let server_port = get_conf_val!(s["server_port"], 119)?;
@@ -839,10 +828,11 @@ impl NntpType {
         let use_starttls = get_conf_val!(s["use_starttls"], server_port != 563)?;
         if !use_tls && use_starttls {
             return Err(Error::new(format!(
-                "Configuration error ({}): incompatible use_tls and use_starttls values: use_tls \
-                 = false, use_starttls = true",
+                "{}: incompatible use_tls and use_starttls values: use_tls = false, use_starttls \
+                 = true",
                 s.name.as_str(),
-            )));
+            ))
+            .set_kind(ErrorKind::Configuration));
         }
         get_conf_val!(s["use_deflate"], false)?;
         get_conf_val!(s["danger_accept_invalid_certs"], false)?;
@@ -854,11 +844,11 @@ impl NntpType {
         let diff = extra_keys.difference(&keys).collect::<Vec<&&str>>();
         if !diff.is_empty() {
             return Err(Error::new(format!(
-                "Configuration error ({}) NNTP: the following flags are set but are not \
-                 recognized: {:?}.",
+                "{} the following flags are set but are not recognized: {:?}.",
                 s.name.as_str(),
                 diff
-            )));
+            ))
+            .set_kind(ErrorKind::Configuration));
         }
         Ok(())
     }
@@ -911,7 +901,8 @@ impl FetchState {
                 return Err(Error::new(format!(
                     "{} Could not select newsgroup {}: expected GROUP response but got: {}",
                     &uid_store.account_name, path, res
-                )));
+                ))
+                .set_kind(ErrorKind::ProtocolError));
             }
             let total = usize::from_str(s[1]).unwrap_or(0);
             let low = usize::from_str(s[2]).unwrap_or(0);
@@ -943,7 +934,8 @@ impl FetchState {
                         "{} Could not select newsgroup: expected OVER response but got: {}",
                         &uid_store.account_name, res
                     )
-                })?;
+                })
+                .chain_err_kind(ErrorKind::ProtocolError)?;
             if reply_code == 423 {
                 // No articles in this range, so move on to next chunk.
                 continue;

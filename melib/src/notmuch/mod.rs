@@ -537,7 +537,7 @@ impl NotmuchDb {
         #[cfg(not(debug_assertions))]
         let database = NonNull::new(database).map(DbPointer).ok_or_else(|| {
             Error::new("notmuch_database_open returned a NULL pointer and status = 0")
-                .set_kind(ErrorKind::External)
+                .set_kind(ErrorKind::LinkedLibrary("notmuch"))
                 .set_details(
                     "libnotmuch exhibited an unexpected and unrecoverable error. Make sure your \
                      libnotmuch version is compatible with this release.",
@@ -807,9 +807,10 @@ impl MailBackend for NotmuchDb {
         _destination_mailbox_hash: MailboxHash,
         _move_: bool,
     ) -> ResultFuture<()> {
-        Err(Error::new(
-            "Copying messages is currently unimplemented for notmuch backend",
-        ))
+        Err(
+            Error::new("Copying messages is currently unimplemented for notmuch backend")
+                .set_kind(ErrorKind::NotImplemented),
+        )
     }
 
     fn set_flags(
@@ -942,9 +943,10 @@ impl MailBackend for NotmuchDb {
         _env_hashes: EnvelopeHashBatch,
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<()> {
-        Err(Error::new(
-            "Deleting messages is currently unimplemented for notmuch backend",
-        ))
+        Err(
+            Error::new("Deleting messages is currently unimplemented for notmuch backend")
+                .set_kind(ErrorKind::NotImplemented),
+        )
     }
 
     fn search(
@@ -971,7 +973,7 @@ impl MailBackend for NotmuchDb {
                         "Mailbox with hash {} not found!",
                         mailbox_hash
                     ))
-                    .set_kind(crate::error::ErrorKind::Bug));
+                    .set_kind(ErrorKind::NotFound));
                 }
             } else {
                 String::new()
@@ -1003,9 +1005,10 @@ impl MailBackend for NotmuchDb {
         &mut self,
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
-        Err(Error::new(
-            "Deleting mailboxes is currently unimplemented for notmuch backend.",
-        ))
+        Err(
+            Error::new("Deleting mailboxes is currently unimplemented for notmuch backend.")
+                .set_kind(ErrorKind::NotImplemented),
+        )
     }
 
     fn set_mailbox_subscription(
@@ -1013,9 +1016,10 @@ impl MailBackend for NotmuchDb {
         _mailbox_hash: MailboxHash,
         _val: bool,
     ) -> ResultFuture<()> {
-        Err(Error::new(
-            "Mailbox subscriptions are not possible for the notmuch backend.",
-        ))
+        Err(
+            Error::new("Mailbox subscriptions are not possible for the notmuch backend.")
+                .set_kind(ErrorKind::NotSupported),
+        )
     }
 
     fn rename_mailbox(
@@ -1023,9 +1027,10 @@ impl MailBackend for NotmuchDb {
         _mailbox_hash: MailboxHash,
         _new_path: String,
     ) -> ResultFuture<Mailbox> {
-        Err(Error::new(
-            "Renaming mailboxes is currently unimplemented for notmuch backend.",
-        ))
+        Err(
+            Error::new("Renaming mailboxes is currently unimplemented for notmuch backend.")
+                .set_kind(ErrorKind::NotImplemented),
+        )
     }
 
     fn set_mailbox_permissions(
@@ -1033,9 +1038,10 @@ impl MailBackend for NotmuchDb {
         _mailbox_hash: MailboxHash,
         _val: crate::backends::MailboxPermissions,
     ) -> ResultFuture<()> {
-        Err(Error::new(
-            "Setting mailbox permissions is not possible for the notmuch backend.",
-        ))
+        Err(
+            Error::new("Setting mailbox permissions is not possible for the notmuch backend.")
+                .set_kind(ErrorKind::NotSupported),
+        )
     }
 
     fn create_mailbox(

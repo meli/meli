@@ -44,7 +44,7 @@ use std::{
     os::raw::c_int,
 };
 
-use crate::error::{Result, ResultIntoError};
+use crate::error::{ErrorKind, Result, ResultIntoError};
 
 pub type UnixTimestamp = u64;
 
@@ -241,7 +241,7 @@ fn timestamp_to_string_inner(
                     std::ptr::null_mut(),
                 )
                 .chain_err_summary(|| "Could not set locale for datetime conversion")
-                .chain_err_kind(crate::error::ErrorKind::External),
+                .chain_err_kind(ErrorKind::External),
             )
         } else {
             None
@@ -392,7 +392,7 @@ where
                 std::ptr::null_mut(),
             )
             .chain_err_summary(|| "Could not set locale for datetime conversion")
-            .chain_err_kind(crate::error::ErrorKind::External)?;
+            .chain_err_kind(ErrorKind::External)?;
             unsafe { strptime(s.as_ptr(), fmt.as_ptr(), std::ptr::addr_of_mut!(new_tm)) }
         };
 
@@ -457,7 +457,7 @@ where
                 std::ptr::null_mut(),
             )
             .chain_err_summary(|| "Could not set locale for datetime conversion")
-            .chain_err_kind(crate::error::ErrorKind::External)?;
+            .chain_err_kind(ErrorKind::External)?;
             unsafe { strptime(s.as_ptr(), fmt.as_ptr(), std::ptr::addr_of_mut!(new_tm)) }
         };
         if ret.is_null() {

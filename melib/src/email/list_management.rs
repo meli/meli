@@ -21,8 +21,6 @@
 
 //! Parsing of `RFC2369` and `RFC2919` `List-*` headers.
 
-use std::convert::From;
-
 use smallvec::SmallVec;
 
 use super::{parser, Envelope};

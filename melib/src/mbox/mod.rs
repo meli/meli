@@ -943,9 +943,10 @@ impl MailBackend for MboxType {
     }
 
     fn refresh(&mut self, _mailbox_hash: MailboxHash) -> ResultFuture<()> {
-        Err(Error::new(
-            "Refreshing is currently unimplemented for mbox backend.",
-        ))
+        Err(
+            Error::new("Refreshing is currently unimplemented for mbox backend.")
+                .set_kind(ErrorKind::NotImplemented),
+        )
     }
 
     fn watch(&self) -> ResultFuture<()> {
@@ -1153,9 +1154,10 @@ impl MailBackend for MboxType {
         _destination_mailbox_hash: MailboxHash,
         _move_: bool,
     ) -> ResultFuture<()> {
-        Err(Error::new(
-            "Copying messages is currently unimplemented for mbox backend",
-        ))
+        Err(
+            Error::new("Copying messages is currently unimplemented for mbox backend")
+                .set_kind(ErrorKind::NotImplemented),
+        )
     }
 
     fn set_flags(
@@ -1164,9 +1166,10 @@ impl MailBackend for MboxType {
         _mailbox_hash: MailboxHash,
         _flags: SmallVec<[FlagOp; 8]>,
     ) -> ResultFuture<()> {
-        Err(Error::new(
-            "Setting flags is currently unimplemented for mbox backend",
-        ))
+        Err(
+            Error::new("Setting flags is currently unimplemented for mbox backend")
+                .set_kind(ErrorKind::NotImplemented),
+        )
     }
 
     fn delete_messages(
@@ -1174,9 +1177,10 @@ impl MailBackend for MboxType {
         _env_hashes: EnvelopeHashBatch,
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<()> {
-        Err(Error::new(
-            "Deleting messages is currently unimplemented for mbox backend",
-        ))
+        Err(
+            Error::new("Deleting messages is currently unimplemented for mbox backend")
+                .set_kind(ErrorKind::NotImplemented),
+        )
     }
 
     fn save(
@@ -1185,9 +1189,10 @@ impl MailBackend for MboxType {
         _mailbox_hash: MailboxHash,
         _flags: Option<Flag>,
     ) -> ResultFuture<()> {
-        Err(Error::new(
-            "Saving messages is currently unimplemented for mbox backend",
-        ))
+        Err(
+            Error::new("Saving messages is currently unimplemented for mbox backend")
+                .set_kind(ErrorKind::NotImplemented),
+        )
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -1206,9 +1211,10 @@ impl MailBackend for MboxType {
         &mut self,
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
-        Err(Error::new(
-            "Deleting mailboxes is currently unimplemented for mbox backend.",
-        ))
+        Err(
+            Error::new("Deleting mailboxes is currently unimplemented for mbox backend.")
+                .set_kind(ErrorKind::NotImplemented),
+        )
     }
 
     fn set_mailbox_subscription(
@@ -1216,9 +1222,10 @@ impl MailBackend for MboxType {
         _mailbox_hash: MailboxHash,
         _val: bool,
     ) -> ResultFuture<()> {
-        Err(Error::new(
-            "Mailbox subscriptions are not possible for the mbox backend.",
-        ))
+        Err(
+            Error::new("Mailbox subscriptions are not possible for the mbox backend.")
+                .set_kind(ErrorKind::NotImplemented),
+        )
     }
 
     fn rename_mailbox(
@@ -1226,9 +1233,10 @@ impl MailBackend for MboxType {
         _mailbox_hash: MailboxHash,
         _new_path: String,
     ) -> ResultFuture<Mailbox> {
-        Err(Error::new(
-            "Renaming mailboxes is currently unimplemented for mbox backend.",
-        ))
+        Err(
+            Error::new("Renaming mailboxes is currently unimplemented for mbox backend.")
+                .set_kind(ErrorKind::NotImplemented),
+        )
     }
 
     fn set_mailbox_permissions(
@@ -1236,9 +1244,10 @@ impl MailBackend for MboxType {
         _mailbox_hash: MailboxHash,
         _val: crate::backends::MailboxPermissions,
     ) -> ResultFuture<()> {
-        Err(Error::new(
-            "Setting mailbox permissions is not possible for the mbox backend.",
-        ))
+        Err(
+            Error::new("Setting mailbox permissions is not possible for the mbox backend.")
+                .set_kind(ErrorKind::NotSupported),
+        )
     }
 
     fn search(

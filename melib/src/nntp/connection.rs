@@ -171,8 +171,8 @@ impl NntpStream {
                                 midhandshake_stream = Some(stream);
                             }
                             p => {
-                                p.chain_err_kind(crate::error::ErrorKind::Network(
-                                    crate::error::NetworkErrorKind::InvalidTLSConnection,
+                                p.chain_err_kind(ErrorKind::Network(
+                                    NetworkErrorKind::InvalidTLSConnection,
                                 ))?;
                             }
                         }

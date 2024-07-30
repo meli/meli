@@ -23,18 +23,14 @@ use std::time::Duration;
 
 use futures::future::{self, Either, Future};
 
-pub async fn timeout<O>(
-    dur: Option<Duration>,
-    f: impl Future<Output = O> + Send,
-) -> crate::Result<O> {
+use crate::error::{Error, ErrorKind, Result};
+
+pub async fn timeout<O>(dur: Option<Duration>, f: impl Future<Output = O> + Send) -> Result<O> {
     futures::pin_mut!(f);
     if let Some(dur) = dur {
         match future::select(f, smol::Timer::after(dur)).await {
             Either::Left((out, _)) => Ok(out),
-            Either::Right(_) => {
-                Err(crate::error::Error::new("Timed out.")
-                    .set_kind(crate::error::ErrorKind::TimedOut))
-            }
+            Either::Right(_) => Err(Error::new("Timed out.").set_kind(ErrorKind::TimedOut)),
         }
     } else {
         Ok(f.await)
