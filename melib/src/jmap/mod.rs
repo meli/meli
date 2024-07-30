@@ -692,10 +692,11 @@ impl MailBackend for JmapType {
         let store = self.store.clone();
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
+            let mailbox_state = store.mailbox_state.lock().await.clone();
             let mut conn = connection.lock().await;
             let mail_account_id = conn.session_guard().await?.mail_account_id();
             let mailbox_set_call = mailbox::MailboxSet::new(
-                Set::<mailbox::MailboxObject>::new()
+                Set::<mailbox::MailboxObject>::new(Some(mailbox_state))
                     .account_id(mail_account_id)
                     .create(Some({
                         let id: Id<mailbox::MailboxObject> = path.as_str().into();
@@ -823,7 +824,7 @@ impl MailBackend for JmapType {
             let mail_account_id = conn.session_guard().await?.mail_account_id();
 
             let email_set_call = email::EmailSet::new(
-                Set::<email::EmailObject>::new()
+                Set::<email::EmailObject>::new(None)
                     .account_id(mail_account_id)
                     .update(Some(update_map)),
             );
@@ -934,7 +935,7 @@ impl MailBackend for JmapType {
             let mail_account_id = conn.session_guard().await?.mail_account_id();
 
             let email_set_call = email::EmailSet::new(
-                Set::<email::EmailObject>::new()
+                Set::<email::EmailObject>::new(None)
                     .account_id(mail_account_id.clone())
                     .update(Some(update_map)),
             );
@@ -1166,7 +1167,7 @@ impl MailBackend for JmapType {
 
                 let mut req = Request::new(conn.request_no.clone());
                 let subm_set_call = submission::EmailSubmissionSet::new(
-                    Set::<submission::EmailSubmissionObject>::new()
+                    Set::<submission::EmailSubmissionObject>::new(None)
                         .account_id(mail_account_id.clone())
                         .create(Some(indexmap! {
                             Argument::from(Id::from("k1490")) => submission::EmailSubmissionObject::new(

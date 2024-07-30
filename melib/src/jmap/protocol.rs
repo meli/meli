@@ -132,8 +132,12 @@ pub async fn get_mailboxes(
     conn.store.online_status.update_timestamp(None).await;
     let m = GetResponse::<MailboxObject>::try_from(v.method_responses.remove(0))?;
     let GetResponse::<MailboxObject> {
-        list, account_id, ..
+        list,
+        account_id,
+        state,
+        ..
     } = m;
+    *conn.store.mailbox_state.lock().await = state;
     conn.last_method_response = Some(res_text);
     // Is account set as `personal`? (`isPersonal` property). Then, even if
     // `isSubscribed` is false on a mailbox, it should be regarded as

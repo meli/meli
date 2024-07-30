@@ -214,7 +214,7 @@ fn test_jmap_identity_methods() {
     let mut req = Request::new(Arc::new(FutureMutex::new(prev_seq)));
 
     let identity_set = IdentitySet(
-        Set::<IdentityObject>::new()
+        Set::<IdentityObject>::new(None)
             .account_id(account_id.into())
             .create(Some({
                 let id: Id<IdentityObject> = main_identity.into();
@@ -319,7 +319,7 @@ fn test_jmap_argument_serde() {
     let prev_seq = futures::executor::block_on(req.add_call(&import_call));
 
     let subm_set_call: EmailSubmissionSet = EmailSubmissionSet::new(
-                Set::<EmailSubmissionObject>::new()
+                Set::<EmailSubmissionObject>::new(None)
                     .account_id(account_id.into())
                     .create(Some(indexmap! {
                         Argument::from(Id::from("k1490")) => EmailSubmissionObject::new(

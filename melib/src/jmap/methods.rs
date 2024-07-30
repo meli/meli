@@ -551,10 +551,10 @@ impl<OBJ> Set<OBJ>
 where
     OBJ: Object + std::fmt::Debug + Serialize,
 {
-    pub fn new() -> Self {
+    pub fn new(if_in_state: Option<State<OBJ>>) -> Self {
         Self {
             account_id: Id::empty(),
-            if_in_state: None,
+            if_in_state,
             create: None,
             update: None,
             destroy: None,
@@ -582,7 +582,7 @@ where
     OBJ: Object + std::fmt::Debug + Serialize,
 {
     fn default() -> Self {
-        Self::new()
+        Self::new(None)
     }
 }
 

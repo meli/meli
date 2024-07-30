@@ -298,7 +298,7 @@ impl JmapConnection {
         if id_list.is_empty() {
             let mut req = Request::new(self.request_no.clone());
             let identity_set = IdentitySet(
-                Set::<IdentityObject>::new()
+                Set::<IdentityObject>::new(None)
                     .account_id(mail_account_id.clone())
                     .create(Some({
                         let address =
