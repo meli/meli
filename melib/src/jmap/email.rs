@@ -27,7 +27,10 @@ use serde_json::{value::RawValue, Value};
 use smallvec::SmallVec;
 
 use crate::{
-    email::address::{Address, MailboxAddress},
+    email::{
+        address::{Address, MailboxAddress},
+        headers::HeaderName,
+    },
     jmap::{
         deserialize_from_str,
         filters::{Filter, FilterCondition, FilterTrait},
@@ -265,16 +268,18 @@ impl std::fmt::Display for EmailAddress {
     }
 }
 
-impl std::convert::From<EmailObject> for crate::Envelope {
+impl From<EmailObject> for crate::Envelope {
     fn from(mut t: EmailObject) -> Self {
+        use crate::email::parser::address::rfc2822address_list;
+
         let mut env = Self::new(t.id.into_hash());
         if let Ok(d) = crate::email::parser::dates::rfc5322_date(env.date_as_str().as_bytes()) {
             env.set_datetime(d);
         }
-        if let Some(ref mut sent_at) = t.sent_at {
-            let unix = datetime::rfc3339_to_timestamp(sent_at.as_bytes().to_vec()).unwrap_or(0);
+        if let Some(sent_at) = t.sent_at.take() {
+            let unix = datetime::rfc3339_to_timestamp(sent_at.as_bytes()).unwrap_or(0);
             env.set_datetime(unix);
-            env.set_date(std::mem::take(sent_at).as_bytes());
+            env.set_date(sent_at.as_bytes());
         }
 
         if let Some(v) = t.message_id.first() {
@@ -286,10 +291,10 @@ impl std::convert::From<EmailObject> for crate::Envelope {
                 env.push_references(in_reply_to);
             }
         }
-        if let Some(v) = t.headers.get("References") {
+        if let Some(v) = t.headers.get(HeaderName::REFERENCES.as_str()) {
             env.set_references(v.as_bytes());
         }
-        if let Some(v) = t.headers.get("Date") {
+        if let Some(v) = t.headers.get(HeaderName::DATE.as_str()) {
             env.set_date(v.as_bytes());
             if let Ok(d) = crate::email::parser::dates::rfc5322_date(v.as_bytes()) {
                 env.set_datetime(d);
@@ -298,42 +303,70 @@ impl std::convert::From<EmailObject> for crate::Envelope {
             env.set_datetime(d);
         }
         env.set_has_attachments(t.has_attachment);
-        if let Some(ref mut subject) = t.subject {
-            env.set_subject(std::mem::take(subject).into_bytes());
+        if let Some(subject) = t.subject.take() {
+            env.set_subject(subject.into_bytes());
         }
 
-        if let Some(ref mut from) = t.from {
+        if let Some(from) = t.from.take() {
             env.set_from(
-                std::mem::take(from)
-                    .into_iter()
+                from.into_iter()
                     .map(|addr| addr.into())
                     .collect::<SmallVec<[crate::email::Address; 1]>>(),
             );
         }
-        if let Some(ref mut to) = t.to {
+        if let Some(to) = t.to.take() {
             env.set_to(
-                std::mem::take(to)
-                    .into_iter()
+                to.into_iter()
                     .map(|addr| addr.into())
                     .collect::<SmallVec<[crate::email::Address; 1]>>(),
             );
         }
 
-        if let Some(ref mut cc) = t.cc {
+        if let Some(cc) = t.cc.take() {
             env.set_cc(
-                std::mem::take(cc)
-                    .into_iter()
+                cc.into_iter()
                     .map(|addr| addr.into())
                     .collect::<SmallVec<[crate::email::Address; 1]>>(),
             );
         }
 
-        if let Some(ref mut bcc) = t.bcc {
+        if let Some(bcc) = t.bcc.take() {
             env.set_bcc(
-                std::mem::take(bcc)
-                    .into_iter()
+                bcc.into_iter()
                     .map(|addr| addr.into())
                     .collect::<Vec<crate::email::Address>>(),
+            );
+        }
+
+        if let Some(from) = t.headers.get(HeaderName::FROM.as_str()) {
+            env.set_from(
+                rfc2822address_list(from.as_bytes())
+                    .map(|(_, v)| v)
+                    .unwrap_or_default(),
+            );
+        }
+        if let Some(to) = t.headers.get(HeaderName::TO.as_str()) {
+            env.set_to(
+                rfc2822address_list(to.as_bytes())
+                    .map(|(_, v)| v)
+                    .unwrap_or_default(),
+            );
+        }
+
+        if let Some(cc) = t.headers.get(HeaderName::CC.as_str()) {
+            env.set_cc(
+                rfc2822address_list(cc.as_bytes())
+                    .map(|(_, v)| v)
+                    .unwrap_or_default(),
+            );
+        }
+
+        if let Some(bcc) = t.headers.get(HeaderName::BCC.as_str()) {
+            env.set_bcc(
+                rfc2822address_list(bcc.as_bytes())
+                    .map(|(_, v)| v)
+                    .unwrap_or_default()
+                    .to_vec(),
             );
         }
 
@@ -649,14 +682,20 @@ impl From<crate::search::Query> for Filter<EmailFilterCondition, EmailObject> {
                 InReplyTo(ref s) => {
                     *f = Filter::Condition(
                         EmailFilterCondition::new()
-                            .header(vec!["In-Reply-To".to_string().into(), s.to_string().into()])
+                            .header(vec![
+                                HeaderName::IN_REPLY_TO.as_str().into(),
+                                s.to_string().into(),
+                            ])
                             .into(),
                     );
                 }
                 References(ref s) => {
                     *f = Filter::Condition(
                         EmailFilterCondition::new()
-                            .header(vec!["References".to_string().into(), s.to_string().into()])
+                            .header(vec![
+                                HeaderName::REFERENCES.as_str().into(),
+                                s.to_string().into(),
+                            ])
                             .into(),
                     );
                 }
