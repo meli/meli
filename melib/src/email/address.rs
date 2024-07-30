@@ -633,31 +633,33 @@ impl std::fmt::Debug for References {
 
 #[macro_export]
 macro_rules! make_address {
-    ($d:expr, $a:expr) => {
-        Address::Mailbox(if $d.is_empty() {
+    ($d:expr, $a:expr) => {{
+        let display_name = { $d };
+        let address = { $a };
+        Address::Mailbox(if display_name.is_empty() {
             MailboxAddress {
-                raw: format!("{}", $a).into_bytes(),
+                raw: format!("{}", address).into_bytes(),
                 display_name: StrBuilder {
                     offset: 0,
                     length: 0,
                 },
                 address_spec: StrBuilder {
                     offset: 0,
-                    length: $a.len(),
+                    length: address.len(),
                 },
             }
         } else {
             MailboxAddress {
-                raw: format!("{} <{}>", $d, $a).into_bytes(),
+                raw: format!("{} <{}>", display_name, address).into_bytes(),
                 display_name: StrBuilder {
                     offset: 0,
-                    length: $d.len(),
+                    length: display_name.len(),
                 },
                 address_spec: StrBuilder {
-                    offset: $d.len() + 2,
-                    length: $a.len(),
+                    offset: display_name.len() + 2,
+                    length: address.len(),
                 },
             }
         })
-    };
+    }};
 }

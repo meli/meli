@@ -250,8 +250,8 @@ pub struct EmailAddress {
 
 impl From<EmailAddress> for crate::email::Address {
     fn from(val: EmailAddress) -> Self {
-        let EmailAddress { email, mut name } = val;
-        crate::make_address!((name.take().unwrap_or_default()), email)
+        let EmailAddress { email, name } = val;
+        crate::make_address!(name.unwrap_or_default(), email)
     }
 }
 
