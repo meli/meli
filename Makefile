@@ -36,7 +36,7 @@ MANDIR ?= ${EXPANDED_PREFIX}/share/man
 # Installation parameters
 DOCS_SUBDIR ?= meli/docs/
 MANPAGES ?= meli.1 meli.conf.5 meli-themes.5 meli.7
-FEATURES ?= --features "${MELI_FEATURES}"
+FEATURES != [ -z "$${MELI_FEATURES}" ] && ($(PRINTF) -- '--all-features') || ($(PRINTF) -- '--features %s' "$${MELI_FEATURES}")
 
 MANPATHS != ACCUM="";for m in `manpath 2> /dev/null | tr ':' ' '`; do if [ -d "$${m}" ]; then REAL_PATH=`cd $${m} && pwd` ACCUM="$${ACCUM}:$${REAL_PATH}";fi;done;echo $${ACCUM}'\c' | sed 's/^://'
 VERSION = `grep -m1 version meli/Cargo.toml | head -n1 | cut -d'"' -f 2 | head -n1`
@@ -55,7 +55,7 @@ YELLOW ?= `[ -z $${NO_COLOR+x} ] && ([ -z $${TERM} ] && echo "" || tput setaf 3)
 
 .PHONY: meli
 meli: check-deps
-	@${CARGO_BIN} build ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" ${FEATURES} --release --bin meli
+	${CARGO_BIN} build ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" ${FEATURES} --release --bin meli
 
 .PHONY: help
 help:
@@ -76,24 +76,25 @@ help:
 	@echo " - ${BOLD}distclean${ANSI_RESET} (cleans distribution build artifacts)"
 	@echo " - ${BOLD}build-rustdoc${ANSI_RESET} (builds rustdoc documentation for all packages in \$$CARGO_TARGET_DIR)"
 	@echo "\nENVIRONMENT variables of interest:"
-	@echo "* PREFIX = ${UNDERLINE}${EXPANDED_PREFIX}${ANSI_RESET}"
-	@echo "* MELI_FEATURES = ${UNDERLINE}\n"
-	@[ -z $${MELI_FEATURES+x} ] && echo "unset\c" || echo ${MELI_FEATURES}'\c'
-	@echo ${ANSI_RESET}
-	@echo "* BINDIR = ${UNDERLINE}${BINDIR}${ANSI_RESET}"
-	@echo "* MANDIR = ${UNDERLINE}${MANDIR}${ANSI_RESET}"
-	@echo "* MANPATH = ${UNDERLINE}\c"
-	@[ $${MANPATH+x} ] && echo $${MANPATH}'\c' || echo "unset\c"
-	@echo ${ANSI_RESET}
+	@$(PRINTF) "* MELI_FEATURES "
+	@[ -z $${MELI_FEATURES+x} ] && echo "unset" || echo "= ${UNDERLINE}"$${MELI_FEATURES}${ANSI_RESET}
+	@$(PRINTF) "* PREFIX "
+	@[ -z ${EXPANDED_PREFIX} ] && echo "unset" || echo "= ${UNDERLINE}"${EXPANDED_PREFIX}${ANSI_RESET}
+	@$(PRINTF) "* BINDIR = %s\n" "${UNDERLINE}${BINDIR}${ANSI_RESET}"
+	@$(PRINTF) "* MANDIR "
+	@[ -z ${MANDIR} ] && echo "unset" || echo "= ${UNDERLINE}"${MANDIR}${ANSI_RESET}
+	@$(PRINTF) "* MANPATH = "
+	@[ $${MANPATH+x} ] && echo ${UNDERLINE}$${MANPATH}${ANSI_RESET} || echo "unset"
 	@echo "* (cleaned) output of manpath(1) = ${UNDERLINE}${MANPATHS}${ANSI_RESET}"
-	@echo "* NO_MAN ${UNDERLINE}\c"
-	@[ $${NO_MAN+x} ] && echo "set\c" || echo "unset\c"
-	@echo ${ANSI_RESET}
-	@echo "* NO_COLOR ${UNDERLINE}\c"
-	@[ $${NO_COLOR+x} ] && echo "set\c" || echo "unset\c"
-	@echo ${ANSI_RESET}
+	@$(PRINTF) "* NO_MAN "
+	@[ $${NO_MAN+x} ] && echo "set" || echo "unset"
+	@$(PRINTF) "* NO_COLOR "
+	@[ $${NO_COLOR+x} ] && echo "set" || echo "unset"
 	@echo "* CARGO_BIN = ${UNDERLINE}${CARGO_BIN}${ANSI_RESET}"
-	@echo "* CARGO_ARGS = ${UNDERLINE}${CARGO_ARGS}${ANSI_RESET}"
+	@$(PRINTF) "* CARGO_ARGS "
+	@[ -z $${CARGO_ARGS+x} ] && echo "unset" || echo "= ${UNDERLINE}"$${CARGO_ARGS}${ANSI_RESET}
+	@$(PRINTF) "* AUTHOR (for deb-dist) "
+	@[ -z $${AUTHOR+x} ] && echo "unset" || echo "= ${UNDERLINE}"$${AUTHOR}${ANSI_RESET}
 	@echo "* MIN_RUSTC = ${UNDERLINE}${MIN_RUSTC}${ANSI_RESET}"
 	@echo "* VERSION = ${UNDERLINE}${VERSION}${ANSI_RESET}"
 	@echo "* GIT_COMMIT = ${UNDERLINE}${GIT_COMMIT}${ANSI_RESET}"
@@ -101,24 +102,24 @@ help:
 
 .PHONY: check
 check: check-tagrefs
-	@RUSTFLAGS='${RUSTFLAGS}' ${CARGO_BIN} check ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" ${FEATURES} --all --tests --examples --benches --bins
+	RUSTFLAGS='${RUSTFLAGS}' ${CARGO_BIN} check ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" ${FEATURES} --all --tests --examples --benches --bins
 
 .PHONY: fmt
 fmt:
-	@$(CARGO_BIN) +nightly fmt --all || $(CARGO_BIN) fmt --all
+	$(CARGO_BIN) +nightly fmt --all || $(CARGO_BIN) fmt --all
 	@OUT=$$($(CARGO_SORT_BIN) -w 2>&1) || $(PRINTF) "WARN: %s cargo-sort failed or binary not found in PATH.\n" "$$OUT"
 
 .PHONY: lint
 lint:
-	@RUSTFLAGS='${RUSTFLAGS}' $(CARGO_BIN) clippy --no-deps --all-features --all --tests --examples --benches --bins
+	RUSTFLAGS='${RUSTFLAGS}' $(CARGO_BIN) clippy --no-deps ${FEATURES} --all --tests --examples --benches --bins
 
 .PHONY: test
 test: test-docs
-	@RUSTFLAGS='${RUSTFLAGS}' ${CARGO_BIN} test ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" --all --tests --examples --benches --bins
+	RUSTFLAGS='${RUSTFLAGS}' ${CARGO_BIN} test ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" ${FEATURES} --all --tests --examples --benches --bins
 
 .PHONY: test-docs
 test-docs:
-	@RUSTFLAGS='${RUSTFLAGS}' ${CARGO_BIN} test ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" --all --doc
+	RUSTFLAGS='${RUSTFLAGS}' ${CARGO_BIN} test ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" ${FEATURES} --all --doc
 
 .PHONY: test-feature-permutations
 test-feature-permutations:
@@ -136,8 +137,8 @@ clean:
 
 .PHONY: distclean
 distclean:
-	@rm -f meli-${VERSION}.tar.gz
-	@rm -rf .pc # rm debian stuff
+	rm -f meli-${VERSION}.tar.gz
+	rm -rf .pc # rm debian stuff
 
 .PHONY: uninstall
 uninstall:
@@ -167,16 +168,16 @@ install-doc:
 
 .PHONY: install-bin
 install-bin: meli
-	@mkdir -p $(DESTDIR)${BINDIR}
+	mkdir -p $(DESTDIR)${BINDIR}
 	@echo " - ${BOLD}Installing binary to ${ANSI_RESET}${GREEN}${DESTDIR}${BINDIR}/meli${ANSI_RESET}"
 	@case ":${PATH}:" in \
 	*:${DESTDIR}${BINDIR}:*) echo "\n";; \
 	*) echo "\n${RED}${BOLD}WARNING${ANSI_RESET}: ${UNDERLINE}Path ${DESTDIR}${BINDIR} is not contained in your PATH variable.${ANSI_RESET} Consider adding it if necessary.\nPATH variable: ${PATH}";; \
 	esac
-	@mkdir -p $(DESTDIR)${BINDIR}
-	@rm -f  $(DESTDIR)${BINDIR}/meli
-	@cp ./${CARGO_TARGET_DIR}/release/meli $(DESTDIR)${BINDIR}/meli
-	@chmod 755 $(DESTDIR)${BINDIR}/meli
+	mkdir -p $(DESTDIR)${BINDIR}
+	rm -f  $(DESTDIR)${BINDIR}/meli
+	cp ./${CARGO_TARGET_DIR}/release/meli $(DESTDIR)${BINDIR}/meli
+	chmod 755 $(DESTDIR)${BINDIR}/meli
 
 
 .PHONY: install
@@ -191,18 +192,19 @@ install: meli install-bin install-doc
 
 .PHONY: dist
 dist:
-	@git archive --format=tar.gz --prefix=meli-${VERSION}/ HEAD >meli-${VERSION}.tar.gz
+	git archive --format=tar.gz --prefix=meli-${VERSION}/ HEAD >meli-${VERSION}.tar.gz
 	@echo meli-${VERSION}.tar.gz
 
+AUTHOR ?= grep -m1 authors meli/Cargo.toml | head -n1 | cut -d'"' -f 2 | head -n1
 .PHONY: deb-dist
 deb-dist:
-	@author=$(grep -m1 authors meli/Cargo.toml | head -n1 | cut -d'"' -f 2 | head -n1)
-	@dpkg-buildpackage -b -rfakeroot -us -uc --build-by="${author}" --release-by="${author}"
+	@$(PRINTF) "Override AUTHOR environment variable to set package metadata.\n"
+	dpkg-buildpackage -b -rfakeroot -us -uc --build-by="${AUTHOR}" --release-by="${AUTHOR}"
 	@echo ${BOLD}${GREEN}Generated${ANSI_RESET}  ../meli_${VERSION}-1_`dpkg --print-architecture`.deb
 
 .PHONY: build-rustdoc
 build-rustdoc:
-	@RUSTDOCFLAGS="--crate-version ${VERSION}_${GIT_COMMIT}_${DATE}" ${CARGO_BIN} doc ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" --all-features --no-deps --workspace --document-private-items --open
+	RUSTDOCFLAGS="--crate-version ${VERSION}_${GIT_COMMIT}_${DATE}" ${CARGO_BIN} doc ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" --all-features --no-deps --workspace --document-private-items --open
 
 .PHONY: check-tagrefs
 check-tagrefs:
