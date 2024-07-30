@@ -1012,7 +1012,3 @@ impl Attachment {
         self.decode_helper(&mut options)
     }
 }
-
-pub fn interpret_format_flowed(_t: &str) -> String {
-    unimplemented!()
-}
