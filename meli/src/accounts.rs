@@ -53,10 +53,7 @@ use crate::command::actions::AccountAction;
 use crate::{
     conf::{AccountConf, FileMailboxConf},
     jobs::{JobId, JoinHandle},
-    types::{
-        ForkType, NotificationType,
-        UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification},
-    },
+    types::{ForkType, NotificationType, UIEvent},
     MainLoopHandler, StatusEvent, ThreadEvent,
 };
 
@@ -140,7 +137,7 @@ pub struct Account {
     pub main_loop_handler: MainLoopHandler,
     pub active_jobs: HashMap<JobId, JobRequest>,
     pub active_job_instants: BTreeMap<std::time::Instant, JobId>,
-    pub event_queue: IndexMap<MailboxHash, VecDeque<RefreshEvent>>,
+    pub event_queue: IndexMap<MailboxHash, VecDeque<RefreshEventKind>>,
     pub backend_capabilities: MailBackendCapabilities,
 }
 
@@ -521,40 +518,37 @@ impl Account {
         Ok(())
     }
 
-    pub fn reload(&mut self, event: RefreshEvent, mailbox_hash: MailboxHash) -> Option<UIEvent> {
+    pub fn reload(
+        &mut self,
+        mut events: Vec<RefreshEventKind>,
+        mailbox_hash: MailboxHash,
+    ) -> Option<Vec<UIEvent>> {
         if !self.mailbox_entries[&mailbox_hash].status.is_available()
             && !self.mailbox_entries[&mailbox_hash].status.is_parsing()
         {
             self.event_queue
                 .entry(mailbox_hash)
                 .or_default()
-                .push_back(event);
+                .extend(events);
             return None;
         }
 
-        {
-            //let mailbox: &mut Mailbox =
-            // self.mailboxes[idx].as_mut().unwrap().as_mut().unwrap();
-            match event.kind {
+        let mut ui_events = vec![];
+        while let Some(event) = events.pop() {
+            match event {
                 RefreshEventKind::Update(old_hash, envelope) => {
                     if !self.collection.contains_key(&old_hash) {
-                        return self.reload(
-                            RefreshEvent {
-                                account_hash: event.account_hash,
-                                mailbox_hash: event.mailbox_hash,
-                                kind: RefreshEventKind::Create(envelope),
-                            },
-                            mailbox_hash,
-                        );
+                        events.push(RefreshEventKind::Create(envelope));
+                        continue;
                     }
                     #[cfg(feature = "sqlite3")]
                     self.update_cached_env(*envelope.clone(), Some(old_hash));
                     self.collection.update(old_hash, *envelope, mailbox_hash);
-                    return Some(EnvelopeUpdate(old_hash));
+                    ui_events.push(UIEvent::EnvelopeUpdate(old_hash));
                 }
                 RefreshEventKind::NewFlags(env_hash, (flags, tags)) => {
                     if !self.collection.contains_key(&env_hash) {
-                        return None;
+                        continue;
                     }
                     self.collection
                         .envelopes
@@ -583,12 +577,13 @@ impl Account {
                         self.update_cached_env(env, None);
                     }
                     self.collection.update_flags(env_hash, mailbox_hash);
-                    return Some(EnvelopeUpdate(env_hash));
+                    ui_events.push(UIEvent::EnvelopeUpdate(env_hash));
                 }
                 RefreshEventKind::Rename(old_hash, new_hash) => {
                     log::trace!("rename {} to {}", old_hash, new_hash);
                     if !self.collection.rename(old_hash, new_hash, mailbox_hash) {
-                        return Some(EnvelopeRename(old_hash, new_hash));
+                        ui_events.push(UIEvent::EnvelopeRename(old_hash, new_hash));
+                        continue;
                     }
                     #[cfg(feature = "sqlite3")]
                     if let Some(env) = {
@@ -604,7 +599,7 @@ impl Account {
                     } {
                         self.update_cached_env(env, Some(old_hash));
                     }
-                    return Some(EnvelopeRename(old_hash, new_hash));
+                    ui_events.push(UIEvent::EnvelopeRename(old_hash, new_hash));
                 }
                 RefreshEventKind::Create(envelope) => {
                     let env_hash = envelope.hash();
@@ -614,7 +609,7 @@ impl Account {
                             .get_mailbox(mailbox_hash)
                             .contains(&env_hash)
                     {
-                        return None;
+                        continue;
                     }
                     let (is_seen, is_draft) =
                         { (envelope.is_seen(), envelope.flags().contains(Flag::DRAFT)) };
@@ -651,7 +646,7 @@ impl Account {
 
                     if self.collection.insert(*envelope, mailbox_hash) {
                         /* is a duplicate */
-                        return None;
+                        continue;
                     }
 
                     let mbox_update_event = UIEvent::MailboxUpdate((self.hash, mailbox_hash));
@@ -662,7 +657,8 @@ impl Account {
                         .ignore
                         .is_true()
                     {
-                        return Some(mbox_update_event);
+                        ui_events.push(mbox_update_event);
+                        continue;
                     }
 
                     let thread_hash = self.collection.get_env(env_hash).thread();
@@ -681,11 +677,13 @@ impl Account {
                             .thread_ref(thread)
                             .snoozed()
                         {
-                            return Some(mbox_update_event);
+                            ui_events.push(mbox_update_event);
+                            continue;
                         }
                     }
                     if is_seen || is_draft {
-                        return Some(mbox_update_event);
+                        ui_events.push(mbox_update_event);
+                        continue;
                     }
 
                     if !matches!(
@@ -696,10 +694,11 @@ impl Account {
                             | SpecialUsageMailbox::Inbox
                             | SpecialUsageMailbox::Flagged
                     ) {
-                        return Some(mbox_update_event);
+                        ui_events.push(mbox_update_event);
+                        continue;
                     }
                     self.main_loop_handler
-                        .send(ThreadEvent::UIEvent(Notification {
+                        .send(ThreadEvent::UIEvent(UIEvent::Notification {
                             title: Some(subject.into()),
                             body: format!(
                                 "{}\n{} | {}",
@@ -712,11 +711,11 @@ impl Account {
                             kind: Some(NotificationType::NewMail),
                         }));
 
-                    return Some(mbox_update_event);
+                    ui_events.push(mbox_update_event);
                 }
                 RefreshEventKind::Remove(env_hash) => {
                     if !self.collection.contains_key(&env_hash) {
-                        return None;
+                        continue;
                     }
                     #[cfg(feature = "sqlite3")]
                     if self.settings.conf.search_backend == crate::conf::SearchBackend::Sqlite3 {
@@ -740,14 +739,15 @@ impl Account {
                         .thread_nodes()
                         .contains_key(&thread_hash)
                     {
-                        return None;
+                        continue;
                     }
                     let thread_hash = self
                         .collection
                         .get_threads(mailbox_hash)
                         .find_group(self.collection.get_threads(mailbox_hash)[&thread_hash].group);
                     self.collection.remove(env_hash, mailbox_hash);
-                    return Some(EnvelopeRemove(env_hash, thread_hash));
+                    ui_events.push(UIEvent::EnvelopeRemove(env_hash, thread_hash));
+                    continue;
                 }
                 RefreshEventKind::Rescan => {
                     self.watch(None);
@@ -762,7 +762,7 @@ impl Account {
                         drop(j);
                     }
                     self.watch(None);
-                    return Some(Notification {
+                    ui_events.push(UIEvent::Notification {
                         title: Some("Account watch failed".into()),
                         body: err.to_string().into(),
                         kind: Some(NotificationType::Error(err.kind)),
@@ -779,7 +779,7 @@ impl Account {
                 RefreshEventKind::MailboxUnsubscribe(_mailbox_hash) => {}
             }
         }
-        None
+        Some(ui_events)
     }
 
     pub fn refresh(&mut self, mailbox_hash: MailboxHash) -> Result<()> {
@@ -1391,10 +1391,18 @@ impl Account {
                                 UIEvent::MailboxUpdate((self.hash, mailbox_hash)),
                             ));
                             if self.event_queue.contains_key(&mailbox_hash) {
-                                for ev in
-                                    self.event_queue.entry(mailbox_hash).or_default().drain(..)
-                                {
-                                    self.main_loop_handler.send(ThreadEvent::UIEvent(ev.into()));
+                                for thread_event in ThreadEvent::from_refresh_events(
+                                    self.event_queue
+                                        .entry(mailbox_hash)
+                                        .or_default()
+                                        .drain(..)
+                                        .map(|kind| RefreshEvent {
+                                            account_hash: self.hash,
+                                            mailbox_hash,
+                                            kind,
+                                        }),
+                                ) {
+                                    self.main_loop_handler.send(thread_event);
                                 }
                                 self.event_queue.remove(&mailbox_hash);
                             }

@@ -47,7 +47,9 @@ use std::{
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use indexmap::{IndexMap, IndexSet};
 use melib::{
-    backends::{AccountHash, BackendEvent, BackendEventConsumer, Backends, RefreshEvent},
+    backends::{
+        AccountHash, BackendEvent, BackendEventConsumer, Backends, RefreshEvent, RefreshEventKind,
+    },
     utils::datetime,
 };
 use smallvec::SmallVec;
@@ -502,9 +504,12 @@ impl State {
      * and startup a thread to remind us to poll it every now and then till it's
      * finished.
      */
-    pub fn refresh_event(&mut self, event: RefreshEvent) {
-        let account_hash = event.account_hash;
-        let mailbox_hash = event.mailbox_hash;
+    pub fn refresh_event(
+        &mut self,
+        account_hash: AccountHash,
+        mailbox_hash: MailboxHash,
+        events: Vec<RefreshEventKind>,
+    ) {
         if self.context.accounts[&account_hash]
             .mailbox_entries
             .contains_key(&mailbox_hash)
@@ -513,21 +518,25 @@ impl State {
                 .load(mailbox_hash, false)
                 .is_err()
             {
-                self.context.replies.push_back(UIEvent::from(event));
+                self.context.accounts[&account_hash]
+                    .event_queue
+                    .entry(mailbox_hash)
+                    .or_default()
+                    .extend(events);
                 return;
             }
             let Context {
                 ref mut accounts, ..
             } = &mut *self.context;
 
-            if let Some(notification) = accounts[&account_hash].reload(event, mailbox_hash) {
-                if matches!(notification, UIEvent::Notification { .. }) {
-                    self.rcv_event(UIEvent::MailboxUpdate((account_hash, mailbox_hash)));
+            if let Some(notifications) = accounts[&account_hash].reload(events, mailbox_hash) {
+                for n in notifications {
+                    if matches!(n, UIEvent::Notification { .. }) {
+                        self.rcv_event(UIEvent::MailboxUpdate((account_hash, mailbox_hash)));
+                    }
+                    self.rcv_event(n);
                 }
-                self.rcv_event(notification);
             }
-        } else if let melib::backends::RefreshEventKind::Failure(err) = event.kind {
-            log::warn!("Backend could not refresh: {}", err);
         }
     }
 
@@ -1077,8 +1086,15 @@ impl State {
                 self.rcv_event(UIEvent::AccountStatusChange(account_hash, Some(message)));
                 return;
             }
-            UIEvent::BackendEvent(_, BackendEvent::Refresh(refresh_event)) => {
-                self.refresh_event(refresh_event);
+            UIEvent::BackendEvent(
+                _,
+                BackendEvent::Refresh(RefreshEvent {
+                    account_hash,
+                    mailbox_hash,
+                    kind,
+                }),
+            ) => {
+                self.refresh_event(account_hash, mailbox_hash, vec![kind]);
                 return;
             }
             UIEvent::ChangeMode(m) => {

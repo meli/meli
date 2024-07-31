@@ -39,10 +39,11 @@ mod helpers;
 use std::{borrow::Cow, sync::Arc};
 
 pub use helpers::*;
+use indexmap::IndexMap;
 use melib::{
     backends::{AccountHash, BackendEvent, MailboxHash},
     error::Error,
-    EnvelopeHash, RefreshEvent, ThreadHash,
+    EnvelopeHash, RefreshEvent, RefreshEventKind, ThreadHash,
 };
 use nix::unistd::Pid;
 
@@ -75,17 +76,49 @@ pub enum StatusEvent {
 pub enum ThreadEvent {
     /// User input and input as raw bytes.
     Input((Key, Vec<u8>)),
-    /// A watched Mailbox has been refreshed.
-    RefreshMailbox(Box<RefreshEvent>),
+    /// A mailbox has changed state.
+    MailboxChanges {
+        mailbox_hash: MailboxHash,
+        account_hash: AccountHash,
+        events: Vec<RefreshEventKind>,
+    },
     UIEvent(UIEvent),
     /// A thread has updated some of its information
     Pulse,
     JobFinished(JobId),
 }
 
-impl From<RefreshEvent> for ThreadEvent {
-    fn from(event: RefreshEvent) -> Self {
-        Self::RefreshMailbox(Box::new(event))
+impl ThreadEvent {
+    pub fn from_refresh_events<I: std::iter::ExactSizeIterator<Item = RefreshEvent>>(
+        events: I,
+    ) -> impl Iterator<Item = Self> {
+        let events_len = events.len();
+        events
+            .fold(
+                IndexMap::<(AccountHash, MailboxHash), Vec<RefreshEventKind>>::with_capacity(
+                    events_len,
+                ),
+                |mut accum,
+                 RefreshEvent {
+                     mailbox_hash,
+                     account_hash,
+                     kind,
+                 }| {
+                    accum
+                        .entry((account_hash, mailbox_hash))
+                        .or_default()
+                        .push(kind);
+                    accum
+                },
+            )
+            .into_iter()
+            .map(
+                |((account_hash, mailbox_hash), events)| Self::MailboxChanges {
+                    account_hash,
+                    mailbox_hash,
+                    events,
+                },
+            )
     }
 }
 

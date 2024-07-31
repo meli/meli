@@ -209,8 +209,8 @@ fn run_app(mut opt: Opt) -> Result<()> {
                                 },
                             }
                         },
-                        ThreadEvent::RefreshMailbox(event) => {
-                            state.refresh_event(*event);
+                        ThreadEvent::MailboxChanges { account_hash, mailbox_hash, events} => {
+                            state.refresh_event(account_hash, mailbox_hash, events);
                             state.redraw();
                         },
                         ThreadEvent::UIEvent(UIEvent::ChangeMode(f)) => {
