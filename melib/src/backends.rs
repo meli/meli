@@ -314,8 +314,8 @@ pub enum RefreshEventKind {
 
 #[derive(Clone, Debug)]
 pub struct RefreshEvent {
-    pub mailbox_hash: MailboxHash,
     pub account_hash: AccountHash,
+    pub mailbox_hash: MailboxHash,
     pub kind: RefreshEventKind,
 }
 
