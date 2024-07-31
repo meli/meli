@@ -34,9 +34,6 @@ use super::{
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComposingSettings {
-    /// A command to pipe new emails to
-    /// Required
-    pub send_mail: SendMail,
     /// Command to launch editor. Can have arguments. Draft filename is given as
     /// the last argument. If it's missing, the environment variable $EDITOR is
     /// looked up.
@@ -116,7 +113,6 @@ pub struct ComposingSettings {
 impl Default for ComposingSettings {
     fn default() -> Self {
         Self {
-            send_mail: SendMail::ShellCommand("false".into()),
             editor_command: None,
             embedded_pty: false,
             format_flowed: true,
@@ -187,6 +183,14 @@ pub enum SendMail {
     ShellCommand(String),
 }
 
+impl Default for SendMail {
+    /// Returns the `false` POSIX shell utility, in order to return an error
+    /// when called.
+    fn default() -> Self {
+        Self::ShellCommand("false".into())
+    }
+}
+
 /// Shell command compose hooks (See
 /// [`crate::mail::compose::hooks::Hook`])
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -220,9 +224,10 @@ Using a shell script
 Direct SMTP connection
 ======================
 
+    [accounts.account-name]
     send_mail = { hostname = "mail.example.com", port = 587, auth = { type = "auto", password = { type = "raw", value = "hunter2" } }, security = { type = "STARTTLS" } }
 
-    [composing.send_mail]
+    [accounts.account-name.send_mail]
     hostname = "mail.example.com"
     port = 587
     auth = { type = "auto", password = { type = "command_eval", value = "/path/to/password_script.sh" } }
@@ -284,6 +289,8 @@ impl<'de> Deserialize<'de> for SendMail {
     where
         D: Deserializer<'de>,
     {
+        use serde::de::Error;
+
         #[derive(Deserialize)]
         #[serde(untagged)]
         enum SendMailInner {
@@ -294,11 +301,17 @@ impl<'de> Deserialize<'de> for SendMail {
             ShellCommand(String),
         }
 
-        match <SendMailInner>::deserialize(deserializer) {
+        match melib::serde_path_to_error::deserialize(deserializer) {
             #[cfg(feature = "smtp")]
             Ok(SendMailInner::Smtp(v)) => Ok(Self::Smtp(v)),
             Ok(SendMailInner::ServerSubmission) => Ok(Self::ServerSubmission),
             Ok(SendMailInner::ShellCommand(v)) => Ok(Self::ShellCommand(v)),
+            Err(err)
+                if err.inner().to_string() == D::Error::missing_field("send_mail").to_string() =>
+            {
+                // Surely there should be a better way to do this...
+                Err(err.into_inner())
+            }
             Err(_err) => Err(de::Error::custom(SENDMAIL_ERR_HELP)),
         }
     }

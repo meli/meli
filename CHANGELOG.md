@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+*WARNING*: This release contains a breaking change in the configuration file: a
+global composing option is not required anymore. Now, composing options are per
+account.
+
 <!-- ### Added -->
 
 <!-- ### Bug Fixes -->

@@ -133,13 +133,13 @@ pub fn test_config(path: Option<PathOrStdio>) -> Result<()> {
             if input.trim().is_empty() {
                 return Err(Error::new("Input was empty.").set_kind(ErrorKind::ValueError));
             }
-            conf::FileSettings::validate_string(input, true, false)?;
+            conf::FileSettings::validate_string(input, false)?;
             return Ok(());
         }
         Some(PathOrStdio::Path(path)) => path.expand(),
         None => conf::get_config_file()?,
     };
-    conf::FileSettings::validate(config_path, true, false)?;
+    conf::FileSettings::validate(config_path, false)?;
     Ok(())
 }
 
@@ -183,7 +183,7 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
     } else {
         conf::get_config_file()?
     };
-    let conf = conf::FileSettings::validate(config_path, true, false)?;
+    let conf = conf::FileSettings::validate(config_path, false)?;
     let account = match opt {
         ToolOpt::ImapShell { ref account } => account,
         #[cfg(feature = "smtp")]
@@ -208,13 +208,7 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
         ToolOpt::SmtpShell { .. } => {
             use crate::conf::composing::SendMail;
 
-            let send_mail = file_account_conf
-                .conf_override
-                .composing
-                .send_mail
-                .as_ref()
-                .unwrap_or(&conf.composing.send_mail)
-                .clone();
+            let send_mail = file_account_conf.send_mail;
             let SendMail::Smtp(smtp_conf) = send_mail else {
                 panic!(
                     "smtp shell requires an smtp configuration for account {}",

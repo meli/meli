@@ -11,6 +11,8 @@
 #[accounts.account-name]
 #root_mailbox = "/path/to/root/mailbox"
 #format = "Maildir"
+#send_mail = 'msmtp --read-recipients --read-envelope-from'
+##send_mail = { hostname = "smtp.example.com", port = 587, auth = { type = "auto", username = "user", password = { type = "command_eval", value = "gpg2 --no-tty -q -d ~/.passwords/user.gpg" } }, security = { type = "STARTTLS" } }
 #listing.index_style = "Conversations" # or [plain, threaded, compact]
 #identity="email@example.com"
 #display_name = "Name"
@@ -26,6 +28,7 @@
 #[accounts.mbox]
 #root_mailbox = "/var/mail/username"
 #format = "mbox"
+#send_mail = 'false'
 #listing.index_style = "Compact"
 #identity="username@hostname.local"
 #
@@ -33,6 +36,7 @@
 #[accounts."imap"]
 #root_mailbox = "INBOX"
 #format = "imap"
+#send_mail = { hostname = "smtp.example.com", port = 587, auth = { type = "auto", username = "user", password = { type = "command_eval", value = "gpg2 --no-tty -q -d ~/.passwords/user.gpg" } }, security = { type = "STARTTLS" } }
 #server_hostname="mail.example.com"
 #server_password="pha2hiLohs2eeeish2phaii1We3ood4chakaiv0hien2ahie3m"
 #server_username="username@example.com"
@@ -51,6 +55,7 @@
 ##[accounts.notmuch]
 ##root_mailbox = "/path/to/folder" # where .notmuch/ directory is located
 ##format = "notmuch"
+##send_mail = 'msmtp --read-recipients --read-envelope-from'
 ##listing.index_style = "conversations"
 ##identity="username@example.com"
 ##display_name = "Name Name"
@@ -64,6 +69,7 @@
 #[accounts."gmail"]
 #root_mailbox = '[Gmail]'
 #format = "imap"
+#send_mail = { hostname = "smtp.gmail.com", port = 587, auth = { type = "auto", username = "user", password = { type = "command_eval", value = "gpg2 --no-tty -q -d ~/.passwords/user.gpg" } }, security = { type = "STARTTLS" } }
 #server_hostname='imap.gmail.com'
 #server_password="password"
 #server_username="username@gmail.com"
@@ -73,20 +79,19 @@
 #display_name = "Name Name"
 ### match every mailbox:
 #subscribed_mailboxes = ["*" ]
-#composing.send_mail = 'msmtp --read-recipients --read-envelope-from'
 ### Gmail auto saves sent mail to Sent folder, so don't duplicate the effort:
 #composing.store_sent_mail = false
 #
 ##[accounts."jmap account"]
 ##root_mailbox = "INBOX"
 ##format = "jmap"
+##send_mail = 'server_submission'
 ##server_url="http://localhost:8080"
 ##server_username="user@hostname.local"
 ##server_password="changeme"
 ##listing.index_style = "Conversations"
 ##identity = "user@hostname.local"
 ##subscribed_mailboxes = ["*", ]
-##composing.send_mail = 'server_submission'
 #
 #[pager]
 #filter = "COLUMNS=72 /usr/local/bin/pygmentize -l email"
@@ -128,11 +133,7 @@
 #page_down = "PageDown"
 #
 #[composing]
-##required for sending e-mail
-#send_mail = 'msmtp --read-recipients --read-envelope-from'
-##send_mail = { hostname = "smtp.example.com", port = 587, auth = { type = "auto", username = "user", password = { type = "command_eval", value = "gpg2 --no-tty -q -d ~/.passwords/user.gpg" } }, security = { type = "STARTTLS" } }
 #editor_command = 'vim +/^$' # optional, by default $EDITOR is used.
-#
 #
 #[pgp]
 #auto_sign = false # always sign sent messages

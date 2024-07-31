@@ -2,7 +2,7 @@
 
 ## Sending mail with a command line tool
 
-`composing.send_mail` can use either settings for an SMTP server or a shell 
+`send_mail` can use either settings for an SMTP server or a shell 
 command to which it pipes new mail to.
 
 ### `msmtp` and `send_mail`
@@ -12,7 +12,6 @@ with many SMTP servers. It supports queuing and other small useful features.
 See [the documentation](https://marlam.de/msmtp/msmtp.html).
 
 ```toml
-[composing]
 send_mail = 'msmtp --logfile=/home/user/.mail/msmtp.log --read-recipients 
 --read-envelope-from'
 ```

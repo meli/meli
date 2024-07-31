@@ -649,23 +649,22 @@ To: {}
                             .values()
                             .map(|acc| {
                                 let addr = acc.settings.account.main_identity_address();
-                                let desc =
-                                    match account_settings!(c[acc.hash()].composing.send_mail) {
-                                        crate::conf::composing::SendMail::ShellCommand(ref cmd) => {
-                                            let mut cmd = cmd.as_str();
-                                            cmd.truncate_at_boundary(10);
-                                            format!("{} [exec: {}]", acc.name(), cmd)
-                                        }
-                                        #[cfg(feature = "smtp")]
-                                        crate::conf::composing::SendMail::Smtp(ref inner) => {
-                                            let mut hostname = inner.hostname.as_str();
-                                            hostname.truncate_at_boundary(10);
-                                            format!("{} [smtp: {}]", acc.name(), hostname)
-                                        }
-                                        crate::conf::composing::SendMail::ServerSubmission => {
-                                            format!("{} [server submission]", acc.name())
-                                        }
-                                    };
+                                let desc = match account_settings!(c[acc.hash()].send_mail) {
+                                    crate::conf::composing::SendMail::ShellCommand(ref cmd) => {
+                                        let mut cmd = cmd.as_str();
+                                        cmd.truncate_at_boundary(10);
+                                        format!("{} [exec: {}]", acc.name(), cmd)
+                                    }
+                                    #[cfg(feature = "smtp")]
+                                    crate::conf::composing::SendMail::Smtp(ref inner) => {
+                                        let mut hostname = inner.hostname.as_str();
+                                        hostname.truncate_at_boundary(10);
+                                        format!("{} [smtp: {}]", acc.name(), hostname)
+                                    }
+                                    crate::conf::composing::SendMail::ServerSubmission => {
+                                        format!("{} [server submission]", acc.name())
+                                    }
+                                };
 
                                 (addr.to_string(), desc)
                             })
@@ -2489,7 +2488,7 @@ pub fn send_draft(
         }
     }
     let bytes = draft.finalise().unwrap();
-    let send_mail = account_settings!(context[account_hash].composing.send_mail).clone();
+    let send_mail = account_settings!(context[account_hash].send_mail).clone();
     let ret =
         context.accounts[&account_hash].send(bytes.clone(), send_mail, complete_in_background);
     save_draft(bytes.as_bytes(), context, mailbox_type, flags, account_hash);
@@ -2578,7 +2577,7 @@ pub fn send_draft_async(
             gpg_state.encrypt_keys,
         )?));
     }
-    let send_mail = account_settings!(context[account_hash].composing.send_mail).clone();
+    let send_mail = account_settings!(context[account_hash].send_mail).clone();
     let send_cb = context.accounts[&account_hash].send_async(send_mail);
     let mut content_type = ContentType::default();
     if format_flowed {

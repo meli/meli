@@ -130,13 +130,11 @@ fn test_cli_subcommands() {
 [accounts.imap]
 root_mailbox = "INBOX"
 format = "imap"
+send_mail = 'false'
 identity="username@example.com"
 server_username = "null"
 server_hostname = "example.com"
 server_password_command = "false"
-
-[composing]
-send_mail = 'false'
     "#
                     .as_slice(),
                 )
@@ -258,13 +256,11 @@ send_mail = 'false'
 [accounts.imap]
 root_mailbox = "INBOX"
 format = "imap"
+send_mail = 'false'
 identity="username@example.com"
 server_username = "null"
 server_hostname = "example.com"
 server_password_command = "false"
-
-[composing]
-send_mail = 'false'
     "#,
             )
             .unwrap();

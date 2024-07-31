@@ -38,10 +38,7 @@ use melib::{
     ShellExpandTrait, SortField, SortOrder, StderrLogger,
 };
 
-use crate::{
-    conf::deserializers::non_empty_opt_string,
-    terminal::{Ask, Color},
-};
+use crate::{conf::deserializers::non_empty_opt_string, terminal::Color};
 
 #[rustfmt::skip]
 mod overrides;
@@ -67,7 +64,7 @@ use std::{
 
 use indexmap::IndexMap;
 use melib::{
-    conf::{AccountSettings, ActionFlag, MailboxConf, ToggleFlag},
+    conf::{ActionFlag, MailboxConf, ToggleFlag},
     error::*,
 };
 use pager::PagerSettings;
@@ -98,6 +95,9 @@ macro_rules! account_settings {
             .as_ref()
             .unwrap_or(&$context.settings.$setting.$field)
     }};
+    ($context:ident[$account_hash:expr].$field:ident) => {{
+        &$context.accounts[&$account_hash].settings.$field
+    }};
 }
 #[macro_export]
 macro_rules! mailbox_settings {
@@ -121,6 +121,7 @@ macro_rules! mailbox_settings {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MailUIConf {
+    pub send_mail: Option<SendMail>,
     #[serde(default)]
     pub pager: PagerSettingsOverride,
     #[serde(default)]
@@ -173,12 +174,12 @@ pub struct FileAccount {
     #[serde(default = "none", skip_serializing_if = "Option::is_none")]
     pub default_mailbox: Option<String>,
     pub format: String,
+    pub send_mail: SendMail,
     pub identity: String,
     #[serde(default)]
     pub extra_identities: Vec<String>,
     #[serde(default = "none", skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
-
     #[serde(default = "false_val")]
     pub read_only: bool,
     #[serde(default)]
@@ -227,6 +228,7 @@ pub struct FileSettings {
     pub notifications: NotificationsSettings,
     #[serde(default)]
     pub shortcuts: Shortcuts,
+    #[serde(default)]
     pub composing: ComposingSettings,
     #[serde(default)]
     pub tags: TagsSettings,
@@ -240,7 +242,10 @@ pub struct FileSettings {
 
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct AccountConf {
-    pub account: AccountSettings,
+    pub account: melib::AccountSettings,
+    /// How to send e-mail for this account.
+    /// Required
+    pub send_mail: SendMail,
     pub default_mailbox: Option<MailboxHash>,
     pub sent_mailbox: Option<MailboxHash>,
     pub conf: FileAccount,
@@ -249,10 +254,10 @@ pub struct AccountConf {
 }
 
 impl AccountConf {
-    pub fn account(&self) -> &AccountSettings {
+    pub fn account(&self) -> &melib::AccountSettings {
         &self.account
     }
-    pub fn account_mut(&mut self) -> &mut AccountSettings {
+    pub fn account_mut(&mut self) -> &mut melib::AccountSettings {
         &mut self.account
     }
     pub fn conf(&self) -> &FileAccount {
@@ -276,7 +281,7 @@ impl From<FileAccount> for AccountConf {
             .map(|(k, v)| (k.clone(), v.mailbox_conf.clone()))
             .collect();
 
-        let acc = AccountSettings {
+        let acc = melib::AccountSettings {
             name: String::new(),
             root_mailbox,
             format,
@@ -294,6 +299,7 @@ impl From<FileAccount> for AccountConf {
         let mailbox_confs = x.mailboxes.clone();
         Self {
             account: acc,
+            send_mail: x.send_mail.clone(),
             default_mailbox: None,
             sent_mailbox: None,
             conf_override: x.conf_override.clone(),
@@ -439,7 +445,7 @@ impl FileSettings {
                     .set_kind(ErrorKind::Configuration));
             }
             #[cfg(not(test))]
-            let ask = Ask {
+            let ask = crate::terminal::Ask {
                 message: format!(
                     "No configuration found. Would you like to generate one in {}?",
                     path_string
@@ -461,46 +467,26 @@ impl FileSettings {
             );
         }
 
-        Self::validate(config_path, true, false)
+        Self::validate(config_path, false)
     }
 
     /// Validate configuration from `input` string.
-    pub fn validate_string(s: String, interactive: bool, clear_extras: bool) -> Result<Self> {
-        let map: toml::value::Table = toml::from_str(&s).map_err(|err| {
+    pub fn validate_string(s: String, clear_extras: bool) -> Result<Self> {
+        let _: toml::value::Table = melib::serde_path_to_error::deserialize(
+            toml::Deserializer::new(&s),
+        )
+        .map_err(|err| {
             Error::new("Config file is invalid TOML")
                 .set_source(Some(Arc::new(err)))
                 .set_kind(ErrorKind::ValueError)
         })?;
 
-        // Check that a global composing option is set and return a user-friendly
-        // error message because the default serde one is confusing.
-        if !map.contains_key("composing") {
-            let err_msg = r#"You must set a global `composing` option. If you override `composing` in each account, you can use a dummy global like follows:
-
-[composing]
-send_mail = 'false'
-
-This is required so that you don't accidentally start meli and find out later that you can't send emails."#;
-            if interactive {
-                println!("{}", err_msg);
-                let ask = Ask {
-                    message: "Would you like to append this dummy value in your configuration \
-                              input and continue?"
-                        .to_string(),
-                };
-                if ask.run() {
-                    let mut s = s;
-                    s.push_str("[composing]\nsend_mail = 'false'\n");
-                    return Self::validate_string(s, interactive, clear_extras);
-                }
-            }
-            return Err(Error::new(err_msg).set_kind(ErrorKind::Configuration));
-        }
-        let mut s: Self = toml::from_str(&s).map_err(|err| {
-            Error::new("Input contains errors")
-                .set_source(Some(Arc::new(err)))
-                .set_kind(ErrorKind::Configuration)
-        })?;
+        let mut s: Self = melib::serde_path_to_error::deserialize(toml::Deserializer::new(&s))
+            .map_err(|err| {
+                Error::new("Input contains errors")
+                    .set_source(Some(Arc::new(err)))
+                    .set_kind(ErrorKind::Configuration)
+            })?;
         let backends = melib::backends::Backends::new();
         let Themes {
             light: default_light,
@@ -538,6 +524,7 @@ This is required so that you don't accidentally start meli and find out later th
             let FileAccount {
                 root_mailbox,
                 format,
+                send_mail: _,
                 identity,
                 extra_identities,
                 read_only,
@@ -554,7 +541,7 @@ This is required so that you don't accidentally start meli and find out later th
             } = acc.clone();
 
             let lowercase_format = format.to_lowercase();
-            let mut s = AccountSettings {
+            let mut s = melib::AccountSettings {
                 name: name.to_string(),
                 root_mailbox,
                 format: format.clone(),
@@ -589,9 +576,9 @@ This is required so that you don't accidentally start meli and find out later th
     }
 
     /// Validate `path` and print errors.
-    pub fn validate(path: PathBuf, interactive: bool, clear_extras: bool) -> Result<Self> {
+    pub fn validate(path: PathBuf, clear_extras: bool) -> Result<Self> {
         let s = pp::pp(&path)?;
-        let map: toml::value::Table = toml::from_str(&s).map_err(|err| {
+        let _: toml::value::Table = toml::from_str(&s).map_err(|err| {
             Error::new(format!(
                 "{}: Config file is invalid TOML; {}",
                 path.display(),
@@ -599,40 +586,6 @@ This is required so that you don't accidentally start meli and find out later th
             ))
         })?;
 
-        // Check that a global composing option is set and return a user-friendly
-        // error message because the default serde one is confusing.
-        if !map.contains_key("composing") {
-            let err_msg = r#"You must set a global `composing` option. If you override `composing` in each account, you can use a dummy global like follows:
-
-[composing]
-send_mail = 'false'
-
-This is required so that you don't accidentally start meli and find out later that you can't send emails."#;
-            if interactive {
-                println!("{}", err_msg);
-                let ask = Ask {
-                    message: format!(
-                        "Would you like to append this dummy value in your configuration file {} \
-                         and continue?",
-                        path.display()
-                    ),
-                };
-                if ask.run() {
-                    let mut file = OpenOptions::new().append(true).open(&path)?;
-                    file.write_all(b"[composing]\nsend_mail = 'false'\n")
-                        .map_err(|err| {
-                            Error::new(format!("Could not append to {}: {}", path.display(), err))
-                        })?;
-                    return Self::validate(path, interactive, clear_extras);
-                }
-            }
-            return Err(Error::new(format!(
-                "{}\n\nEdit the {} and relaunch meli.",
-                if interactive { "" } else { err_msg },
-                path.display()
-            ))
-            .set_kind(ErrorKind::Configuration));
-        }
         let mut s: Self = toml::from_str(&s).map_err(|err| {
             Error::new(format!("{}: Config file contains errors", path.display()))
                 .set_source(Some(Arc::new(err)))
@@ -675,6 +628,7 @@ This is required so that you don't accidentally start meli and find out later th
             let FileAccount {
                 root_mailbox,
                 format,
+                send_mail: _,
                 identity,
                 extra_identities,
                 read_only,
@@ -691,7 +645,7 @@ This is required so that you don't accidentally start meli and find out later th
             } = acc.clone();
 
             let lowercase_format = format.to_lowercase();
-            let mut s = AccountSettings {
+            let mut s = melib::AccountSettings {
                 name: name.to_string(),
                 root_mailbox,
                 format: format.clone(),
@@ -1492,6 +1446,7 @@ pub mod tests {
 [accounts.account-name]
 root_mailbox = "/path/to/root/mailbox"
 format = "Maildir"
+send_mail = 'false'
 listing.index_style = "Conversations" # or [plain, threaded, compact]
 identity="email@example.com"
 display_name = "Name"
@@ -1507,6 +1462,7 @@ subscribed_mailboxes = ["INBOX", "INBOX/Sent", "INBOX/Drafts", "INBOX/Junk"]
 [accounts.mbox]
 root_mailbox = "/var/mail/username"
 format = "mbox"
+send_mail = 'false'
 listing.index_style = "Compact"
 identity="username@hostname.local"
 "#;
@@ -1515,39 +1471,26 @@ identity="username@hostname.local"
 [accounts.mbox]
 root_mailbox = "/"
 format = "mbox"
+send_mail = 'false'
 index_style = "Compact"
 identity="username@hostname.local"
-
-[composing]
-send_mail = 'false'
     "#;
     pub const IMAP_CONFIG: &str = r#"
 [accounts.imap]
 root_mailbox = "INBOX"
 format = "imap"
+send_mail = 'false'
 identity="username@example.com"
 server_username = "null"
 server_hostname = "example.com"
 server_password_command = "false"
-
-[composing]
-send_mail = 'false'
     "#;
 
     #[test]
     fn test_config_parse() {
         let tempdir = tempfile::tempdir().unwrap();
-        let mut new_file = ConfigFile::new(TEST_CONFIG, &tempdir).unwrap();
-        let err = FileSettings::validate(new_file.path.clone(), false, true).unwrap_err();
-        assert!(err.summary.as_ref().starts_with(
-            "You must set a global `composing` option. If you override `composing` in each \
-             account, you can use a dummy global like follows"
-        ));
-        new_file
-            .file
-            .write_all(b"[composing]\nsend_mail = 'false'\n")
-            .unwrap();
-        let err = FileSettings::validate(new_file.path.clone(), false, true).unwrap_err();
+        let new_file = ConfigFile::new(TEST_CONFIG, &tempdir).unwrap();
+        let err = FileSettings::validate(new_file.path.clone(), true).unwrap_err();
         assert_eq!(
             err.summary.as_ref(),
             "Configuration error (account-name): root_mailbox `/path/to/root/mailbox` is not a \
@@ -1557,7 +1500,7 @@ send_mail = 'false'
         /* Test unrecognised configuration entries error */
 
         let new_file = ConfigFile::new(EXTRA_CONFIG, &tempdir).unwrap();
-        let err = FileSettings::validate(new_file.path.clone(), false, true).unwrap_err();
+        let err = FileSettings::validate(new_file.path.clone(), true).unwrap_err();
         assert_eq!(
             err.summary.as_ref(),
             "Unrecognised configuration values: {\"index_style\": \"Compact\"}"
@@ -1566,8 +1509,7 @@ send_mail = 'false'
         /* Test IMAP config */
 
         let new_file = ConfigFile::new(IMAP_CONFIG, &tempdir).unwrap();
-        FileSettings::validate(new_file.path.clone(), false, true)
-            .expect("could not parse IMAP config");
+        FileSettings::validate(new_file.path.clone(), true).expect("could not parse IMAP config");
 
         /* Test sample config */
 
@@ -1579,7 +1521,7 @@ send_mail = 'false'
         );
 
         let new_file = ConfigFile::new(&example_config, &tempdir).unwrap();
-        let config = FileSettings::validate(new_file.path.clone(), false, true)
+        let config = FileSettings::validate(new_file.path.clone(), true)
             .expect("Could not parse example config!");
         for (accname, acc) in config.accounts.iter() {
             if !acc.extra.is_empty() {
@@ -1588,6 +1530,9 @@ send_mail = 'false'
                     accname, acc.extra
                 );
             }
+        }
+        if let Err(err) = tempdir.close() {
+            eprintln!("Could not cleanup tempdir: {}", err);
         }
     }
 }
