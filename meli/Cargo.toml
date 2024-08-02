@@ -4,7 +4,7 @@ version = "0.8.7"
 authors = ["Manos Pitsidianakis <manos@pitsidianak.is>"]
 edition = "2021"
 rust-version = "1.70.0"
-license = "GPL-3.0-or-later"
+license = "EUPL-1.2 OR GPL-3.0-or-later"
 readme = "README.md"
 description = "terminal e-mail client"
 homepage = "https://meli-email.org"
@@ -22,7 +22,7 @@ name = "meli"
 path = "src/lib.rs"
 
 [dependencies]
-async-task = "^4.2.0"
+async-task = { version = "^4.2.0" }
 bitflags = { version = "2.4", features = ["serde"] }
 crossbeam = { version = "^0.8" }
 flate2 = { version = "1", optional = true }
@@ -33,17 +33,17 @@ libz-sys = { version = "1.1", features = ["static"], optional = true }
 linkify = { version = "^0.10", default-features = false }
 melib = { path = "../melib", version = "0.8.7", features = [] }
 nix = { version = "0.27", default-features = false, features = ["signal", "poll", "term", "ioctl", "process"] }
-serde = "1.0.71"
-serde_derive = "1.0.71"
-serde_json = "1.0"
+serde = { version = "1.0.71" }
+serde_derive = { version = "1.0.71" }
+serde_json = { version = "1.0" }
 signal-hook = { version = "^0.3", default-features = false, features = ["iterator"] }
 signal-hook-registry = { version = "1.2.0", default-features = false }
 smallvec = { version = "^1.5.0", features = ["serde"] }
-structopt = { version = "0.3.14", default-features = false }
+structopt = { version = "0.3.26", default-features = false }
 svg_crate = { version = "^0.13", optional = true, package = "svg" }
 termion = { version = "1.5.1", default-features = false }
 toml = { version = "0.8", default-features = false, features = ["display","preserve_order","parse"] }
-xdg = "2.1.0"
+xdg = { version = "2.1.0" }
 
 [dependencies.pcre2]
 # An [env] entry in .cargo/config.toml should force a static build instead of
@@ -77,17 +77,17 @@ debug-tracing = ["melib/debug-tracing"]
 
 [build-dependencies]
 flate2 = { version = "1", optional = true }
-proc-macro2 = "1.0.37"
-quote = "^1.0"
-regex = "1"
+proc-macro2 = { version = "1.0.37" }
+quote = { version = "^1.0" }
+regex = { version = "1" }
 syn = { version = "1", features = [] }
 
 [dev-dependencies]
 assert_cmd = { version = "=2.0.13" }
 flate2 = { version = "1" }
 predicates = { version = "3" }
-regex = "1"
-tempfile = "3.3"
+regex = { version = "1" }
+tempfile = { version = "3.3" }
 
 [target.'cfg(target_os="linux")'.dependencies]
 notify-rust = { version = "^4", default-features = false, features = ["dbus"], optional = true }

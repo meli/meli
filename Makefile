@@ -107,7 +107,7 @@ check: check-tagrefs
 .PHONY: fmt
 fmt:
 	$(CARGO_BIN) +nightly fmt --all || $(CARGO_BIN) fmt --all
-	@OUT=$$($(CARGO_SORT_BIN) -w 2>&1) || $(PRINTF) "WARN: %s cargo-sort failed or binary not found in PATH.\n" "$$OUT"
+	@OUT=$$($(CARGO_SORT_BIN) melib -w 2>&1 && $(CARGO_SORT_BIN) meli -w 2>&1) || $(PRINTF) "WARN: %s cargo-sort failed or binary not found in PATH.\n" "$$OUT"
 
 .PHONY: lint
 lint:

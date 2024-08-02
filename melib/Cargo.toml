@@ -2,57 +2,54 @@
 name = "melib"
 version = "0.8.7"
 authors = ["Manos Pitsidianakis <manos@pitsidianak.is>"]
-edition = "2021"
-build = "build.rs"
-rust-version = "1.70.0"
-
 homepage = "https://meli-email.org"
 repository = "https://git.meli-email.org/meli/meli.git"
 description = "library for e-mail clients and other e-mail applications"
 keywords = ["mail", "mua", "maildir", "imap", "jmap"]
 categories = ["email", "parser-implementations"]
-license = "GPL-3.0-or-later"
+license = "EUPL-1.2 OR GPL-3.0-or-later"
 readme = "README.md"
+edition = "2021"
+build = "build.rs"
+rust-version = "1.70.0"
 
 [lib]
 name = "melib"
 path = "src/lib.rs"
 
 [dependencies]
-async-fn-stream = "=0.2.2"
+async-fn-stream = { version = "=0.2.2" }
 base64 = { version = "^0.13", optional = true }
 bitflags = { version = "2.4", features = ["serde"] }
 data-encoding = { version = "2.1.1" }
 encoding = { version = "0.2.33", default-features = false }
 encoding_rs = { version = "^0.8" }
 flate2 = { version = "1.0.16" }
-futures = "0.3.5"
-
+futures = { version = "0.3.5" }
 imap-codec = { version = "2.0.0-alpha.1", features = ["ext_condstore_qresync", "ext_id", "ext_uidplus"], optional = true }
 indexmap = { version = "^2.3", default-features = false, features = ["serde", "std"] }
 isahc = { version = "^1.7.2", optional = true, default-features = false, features = ["http2", "json", "text-decoding"] }
 libc = { version = "0.2.125", features = ["extra_traits"] }
-
-libloading = "^0.8"
+libloading = { version = "^0.8" }
 log = { version = "0.4", features = ["std"] }
 native-tls = { version = "0.2.3", default-features = false, optional = true }
 nix = { version = "0.27", default-features = false, features = ["fs", "socket", "dir", "hostname"] }
 nom = { version = "7" }
 notify = { version = "6.1.1", optional = true }
-polling = "2.8"
+polling = { version = "2.8" }
 regex = { version = "1" }
 rusqlite = { version = "^0.29", default-features = false, features = ["array"], optional = true }
 serde = { version = "1.0", features = ["rc"] }
-serde_derive = "1.0"
+serde_derive = { version = "1.0" }
 serde_json = { version = "1.0", features = ["raw_value"] }
 serde_path_to_error = { version = "0.1" }
 smallvec = { version = "^1.5.0", features = ["serde"] }
-smol = "1.0.0"
+smol = { version = "1.0.0" }
 socket2 = { version = "0.5", features = [] }
 unicode-segmentation = { version = "1.2.1", default-features = false }
 url = { version = "2.4", optional = true }
 uuid = { version = "^1", features = ["serde", "v4", "v5"] }
-xdg = "2.1.0"
+xdg = { version = "2.1.0" }
 
 [features]
 default = ["imap", "nntp", "maildir", "mbox", "vcard", "smtp"]
@@ -83,5 +80,5 @@ flate2 = { version = "1.0.16" }
 
 [dev-dependencies]
 mailin-embedded = { version = "0.8", features = ["rtls"] }
-stderrlog = "^0.5"
-tempfile = "3.3"
+stderrlog = { version = "^0.5" }
+tempfile = { version = "3.3" }
