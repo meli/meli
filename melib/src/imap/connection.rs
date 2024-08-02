@@ -53,6 +53,7 @@ use crate::{
     email::parser::BytesExt,
     error::*,
     imap::{
+        cache::ignore_not_found,
         protocol_parser::{
             self, id_ext::id_ext_response, ImapLineSplit, ImapResponse, RequiredResponses,
             SelectResponse,
@@ -1102,13 +1103,17 @@ impl ImapConnection {
         })?;
         {
             if let Some(mut cache_handle) = self.uid_store.cache_handle()? {
-                if let Err(err) = cache_handle.mailbox_state(mailbox_hash).and_then(|r| {
-                    if r.is_none() {
-                        cache_handle.clear(mailbox_hash, &select_response)
-                    } else {
-                        Ok(())
-                    }
-                }) {
+                if let Err(err) = cache_handle
+                    .mailbox_state(mailbox_hash)
+                    .and_then(|r| {
+                        if r.is_none() {
+                            cache_handle.clear(mailbox_hash, &select_response)
+                        } else {
+                            Ok(())
+                        }
+                    })
+                    .or_else(ignore_not_found)
+                {
                     (self.uid_store.event_consumer)(
                         self.uid_store.account_hash,
                         BackendEvent::from(err),

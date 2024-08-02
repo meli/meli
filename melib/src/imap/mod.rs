@@ -980,6 +980,8 @@ impl MailBackend for ImapType {
                 .unwrap()
                 .iter()
                 .any(|cap| cap.eq_ignore_ascii_case(b"UIDPLUS"));
+            conn.select_mailbox(mailbox_hash, &mut response, false)
+                .await?;
             if has_uid_plus {
                 let uids: Vec<UID> = {
                     let hash_index_lck = uid_store.hash_index.lock().unwrap();

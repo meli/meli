@@ -218,13 +218,26 @@ impl ImapConnection {
             payload.iter().map(|(_, env)| env.hash()).collect::<_>();
         {
             let mut unseen_lck = unseen.lock().unwrap();
-            for &seen_env_hash in payload_hash_set.difference(&new_unseen) {
-                unseen_lck.remove(seen_env_hash);
-            }
+            if unseen_lck.set.is_empty() {
+                let new_total = unseen_lck.len() + new_unseen.len();
+                unseen_lck.set_not_yet_seen(new_total);
+            } else {
+                for &seen_env_hash in payload_hash_set.difference(&new_unseen) {
+                    unseen_lck.remove(seen_env_hash);
+                }
 
-            unseen_lck.insert_set(new_unseen);
+                unseen_lck.insert_set(new_unseen);
+            }
         }
-        mailbox_exists.lock().unwrap().insert_set(payload_hash_set);
+        {
+            let mut exists_lck = mailbox_exists.lock().unwrap();
+            if exists_lck.set.is_empty() {
+                let new_total = exists_lck.len() + payload_hash_set.len();
+                exists_lck.set_not_yet_seen(new_total);
+            } else {
+                exists_lck.insert_set(payload_hash_set);
+            }
+        }
         // 3. tag2 UID FETCH 1:<lastseenuid> FLAGS
         let sequence_set = if max_uid == 0 {
             SequenceSet::from(..)
@@ -505,13 +518,26 @@ impl ImapConnection {
                 payload.iter().map(|(_, env)| env.hash()).collect::<_>();
             {
                 let mut unseen_lck = unseen.lock().unwrap();
-                for &seen_env_hash in payload_hash_set.difference(&new_unseen) {
-                    unseen_lck.remove(seen_env_hash);
-                }
+                if unseen_lck.set.is_empty() {
+                    let new_total = unseen_lck.len() + new_unseen.len();
+                    unseen_lck.set_not_yet_seen(new_total);
+                } else {
+                    for &seen_env_hash in payload_hash_set.difference(&new_unseen) {
+                        unseen_lck.remove(seen_env_hash);
+                    }
 
-                unseen_lck.insert_set(new_unseen);
+                    unseen_lck.insert_set(new_unseen);
+                }
             }
-            mailbox_exists.lock().unwrap().insert_set(payload_hash_set);
+            {
+                let mut exists_lck = mailbox_exists.lock().unwrap();
+                if exists_lck.set.is_empty() {
+                    let new_total = exists_lck.len() + payload_hash_set.len();
+                    exists_lck.set_not_yet_seen(new_total);
+                } else {
+                    exists_lck.insert_set(payload_hash_set);
+                }
+            }
             // 3. tag2 UID FETCH 1:<lastseenuid> FLAGS
             if cached_max_uid == 0 {
                 // [ref:TODO]: (#222) imap-codec does not support "CONDSTORE/QRESYNC" currently.
