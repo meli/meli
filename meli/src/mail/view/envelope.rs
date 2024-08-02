@@ -1867,7 +1867,7 @@ impl Component for EnvelopeView {
         //    our_map.remove("return_to_normal_view");
         //}
         if !self.options.contains(ViewOptions::URL) {
-            our_map.remove("go_to_url");
+            our_map.shift_remove("go_to_url");
         }
         map.insert(Shortcuts::ENVELOPE_VIEW, our_map);
 

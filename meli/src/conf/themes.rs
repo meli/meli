@@ -834,7 +834,7 @@ impl<'de> Deserialize<'de> for Themes {
         }
 
         for (k, v) in ret.light.iter_mut() {
-            if let Some(mut att) = s.light.keys.remove(k) {
+            if let Some(mut att) = s.light.keys.shift_remove(k) {
                 if let Some(att) = att.fg.take() {
                     v.fg = att;
                 }
@@ -889,7 +889,7 @@ impl<'de> Deserialize<'de> for Themes {
             ret.light.text_format_regexps.insert(k, acc);
         }
         for (k, v) in ret.dark.iter_mut() {
-            if let Some(mut att) = s.dark.keys.remove(k) {
+            if let Some(mut att) = s.dark.keys.shift_remove(k) {
                 if let Some(att) = att.fg.take() {
                     v.fg = att;
                 }
@@ -944,9 +944,9 @@ impl<'de> Deserialize<'de> for Themes {
             ret.dark.text_format_regexps.insert(k, acc);
         }
         for (tk, t) in ret.other_themes.iter_mut() {
-            let mut theme = s.other_themes.remove(tk).unwrap();
+            let mut theme = s.other_themes.shift_remove(tk).unwrap();
             for (k, v) in t.iter_mut() {
-                if let Some(mut att) = theme.keys.remove(k) {
+                if let Some(mut att) = theme.keys.shift_remove(k) {
                     if let Some(att) = att.fg.take() {
                         v.fg = att;
                     }

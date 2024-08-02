@@ -165,7 +165,7 @@ impl HeaderMap {
     where
         <T as TryInto<HeaderName>>::Error: std::fmt::Debug,
     {
-        key.try_into().ok().and_then(|k| (self.0).remove(&k))
+        key.try_into().ok().and_then(|k| (self.0).shift_remove(&k))
     }
 
     pub fn into_inner(self) -> indexmap::IndexMap<HeaderName, String> {

@@ -2673,7 +2673,7 @@ impl Component for Listing {
         });
         let mut config_map = context.settings.shortcuts.listing.key_values();
         if self.focus != ListingFocus::Menu {
-            config_map.remove("open_mailbox");
+            config_map.shift_remove("open_mailbox");
         }
         map.insert(Shortcuts::LISTING, config_map);
 

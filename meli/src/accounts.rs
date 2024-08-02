@@ -1404,7 +1404,7 @@ impl Account {
                                 ) {
                                     self.main_loop_handler.send(thread_event);
                                 }
-                                self.event_queue.remove(&mailbox_hash);
+                                self.event_queue.shift_remove(&mailbox_hash);
                             }
                             return true;
                         }
@@ -1582,7 +1582,7 @@ impl Account {
                                         FlagOp::UnSetTag(t) => {
                                             entry
                                                 .tags_mut()
-                                                .remove(&TagHash::from_bytes(t.as_bytes()));
+                                                .shift_remove(&TagHash::from_bytes(t.as_bytes()));
                                         }
                                     }
                                 }

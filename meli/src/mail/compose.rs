@@ -391,7 +391,7 @@ impl Composer {
                 .settings
                 .account()
                 .main_identity_address();
-            to.remove(&ours);
+            to.shift_remove(&ours);
             ret.draft.set_header(HeaderName::TO, {
                 let mut ret: String =
                     to.into_iter()

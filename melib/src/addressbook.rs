@@ -194,7 +194,7 @@ impl AddressBook {
     }
 
     pub fn remove_card(&mut self, card_id: CardId) {
-        self.cards.remove(&card_id);
+        self.cards.shift_remove(&card_id);
     }
 
     pub fn card_exists(&self, card_id: CardId) -> bool {
@@ -332,7 +332,7 @@ impl From<IndexMap<String, String>> for Card {
         let mut card = Self::new();
         macro_rules! get {
             ($key:literal, $field:tt) => {
-                if let Some(val) = map.remove($key) {
+                if let Some(val) = map.swap_remove($key) {
                     card.$field = val;
                 }
             };

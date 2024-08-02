@@ -318,7 +318,8 @@ impl Account {
                             .write()
                             .unwrap()
                             .remove(&mailbox_hash);
-                        let deleted_mailbox = self.mailbox_entries.remove(&mailbox_hash).unwrap();
+                        let deleted_mailbox =
+                            self.mailbox_entries.shift_remove(&mailbox_hash).unwrap();
                         // if deleted mailbox had parent, we need to update its children field
                         if let Some(parent_hash) = deleted_mailbox.ref_mailbox.parent() {
                             self.mailbox_entries

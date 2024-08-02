@@ -1579,7 +1579,7 @@ impl Component for ThreadListing {
                     return false;
                 }
                 self.rows.rename_env(*old_hash, *new_hash);
-                self.seen_cache.remove(old_hash);
+                self.seen_cache.shift_remove(old_hash);
                 self.seen_cache
                     .insert(*new_hash, account.collection.get_env(*new_hash).is_seen());
                 if let Some(&row) = self.rows.env_order.get(new_hash) {
@@ -1591,7 +1591,7 @@ impl Component for ThreadListing {
             UIEvent::EnvelopeRemove(ref env_hash, _) => {
                 if self.rows.contains_env(*env_hash) {
                     self.refresh_mailbox(context, false);
-                    self.seen_cache.remove(env_hash);
+                    self.seen_cache.shift_remove(env_hash);
                     self.set_dirty(true);
                 }
             }

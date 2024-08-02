@@ -1240,9 +1240,9 @@ impl State {
                 to_delete.insert(*desc);
             }
             self.context.unrealized.extend(to_delete.into_iter());
-            self.component_tree.remove(&id);
-            self.components.remove(&id);
-            self.overlay.remove(&id);
+            self.component_tree.shift_remove(&id);
+            self.components.shift_remove(&id);
+            self.overlay.shift_remove(&id);
         }
     }
 

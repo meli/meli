@@ -511,7 +511,7 @@ impl ImapCache for Sqlite3Cache {
                         if op.as_bool() {
                             env.tags_mut().insert(hash);
                         } else {
-                            env.tags_mut().remove(&hash);
+                            env.tags_mut().shift_remove(&hash);
                         }
                     }
                 }

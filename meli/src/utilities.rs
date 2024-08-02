@@ -756,7 +756,7 @@ impl Component for StatusBar {
                 self.in_progress_jobs.insert(*job_id);
             }
             UIEvent::StatusEvent(StatusEvent::ScrollUpdate(ScrollUpdate::End(component_id))) => {
-                if self.scroll_contexts.remove(component_id).is_some() {
+                if self.scroll_contexts.shift_remove(component_id).is_some() {
                     self.dirty = true;
                 }
                 return true;

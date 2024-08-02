@@ -303,7 +303,7 @@ impl ComponentPath {
                 // log::trace!("continue;");
                 continue;
             }
-            cursor = cursor.children().remove(id)?;
+            cursor = cursor.children().shift_remove(id)?;
         }
         Some(cursor)
     }
