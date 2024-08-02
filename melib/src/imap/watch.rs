@@ -23,7 +23,7 @@ use std::sync::Arc;
 use imap_codec::imap_types::search::SearchKey;
 
 use super::*;
-use crate::{backends::SpecialUsageMailbox, imap::cache::ignore_not_found};
+use crate::{backends::SpecialUsageMailbox, imap::sync::cache::ignore_not_found};
 
 /// Arguments for IMAP watching functions
 pub struct ImapWatchKit {

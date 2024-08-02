@@ -28,11 +28,6 @@ use crate::{
     error::*,
 };
 
-pub mod ram_cache;
-#[cfg(feature = "sqlite3")]
-pub mod sqlite3_cache;
-pub mod sync;
-
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ModSequence(pub std::num::NonZeroU64);
 
@@ -120,7 +115,7 @@ pub trait ImapCacheReset: Send + std::fmt::Debug {
         Self: Sized;
 }
 
-pub(super) async fn fetch_cached_envs(state: &mut FetchState) -> Result<Option<Vec<Envelope>>> {
+pub async fn fetch_cached_envs(state: &mut FetchState) -> Result<Option<Vec<Envelope>>> {
     let FetchState {
         stage: _,
         ref mut connection,

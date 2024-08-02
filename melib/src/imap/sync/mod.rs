@@ -29,6 +29,11 @@ use indexmap::IndexSet;
 
 use super::*;
 
+pub mod cache;
+pub mod ram_cache;
+#[cfg(feature = "sqlite3")]
+pub mod sqlite3_cache;
+
 impl ImapConnection {
     pub async fn resync(&mut self, mailbox_hash: MailboxHash) -> Result<Option<Vec<Envelope>>> {
         debug!("resync mailbox_hash {}", mailbox_hash);
@@ -82,7 +87,7 @@ impl ImapConnection {
     /// RFC4549 Synchronization Operations for Disconnected IMAP4 Clients
     pub async fn resync_basic(
         &mut self,
-        mut cache_handle: Box<dyn ImapCache>,
+        mut cache_handle: Box<dyn cache::ImapCache>,
         mailbox_hash: MailboxHash,
     ) -> Result<Option<Vec<Envelope>>> {
         let mut payload = vec![];
@@ -328,7 +333,7 @@ impl ImapConnection {
     /// > Section 6.1
     pub async fn resync_condstore(
         &mut self,
-        mut cache_handle: Box<dyn ImapCache>,
+        mut cache_handle: Box<dyn cache::ImapCache>,
         mailbox_hash: MailboxHash,
     ) -> Result<Option<Vec<Envelope>>> {
         let mut payload = vec![];
@@ -651,7 +656,7 @@ impl ImapConnection {
     /// Mailbox Resynchronization (QRESYNC)
     pub async fn resync_condstoreqresync(
         &mut self,
-        _cache_handle: Box<dyn ImapCache>,
+        _cache_handle: Box<dyn cache::ImapCache>,
         _mailbox_hash: MailboxHash,
     ) -> Result<Option<Vec<Envelope>>> {
         Ok(None)

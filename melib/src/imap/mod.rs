@@ -37,9 +37,9 @@ mod watch;
 pub use watch::*;
 mod search;
 pub use search::*;
-pub mod cache;
 pub mod error;
 pub mod managesieve;
+pub mod sync;
 pub mod untagged;
 
 use std::{
@@ -52,10 +52,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use protocol_parser::id_ext::IDResponse;
-
 pub extern crate imap_codec;
-pub use cache::ModSequence;
 use imap_codec::imap_types::{
     command::CommandBody,
     core::{Atom, Literal},
@@ -63,6 +60,7 @@ use imap_codec::imap_types::{
     mailbox::Mailbox as ImapTypesMailbox,
     sequence::{SequenceSet, ONE},
 };
+pub use sync::cache::ModSequence;
 
 use crate::{
     backends::{prelude::*, RefreshEventKind::*},
@@ -70,6 +68,7 @@ use crate::{
     conf::AccountSettings,
     email::{parser::BytesExt, *},
     error::{Error, ErrorKind, Result, ResultIntoError},
+    imap::{protocol_parser::id_ext::IDResponse, sync::cache::ImapCache},
     utils::futures::timeout,
 };
 
@@ -165,7 +164,7 @@ pub struct UIDStore {
 
     // Offline caching
     pub uidvalidity: Arc<Mutex<HashMap<MailboxHash, UID>>>,
-    pub envelopes: Arc<Mutex<HashMap<EnvelopeHash, cache::CachedEnvelope>>>,
+    pub envelopes: Arc<Mutex<HashMap<EnvelopeHash, sync::cache::CachedEnvelope>>>,
     pub max_uids: Arc<Mutex<HashMap<MailboxHash, UID>>>,
     pub modseq: Arc<Mutex<HashMap<EnvelopeHash, ModSequence>>>,
     pub highestmodseqs: Arc<Mutex<HashMap<MailboxHash, std::result::Result<ModSequence, ()>>>>,
@@ -208,14 +207,14 @@ impl UIDStore {
         }
     }
 
-    pub fn cache_handle(self: &Arc<Self>) -> Result<Option<Box<dyn cache::ImapCache>>> {
+    pub fn cache_handle(self: &Arc<Self>) -> Result<Option<Box<dyn ImapCache>>> {
         if !*self.keep_offline_cache.lock().unwrap() {
             return Ok(None);
         }
         #[cfg(not(feature = "sqlite3"))]
         return Ok(None);
         #[cfg(feature = "sqlite3")]
-        return Ok(Some(cache::sqlite3_cache::Sqlite3Cache::get(Arc::clone(
+        return Ok(Some(sync::sqlite3_cache::Sqlite3Cache::get(Arc::clone(
             self,
         ))?));
     }
@@ -227,9 +226,9 @@ impl UIDStore {
         #[cfg(not(feature = "sqlite3"))]
         return Ok(());
         #[cfg(feature = "sqlite3")]
-        use crate::imap::cache::ImapCacheReset;
+        use crate::imap::sync::cache::ImapCacheReset;
         #[cfg(feature = "sqlite3")]
-        return cache::sqlite3_cache::Sqlite3Cache::reset_db(self);
+        return sync::sqlite3_cache::Sqlite3Cache::reset_db(self);
     }
 }
 
@@ -1749,22 +1748,25 @@ impl ImapType {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum FetchStage {
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum FetchStage {
+    #[default]
     InitialFresh,
     InitialCache,
     ResyncCache,
-    FreshFetch { max_uid: UID },
+    FreshFetch {
+        max_uid: UID,
+    },
     Finished,
 }
 
 #[derive(Debug)]
-struct FetchState {
-    stage: FetchStage,
-    connection: Arc<FutureMutex<ImapConnection>>,
-    mailbox_hash: MailboxHash,
-    uid_store: Arc<UIDStore>,
-    cache_handle: Option<Box<dyn cache::ImapCache>>,
+pub struct FetchState {
+    pub stage: FetchStage,
+    pub connection: Arc<FutureMutex<ImapConnection>>,
+    pub mailbox_hash: MailboxHash,
+    pub uid_store: Arc<UIDStore>,
+    pub cache_handle: Option<Box<dyn ImapCache>>,
 }
 
 async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
@@ -1805,7 +1807,7 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                 continue;
             }
             FetchStage::InitialCache => {
-                match cache::fetch_cached_envs(state).await {
+                match sync::cache::fetch_cached_envs(state).await {
                     Err(err) => {
                         log::error!(
                             "IMAP cache error: could not fetch cache for {}. Reason: {}",

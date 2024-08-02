@@ -29,7 +29,7 @@ use crate::{
     email::{Envelope, EnvelopeHash},
     error::{Error, ErrorKind, Result, ResultIntoError},
     imap::{
-        cache::{CachedEnvelope, ImapCache, ImapCacheReset},
+        sync::cache::{CachedEnvelope, ImapCache, ImapCacheReset},
         FetchResponse, ModSequence, SelectResponse, UIDStore, UID, UIDVALIDITY,
     },
     utils::sqlite3::{

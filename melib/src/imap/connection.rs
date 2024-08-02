@@ -53,11 +53,11 @@ use crate::{
     email::parser::BytesExt,
     error::*,
     imap::{
-        cache::ignore_not_found,
         protocol_parser::{
             self, id_ext::id_ext_response, ImapLineSplit, ImapResponse, RequiredResponses,
             SelectResponse,
         },
+        sync::cache::ignore_not_found,
         Capabilities, ImapServerConf, UIDStore,
     },
     text::Truncate,
