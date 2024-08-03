@@ -605,6 +605,9 @@ impl<OBJ: Object + Serialize + std::fmt::Debug> Serialize for Set<OBJ> {
                     let mut v = serde_json::json!(v);
                     if let Some(ref mut obj) = v.as_object_mut() {
                         obj.remove("id");
+                        for f in <OBJ as Object>::SERVER_SET_FIELDS {
+                            obj.remove(*f);
+                        }
                     }
                     (k, v)
                 })

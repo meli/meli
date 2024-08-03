@@ -698,3 +698,66 @@ fn test_jmap_session_serde() {
         .unwrap(),
     );
 }
+
+#[test]
+fn test_jmap_server_set_fields_in_set_create() {
+    use std::sync::Arc;
+
+    use futures::lock::Mutex as FutureMutex;
+    use serde_json::json;
+
+    use crate::jmap::{mailbox, methods::Set, objects::Id, protocol::Request};
+    let account_id = "blahblah";
+    let prev_seq = 33;
+    let mut req = Request::new(Arc::new(FutureMutex::new(prev_seq)));
+    let path = "new_mbox";
+
+    let mailbox_set_call = mailbox::MailboxSet::new(
+        Set::<mailbox::MailboxObject>::new(None)
+            .account_id(account_id.into())
+            .create(Some({
+                let id: Id<mailbox::MailboxObject> = path.into();
+                indexmap! {
+                    id.clone().into() => mailbox::MailboxObject {
+                        id,
+                        name: path.to_string(),
+                        ..mailbox::MailboxObject::default()
+                    }
+                }
+            })),
+    );
+    futures::executor::block_on(req.add_call(&mailbox_set_call));
+
+    assert_eq!(
+        json! {&req},
+        json! {{
+            "methodCalls" : [
+                [
+                    "Mailbox/set",
+                    {
+                        "accountId" : account_id,
+                        "create" : {
+                            "new_mbox": {
+                                "isSubscribed": false,
+                                "name": path,
+                                "parentId": null,
+                                "role": null,
+                                "sortOrder": 0,
+                            }
+                        },
+                        "destroy" : null,
+                        "ifInState" : null,
+                        "onDestroyRemoveEmails": false,
+                        "update" : null
+                    },
+                    "m33"
+                ],
+                ],
+                "using" : [
+                    "urn:ietf:params:jmap:core",
+                    "urn:ietf:params:jmap:mail",
+                    "urn:ietf:params:jmap:submission"
+                ]
+        }},
+    );
+}

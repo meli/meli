@@ -52,6 +52,14 @@ pub struct MailboxObject {
 
 impl Object for MailboxObject {
     const NAME: &'static str = "Mailbox";
+    const SERVER_SET_FIELDS: &'static [&'static str] = &[
+        "id",
+        "totalEmails",
+        "unreadEmails",
+        "unreadThreads",
+        "totalThreads",
+        "myRights",
+    ];
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

@@ -37,6 +37,7 @@ impl Object for PatchObject {
 
 pub trait Object: Send + Sync {
     const NAME: &'static str;
+    const SERVER_SET_FIELDS: &'static [&'static str] = &["id"];
 }
 
 #[derive(Deserialize, Serialize)]
