@@ -270,10 +270,10 @@ impl std::fmt::Display for EmailAddress {
 
 impl From<EmailObject> for crate::Envelope {
     fn from(mut t: EmailObject) -> Self {
-        use crate::email::parser::address::rfc2822address_list;
+        use crate::email::parser::{address::rfc2822address_list, dates::rfc5322_date};
 
         let mut env = Self::new(t.id.into_hash());
-        if let Ok(d) = crate::email::parser::dates::rfc5322_date(env.date_as_str().as_bytes()) {
+        if let Ok(d) = rfc5322_date(env.date_as_str().as_bytes()) {
             env.set_datetime(d);
         }
         if let Some(sent_at) = t.sent_at.take() {
@@ -296,10 +296,10 @@ impl From<EmailObject> for crate::Envelope {
         }
         if let Some(v) = t.headers.get(HeaderName::DATE.as_str()) {
             env.set_date(v.as_bytes());
-            if let Ok(d) = crate::email::parser::dates::rfc5322_date(v.as_bytes()) {
+            if let Ok(d) = rfc5322_date(v.as_bytes()) {
                 env.set_datetime(d);
             }
-        } else if let Ok(d) = crate::email::parser::dates::rfc5322_date(t.received_at.as_bytes()) {
+        } else if let Ok(d) = rfc5322_date(t.received_at.as_bytes()) {
             env.set_datetime(d);
         }
         env.set_has_attachments(t.has_attachment);
