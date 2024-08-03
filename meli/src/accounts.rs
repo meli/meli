@@ -1325,7 +1325,7 @@ impl Account {
         if let Some(mut job) = self.active_jobs.remove(job_id) {
             let job_id = *job_id;
             match job {
-                JobRequest::Mailbox(ref mut inner) => {
+                JobRequest::Mailbox(inner) => {
                     self.process_mailbox_event(job_id, inner);
                     return true;
                 }

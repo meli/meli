@@ -113,12 +113,71 @@ impl Account {
                 );
                 Ok(())
             }
-            MailboxOperation::Rename(_, _) => Err(Error::new("Not implemented.")),
+            MailboxOperation::Rename(path, new_path) => {
+                let mailbox_hash = self.mailbox_by_path(&path)?;
+                let job = self
+                    .backend
+                    .write()
+                    .unwrap()
+                    .rename_mailbox(mailbox_hash, new_path.clone())?;
+                let handle = self.main_loop_handler.job_executor.spawn(
+                    format!("rename-mailbox {path} to {new_path}").into(),
+                    job,
+                    self.is_async(),
+                );
+                self.insert_job(
+                    handle.job_id,
+                    JobRequest::Mailbox(MailboxJobRequest::RenameMailbox {
+                        handle,
+                        mailbox_hash,
+                        new_path,
+                    }),
+                );
+                Ok(())
+            }
             MailboxOperation::SetPermissions(_) => Err(Error::new("Not implemented.")),
         }
     }
 
-    pub fn process_mailbox_event(&mut self, job_id: JobId, job: &mut MailboxJobRequest) {
+    pub fn process_mailbox_event(&mut self, job_id: JobId, mut job: MailboxJobRequest) {
+        macro_rules! try_handle {
+            ($handle:ident, $binding:pat => $then:block) => {{
+                try_handle! { $handle, Err(err) => {
+                    self.main_loop_handler
+                        .job_executor
+                        .set_job_success(job_id, false);
+                    self.main_loop_handler
+                        .send(ThreadEvent::UIEvent(UIEvent::Notification {
+                            title: None,
+                            body: format!("{}: {} failed", &self.name, job).into(),
+                            kind: Some(NotificationType::Error(err.kind)),
+                            source: Some(err),
+                        }));
+                    return;
+                },
+                $binding => $then
+                }
+            }};
+            ($handle:ident, Err($err:pat) => $then_err: block, $binding:pat => $then:block) => {{
+                match $handle.chan.try_recv() {
+                    _err @ Ok(None) | _err @ Err(_) => {
+                        /* canceled */
+                        #[cfg(debug_assertions)]
+                        log::trace!(
+                            "handle.chan.try_recv() for job {} returned {:?}",
+                            job_id,
+                            _err
+                        );
+                        self.main_loop_handler
+                            .job_executor
+                            .set_job_success(job_id, false);
+                    }
+                    Ok(Some(Err($err))) => $then_err,
+                    Ok(Some(Ok($binding))) => $then,
+                }
+            }};
+        }
+
         match job {
             MailboxJobRequest::Mailboxes { ref mut handle } => {
                 if let Ok(Some(mailboxes)) = handle.chan.try_recv() {
@@ -166,229 +225,184 @@ impl Account {
                     }
                 }
             }
-            MailboxJobRequest::CreateMailbox {
-                ref path,
-                ref mut handle,
-                ..
-            } => {
-                if let Ok(Some(r)) = handle.chan.try_recv() {
-                    match r {
-                        Err(err) => {
-                            self.main_loop_handler
-                                .job_executor
-                                .set_job_success(job_id, false);
-                            self.main_loop_handler.send(ThreadEvent::UIEvent(
-                                UIEvent::Notification {
-                                    title: Some(
-                                        format!(
-                                            "{}: could not create mailbox {}",
-                                            &self.name, path
-                                        )
-                                        .into(),
-                                    ),
-                                    source: None,
-                                    body: err.to_string().into(),
-                                    kind: Some(NotificationType::Error(err.kind)),
-                                },
-                            ));
+            MailboxJobRequest::CreateMailbox { ref mut handle, .. } => {
+                try_handle! { handle, (mailbox_hash, mut mailboxes) => {
+                    self.main_loop_handler.send(ThreadEvent::UIEvent(
+                            UIEvent::MailboxCreate((self.hash, mailbox_hash)),
+                    ));
+                    let mut new = FileMailboxConf::default();
+                    new.mailbox_conf.subscribe = ToggleFlag::InternalVal(true);
+                    new.mailbox_conf.usage = if mailboxes[&mailbox_hash].special_usage()
+                        != SpecialUsageMailbox::Normal
+                    {
+                        Some(mailboxes[&mailbox_hash].special_usage())
+                    } else {
+                        let tmp = SpecialUsageMailbox::detect_usage(
+                            mailboxes[&mailbox_hash].name(),
+                        );
+                        if let Some(tmp) = tmp.filter(|&v| v != SpecialUsageMailbox::Normal)
+                        {
+                            mailboxes.entry(mailbox_hash).and_modify(|entry| {
+                                let _ = entry.set_special_usage(tmp);
+                            });
                         }
-                        Ok((mailbox_hash, mut mailboxes)) => {
-                            self.main_loop_handler.send(ThreadEvent::UIEvent(
-                                UIEvent::MailboxCreate((self.hash, mailbox_hash)),
-                            ));
-                            let mut new = FileMailboxConf::default();
-                            new.mailbox_conf.subscribe = ToggleFlag::InternalVal(true);
-                            new.mailbox_conf.usage = if mailboxes[&mailbox_hash].special_usage()
-                                != SpecialUsageMailbox::Normal
-                            {
-                                Some(mailboxes[&mailbox_hash].special_usage())
-                            } else {
-                                let tmp = SpecialUsageMailbox::detect_usage(
-                                    mailboxes[&mailbox_hash].name(),
-                                );
-                                if let Some(tmp) = tmp.filter(|&v| v != SpecialUsageMailbox::Normal)
-                                {
-                                    mailboxes.entry(mailbox_hash).and_modify(|entry| {
-                                        let _ = entry.set_special_usage(tmp);
-                                    });
-                                }
-                                tmp
-                            };
-                            // if new mailbox has parent, we need to update its children field
-                            if let Some(parent_hash) = mailboxes[&mailbox_hash].parent() {
-                                self.mailbox_entries
-                                    .entry(parent_hash)
-                                    .and_modify(|parent| {
-                                        parent.ref_mailbox =
-                                            mailboxes.remove(&parent_hash).unwrap();
-                                    });
-                            }
-                            let status = MailboxStatus::default();
-
-                            self.mailbox_entries.insert(
-                                mailbox_hash,
-                                MailboxEntry::new(
-                                    status,
-                                    mailboxes[&mailbox_hash].path().to_string(),
-                                    mailboxes.remove(&mailbox_hash).unwrap(),
-                                    new,
-                                ),
-                            );
-                            self.collection
-                                .threads
-                                .write()
-                                .unwrap()
-                                .insert(mailbox_hash, Threads::default());
-                            self.collection
-                                .mailboxes
-                                .write()
-                                .unwrap()
-                                .insert(mailbox_hash, Default::default());
-                            build_mailboxes_order(
-                                &mut self.tree,
-                                &self.mailbox_entries,
-                                &mut self.mailboxes_order,
-                            );
-                        }
+                        tmp
+                    };
+                    // if new mailbox has parent, we need to update its children field
+                    if let Some(parent_hash) = mailboxes[&mailbox_hash].parent() {
+                        self.mailbox_entries
+                            .entry(parent_hash)
+                            .and_modify(|parent| {
+                                parent.ref_mailbox =
+                                    mailboxes.remove(&parent_hash).unwrap();
+                            });
                     }
-                }
+                    let status = MailboxStatus::default();
+
+                    self.mailbox_entries.insert(
+                        mailbox_hash,
+                        MailboxEntry::new(
+                            status,
+                            mailboxes[&mailbox_hash].path().to_string(),
+                            mailboxes.remove(&mailbox_hash).unwrap(),
+                            new,
+                        ),
+                    );
+                    self.collection
+                        .threads
+                        .write()
+                        .unwrap()
+                        .insert(mailbox_hash, Threads::default());
+                    self.collection
+                        .mailboxes
+                        .write()
+                        .unwrap()
+                        .insert(mailbox_hash, Default::default());
+                    build_mailboxes_order(
+                        &mut self.tree,
+                        &self.mailbox_entries,
+                        &mut self.mailboxes_order,
+                    );
+                }}
             }
             MailboxJobRequest::DeleteMailbox {
                 mailbox_hash,
                 ref mut handle,
                 ..
             } => {
-                match handle.chan.try_recv() {
-                    Err(_) => { /* canceled */ }
-                    Ok(None) => {}
-                    Ok(Some(Err(err))) => {
-                        self.main_loop_handler
-                            .job_executor
-                            .set_job_success(job_id, false);
-                        self.main_loop_handler
-                            .send(ThreadEvent::UIEvent(UIEvent::Notification {
-                                title: Some(
-                                    format!("{}: could not delete mailbox", &self.name).into(),
-                                ),
-                                source: None,
-                                body: err.to_string().into(),
-                                kind: Some(NotificationType::Error(err.kind)),
-                            }));
+                try_handle! { handle, mut mailboxes => {
+                    self.main_loop_handler
+                        .send(ThreadEvent::UIEvent(UIEvent::MailboxDelete((
+                                        self.hash,
+                                        mailbox_hash,
+                        ))));
+                    if let Some(pos) =
+                        self.mailboxes_order.iter().position(|&h| h == mailbox_hash)
+                    {
+                        self.mailboxes_order.remove(pos);
                     }
-                    Ok(Some(Ok(mut mailboxes))) => {
-                        let mailbox_hash = *mailbox_hash;
-                        self.main_loop_handler
-                            .send(ThreadEvent::UIEvent(UIEvent::MailboxDelete((
-                                self.hash,
-                                mailbox_hash,
-                            ))));
-                        if let Some(pos) =
-                            self.mailboxes_order.iter().position(|&h| h == mailbox_hash)
-                        {
-                            self.mailboxes_order.remove(pos);
-                        }
-                        if let Some(pos) = self.tree.iter().position(|n| n.hash == mailbox_hash) {
-                            self.tree.remove(pos);
-                        }
-                        if self.settings.sent_mailbox == Some(mailbox_hash) {
-                            self.settings.sent_mailbox = None;
-                        }
-                        self.collection
-                            .threads
-                            .write()
-                            .unwrap()
-                            .remove(&mailbox_hash);
-                        let deleted_mailbox =
-                            self.mailbox_entries.shift_remove(&mailbox_hash).unwrap();
-                        // if deleted mailbox had parent, we need to update its children field
-                        if let Some(parent_hash) = deleted_mailbox.ref_mailbox.parent() {
-                            self.mailbox_entries
-                                .entry(parent_hash)
-                                .and_modify(|parent| {
-                                    parent.ref_mailbox = mailboxes.remove(&parent_hash).unwrap();
-                                });
-                        }
-                        self.collection
-                            .mailboxes
-                            .write()
-                            .unwrap()
-                            .remove(&mailbox_hash);
-                        build_mailboxes_order(
-                            &mut self.tree,
-                            &self.mailbox_entries,
-                            &mut self.mailboxes_order,
-                        );
-                        // [ref:FIXME] remove from settings as well
+                    if let Some(pos) = self.tree.iter().position(|n| n.hash == mailbox_hash) {
+                        self.tree.remove(pos);
+                    }
+                    if self.settings.sent_mailbox == Some(mailbox_hash) {
+                        self.settings.sent_mailbox = None;
+                    }
+                    self.collection
+                        .threads
+                        .write()
+                        .unwrap()
+                        .remove(&mailbox_hash);
+                    let deleted_mailbox =
+                        self.mailbox_entries.shift_remove(&mailbox_hash).unwrap();
+                    // if deleted mailbox had parent, we need to update its children field
+                    if let Some(parent_hash) = deleted_mailbox.ref_mailbox.parent() {
+                        self.mailbox_entries
+                            .entry(parent_hash)
+                            .and_modify(|parent| {
+                                parent.ref_mailbox = mailboxes.remove(&parent_hash).unwrap();
+                            });
+                    }
+                    self.collection
+                        .mailboxes
+                        .write()
+                        .unwrap()
+                        .remove(&mailbox_hash);
+                    build_mailboxes_order(
+                        &mut self.tree,
+                        &self.mailbox_entries,
+                        &mut self.mailboxes_order,
+                    );
+                    // [ref:FIXME] remove from settings as well
 
-                        self.main_loop_handler
-                            .send(ThreadEvent::UIEvent(UIEvent::Notification {
-                                title: Some(
-                                    format!("{}: mailbox deleted successfully", &self.name).into(),
-                                ),
-                                source: None,
-                                body: "".into(),
-                                kind: Some(NotificationType::Info),
-                            }));
+                    self.main_loop_handler
+                        .send(ThreadEvent::UIEvent(UIEvent::Notification {
+                            title: Some(
+                                       format!("{}: mailbox deleted successfully", &self.name).into(),
+                                   ),
+                                   source: None,
+                                   body: "".into(),
+                                   kind: Some(NotificationType::Info),
+                        }));
+                }}
+            }
+            MailboxJobRequest::RenameMailbox {
+                ref mut handle,
+                mailbox_hash,
+                ref mut new_path,
+            } => {
+                use indexmap::map::MutableKeys;
+                try_handle! { handle, mailbox => {
+                    let new_hash = mailbox.hash();
+                    if let Some((_, key, entry)) = self.mailbox_entries.get_full_mut2(&mailbox_hash) {
+                        *key = new_hash;
+                        *entry = MailboxEntry::new(entry.status.clone(), std::mem::take(new_path), mailbox, entry.conf.clone());
                     }
-                }
+                    if let Some(key) = self.mailboxes_order.iter_mut().find(|k| **k == mailbox_hash) {
+                        *key = new_hash;
+                    }
+                    if let Some((_, key, _)) = self.event_queue.get_full_mut2(&mailbox_hash) {
+                        *key = new_hash;
+                    }
+                    {
+                        let mut threads = self.collection.threads.write().unwrap();
+                        if let Some(entry) = threads.remove(&mailbox_hash) {
+                            threads.insert(new_hash, entry);
+                        }
+                    }
+                    {
+                        let mut mailboxes = self.collection.mailboxes.write().unwrap();
+                        if let Some(entry) = mailboxes.remove(&mailbox_hash) {
+                            mailboxes.insert(new_hash, entry);
+                        }
+                    }
+                    build_mailboxes_order(
+                        &mut self.tree,
+                        &self.mailbox_entries,
+                        &mut self.mailboxes_order,
+                    );
+                }}
             }
             MailboxJobRequest::SetMailboxPermissions { ref mut handle, .. } => {
-                match handle.chan.try_recv() {
-                    Err(_) => { /* canceled */ }
-                    Ok(None) => {}
-                    Ok(Some(Err(err))) => {
-                        self.main_loop_handler
-                            .job_executor
-                            .set_job_success(job_id, false);
-                        self.main_loop_handler
-                            .send(ThreadEvent::UIEvent(UIEvent::Notification {
-                                title: Some(
-                                    format!("{}: could not set mailbox permissions", &self.name)
-                                        .into(),
-                                ),
-                                source: None,
-                                body: err.to_string().into(),
-                                kind: Some(NotificationType::Error(err.kind)),
-                            }));
-                    }
-                    Ok(Some(Ok(_))) => {
-                        self.main_loop_handler
-                            .send(ThreadEvent::UIEvent(UIEvent::Notification {
-                                title: Some(
-                                    format!("{}: mailbox permissions set successfully", &self.name)
-                                        .into(),
-                                ),
-                                source: None,
-                                body: "".into(),
-                                kind: Some(NotificationType::Info),
-                            }));
-                    }
-                }
+                try_handle! { handle, _ => {
+                    self.main_loop_handler
+                        .send(ThreadEvent::UIEvent(UIEvent::Notification {
+                            title: Some(
+                                       format!("{}: mailbox permissions set successfully", &self.name)
+                                       .into(),
+                                   ),
+                                   source: None,
+                                   body: "".into(),
+                                   kind: Some(NotificationType::Info),
+                        }));
+                }}
             }
             MailboxJobRequest::SetMailboxSubscription {
                 ref mut handle,
                 ref mailbox_hash,
                 ref new_value,
             } => {
-                match handle.chan.try_recv() {
-                    Err(_) => { /* canceled */ }
-                    Ok(None) => {}
-                    Ok(Some(Err(err))) => {
-                        self.main_loop_handler
-                            .job_executor
-                            .set_job_success(job_id, false);
-                        self.main_loop_handler
-                            .send(ThreadEvent::UIEvent(UIEvent::Notification {
-                                title: Some(
-                                    format!("{}: could not set mailbox subscription", &self.name)
-                                        .into(),
-                                ),
-                                source: None,
-                                body: err.to_string().into(),
-                                kind: Some(NotificationType::Error(err.kind)),
-                            }));
-                    }
-                    Ok(Some(Ok(()))) if self.mailbox_entries.contains_key(mailbox_hash) => {
+                try_handle! { handle, () => {
+                    if self.mailbox_entries.contains_key(mailbox_hash) {
                         self.mailbox_entries.entry(*mailbox_hash).and_modify(|m| {
                             m.conf.mailbox_conf.subscribe = if *new_value {
                                 ToggleFlag::True
@@ -413,8 +427,7 @@ impl Account {
                                 kind: Some(NotificationType::Info),
                             }));
                     }
-                    Ok(Some(Ok(()))) => {}
-                }
+                }}
             }
         }
     }

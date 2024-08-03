@@ -40,6 +40,11 @@ pub enum MailboxJobRequest {
         mailbox_hash: MailboxHash,
         handle: JoinHandle<Result<HashMap<MailboxHash, Mailbox>>>,
     },
+    RenameMailbox {
+        mailbox_hash: MailboxHash,
+        new_path: String,
+        handle: JoinHandle<Result<Mailbox>>,
+    },
     SetMailboxPermissions {
         mailbox_hash: MailboxHash,
         handle: JoinHandle<Result<()>>,
@@ -58,6 +63,13 @@ impl std::fmt::Debug for MailboxJobRequest {
             Self::DeleteMailbox { mailbox_hash, .. } => {
                 write!(f, "JobRequest::DeleteMailbox({})", mailbox_hash)
             }
+            Self::RenameMailbox {
+                mailbox_hash,
+                new_path,
+                ..
+            } => {
+                write!(f, "JobRequest::RenameMailbox {mailbox_hash} to {new_path} ")
+            }
             Self::SetMailboxPermissions { .. } => {
                 write!(f, "JobRequest::SetMailboxPermissions")
             }
@@ -75,6 +87,7 @@ impl std::fmt::Display for MailboxJobRequest {
             Self::Mailboxes { .. } => write!(f, "Get mailbox list"),
             Self::CreateMailbox { path, .. } => write!(f, "Create mailbox {}", path),
             Self::DeleteMailbox { .. } => write!(f, "Delete mailbox"),
+            Self::RenameMailbox { new_path, .. } => write!(f, "Rename mailbox to {new_path}"),
             Self::SetMailboxPermissions { .. } => write!(f, "Set mailbox permissions"),
             Self::SetMailboxSubscription { .. } => write!(f, "Set mailbox subscription"),
         }
