@@ -17,7 +17,7 @@ on:
 
 jobs:
   build:
-    name: Package for debian on ${{ matrix.arch }}
+    name: Create debian package
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

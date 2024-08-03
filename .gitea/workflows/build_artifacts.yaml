@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: EUPL-1.2
-name: Build release binary
+name: Build release binaries
 
 env:
   CARGO_INCREMENTAL: 0
@@ -17,7 +17,7 @@ on:
 
 jobs:
   build:
-    name: Build on ${{ matrix.build }}
+    name: Build release binary
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

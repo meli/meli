@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: EUPL-1.2
-name: Run Tests
+name: Build and run Tests
 
 env:
   CARGO_INCREMENTAL: 0
@@ -23,7 +23,7 @@ on:
 
 jobs:
   test:
-    name: Test on ${{ matrix.build }}
+    name: Run tests
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

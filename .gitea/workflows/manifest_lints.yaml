@@ -24,7 +24,7 @@ on:
 
 jobs:
   manifest_lint:
-    name: Lint Cargo manifests on ${{ matrix.build }}
+    name: Run Cargo manifest etc lints
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

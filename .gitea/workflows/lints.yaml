@@ -23,7 +23,7 @@ on:
 
 jobs:
   test:
-    name: Lint on ${{ matrix.build }}
+    name: Run lints
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
