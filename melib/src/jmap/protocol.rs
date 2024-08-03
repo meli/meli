@@ -128,9 +128,9 @@ pub async fn get_mailboxes(
     req.add_call(&mailbox_get).await;
     let res_text = conn.send_request(serde_json::to_string(&req)?).await?;
 
-    let mut v: MethodResponse = deserialize_from_str(&res_text)?;
+    let v: MethodResponse = deserialize_from_str(&res_text)?;
     conn.store.online_status.update_timestamp(None).await;
-    let m = GetResponse::<MailboxObject>::try_from(v.method_responses.remove(0))?;
+    let m = GetResponse::<MailboxObject>::try_from(*v.method_responses.last().unwrap())?;
     let GetResponse::<MailboxObject> {
         list,
         account_id,

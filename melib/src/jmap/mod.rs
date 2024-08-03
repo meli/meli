@@ -680,13 +680,54 @@ impl MailBackend for JmapType {
 
     fn rename_mailbox(
         &mut self,
-        _mailbox_hash: MailboxHash,
-        _new_path: String,
+        mailbox_hash: MailboxHash,
+        new_path: String,
     ) -> ResultFuture<Mailbox> {
-        Err(
-            Error::new("Renaming mailbox is currently unimplemented for the JMAP backend.")
-                .set_kind(ErrorKind::NotImplemented),
-        )
+        let store = self.store.clone();
+        let mailbox_id: Id<mailbox::MailboxObject> = {
+            let mailboxes_lck = store.mailboxes.read().unwrap();
+            let Some(id) = mailboxes_lck.get(&mailbox_hash).map(|m| m.id.clone()) else {
+                return Err(
+                    Error::new(format!("Mailbox with hash {} not found", mailbox_hash))
+                        .set_kind(ErrorKind::NotFound),
+                );
+            };
+            id
+        };
+        let connection = self.connection.clone();
+        Ok(Box::pin(async move {
+            let mailbox_state = store.mailbox_state.lock().await.clone();
+            let mut conn = connection.lock().await;
+            let mail_account_id = conn.session_guard().await?.mail_account_id();
+            let mailbox_set_call = mailbox::MailboxSet::new(
+                Set::<mailbox::MailboxObject>::new(Some(mailbox_state))
+                    .account_id(mail_account_id)
+                    .update(Some({
+                        indexmap! {
+                            mailbox_id.clone().into() => serde_json::json!{indexmap! {
+                                "name" => new_path.clone()
+                            }}
+                        }
+                    })),
+            );
+
+            let mut req = Request::new(conn.request_no.clone());
+            let _prev_seq = req.add_call(&mailbox_set_call).await;
+            let new_mailboxes = protocol::get_mailboxes(&mut conn, Some(req)).await?;
+
+            let new_mailbox: Mailbox = new_mailboxes
+                .iter()
+                .find_map(|(_, m)| {
+                    if m.path() == new_path {
+                        Some(BackendMailbox::clone(m) as Mailbox)
+                    } else {
+                        None
+                    }
+                })
+                .unwrap();
+            *store.mailboxes.write().unwrap() = new_mailboxes;
+            Ok(new_mailbox)
+        }))
     }
 
     fn create_mailbox(
