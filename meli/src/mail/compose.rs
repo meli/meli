@@ -37,7 +37,11 @@ use melib::{
 use nix::sys::wait::WaitStatus;
 
 use super::*;
-use crate::{accounts::JobRequest, jobs::JoinHandle, terminal::embedded::Terminal};
+use crate::{
+    accounts::JobRequest,
+    jobs::{IsAsync, JoinHandle},
+    terminal::embedded::Terminal,
+};
 
 #[cfg(feature = "gpgme")]
 pub mod gpg;
@@ -1197,10 +1201,11 @@ impl Component for Composer {
                         Flag::SEEN,
                     ) {
                         Ok(job) => {
-                            let handle = context
-                                .main_loop_handler
-                                .job_executor
-                                .spawn_blocking("compose::submit".into(), job);
+                            let handle = context.main_loop_handler.job_executor.spawn(
+                                "compose::submit".into(),
+                                job,
+                                IsAsync::Blocking,
+                            );
                             context
                                 .replies
                                 .push_back(UIEvent::StatusEvent(StatusEvent::NewJob(

@@ -141,6 +141,11 @@ END; ",
 pub struct AccountCache;
 
 impl AccountCache {
+    #[inline]
+    pub const fn is_async() -> crate::jobs::IsAsync {
+        crate::jobs::IsAsync::Blocking
+    }
+
     pub async fn insert(
         envelope: Envelope,
         backend: Arc<RwLock<Box<dyn MailBackend>>>,

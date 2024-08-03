@@ -42,6 +42,12 @@ use melib::{log, smol, utils::datetime, uuid::Uuid, UnixTimestamp};
 
 use crate::types::{StatusEvent, ThreadEvent, UIEvent};
 
+#[derive(Clone, Copy, Eq, Hash, PartialEq)]
+pub enum IsAsync {
+    Async,
+    Blocking,
+}
+
 type AsyncTask = async_task::Runnable;
 
 fn find_task(
@@ -238,7 +244,26 @@ impl JobExecutor {
 
     /// Spawns a future with a generic return value `R`
     #[inline(always)]
-    pub fn spawn_specialized<F, R>(&self, desc: Cow<'static, str>, future: F) -> JoinHandle<R>
+    pub fn spawn<F, R>(
+        &self,
+        desc: Cow<'static, str>,
+        future: F,
+        is_async: IsAsync,
+    ) -> JoinHandle<R>
+    where
+        F: Future<Output = R> + Send + 'static,
+        R: Send + 'static,
+    {
+        if matches!(is_async, IsAsync::Async) {
+            self.spawn_specialized(desc, future)
+        } else {
+            self.spawn_blocking(desc, future)
+        }
+    }
+
+    /// Spawns a future with a generic return value `R`
+    #[inline(always)]
+    fn spawn_specialized<F, R>(&self, desc: Cow<'static, str>, future: F) -> JoinHandle<R>
     where
         F: Future<Output = R> + Send + 'static,
         R: Send + 'static,
@@ -300,7 +325,7 @@ impl JobExecutor {
     /// Spawns a future with a generic return value `R` that might block on a
     /// new thread
     #[inline(always)]
-    pub fn spawn_blocking<F, R>(&self, desc: Cow<'static, str>, future: F) -> JoinHandle<R>
+    fn spawn_blocking<F, R>(&self, desc: Cow<'static, str>, future: F) -> JoinHandle<R>
     where
         F: Future<Output = R> + Send + 'static,
         R: Send + 'static,
@@ -447,17 +472,8 @@ impl<T> std::cmp::PartialEq<JobId> for JoinHandle<T> {
     }
 }
 
-/*
-use std::pin::Pin;
-use std::task::{Context, Poll};
-impl Future for JoinHandle {
-    type Output = Result<()>;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match Pin::new(&mut self.inner).poll(cx) {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(output) => Poll::Ready(output.expect("task failed")),
-        }
+impl<T> Drop for JoinHandle<T> {
+    fn drop(&mut self) {
+        _ = self.cancel();
     }
 }
-*/

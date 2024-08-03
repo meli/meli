@@ -1480,7 +1480,11 @@ impl Component for ConversationsListing {
                             let handle = context.accounts[&self.cursor_pos.0]
                                 .main_loop_handler
                                 .job_executor
-                                .spawn_specialized("search".into(), job);
+                                .spawn(
+                                    "search".into(),
+                                    job,
+                                    context.accounts[&self.cursor_pos.0].is_async(),
+                                );
                             self.search_job = Some((filter_term.to_string(), handle));
                         }
                         Err(err) => {

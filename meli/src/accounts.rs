@@ -52,7 +52,7 @@ use smallvec::SmallVec;
 use crate::command::actions::AccountAction;
 use crate::{
     conf::{AccountConf, FileMailboxConf},
-    jobs::{JobId, JoinHandle},
+    jobs::{IsAsync, JobId, JoinHandle},
     types::{ForkType, NotificationType, UIEvent},
     MainLoopHandler, StatusEvent, ThreadEvent,
 };
@@ -254,15 +254,15 @@ impl Account {
         let mut active_job_instants = BTreeMap::default();
         if let Ok(mailboxes_job) = backend.mailboxes() {
             if let Ok(online_job) = backend.is_online() {
-                let handle = if backend.capabilities().is_async {
-                    main_loop_handler
-                        .job_executor
-                        .spawn_specialized("mailboxes".into(), online_job.then(|_| mailboxes_job))
-                } else {
-                    main_loop_handler
-                        .job_executor
-                        .spawn_blocking("mailboxes".into(), online_job.then(|_| mailboxes_job))
-                };
+                let handle = main_loop_handler.job_executor.spawn(
+                    "list-mailboxes".into(),
+                    online_job.then(|_| mailboxes_job),
+                    if backend.capabilities().is_async {
+                        IsAsync::Async
+                    } else {
+                        IsAsync::Blocking
+                    },
+                );
                 let job_id = handle.job_id;
                 active_jobs.insert(
                     job_id,
@@ -481,16 +481,11 @@ impl Account {
                     let total = entry.ref_mailbox.count().ok().unwrap_or((0, 0)).1;
                     entry.status = MailboxStatus::Parsing(0, total);
                     if let Ok(mailbox_job) = self.backend.write().unwrap().fetch(*h) {
-                        let mailbox_job = mailbox_job.into_future();
-                        let handle = if self.backend_capabilities.is_async {
-                            self.main_loop_handler
-                                .job_executor
-                                .spawn_specialized("fetch-mailbox".into(), mailbox_job)
-                        } else {
-                            self.main_loop_handler
-                                .job_executor
-                                .spawn_blocking("fetch-mailbox".into(), mailbox_job)
-                        };
+                        let handle = self.main_loop_handler.job_executor.spawn(
+                            "fetch-mailbox".into(),
+                            mailbox_job.into_future(),
+                            self.is_async(),
+                        );
                         let job_id = handle.job_id;
                         self.main_loop_handler
                             .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
@@ -621,13 +616,14 @@ impl Account {
                     };
                     #[cfg(feature = "sqlite3")]
                     if self.settings.conf.search_backend == crate::conf::SearchBackend::Sqlite3 {
-                        let handle = self.main_loop_handler.job_executor.spawn_specialized(
+                        let handle = self.main_loop_handler.job_executor.spawn(
                             "sqlite3::insert".into(),
                             crate::sqlite3::AccountCache::insert(
                                 (*envelope).clone(),
                                 self.backend.clone(),
                                 self.name.clone(),
                             ),
+                            crate::sqlite3::AccountCache::is_async(),
                         );
                         self.insert_job(
                             handle.job_id,
@@ -719,11 +715,11 @@ impl Account {
                     }
                     #[cfg(feature = "sqlite3")]
                     if self.settings.conf.search_backend == crate::conf::SearchBackend::Sqlite3 {
-                        let fut = crate::sqlite3::AccountCache::remove(self.name.clone(), env_hash);
-                        let handle = self
-                            .main_loop_handler
-                            .job_executor
-                            .spawn_specialized("remove envelope from cache".into(), fut);
+                        let handle = self.main_loop_handler.job_executor.spawn(
+                            "sqlite3::remove-envelope".into(),
+                            crate::sqlite3::AccountCache::remove(self.name.clone(), env_hash),
+                            crate::sqlite3::AccountCache::is_async(),
+                        );
                         self.insert_job(
                             handle.job_id,
                             JobRequest::Refresh {
@@ -804,15 +800,11 @@ impl Account {
         }
         let refresh_job = self.backend.write().unwrap().refresh(mailbox_hash);
         if let Ok(refresh_job) = refresh_job {
-            let handle = if self.backend_capabilities.is_async {
-                self.main_loop_handler
-                    .job_executor
-                    .spawn_specialized("refresh".into(), refresh_job)
-            } else {
-                self.main_loop_handler
-                    .job_executor
-                    .spawn_blocking("refresh".into(), refresh_job)
-            };
+            let handle = self.main_loop_handler.job_executor.spawn(
+                "refresh".into(),
+                refresh_job,
+                self.is_async(),
+            );
             self.insert_job(
                 handle.job_id,
                 JobRequest::Refresh {
@@ -840,15 +832,11 @@ impl Account {
                         }
                         fut.await
                     };
-                    let handle = if self.backend_capabilities.is_async {
-                        self.main_loop_handler
-                            .job_executor
-                            .spawn_specialized("watch".into(), fut)
-                    } else {
-                        self.main_loop_handler
-                            .job_executor
-                            .spawn_blocking("watch".into(), fut)
-                    };
+                    let handle = self.main_loop_handler.job_executor.spawn(
+                        "watch".into(),
+                        fut,
+                        self.is_async(),
+                    );
                     self.active_jobs
                         .insert(handle.job_id, JobRequest::Watch { handle });
                 }
@@ -922,16 +910,11 @@ impl Account {
                     let mailbox_job = self.backend.write().unwrap().fetch(mailbox_hash);
                     match mailbox_job {
                         Ok(mailbox_job) => {
-                            let mailbox_job = mailbox_job.into_future();
-                            let handle = if self.backend_capabilities.is_async {
-                                self.main_loop_handler
-                                    .job_executor
-                                    .spawn_specialized("mailbox_fetch".into(), mailbox_job)
-                            } else {
-                                self.main_loop_handler
-                                    .job_executor
-                                    .spawn_blocking("mailbox_fetch".into(), mailbox_job)
-                            };
+                            let handle = self.main_loop_handler.job_executor.spawn(
+                                "fetch-mailbox".into(),
+                                mailbox_job.into_future(),
+                                self.is_async(),
+                            );
                             self.insert_job(
                                 handle.job_id,
                                 JobRequest::Fetch {
@@ -1017,15 +1000,10 @@ impl Account {
             .unwrap()
             .save(bytes.to_vec(), mailbox_hash, flags)?;
 
-        let handle = if self.backend_capabilities.is_async {
+        let handle =
             self.main_loop_handler
                 .job_executor
-                .spawn_specialized("save".into(), job)
-        } else {
-            self.main_loop_handler
-                .job_executor
-                .spawn_blocking("save".into(), job)
-        };
+                .spawn("save-envelope".into(), job, self.is_async());
         self.insert_job(
             handle.job_id,
             JobRequest::SaveMessage {
@@ -1090,13 +1068,14 @@ impl Account {
             }
             #[cfg(feature = "smtp")]
             SendMail::Smtp(conf) => {
-                let handle = self.main_loop_handler.job_executor.spawn_specialized(
+                let handle = self.main_loop_handler.job_executor.spawn(
                     "smtp".into(),
                     async move {
                         let mut smtp_connection =
                             melib::smtp::SmtpConnection::new_connection(conf).await?;
                         smtp_connection.mail_transaction(&message, None).await
                     },
+                    IsAsync::Async,
                 );
                 if complete_in_background {
                     self.insert_job(handle.job_id, JobRequest::SendMessageBackground { handle });
@@ -1114,15 +1093,11 @@ impl Account {
                             .unwrap()
                             .submit(message.into_bytes(), None, None)?;
 
-                    let handle = if self.backend_capabilities.is_async {
-                        self.main_loop_handler
-                            .job_executor
-                            .spawn_specialized("server_submission".into(), job)
-                    } else {
-                        self.main_loop_handler
-                            .job_executor
-                            .spawn_blocking("server_submission".into(), job)
-                    };
+                    let handle = self.main_loop_handler.job_executor.spawn(
+                        "server-submission".into(),
+                        job,
+                        self.is_async(),
+                    );
                     self.insert_job(handle.job_id, JobRequest::SendMessageBackground { handle });
                     return Ok(None);
                 }
@@ -1267,29 +1242,20 @@ impl Account {
         if !self.active_jobs.values().any(JobRequest::is_online) {
             let online_fut = self.backend.read().unwrap().is_online();
             if let Ok(online_fut) = online_fut {
-                let handle = match (wait, self.backend_capabilities.is_async) {
-                    (Some(wait), true) => self.main_loop_handler.job_executor.spawn_specialized(
-                        "is_online".into(),
+                let handle = match wait {
+                    Some(wait) => self.main_loop_handler.job_executor.spawn(
+                        "is-online".into(),
                         async move {
                             sleep(wait).await;
                             online_fut.await
                         },
+                        self.is_async(),
                     ),
-                    (None, true) => self
-                        .main_loop_handler
-                        .job_executor
-                        .spawn_specialized("is_online".into(), online_fut),
-                    (Some(wait), false) => self.main_loop_handler.job_executor.spawn_blocking(
+                    None => self.main_loop_handler.job_executor.spawn(
                         "is_online".into(),
-                        async move {
-                            sleep(wait).await;
-                            online_fut.await
-                        },
+                        online_fut,
+                        self.is_async(),
                     ),
-                    (None, false) => self
-                        .main_loop_handler
-                        .job_executor
-                        .spawn_blocking("is_online".into(), online_fut),
                 };
                 self.insert_job(handle.job_id, JobRequest::IsOnline { handle });
             }
@@ -1433,15 +1399,11 @@ impl Account {
                             return true;
                         }
                         Ok(Some((Some(Ok(payload)), rest))) => {
-                            let handle = if self.backend_capabilities.is_async {
-                                self.main_loop_handler
-                                    .job_executor
-                                    .spawn_specialized("rest_fetch".into(), rest.into_future())
-                            } else {
-                                self.main_loop_handler
-                                    .job_executor
-                                    .spawn_blocking("rest_fetch".into(), rest.into_future())
-                            };
+                            let handle = self.main_loop_handler.job_executor.spawn(
+                                "fetch-mailbox-continued".into(),
+                                rest.into_future(),
+                                self.is_async(),
+                            );
                             self.insert_job(
                                 handle.job_id,
                                 JobRequest::Fetch {
@@ -1496,15 +1458,11 @@ impl Account {
                     }
                     let online_job = self.backend.read().unwrap().is_online();
                     if let Ok(online_job) = online_job {
-                        let handle = if self.backend_capabilities.is_async {
-                            self.main_loop_handler
-                                .job_executor
-                                .spawn_specialized("is_online".into(), online_job)
-                        } else {
-                            self.main_loop_handler
-                                .job_executor
-                                .spawn_blocking("is_online".into(), online_job)
-                        };
+                        let handle = self.main_loop_handler.job_executor.spawn(
+                            "is-online".into(),
+                            online_job,
+                            self.is_async(),
+                        );
                         self.insert_job(handle.job_id, JobRequest::IsOnline { handle });
                     };
                 }
@@ -1774,6 +1732,15 @@ impl Account {
             Some(req)
         } else {
             None
+        }
+    }
+
+    #[inline]
+    pub fn is_async(&self) -> IsAsync {
+        if self.backend_capabilities.is_async {
+            IsAsync::Async
+        } else {
+            IsAsync::Blocking
         }
     }
 }

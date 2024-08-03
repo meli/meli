@@ -37,15 +37,11 @@ impl Account {
                     .write()
                     .unwrap()
                     .create_mailbox(path.to_string())?;
-                let handle = if self.backend_capabilities.is_async {
-                    self.main_loop_handler
-                        .job_executor
-                        .spawn_specialized("create_mailbox".into(), job)
-                } else {
-                    self.main_loop_handler
-                        .job_executor
-                        .spawn_blocking("create_mailbox".into(), job)
-                };
+                let handle = self.main_loop_handler.job_executor.spawn(
+                    "create_mailbox".into(),
+                    job,
+                    self.is_async(),
+                );
                 self.insert_job(
                     handle.job_id,
                     JobRequest::Mailbox(MailboxJobRequest::CreateMailbox { path, handle }),
@@ -59,15 +55,11 @@ impl Account {
 
                 let mailbox_hash = self.mailbox_by_path(&path)?;
                 let job = self.backend.write().unwrap().delete_mailbox(mailbox_hash)?;
-                let handle = if self.backend_capabilities.is_async {
-                    self.main_loop_handler
-                        .job_executor
-                        .spawn_specialized("delete_mailbox".into(), job)
-                } else {
-                    self.main_loop_handler
-                        .job_executor
-                        .spawn_blocking("delete_mailbox".into(), job)
-                };
+                let handle = self.main_loop_handler.job_executor.spawn(
+                    "delete-mailbox".into(),
+                    job,
+                    self.is_async(),
+                );
                 self.insert_job(
                     handle.job_id,
                     JobRequest::Mailbox(MailboxJobRequest::DeleteMailbox {
@@ -84,15 +76,11 @@ impl Account {
                     .write()
                     .unwrap()
                     .set_mailbox_subscription(mailbox_hash, true)?;
-                let handle = if self.backend_capabilities.is_async {
-                    self.main_loop_handler
-                        .job_executor
-                        .spawn_specialized("subscribe_mailbox".into(), job)
-                } else {
-                    self.main_loop_handler
-                        .job_executor
-                        .spawn_blocking("subscribe_mailbox".into(), job)
-                };
+                let handle = self.main_loop_handler.job_executor.spawn(
+                    "subscribe-mailbox".into(),
+                    job,
+                    self.is_async(),
+                );
                 self.insert_job(
                     handle.job_id,
                     JobRequest::Mailbox(MailboxJobRequest::SetMailboxSubscription {
@@ -110,15 +98,11 @@ impl Account {
                     .write()
                     .unwrap()
                     .set_mailbox_subscription(mailbox_hash, false)?;
-                let handle = if self.backend_capabilities.is_async {
-                    self.main_loop_handler
-                        .job_executor
-                        .spawn_specialized("unsubscribe_mailbox".into(), job)
-                } else {
-                    self.main_loop_handler
-                        .job_executor
-                        .spawn_blocking("unsubscribe_mailbox".into(), job)
-                };
+                let handle = self.main_loop_handler.job_executor.spawn(
+                    "unsubscribe-mailbox".into(),
+                    job,
+                    self.is_async(),
+                );
                 self.insert_job(
                     handle.job_id,
                     JobRequest::Mailbox(MailboxJobRequest::SetMailboxSubscription {
@@ -162,15 +146,11 @@ impl Account {
                         }
                         let mailboxes_job = self.backend.read().unwrap().mailboxes();
                         if let Ok(mailboxes_job) = mailboxes_job {
-                            let handle = if self.backend_capabilities.is_async {
-                                self.main_loop_handler
-                                    .job_executor
-                                    .spawn_specialized("mailboxes_list".into(), mailboxes_job)
-                            } else {
-                                self.main_loop_handler
-                                    .job_executor
-                                    .spawn_blocking("mailboxes_list".into(), mailboxes_job)
-                            };
+                            let handle = self.main_loop_handler.job_executor.spawn(
+                                "list-mailboxes".into(),
+                                mailboxes_job,
+                                self.is_async(),
+                            );
                             self.insert_job(
                                 handle.job_id,
                                 JobRequest::Mailbox(MailboxJobRequest::Mailboxes { handle }),

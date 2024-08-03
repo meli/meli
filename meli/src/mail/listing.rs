@@ -40,6 +40,7 @@ use super::*;
 use crate::{
     accounts::{JobRequest, MailboxStatus},
     components::ExtendShortcutsMaps,
+    jobs::IsAsync,
 };
 
 pub const DEFAULT_ATTACHMENT_FLAG: &str = concat!("📎", emoji_text_presentation_selector!());
@@ -685,10 +686,11 @@ pub trait MailListingTrait: ListingTrait {
                             ));
                         }
                         Ok(fut) => {
-                            let handle = account
-                                .main_loop_handler
-                                .job_executor
-                                .spawn_specialized("delete".into(), fut);
+                            let handle = account.main_loop_handler.job_executor.spawn(
+                                "delete".into(),
+                                fut,
+                                account.is_async(),
+                            );
                             account.insert_job(
                                 handle.job_id,
                                 JobRequest::DeleteMessages { env_hashes, handle },
@@ -713,10 +715,11 @@ pub trait MailListingTrait: ListingTrait {
                             ));
                         }
                         Ok(fut) => {
-                            let handle = account
-                                .main_loop_handler
-                                .job_executor
-                                .spawn_specialized("copy_to_mailbox".into(), fut);
+                            let handle = account.main_loop_handler.job_executor.spawn(
+                                "copy-to-mailbox".into(),
+                                fut,
+                                account.is_async(),
+                            );
                             account.insert_job(
                                 handle.job_id,
                                 JobRequest::Generic {
@@ -753,10 +756,11 @@ pub trait MailListingTrait: ListingTrait {
                             ));
                         }
                         Ok(fut) => {
-                            let handle = account
-                                .main_loop_handler
-                                .job_executor
-                                .spawn_specialized("move_to_mailbox".into(), fut);
+                            let handle = account.main_loop_handler.job_executor.spawn(
+                                "move-to-mailbox".into(),
+                                fut,
+                                account.is_async(),
+                            );
                             account.insert_job(
                                 handle.job_id,
                                 JobRequest::Generic {
@@ -854,10 +858,11 @@ pub trait MailListingTrait: ListingTrait {
                             let _ = sender.send(r);
                             Ok(())
                         });
-                    let handle = account
-                        .main_loop_handler
-                        .job_executor
-                        .spawn_blocking("exporting mbox".into(), fut);
+                    let handle = account.main_loop_handler.job_executor.spawn(
+                        "exporting-mbox".into(),
+                        fut,
+                        IsAsync::Blocking,
+                    );
                     account.insert_job(
                         handle.job_id,
                         JobRequest::Generic {

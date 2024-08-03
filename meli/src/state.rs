@@ -833,11 +833,11 @@ impl State {
                     account.collection.clone(),
                     backend_mutex,
                 );
-                let handle = self
-                    .context
-                    .main_loop_handler
-                    .job_executor
-                    .spawn_specialized("sqlite3::index".into(), job);
+                let handle = self.context.main_loop_handler.job_executor.spawn(
+                    "sqlite3::index".into(),
+                    job,
+                    crate::sqlite3::AccountCache::is_async(),
+                );
                 self.context.accounts[account_index].active_jobs.insert(
                     handle.job_id,
                     crate::accounts::JobRequest::Generic {

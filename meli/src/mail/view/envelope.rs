@@ -24,6 +24,8 @@ use std::process::{Command, Stdio};
 use melib::utils::{shellexpand::ShellExpandTrait, xdg::query_default_app};
 
 use super::*;
+#[cfg(feature = "gpgme")]
+use crate::jobs::IsAsync;
 use crate::ThreadEvent;
 
 /// Envelope view, with sticky headers, a pager for the body, and
@@ -259,9 +261,11 @@ impl EnvelopeView {
                     {
                         if view_settings.auto_verify_signatures.is_true() {
                             let verify_fut = crate::mail::pgp::verify(a.clone());
-                            let handle = main_loop_handler
-                                .job_executor
-                                .spawn_specialized("gpg::verify_sig".into(), verify_fut);
+                            let handle = main_loop_handler.job_executor.spawn(
+                                "gpg::verify-sig".into(),
+                                verify_fut,
+                                IsAsync::Blocking,
+                            );
                             active_jobs.insert(handle.job_id);
                             main_loop_handler.send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
                                 StatusEvent::NewJob(handle.job_id),
@@ -319,9 +323,11 @@ impl EnvelopeView {
                             {
                                 if view_settings.auto_decrypt.is_true() {
                                     let decrypt_fut = crate::mail::pgp::decrypt(a.raw().to_vec());
-                                    let handle = main_loop_handler
-                                        .job_executor
-                                        .spawn_specialized("gpg::decrypt".into(), decrypt_fut);
+                                    let handle = main_loop_handler.job_executor.spawn(
+                                        "gpg::decrypt".into(),
+                                        decrypt_fut,
+                                        IsAsync::Blocking,
+                                    );
                                     active_jobs.insert(handle.job_id);
                                     main_loop_handler.send(ThreadEvent::UIEvent(
                                         UIEvent::StatusEvent(StatusEvent::NewJob(handle.job_id)),

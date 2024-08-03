@@ -35,10 +35,10 @@ impl Account {
             mailbox_hash,
             flags.clone(),
         )?;
-        let handle = self
-            .main_loop_handler
-            .job_executor
-            .spawn_specialized("set_flags".into(), fut);
+        let handle =
+            self.main_loop_handler
+                .job_executor
+                .spawn("set-flags".into(), fut, self.is_async());
         let job_id = handle.job_id;
         self.insert_job(
             job_id,
@@ -73,10 +73,11 @@ impl Account {
                 crate::sqlite3::AccountCache::insert(env, backend, name).await?;
                 Ok(())
             };
-            let handle = self
-                .main_loop_handler
-                .job_executor
-                .spawn_specialized("sqlite3::remove".into(), fut);
+            let handle = self.main_loop_handler.job_executor.spawn(
+                "sqlite3::remove".into(),
+                fut,
+                crate::sqlite3::AccountCache::is_async(),
+            );
             self.insert_job(
                 handle.job_id,
                 JobRequest::Generic {

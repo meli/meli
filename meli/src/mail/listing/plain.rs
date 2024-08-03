@@ -1816,7 +1816,11 @@ impl Component for PlainListing {
                         let handle = context.accounts[&self.cursor_pos.0]
                             .main_loop_handler
                             .job_executor
-                            .spawn_specialized("search".into(), job);
+                            .spawn(
+                                "search".into(),
+                                job,
+                                context.accounts[&self.cursor_pos.0].is_async(),
+                            );
                         self.search_job = Some((filter_term.to_string(), handle));
                     }
                     Err(err) => {
@@ -1841,7 +1845,11 @@ impl Component for PlainListing {
                         let mut handle = context.accounts[&self.cursor_pos.0]
                             .main_loop_handler
                             .job_executor
-                            .spawn_specialized("select_by_search".into(), job);
+                            .spawn(
+                                "select-by-search".into(),
+                                job,
+                                context.accounts[&self.cursor_pos.0].is_async(),
+                            );
                         if let Ok(Some(search_result)) = try_recv_timeout!(&mut handle.chan) {
                             self.select(search_term, search_result, context);
                         } else {

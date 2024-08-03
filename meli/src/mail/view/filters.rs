@@ -42,7 +42,7 @@ use smallvec::SmallVec;
 use crate::{
     components::*,
     desktop_exec_to_command,
-    jobs::{JobId, JoinHandle},
+    jobs::{IsAsync, JobId, JoinHandle},
     terminal::{Area, CellBuffer},
     try_recv_timeout, Context, ErrorKind, File, StatusEvent, UIEvent,
 };
@@ -276,10 +276,11 @@ impl ViewFilter {
             )
             .into()
         };
-        let mut job_handle = context
-            .main_loop_handler
-            .job_executor
-            .spawn_blocking(filter_invocation.to_string().into(), job);
+        let mut job_handle = context.main_loop_handler.job_executor.spawn(
+            filter_invocation.to_string().into(),
+            job,
+            IsAsync::Blocking,
+        );
         let mut retval = Self {
             filter_invocation: filter_invocation.to_string(),
             content_type: att.content_type.clone(),
@@ -415,10 +416,11 @@ impl ViewFilter {
                             .map_err(|err| (err, bytes))?;
                             Ok((AttachmentBuilder::new(&bytes).build(), bytes))
                         };
-                        let mut job_handle = context
-                            .main_loop_handler
-                            .job_executor
-                            .spawn_specialized("gpg::decrypt".into(), decrypt_fut);
+                        let mut job_handle = context.main_loop_handler.job_executor.spawn(
+                            "gpg::decrypt".into(),
+                            decrypt_fut,
+                            IsAsync::Blocking,
+                        );
                         let on_success_notice_cb = || "Decrypted content.\n\n".into();
                         let mut retval = Self {
                             filter_invocation: "gpg::decrypt".into(),
@@ -499,10 +501,11 @@ impl ViewFilter {
                             .map_err(|err| (err, bytes))?;
                             Ok((AttachmentBuilder::new(&bytes).build(), bytes))
                         };
-                        let mut job_handle = context
-                            .main_loop_handler
-                            .job_executor
-                            .spawn_specialized("gpg::decrypt".into(), decrypt_fut);
+                        let mut job_handle = context.main_loop_handler.job_executor.spawn(
+                            "gpg::decrypt".into(),
+                            decrypt_fut,
+                            IsAsync::Blocking,
+                        );
                         let on_success_notice_cb = || "Decrypted content.\n\n".into();
                         let mut retval = Self {
                             filter_invocation: "gpg::decrypt".into(),
@@ -573,10 +576,11 @@ impl ViewFilter {
                     .map_err(|err| (err, bytes))?;
                     Ok((AttachmentBuilder::new(&bytes).build(), bytes))
                 };
-                let mut job_handle = context
-                    .main_loop_handler
-                    .job_executor
-                    .spawn_specialized("gpg::decrypt".into(), decrypt_fut);
+                let mut job_handle = context.main_loop_handler.job_executor.spawn(
+                    "gpg::decrypt".into(),
+                    decrypt_fut,
+                    IsAsync::Blocking,
+                );
                 let on_success_notice_cb = || "Decrypted content.\n\n".into();
                 let mut retval = Self {
                     filter_invocation: "gpg::decrypt".into(),

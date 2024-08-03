@@ -129,10 +129,11 @@ impl MailView {
                     .and_then(|op| op.as_bytes())
                 {
                     Ok(fut) => {
-                        let mut handle = account
-                            .main_loop_handler
-                            .job_executor
-                            .spawn_specialized("fetch_envelopes".into(), fut);
+                        let mut handle = account.main_loop_handler.job_executor.spawn(
+                            "fetch-envelopes".into(),
+                            fut,
+                            account.is_async(),
+                        );
                         let job_id = handle.job_id;
                         pending_action = if let MailViewState::Init {
                             ref mut pending_action,
@@ -554,20 +555,11 @@ impl Component for MailView {
                     let _ = sender.send(operation?.as_bytes()?.await);
                     Ok(())
                 };
-                let handle = if context.accounts[&account_hash]
-                    .backend_capabilities
-                    .is_async
-                {
-                    context
-                        .main_loop_handler
-                        .job_executor
-                        .spawn_specialized("fetch_envelope".into(), bytes_job)
-                } else {
-                    context
-                        .main_loop_handler
-                        .job_executor
-                        .spawn_blocking("fetch_envelope".into(), bytes_job)
-                };
+                let handle = context.main_loop_handler.job_executor.spawn(
+                    "fetch-envelope".into(),
+                    bytes_job,
+                    context.accounts[&account_hash].is_async(),
+                );
                 context.accounts[&account_hash].insert_job(
                     handle.job_id,
                     JobRequest::Generic {

@@ -51,17 +51,6 @@ pub enum MailboxJobRequest {
     },
 }
 
-impl Drop for MailboxJobRequest {
-    fn drop(&mut self) {
-        match self {
-            Self::CreateMailbox { handle, .. } => handle.cancel(),
-            Self::SetMailboxPermissions { handle, .. }
-            | Self::SetMailboxSubscription { handle, .. } => handle.cancel(),
-            Self::DeleteMailbox { handle, .. } | Self::Mailboxes { handle } => handle.cancel(),
-        };
-    }
-}
-
 impl std::fmt::Debug for MailboxJobRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
@@ -137,29 +126,6 @@ pub enum JobRequest {
         handle: JoinHandle<Result<()>>,
     },
     Mailbox(MailboxJobRequest),
-}
-
-impl Drop for JobRequest {
-    fn drop(&mut self) {
-        match self {
-            Self::Generic { handle, .. }
-            | Self::IsOnline { handle, .. }
-            | Self::Refresh { handle, .. }
-            | Self::SetFlags { handle, .. }
-            | Self::SaveMessage { handle, .. }
-            | Self::Watch { handle, .. }
-            | Self::SendMessageBackground { handle, .. } => {
-                handle.cancel();
-            }
-            Self::DeleteMessages { handle, .. } => {
-                handle.cancel();
-            }
-            Self::Fetch { handle, .. } => {
-                handle.cancel();
-            }
-            Self::SendMessage | Self::Mailbox(_) => {}
-        }
-    }
 }
 
 impl std::fmt::Debug for JobRequest {

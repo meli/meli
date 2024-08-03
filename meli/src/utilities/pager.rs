@@ -22,7 +22,10 @@
 use melib::text::{LineBreakText, Truncate};
 
 use super::*;
-use crate::{jobs::JoinHandle, terminal::embedded::EmbeddedGrid};
+use crate::{
+    jobs::{IsAsync, JoinHandle},
+    terminal::embedded::EmbeddedGrid,
+};
 
 /// A pager for text.
 /// `Pager` holds its own content in its own `CellBuffer` and when `draw` is
@@ -225,10 +228,11 @@ impl Pager {
             Ok(embedded)
         }
         let fut = Box::pin(filter_fut(cmd.to_string(), self.text.clone()));
-        let handle = context
-            .main_loop_handler
-            .job_executor
-            .spawn_blocking(format!("Running pager filter {cmd}").into(), fut);
+        let handle = context.main_loop_handler.job_executor.spawn(
+            format!("Running pager filter {cmd}").into(),
+            fut,
+            IsAsync::Blocking,
+        );
         self.filter_job = Some((cmd.to_string(), handle));
     }
 
