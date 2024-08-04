@@ -334,6 +334,7 @@ impl MailListingTrait for CompactListing {
                 .highlight_self
         )
         .is_true();
+        let mut itoa_buffer = itoa::Buffer::new();
         'items_for_loop: for thread in items {
             let thread_node = &threads.thread_nodes()[&threads.thread_ref(thread).root()];
             let root_env_hash = if let Some(h) = thread_node.message().or_else(|| {
@@ -441,9 +442,13 @@ impl MailListingTrait for CompactListing {
                 highlight_self,
                 thread,
             );
-            row_widths
-                .0
-                .push(digits_of_num!(self.length).try_into().unwrap_or(255));
+            row_widths.0.push(
+                itoa_buffer
+                    .format(self.length)
+                    .len()
+                    .try_into()
+                    .unwrap_or(255),
+            );
             /* date */
             row_widths.1.push(
                 entry_strings
@@ -494,7 +499,7 @@ impl MailListingTrait for CompactListing {
             self.length += 1;
         }
 
-        min_width.0 = digits_of_num!(self.length.saturating_sub(1));
+        min_width.0 = itoa_buffer.format(self.length.saturating_sub(1)).len();
 
         self.data_columns.elasticities[0].set_rigid();
         self.data_columns.elasticities[1].set_rigid();
@@ -1145,6 +1150,7 @@ impl CompactListing {
         );
 
         let columns = &mut self.data_columns.columns;
+        let mut itoa_buffer = itoa::Buffer::new();
         for (idx, ((_thread_hash, root_env_hash), strings)) in self
             .rows
             .entries
@@ -1168,7 +1174,7 @@ impl CompactListing {
             let (x, _) = {
                 let area = columns[0].area().nth_row(idx);
                 columns[0].grid_mut().write_string(
-                    &idx.to_string(),
+                    itoa_buffer.format(idx),
                     row_attr.fg,
                     row_attr.bg,
                     row_attr.attrs,

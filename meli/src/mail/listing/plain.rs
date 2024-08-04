@@ -745,6 +745,7 @@ impl PlainListing {
             .settings
             .account
             .main_identity_address();
+        let mut itoa_buffer = itoa::Buffer::new();
         for i in iter {
             if !context.accounts[&self.cursor_pos.0].contains_key(i)
                 || !threads.envelope_to_thread.contains_key(&i)
@@ -785,9 +786,13 @@ impl PlainListing {
             let mut entry_strings = self.make_entry_string(&envelope, context);
             entry_strings.highlight_self = should_highlight_self
                 && (envelope.recipient_any(&my_address) || envelope.sender_any(&my_address));
-            row_widths
-                .0
-                .push(digits_of_num!(self.length).try_into().unwrap_or(255));
+            row_widths.0.push(
+                itoa_buffer
+                    .format(self.length)
+                    .len()
+                    .try_into()
+                    .unwrap_or(255),
+            );
             row_widths.1.push(
                 entry_strings
                     .date
@@ -873,6 +878,7 @@ impl PlainListing {
         };
 
         let columns = &mut self.data_columns.columns;
+        let mut itoa_buffer = itoa::Buffer::new();
         for ((idx, i), (_, strings)) in iter.enumerate().zip(self.rows.entries.iter()) {
             if !context.accounts[&self.cursor_pos.0].contains_key(i) {
                 //let mailbox = &account[&self.cursor_pos.1];
@@ -893,7 +899,7 @@ impl PlainListing {
                 let mut area_col_0 = columns[0].area().nth_row(idx);
                 if !*account_settings!(context[self.cursor_pos.0].listing.relative_list_indices) {
                     area_col_0 = area_col_0.skip_cols(columns[0].grid_mut().write_string(
-                        &idx.to_string(),
+                        itoa_buffer.format(idx),
                         row_attr.fg,
                         row_attr.bg,
                         row_attr.attrs,
@@ -1102,10 +1108,11 @@ impl PlainListing {
             columns[n].grid_mut().clear_area(area, row_attr);
         }
 
+        let mut itoa_buffer = itoa::Buffer::new();
         let (x, _) = {
             let area = columns[0].area().nth_row(idx);
             columns[0].grid_mut().write_string(
-                &idx.to_string(),
+                itoa_buffer.format(idx),
                 row_attr.fg,
                 row_attr.bg,
                 row_attr.attrs,

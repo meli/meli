@@ -921,7 +921,7 @@ impl ThreadListing {
             self.data_columns.columns[4].area().width(),
         );
         let columns = &mut self.data_columns.columns;
-
+        let mut itoa_buffer = itoa::Buffer::new();
         for (idx, ((_thread_hash, env_hash), strings)) in self
             .rows
             .entries
@@ -945,7 +945,7 @@ impl ThreadListing {
                 let mut area_col_0 = columns[0].area().nth_row(idx);
                 if !*account_settings!(context[self.cursor_pos.0].listing.relative_list_indices) {
                     area_col_0 = area_col_0.skip_cols(columns[0].grid_mut().write_string(
-                        &idx.to_string(),
+                        itoa_buffer.format(idx),
                         row_attr.fg,
                         row_attr.bg,
                         row_attr.attrs,
