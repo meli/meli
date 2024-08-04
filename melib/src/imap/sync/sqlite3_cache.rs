@@ -431,6 +431,13 @@ impl ImapCache for Sqlite3Cache {
             .cloned()
             .unwrap_or_default();
         if self.mailbox_state(mailbox_hash)?.is_none() {
+            log::trace!(
+                "insert_envelopes: Mailbox not in cache, mailbox_hash: {:?}, fetches: {:?} \
+                 backtrace:\n{}",
+                mailbox_hash,
+                fetches,
+                std::backtrace::Backtrace::capture()
+            );
             return Err(Error::new("Mailbox is not in cache").set_kind(ErrorKind::NotFound));
         }
         let Self {
@@ -490,6 +497,14 @@ impl ImapCache for Sqlite3Cache {
         flags: SmallVec<[FlagOp; 8]>,
     ) -> Result<()> {
         if self.mailbox_state(mailbox_hash)?.is_none() {
+            log::trace!(
+                "update_flags: Mailbox not in cache, env_hashes: {:?}, mailbox_hash: {:?} flags \
+                 {:?} backtrace:\n{}",
+                env_hashes,
+                mailbox_hash,
+                flags,
+                std::backtrace::Backtrace::capture()
+            );
             return Err(Error::new("Mailbox is not in cache").set_kind(ErrorKind::NotFound));
         }
         let Self {
@@ -549,6 +564,13 @@ impl ImapCache for Sqlite3Cache {
         refresh_events: &[(UID, RefreshEvent)],
     ) -> Result<()> {
         if self.mailbox_state(mailbox_hash)?.is_none() {
+            log::trace!(
+                "update: Mailbox not in cache, mailbox_hash: {:?}, refresh_events: {:?} \
+                 backtrace:\n{}",
+                mailbox_hash,
+                refresh_events,
+                std::backtrace::Backtrace::capture()
+            );
             return Err(Error::new("Mailbox is not in cache").set_kind(ErrorKind::NotFound));
         }
         {

@@ -992,7 +992,7 @@ pub struct SelectResponse {
     pub uidvalidity: UIDVALIDITY,
     pub uidnext: UID,
     pub permanentflags: (Flag, Vec<String>),
-    /// if SELECT returns \* we can set arbitrary flags permanently.
+    /// if `SELECT` returns `\*` we can set arbitrary flags permanently.
     pub can_create_flags: bool,
     pub read_only: bool,
     pub highestmodseq: Option<std::result::Result<ModSequence, ()>>,

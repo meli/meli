@@ -21,12 +21,12 @@
 
 use std::sync::{Arc, Mutex, RwLock};
 
-use super::protocol_parser::SelectResponse;
 use crate::{
     backends::{
         BackendMailbox, LazyCountSet, Mailbox, MailboxHash, MailboxPermissions, SpecialUsageMailbox,
     },
     error::*,
+    imap::protocol_parser::SelectResponse,
 };
 
 #[derive(Clone, Debug, Default)]

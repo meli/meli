@@ -36,8 +36,11 @@ pub mod sqlite3_cache;
 
 impl ImapConnection {
     pub async fn resync(&mut self, mailbox_hash: MailboxHash) -> Result<Option<Vec<Envelope>>> {
-        debug!("resync mailbox_hash {}", mailbox_hash);
-        debug!(&self.sync_policy);
+        log::trace!(
+            "resync mailbox_hash {} with policy {:?}",
+            mailbox_hash,
+            self.sync_policy
+        );
         if matches!(self.sync_policy, SyncPolicy::None) {
             return Ok(None);
         }
@@ -62,7 +65,7 @@ impl ImapConnection {
     }
 
     pub async fn load_cache(&self, mailbox_hash: MailboxHash) -> Option<Result<Vec<EnvelopeHash>>> {
-        debug!("load_cache {}", mailbox_hash);
+        log::trace!("load_cache {}", mailbox_hash);
         let mut cache_handle = match self.uid_store.cache_handle() {
             Ok(v) => v?,
             Err(err) => return Some(Err(err)),
@@ -81,14 +84,16 @@ impl ImapConnection {
         }
     }
 
-    /// RFC4549 Synchronization Operations for Disconnected IMAP4 Clients
+    /// Re-sync IMAP state by following the strategy described in
+    /// [RFC4549](https://datatracker.ietf.org/doc/rfc4549/) "Synchronization Operations for
+    /// Disconnected IMAP4 Clients".
     pub async fn resync_basic(
         &mut self,
         mut cache_handle: Box<dyn cache::ImapCache>,
         mailbox_hash: MailboxHash,
     ) -> Result<Option<Vec<Envelope>>> {
+        log::trace!("resync_basic mailbox_hash {:?}", mailbox_hash);
         let mut payload = vec![];
-        debug!("resync_basic");
         let mut response = Vec::with_capacity(8 * 1024);
         let cached_uidvalidity = self
             .uid_store
@@ -132,6 +137,10 @@ impl ImapConnection {
         cache_handle.update_mailbox(mailbox_hash, &select_response)?;
 
         // 2. tag1 UID FETCH <lastseenuid+1>:* <descriptors>
+        log::trace!(
+            "Step 2. tag1 UID FETCH <lastseenuid+1>:* <descriptors> == {}:*",
+            max_uid + 1
+        );
         self.send_command(CommandBody::fetch(
             max_uid + 1..,
             common_attributes(),
@@ -140,13 +149,13 @@ impl ImapConnection {
         .await?;
         self.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
             .await?;
-        debug!(
+        log::debug!(
             "fetch response is {} bytes and {} lines",
             response.len(),
             String::from_utf8_lossy(&response).lines().count()
         );
         let (_, mut v, _) = protocol_parser::fetch_responses(&response)?;
-        debug!("responses len is {}", v.len());
+        log::debug!("responses len is {}", v.len());
         for FetchResponse {
             ref uid,
             ref mut envelope,
@@ -194,15 +203,6 @@ impl ImapConnection {
         {
             let uid = uid.unwrap();
             let env = envelope.unwrap();
-            /*
-            debug!(
-                "env hash {} {} UID = {} MSN = {}",
-                env.hash(),
-                env.subject(),
-                uid,
-                message_sequence_number
-            );
-            */
             self.uid_store
                 .hash_index
                 .lock()
@@ -215,7 +215,6 @@ impl ImapConnection {
                 .insert((mailbox_hash, uid), env.hash());
             payload.push((uid, env));
         }
-        debug!("sending payload for {}", mailbox_hash);
         let payload_hash_set: BTreeSet<_> =
             payload.iter().map(|(_, env)| env.hash()).collect::<_>();
         {
@@ -241,6 +240,7 @@ impl ImapConnection {
             }
         }
         // 3. tag2 UID FETCH 1:<lastseenuid> FLAGS
+        log::trace!("Step 3. tag2 UID FETCH 1:<lastseenuid> FLAGS");
         let sequence_set = if max_uid == 0 {
             SequenceSet::from(..)
         } else {
@@ -326,15 +326,18 @@ impl ImapConnection {
         Ok(Some(payload.into_iter().map(|(_, env)| env).collect()))
     }
 
-    /// RFC4549 Synchronization Operations for Disconnected IMAP4 Clients
-    /// > Section 6.1
+    /// Resync with `CONDSTORE` Extension
+    ///
+    /// Re-sync IMAP state by following the strategy described in
+    /// [RFC4549](https://datatracker.ietf.org/doc/rfc4549/) "Synchronization Operations for
+    /// Disconnected IMAP4 Clients", Section 6.1 "CONDSTORE Extension"
     pub async fn resync_condstore(
         &mut self,
         mut cache_handle: Box<dyn cache::ImapCache>,
         mailbox_hash: MailboxHash,
     ) -> Result<Option<Vec<Envelope>>> {
+        log::trace!("resync_condstore: mailbox_hash {:?}", mailbox_hash);
         let mut payload = vec![];
-        debug!("resync_condstore");
         let mut response = Vec::with_capacity(8 * 1024);
         let cached_uidvalidity = self
             .uid_store
@@ -648,13 +651,20 @@ impl ImapConnection {
         Ok(Some(payload.into_iter().map(|(_, env)| env).collect()))
     }
 
-    /// RFC7162 Quick Flag Changes Resynchronization (CONDSTORE) and Quick
-    /// Mailbox Resynchronization (QRESYNC)
+    /// Resync with `CONDSTORE` and `QRESYNC` Extension
+    ///
+    /// Re-sync IMAP state by following the strategy described in
+    /// [RFC7162](https://datatracker.ietf.org/doc/rfc7162/) "Quick Flag Changes Resynchronization (CONDSTORE) and Quick
+    /// Mailbox Resynchronization (QRESYNC)"
     pub async fn resync_condstoreqresync(
         &self,
         _cache_handle: Box<dyn cache::ImapCache>,
         _mailbox_hash: MailboxHash,
     ) -> Result<Option<Vec<Envelope>>> {
+        log::trace!(
+            "resync_condstoreqresync: mailbox_hash: {:?}, function unimplemented",
+            _mailbox_hash
+        );
         Ok(None)
     }
 

@@ -1423,7 +1423,7 @@ impl ImapType {
         #[cfg(not(feature = "sqlite3"))]
         if keep_offline_cache {
             return Err(Error::new(format!(
-                "({}) keep_offline_cache is true but melib is not compiled with sqlite3",
+                "({}) offline_cache is true but melib is not compiled with sqlite3",
                 s.name,
             )));
         }
@@ -1710,7 +1710,7 @@ impl ImapType {
             let keep_offline_cache = get_conf_val!(s["offline_cache"], false)?;
             if keep_offline_cache {
                 return Err(Error::new(format!(
-                    "({}) keep_offline_cache is true but melib is not compiled with sqlite3",
+                    "({}) offline_cache is true but melib is not compiled with sqlite3",
                     s.name,
                 )));
             }

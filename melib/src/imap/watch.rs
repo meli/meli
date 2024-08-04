@@ -200,7 +200,7 @@ pub async fn examine_updates(
         return Ok(());
     }
     let mailbox_hash = mailbox.hash();
-    debug!("examining mailbox {} {}", mailbox_hash, mailbox.path());
+    log::debug!("examining mailbox {} {}", mailbox_hash, mailbox.path());
     if let Some(new_envelopes) = conn.resync(mailbox_hash).await? {
         for env in new_envelopes {
             conn.add_refresh_event(RefreshEvent {
@@ -230,17 +230,14 @@ pub async fn examine_updates(
                         mailbox_hash,
                         kind: RefreshEventKind::Rescan,
                     });
-                    /*
-                    uid_store.uid_index.lock().unwrap().clear();
-                    uid_store.hash_index.lock().unwrap().clear();
-                    uid_store.byte_cache.lock().unwrap().clear();
-                    */
                     return Ok(());
                 }
             } else {
                 uidvalidities.insert(mailbox_hash, select_response.uidvalidity);
             }
         }
+
+        let current_exists = mailbox.exists.lock().unwrap().len();
         if mailbox.is_cold() {
             /* Mailbox hasn't been loaded yet */
             let has_list_status: bool = conn
@@ -328,8 +325,8 @@ pub async fn examine_updates(
                 .await?;
             conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
                 .await?;
-        } else if select_response.exists > mailbox.exists.lock().unwrap().len() {
-            let min = std::cmp::max(mailbox.exists.lock().unwrap().len(), 1);
+        } else if select_response.exists > current_exists {
+            let min = current_exists.max(1);
 
             conn.send_command(CommandBody::fetch(min.., common_attributes(), false)?)
                 .await?;
@@ -338,13 +335,13 @@ pub async fn examine_updates(
         } else {
             return Ok(());
         }
-        debug!(
+        log::debug!(
             "fetch response is {} bytes and {} lines",
             response.len(),
             String::from_utf8_lossy(&response).lines().count()
         );
         let (_, mut v, _) = protocol_parser::fetch_responses(&response)?;
-        debug!("responses len is {}", v.len());
+        log::debug!("responses len is {}", v.len());
         for FetchResponse {
             ref uid,
             ref mut envelope,
