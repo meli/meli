@@ -144,7 +144,7 @@ impl ManPages {
                 Error::new(format!("Could not create {} directory.", path.display()))
                     .set_source(Some(Arc::new(err)))
             })?;
-            path.push(&p.to_string());
+            path.push(p.to_string());
 
             fs::write(&path, text.as_bytes()).map_err(|err| {
                 Error::new(format!("Could not write to {}", path.display()))

@@ -1387,7 +1387,7 @@ impl CompactListing {
     }
 
     fn draw_relative_numbers(
-        &mut self,
+        &self,
         grid: &mut CellBuffer,
         area: Area,
         top_idx: usize,

@@ -517,7 +517,7 @@ impl NntpConnection {
         }
     }
 
-    pub fn add_refresh_event(&mut self, ev: crate::backends::RefreshEvent) {
+    pub fn add_refresh_event(&self, ev: crate::backends::RefreshEvent) {
         (self.uid_store.event_consumer)(
             self.uid_store.account_hash,
             crate::backends::BackendEvent::Refresh(ev),

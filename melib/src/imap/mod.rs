@@ -1474,7 +1474,7 @@ impl ImapType {
         }))
     }
 
-    pub fn shell(&mut self) {
+    pub fn shell(&self) {
         let mut conn = ImapConnection::new_connection(
             &self.server_conf,
             "ImapType::shell".into(),

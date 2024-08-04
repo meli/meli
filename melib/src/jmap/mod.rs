@@ -233,7 +233,7 @@ impl JmapServerConf {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 #[repr(transparent)]
 pub struct OnlineStatus(pub Arc<FutureMutex<(Instant, Result<Session>)>>);
 

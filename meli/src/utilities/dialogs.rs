@@ -846,7 +846,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> UIDialog<T>
         })
     }
 
-    fn cancel(&mut self, context: &mut Context) {
+    fn cancel(&self, context: &mut Context) {
         context.unrealized.insert(self.id());
         context
             .replies
@@ -875,7 +875,7 @@ impl UIConfirmationDialog {
         })
     }
 
-    fn cancel(&mut self, context: &mut Context) {
+    fn cancel(&self, context: &mut Context) {
         context.unrealized.insert(self.id());
         context
             .replies

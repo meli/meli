@@ -42,26 +42,31 @@ use crate::{
     },
 };
 
-/// #`get`
+/// `/get`
 ///
-///    Objects of type `Foo` are fetched via a call to `Foo/get`.
-///
-///    It takes the following arguments:
-///
-///    - `account_id`: `Id`
-///
-///       The id of the account to use.
+/// Objects of type `Foo` are fetched via a call to `Foo/get`.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Get<OBJ>
 where
     OBJ: Object + std::fmt::Debug + Serialize,
 {
+    /// `account_id`: `Id` The id of the account to use.
     pub account_id: Id<Account>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(flatten)]
+    /// `ids`: `Id[]|null` The ids of the `Foo` objects to return. If `null`,
+    /// then *all* records of the data type are returned, if this is
+    /// supported for that data type and the number of records does not
+    /// exceed the `maxObjectsInGet` limit.
     pub ids: Option<Argument<Vec<Id<OBJ>>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// `properties`: `String[]|null` If supplied, only the properties listed in
+    /// the array are returned for each `Foo` object. If `null`, all
+    /// properties of the object are returned. The `id` property of the
+    /// object is *always* returned, even if not explicitly requested. If an
+    /// invalid property is requested, the call **MUST** be rejected with an
+    /// `invalidArguments` error.
     pub properties: Option<Vec<String>>,
     #[serde(skip)]
     _ph: PhantomData<fn() -> OBJ>,
@@ -80,30 +85,21 @@ where
         }
     }
     _impl!(
-        ///   - accountId: `Id`
-        ///
-        ///      The id of the account to use.
+        /// `account_id`: `Id` The id of the account to use.
         account_id: Id<Account>
     );
     _impl!(
-        ///   - ids: `Option<Argument<Vec<String>>>`
-        ///
-        ///      The ids of the Foo objects to return.  If `None`, then *all*
-        /// records      of the data type are returned, if this is
-        /// supported for that data      type and the number of records
-        /// does not exceed the      `max_objects_in_get` limit.
+        /// `ids`: `Id[]|null` The ids of the `Foo` objects to return. If `null`, then *all* records
+        /// of the data type are returned, if this is supported for that data type and the number of
+        /// records does not exceed the `maxObjectsInGet` limit.
         ids: Option<Argument<Vec<Id<OBJ>>>>
     );
     _impl!(
-        ///   - properties: `Option<Vec<String>>`
-        ///
-        ///      If supplied, only the properties listed in the array are
-        /// returned      for each `Foo` object.  If `None`, all
-        /// properties of the object are      returned.  The `id`
-        /// property of the object is *always* returned,      even if
-        /// not explicitly requested.  If an invalid property is
-        ///      requested, the call WILL be rejected with an
-        /// `invalid_arguments`      error.
+        /// `properties`: `String[]|null` If supplied, only the properties listed in the array are
+        /// returned for each `Foo` object. If `null`, all properties of the object are returned.
+        /// The `id` property of the object is *always* returned, even if not explicitly requested.
+        /// If an invalid property is requested, the call **MUST** be rejected with an
+        /// `invalidArguments` error.
         properties: Option<Vec<String>>
     );
 }
@@ -342,26 +338,13 @@ impl<M: Method<OBJ>, OBJ: Object> From<&'static str> for ResultField<M, OBJ> {
     }
 }
 
-/// #`changes`
+/// `changes`
 ///
-///    The `Foo/changes` method allows a client to efficiently update the state
-/// of its Foo cache    to match the new state on the server. It takes the
-/// following arguments:
-///
-///    - accountId: `Id` The id of the account to use.
-///    - sinceState: `String`
-///     The current state of the client. This is the string that was
-///     returned as the `state` argument in the `Foo/get` response. The
-///     server will return the changes that have occurred since this
-///     state.
-///
-///    - maxChanges: `UnsignedInt|null`
-///     The maximum number of ids to return in the response. The server
-///     MAY choose to return fewer than this value but MUST NOT return
-///     more. If not given by the client, the server may choose how many
-///     to return. If supplied by the client, the value MUST be a
-///     positive integer greater than 0. If a value outside of this range
-///     is given, the server MUST re
+/// When the state of the set of `Foo` records in an account changes on the
+/// server (whether due to creation, updates, or deletion), the `state` property
+/// of the `Foo/get` response will change. The `Foo/changes` method allows a
+/// client to efficiently update the state of its Foo cache to match the new
+/// state on the server.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 /* ch-ch-ch-ch-ch-Changes */
@@ -369,9 +352,24 @@ pub struct Changes<OBJ>
 where
     OBJ: Object + std::fmt::Debug + Serialize,
 {
+    /// `accountId`: `Id` The id of the account to use.
     pub account_id: Id<Account>,
+    /// `sinceState`: `String`
+    /// The current state of the client. This is the string that was
+    /// returned as the `state` argument in the `Foo/get` response. The
+    /// server will return the changes that have occurred since this
+    /// state.
     pub since_state: State<OBJ>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// `maxChanges`: `UnsignedInt|null`
+    ///
+    /// The maximum number of ids to return in the response. The server
+    /// **MAY** choose to return fewer than this value but **MUST NOT** return
+    /// more. If not given by the client, the server may choose how many
+    /// to return. If supplied by the client, the value **MUST** be a
+    /// positive integer greater than `0`. If a value outside of this range
+    /// is given, the server **MUST** reject the call with an `invalidArguments`
+    /// error.
     pub max_changes: Option<u64>,
     #[serde(skip)]
     _ph: PhantomData<fn() -> OBJ>,
@@ -390,27 +388,26 @@ where
         }
     }
     _impl!(
-        ///   - accountId: `Id`
-        ///
-        ///      The id of the account to use.
+        /// `accountId: `Id` The id of the account to use.
         account_id: Id<Account>
     );
     _impl!(
-        ///    - since_state: `String`
-        ///     The current state of the client. This is the string that was
-        ///     returned as the `state` argument in the `Foo/get` response. The
-        ///     server will return the changes that have occurred since this
-        ///     state.
+        /// `sinceState`: `String`
+        /// The current state of the client. This is the string that was
+        /// returned as the `state` argument in the `Foo/get` response. The
+        /// server will return the changes that have occurred since this
+        /// state.
         since_state: State<OBJ>
     );
     _impl!(
-        ///    - max_changes: `UnsignedInt|null`
-        ///     The maximum number of ids to return in the response. The server
-        ///     MAY choose to return fewer than this value but MUST NOT return
-        ///     more. If not given by the client, the server may choose how many
-        ///     to return. If supplied by the client, the value MUST be a
-        ///     positive integer greater than 0. If a value outside of this
-        /// range     is given, the server MUST re
+        /// `maxChanges`: `UnsignedInt|null`
+        ///
+        /// The maximum number of ids to return in the response. The server
+        /// **MAY** choose to return fewer than this value but **MUST NOT** return
+        /// more. If not given by the client, the server may choose how many
+        /// to return. If supplied by the client, the value **MUST** be a
+        /// positive integer greater than `0`. If a value outside of this range
+        /// is given, the server **MUST** reject the call with an `invalidArguments` error.
         max_changes: Option<u64>
     );
 }
@@ -458,11 +455,11 @@ impl<OBJ: Object> ChangesResponse<OBJ> {
     _impl!(get_mut  destroyed_mut, destroyed: Vec<Id<OBJ>>);
 }
 
-/// #`set`
+/// `/set`
 ///
-/// Modifying the state of Foo objects on the server is done via the
-/// `Foo/set` method.  This encompasses creating, updating, and
-/// destroying Foo records.  This allows the server to sort out ordering
+/// Modifying the state of `Foo` objects on the server is done via the
+/// `Foo/set` method. This encompasses creating, updating, and
+/// destroying `Foo` records. This allows the server to sort out ordering
 /// and dependencies that may exist if doing multiple operations at once
 /// (for example, to ensure there is always a minimum number of a certain
 /// record type).
@@ -472,78 +469,76 @@ pub struct Set<OBJ>
 where
     OBJ: Object + std::fmt::Debug + Serialize,
 {
-    /// o  accountId: `Id`
-    ///
-    ///   The id of the account to use.
+    /// `accountId`: `Id` The id of the account to use.
     pub account_id: Id<Account>,
-    /// o  ifInState: `String|null`
+    /// `ifInState`: `String|null`
     ///
-    ///   This is a state string as returned by the `Foo/get` method
-    ///   (representing the state of all objects of this type in the
-    ///   account).  If supplied, the string must match the current state;
-    ///   otherwise, the method will be aborted and a `stateMismatch` error
-    ///   returned.  If null, any changes will be applied to the current
-    ///   state.
+    /// This is a state string as returned by the `Foo/get` method
+    /// (representing the state of all objects of this type in the
+    /// account). If supplied, the string must match the current state;
+    /// otherwise, the method will be aborted and a `stateMismatch` error
+    /// returned. If null, any changes will be applied to the current
+    /// state.
     pub if_in_state: Option<State<OBJ>>,
-    /// o  create: `Id[Foo]|null`
+    /// `create`: `Id[Foo]|null`
     ///
-    ///   A map of a *creation id* (a temporary id set by the client) to Foo
-    ///   objects, or null if no objects are to be created.
+    /// A map of a *creation id* (a temporary id set by the client) to Foo
+    /// objects, or null if no objects are to be created.
     ///
-    ///   The Foo object type definition may define default values for
-    ///   properties.  Any such property may be omitted by the client.
+    /// The Foo object type definition may define default values for
+    /// properties. Any such property may be omitted by the client.
     ///
-    ///   The client MUST omit any properties that may only be set by the
-    ///   server (for example, the `id` property on most object types).
+    /// The client MUST omit any properties that may only be set by the
+    /// server (for example, the `id` property on most object types).
     pub create: Option<IndexMap<Argument<Id<OBJ>>, OBJ>>,
-    /// o  update: `Id[PatchObject]|null`
+    /// `update`: `Id[PatchObject]|null`
     ///
-    ///   A map of an id to a Patch object to apply to the current Foo
-    ///   object with that id, or null if no objects are to be updated.
+    /// A map of an id to a Patch object to apply to the current Foo
+    /// object with that id, or null if no objects are to be updated.
     ///
-    ///   A [`PatchObject`] is of type `String[*]` and represents an unordered
-    ///   set of patches.  The keys are a path in JSON Pointer format
-    ///   `RFC6901`, with an implicit leading `/` (i.e., prefix each key
-    ///   with `/` before applying the JSON Pointer evaluation algorithm).
+    /// A [`PatchObject`] is of type `String[*]` and represents an unordered
+    /// set of patches. The keys are a path in JSON Pointer format
+    /// `RFC6901`, with an implicit leading `/` (i.e., prefix each key
+    /// with `/` before applying the JSON Pointer evaluation algorithm).
     ///
-    ///   All paths MUST also conform to the following restrictions; if
-    ///   there is any violation, the update MUST be rejected with an
-    ///   `invalidPatch` error:
-    ///   * The pointer MUST NOT reference inside an array (i.e., you MUST NOT
-    ///     insert/delete from an array; the array MUST be replaced in its
-    ///     entirety instead).
+    /// All paths MUST also conform to the following restrictions; if
+    /// there is any violation, the update MUST be rejected with an
+    /// `invalidPatch` error:
+    /// * The pointer MUST NOT reference inside an array (i.e., you MUST NOT
+    ///   insert/delete from an array; the array MUST be replaced in its
+    ///   entirety instead).
     ///
-    ///   * All parts prior to the last (i.e., the value after the final slash)
-    ///     MUST already exist on the object being patched.
+    /// * All parts prior to the last (i.e., the value after the final slash)
+    ///   MUST already exist on the object being patched.
     ///
-    ///   * There MUST NOT be two patches in the [`PatchObject`] where the
-    ///     pointer of one is the prefix of the pointer of the other, e.g.,
-    ///     `alerts/1/offset` and `alerts`.
+    /// * There MUST NOT be two patches in the [`PatchObject`] where the pointer
+    ///   of one is the prefix of the pointer of the other, e.g.,
+    ///   `alerts/1/offset` and `alerts`.
     ///
-    ///   The value associated with each pointer determines how to apply
-    ///   that patch:
+    /// The value associated with each pointer determines how to apply
+    /// that patch:
     ///
-    ///   * If null, set to the default value if specified for this property;
-    ///     otherwise, remove the property from the patched object.  If the key
-    ///     is not present in the parent, this a no-op.
+    /// * If null, set to the default value if specified for this property;
+    ///   otherwise, remove the property from the patched object. If the key is
+    ///   not present in the parent, this a no-op.
     ///
-    ///   * Anything else: The value to set for this property (this may be a
-    ///     replacement or addition to the object being patched).
+    /// * Anything else: The value to set for this property (this may be a
+    ///   replacement or addition to the object being patched).
     ///
-    ///   Any server-set properties MAY be included in the patch if their
-    ///   value is identical to the current server value (before applying
-    ///   the patches to the object).  Otherwise, the update MUST be
-    ///   rejected with an `invalidProperties` [`SetError`].
+    /// Any server-set properties MAY be included in the patch if their
+    /// value is identical to the current server value (before applying
+    /// the patches to the object). Otherwise, the update MUST be
+    /// rejected with an `invalidProperties` [`SetError`].
     ///
-    ///   This patch definition is designed such that an entire Foo object
-    ///   is also a valid [`PatchObject`].  The client may choose to optimise
-    ///   network usage by just sending the diff or may send the whole
-    ///   object; the server processes it the same either way.
+    /// This patch definition is designed such that an entire Foo object
+    /// is also a valid [`PatchObject`]. The client may choose to optimise
+    /// network usage by just sending the diff or may send the whole
+    /// object; the server processes it the same either way.
     pub update: Option<IndexMap<Argument<Id<OBJ>>, PatchObject>>,
-    /// o  destroy: `Id[]|null`
+    /// `destroy`: `Id[]|null`
     ///
-    ///   A list of ids for Foo objects to permanently delete, or null if no
-    ///   objects are to be destroyed.
+    /// A list of ids for Foo objects to permanently delete, or null if no
+    /// objects are to be destroyed.
     pub destroy: Option<Vec<Argument<Id<OBJ>>>>,
 }
 
@@ -562,14 +557,14 @@ where
     }
     _impl!(account_id: Id<Account>);
     _impl!(
-        /// o  ifInState: `String|null`
+        /// `ifInState`: `String|null`
         ///
-        ///   This is a state string as returned by the `Foo/get` method
-        ///   (representing the state of all objects of this type in the
-        ///   account).  If supplied, the string must match the current state;
-        ///   otherwise, the method will be aborted and a `stateMismatch` error
-        ///   returned.  If null, any changes will be applied to the current
-        ///   state.
+        /// This is a state string as returned by the `Foo/get` method
+        /// (representing the state of all objects of this type in the
+        /// account). If supplied, the string must match the current state;
+        /// otherwise, the method will be aborted and a `stateMismatch` error
+        /// returned. If null, any changes will be applied to the current
+        /// state.
         if_in_state: Option<State<OBJ>>
     );
     _impl!(update: Option<IndexMap<Argument<Id<OBJ>>, PatchObject>>);
@@ -624,61 +619,47 @@ impl<OBJ: Object + Serialize + std::fmt::Debug> Serialize for Set<OBJ> {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetResponse<OBJ: Object> {
-    /// o  accountId: `Id`
-    ///
-    ///   The id of the account used for the call.
+    /// `accountId`: `Id` The id of the account used for the call.
     pub account_id: Id<Account>,
-    /// o  oldState: `String|null`
-    ///
-    ///   The state string that would have been returned by `Foo/get` before
-    ///   making the requested changes, or null if the server doesn't know
-    ///   what the previous state string was.
+    /// `oldState`: `String|null` The state string that would have been returned
+    /// by `Foo/get` before making the requested changes, or null if the server
+    /// doesn't know what the previous state string was.
     pub old_state: Option<State<OBJ>>,
-    /// o  newState: `String`
-    ///
-    ///   The state string that will now be returned by `Foo/get`.
+    /// `newState`: `String` The state string that will now be returned by
+    /// `Foo/get`.
     pub new_state: State<OBJ>,
-    /// o  created: `Id[Foo]|null`
+    /// `created`: `Id[Foo]|null` A map of the creation id to an object
+    /// containing any properties of the created `Foo` object that were not sent
+    /// by the client. This includes all server-set properties (such as the `id`
+    /// in most object types) and any properties that were omitted by the client
+    /// and thus set to a default by the server.
     ///
-    ///   A map of the creation id to an object containing any properties of
-    ///   the created Foo object that were not sent by the client.  This
-    ///   includes all server-set properties (such as the `id` in most
-    ///   object types) and any properties that were omitted by the client
-    ///   and thus set to a default by the server.
-    ///
-    ///   This argument is null if no Foo objects were successfully created.
+    /// This argument is null if no `Foo` objects were successfully created.
     pub created: Option<IndexMap<Id<OBJ>, OBJ>>,
-    /// o  updated: `Id[Foo|null]|null`
+    /// `updated`: `Id[Foo|null]|null` The keys in this map are the ids of all
+    /// `Foo`s that were successfully updated.
     ///
-    ///   The keys in this map are the ids of all Foos that were
-    ///   successfully updated.
+    /// The value for each id is a `Foo` object containing any property that
+    /// changed in a way *not* explicitly requested by the [`PatchObject`]
+    /// sent to the server, or null if none. This lets the client know of
+    /// any changes to server-set or computed properties.
     ///
-    ///   The value for each id is a Foo object containing any property that
-    ///   changed in a way *not* explicitly requested by the [`PatchObject`]
-    ///   sent to the server, or null if none.  This lets the client know of
-    ///   any changes to server-set or computed properties.
-    ///
-    ///   This argument is null if no Foo objects were successfully updated.
+    /// This argument is null if no `Foo` objects were successfully updated.
     pub updated: Option<IndexMap<Id<OBJ>, Option<OBJ>>>,
-    /// o  destroyed: `Id[]|null`
-    ///
-    ///   A list of Foo ids for records that were successfully destroyed, or
-    ///   null if none.
+    /// `destroyed`: `Id[]|null` A list of `Foo` ids for records that were
+    /// successfully destroyed, or `null` if none.
     pub destroyed: Option<Vec<Id<OBJ>>>,
-    /// o  notCreated: `Id[SetError]|null`
-    ///
-    ///   A map of the creation id to a [`SetError`] object for each record that
-    ///   failed to be created, or null if all successful.
+    /// `notCreated`: `Id[SetError]|null` A map of the creation id to a
+    /// [`SetError`] object for each record that failed to be created, or `null`
+    /// if all successful.
     pub not_created: Option<Vec<SetError>>,
-    /// o  notUpdated: `Id[SetError]|null`
-    ///
-    ///   A map of the Foo id to a [`SetError`] object for each record that
-    ///   failed to be updated, or null if all successful.
+    /// `notUpdated`: `Id[SetError]|null` A map of the `Foo` id to a
+    /// [`SetError`] object for each record that failed to be updated, or `null`
+    /// if all successful.
     pub not_updated: Option<Vec<SetError>>,
-    /// o  notDestroyed: `Id[SetError]|null`
-    ///
-    ///   A map of the Foo id to a [`SetError`] object for each record that
-    ///   failed to be destroyed, or null if all successful.//
+    /// `notDestroyed`: `Id[SetError]|null` A map of the `Foo` id to a
+    /// [`SetError`] object for each record that failed to be destroyed, or
+    /// `null` if all successful.//
     pub not_destroyed: Option<Vec<SetError>>,
 }
 
@@ -696,40 +677,40 @@ impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for SetRes
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "type", content = "description")]
 pub enum SetError {
-    /// (create; update; destroy).  The create/update/destroy would violate an
+    /// (create; update; destroy). The create/update/destroy would violate an
     /// ACL or other permissions policy.
     Forbidden(Option<String>),
-    /// (create; update).  The create would exceed a server- defined limit on
+    /// (create; update). The create would exceed a server- defined limit on
     /// the number or total size of objects of this type.
     OverQuota(Option<String>),
 
-    /// (create; update).  The create/update would result in an object that
+    /// (create; update). The create/update would result in an object that
     /// exceeds a server-defined limit for the maximum size of a single object
     /// of this type.
     TooLarge(Option<String>),
 
-    /// (create).  Too many objects of this type have been created recently, and
-    /// a server-defined rate limit has been reached.  It may work if tried
+    /// (create). Too many objects of this type have been created recently, and
+    /// a server-defined rate limit has been reached. It may work if tried
     /// again later.
     RateLimit(Option<String>),
 
-    /// (update; destroy).  The id given to update/destroy cannot be found.
+    /// (update; destroy). The id given to update/destroy cannot be found.
     NotFound(Option<String>),
 
-    /// (update).  The [`PatchObject`] given to update the record was not a
+    /// (update). The [`PatchObject`] given to update the record was not a
     /// valid patch (see the patch description).
     InvalidPatch(Option<String>),
 
-    /// (update).  The client requested that an object be both updated and
+    /// (update). The client requested that an object be both updated and
     /// destroyed in the same /set request, and the server has decided to
     /// therefore ignore the update.
     WillDestroy(Option<String>),
-    /// (create; update).  The record given is invalid in some way.
+    /// (create; update). The record given is invalid in some way.
     InvalidProperties {
         description: Option<String>,
         properties: Vec<String>,
     },
-    /// (create; destroy).  This is a singleton type, so you cannot create
+    /// (create; destroy). This is a singleton type, so you cannot create
     /// another one or destroy the existing one.
     Singleton(Option<String>),
     RequestTooLarge(Option<String>),
@@ -934,36 +915,26 @@ pub fn upload_request_format(
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UploadResponse {
-    /// o  accountId: `Id`
-    ///
-    ///   The id of the account used for the call.
+    /// `accountId`: `Id` The id of the account used for the call.
     pub account_id: Id<Account>,
-    /// o  blobId: `Id`
-    ///
-    /// The id representing the binary data uploaded.  The data for this id is
-    /// immutable. The id *only* refers to the binary data, not any
-    /// metadata.
+    /// `blobId`: `Id` The id representing the binary data uploaded. The data
+    /// for this id is immutable. The id *only* refers to the binary data, not
+    /// any metadata.
     pub blob_id: Id<BlobObject>,
-    /// o  type: `String`
-    ///
-    /// The media type of the file (as specified in `RFC6838`,
+    /// `type`: `String` The media type of the file (as specified in `RFC6838`,
     /// Section 4.2) as set in the Content-Type header of the upload HTTP
     /// request.
-
     #[serde(rename = "type")]
     pub _type: String,
-
-    /// o  size: `UnsignedInt`
-    ///
-    /// The size of the file in octets.
+    /// `size`: `UnsignedInt` The size of the file in octets.
     pub size: usize,
 }
 
-/// #`queryChanges`
+/// `/queryChanges`
 ///
-///   The `Foo/queryChanges` method allows a client to efficiently update
-///   the state of a cached query to match the new state on the server.  It
-///   takes the following arguments:
+/// The `Foo/queryChanges` method allows a client to efficiently update
+/// the state of a cached query to match the new state on the server. It
+/// takes the following arguments:
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueryChanges<F: filters::FilterTrait<OBJ>, OBJ>
@@ -973,36 +944,29 @@ where
     pub account_id: Id<Account>,
     pub filter: Option<F>,
     pub sort: Option<Comparator<OBJ>>,
-    /// sinceQueryState: `String`
-    ///
-    /// The current state of the query in the client.  This is the string
-    /// that was returned as the `queryState` argument in the `Foo/query`
-    /// response with the same sort/filter.  The server will return the
-    /// changes made to the query since this state.
+    /// `sinceQueryState`: `String` The current state of the query in the
+    /// client. This is the string that was returned as the `queryState`
+    /// argument in the `Foo/query` response with the same sort/filter. The
+    /// server will return the changes made to the query since this state.
     pub since_query_state: String,
-    /// o  maxChanges: `UnsignedInt|null`
-    ///
-    /// The maximum number of changes to return in the response.  See
-    /// error descriptions below for more details.
+    /// `maxChanges`: `UnsignedInt|null` The maximum number of changes to return
+    /// in the response. See error descriptions below for more details.
     pub max_changes: Option<usize>,
-    /// o  upToId: `Id|null`
-    ///
-    /// The last (highest-index) id the client currently has cached from
-    /// the query results.  When there are a large number of results, in a
-    /// common case, the client may have only downloaded and cached a
-    /// small subset from the beginning of the results.  If the sort and
-    /// filter are both only on immutable properties, this allows the
+    /// `upToId`: `Id|null` The last (highest-index) id the client currently has
+    /// cached from the query results. When there are a large number of
+    /// results, in a common case, the client may have only downloaded and
+    /// cached a small subset from the beginning of the results. If the sort
+    /// and filter are both only on immutable properties, this allows the
     /// server to omit changes after this point in the results, which can
-    /// significantly increase efficiency.  If they are not immutable,
+    /// significantly increase efficiency. If they are not immutable,
     /// this argument is ignored.
     pub up_to_id: Option<Id<OBJ>>,
 
-    /// o  calculateTotal: `Boolean` (default: false)
-    ///
-    /// Does the client wish to know the total number of results now in
-    /// the query?  This may be slow and expensive for servers to
-    /// calculate, particularly with complex filters, so clients should
-    /// take care to only request the total when needed.
+    /// `calculateTotal`: `Boolean` (default: `false`) Does the client wish to
+    /// know the total number of results now in the query?  This may be slow
+    /// and expensive for servers to calculate, particularly with complex
+    /// filters, so clients should take care to only request the total when
+    /// needed.
     #[serde(default = "bool_false")]
     pub calculate_total: bool,
 
@@ -1044,26 +1008,26 @@ pub struct QueryChangesResponse<OBJ: Object> {
     /// This is the state the query will be in after applying the set of changes
     /// to the old state.
     pub new_query_state: String,
-    /// The total number of Foos in the results (given the `filter`).  This
+    /// The total number of Foos in the results (given the `filter`). This
     /// argument MUST be omitted if the `calculateTotal` request argument is not
     /// true.
     #[serde(default)]
     pub total: Option<usize>,
     /// The `id` for every Foo that was in the query results in the old
     /// state and that is not in the results in the new state.
-
+    ///
     /// If the server cannot calculate this exactly, the server MAY return
     /// the ids of extra Foos in addition that may have been in the old
     /// results but are not in the new results.
-
+    ///
     /// If the sort and filter are both only on immutable properties and
     /// an `upToId` is supplied and exists in the results, any ids that
     /// were removed but have a higher index than `upToId` SHOULD be
     /// omitted.
-
+    ///
     /// If the `filter` or `sort` includes a mutable property, the server
     /// MUST include all Foos in the current results for which this
-    /// property may have changed.  The position of these may have moved
+    /// property may have changed. The position of these may have moved
     /// in the results, so they must be reinserted by the client to ensure
     /// its query cache is correct.
     pub removed: Vec<Id<OBJ>>,
@@ -1072,43 +1036,49 @@ pub struct QueryChangesResponse<OBJ: Object> {
     /// every Foo in the current results that was included in the
     /// `removed` array (due to a filter or sort based upon a mutable
     /// property).
-
+    ///
     /// If the sort and filter are both only on immutable properties and
     /// an `upToId` is supplied and exists in the results, any ids that
     /// were added but have a higher index than `upToId` SHOULD be
     /// omitted.
-
+    ///
     /// The array MUST be sorted in order of index, with the lowest index
     /// first.
-
+    ///
     /// An [`AddedItem`] object has the following properties:
-
-    /// * id: `Id`
-
-    /// * index: `UnsignedInt`
-
+    ///
+    /// `* id`: `Id`
+    ///
+    /// `* index`: `UnsignedInt`
+    ///
     /// The result of this is that if the client has a cached sparse array of
-    /// Foo ids corresponding to the results in the old state, then:
-
+    /// `Foo` ids corresponding to the results in the old state, then:
+    ///
+    /// ```text
     /// fooIds = [ `id1`, `id2`, null, null, `id3`, `id4`, null, null, null ]
-
+    /// ```
+    ///
     /// If it *splices out* all ids in the removed array that it has in its
     /// cached results, then:
-
-    ///   removed = [ `id2`, `id31`, ... ];
-    ///   fooIds => [ `id1`, null, null, `id3`, `id4`, null, null, null ]
-
+    ///
+    /// ```text
+    /// removed = [ `id2`, `id31`, ... ];
+    /// fooIds => [ `id1`, null, null, `id3`, `id4`, null, null, null ]
+    /// ```
+    ///
     /// and *splices in* (one by one in order, starting with the lowest
     /// index) all of the ids in the added array:
-
+    ///
+    /// ```text
     /// added = [{ id: `id5`, index: 0, ... }];
     /// fooIds => [ `id5`, `id1`, null, null, `id3`, `id4`, null, null, null ]
-
+    /// ```
+    ///
     /// and *truncates* or *extends* to the new total length, then the
     /// results will now be in the new state.
-
+    ///
     /// Note: splicing in adds the item at the given index, incrementing the
-    /// index of all items previously at that or a higher index.  Splicing
+    /// index of all items previously at that or a higher index. Splicing
     /// out is the inverse, removing the item and decrementing the index of
     /// every item after it in the array.
     pub added: Vec<AddedItem<OBJ>>,

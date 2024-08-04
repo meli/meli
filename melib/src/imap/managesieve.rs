@@ -101,7 +101,7 @@ impl ManageSieveConnection {
         })
     }
 
-    pub async fn havespace(&mut self) -> Result<()> {
+    pub async fn havespace(&self) -> Result<()> {
         Ok(())
     }
 
@@ -233,7 +233,7 @@ impl ManageSieveConnection {
         }
     }
 
-    pub async fn renamescript(&mut self) -> Result<()> {
+    pub async fn renamescript(&self) -> Result<()> {
         Ok(())
     }
 }

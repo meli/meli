@@ -244,7 +244,7 @@ impl ContactList {
         }
     }
 
-    fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize) {
+    fn highlight_line(&self, grid: &mut CellBuffer, area: Area, idx: usize) {
         /* Reset previously highlighted line */
         let mut theme = if idx == self.new_cursor_pos {
             self.highlight_theme

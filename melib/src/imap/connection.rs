@@ -1242,7 +1242,7 @@ impl ImapConnection {
         Ok(())
     }
 
-    pub fn add_refresh_event(&mut self, ev: RefreshEvent) {
+    pub fn add_refresh_event(&self, ev: RefreshEvent) {
         (self.uid_store.event_consumer)(self.uid_store.account_hash, BackendEvent::Refresh(ev));
     }
 

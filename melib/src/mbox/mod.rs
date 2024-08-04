@@ -279,7 +279,7 @@ impl BackendMailbox for MboxMailbox {
 }
 
 /// `BackendOp` implementor for Mbox
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct MboxOp {
     pub _hash: EnvelopeHash,
     pub path: PathBuf,

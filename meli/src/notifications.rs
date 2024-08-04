@@ -223,7 +223,7 @@ impl Component for NotificationCommand {
 
                 if let Some(ref bin) = script {
                     match Command::new(bin)
-                        .arg(&kind.map(|k| k.to_string()).unwrap_or_default())
+                        .arg(kind.map(|k| k.to_string()).unwrap_or_default())
                         .arg(title.as_ref().map(<_>::as_ref).unwrap_or("meli"))
                         .arg(body.as_ref())
                         .stdin(Stdio::piped())

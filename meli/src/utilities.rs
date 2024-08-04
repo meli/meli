@@ -230,7 +230,7 @@ impl StatusBar {
         );
     }
 
-    fn draw_command_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+    fn draw_command_bar(&self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         grid.clear_area(area, crate::conf::value(context, "theme_default"));
         let command_bar = crate::conf::value(context, "status.command_bar");
         let (_, y) = grid.write_string(
@@ -888,7 +888,7 @@ impl Tabbed {
         ret
     }
 
-    fn draw_tabs(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+    fn draw_tabs(&self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let tab_bar_attribute = crate::conf::value(context, "tab.bar");
         grid.clear_area(area, tab_bar_attribute);
         if self.children.is_empty() {

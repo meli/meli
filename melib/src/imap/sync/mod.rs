@@ -61,10 +61,7 @@ impl ImapConnection {
         }
     }
 
-    pub async fn load_cache(
-        &mut self,
-        mailbox_hash: MailboxHash,
-    ) -> Option<Result<Vec<EnvelopeHash>>> {
+    pub async fn load_cache(&self, mailbox_hash: MailboxHash) -> Option<Result<Vec<EnvelopeHash>>> {
         debug!("load_cache {}", mailbox_hash);
         let mut cache_handle = match self.uid_store.cache_handle() {
             Ok(v) => v?,
@@ -655,7 +652,7 @@ impl ImapConnection {
     /// RFC7162 Quick Flag Changes Resynchronization (CONDSTORE) and Quick
     /// Mailbox Resynchronization (QRESYNC)
     pub async fn resync_condstoreqresync(
-        &mut self,
+        &self,
         _cache_handle: Box<dyn cache::ImapCache>,
         _mailbox_hash: MailboxHash,
     ) -> Result<Option<Vec<Envelope>>> {

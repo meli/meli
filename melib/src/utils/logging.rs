@@ -239,7 +239,7 @@ impl StderrLogger {
     }
 
     #[cfg(not(test))]
-    pub fn change_log_dest(&mut self, path: PathBuf) {
+    pub fn change_log_dest(&self, path: PathBuf) {
         use crate::utils::shellexpand::ShellExpandTrait;
 
         let path = path.expand(); // expand shell stuff

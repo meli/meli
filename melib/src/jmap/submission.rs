@@ -36,18 +36,20 @@ use crate::jmap::{
 /// `UndoStatus`
 ///
 /// This represents whether the submission may be canceled.  This is
-/// server set on create and MUST be one of the following values:
-/// * `pending`: It may be possible to cancel this submission.
-/// * `final`: The message has been relayed to at least one recipient
-/// in a manner that cannot be recalled.  It is no longer possible
-/// to cancel this submission.
-/// * `canceled`: The submission was canceled and will not be
-/// delivered to any recipient.
+/// server set on create and **MUST** be one of the following values:
+///
+/// - `pending`: It may be possible to cancel this submission.
+/// - `final`: The message has been relayed to at least one recipient in a
+///   manner that cannot be recalled.  It is no longer possible to cancel this
+///   submission.
+/// - `canceled`: The submission was canceled and will not be delivered to any
+///   recipient.
+///
 /// On systems that do not support unsending, the value of this
 /// property will always be `final`.  On systems that do support
-/// canceling submission, it will start as `pending` and MAY
+/// canceling submission, it will start as `pending` and **MAY**
 /// transition to `final` when the server knows it definitely cannot
-/// recall the message, but it MAY just remain `pending`.  If in
+/// recall the message, but it **MAY** just remain `pending`.  If in
 /// pending state, a client can attempt to cancel the submission by
 /// setting this property to `canceled`; if the update succeeds, the
 /// submission was successfully canceled, and the message has not been
@@ -67,9 +69,9 @@ pub enum UndoStatus {
 }
 
 /// This represents the delivery status for each of the submission's
-/// recipients, if known.  This property MAY not be supported by all
+/// recipients, if known.  This property **MAY** not be supported by all
 /// servers, in which case it will remain null.  Servers that support
-/// it SHOULD update the [`EmailSubmission`](`EmailSubmissionObject`) object
+/// it **SHOULD** update the [`EmailSubmission`](`EmailSubmissionObject`) object
 /// each time the status of any of the recipients changes, even if some
 /// recipients are still being retried.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -78,49 +80,45 @@ pub struct DeliveryStatusObject {
     /// The SMTP reply string returned for this recipient when the
     /// server last tried to relay the message, or in a later Delivery
     /// Status Notification (DSN, as defined in `[RFC3464]`) response for
-    /// the message.  This SHOULD be the response to the RCPT TO stage,
+    /// the message.  This **SHOULD** be the response to the `RCPT TO` stage,
     /// unless this was accepted and the message as a whole was
-    /// rejected at the end of the DATA stage, in which case the DATA
-    /// stage reply SHOULD be used instead.
+    /// rejected at the end of the `DATA` stage, in which case the `DATA`
+    /// stage reply **SHOULD** be used instead.
     ///
     /// Multi-line SMTP responses should be concatenated to a single
     /// string as follows:
     ///
-    /// + The hyphen following the SMTP code on all but the last line
-    /// is replaced with a space.
-    ///
-    /// + Any prefix in common with the first line is stripped from
-    /// lines after the first.
-    ///
-    /// + CRLF is replaced by a space.
+    /// - The hyphen following the SMTP code on all but the last line is
+    ///   replaced with a space.
+    /// - Any prefix in common with the first line is stripped from lines after
+    ///   the first.
+    /// - `CRLF` is replaced by a space.
     ///
     /// For example:
     ///
+    /// ```text
     /// 550-5.7.1 Our system has detected that this message is
     /// 550 5.7.1 likely spam.
+    /// ```
     ///
     /// would become:
     ///
+    /// ```text
     /// 550 5.7.1 Our system has detected that this message is likely spam.
+    /// ```
     ///
     /// For messages relayed via an alternative to SMTP, the server MAY
     /// generate a synthetic string representing the status instead.
-    /// If it does this, the string MUST be of the following form:
+    /// If it does this, the string **MUST** be of the following form:
     ///
-    /// + A 3-digit SMTP reply code, as defined in `[RFC5321]`,
-    /// Section 4.2.3.
-    ///
-    /// + Then a single space character.
-    ///
-    /// + Then an SMTP Enhanced Mail System Status Code as defined in
-    /// `[RFC3463]`, with a registry defined in `[RFC5248]`.
-    ///
-    /// + Then a single space character.
-    ///
-    /// + Then an implementation-specific information string with a
-    /// human-readable explanation of the response.
+    /// - A 3-digit SMTP reply code, as defined in `[RFC5321]`, Section 4.2.3.
+    /// - Then a single space character.
+    /// - Then an SMTP Enhanced Mail System Status Code as defined in
+    ///   `[RFC3463]`, with a registry defined in `[RFC5248]`.
+    /// - Then a single space character.
+    /// - Then an implementation-specific information string with a
+    ///   human-readable explanation of the response.
     pub smtp_reply: String,
-
     /// Represents whether the message has been successfully delivered
     /// to the recipient.
     pub delivered: String,
@@ -132,7 +130,7 @@ pub struct DeliveryStatusObject {
 /// Represents whether the message has been displayed to the recipient.
 /// If a Message Disposition Notification (MDN) is received for
 /// this recipient with Disposition-Type (as per `[RFC8098]`,
-/// Section 3.2.6.2) equal to `displayed`, this property SHOULD be
+/// Section 3.2.6.2) equal to `displayed`, this property **SHOULD** be
 /// set to `yes`.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -149,18 +147,18 @@ pub enum Displayed {
 /// Represents whether the message has been successfully delivered
 /// to the recipient.
 ///
-/// Note that successful relaying to an external SMTP server SHOULD
-/// NOT be taken as an indication that the message has successfully
+/// Note that successful relaying to an external SMTP server **SHOULD
+/// NOT** be taken as an indication that the message has successfully
 /// reached the final mail store.  In this case though, the server
 /// may receive a DSN response, if requested.
 ///
 /// If a DSN is received for the recipient with Action equal to
 /// `delivered`, as per `[RFC3464]`, Section 2.3.3, then the
-/// `delivered` property SHOULD be set to `yes`; if the Action
-/// equals `failed`, the property SHOULD be set to `no`.  Receipt
-/// of any other DSN SHOULD NOT affect this property.
+/// `delivered` property **SHOULD** be set to `yes`; if the Action
+/// equals `failed`, the property **SHOULD** be set to `no`.  Receipt
+/// of any other DSN **SHOULD NOT** affect this property.
 ///
-/// The server MAY also set this property based on other feedback
+/// The server **MAY** also set this property based on other feedback
 /// channels.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -209,8 +207,8 @@ pub struct EmailSubmissionObject {
     /// sendAt: `UTCDate` (immutable; server-set)
     /// The date the submission was/will be released for delivery.  If the
     /// client successfully used `FUTURERELEASE` `[RFC4865]` with the
-    /// submission, this MUST be the time when the server will release the
-    /// message; otherwise, it MUST be the time the `EmailSubmission` was
+    /// submission, this **MUST** be the time when the server will release the
+    /// message; otherwise, it **MUST** be the time the `EmailSubmission` was
     /// created.
     #[serde(skip_serializing)]
     pub send_at: String,
@@ -219,9 +217,9 @@ pub struct EmailSubmissionObject {
     /// deliveryStatus: `String[DeliveryStatus]|null` (server-set)
     ///
     /// This represents the delivery status for each of the submission's
-    /// recipients, if known.  This property MAY not be supported by all
+    /// recipients, if known.  This property **MAY** not be supported by all
     /// servers, in which case it will remain null.  Servers that support
-    /// it SHOULD update the `EmailSubmission` object each time the status
+    /// it **SHOULD** update the `EmailSubmission` object each time the status
     /// of any of the recipients changes, even if some recipients are
     /// still being retried.
     #[serde(skip_serializing)]
@@ -357,13 +355,13 @@ impl EmailSubmissionSet {
 pub struct EnvelopeObject {
     /// The email address to use as the return address in the SMTP
     /// submission, plus any parameters to pass with the MAIL FROM
-    /// address.  The JMAP server MAY allow the address to be the empty
+    /// address.  The JMAP server **MAY** allow the address to be the empty
     /// string.
 
     /// When a JMAP server performs an SMTP message submission, it MAY
     /// use the same id string for the ENVID parameter `[RFC3461]` and
     /// the [`EmailSubmission`](`EmailSubmissionObject`) object id.  Servers
-    /// that do this MAY replace a client-provided value for ENVID with a
+    /// that do this **MAY** replace a client-provided value for ENVID with a
     /// server- provided value.
     pub mail_from: Address,
 

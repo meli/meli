@@ -890,7 +890,7 @@ impl ScrollBar {
     }
 
     pub fn draw(
-        &mut self,
+        &self,
         grid: &mut CellBuffer,
         area: Area,
         context: &Context,
@@ -946,7 +946,7 @@ impl ScrollBar {
     }
 
     pub fn draw_horizontal(
-        &mut self,
+        &self,
         grid: &mut CellBuffer,
         area: Area,
         context: &Context,

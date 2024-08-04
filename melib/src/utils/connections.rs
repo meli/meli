@@ -396,7 +396,7 @@ impl Connection {
         Ok(())
     }
 
-    fn setsockopt(&self, option: SockOpts) -> std::io::Result<()> {
+    pub fn setsockopt(&self, option: SockOpts) -> std::io::Result<()> {
         match option {
             SockOpts::KeepAlive {
                 enable: true,

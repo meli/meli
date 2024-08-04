@@ -113,7 +113,7 @@ pub const NOTMUCH_ERROR_MSG: &str = "this version of meli is not compiled with n
 #[cfg(not(feature = "notmuch"))]
 pub const NOTMUCH_ERROR_DETAILS: &str = "";
 
-#[cfg(all(feature = "notmuch", target_os = "unix"))]
+#[cfg(all(feature = "notmuch", target_family = "unix"))]
 pub const NOTMUCH_ERROR_DETAILS: &str = r#"If you have installed the library manually, try setting the `LD_LIBRARY_PATH` environment variable to its `lib` directory. Otherwise, set it to the location of libnotmuch.5.so. Example:
 
 LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/path/to/notmuch/lib" meli
@@ -139,7 +139,10 @@ export DYLD_LIBRARY_PATH="$DYLD_LIBRARY_PATH:$(brew --prefix)/lib"
 
 You can also set any location by specifying the library file path with the configuration flag `library_file_path`."#;
 
-#[cfg(all(feature = "notmuch", not(any(target_os = "unix", target_os = "macos"))))]
+#[cfg(all(
+    feature = "notmuch",
+    not(any(target_family = "unix", target_os = "macos"))
+))]
 pub const NOTMUCH_ERROR_DETAILS: &str = r#"If notmuch is installed but the library isn't found, consult your system's documentation on how to make dynamic libraries discoverable."#;
 
 impl Backends {

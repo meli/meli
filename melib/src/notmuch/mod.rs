@@ -121,7 +121,7 @@ impl DbConnection {
 
     #[allow(clippy::too_many_arguments)] // Don't judge me clippy.
     fn refresh(
-        &mut self,
+        &self,
         mailboxes: Arc<RwLock<HashMap<MailboxHash, NotmuchMailbox>>>,
         index: Arc<RwLock<HashMap<EnvelopeHash, CString>>>,
         mailbox_index: Arc<RwLock<HashMap<EnvelopeHash, SmallVec<[MailboxHash; 16]>>>>,
@@ -679,7 +679,7 @@ impl MailBackend for NotmuchDb {
 
     fn refresh(&mut self, _mailbox_hash: MailboxHash) -> ResultFuture<()> {
         let account_hash = self.account_hash;
-        let mut database = Self::new_connection(
+        let database = Self::new_connection(
             self.path.as_path(),
             self.revision_uuid.clone(),
             self.lib.clone(),
@@ -735,7 +735,7 @@ impl MailBackend for NotmuchDb {
             loop {
                 let _ = rx.recv().map_err(|err| err.to_string())?;
                 {
-                    let mut database = Self::new_connection(
+                    let database = Self::new_connection(
                         path.as_path(),
                         revision_uuid.clone(),
                         lib.clone(),
@@ -1055,7 +1055,7 @@ impl MailBackend for NotmuchDb {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 struct NotmuchOp {
     hash: EnvelopeHash,
     index: Arc<RwLock<HashMap<EnvelopeHash, CString>>>,

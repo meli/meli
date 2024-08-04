@@ -53,11 +53,14 @@ pub struct CodePointsIterator<'a> {
  * sequence, or a continuation byte; the remaining bits, concatenated, give
  * the code point index. This table shows how it works:
  *
- * UTF-8 (binary) 	                Code point (binary) 	Range
- * 0xxxxxxx                     	xxxxxxx 	        U+0000–U+007F
- * 110xxxxx 10yyyyyy 	                xxxxxyyyyyy 	        U+0080–U+07FF
- * 1110xxxx 10yyyyyy 10zzzzzz 	        xxxxyyyyyyzzzzzz 	U+0800–U+FFFF
- * 11110xxx 10yyyyyy 10zzzzzz 10wwwwww 	xxxyyyyyyzzzzzzwwwwww 	U+10000–U+10FFFF
+ * ```text
+ * UTF-8 (binary)                      |Code point (binary)    |Range
+ * ------------------------------------+-----------------------+-------
+ * 0xxxxxxx                            |xxxxxxx                |U+0000–U+007F
+ * 110xxxxx 10yyyyyy                   |xxxxxyyyyyy            |U+0080–U+07FF
+ * 1110xxxx 10yyyyyy 10zzzzzz          |xxxxyyyyyyzzzzzz       |U+0800–U+FFFF
+ * 11110xxx 10yyyyyy 10zzzzzz 10wwwwww |xxxyyyyyyzzzzzzwwwwww  |U+10000–U+10FFFF
+ * ```
  *
  */
 impl<'a> Iterator for CodePointsIterator<'a> {

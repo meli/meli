@@ -90,7 +90,7 @@ impl DotAddressable for Shortcuts {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CommandShortcut {
     pub shortcut: Key,
     pub command: Vec<String>,

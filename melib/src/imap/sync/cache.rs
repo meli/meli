@@ -128,7 +128,7 @@ pub async fn fetch_cached_envs(state: &mut FetchState) -> Result<Option<Vec<Enve
         return Ok(None);
     }
     {
-        let mut conn = connection.lock().await;
+        let conn = connection.lock().await;
         match conn.load_cache(mailbox_hash).await {
             None => Ok(None),
             Some(Ok(env_hashes)) => {

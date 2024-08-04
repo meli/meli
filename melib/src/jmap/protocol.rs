@@ -256,7 +256,7 @@ pub enum EmailFetchState {
 
 impl EmailFetchState {
     pub async fn must_update_state(
-        &mut self,
+        &self,
         conn: &JmapConnection,
         mailbox_hash: MailboxHash,
         state: State<EmailObject>,

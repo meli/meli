@@ -72,11 +72,13 @@ pub struct ComposingSettings {
     /// mail on its own. Default: true
     #[serde(default = "true_val")]
     pub store_sent_mail: bool,
-    /// The attribution line appears above the quoted reply text.
+    /// The attribution line that appears above the quoted reply text.
+    ///
     /// The format specifiers for the replied address are:
     /// - `%+f` — the sender's name and email address.
     /// - `%+n` — the sender's name (or email address, if no name is included).
     /// - `%+a` — the sender's email address.
+    ///
     /// The format string is passed to strftime(3) with the replied envelope's
     /// date. Default: "On %a, %0e %b %Y %H:%M, %+f wrote:%n"
     #[serde(default = "none")]

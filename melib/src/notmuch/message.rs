@@ -258,21 +258,21 @@ impl<'m> Message<'m> {
     ///
     /// Quoted from `libnotmuch` C header:
     ///
-    /// > The returned filename is an absolute filename, (the initial
-    /// > component will match
-    /// > [`notmuch_database_get_path`](crate::notmuch::ffi::notmuch_database_get_path)).
-    /// >
-    /// > The returned string belongs to the message so should not be
-    /// > modified or freed by the caller (nor should it be referenced after
-    /// > the message is destroyed).
-    /// >
-    /// > Note: If this message corresponds to multiple files in the mail
-    /// > store, (that is, multiple files contain identical message IDs),
-    /// > this function will arbitrarily return a single one of those
-    /// > filenames. See
-    /// > [`notmuch_message_get_filenames`](crate::notmuch::ffi::notmuch_message_get_filenames)
-    /// > for returning the
-    /// > complete list of filenames.
+    /// The returned filename is an absolute filename, (the initial
+    /// component will match
+    /// [`notmuch_database_get_path`](crate::notmuch::ffi::notmuch_database_get_path)).
+    ///
+    /// The returned string belongs to the message so should not be
+    /// modified or freed by the caller (nor should it be referenced after
+    /// the message is destroyed).
+    ///
+    /// Note: If this message corresponds to multiple files in the mail
+    /// store, (that is, multiple files contain identical message IDs),
+    /// this function will arbitrarily return a single one of those
+    /// filenames. See
+    /// [`notmuch_message_get_filenames`](crate::notmuch::ffi::notmuch_message_get_filenames)
+    /// for returning the
+    /// complete list of filenames.
     #[doc(alias = "notmuch_message_get_filename")]
     pub fn get_filename(&self) -> &OsStr {
         let fs_path =
@@ -285,46 +285,45 @@ impl<'m> Message<'m> {
     ///
     /// Quoted from `libnotmuch` C header:
     ///
-    /// > This means that changes to the message state, (via
-    /// > [`notmuch_message_add_tag`], [`notmuch_message_remove_tag`](, and
-    /// > [`notmuch_message_remove_all_tags`](crate::notmuch::ffi::notmuch_message_remove_all_tags)), will not be committed to the
-    /// > database until the message is thawed with
-    /// > [`notmuch_message_thaw`].
-    /// >
-    /// > Multiple calls to freeze/thaw are valid and these calls will
-    /// > "stack". That is there must be as many calls to thaw as to freeze
-    /// > before a message is actually thawed.
-    /// >
-    /// > The ability to do freeze/thaw allows for safe transactions to
-    /// > change tag values. For example, explicitly setting a message to
-    /// > have a given set of tags might look like this:
+    /// This means that changes to the message state, (via
+    /// [`notmuch_message_add_tag`], [`notmuch_message_remove_tag`](, and
+    /// [`notmuch_message_remove_all_tags`](crate::notmuch::ffi::notmuch_message_remove_all_tags)), will not be committed to the
+    /// database until the message is thawed with
+    /// [`notmuch_message_thaw`].
+    ///
+    /// Multiple calls to freeze/thaw are valid and these calls will
+    /// "stack". That is there must be as many calls to thaw as to freeze
+    /// before a message is actually thawed.
+    ///
+    /// The ability to do freeze/thaw allows for safe transactions to
+    /// change tag values. For example, explicitly setting a message to
+    /// have a given set of tags might look like this:
     ///
     /// ```c
-    /// notmuch_message_freeze (message);
+    /// notmuch_message_freeze(message);
     ///
-    ///  notmuch_message_remove_all_tags (message);
+    /// notmuch_message_remove_all_tags(message);
     ///
-    ///  for (i = 0; i < NUM_TAGS; i++)
-    ///  notmuch_message_add_tag (message, tags[i]);
+    /// for (i = 0; i < NUM_TAGS; i++)
+    ///     notmuch_message_add_tag(message, tags[i]);
     ///
-    ///  notmuch_message_thaw (message);
-    ///  ```
+    /// notmuch_message_thaw(message);
+    /// ```
     ///
-    /// > With freeze/thaw used like this, the message in the database is
-    /// > guaranteed to have either the full set of original tag values, or
-    /// > the full set of new tag values, but nothing in between.
-    /// >
-    /// > Imagine the example above without freeze/thaw and the operation
-    /// > somehow getting interrupted. This could result in the message being
-    /// > left with no tags if the interruption happened after
-    /// > [`notmuch_message_remove_all_tags`](crate::notmuch::ffi::notmuch_message_remove_all_tags) but before [`notmuch_message_add_tag`].
-    /// >
-    /// > Return value:
-    /// >
-    /// > - [`NOTMUCH_STATUS_SUCCESS`](crate::notmuch::ffi::NOTMUCH_STATUS_SUCCESS): Message successfully frozen.
-    /// > - [`NOTMUCH_STATUS_READ_ONLY_DATABASE`]: Database was opened in
-    /// > read-only
-    /// > mode so message cannot be modified.
+    /// With freeze/thaw used like this, the message in the database is
+    /// guaranteed to have either the full set of original tag values, or
+    /// the full set of new tag values, but nothing in between.
+    ///
+    /// Imagine the example above without freeze/thaw and the operation
+    /// somehow getting interrupted. This could result in the message being
+    /// left with no tags if the interruption happened after
+    /// [`notmuch_message_remove_all_tags`](crate::notmuch::ffi::notmuch_message_remove_all_tags) but before [`notmuch_message_add_tag`].
+    ///
+    /// Return value:
+    ///
+    /// - [`NOTMUCH_STATUS_SUCCESS`](crate::notmuch::ffi::NOTMUCH_STATUS_SUCCESS): Message successfully frozen.
+    /// - [`NOTMUCH_STATUS_READ_ONLY_DATABASE`]: Database was opened in
+    ///   read-only mode so message cannot be modified.
     #[doc(alias = "notmuch_message_freeze")]
     pub fn freeze(&self) {
         if NOTMUCH_STATUS_READ_ONLY_DATABASE
@@ -340,26 +339,19 @@ impl<'m> Message<'m> {
     ///
     /// Quoted from `libnotmuch` C header:
     ///
-    /// > See [`notmuch_message_freeze`](Message::freeze) for an example of how
-    /// > to use this
-    /// > function to safely provide tag changes.
-    /// >
-    /// > Multiple calls to freeze/thaw are valid and these calls with
-    /// > "stack". That is there must be as many calls to thaw as to freeze
-    /// > before a message is actually thawed.
-    /// >
-    /// > Return value:
-    /// >
-    /// > - [`NOTMUCH_STATUS_SUCCESS`](crate::notmuch::ffi::NOTMUCH_STATUS_SUCCESS): Message successfully thawed, (or at
-    /// > least
-    /// > its frozen count has successfully been reduced by 1).
-    /// > - [`NOTMUCH_STATUS_UNBALANCED_FREEZE_THAW`]: An attempt was made to
-    /// > thaw
-    /// > an unfrozen message. That is, there have been an unbalanced
-    /// > number of calls to
-    /// > [`notmuch_message_freeze`]
-    /// > and
-    /// > [`notmuch_message_thaw`].
+    /// See [`notmuch_message_freeze`](Message::freeze) for an example of how
+    /// to use this function to safely provide tag changes.
+    ///
+    /// Multiple calls to freeze/thaw are valid and these calls with "stack".
+    /// That is there must be as many calls to thaw as to freeze before a
+    /// message is actually thawed.
+    ///
+    /// Return value:
+    ///
+    /// - [`NOTMUCH_STATUS_SUCCESS`](crate::notmuch::ffi::NOTMUCH_STATUS_SUCCESS): Message successfully thawed, (or at least its frozen count has successfully been reduced by 1).
+    /// - [`NOTMUCH_STATUS_UNBALANCED_FREEZE_THAW`]: An attempt was made to thaw
+    ///   an unfrozen message. That is, there have been an unbalanced number of
+    ///   calls to [`notmuch_message_freeze`] and [`notmuch_message_thaw`].
     #[doc(alias = "notmuch_message_thaw")]
     pub fn thaw(&self) {
         if self.freezes.get() == 0 {
