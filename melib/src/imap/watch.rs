@@ -83,8 +83,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
     let mut response = Vec::with_capacity(8 * 1024);
     let select_response = conn
         .examine_mailbox(mailbox_hash, &mut response, true)
-        .await?
-        .unwrap();
+        .await?;
     {
         let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
 
@@ -215,8 +214,7 @@ pub async fn examine_updates(
         let mut response = Vec::with_capacity(8 * 1024);
         let select_response = conn
             .examine_mailbox(mailbox_hash, &mut response, true)
-            .await?
-            .unwrap();
+            .await?;
         {
             let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
 

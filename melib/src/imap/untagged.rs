@@ -58,7 +58,12 @@ impl ImapConnection {
             };
         }
         let mailbox_hash = match self.stream.as_ref()?.current_mailbox {
-            MailboxSelection::Select(h) | MailboxSelection::Examine(h) => h,
+            MailboxSelection::Select {
+                mailbox_hash: h, ..
+            }
+            | MailboxSelection::Examine {
+                mailbox_hash: h, ..
+            } => h,
             MailboxSelection::None => return Ok(false),
         };
         let mailbox =

@@ -130,19 +130,38 @@ pub struct ImapStream {
     pub timeout: Option<Duration>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MailboxSelection {
     None,
-    Select(MailboxHash),
-    Examine(MailboxHash),
+    Select {
+        mailbox_hash: MailboxHash,
+        latest_response: SelectResponse,
+    },
+    Examine {
+        mailbox_hash: MailboxHash,
+        latest_response: SelectResponse,
+    },
 }
 
 impl MailboxSelection {
     pub fn take(&mut self) -> Self {
         std::mem::replace(self, Self::None)
     }
+
+    pub fn is(&self, needle: &MailboxHash) -> &Self {
+        match self {
+            Self::None => self,
+            Self::Examine { mailbox_hash, .. } | Self::Select { mailbox_hash, .. }
+                if mailbox_hash == needle =>
+            {
+                self
+            }
+            _ => &Self::None,
+        }
+    }
 }
 
+#[inline]
 async fn try_await(cl: impl Future<Output = Result<()>> + Send) -> Result<()> {
     cl.await
 }
@@ -1067,10 +1086,18 @@ impl ImapConnection {
         mailbox_hash: MailboxHash,
         ret: &mut Vec<u8>,
         force: bool,
-    ) -> Result<Option<SelectResponse>> {
-        if !force && self.stream.as_ref()?.current_mailbox == MailboxSelection::Select(mailbox_hash)
-        {
-            return Ok(None);
+    ) -> Result<SelectResponse> {
+        if let (
+            true,
+            MailboxSelection::Select {
+                mailbox_hash: _,
+                latest_response,
+            },
+        ) = (
+            !force,
+            self.stream.as_ref()?.current_mailbox.is(&mailbox_hash),
+        ) {
+            return Ok(latest_response.clone());
         }
         let (imap_path, no_select, permissions) = {
             let m = &self.uid_store.mailboxes.lock().await[&mailbox_hash];
@@ -1137,7 +1164,10 @@ impl ImapConnection {
             permissions.rename_messages = !select_response.read_only;
             permissions.delete_messages = !select_response.read_only;
         }
-        self.stream.as_mut()?.current_mailbox = MailboxSelection::Select(mailbox_hash);
+        self.stream.as_mut()?.current_mailbox = MailboxSelection::Select {
+            mailbox_hash,
+            latest_response: select_response.clone(),
+        };
         if self
             .uid_store
             .msn_index
@@ -1150,7 +1180,7 @@ impl ImapConnection {
             self.create_uid_msn_cache(mailbox_hash, 1, &select_response)
                 .await?;
         }
-        Ok(Some(select_response))
+        Ok(select_response)
     }
 
     pub async fn examine_mailbox(
@@ -1158,11 +1188,18 @@ impl ImapConnection {
         mailbox_hash: MailboxHash,
         ret: &mut Vec<u8>,
         force: bool,
-    ) -> Result<Option<SelectResponse>> {
-        if !force
-            && self.stream.as_ref()?.current_mailbox == MailboxSelection::Examine(mailbox_hash)
-        {
-            return Ok(None);
+    ) -> Result<SelectResponse> {
+        if let (
+            true,
+            MailboxSelection::Examine {
+                mailbox_hash: _,
+                latest_response,
+            },
+        ) = (
+            !force,
+            self.stream.as_ref()?.current_mailbox.is(&mailbox_hash),
+        ) {
+            return Ok(latest_response.clone());
         }
         let (imap_path, no_select) = {
             let m = &self.uid_store.mailboxes.lock().await[&mailbox_hash];
@@ -1189,7 +1226,10 @@ impl ImapConnection {
         let select_response = protocol_parser::select_response(ret).chain_err_summary(|| {
             format!("Could not parse select response for mailbox {}", imap_path)
         })?;
-        self.stream.as_mut()?.current_mailbox = MailboxSelection::Examine(mailbox_hash);
+        self.stream.as_mut()?.current_mailbox = MailboxSelection::Examine {
+            mailbox_hash,
+            latest_response: select_response.clone(),
+        };
         if !self
             .uid_store
             .msn_index
@@ -1202,12 +1242,12 @@ impl ImapConnection {
             self.create_uid_msn_cache(mailbox_hash, 1, &select_response)
                 .await?;
         }
-        Ok(Some(select_response))
+        Ok(select_response)
     }
 
     pub async fn unselect(&mut self) -> Result<()> {
         match self.stream.as_mut()?.current_mailbox.take() {
-            MailboxSelection::Examine(_) | MailboxSelection::Select(_) => {
+            MailboxSelection::Examine { .. } | MailboxSelection::Select { .. } => {
                 let mut response = Vec::with_capacity(8 * 1024);
                 if self
                     .uid_store

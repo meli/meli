@@ -122,9 +122,9 @@ impl ImapConnection {
         let mut new_unseen = BTreeSet::default();
         let select_response = self
             .select_mailbox(mailbox_hash, &mut response, true)
-            .await?
-            .unwrap();
+            .await?;
         // 1. check UIDVALIDITY. If fail, discard cache and rebuild
+        log::trace!("Step 1. check UIDVALIDITY. If fail, discard cache and rebuild");
         if select_response.uidvalidity != current_uidvalidity {
             cache_handle.clear(mailbox_hash, &select_response)?;
             return Ok(None);
@@ -386,8 +386,7 @@ impl ImapConnection {
         // 1. check UIDVALIDITY. If fail, discard cache and rebuild
         let select_response = self
             .select_mailbox(mailbox_hash, &mut response, true)
-            .await?
-            .unwrap();
+            .await?;
         if select_response.uidvalidity != cached_uidvalidity {
             // 1a) Check the mailbox UIDVALIDITY (see section 4.1 for more
             //details) with SELECT/EXAMINE/STATUS.
@@ -674,11 +673,11 @@ impl ImapConnection {
          * only returns READ-ONLY for both cases) */
         let mut select_response = self
             .select_mailbox(mailbox_hash, &mut response, true)
-            .await?
-            .unwrap();
-        debug!(
+            .await?;
+        log::trace!(
             "mailbox: {} select_response: {:?}",
-            mailbox_path, select_response
+            mailbox_path,
+            select_response
         );
         {
             {
