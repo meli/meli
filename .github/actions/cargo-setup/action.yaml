@@ -1,0 +1,25 @@
+name: Setup cargo
+runs:
+  using: "composite"
+  steps:
+    - name: Cache cargo configuration and installations
+      id: cache-cargo
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: cargo-${{ matrix.os }}-${{ matrix.rust }}
+        restore-keys: |
+          cargo-${{ matrix.os }}-${{ matrix.rust }}
+    - if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
+      name: Add lint dependencies
+      shell: bash
+      run: |
+        cargo install --quiet --version 1.0.9 --target "${{ matrix.target }}" cargo-sort
+        cargo install --quiet --version 0.15.1 --target "${{ matrix.target }}" cargo-msrv
+        cargo install --quiet --version 0.9.54 --target "${{ matrix.target }}" cargo-nextest
+        RUSTFLAGS="" cargo install --quiet --locked --target "${{ matrix.target }}" --git https://github.com/dcchut/cargo-derivefmt --rev 2ff93de7fb418180458dd1ba27e5655607c23ab6 --bin cargo-derivefmt

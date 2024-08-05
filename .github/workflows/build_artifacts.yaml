@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: EUPL-1.2
+name: Build release binaries
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+  RUSTFLAGS: "-D warnings -W unreachable-pub -W rust-2021-compatibility"
+  RUSTUP_MAX_RETRIES: 10
+  RUST_BACKTRACE: short
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - v*
+
+jobs:
+  build:
+    name: Build release binary
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [linux-amd64, ]
+        include:
+          - build: linux-amd64
+            os: ubuntu-latest
+            rust: stable
+            artifact_name: 'meli-linux-amd64'
+            target: x86_64-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install sudo for act
+        if: env.ACT == 'true'
+        run: apt-get update && apt-get install --assume-yes --no-install-recommends sudo
+      - id: os-deps
+        name: install OS dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev pkg-config mandoc libssl-dev
+      - uses: ./.github/actions/rustup-setup
+      - uses: ./.github/actions/cargo-setup
+      - name: Build binary
+        run: |
+          make
+          mkdir artifacts
+          mv target/*/release/* target/ || true
+          mv target/release/* target/ || true
+          mv target/meli  artifacts/
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: artifacts/meli
+          if-no-files-found: error
+          retention-days: 30
