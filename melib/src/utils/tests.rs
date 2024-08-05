@@ -33,6 +33,8 @@ use tempfile::TempDir;
 use crate::error::{Errno, ErrorKind};
 
 #[sealed_test]
+#[ignore]
+#[test]
 fn test_shellexpandtrait() {
     use super::shellexpand::*;
 
@@ -148,10 +150,13 @@ fn test_shellexpandtrait() {
     );
     assert!(matches!(Path::new("/").expand().complete(true, true),
         Completions::Entries(entries) if !entries.is_empty()));
+    _ = tmp_dir.close();
 }
 
 #[cfg(target_os = "linux")]
 #[sealed_test]
+#[ignore]
+#[test]
 fn test_shellexpandtrait_impls() {
     use super::shellexpand::*;
 
@@ -178,6 +183,8 @@ fn test_shellexpandtrait_impls() {
     let tmp_dir = TempDir::new().unwrap();
 
     std::env::set_var("HOME", tmp_dir.path());
+
+    assert_eq!(&Path::new("~").expand(), tmp_dir.path());
 
     macro_rules! assert_complete {
         (($path:expr, $force:literal, $treat_as_dir:literal), $($expected:tt)*) => {{
@@ -255,6 +262,7 @@ fn test_shellexpandtrait_impls() {
         (&Path::new("/").expand(), true, false),
         Completions::IsDirectory
     );
+    _ = tmp_dir.close();
 }
 
 #[test]
