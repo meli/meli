@@ -33,7 +33,7 @@ use notify::{self, event::EventKind as NotifyEvent};
 use crate::{
     backends::{prelude::*, RefreshEventKind::*},
     error,
-    maildir::{move_to_cur, HashIndexes, MaildirPathTrait, PathMod},
+    maildir::{move_to_cur, Configuration, HashIndexes, MaildirPathTrait, PathMod},
 };
 
 pub struct MaildirWatch {
@@ -45,6 +45,7 @@ pub struct MaildirWatch {
     pub hash_indexes: HashIndexes,
     pub mailbox_index: Arc<Mutex<HashMap<EnvelopeHash, MailboxHash>>>,
     pub root_mailbox_hash: MailboxHash,
+    pub config: Arc<Configuration>,
     #[allow(clippy::type_complexity)]
     pub mailbox_counts: HashMap<MailboxHash, (Arc<Mutex<usize>>, Arc<Mutex<usize>>)>,
 }
@@ -61,6 +62,7 @@ impl MaildirWatch {
             mailbox_index,
             root_mailbox_hash,
             mailbox_counts,
+            config,
         } = self;
 
         let mut buf = Vec::with_capacity(4096);
@@ -72,7 +74,7 @@ impl MaildirWatch {
                         for mut pathbuf in event.paths {
                             if pathbuf.is_in_new() {
                                 // This creates a Rename event that we will receive later
-                                pathbuf = match move_to_cur(&pathbuf) {
+                                pathbuf = match move_to_cur(&config, &pathbuf) {
                                     Ok(p) => p,
                                     Err(err) => {
                                         log::error!(

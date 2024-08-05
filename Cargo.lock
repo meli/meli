@@ -1398,6 +1398,7 @@ dependencies = [
  "socket2",
  "stderrlog",
  "tempfile",
+ "toml",
  "unicode-segmentation",
  "url",
  "uuid",

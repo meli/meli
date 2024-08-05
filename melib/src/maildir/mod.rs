@@ -22,9 +22,12 @@
 #[macro_use]
 mod backend;
 pub use self::backend::*;
+mod stream;
 pub mod watch;
 
-mod stream;
+#[cfg(test)]
+mod tests;
+
 use std::{
     collections::{hash_map::DefaultHasher, HashMap},
     fs,
@@ -268,6 +271,8 @@ impl BackendMailbox for MaildirMailbox {
 
 pub trait MaildirPathTrait {
     fn flags(&self) -> Flag;
+    fn set_flags(&self, flags: Flag, config: &Configuration) -> Result<PathBuf>;
+    fn place_in_dir(&self, dest_dir: &Path, config: &Configuration) -> Result<PathBuf>;
     fn to_mailbox_hash(&self) -> MailboxHash;
     fn to_envelope_hash(&self) -> EnvelopeHash;
     fn is_in_new(&self) -> bool;
@@ -301,6 +306,70 @@ impl MaildirPathTrait for Path {
         }
 
         flag
+    }
+
+    fn set_flags(&self, flags: Flag, config: &Configuration) -> Result<PathBuf> {
+        let filename = self
+            .file_name()
+            .ok_or_else(|| format!("Could not get filename of `{}`", self.display(),))?
+            .to_string_lossy()
+            .to_string();
+        let (idx, append_2): (usize, bool) = if let Some(idx) = filename.rfind(":2,") {
+            (idx + 3, false)
+        } else {
+            log::trace!(
+                "Invalid maildir filename: {:?}\nBacktrace:\n{}",
+                self,
+                std::backtrace::Backtrace::capture()
+            );
+            (filename.len(), true)
+        };
+        let mut new_name: String = if let Some(ref rename_regex) = config.rename_regex {
+            rename_regex.replace_all(&filename[..idx], "").to_string()
+        } else {
+            filename[..idx].to_string()
+        };
+        if append_2 {
+            new_name.push_str(":2,");
+        }
+        if !(flags & Flag::DRAFT).is_empty() {
+            new_name.push('D');
+        }
+        if !(flags & Flag::FLAGGED).is_empty() {
+            new_name.push('F');
+        }
+        if !(flags & Flag::PASSED).is_empty() {
+            new_name.push('P');
+        }
+        if !(flags & Flag::REPLIED).is_empty() {
+            new_name.push('R');
+        }
+        if !(flags & Flag::SEEN).is_empty() {
+            new_name.push('S');
+        }
+        if !(flags & Flag::TRASHED).is_empty() {
+            new_name.push('T');
+        }
+        let mut new_path: PathBuf = self.into();
+        new_path.set_file_name(new_name);
+        Ok(new_path)
+    }
+
+    fn place_in_dir(&self, dest_dir: &Path, config: &Configuration) -> Result<PathBuf> {
+        let mut filename = self
+            .file_name()
+            .ok_or_else(|| format!("Could not get filename of `{}`", self.display()))?
+            .to_string_lossy();
+        if !filename.contains(":2,") {
+            filename = Cow::Owned(format!("{}:2,", filename));
+        }
+        let mut new_path = dest_dir.to_path_buf();
+        if let Some(ref rename_regex) = config.rename_regex {
+            new_path.push(rename_regex.replace_all(&filename, "").as_ref());
+        } else {
+            new_path.push(filename.as_ref());
+        };
+        Ok(new_path)
     }
 
     fn to_mailbox_hash(&self) -> MailboxHash {

@@ -674,8 +674,13 @@ mod deserializers {
         D: Deserializer<'de>,
     {
         let v: Value = Deserialize::deserialize(deserializer)?;
+        if let Some(s) = v.as_str() {
+            return Ok(s.to_string());
+        }
         let mut ret = v.to_string();
-        if ret.starts_with('"') && ret.ends_with('"') {
+        if (ret.starts_with('"') && ret.ends_with('"'))
+            || (ret.starts_with('\"') && ret.ends_with('\''))
+        {
             ret.drain(0..1).count();
             ret.drain(ret.len() - 1..).count();
         }

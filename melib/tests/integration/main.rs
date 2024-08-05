@@ -19,6 +19,7 @@
 // along with meli. If not, see <http://www.gnu.org/licenses/>.
 //
 
+mod configs;
 mod generating_email;
 mod mbox_parse;
 

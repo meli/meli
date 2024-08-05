@@ -147,6 +147,13 @@ pub struct Error {
     pub kind: ErrorKind,
 }
 
+#[cfg(test)]
+impl PartialEq for Error {
+    fn eq(&self, other: &Self) -> bool {
+        self.to_string().eq(&other.to_string())
+    }
+}
+
 pub trait IntoError {
     fn set_err_summary<M>(self, msg: M) -> Error
     where

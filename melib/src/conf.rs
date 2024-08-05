@@ -34,7 +34,7 @@ use crate::{
 };
 pub use crate::{SortField, SortOrder};
 
-#[derive(Clone, Debug, Default, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct AccountSettings {
     pub name: String,
     /// Name of mailbox that is the root of the mailbox hierarchy.
@@ -44,8 +44,11 @@ pub struct AccountSettings {
     pub root_mailbox: String,
     pub format: String,
     pub identity: String,
+    #[serde(default)]
     pub extra_identities: Vec<String>,
+    #[serde(default = "false_val")]
     pub read_only: bool,
+    #[serde(default)]
     pub display_name: Option<String>,
     #[serde(default)]
     pub order: (SortField, SortOrder),

@@ -36,6 +36,7 @@ use std::{
 };
 
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use regex::Regex;
 
 use super::{watch, MaildirMailbox, MaildirOp, MaildirPathTrait};
 use crate::{
@@ -105,6 +106,34 @@ impl DerefMut for HashIndex {
 
 pub type HashIndexes = Arc<Mutex<HashMap<MailboxHash, HashIndex>>>;
 
+#[derive(Debug)]
+pub struct Configuration {
+    pub rename_regex: Option<Regex>,
+}
+
+impl Configuration {
+    pub fn new(settings: &AccountSettings) -> Result<Self> {
+        let rename_regex = if let Some(v) = settings.extra.get("rename_regex").map(|v| {
+            Regex::new(v).map_err(|e| {
+                Error::new(format!(
+                    "Configuration error ({}): Invalid value for field `{}`: {}",
+                    settings.name.as_str(),
+                    "rename_regex",
+                    v,
+                ))
+                .set_source(Some(crate::src_err_arc_wrap!(e)))
+                .set_kind(ErrorKind::ValueError)
+            })
+        }) {
+            Some(v?)
+        } else {
+            None
+        };
+
+        Ok(Self { rename_regex })
+    }
+}
+
 /// The maildir backend instance type.
 #[derive(Debug)]
 pub struct MaildirType {
@@ -115,23 +144,22 @@ pub struct MaildirType {
     pub event_consumer: BackendEventConsumer,
     pub collection: Collection,
     pub path: PathBuf,
+    pub config: Arc<Configuration>,
 }
 
-pub fn move_to_cur(p: &Path) -> Result<PathBuf> {
-    let mut new = p.to_path_buf();
-    let file_name = p.to_string_lossy();
-    let slash_pos = file_name.bytes().rposition(|c| c == b'/').unwrap() + 1;
-    new.pop();
-    new.pop();
-
-    new.push("cur");
-    new.push(&file_name[slash_pos..]);
-    if !file_name.ends_with(":2,") {
-        new.set_extension(":2,");
-    }
-    log::trace!("moved to cur: {}", new.display());
-    fs::rename(p, &new)?;
-    Ok(new)
+pub fn move_to_cur(config: &Configuration, p: &Path) -> Result<PathBuf> {
+    let cur = {
+        let mut cur = p.to_path_buf();
+        cur.pop();
+        cur.pop();
+        cur.push("cur");
+        cur
+    };
+    let dest_path = p.place_in_dir(&cur, config)?;
+    log::trace!("moved to cur: {}", dest_path.display());
+    #[cfg(not(test))]
+    fs::rename(p, &dest_path)?;
+    Ok(dest_path)
 }
 
 impl MailBackend for MaildirType {
@@ -169,7 +197,15 @@ impl MailBackend for MaildirType {
         let path: PathBuf = mailbox.fs_path().into();
         let map = self.hash_indexes.clone();
         let mailbox_index = self.mailbox_index.clone();
-        super::stream::MaildirStream::new(mailbox_hash, unseen, total, path, map, mailbox_index)
+        super::stream::MaildirStream::new(
+            mailbox_hash,
+            unseen,
+            total,
+            path,
+            map,
+            mailbox_index,
+            self.config.clone(),
+        )
     }
 
     fn refresh(&mut self, mailbox_hash: MailboxHash) -> ResultFuture<()> {
@@ -180,12 +216,13 @@ impl MailBackend for MaildirType {
         let path: PathBuf = mailbox.fs_path().into();
         let map = self.hash_indexes.clone();
         let mailbox_index = self.mailbox_index.clone();
+        let config = self.config.clone();
 
         Ok(Box::pin(async move {
             let thunk = move |sender: &BackendEventConsumer| {
                 log::trace!("refreshing");
                 let mut buf = Vec::with_capacity(4096);
-                let files = Self::list_mail_in_maildir_fs(path.clone(), false)?;
+                let files = Self::list_mail_in_maildir_fs(&config, path.clone(), false)?;
                 let mut current_hashes = {
                     let mut map = map.lock().unwrap();
                     let map = map.entry(mailbox_hash).or_default();
@@ -287,6 +324,7 @@ impl MailBackend for MaildirType {
             mailbox_index: self.mailbox_index.clone(),
             root_mailbox_hash,
             mailbox_counts,
+            config: self.config.clone(),
         };
         Ok(Box::pin(async move { watch_state.watch().await }))
     }
@@ -315,19 +353,20 @@ impl MailBackend for MaildirType {
         &mut self,
         env_hashes: EnvelopeHashBatch,
         mailbox_hash: MailboxHash,
-        flags: SmallVec<[FlagOp; 8]>,
+        flag_ops: SmallVec<[FlagOp; 8]>,
     ) -> ResultFuture<()> {
-        let hash_index = self.hash_indexes.clone();
-        if flags.iter().any(|op| op.is_tag()) {
+        if flag_ops.iter().any(|op| op.is_tag()) {
             return Err(Error::new("Maildir doesn't support tags."));
         }
+        let hash_index = self.hash_indexes.clone();
+        let config = self.config.clone();
 
         Ok(Box::pin(async move {
             let mut hash_indexes_lck = hash_index.lock().unwrap();
             let hash_index = hash_indexes_lck.entry(mailbox_hash).or_default();
 
             for env_hash in env_hashes.iter() {
-                let _path = {
+                let path = {
                     if !hash_index.contains_key(&env_hash) {
                         continue;
                     }
@@ -340,38 +379,14 @@ impl MailBackend for MaildirType {
                         hash_index[&env_hash].to_path_buf()
                     }
                 };
-                let mut env_flags = _path.flags();
-                let path = _path.to_str().unwrap(); // Assume UTF-8 validity
-                let idx: usize = path
-                    .rfind(":2,")
-                    .ok_or_else(|| Error::new(format!("Invalid email filename: {:?}", path)))?
-                    + 3;
-                let mut new_name: String = path[..idx].to_string();
-                for op in flags.iter() {
+                let mut new_flags = path.flags();
+                for op in flag_ops.iter() {
                     if let FlagOp::Set(f) | FlagOp::UnSet(f) = op {
-                        env_flags.set(*f, op.as_bool());
+                        new_flags.set(*f, op.as_bool());
                     }
                 }
 
-                if !(env_flags & Flag::DRAFT).is_empty() {
-                    new_name.push('D');
-                }
-                if !(env_flags & Flag::FLAGGED).is_empty() {
-                    new_name.push('F');
-                }
-                if !(env_flags & Flag::PASSED).is_empty() {
-                    new_name.push('P');
-                }
-                if !(env_flags & Flag::REPLIED).is_empty() {
-                    new_name.push('R');
-                }
-                if !(env_flags & Flag::SEEN).is_empty() {
-                    new_name.push('S');
-                }
-                if !(env_flags & Flag::TRASHED).is_empty() {
-                    new_name.push('T');
-                }
-                let new_name: PathBuf = new_name.into();
+                let new_name: PathBuf = path.set_flags(new_flags, &config)?;
                 hash_index.entry(env_hash).or_default().modified =
                     Some(PathMod::Path(new_name.clone()));
 
@@ -394,7 +409,7 @@ impl MailBackend for MaildirType {
             let hash_index = hash_indexes_lck.entry(mailbox_hash).or_default();
 
             for env_hash in env_hashes.iter() {
-                let _path = {
+                let path = {
                     if !hash_index.contains_key(&env_hash) {
                         continue;
                     }
@@ -408,7 +423,7 @@ impl MailBackend for MaildirType {
                     }
                 };
 
-                fs::remove_file(&_path)?;
+                fs::remove_file(&path)?;
             }
             Ok(())
         }))
@@ -421,14 +436,15 @@ impl MailBackend for MaildirType {
         destination_mailbox_hash: MailboxHash,
         move_: bool,
     ) -> ResultFuture<()> {
-        let hash_index = self.hash_indexes.clone();
         if !self.mailboxes.contains_key(&source_mailbox_hash) {
             return Err(Error::new("Invalid source mailbox hash").set_kind(ErrorKind::Bug));
         } else if !self.mailboxes.contains_key(&destination_mailbox_hash) {
             return Err(Error::new("Invalid destination mailbox hash").set_kind(ErrorKind::Bug));
         }
-        let mut dest_path: PathBuf = self.mailboxes[&destination_mailbox_hash].fs_path().into();
-        dest_path.push("cur");
+        let hash_index = self.hash_indexes.clone();
+        let config = self.config.clone();
+        let mut dest_dir: PathBuf = self.mailboxes[&destination_mailbox_hash].fs_path().into();
+        dest_dir.push("cur");
         Ok(Box::pin(async move {
             let mut hash_indexes_lck = hash_index.lock().unwrap();
             let hash_index = hash_indexes_lck.entry(source_mailbox_hash).or_default();
@@ -447,10 +463,7 @@ impl MailBackend for MaildirType {
                         hash_index[&env_hash].to_path_buf()
                     }
                 };
-                let filename = path_src.file_name().ok_or_else(|| {
-                    format!("Could not get filename of `{}`", path_src.display(),)
-                })?;
-                dest_path.push(filename);
+                let dest_path = path_src.place_in_dir(&dest_dir, &config)?;
                 hash_index.entry(env_hash).or_default().modified =
                     Some(PathMod::Path(dest_path.clone()));
                 if move_ {
@@ -462,7 +475,6 @@ impl MailBackend for MaildirType {
                     fs::copy(&path_src, &dest_path)?;
                     log::trace!("success in copy");
                 }
-                dest_path.pop();
             }
             Ok(())
         }))
@@ -588,6 +600,8 @@ impl MaildirType {
         is_subscribed: Box<dyn Fn(&str) -> bool>,
         event_consumer: BackendEventConsumer,
     ) -> Result<Box<dyn MailBackend>> {
+        let config = Arc::new(Configuration::new(settings)?);
+
         let mut mailboxes: HashMap<MailboxHash, MaildirMailbox> = Default::default();
         fn recurse_mailboxes<P: AsRef<Path>>(
             mailboxes: &mut HashMap<MailboxHash, MaildirMailbox>,
@@ -737,6 +751,7 @@ impl MaildirType {
             event_consumer,
             collection: Default::default(),
             path: root_mailbox,
+            config,
         }))
     }
 
@@ -823,16 +838,22 @@ impl MaildirType {
                 s.root_mailbox.as_str()
             )));
         }
+        _ = Configuration::new(s)?;
+        _ = s.extra.swap_remove("rename_regex");
 
         Ok(())
     }
 
-    pub fn list_mail_in_maildir_fs(mut path: PathBuf, read_only: bool) -> Result<Vec<PathBuf>> {
+    pub fn list_mail_in_maildir_fs(
+        config: &Configuration,
+        mut path: PathBuf,
+        read_only: bool,
+    ) -> Result<Vec<PathBuf>> {
         let mut files: Vec<PathBuf> = vec![];
         path.push("new");
         for p in path.read_dir()?.flatten() {
             if !read_only {
-                move_to_cur(&p.path()).ok().take();
+                move_to_cur(config, &p.path()).ok().take();
             } else {
                 files.push(p.path());
             }

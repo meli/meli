@@ -84,3 +84,4 @@ mailin-embedded = { version = "0.8", features = ["rtls"] }
 sealed_test = { version = "1.1.0" }
 stderrlog = { version = "^0.5" }
 tempfile = { version = "3.3" }
+toml = { version = "0.8", default-features = false, features = ["display","preserve_order","parse"] }
