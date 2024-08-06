@@ -28,12 +28,13 @@ use std::{
 use futures::lock::{MappedMutexGuard as FutureMappedMutexGuard, Mutex as FutureMutex};
 use isahc::{
     config::{Configurable, DnsCache, RedirectPolicy, SslOption},
-    AsyncReadResponseExt, HttpClient,
+    http, AsyncReadResponseExt, HttpClient,
 };
 use smallvec::SmallVec;
 use url::Url;
 
 use crate::{
+    email::parser::BytesExt,
     error::{Error, ErrorKind, NetworkErrorKind, Result},
     jmap::{
         argument::Argument,
@@ -74,7 +75,7 @@ impl JmapConnection {
             .dns_cache(DnsCache::Forever)
             .connection_cache_size(8)
             .connection_cache_ttl(Duration::from_secs(30 * 60))
-            .default_header("Content-Type", "application/json")
+            .default_header(http::header::CONTENT_TYPE, "application/json")
             .ssl_options(if server_conf.danger_accept_invalid_certs {
                 SslOption::DANGER_ACCEPT_INVALID_CERTS
                     | SslOption::DANGER_ACCEPT_INVALID_HOSTS
@@ -96,7 +97,7 @@ impl JmapConnection {
             client
                 .authentication(isahc::auth::Authentication::none())
                 .default_header(
-                    "Authorization",
+                    http::header::AUTHORIZATION,
                     format!("Bearer {}", &server_conf.server_password),
                 )
         } else {
@@ -175,15 +176,62 @@ impl JmapConnection {
                 &self.server_conf.server_url, res_text
             ))
             .set_kind(kind.into());
-            if matches!(err.kind, ErrorKind::Network(NetworkErrorKind::Unauthorized)) {
-                err = err.set_details(
-                    "The server rejected your authentication credentials. Check your provider's \
-                     client connection documentation and see if the following common reasons for \
-                     this error apply:\n- Using the account password when a Bearer token is \
-                     required (You must set `use_token=true` in this case)\n- Using a Bearer \
-                     token is required when a password is expected (You must set \
-                     `use_token=false`)\n- Using invalid password or token value.",
-                );
+            if req.status() == 401 {
+                let mut supports_bearer = false;
+                let mut supports_basic = false;
+                for val in req.headers().get_all(http::header::WWW_AUTHENTICATE).iter() {
+                    supports_bearer |= val.as_bytes().contains_subsequence(b"Bearer".as_slice());
+                    supports_basic |= val.as_bytes().contains_subsequence(b"Basic".as_slice());
+                }
+                match (self.server_conf.use_token, supports_bearer, supports_basic) {
+                    (false, true, _) => {
+                        err = err.set_details(
+                            "The server rejected your authentication credentials because it \
+                             expects authentication with a Bearer token instead of a password. \
+                             Check your provider's client connection documentation. Note that to \
+                             use Bearer token authentication, you must explicitly set \
+                             `use_token=true` in the account's configuration.",
+                        );
+                    }
+                    (true, false, true) => {
+                        err = err.set_details(
+                            "The server rejected your authentication credentials because it \
+                             expects authentication with a username and password but `use_token` \
+                             is set to `true`. Try setting it to `false`.",
+                        );
+                    }
+                    (_, false, false) => {
+                        let schemes = req
+                            .headers()
+                            .get_all(http::header::WWW_AUTHENTICATE)
+                            .iter()
+                            .map(|val| String::from_utf8_lossy(val.as_bytes()).to_string())
+                            .collect::<Vec<String>>();
+                        if schemes.is_empty() {
+                            err = err
+                                .set_details(
+                                    "The server fails to report what authentication schemes it \
+                                     supports. Please report this to your e-mail provider! (The \
+                                     server is expected to provide the supported schemes with the \
+                                     WWW-Authenticate HTTP header)",
+                                )
+                                .set_kind(ErrorKind::ProtocolError);
+                        } else {
+                            err = err.set_details(format!(
+                                "The server does not support any of the implemented \
+                                 authentication mechanisms (Basic or Bearer token). Here are the \
+                                 authentication schemes it reports to support: {}",
+                                schemes.join(", ")
+                            ));
+                        }
+                    }
+                    (true, true, _) | (false, _, true) => {
+                        err = err.set_details(
+                            "The server rejected your authentication credentials. Confirm you are \
+                             not using an invalid password or token value.",
+                        );
+                    }
+                }
             }
             _ = self
                 .store
