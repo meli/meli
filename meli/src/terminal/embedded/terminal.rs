@@ -70,7 +70,7 @@ enum CodepointBuf {
 #[derive(Debug)]
 pub struct Terminal {
     pub grid: EmbeddedGrid,
-    stdin: std::fs::File,
+    stdin: std::mem::ManuallyDrop<std::fs::File>,
     /// Pid of the embedded process
     pub child_pid: nix::unistd::Pid,
 }
@@ -114,7 +114,7 @@ impl std::io::Write for Terminal {
 }
 
 impl Terminal {
-    pub fn new(stdin: std::fs::File, child_pid: nix::unistd::Pid) -> Self {
+    pub fn new(stdin: std::mem::ManuallyDrop<std::fs::File>, child_pid: nix::unistd::Pid) -> Self {
         Self {
             grid: EmbeddedGrid::new(),
             stdin,

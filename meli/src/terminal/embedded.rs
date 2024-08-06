@@ -23,6 +23,7 @@
 use std::os::fd::OwnedFd;
 use std::{
     ffi::{CString, OsStr},
+    mem::ManuallyDrop,
     os::unix::{
         ffi::OsStrExt,
         io::{AsRawFd, FromRawFd, IntoRawFd},
@@ -178,7 +179,8 @@ pub fn create_pty(width: usize, height: usize, command: &str) -> Result<Arc<Mute
     };
 
     let stdin = unsafe { std::fs::File::from_raw_fd(frontend_fd.as_raw_fd()) };
-    let mut embedded_pty = Terminal::new(stdin, child_pid);
+    // We will let the spawned thread close frontend_fd
+    let mut embedded_pty = Terminal::new(ManuallyDrop::new(stdin), child_pid);
     embedded_pty.set_terminal_size((width, height));
     let pty = Arc::new(Mutex::new(embedded_pty));
     let pty_ = pty.clone();
