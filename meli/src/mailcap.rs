@@ -36,6 +36,12 @@ use crate::{
     types::{File, ForkType, UIEvent},
 };
 
+macro_rules! split_command {
+    ($cmd:expr) => {{
+        $cmd.split_whitespace().collect::<Vec<&str>>()
+    }};
+}
+
 pub struct MailcapEntry {
     command: String,
     /* Pass to pager */

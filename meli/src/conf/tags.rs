@@ -21,24 +21,22 @@
 
 //! E-mail tag configuration and {de,}serializing.
 
-use std::collections::{HashMap, HashSet};
-
+use indexmap::{IndexMap, IndexSet};
 use melib::{Error, Result, TagHash};
 use serde::{Deserialize, Deserializer};
 
-use super::DotAddressable;
-use crate::terminal::Color;
+use crate::{conf::DotAddressable, terminal::Color};
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct TagsSettings {
     #[serde(default, deserialize_with = "tag_color_de")]
-    pub colors: HashMap<TagHash, Color>,
+    pub colors: IndexMap<TagHash, Color>,
     #[serde(default, deserialize_with = "tag_set_de", alias = "ignore-tags")]
-    pub ignore_tags: HashSet<TagHash>,
+    pub ignore_tags: IndexSet<TagHash>,
 }
 
-pub fn tag_set_de<'de, D, T: std::convert::From<HashSet<TagHash>>>(
+pub fn tag_set_de<'de, D, T: std::convert::From<IndexSet<TagHash>>>(
     deserializer: D,
 ) -> std::result::Result<T, D::Error>
 where
@@ -47,11 +45,11 @@ where
     Ok(<Vec<String>>::deserialize(deserializer)?
         .into_iter()
         .map(|tag| TagHash::from_bytes(tag.as_bytes()))
-        .collect::<HashSet<TagHash>>()
+        .collect::<IndexSet<TagHash>>()
         .into())
 }
 
-pub fn tag_color_de<'de, D, T: std::convert::From<HashMap<TagHash, Color>>>(
+pub fn tag_color_de<'de, D, T: std::convert::From<IndexMap<TagHash, Color>>>(
     deserializer: D,
 ) -> std::result::Result<T, D::Error>
 where
@@ -64,7 +62,7 @@ where
         C(Color),
     }
 
-    Ok(<HashMap<String, _Color>>::deserialize(deserializer)?
+    Ok(<IndexMap<String, _Color>>::deserialize(deserializer)?
         .into_iter()
         .map(|(tag, color)| {
             (
@@ -75,7 +73,7 @@ where
                 },
             )
         })
-        .collect::<HashMap<TagHash, Color>>()
+        .collect::<IndexMap<TagHash, Color>>()
         .into())
 }
 

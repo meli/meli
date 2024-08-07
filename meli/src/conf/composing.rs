@@ -20,13 +20,13 @@
  */
 
 //! Configuration for composing email.
-use std::collections::HashMap;
 
+use indexmap::IndexMap;
 use melib::{conf::ActionFlag, email::HeaderName};
 use serde::{de, Deserialize, Deserializer};
 
-use super::{
-    default_vals::{ask, false_val, none, true_val},
+use crate::conf::{
+    default_values::{ask, false_val, none, true_val},
     deserializers::non_empty_string,
 };
 
@@ -59,7 +59,7 @@ pub struct ComposingSettings {
     /// Set default header values for new drafts
     /// Default: empty
     #[serde(default, alias = "default-header-values")]
-    pub default_header_values: HashMap<HeaderName, String>,
+    pub default_header_values: IndexMap<HeaderName, String>,
     /// Wrap header preamble when editing a draft in an editor. This allows you
     /// to write non-plain text email without the preamble creating syntax
     /// errors. They are stripped when you return from the editor. The
@@ -119,7 +119,7 @@ impl Default for ComposingSettings {
             embedded_pty: false,
             format_flowed: true,
             insert_user_agent: true,
-            default_header_values: HashMap::default(),
+            default_header_values: IndexMap::default(),
             store_sent_mail: true,
             wrap_header_preamble: None,
             attribution_format_string: None,

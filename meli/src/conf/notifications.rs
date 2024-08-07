@@ -21,8 +21,8 @@
 
 use melib::{Error, Result, ToggleFlag};
 
-use super::{
-    default_vals::{internal_value_false, none, true_val},
+use crate::conf::{
+    default_values::{internal_value_false, none, true_val},
     DotAddressable,
 };
 

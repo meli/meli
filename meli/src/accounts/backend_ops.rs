@@ -59,7 +59,7 @@ impl Account {
 
     #[cfg(feature = "sqlite3")]
     pub(super) fn update_cached_env(&mut self, env: Envelope, old_hash: Option<EnvelopeHash>) {
-        if self.settings.conf.search_backend == crate::conf::SearchBackend::Sqlite3 {
+        if self.settings.conf.search_backend == SearchBackend::Sqlite3 {
             let msg_id = env.message_id_display().to_string();
             let name = self.name.clone();
             let backend = self.backend.clone();

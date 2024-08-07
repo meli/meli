@@ -21,7 +21,7 @@
 
 use melib::{search::Query, Error, Result, ToggleFlag};
 
-use super::{default_vals::*, DotAddressable, IndexStyle};
+use crate::conf::{data_types::IndexStyle, default_values::*, DotAddressable};
 
 /// Settings for mail listings
 ///

@@ -151,7 +151,8 @@ pub mod svg;
 #[macro_use]
 pub mod conf;
 pub use crate::conf::{
-    DotAddressable, IndexStyle, SearchBackend, Settings, Shortcuts, ThemeAttribute,
+    data_types::{IndexStyle, SearchBackend},
+    DotAddressable, Settings, Shortcuts, ThemeAttribute,
 };
 
 #[cfg(feature = "sqlite3")]

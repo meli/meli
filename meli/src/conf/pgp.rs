@@ -21,7 +21,7 @@
 
 use melib::conf::ActionFlag;
 
-use super::default_vals::*;
+use crate::conf::default_values::*;
 
 /// Settings for digital signing and encryption
 #[derive(Clone, Debug, Deserialize, Serialize)]

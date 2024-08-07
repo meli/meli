@@ -56,6 +56,7 @@ use smallvec::SmallVec;
 
 use super::*;
 use crate::{
+    conf::data_types::SearchBackend,
     jobs::JobExecutor,
     notifications::{DisplayMessage, DisplayMessageBox},
     terminal::{get_events, Screen, Tty},
@@ -810,7 +811,7 @@ impl State {
                     .settings
                     .conf
                     .search_backend()
-                    != crate::conf::SearchBackend::Sqlite3
+                    != SearchBackend::Sqlite3
                 {
                     self.context.replies.push_back(UIEvent::Notification {
                         title: None,

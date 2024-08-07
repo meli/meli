@@ -30,6 +30,7 @@ use melib::{utils::futures::timeout, Result, ShellExpandTrait};
 
 use crate::{
     args::{PathOrStdio, ToolOpt},
+    conf::preprocessing::get_included_configs,
     *,
 };
 
@@ -63,7 +64,7 @@ pub fn edit_config() -> Result<()> {
     let mut cmd = Command::new(editor);
 
     let mut handle = &mut cmd;
-    for c in conf::get_included_configs(config_path)? {
+    for c in get_included_configs(&config_path)? {
         handle = handle.arg(&c);
     }
     let mut handle = handle

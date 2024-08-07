@@ -24,7 +24,7 @@
 use indexmap::IndexMap;
 use melib::{Error, Result, ToggleFlag};
 
-use super::{default_vals::*, deserializers::*, DotAddressable};
+use crate::conf::{default_values::*, deserializers::*, DotAddressable};
 
 /// Settings for the pager function.
 #[derive(Clone, Debug, Deserialize, Serialize)]
