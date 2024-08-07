@@ -931,7 +931,6 @@ impl PlainListing {
                     None,
                     None,
                 );
-                #[cfg(feature = "regexp")]
                 {
                     for text_formatter in crate::conf::text_format_regexps(context, "listing.from")
                     {
@@ -1004,7 +1003,6 @@ impl PlainListing {
                     None,
                     None,
                 ));
-                #[cfg(feature = "regexp")]
                 {
                     for text_formatter in
                         crate::conf::text_format_regexps(context, "listing.subject")
@@ -1212,7 +1210,6 @@ impl PlainListing {
                 None,
                 None,
             ));
-            #[cfg(feature = "regexp")]
             {
                 for text_formatter in crate::conf::text_format_regexps(context, "listing.subject") {
                     let t = columns[4].grid_mut().insert_tag(text_formatter.tag);

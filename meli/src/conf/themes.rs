@@ -43,6 +43,7 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use smallvec::SmallVec;
 
 use crate::{
+    conf::data_types::regex_pattern::{RegexOptions, RegexValue},
     terminal::{Attr, Color},
     Context,
 };
@@ -520,30 +521,23 @@ pub struct Themes {
 pub struct Theme {
     color_aliases: IndexMap<Cow<'static, str>, ThemeValue<Color>>,
     attr_aliases: IndexMap<Cow<'static, str>, ThemeValue<Attr>>,
-    #[cfg(feature = "regexp")]
     text_format_regexps: IndexMap<Cow<'static, str>, SmallVec<[TextFormatterSetting; 32]>>,
     pub keys: IndexMap<Cow<'static, str>, ThemeAttributeInner>,
 }
 
-#[cfg(feature = "regexp")]
 pub use regexp::text_format_regexps;
-#[cfg(feature = "regexp")]
 use regexp::*;
 
-#[cfg(feature = "regexp")]
 mod regexp {
     use super::*;
-    use crate::terminal::FormatTag;
+    use crate::{conf::data_types::regex_pattern::RegexValue, terminal::FormatTag};
 
     pub(super) const DEFAULT_TEXT_FORMATTER_KEYS: &[&str] =
         &["pager.envelope.body", "listing.from", "listing.subject"];
 
-    #[derive(Clone)]
-    pub struct RegexpWrapper(pub pcre2::bytes::Regex);
-
     #[derive(Clone, Debug)]
     pub(super) struct TextFormatterSetting {
-        pub(super) regexp: RegexpWrapper,
+        pub(super) regexp: RegexValue,
         pub(super) fg: Option<ThemeValue<Color>>,
         pub(super) bg: Option<ThemeValue<Color>>,
         pub(super) attrs: Option<ThemeValue<Attr>>,
@@ -552,106 +546,8 @@ mod regexp {
 
     #[derive(Clone, Debug)]
     pub struct TextFormatter<'r> {
-        pub regexp: &'r RegexpWrapper,
+        pub regexp: &'r RegexValue,
         pub tag: FormatTag,
-    }
-
-    impl Default for RegexpWrapper {
-        fn default() -> Self {
-            Self(pcre2::bytes::Regex::new("").unwrap())
-        }
-    }
-
-    impl std::fmt::Debug for RegexpWrapper {
-        fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-            std::fmt::Debug::fmt(self.0.as_str(), fmt)
-        }
-    }
-
-    impl std::hash::Hash for RegexpWrapper {
-        fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-            self.0.as_str().hash(state)
-        }
-    }
-
-    impl Eq for RegexpWrapper {}
-
-    impl PartialEq for RegexpWrapper {
-        fn eq(&self, other: &Self) -> bool {
-            self.0.as_str().eq(other.0.as_str())
-        }
-    }
-
-    impl RegexpWrapper {
-        pub(super) fn new(
-            pattern: &str,
-            caseless: bool,
-            dotall: bool,
-            extended: bool,
-            multi_line: bool,
-            ucp: bool,
-            jit_if_available: bool,
-        ) -> std::result::Result<Self, pcre2::Error> {
-            Ok(Self(
-                pcre2::bytes::RegexBuilder::new()
-                    .caseless(caseless)
-                    .dotall(dotall)
-                    .extended(extended)
-                    .multi_line(multi_line)
-                    .ucp(ucp)
-                    .jit_if_available(jit_if_available)
-                    .build(pattern)?,
-            ))
-        }
-
-        pub fn find_iter<'w, 's>(&'w self, s: &'s str) -> FindIter<'w, 's> {
-            FindIter {
-                pcre_iter: self.0.find_iter(s.as_bytes()),
-                char_indices: s.char_indices(),
-                char_offset: 0,
-            }
-        }
-    }
-
-    pub struct FindIter<'r, 's> {
-        pcre_iter: pcre2::bytes::Matches<'r, 's>,
-        char_indices: std::str::CharIndices<'s>,
-        char_offset: usize,
-    }
-
-    impl<'r, 's> Iterator for FindIter<'r, 's> {
-        type Item = (usize, usize);
-
-        fn next(&mut self) -> Option<Self::Item> {
-            loop {
-                let next_byte_offset = self.pcre_iter.next()?;
-                if next_byte_offset.is_err() {
-                    continue;
-                }
-                let next_byte_offset = next_byte_offset.unwrap();
-
-                let mut next_char_index = self.char_indices.next()?;
-
-                while next_byte_offset.start() < next_char_index.0 {
-                    self.char_offset += 1;
-                    next_char_index = self.char_indices.next()?;
-                }
-                let start = self.char_offset;
-
-                while next_byte_offset.end()
-                    > self
-                        .char_indices
-                        .next()
-                        .map(|(v, _)| v)
-                        .unwrap_or_else(|| next_byte_offset.end())
-                {
-                    self.char_offset += 1;
-                }
-                let end = self.char_offset + 1;
-
-                return Some((start, end));
-            }
-        }
     }
 
     #[inline(always)]
@@ -775,14 +671,6 @@ impl<'de> Deserialize<'de> for Themes {
     where
         D: Deserializer<'de>,
     {
-        #[cfg(feature = "regexp")]
-        const fn false_val() -> bool {
-            false
-        }
-        #[cfg(feature = "regexp")]
-        const fn true_val() -> bool {
-            true
-        }
         #[derive(Deserialize)]
         struct ThemesOptions {
             #[serde(default)]
@@ -798,27 +686,15 @@ impl<'de> Deserialize<'de> for Themes {
             color_aliases: IndexMap<Cow<'static, str>, ThemeValue<Color>>,
             #[serde(default)]
             attr_aliases: IndexMap<Cow<'static, str>, ThemeValue<Attr>>,
-            #[cfg(feature = "regexp")]
             #[serde(default)]
             text_format_regexps: IndexMap<Cow<'static, str>, IndexMap<String, RegexpOptions>>,
             #[serde(flatten, default)]
             keys: IndexMap<Cow<'static, str>, ThemeAttributeInnerOptions>,
         }
-        #[cfg(feature = "regexp")]
         #[derive(Default, Deserialize)]
         struct RegexpOptions {
-            #[serde(default = "false_val")]
-            caseless: bool,
-            #[serde(default = "false_val")]
-            dotall: bool,
-            #[serde(default = "false_val")]
-            extended: bool,
-            #[serde(default = "false_val")]
-            multi_line: bool,
-            #[serde(default = "true_val")]
-            ucp: bool,
-            #[serde(default = "false_val")]
-            jit_if_available: bool,
+            #[serde(flatten)]
+            o: RegexOptions,
             #[serde(default)]
             priority: u8,
             #[serde(flatten)]
@@ -867,19 +743,10 @@ impl<'de> Deserialize<'de> for Themes {
         }
         ret.light.color_aliases = s.light.color_aliases;
         ret.light.attr_aliases = s.light.attr_aliases;
-        #[cfg(feature = "regexp")]
         for (k, v) in s.light.text_format_regexps {
             let mut acc = SmallVec::new();
             for (rs, v) in v {
-                match RegexpWrapper::new(
-                    &rs,
-                    v.caseless,
-                    v.dotall,
-                    v.extended,
-                    v.multi_line,
-                    v.ucp,
-                    v.jit_if_available,
-                ) {
+                match RegexValue::new_with_options(&rs, v.o) {
                     Ok(regexp) => {
                         acc.push(TextFormatterSetting {
                             regexp,
@@ -922,19 +789,10 @@ impl<'de> Deserialize<'de> for Themes {
         }
         ret.dark.color_aliases = s.dark.color_aliases;
         ret.dark.attr_aliases = s.dark.attr_aliases;
-        #[cfg(feature = "regexp")]
         for (k, v) in s.dark.text_format_regexps {
             let mut acc = SmallVec::new();
             for (rs, v) in v {
-                match RegexpWrapper::new(
-                    &rs,
-                    v.caseless,
-                    v.dotall,
-                    v.extended,
-                    v.multi_line,
-                    v.ucp,
-                    v.jit_if_available,
-                ) {
+                match RegexValue::new_with_options(&rs, v.o) {
                     Ok(regexp) => {
                         acc.push(TextFormatterSetting {
                             regexp,
@@ -980,19 +838,10 @@ impl<'de> Deserialize<'de> for Themes {
             }
             t.color_aliases = theme.color_aliases;
             t.attr_aliases = theme.attr_aliases;
-            #[cfg(feature = "regexp")]
             for (k, v) in theme.text_format_regexps {
                 let mut acc = SmallVec::new();
                 for (rs, v) in v {
-                    match RegexpWrapper::new(
-                        &rs,
-                        v.caseless,
-                        v.dotall,
-                        v.extended,
-                        v.multi_line,
-                        v.ucp,
-                        v.jit_if_available,
-                    ) {
+                    match RegexValue::new_with_options(&rs, v.o) {
                         Ok(regexp) => {
                             acc.push(TextFormatterSetting {
                                 regexp,
@@ -1126,7 +975,6 @@ impl Themes {
                 }
             }))
             .collect::<SmallVec<[(Option<_>, &'_ str, &'_ str, &'_ str); 128]>>();
-        #[cfg(feature = "regexp")]
         {
             for (key, v) in &theme.text_format_regexps {
                 if !regexp::DEFAULT_TEXT_FORMATTER_KEYS.contains(&key.as_ref()) {
@@ -1759,7 +1607,6 @@ impl Default for Themes {
                 keys: light,
                 attr_aliases: Default::default(),
                 color_aliases: Default::default(),
-                #[cfg(feature = "regexp")]
                 text_format_regexps: DEFAULT_TEXT_FORMATTER_KEYS
                     .iter()
                     .map(|&k| (k.into(), SmallVec::new()))
@@ -1769,7 +1616,6 @@ impl Default for Themes {
                 keys: dark,
                 attr_aliases: Default::default(),
                 color_aliases: Default::default(),
-                #[cfg(feature = "regexp")]
                 text_format_regexps: DEFAULT_TEXT_FORMATTER_KEYS
                     .iter()
                     .map(|&k| (k.into(), SmallVec::new()))

@@ -21,6 +21,7 @@
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
 pub mod dotaddressable;
+pub mod regex_pattern;
 
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 

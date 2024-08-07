@@ -46,12 +46,6 @@ termion = { version = "1.5.1", default-features = false }
 toml = { version = "0.8", default-features = false, features = ["display","preserve_order","parse"] }
 xdg = { version = "2.1.0" }
 
-[dependencies.pcre2]
-# An [env] entry in .cargo/config.toml should force a static build instead of
-# looking for a system library.
-version = "0.2.3"
-optional = true
-
 [features]
 default = ["sqlite3", "notmuch", "smtp", "dbus-notifications", "gpgme", "cli-docs", "jmap", "static"]
 notmuch = ["melib/notmuch"]
@@ -59,7 +53,6 @@ jmap = ["melib/jmap"]
 sqlite3 = ["melib/sqlite3"]
 smtp = ["melib/smtp"]
 smtp-trace = ["smtp", "melib/smtp-trace"]
-regexp = ["dep:pcre2"]
 dbus-notifications = ["dep:notify-rust"]
 cli-docs = ["dep:flate2"]
 svgscreenshot = ["dep:svg_crate"]

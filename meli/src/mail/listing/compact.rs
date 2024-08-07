@@ -1221,7 +1221,6 @@ impl CompactListing {
                     .set_attrs(row_attr.attrs)
                     .set_ch(' ');
             }
-            #[cfg(feature = "regexp")]
             {
                 for text_formatter in crate::conf::text_format_regexps(context, "listing.from") {
                     let t = columns[2].grid_mut().insert_tag(text_formatter.tag);
@@ -1280,7 +1279,6 @@ impl CompactListing {
                     None,
                     None,
                 ));
-                #[cfg(feature = "regexp")]
                 {
                     for text_formatter in
                         crate::conf::text_format_regexps(context, "listing.subject")

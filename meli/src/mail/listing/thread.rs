@@ -987,7 +987,6 @@ impl ThreadListing {
                     None,
                     None,
                 );
-                #[cfg(feature = "regexp")]
                 {
                     for text_formatter in crate::conf::text_format_regexps(context, "listing.from")
                     {
@@ -1060,7 +1059,6 @@ impl ThreadListing {
                     None,
                     None,
                 ));
-                #[cfg(feature = "regexp")]
                 {
                     for text_formatter in
                         crate::conf::text_format_regexps(context, "listing.subject")

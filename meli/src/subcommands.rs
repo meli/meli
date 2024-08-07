@@ -115,8 +115,6 @@ pub fn compiled_with() -> Result<()> {
     println!("sqlite3");
     #[cfg(feature = "smtp")]
     println!("smtp");
-    #[cfg(feature = "regexp")]
-    println!("regexp");
     #[cfg(feature = "dbus-notifications")]
     println!("dbus-notifications");
     #[cfg(feature = "cli-docs")]

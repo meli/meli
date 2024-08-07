@@ -393,7 +393,6 @@ impl Pager {
         }
 
         {
-            #[cfg(feature = "regexp")]
             {
                 let area3 = area;
                 for text_formatter in
