@@ -33,12 +33,14 @@ impl From<ValidationError> for Error {
     #[inline]
     fn from(error: ValidationError) -> Self {
         Self {
-            summary: error.to_string().into(),
+            summary: "IMAP transaction validation failed".into(),
             details: None,
-            source: Some(Arc::new(error)),
+            inner: None,
+            source: None,
             related_path: None,
             kind: ErrorKind::Bug,
         }
+        .set_source(Some(Arc::new(error)))
     }
 }
 
@@ -49,12 +51,14 @@ where
     #[inline]
     fn from(error: AppendError<S, L>) -> Self {
         Self {
-            summary: error.to_string().into(),
+            summary: "IMAP APPEND command failed".into(),
             details: None,
-            source: Some(Arc::new(error)),
+            inner: None,
+            source: None,
             related_path: None,
             kind: ErrorKind::Bug,
         }
+        .set_source(Some(Arc::new(error)))
     }
 }
 
@@ -65,12 +69,14 @@ where
     #[inline]
     fn from(error: CopyError<S, L>) -> Self {
         Self {
-            summary: error.to_string().into(),
+            summary: "IMAP COPY command failed".into(),
             details: None,
-            source: Some(Arc::new(error)),
+            inner: None,
+            source: None,
             related_path: None,
             kind: ErrorKind::Bug,
         }
+        .set_source(Some(Arc::new(error)))
     }
 }
 
@@ -81,12 +87,14 @@ where
     #[inline]
     fn from(error: MoveError<S, M>) -> Self {
         Self {
-            summary: error.to_string().into(),
+            summary: "IMAP MOVE command failed".into(),
+            source: None,
             details: None,
-            source: Some(Arc::new(error)),
+            inner: None,
             related_path: None,
             kind: ErrorKind::Bug,
         }
+        .set_source(Some(Arc::new(error)))
     }
 }
 
@@ -97,11 +105,13 @@ where
     #[inline]
     fn from(error: ListError<L1, L2>) -> Self {
         Self {
-            summary: error.to_string().into(),
+            summary: "IMAP LIST command failed".into(),
             details: None,
-            source: Some(Arc::new(error)),
+            inner: None,
+            source: None,
             related_path: None,
             kind: ErrorKind::Bug,
         }
+        .set_source(Some(Arc::new(error)))
     }
 }

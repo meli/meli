@@ -21,7 +21,13 @@
 
 //! Library error type.
 
-use std::{borrow::Cow, io, result, str, string, sync::Arc};
+use std::{
+    borrow::Cow,
+    error, io,
+    path::{Path, PathBuf},
+    result, str, string,
+    sync::Arc,
+};
 
 pub type Result<T> = result::Result<T, Error>;
 
@@ -57,10 +63,10 @@ pub enum ErrorKind {
 impl std::fmt::Display for ErrorKind {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::None => write!(fmt, "None"),
-            Self::External => write!(fmt, "External"),
-            Self::LinkedLibrary(ref name) => write!(fmt, "Linked library error: {name}"),
-            Self::Authentication => write!(fmt, "Authentication"),
+            Self::None => write!(fmt, ""),
+            Self::External => write!(fmt, "External error"),
+            Self::LinkedLibrary(ref name) => write!(fmt, "Linked library `{name}` error"),
+            Self::Authentication => write!(fmt, "Authentication error"),
             Self::Bug => write!(fmt, "Bug, please report this!"),
             Self::Network(ref inner) => write!(fmt, "{}", inner.as_str()),
             Self::ProtocolError => write!(fmt, "Protocol error"),
@@ -68,14 +74,14 @@ impl std::fmt::Display for ErrorKind {
                 fmt,
                 "Protocol is not supported. It could be the wrong type or version."
             ),
-            Self::Platform => write!(fmt, "Platform/Runtime environment; OS or hardware"),
-            Self::TimedOut => write!(fmt, "Timed Out"),
-            Self::OSError => write!(fmt, "OS Error"),
-            Self::Configuration => write!(fmt, "Configuration"),
-            Self::NotImplemented => write!(fmt, "Not implemented"),
-            Self::NotSupported => write!(fmt, "Not supported"),
-            Self::NotFound => write!(fmt, "Not found"),
-            Self::ValueError => write!(fmt, "Invalid value"),
+            Self::Platform => write!(fmt, "Platform/Runtime environment error (OS or hardware)"),
+            Self::TimedOut => write!(fmt, "Timed out error"),
+            Self::OSError => write!(fmt, "OS error"),
+            Self::Configuration => write!(fmt, "Configuration error"),
+            Self::NotImplemented => write!(fmt, "Not implemented error"),
+            Self::NotSupported => write!(fmt, "Not supported error"),
+            Self::NotFound => write!(fmt, "Not found error"),
+            Self::ValueError => write!(fmt, "Invalid value error"),
         }
     }
 }
@@ -133,8 +139,9 @@ macro_rules! src_err_arc_wrap {
 pub struct Error {
     pub summary: Cow<'static, str>,
     pub details: Option<Cow<'static, str>>,
-    pub source: Option<std::sync::Arc<dyn std::error::Error + Send + Sync + 'static>>,
-    pub related_path: Option<std::path::PathBuf>,
+    pub source: Option<Box<Self>>,
+    pub inner: Option<Arc<dyn error::Error + Send + Sync + 'static>>,
+    pub related_path: Option<PathBuf>,
     pub kind: ErrorKind,
 }
 
@@ -165,7 +172,7 @@ pub trait ResultIntoError<T> {
 
 pub trait WrapResultIntoError<T, I>
 where
-    I: Send + Sync + std::error::Error + 'static,
+    I: Send + Sync + error::Error + 'static,
 {
     /// Wrap a result into a new [`Error`] that sets its source to the original
     /// value.
@@ -227,7 +234,7 @@ impl<T, I: Into<Error>> ResultIntoError<T> for std::result::Result<T, I> {
     }
 
     #[inline]
-    fn chain_err_related_path(self, p: &std::path::Path) -> Result<T> {
+    fn chain_err_related_path(self, p: &Path) -> Result<T> {
         self.map_err(|err| err.set_err_related_path(p))
     }
 
@@ -239,7 +246,7 @@ impl<T, I: Into<Error>> ResultIntoError<T> for std::result::Result<T, I> {
 
 impl<T, I> WrapResultIntoError<T, I> for std::result::Result<T, I>
 where
-    I: Send + Sync + std::error::Error + 'static,
+    I: Send + Sync + error::Error + 'static,
 {
     #[inline]
     /// Wrap a result into a new [`Error`] that sets its source to the original
@@ -262,6 +269,7 @@ impl Error {
             summary: msg.into(),
             details: None,
             source: None,
+            inner: None,
             related_path: None,
             kind: ErrorKind::None,
         }
@@ -293,10 +301,30 @@ impl Error {
 
     pub fn set_source(
         mut self,
-        new_val: Option<std::sync::Arc<dyn std::error::Error + Send + Sync + 'static>>,
+        new_val: Option<std::sync::Arc<dyn error::Error + Send + Sync + 'static>>,
     ) -> Self {
-        self.source = new_val;
+        self.source = new_val.map(|inner| {
+            Box::new(Self {
+                summary: "".into(),
+                details: None,
+                inner: Some(inner),
+                source: None,
+                related_path: None,
+                kind: ErrorKind::External,
+            })
+        });
         self
+    }
+
+    pub fn from_inner(inner: std::sync::Arc<dyn error::Error + Send + Sync + 'static>) -> Self {
+        Self {
+            summary: "".into(),
+            details: None,
+            inner: Some(inner),
+            source: None,
+            related_path: None,
+            kind: ErrorKind::External,
+        }
     }
 
     pub fn set_kind(mut self, new_val: ErrorKind) -> Self {
@@ -304,7 +332,8 @@ impl Error {
         self
     }
 
-    pub fn set_related_path(mut self, new_val: Option<std::path::PathBuf>) -> Self {
+    pub fn set_related_path<P: Into<PathBuf>>(mut self, new_val: Option<P>) -> Self {
+        let new_val = new_val.map(Into::into);
         self.related_path = new_val;
         self
     }
@@ -323,34 +352,70 @@ impl Error {
             || self.kind.is_protocol_not_supported()
             || self.kind.is_value_error())
     }
+
+    /// Display error chain to user.
+    fn display_chain(&'_ self) -> impl std::fmt::Display + '_ {
+        ErrorChainDisplay {
+            current: self,
+            counter: 1,
+        }
+    }
 }
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "Error: {}", self.summary)?;
-        if let Some(details) = self.details.as_ref() {
-            if !details.trim().is_empty() {
-                write!(f, "\n{}", details)?;
-            }
-        }
-        if let Some(ref path) = self.related_path {
-            write!(f, "\nPath: {}", path.display())?;
-        }
-        if let Some(ref source) = self.source {
-            write!(f, "\nCaused by: {}", source)?;
-        }
-        if self.kind != ErrorKind::None {
-            write!(f, "\nError kind: {}", self.kind)?;
-        }
-        Ok(())
+        self.display_chain().fmt(f)
     }
 }
 
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+#[derive(Copy, Clone)]
+struct ErrorChainDisplay<'e> {
+    current: &'e Error,
+    counter: usize,
+}
+
+impl std::fmt::Display for ErrorChainDisplay<'_> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let mut cur = *self;
+        loop {
+            if cur.counter > 1 {
+                write!(fmt, "[{}] ", cur.counter)?;
+            }
+            match cur.current.kind {
+                ErrorKind::External | ErrorKind::None => {}
+                other => write!(fmt, "{other}: ")?,
+            }
+            if let Some(ref inner) = cur.current.inner {
+                write!(fmt, "{}", inner)?;
+            } else {
+                write!(fmt, "{}", cur.current.summary)?;
+                if let Some(details) = cur.current.details.as_ref() {
+                    if !details.trim().is_empty() {
+                        write!(fmt, "\n{}", details)?;
+                    }
+                }
+                if let Some(ref path) = cur.current.related_path {
+                    write!(fmt, "\nRelated path: {}", path.display())?;
+                }
+            }
+            if let Some(ref source) = cur.current.source {
+                writeln!(fmt, "\nCaused by:")?;
+                cur = Self {
+                    current: source,
+                    counter: cur.counter + 1,
+                };
+            } else {
+                return Ok(());
+            }
+        }
+    }
+}
+
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         self.source
             .as_ref()
-            .map(|s| &(*(*s)) as &(dyn std::error::Error + 'static))
+            .map(|s| &(*(*s)) as &(dyn error::Error + 'static))
     }
 }
 
@@ -381,54 +446,43 @@ impl From<io::Error> for Error {
         } else {
             err.kind().into()
         };
-        Self::new(s)
-            .set_details(err.kind().to_string())
-            .set_source(Some(Arc::new(err)))
-            .set_kind(kind)
+        Self::from_inner(Arc::new(err)).set_kind(kind)
     }
 }
 
 impl<'a> From<Cow<'a, str>> for Error {
     #[inline]
-    fn from(kind: Cow<'_, str>) -> Self {
-        Self::new(kind.to_string())
+    fn from(err: Cow<'_, str>) -> Self {
+        Self::new(err.to_string())
     }
 }
 
 impl From<string::FromUtf8Error> for Error {
     #[inline]
-    fn from(kind: string::FromUtf8Error) -> Self {
-        Self::new(kind.to_string()).set_source(Some(Arc::new(kind)))
+    fn from(err: string::FromUtf8Error) -> Self {
+        Self::from_inner(Arc::new(err)).set_kind(ErrorKind::ValueError)
     }
 }
 
 impl From<str::Utf8Error> for Error {
     #[inline]
-    fn from(kind: str::Utf8Error) -> Self {
-        Self::new(kind.to_string()).set_source(Some(Arc::new(kind)))
+    fn from(err: str::Utf8Error) -> Self {
+        Self::from_inner(Arc::new(err)).set_kind(ErrorKind::ValueError)
     }
 }
-//use std::option;
-//impl From<option::NoneError> for Error {
-//    #[inline]
-//    fn from(kind: option::NoneError) -> Error {
-//        Error::new(format!("{:?}", kind))
-//    }
-//}
 
 impl<T> From<std::sync::PoisonError<T>> for Error {
     #[inline]
-    fn from(kind: std::sync::PoisonError<T>) -> Self {
-        Self::new(kind.to_string()).set_kind(ErrorKind::Bug)
+    fn from(err: std::sync::PoisonError<T>) -> Self {
+        Self::new(err.to_string()).set_kind(ErrorKind::Bug)
     }
 }
 
 #[cfg(feature = "tls")]
 impl<T: Sync + Send + 'static + std::fmt::Debug> From<native_tls::HandshakeError<T>> for Error {
     #[inline]
-    fn from(kind: native_tls::HandshakeError<T>) -> Self {
-        Self::new(kind.to_string())
-            .set_source(Some(Arc::new(kind)))
+    fn from(err: native_tls::HandshakeError<T>) -> Self {
+        Self::from_inner(Arc::new(err))
             .set_kind(ErrorKind::Network(NetworkErrorKind::InvalidTLSConnection))
     }
 }
@@ -436,24 +490,23 @@ impl<T: Sync + Send + 'static + std::fmt::Debug> From<native_tls::HandshakeError
 #[cfg(feature = "tls")]
 impl From<native_tls::Error> for Error {
     #[inline]
-    fn from(kind: native_tls::Error) -> Self {
-        Self::new(kind.to_string())
-            .set_source(Some(Arc::new(kind)))
+    fn from(err: native_tls::Error) -> Self {
+        Self::from_inner(Arc::new(err))
             .set_kind(ErrorKind::Network(NetworkErrorKind::InvalidTLSConnection))
     }
 }
 
 impl From<std::num::ParseIntError> for Error {
     #[inline]
-    fn from(kind: std::num::ParseIntError) -> Self {
-        Self::new(kind.to_string()).set_source(Some(Arc::new(kind)))
+    fn from(err: std::num::ParseIntError) -> Self {
+        Self::new(err.to_string()).set_kind(ErrorKind::ValueError)
     }
 }
 
 impl From<std::fmt::Error> for Error {
     #[inline]
-    fn from(kind: std::fmt::Error) -> Self {
-        Self::new(kind.to_string()).set_source(Some(Arc::new(kind)))
+    fn from(err: std::fmt::Error) -> Self {
+        Self::new(err.to_string()).set_kind(ErrorKind::Bug)
     }
 }
 
@@ -462,46 +515,44 @@ impl From<isahc::Error> for Error {
     #[inline]
     fn from(val: isahc::Error) -> Self {
         let kind: NetworkErrorKind = val.kind().into();
-        Self::new(val.to_string())
-            .set_source(Some(Arc::new(val)))
-            .set_kind(ErrorKind::Network(kind))
+        Self::from_inner(Arc::new(val)).set_kind(ErrorKind::Network(kind))
     }
 }
 
 #[cfg(feature = "jmap")]
 impl From<serde_json::error::Error> for Error {
     #[inline]
-    fn from(kind: serde_json::error::Error) -> Self {
-        Self::new(kind.to_string()).set_source(Some(Arc::new(kind)))
+    fn from(err: serde_json::error::Error) -> Self {
+        Self::from_inner(Arc::new(err))
     }
 }
 
-impl From<Box<dyn std::error::Error + Sync + Send + 'static>> for Error {
+impl From<Box<dyn error::Error + Sync + Send + 'static>> for Error {
     #[inline]
-    fn from(kind: Box<dyn std::error::Error + Sync + Send + 'static>) -> Self {
-        Self::new(kind.to_string()).set_source(Some(kind.into()))
+    fn from(err: Box<dyn error::Error + Sync + Send + 'static>) -> Self {
+        Self::from_inner(err.into())
     }
 }
 
 impl From<std::ffi::NulError> for Error {
     #[inline]
-    fn from(kind: std::ffi::NulError) -> Self {
-        Self::new(kind.to_string()).set_source(Some(Arc::new(kind)))
+    fn from(err: std::ffi::NulError) -> Self {
+        Self::from_inner(Arc::new(err)).set_kind(ErrorKind::Bug)
     }
 }
 
 impl From<nix::Error> for Error {
     #[inline]
-    fn from(kind: nix::Error) -> Self {
-        Self::new(kind.to_string()).set_source(Some(Arc::new(kind)))
+    fn from(err: nix::Error) -> Self {
+        Self::from_inner(Arc::new(err)).set_kind(ErrorKind::Platform)
     }
 }
 
 #[cfg(feature = "sqlite3")]
 impl From<rusqlite::Error> for Error {
     #[inline]
-    fn from(kind: rusqlite::Error) -> Self {
-        Self::new(kind.to_string()).set_source(Some(Arc::new(kind)))
+    fn from(err: rusqlite::Error) -> Self {
+        Self::from_inner(Arc::new(err)).set_kind(ErrorKind::LinkedLibrary("sqlite3"))
     }
 }
 
@@ -512,80 +563,76 @@ impl From<notify::Error> for Error {
         let kind = match err.kind {
             notify::ErrorKind::MaxFilesWatch
             | notify::ErrorKind::WatchNotFound
-            | notify::ErrorKind::Generic(_) => ErrorKind::External,
+            | notify::ErrorKind::Generic(_) => ErrorKind::Platform,
             notify::ErrorKind::Io(_) => ErrorKind::OSError,
             notify::ErrorKind::PathNotFound => ErrorKind::Configuration,
             notify::ErrorKind::InvalidConfig(_) => ErrorKind::Bug,
         };
-        Self::new(err.to_string())
-            .set_source(Some(Arc::new(err)))
-            .set_kind(kind)
+        Self::from_inner(Arc::new(err)).set_kind(kind)
     }
 }
 
 impl From<libloading::Error> for Error {
     #[inline]
-    fn from(kind: libloading::Error) -> Self {
-        Self::new(kind.to_string()).set_source(Some(Arc::new(kind)))
+    fn from(err: libloading::Error) -> Self {
+        Self::from_inner(Arc::new(err))
     }
 }
 
 impl From<&str> for Error {
     #[inline]
-    fn from(kind: &str) -> Self {
-        Self::new(kind.to_string())
+    fn from(err: &str) -> Self {
+        Self::new(err.to_string())
     }
 }
 
 impl From<String> for Error {
     #[inline]
-    fn from(kind: String) -> Self {
-        Self::new(kind)
+    fn from(err: String) -> Self {
+        Self::new(err)
     }
 }
 
 impl From<nom::Err<(&[u8], nom::error::ErrorKind)>> for Error {
     #[inline]
-    fn from(kind: nom::Err<(&[u8], nom::error::ErrorKind)>) -> Self {
-        Self::new("Parsing error").set_source(Some(Arc::new(Self::new(kind.to_string()))))
+    fn from(err: nom::Err<(&[u8], nom::error::ErrorKind)>) -> Self {
+        Self::new("Parsing error").set_details(err.to_string())
     }
 }
 
 impl From<nom::Err<(&str, nom::error::ErrorKind)>> for Error {
     #[inline]
-    fn from(kind: nom::Err<(&str, nom::error::ErrorKind)>) -> Self {
-        Self::new("Parsing error").set_details(kind.to_string())
+    fn from(err: nom::Err<(&str, nom::error::ErrorKind)>) -> Self {
+        Self::new("Parsing error").set_details(err.to_string())
     }
 }
 
 impl From<crate::email::InvalidHeaderName> for Error {
     #[inline]
-    fn from(kind: crate::email::InvalidHeaderName) -> Self {
-        Self::new(kind.to_string())
-            .set_source(Some(Arc::new(kind)))
-            .set_kind(ErrorKind::Network(NetworkErrorKind::InvalidTLSConnection))
+    fn from(err: crate::email::InvalidHeaderName) -> Self {
+        Self::from_inner(Arc::new(err)).set_kind(ErrorKind::ValueError)
     }
 }
 
 impl<'a> From<&'a mut Self> for Error {
     #[inline]
-    fn from(kind: &'a mut Self) -> Self {
-        kind.clone()
+    fn from(err: &'a mut Self) -> Self {
+        err.clone()
     }
 }
 
 impl<'a> From<&'a Self> for Error {
     #[inline]
-    fn from(kind: &'a Self) -> Self {
-        kind.clone()
+    fn from(err: &'a Self) -> Self {
+        err.clone()
     }
 }
 
 impl From<base64::DecodeError> for Error {
     #[inline]
-    fn from(kind: base64::DecodeError) -> Self {
-        Self::new("base64 decoding failed")
-            .set_source(Some(Arc::new(kind)))
+    fn from(err: base64::DecodeError) -> Self {
+        Self::from_inner(Arc::new(err))
+            .set_summary("base64 decoding failed")
             .set_kind(ErrorKind::ValueError)
     }
 }

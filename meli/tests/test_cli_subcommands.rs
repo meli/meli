@@ -223,7 +223,7 @@ server_password_command = "false"
         output
             .code(1)
             .stderr(predicate::eq(
-                "Edit the sample configuration and relaunch meli.\nKind: Configuration\n",
+                "Configuration error: Edit the sample configuration and relaunch meli.\n",
             ))
             .stdout(
                 predicate::eq(

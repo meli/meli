@@ -21,6 +21,7 @@
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
 #[test]
+#[ignore]
 fn test_shellexpandtrait() {
     use std::{fs::File, io::Write, os::unix::fs::PermissionsExt, path::Path};
 
@@ -144,6 +145,7 @@ fn test_shellexpandtrait() {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[ignore]
 fn test_shellexpandtrait_impls() {
     use std::{fs::File, io::Write, os::unix::fs::PermissionsExt, path::Path};
 

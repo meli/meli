@@ -22,7 +22,7 @@
 //! Pre-submission hooks for draft validation and/or transformations.
 pub use std::borrow::Cow;
 
-use melib::email::headers::HeaderName;
+use melib::{email::headers::HeaderName, src_err_arc_wrap};
 
 use super::*;
 
@@ -102,11 +102,11 @@ impl Hook {
                     .stderr(Stdio::piped())
                     .spawn()
                     .map_err(|err| -> Error {
-                        format!(
+                        Error::new(format!(
                             "could not execute `{command}`. Check if its binary is in PATH or if \
-                             the command is valid. Original error: {err}"
-                        )
-                        .into()
+                             the command is valid."
+                        ))
+                        .set_source(Some(src_err_arc_wrap! {err}))
                     })?;
                 let mut stdin = child
                     .stdin
@@ -121,7 +121,8 @@ impl Hook {
                     });
                 });
                 let output = child.wait_with_output().map_err(|err| -> Error {
-                    format!("failed to wait on hook child {name_}: {err}").into()
+                    Error::new(format!("failed to wait on hook child {name_}"))
+                        .set_source(Some(src_err_arc_wrap! {err}))
                 })?;
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 let stderr = String::from_utf8_lossy(&output.stderr);
@@ -187,7 +188,10 @@ fn important_header_warn(_ctx: &mut Context, draft: &mut Draft) -> Result<()> {
     for hdr in [HeaderName::FROM, HeaderName::TO] {
         match draft.headers.get(&hdr).map(melib::Address::list_try_from) {
             Some(Ok(_)) => {}
-            Some(Err(err)) => return Err(format!("{hdr} header value is invalid ({err}).").into()),
+            Some(Err(err)) => {
+                return Err(Error::new(format!("{hdr} header value is invalid"))
+                    .set_source(Some(src_err_arc_wrap! {err})))
+            }
             None => return Err(format!("{hdr} header is missing and should be present.").into()),
         }
     }
@@ -198,8 +202,11 @@ fn important_header_warn(_ctx: &mut Context, draft: &mut Draft) -> Result<()> {
             .get(HeaderName::DATE)
             .map(melib::utils::datetime::rfc822_to_timestamp)
         {
-            Some(Err(err)) => return Err(format!("Date header value is invalid ({err}).").into()),
-            Some(Ok(0)) => return Err("Date header value is invalid.".into()),
+            Some(Err(err)) => {
+                return Err(Error::new("Date header value is invalid.")
+                    .set_source(Some(src_err_arc_wrap! {err})))
+            }
+            Some(Ok(0)) => return Err(Error::new("Date header value is invalid.")),
             _ => {}
         }
     }
@@ -211,7 +218,8 @@ fn important_header_warn(_ctx: &mut Context, draft: &mut Draft) -> Result<()> {
             .filter(|v| !v.trim().is_empty())
             .map(melib::Address::list_try_from)
         {
-            return Err(format!("{hdr} header value is invalid ({err}).").into());
+            return Err(Error::new(format!("{hdr} header value is invalid"))
+                .set_source(Some(src_err_arc_wrap! {err})));
         }
     }
     Ok(())
@@ -310,8 +318,9 @@ mod tests {
         let err_msg = hook(&mut ctx, &mut draft).unwrap_err().to_string();
         assert_eq!(
             err_msg,
-            "From header value is invalid (Parsing error. In input: \"...\",\nError: Alternative, \
-             Many1, Alternative, atom(): starts with whitespace or empty).",
+            "From header value is invalid\nCaused by:\n[2] Parsing error. In input: \
+             \"...\",\nError: Alternative, Many1, Alternative, atom(): starts with whitespace or \
+             empty",
             "HEADERWARN should complain about From value being empty: {}",
             err_msg
         );
@@ -321,8 +330,9 @@ mod tests {
         let err_msg = hook(&mut ctx, &mut draft).unwrap_err().to_string();
         assert_eq!(
             err_msg,
-            "To header value is invalid (Parsing error. In input: \"...\",\nError: Alternative, \
-             Many1, Alternative, atom(): starts with whitespace or empty).",
+            "To header value is invalid\nCaused by:\n[2] Parsing error. In input: \
+             \"...\",\nError: Alternative, Many1, Alternative, atom(): starts with whitespace or \
+             empty",
             "HEADERWARN should complain about To value being empty: {}",
             err_msg
         );
@@ -350,8 +360,8 @@ mod tests {
         let err_msg = hook(&mut ctx, &mut draft).unwrap_err().to_string();
         assert_eq!(
             err_msg,
-            "From header value is invalid (Parsing error. In input: \"user \
-             user@example.com>...\",\nError: Alternative, Tag).",
+            "From header value is invalid\nCaused by:\n[2] Parsing error. In input: \"user \
+             user@example.com>...\",\nError: Alternative, Tag",
             "HEADERWARN should complain about From value being invalid: {}",
             err_msg
         );
