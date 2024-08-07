@@ -623,7 +623,7 @@ impl Component for MailView {
                 self.start_contact_selector(context);
                 return true;
             }
-            UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt(''))
+            UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Char('\x1b'))
                 if self.contact_selector.is_some() || self.forward_dialog.is_some() =>
             {
                 if let Some(s) = self.contact_selector.take() {

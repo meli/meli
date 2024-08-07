@@ -1420,7 +1420,9 @@ impl Component for EnvelopeView {
             UIEvent::Resize | UIEvent::VisibilityChange(true) => {
                 self.set_dirty(true);
             }
-            UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt('')) if !self.cmd_buf.is_empty() => {
+            UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Char('\x1B'))
+                if !self.cmd_buf.is_empty() =>
+            {
                 self.cmd_buf.clear();
                 context
                     .replies

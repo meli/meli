@@ -2055,7 +2055,7 @@ impl Component for Listing {
                         self.component.prev_entry(context);
                         return true;
                     }
-                    UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt(''))
+                    UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Char('\x1b'))
                         if !self.component.unfocused() =>
                     {
                         // Clear selection.
@@ -2070,7 +2070,7 @@ impl Component for Listing {
                         self.component.set_dirty(true);
                         return true;
                     }
-                    UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt(''))
+                    UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Char('\x1b'))
                         if !self.cmd_buf.is_empty() =>
                     {
                         self.cmd_buf.clear();
@@ -2594,7 +2594,9 @@ impl Component for Listing {
                     )));
                 return true;
             }
-            UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt('')) if !self.cmd_buf.is_empty() => {
+            UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Char('\x1b'))
+                if !self.cmd_buf.is_empty() =>
+            {
                 self.cmd_buf.clear();
                 self.component.set_modifier_active(false);
                 context

@@ -1501,7 +1501,7 @@ impl Component for ConversationsListing {
                 }
                 _ => {}
             },
-            UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Char(''))
+            UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Char('\x1b'))
                 if !self.unfocused() && !&self.filter_term.is_empty() =>
             {
                 self.set_coordinates((self.new_cursor_pos.0, self.new_cursor_pos.1));

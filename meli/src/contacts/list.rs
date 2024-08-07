@@ -724,7 +724,7 @@ impl Component for ContactList {
                     self.menu_visibility = !self.menu_visibility;
                     self.set_dirty(true);
                 }
-                UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt(''))
+                UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Char('\x1b'))
                     if !self.cmd_buf.is_empty() =>
                 {
                     self.cmd_buf.clear();
