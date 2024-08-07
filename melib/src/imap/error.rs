@@ -36,6 +36,7 @@ impl From<ValidationError> for Error {
             summary: error.to_string().into(),
             details: None,
             source: Some(Arc::new(error)),
+            related_path: None,
             kind: ErrorKind::Bug,
         }
     }
@@ -51,6 +52,7 @@ where
             summary: error.to_string().into(),
             details: None,
             source: Some(Arc::new(error)),
+            related_path: None,
             kind: ErrorKind::Bug,
         }
     }
@@ -66,6 +68,7 @@ where
             summary: error.to_string().into(),
             details: None,
             source: Some(Arc::new(error)),
+            related_path: None,
             kind: ErrorKind::Bug,
         }
     }
@@ -81,6 +84,7 @@ where
             summary: error.to_string().into(),
             details: None,
             source: Some(Arc::new(error)),
+            related_path: None,
             kind: ErrorKind::Bug,
         }
     }
@@ -96,6 +100,7 @@ where
             summary: error.to_string().into(),
             details: None,
             source: Some(Arc::new(error)),
+            related_path: None,
             kind: ErrorKind::Bug,
         }
     }

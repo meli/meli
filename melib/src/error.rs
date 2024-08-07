@@ -134,6 +134,7 @@ pub struct Error {
     pub summary: Cow<'static, str>,
     pub details: Option<Cow<'static, str>>,
     pub source: Option<std::sync::Arc<dyn std::error::Error + Send + Sync + 'static>>,
+    pub related_path: Option<std::path::PathBuf>,
     pub kind: ErrorKind,
 }
 
@@ -146,6 +147,7 @@ pub trait IntoError {
     where
         M: Into<Cow<'static, str>>;
     fn set_err_kind(self, kind: ErrorKind) -> Error;
+    fn set_err_related_path(self, p: &std::path::Path) -> Error;
 }
 
 pub trait ResultIntoError<T> {
@@ -158,6 +160,7 @@ pub trait ResultIntoError<T> {
         F: Fn() -> M,
         M: Into<Cow<'static, str>>;
     fn chain_err_kind(self, kind: ErrorKind) -> Result<T>;
+    fn chain_err_related_path(self, p: &std::path::Path) -> Result<T>;
 }
 
 pub trait WrapResultIntoError<T, I>
@@ -192,6 +195,12 @@ impl<I: Into<Error>> IntoError for I {
     }
 
     #[inline]
+    fn set_err_related_path(self, p: &std::path::Path) -> Error {
+        let err: Error = self.into();
+        err.set_related_path(Some(p.to_path_buf()))
+    }
+
+    #[inline]
     fn set_err_kind(self, kind: ErrorKind) -> Error {
         let err: Error = self.into();
         err.set_kind(kind)
@@ -215,6 +224,11 @@ impl<T, I: Into<Error>> ResultIntoError<T> for std::result::Result<T, I> {
         M: Into<Cow<'static, str>>,
     {
         self.map_err(|err| err.set_err_details(msg_fn()))
+    }
+
+    #[inline]
+    fn chain_err_related_path(self, p: &std::path::Path) -> Result<T> {
+        self.map_err(|err| err.set_err_related_path(p))
     }
 
     #[inline]
@@ -248,6 +262,7 @@ impl Error {
             summary: msg.into(),
             details: None,
             source: None,
+            related_path: None,
             kind: ErrorKind::None,
         }
     }
@@ -289,6 +304,11 @@ impl Error {
         self
     }
 
+    pub fn set_related_path(mut self, new_val: Option<std::path::PathBuf>) -> Self {
+        self.related_path = new_val;
+        self
+    }
+
     #[inline]
     pub fn is_recoverable(&self) -> bool {
         !(self.kind.is_authentication()
@@ -307,17 +327,20 @@ impl Error {
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.summary)?;
+        write!(f, "Error: {}", self.summary)?;
         if let Some(details) = self.details.as_ref() {
             if !details.trim().is_empty() {
                 write!(f, "\n{}", details)?;
             }
         }
-        if let Some(source) = self.source.as_ref() {
+        if let Some(ref path) = self.related_path {
+            write!(f, "\nPath: {}", path.display())?;
+        }
+        if let Some(ref source) = self.source {
             write!(f, "\nCaused by: {}", source)?;
         }
         if self.kind != ErrorKind::None {
-            write!(f, "\nKind: {}", self.kind)?;
+            write!(f, "\nError kind: {}", self.kind)?;
         }
         Ok(())
     }
