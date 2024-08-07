@@ -763,7 +763,7 @@ impl NntpType {
         macro_rules! get_conf_val {
             ($s:ident[$var:literal]) => {{
                 keys.insert($var);
-                $s.extra.remove($var).ok_or_else(|| {
+                $s.extra.swap_remove($var).ok_or_else(|| {
                     Error::new(format!(
                         "{}: NNTP connection requires the field `{}` set",
                         $s.name.as_str(),
@@ -775,7 +775,7 @@ impl NntpType {
             ($s:ident[$var:literal], $default:expr) => {{
                 keys.insert($var);
                 $s.extra
-                    .remove($var)
+                    .swap_remove($var)
                     .map(|v| {
                         <_>::from_str(&v).map_err(|e| {
                             Error::new(format!(

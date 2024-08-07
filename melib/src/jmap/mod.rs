@@ -1301,7 +1301,7 @@ impl JmapType {
     pub fn validate_config(s: &mut AccountSettings) -> Result<()> {
         macro_rules! get_conf_val {
             ($s:ident[$var:literal]) => {
-                $s.extra.remove($var).ok_or_else(|| {
+                $s.extra.swap_remove($var).ok_or_else(|| {
                     Error::new(format!(
                         "Configuration error ({}): JMAP connection requires the field `{}` set",
                         $s.name.as_str(),
@@ -1328,7 +1328,7 @@ impl JmapType {
             };
             ($s:ident[$var:literal], $default:expr, $hd: literal) => {
                 $s.extra
-                    .remove($var)
+                    .swap_remove($var)
                     .map(|v| {
                         <_>::from_str(&v).map_err(|e| {
                             Error::new(format!(

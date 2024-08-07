@@ -444,7 +444,7 @@ impl NotmuchDb {
         path.pop();
 
         let account_name = s.name.to_string();
-        if let Some(lib_path) = s.extra.remove("library_file_path") {
+        if let Some(lib_path) = s.extra.swap_remove("library_file_path") {
             let expanded_path = Path::new(&lib_path).expand();
             if (!Path::new(&lib_path).try_exists().unwrap_or(false)
                 || Path::new(&lib_path).is_dir())
@@ -461,7 +461,7 @@ impl NotmuchDb {
         }
         let mut parents: Vec<(String, String)> = Vec::with_capacity(s.mailboxes.len());
         for (k, f) in s.mailboxes.iter_mut() {
-            if f.extra.remove("query").is_none() {
+            if f.extra.swap_remove("query").is_none() {
                 return Err(Error::new(format!(
                     "notmuch mailbox configuration entry `{}` for account {} should have a \
                      `query` value set.",
@@ -469,7 +469,7 @@ impl NotmuchDb {
                 ))
                 .set_kind(ErrorKind::Configuration));
             }
-            if let Some(parent) = f.extra.remove("parent") {
+            if let Some(parent) = f.extra.swap_remove("parent") {
                 parents.push((k.clone(), parent));
             }
         }

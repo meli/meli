@@ -1439,7 +1439,7 @@ impl MboxType {
     pub fn validate_config(s: &mut AccountSettings) -> Result<()> {
         macro_rules! get_conf_val {
             ($s:ident[$var:literal]) => {
-                $s.extra.remove($var).ok_or_else(|| {
+                $s.extra.swap_remove($var).ok_or_else(|| {
                     Error::new(format!(
                         "Configuration error ({}): mbox backend requires the field `{}` set",
                         $s.name.as_str(),
@@ -1449,7 +1449,7 @@ impl MboxType {
             };
             ($s:ident[$var:literal], $default:expr) => {
                 $s.extra
-                    .remove($var)
+                    .swap_remove($var)
                     .map(|v| {
                         <_>::from_str(&v).map_err(|e| {
                             Error::new(format!(

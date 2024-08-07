@@ -21,7 +21,10 @@
 
 //! Basic mail account configuration to use with
 //! [`backends`](./backends/index.html)
-use std::{collections::HashMap, path::Path};
+
+use std::path::Path;
+
+use indexmap::IndexMap;
 
 use crate::{
     backends::SpecialUsageMailbox,
@@ -48,11 +51,11 @@ pub struct AccountSettings {
     pub order: (SortField, SortOrder),
     pub subscribed_mailboxes: Vec<String>,
     #[serde(default)]
-    pub mailboxes: HashMap<String, MailboxConf>,
+    pub mailboxes: IndexMap<String, MailboxConf>,
     #[serde(default)]
     pub manual_refresh: bool,
     #[serde(flatten)]
-    pub extra: HashMap<String, String>,
+    pub extra: IndexMap<String, String>,
 }
 
 impl AccountSettings {
@@ -127,7 +130,7 @@ impl AccountSettings {
     pub fn validate_config(&mut self) -> Result<()> {
         #[cfg(feature = "vcard")]
         {
-            if let Some(folder) = self.extra.remove("vcard_folder") {
+            if let Some(folder) = self.extra.swap_remove("vcard_folder") {
                 let path = Path::new(&folder).expand();
 
                 if !matches!(path.try_exists(), Ok(true)) {
@@ -171,7 +174,7 @@ pub struct MailboxConf {
     #[serde(default = "none")]
     pub encoding: Option<String>,
     #[serde(flatten)]
-    pub extra: HashMap<String, String>,
+    pub extra: IndexMap<String, String>,
 }
 
 impl Default for MailboxConf {
@@ -184,7 +187,7 @@ impl Default for MailboxConf {
             usage: None,
             sort_order: None,
             encoding: None,
-            extra: HashMap::default(),
+            extra: IndexMap::default(),
         }
     }
 }
