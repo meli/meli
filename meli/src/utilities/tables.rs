@@ -65,13 +65,19 @@ impl TableRowFormat {
 }
 */
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct TableThemeConfig {
     pub theme: TableTheme,
     //pub row_formats: HashMap<usize, SmallVec<[(u8, TableRowFormat); 6]>>,
 }
 
 impl TableThemeConfig {
+    pub fn new(theme_default: ThemeAttribute) -> Self {
+        Self {
+            theme: TableTheme::Single(theme_default),
+        }
+    }
+
     pub fn set_single_theme(&mut self, value: ThemeAttribute) -> &mut Self {
         self.theme = TableTheme::Single(value);
         self
@@ -92,19 +98,20 @@ pub enum TableTheme {
     },
 }
 
-impl Default for TableTheme {
-    fn default() -> Self {
-        Self::Single(ThemeAttribute::default())
-    }
-}
-
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct TableCursorConfig {
     pub handle: bool,
     pub theme: TableTheme,
 }
 
 impl TableCursorConfig {
+    pub fn new(theme_default: ThemeAttribute) -> Self {
+        Self {
+            handle: false,
+            theme: TableTheme::Single(theme_default),
+        }
+    }
+
     pub fn set_handle(&mut self, value: bool) -> &mut Self {
         self.handle = value;
         self
@@ -136,8 +143,8 @@ pub struct DataColumns<const N: usize> {
 
 // Workaround because Default derive doesn't work for const generic array
 // lengths yet.
-impl<const N: usize> Default for DataColumns<N> {
-    fn default() -> Self {
+impl<const N: usize> DataColumns<N> {
+    pub fn new(theme_default: ThemeAttribute) -> Self {
         fn init_array<T, const N: usize>(cl: impl Fn() -> T) -> [T; N] {
             // https://doc.rust-lang.org/std/mem/union.MaybeUninit.html#initializing-an-array-element-by-element
             let mut data: [MaybeUninit<T>; N] = unsafe { MaybeUninit::uninit().assume_init() };
@@ -149,9 +156,9 @@ impl<const N: usize> Default for DataColumns<N> {
         }
 
         Self {
-            cursor_config: TableCursorConfig::default(),
-            theme_config: TableThemeConfig::default(),
-            columns: Box::new(init_array(|| Screen::init(Virtual))),
+            cursor_config: TableCursorConfig::new(theme_default),
+            theme_config: TableThemeConfig::new(theme_default),
+            columns: Box::new(init_array(|| Screen::init(Virtual, theme_default))),
             widths: [0_usize; N],
             elasticities: [ColumnElasticity::default(); N],
             x_offset: 0,

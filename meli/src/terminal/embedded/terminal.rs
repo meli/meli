@@ -225,7 +225,7 @@ impl Default for EmbeddedGrid {
 impl EmbeddedGrid {
     #[inline]
     pub fn new() -> Self {
-        let normal_screen = Box::new(Screen::<Virtual>::new());
+        let normal_screen = Box::new(Screen::<Virtual>::new(Default::default()));
         Self {
             cursor: (0, 0),
             scroll_region: ScrollRegion {
@@ -236,7 +236,7 @@ impl EmbeddedGrid {
             },
             terminal_size: (0, 0),
             initialized: false,
-            alternate_screen: Box::new(Screen::<Virtual>::new()),
+            alternate_screen: Box::new(Screen::<Virtual>::new(Default::default())),
             state: State::Normal,
             fg_color: Color::Default,
             bg_color: Color::Default,

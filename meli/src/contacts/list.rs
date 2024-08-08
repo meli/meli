@@ -88,6 +88,7 @@ impl ContactList {
                 index: i,
             })
             .collect();
+        let theme_default = crate::conf::value(context, "theme_default");
         Self {
             accounts,
             cursor_pos: 0,
@@ -96,8 +97,8 @@ impl ContactList {
             account_pos: 0,
             id_positions: Vec::new(),
             mode: ViewMode::List,
-            data_columns: DataColumns::default(),
-            theme_default: crate::conf::value(context, "theme_default"),
+            data_columns: DataColumns::new(theme_default),
+            theme_default,
             highlight_theme: crate::conf::value(context, "highlight"),
             initialized: false,
             dirty: true,
@@ -251,7 +252,6 @@ impl ContactList {
         } else {
             self.theme_default
         };
-        theme.fg = self.theme_default.fg;
         if !grid.use_color {
             theme.attrs |= Attr::REVERSE;
         }

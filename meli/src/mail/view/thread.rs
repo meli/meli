@@ -86,6 +86,7 @@ impl ThreadView {
         focus: Option<ThreadViewFocus>,
         context: &mut Context,
     ) -> Self {
+        let theme_default = crate::conf::value(context, "theme_default");
         let mut view = Self {
             reversed: false,
             coordinates,
@@ -110,7 +111,7 @@ impl ThreadView {
             new_expanded_pos: 0,
             visible_entries: vec![],
             movement: None,
-            content: Screen::<Virtual>::default(),
+            content: Screen::<Virtual>::new(theme_default),
         };
         view.initiate(expanded_hash, go_to_first_unread, context);
         view.new_cursor_pos = view.new_expanded_pos;

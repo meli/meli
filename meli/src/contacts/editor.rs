@@ -65,7 +65,7 @@ impl ContactManager {
             mode: ViewMode::Edit,
             form: FormWidget::default(),
             account_pos: 0,
-            content: Screen::<Virtual>::new(),
+            content: Screen::<Virtual>::new(theme_default),
             theme_default,
             dirty: true,
             has_changes: false,

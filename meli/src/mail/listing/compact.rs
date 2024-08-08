@@ -877,7 +877,12 @@ impl std::fmt::Display for CompactListing {
 }
 
 impl CompactListing {
-    pub fn new(parent: ComponentId, coordinates: (AccountHash, MailboxHash)) -> Box<Self> {
+    pub fn new(
+        parent: ComponentId,
+        coordinates: (AccountHash, MailboxHash),
+        context: &Context,
+    ) -> Box<Self> {
+        let color_cache = ColorCache::new(context, IndexStyle::Compact);
         Box::new(Self {
             cursor_pos: (AccountHash::default(), MailboxHash::default(), 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
@@ -891,12 +896,12 @@ impl CompactListing {
             filtered_selection: Vec::new(),
             filtered_order: HashMap::default(),
             focus: Focus::None,
-            data_columns: DataColumns::default(),
+            data_columns: DataColumns::new(color_cache.theme_default),
             rows_drawn: SegmentTree::default(),
             rows: RowsState::default(),
             dirty: true,
             force_draw: true,
-            color_cache: ColorCache::default(),
+            color_cache,
             movement: None,
             modifier_active: false,
             modifier_command: None,

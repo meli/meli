@@ -623,7 +623,12 @@ impl std::fmt::Display for PlainListing {
 }
 
 impl PlainListing {
-    pub fn new(parent: ComponentId, coordinates: (AccountHash, MailboxHash)) -> Box<Self> {
+    pub fn new(
+        parent: ComponentId,
+        coordinates: (AccountHash, MailboxHash),
+        context: &Context,
+    ) -> Box<Self> {
+        let color_cache = ColorCache::new(context, IndexStyle::Plain);
         Box::new(Self {
             cursor_pos: (AccountHash::default(), MailboxHash::default(), 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
@@ -637,11 +642,11 @@ impl PlainListing {
             select_job: None,
             filtered_selection: Vec::new(),
             filtered_order: HashMap::default(),
-            data_columns: DataColumns::default(),
+            data_columns: DataColumns::new(color_cache.theme_default),
             dirty: true,
             force_draw: true,
             focus: Focus::None,
-            color_cache: ColorCache::default(),
+            color_cache,
             movement: None,
             modifier_active: false,
             modifier_command: None,

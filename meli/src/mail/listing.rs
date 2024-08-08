@@ -20,6 +20,7 @@
  */
 
 use std::{
+    borrow::Cow,
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     convert::TryFrom,
     fs::File,
@@ -2812,7 +2813,7 @@ impl Listing {
                 account: 0,
                 menu: MenuEntryCursor::Mailbox(0),
             },
-            menu: Screen::<Virtual>::new(),
+            menu: Screen::<Virtual>::new(crate::conf::value(context, "mail.sidebar")),
             menu_scrollbar_show_timer: context.main_loop_handler.job_executor.clone().create_timer(
                 std::time::Duration::from_secs(0),
                 std::time::Duration::from_millis(1200),
@@ -3028,7 +3029,6 @@ impl Listing {
         } else {
             crate::conf::value(context, "mail.sidebar_account_name")
         };
-
         // Print account name first
         self.menu.grid_mut().write_string(
             &self.accounts[aidx].name,
@@ -3053,7 +3053,6 @@ impl Listing {
             );
             return 0;
         }
-        area = self.menu.area().skip_rows(account_y);
 
         let lines_len = lines.len();
         let mut idx = 0;
@@ -3131,6 +3130,7 @@ impl Listing {
                     crate::conf::value(context, "mail.sidebar_unread_count"),
                 )
             };
+            self.menu.grid_mut().change_theme(area.nth_row(y + 1), att);
 
             // Calculate how many columns the mailbox index tags should occupy with right
             // alignment, eg.
@@ -3257,19 +3257,21 @@ impl Listing {
                     None,
                 )
                 .0
-                + x;
+                + x
+                + 1;
             area = self.menu.area().skip_rows(account_y);
 
             // Unread message count
-            let count_string = match (l.count, l.collapsed_count) {
-                (None, None) => " ...".to_string(),
-                (Some(0), None) => String::new(),
-                (Some(0), Some(0)) | (None, Some(0)) => " v".to_string(),
-                (Some(0), Some(coll)) => format!(" ({}) v", coll),
-                (Some(c), Some(0)) => format!(" {} v", c),
-                (Some(c), Some(coll)) => format!(" {} ({}) v", c, coll),
-                (Some(c), None) => format!(" {}", c),
-                (None, Some(coll)) => format!(" ({}) v", coll),
+            let count_string: Cow<'static, str> = match (l.count, l.collapsed_count) {
+                (None, None) if context.settings.terminal.ascii_drawing => "...".into(),
+                (None, None) => "…".into(),
+                (Some(0), None) => "".into(),
+                (Some(0), Some(0)) | (None, Some(0)) => "v".into(),
+                (Some(0), Some(coll)) => format!("({}) v", coll).into(),
+                (Some(c), Some(0)) => format!("{} v", c).into(),
+                (Some(c), Some(coll)) => format!("{} ({}) v", c, coll).into(),
+                (Some(c), None) => format!("{}", c).into(),
+                (None, Some(coll)) => format!("({}) v", coll).into(),
             };
 
             let skip_cols = {
@@ -3282,7 +3284,7 @@ impl Listing {
                 }
             };
             let (x, _) = self.menu.grid_mut().write_string(
-                &count_string,
+                count_string.as_ref(),
                 unread_count_att.fg,
                 unread_count_att.bg,
                 unread_count_att.attrs
@@ -3462,7 +3464,7 @@ impl Listing {
                 let coordinates = self.component.coordinates();
                 std::mem::replace(
                     &mut self.component,
-                    Plain(PlainListing::new(self.id, coordinates)),
+                    Plain(PlainListing::new(self.id, coordinates, context)),
                 )
             }
             IndexStyle::Threaded => {
@@ -3482,7 +3484,7 @@ impl Listing {
                 let coordinates = self.component.coordinates();
                 std::mem::replace(
                     &mut self.component,
-                    Compact(CompactListing::new(self.id, coordinates)),
+                    Compact(CompactListing::new(self.id, coordinates, context)),
                 )
             }
             IndexStyle::Conversations => {

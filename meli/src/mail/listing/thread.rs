@@ -757,14 +757,15 @@ impl ThreadListing {
         coordinates: (AccountHash, MailboxHash),
         context: &Context,
     ) -> Box<Self> {
+        let color_cache = ColorCache::new(context, IndexStyle::Threaded);
         Box::new(Self {
             cursor_pos: (coordinates.0, MailboxHash::default(), 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
             length: 0,
             sort: (Default::default(), Default::default()),
             subsort: (Default::default(), Default::default()),
-            color_cache: ColorCache::new(context, IndexStyle::Threaded),
-            data_columns: DataColumns::default(),
+            data_columns: DataColumns::new(color_cache.theme_default),
+            color_cache,
             rows_drawn: SegmentTree::default(),
             rows: RowsState::default(),
             seen_cache: IndexMap::default(),

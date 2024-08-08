@@ -358,10 +358,16 @@ pub struct ThemeAttributeInner {
 
 impl Default for ThemeAttributeInner {
     fn default() -> Self {
+        Self::inherited("theme_default")
+    }
+}
+
+impl ThemeAttributeInner {
+    pub fn inherited(key: &'static str) -> Self {
         Self {
-            fg: "theme_default".into(),
-            bg: "theme_default".into(),
-            attrs: "theme_default".into(),
+            fg: key.into(),
+            bg: key.into(),
+            attrs: key.into(),
         }
     }
 }
@@ -399,8 +405,14 @@ enum ThemeValue<T: ThemeLink> {
 }
 
 impl From<&'static str> for ThemeValue<Color> {
-    fn from(from: &'static str) -> Self {
-        Self::Link(from.into(), ColorField::LikeSelf)
+    fn from(s: &'static str) -> Self {
+        if let Some(stripped) = s.strip_suffix(".fg") {
+            Self::Link(Cow::Borrowed(stripped), ColorField::Fg)
+        } else if let Some(stripped) = s.strip_suffix(".bg") {
+            Self::Link(Cow::Borrowed(stripped), ColorField::Bg)
+        } else {
+            Self::Link(s.into(), ColorField::LikeSelf)
+        }
     }
 }
 
@@ -704,6 +716,8 @@ impl<'de> Deserialize<'de> for Themes {
         #[serde(deny_unknown_fields)]
         struct ThemeAttributeInnerOptions {
             #[serde(default)]
+            from: Option<Cow<'static, str>>,
+            #[serde(default)]
             fg: Option<ThemeValue<Color>>,
             #[serde(default)]
             bg: Option<ThemeValue<Color>>,
@@ -712,133 +726,59 @@ impl<'de> Deserialize<'de> for Themes {
         }
 
         let mut ret = Self::default();
-        let mut s = <ThemesOptions>::deserialize(deserializer)?;
-        for tk in s.other_themes.keys() {
-            ret.other_themes.insert(tk.clone(), ret.dark.clone());
-        }
+        let ThemesOptions {
+            light,
+            dark,
+            other_themes,
+        } = <ThemesOptions>::deserialize(deserializer)?;
 
-        for (k, v) in ret.light.iter_mut() {
-            if let Some(mut att) = s.light.keys.shift_remove(k) {
-                if let Some(att) = att.fg.take() {
-                    v.fg = att;
-                }
-                if let Some(att) = att.bg.take() {
-                    v.bg = att;
-                }
-                if let Some(att) = att.attrs.take() {
-                    v.attrs = att;
-                }
-            }
-        }
-        if !s.light.keys.is_empty() {
-            return Err(de::Error::custom(format!(
-                "light theme contains unrecognized theme keywords: {}",
-                s.light
-                    .keys
-                    .keys()
-                    .map(|k| k.as_ref())
-                    .collect::<SmallVec<[_; 128]>>()
-                    .join(", ")
-            )));
-        }
-        ret.light.color_aliases = s.light.color_aliases;
-        ret.light.attr_aliases = s.light.attr_aliases;
-        for (k, v) in s.light.text_format_regexps {
-            let mut acc = SmallVec::new();
-            for (rs, v) in v {
-                match RegexValue::new_with_options(&rs, v.o) {
-                    Ok(regexp) => {
-                        acc.push(TextFormatterSetting {
-                            regexp,
-                            fg: v.rest.fg,
-                            bg: v.rest.bg,
-                            attrs: v.rest.attrs,
-                            priority: v.priority,
-                        });
-                    }
-                    Err(err) => {
-                        return Err(de::Error::custom(err.to_string()));
-                    }
-                }
-            }
-            ret.light.text_format_regexps.insert(k, acc);
-        }
-        for (k, v) in ret.dark.iter_mut() {
-            if let Some(mut att) = s.dark.keys.shift_remove(k) {
-                if let Some(att) = att.fg.take() {
-                    v.fg = att;
-                }
-                if let Some(att) = att.bg.take() {
-                    v.bg = att;
-                }
-                if let Some(att) = att.attrs.take() {
-                    v.attrs = att;
-                }
-            }
-        }
-        if !s.dark.keys.is_empty() {
-            return Err(de::Error::custom(format!(
-                "dark theme contains unrecognized theme keywords: {}",
-                s.dark
-                    .keys
-                    .keys()
-                    .map(|k| k.as_ref())
-                    .collect::<SmallVec<[_; 128]>>()
-                    .join(", ")
-            )));
-        }
-        ret.dark.color_aliases = s.dark.color_aliases;
-        ret.dark.attr_aliases = s.dark.attr_aliases;
-        for (k, v) in s.dark.text_format_regexps {
-            let mut acc = SmallVec::new();
-            for (rs, v) in v {
-                match RegexValue::new_with_options(&rs, v.o) {
-                    Ok(regexp) => {
-                        acc.push(TextFormatterSetting {
-                            regexp,
-                            fg: v.rest.fg,
-                            bg: v.rest.bg,
-                            attrs: v.rest.attrs,
-                            priority: v.priority,
-                        });
-                    }
-                    Err(err) => {
-                        return Err(de::Error::custom(err.to_string()));
-                    }
-                }
-            }
-            ret.dark.text_format_regexps.insert(k, acc);
-        }
-        for (tk, t) in ret.other_themes.iter_mut() {
-            let mut theme = s.other_themes.shift_remove(tk).unwrap();
-            for (k, v) in t.iter_mut() {
-                if let Some(mut att) = theme.keys.shift_remove(k) {
-                    if let Some(att) = att.fg.take() {
+        fn construct_theme<'de, D>(
+            name: Cow<'_, str>,
+            theme: &mut Theme,
+            mut s: ThemeOptions,
+        ) -> std::result::Result<(), D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            for (k, v) in theme.iter_mut() {
+                if let Some(ThemeAttributeInnerOptions {
+                    from,
+                    fg,
+                    bg,
+                    attrs,
+                }) = s.keys.shift_remove(k)
+                {
+                    if let Some(att) = fg {
                         v.fg = att;
+                    } else if let Some(ref parent) = from {
+                        v.fg = ThemeValue::Link(parent.clone(), ColorField::LikeSelf);
                     }
-                    if let Some(att) = att.bg.take() {
+                    if let Some(att) = bg {
                         v.bg = att;
+                    } else if let Some(ref parent) = from {
+                        v.bg = ThemeValue::Link(parent.clone(), ColorField::LikeSelf);
                     }
-                    if let Some(att) = att.attrs.take() {
+                    if let Some(att) = attrs {
                         v.attrs = att;
+                    } else if let Some(parent) = from {
+                        v.attrs = ThemeValue::Link(parent, ());
                     }
                 }
             }
-            if !theme.keys.is_empty() {
+            if !s.keys.is_empty() {
                 return Err(de::Error::custom(format!(
                     "{} theme contains unrecognized theme keywords: {}",
-                    tk,
-                    theme
-                        .keys
+                    name,
+                    s.keys
                         .keys()
                         .map(|k| k.as_ref())
                         .collect::<SmallVec<[_; 128]>>()
                         .join(", ")
                 )));
             }
-            t.color_aliases = theme.color_aliases;
-            t.attr_aliases = theme.attr_aliases;
-            for (k, v) in theme.text_format_regexps {
+            theme.color_aliases = s.color_aliases;
+            theme.attr_aliases = s.attr_aliases;
+            for (k, v) in s.text_format_regexps {
                 let mut acc = SmallVec::new();
                 for (rs, v) in v {
                     match RegexValue::new_with_options(&rs, v.o) {
@@ -856,8 +796,17 @@ impl<'de> Deserialize<'de> for Themes {
                         }
                     }
                 }
-                t.text_format_regexps.insert(k, acc);
+                theme.text_format_regexps.insert(k, acc);
             }
+            Ok(())
+        }
+
+        construct_theme::<D>(Cow::Borrowed(self::DARK), &mut ret.dark, dark)?;
+        construct_theme::<D>(Cow::Borrowed(self::LIGHT), &mut ret.light, light)?;
+        for (name, theme_opts) in other_themes {
+            let mut theme = ret.dark.clone();
+            construct_theme::<D>(Cow::Borrowed(&name), &mut theme, theme_opts)?;
+            ret.other_themes.insert(name, theme);
         }
         Ok(ret)
     }
@@ -1153,6 +1102,12 @@ impl Default for Themes {
         let other_themes = IndexMap::default();
 
         macro_rules! add {
+            ($key:literal from $parent_key:literal, $($theme:ident={ $($name:ident : $val:expr),*$(,)? }),*$(,)?) => {
+                add!($key);
+                $($theme.insert($key.into(), ThemeAttributeInner {
+                    $($name: $val.into()),*
+                        ,..ThemeAttributeInner::inherited($parent_key) }));*
+            };
             ($key:literal, $($theme:ident={ $($name:ident : $val:expr),*$(,)? }),*$(,)?) => {
                 add!($key);
                 $($theme.insert($key.into(), ThemeAttributeInner {
@@ -1179,7 +1134,7 @@ impl Default for Themes {
         add!("text.highlight", dark = { fg: Color::Blue, bg: "theme_default", attrs: Attr::REVERSE }, light = { fg: Color::Blue, bg: "theme_default", attrs: Attr::REVERSE });
 
         /* rest */
-        add!("highlight", dark = { fg: Color::Byte(240), bg: Color::Byte(237), attrs: Attr::BOLD }, light = { fg: Color::Byte(240), bg: Color::Byte(237), attrs: Attr::BOLD });
+        add!("highlight", dark = { fg: "theme_default.bg", bg: "theme_default.fg", attrs: Attr::BOLD }, light = { fg: Color::Byte(240), bg: Color::Byte(237), attrs: Attr::BOLD });
 
         add!("status.bar", dark = { fg: Color::Byte(123), bg: Color::Byte(26) }, light = { fg: Color::Byte(123), bg: Color::Byte(26) });
         add!("status.command_bar", dark = { fg: Color::Byte(219), bg: Color::Byte(88) }, light = { fg: Color::Byte(219), bg: Color::Byte(88) });
@@ -1221,11 +1176,11 @@ impl Default for Themes {
                 attrs: Attr::BOLD,
             }
         );
-        add!("mail.sidebar_unread_count", dark = { fg: Color::Byte(243) });
-        add!("mail.sidebar_index", dark = { fg: Color::Byte(243) });
-        add!("mail.sidebar_highlighted", dark = { fg: Color::Byte(233), bg: Color::Byte(15) });
+        add!("mail.sidebar_unread_count" from "mail.sidebar", dark = { fg: Color::Byte(243) });
+        add!("mail.sidebar_index" from "mail.sidebar", dark = { fg: Color::Byte(243) });
+        add!("mail.sidebar_highlighted" from "mail.sidebar", dark = { fg: Color::Byte(233), bg: Color::Byte(15) });
         add!(
-            "mail.sidebar_highlighted_unread_count",
+            "mail.sidebar_highlighted_unread_count" from "mail.sidebar_highlighted",
             light = {
                 fg: "mail.sidebar_highlighted",
                 bg: "mail.sidebar_highlighted"
@@ -1236,7 +1191,7 @@ impl Default for Themes {
             }
         );
         add!(
-            "mail.sidebar_highlighted_index",
+            "mail.sidebar_highlighted_index" from "mail.sidebar_highlighted",
             light = {
                 fg: "mail.sidebar_index",
                 bg: "mail.sidebar_highlighted",
@@ -1247,14 +1202,14 @@ impl Default for Themes {
             },
         );
         add!(
-            "mail.sidebar_highlighted_account",
+            "mail.sidebar_highlighted_account" from "mail.sidebar_highlighted",
             dark = {
                 fg: Color::Byte(15),
                 bg: Color::Byte(233),
             }
         );
         add!(
-            "mail.sidebar_highlighted_account_name",
+            "mail.sidebar_highlighted_account_name" from "mail.sidebar_highlighted",
             dark = {
                 fg: "mail.sidebar_highlighted_account",
                 bg: "mail.sidebar_highlighted_account",
@@ -1267,7 +1222,7 @@ impl Default for Themes {
             }
         );
         add!(
-            "mail.sidebar_highlighted_account_unread_count",
+            "mail.sidebar_highlighted_account_unread_count" from "mail.sidebar_highlighted",
             light = {
                 fg: "mail.sidebar_unread_count",
                 bg: "mail.sidebar_highlighted_account",
@@ -1278,7 +1233,7 @@ impl Default for Themes {
             }
         );
         add!(
-            "mail.sidebar_highlighted_account_index",
+            "mail.sidebar_highlighted_account_index" from "mail.sidebar_highlighted",
             light = {
                 fg: "mail.sidebar_index",
                 bg: "mail.sidebar_highlighted_account"

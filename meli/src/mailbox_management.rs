@@ -94,7 +94,7 @@ impl MailboxManager {
     pub fn new(context: &Context, account_pos: usize) -> Self {
         let account_hash = context.accounts[account_pos].hash();
         let theme_default = crate::conf::value(context, "theme_default");
-        let mut data_columns = DataColumns::default();
+        let mut data_columns = DataColumns::new(theme_default);
         data_columns.theme_config.set_single_theme(theme_default);
         Self {
             cursor_pos: 0,

@@ -90,7 +90,7 @@ impl JobManager {
                 ..ThemeAttribute::default()
             }
         };
-        let mut data_columns = DataColumns::default();
+        let mut data_columns = DataColumns::new(theme_default);
         data_columns.theme_config.set_single_theme(theme_default);
         Self {
             cursor_pos: 0,

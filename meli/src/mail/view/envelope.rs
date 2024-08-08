@@ -751,7 +751,7 @@ impl Component for EnvelopeView {
                             if sticky || skip_header_ctr == 0 {
                                 if y <= area.height() {
                                     grid.clear_area(
-                                        area.skip_rows(y),
+                                        area.skip_rows(y).take_rows(1),
                                         hdr_area_theme,
                                     );
                                     let (_x, _y) =
@@ -993,19 +993,12 @@ impl Component for EnvelopeView {
                                 }
                             }
                         }
-                        for c in grid.row_iter(area, (x + 1)..area.width(), y) {
-                            grid[c]
-                                .set_ch(' ')
-                                .set_fg(hdr_area_theme.fg)
-                                .set_bg(hdr_area_theme.bg);
-                        }
                         y += 1;
                     }
                 }
 
                 self.force_draw_headers = false;
 
-                grid.clear_area(area.nth_row(y), hdr_area_theme);
                 context.dirty_areas.push_back(area.take_rows(y + 3));
                 if !self.view_settings.sticky_headers {
                     let height_p = self.pager.size().1;

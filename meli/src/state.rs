@@ -427,7 +427,8 @@ impl State {
 
         let working = Arc::new(());
         let control = Arc::downgrade(&working);
-        let mut screen = Box::new(Screen::<Tty>::new().with_cols_and_rows(cols, rows));
+        let mut screen =
+            Box::new(Screen::<Tty>::new(Default::default()).with_cols_and_rows(cols, rows));
         screen
             .tty_mut()
             .set_mouse(settings.terminal.use_mouse.is_true())

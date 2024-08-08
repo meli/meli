@@ -521,6 +521,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             identifiers[0].1 = true;
         }
 
+        let theme_default = crate::conf::value(context, "theme_default");
         let mut ret = Self {
             single_only,
             entries: identifiers,
@@ -531,12 +532,12 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             vertical_alignment: Alignment::Center,
             horizontal_alignment: Alignment::Center,
             title: title.to_string(),
-            content: Screen::<Virtual>::new(),
+            content: Screen::<Virtual>::new(theme_default),
             initialized: false,
             done: false,
             done_fn,
             dirty: true,
-            theme_default: Default::default(),
+            theme_default,
             id: ComponentId::default(),
         };
         ret.initialise(context);

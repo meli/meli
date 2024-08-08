@@ -1155,6 +1155,17 @@ impl Default for Cell {
     }
 }
 
+impl From<ThemeAttribute> for Cell {
+    fn from(ThemeAttribute { fg, bg, attrs, .. }: ThemeAttribute) -> Self {
+        Self {
+            fg,
+            bg,
+            attrs,
+            ..Self::default()
+        }
+    }
+}
+
 bitflags::bitflags! {
     /// The attributes of a `Cell`.
     ///
@@ -1407,7 +1418,7 @@ impl Attr {
 ///
 /// ```rust,no_run
 /// # use meli::terminal::{Screen, Virtual, Area};
-/// # let mut screen = Screen::<Virtual>::new();
+/// # let mut screen = Screen::<Virtual>::new(Default::default());
 /// # assert!(screen.resize(120, 20));
 /// # let area = screen.area();
 /// for c in screen.grid().row_iter(area, 0..area.width(), 2) {
@@ -1425,7 +1436,7 @@ pub struct RowIterator {
 ///
 /// ```rust,no_run
 /// # use meli::terminal::{Screen, Virtual, Area};
-/// # let mut screen = Screen::<Virtual>::new();
+/// # let mut screen = Screen::<Virtual>::new(Default::default());
 /// # assert!(screen.resize(120, 20));
 /// # let area = screen.area();
 /// for row in screen.grid().bounds_iter(area) {
@@ -1991,7 +2002,7 @@ mod tests {
 
     #[test]
     fn test_bounds_iter() {
-        let mut screen = Screen::<Virtual>::new();
+        let mut screen = Screen::<Virtual>::new(Default::default());
         assert!(screen.resize(120, 20));
         let area = screen.area();
         assert_eq!(area.width(), 120);

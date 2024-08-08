@@ -32,7 +32,7 @@ use crate::{
         EnableMouse, EnableSGRMouse, Pos, RestoreWindowTitleIconFromStack,
         SaveWindowTitleIconToStack,
     },
-    Attr, Context,
+    Attr, Context, ThemeAttribute,
 };
 
 pub type StateStdout = termion::screen::AlternateScreen<
@@ -168,7 +168,7 @@ impl<D: private::Sealed> std::fmt::Debug for Screen<D> {
 
 impl<D: private::Sealed> Screen<D> {
     #[inline]
-    pub fn init(display: D) -> Self {
+    pub fn init(display: D, theme_default: ThemeAttribute) -> Self {
         let area = Area {
             offset: (0, 0),
             upper_left: (0, 0),
@@ -178,14 +178,17 @@ impl<D: private::Sealed> Screen<D> {
             canvas_rows: 0,
             generation: ScreenGeneration::NIL,
         };
-        Self {
+        let mut retval = Self {
             cols: 0,
             rows: 0,
             grid: CellBuffer::nil(area),
             overlay_grid: CellBuffer::nil(area),
             display,
             generation: ScreenGeneration::NIL,
-        }
+        };
+        retval.grid_mut().default_cell = theme_default.into();
+        retval.overlay_grid_mut().default_cell = theme_default.into();
+        retval
     }
 
     #[inline]
@@ -269,12 +272,15 @@ impl Clone for Screen<Virtual> {
 
 impl Screen<Tty> {
     #[inline]
-    pub fn new() -> Self {
-        Self::init(Tty {
-            stdout: None,
-            mouse: false,
-            draw_horizontal_segment_fn: Self::draw_horizontal_segment,
-        })
+    pub fn new(theme_default: ThemeAttribute) -> Self {
+        Self::init(
+            Tty {
+                stdout: None,
+                mouse: false,
+                draw_horizontal_segment_fn: Self::draw_horizontal_segment,
+            },
+            theme_default,
+        )
     }
 
     #[inline]
@@ -484,16 +490,10 @@ impl Screen<Tty> {
     }
 }
 
-impl Default for Screen<Virtual> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl Screen<Virtual> {
     #[inline]
-    pub fn new() -> Self {
-        Self::init(Virtual)
+    pub fn new(theme_default: ThemeAttribute) -> Self {
+        Self::init(Virtual, theme_default)
     }
 
     #[must_use]
@@ -772,7 +772,7 @@ impl Area {
     ///
     /// ```rust
     /// # use meli::terminal::{Screen, Virtual, Area};
-    /// # let mut screen = Screen::<Virtual>::new();
+    /// # let mut screen = Screen::<Virtual>::new(Default::default());
     /// # assert!(screen.resize(120, 20));
     /// # let area = screen.area();
     /// assert_eq!(area.width(), 120);
@@ -803,7 +803,7 @@ impl Area {
     ///
     /// ```rust
     /// # use meli::terminal::{Screen, Virtual, Area};
-    /// # let mut screen = Screen::<Virtual>::new();
+    /// # let mut screen = Screen::<Virtual>::new(Default::default());
     /// # assert!(screen.resize(120, 20));
     /// # let area = screen.area();
     /// assert_eq!(area.width(), 120);
@@ -849,7 +849,7 @@ impl Area {
     ///
     /// ```rust
     /// # use meli::terminal::{Screen, Virtual, Area};
-    /// # let mut screen = Screen::<Virtual>::new();
+    /// # let mut screen = Screen::<Virtual>::new(Default::default());
     /// # assert!(screen.resize(120, 20));
     /// # let area = screen.area();
     /// assert_eq!(area.width(), 120);
@@ -872,7 +872,7 @@ impl Area {
     ///
     /// ```rust
     /// # use meli::terminal::{Screen, Virtual, Area};
-    /// # let mut screen = Screen::<Virtual>::new();
+    /// # let mut screen = Screen::<Virtual>::new(Default::default());
     /// # assert!(screen.resize(120, 20));
     /// # let area = screen.area();
     /// assert_eq!(area.width(), 120);
@@ -909,7 +909,7 @@ impl Area {
     ///
     /// ```rust
     /// # use meli::terminal::{Screen, Virtual, Area};
-    /// # let mut screen = Screen::<Virtual>::new();
+    /// # let mut screen = Screen::<Virtual>::new(Default::default());
     /// # assert!(screen.resize(120, 20));
     /// # let area = screen.area();
     /// assert_eq!(area.width(), 120);
@@ -942,7 +942,7 @@ impl Area {
     ///
     /// ```rust
     /// # use meli::terminal::{Screen, Virtual, Area};
-    /// # let mut screen = Screen::<Virtual>::new();
+    /// # let mut screen = Screen::<Virtual>::new(Default::default());
     /// # assert!(screen.resize(120, 20));
     /// # let area = screen.area();
     /// assert_eq!(area.width(), 120);
@@ -1081,7 +1081,7 @@ mod tests {
 
     #[test]
     fn test_skip_rows() {
-        let mut screen = Screen::<Virtual>::new();
+        let mut screen = Screen::<Virtual>::new(Default::default());
         assert!(screen.resize(120, 20));
         let area = screen.area();
         assert_eq!(area.width(), 120);
@@ -1103,7 +1103,7 @@ mod tests {
 
     #[test]
     fn test_skip_rows_from_end() {
-        let mut screen = Screen::<Virtual>::new();
+        let mut screen = Screen::<Virtual>::new(Default::default());
         assert!(screen.resize(120, 20));
         let area = screen.area();
         assert_eq!(area.width(), 120);
@@ -1120,7 +1120,7 @@ mod tests {
 
     #[test]
     fn test_skip_cols() {
-        let mut screen = Screen::<Virtual>::new();
+        let mut screen = Screen::<Virtual>::new(Default::default());
         assert!(screen.resize(120, 20));
         let area = screen.area();
         assert_eq!(area.width(), 120);
@@ -1142,7 +1142,7 @@ mod tests {
 
     #[test]
     fn test_skip_cols_from_end() {
-        let mut screen = Screen::<Virtual>::new();
+        let mut screen = Screen::<Virtual>::new(Default::default());
         assert!(screen.resize(120, 20));
         let area = screen.area();
         assert_eq!(area.width(), 120);
@@ -1159,7 +1159,7 @@ mod tests {
 
     #[test]
     fn test_take_rows() {
-        let mut screen = Screen::<Virtual>::new();
+        let mut screen = Screen::<Virtual>::new(Default::default());
         assert!(screen.resize(120, 20));
         let area = screen.area();
         assert_eq!(area.width(), 120);
@@ -1176,7 +1176,7 @@ mod tests {
 
     #[test]
     fn test_take_cols() {
-        let mut screen = Screen::<Virtual>::new();
+        let mut screen = Screen::<Virtual>::new(Default::default());
         assert!(screen.resize(120, 20));
         let area = screen.area();
         assert_eq!(area.width(), 120);
@@ -1193,7 +1193,7 @@ mod tests {
 
     #[test]
     fn test_nth_area() {
-        let mut screen = Screen::<Virtual>::new();
+        let mut screen = Screen::<Virtual>::new(Default::default());
         assert!(screen.resize(120, 20));
         let area = screen.area();
         assert_eq!(area.width(), 120);
@@ -1222,7 +1222,7 @@ mod tests {
 
     #[test]
     fn test_place_inside_area() {
-        let mut screen = Screen::<Virtual>::new();
+        let mut screen = Screen::<Virtual>::new(Default::default());
         assert!(screen.resize(120, 20));
         let area = screen.area();
         assert_eq!(area.width(), 120);
@@ -1251,7 +1251,7 @@ mod tests {
 
         const ALIGNMENTS: [Alignment; 4] = [Fill, Start, End, Center];
 
-        let mut screen = Screen::<Virtual>::new();
+        let mut screen = Screen::<Virtual>::new(Default::default());
         assert!(screen.resize(120, 20));
         let area = screen.area();
         assert_eq!(area.width(), 120);

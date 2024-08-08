@@ -864,9 +864,10 @@ pub struct Tabbed {
 impl Tabbed {
     pub fn new(children: Vec<Box<dyn Component>>, context: &Context) -> Self {
         let pinned = children.len();
+        let theme_default = crate::conf::value(context, "theme_default");
         let mut ret = Self {
             help_view: HelpView {
-                content: Screen::<Virtual>::new(),
+                content: Screen::<Virtual>::new(theme_default),
                 curr_views: children
                     .first()
                     .map(|c| c.shortcuts(context))
@@ -874,7 +875,7 @@ impl Tabbed {
                 cursor: (0, 0),
                 search: None,
             },
-            theme_default: crate::conf::value(context, "theme_default"),
+            theme_default,
             pinned,
             children,
             cursor_pos: 0,

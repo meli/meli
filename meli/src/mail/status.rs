@@ -44,15 +44,7 @@ impl std::fmt::Display for AccountStatus {
 
 impl AccountStatus {
     pub fn new(account_pos: usize, theme_default: ThemeAttribute) -> Self {
-        let default_cell = {
-            let mut ret = Cell::with_char(' ');
-            ret.set_fg(theme_default.fg)
-                .set_bg(theme_default.bg)
-                .set_attrs(theme_default.attrs);
-            ret
-        };
-        let mut content = Screen::<Virtual>::new();
-        content.grid_mut().default_cell = default_cell;
+        let mut content = Screen::<Virtual>::new(theme_default);
         content.grid_mut().set_growable(true);
         _ = content.resize(80, 20);
 
