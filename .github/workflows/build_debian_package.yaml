@@ -32,23 +32,16 @@ jobs:
             target: x86_64-unknown-linux-gnu
     steps:
       - uses: actions/checkout@v3
+      - name: Install sudo for act
+        if: env.ACT == 'true'
+        run: apt-get update && apt-get install --assume-yes --no-install-recommends sudo
       - id: os-deps
         name: install OS dependencies
         run: |
-          apt-get update
-          apt-get install -y mandoc debhelper quilt build-essential
-      - id: rustup-setup
-        name: Install rustup and toolchains
-        shell: bash
-        run: |
-          if ! command -v rustup &>/dev/null; then
-            curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused --location --silent --show-error --fail "https://sh.rustup.rs" | sh -s -- --default-toolchain none -y
-            source "${HOME}/.cargo/env"
-            echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> $GITHUB_PATH
-            echo "CARGO_HOME=${CARGO_HOME:-$HOME/.cargo}" >> $GITHUB_ENV
-            rustup toolchain install --profile minimal ${{ matrix.rust }} --target ${{ matrix.target }}
-            rustup default ${{ matrix.rust }}
-          fi
+          sudo apt-get update
+          sudo apt-get install -y mandoc debhelper quilt build-essential
+      - uses: ./.github/actions/rustup-setup
+      - uses: ./.github/actions/cargo-setup
       - name: Build binary
         run: |
           VERSION=$(grep -m1 version meli/Cargo.toml | head -n1 | cut -d'"' -f 2 | head -n1)

@@ -1,0 +1,34 @@
+name: Setup Rust toolchain and components
+runs:
+  using: "composite"
+  steps:
+    - id: cache-rustup
+      name: Cache Rust toolchain
+      uses: actions/cache@v4
+      with:
+        path: ~/.rustup
+        key: rustup-${{ matrix.os }}-${{ matrix.rust }}
+        restore-keys: |
+          rustup-${{ matrix.os }}-${{ matrix.rust }}
+    - if: ${{ steps.cache-rustup.outputs.cache-hit != 'true' }}
+      id: rustup-setup
+      name: Install Rustup and toolchains
+      shell: bash
+      run: |
+        if ! command -v rustup &>/dev/null; then
+        curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused --location --silent --show-error --fail "https://sh.rustup.rs" | sh -s -- --default-toolchain none -y
+        source "${HOME}/.cargo/env"
+        echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> $GITHUB_PATH
+        echo "CARGO_HOME=${CARGO_HOME:-$HOME/.cargo}" >> $GITHUB_ENV
+        rustup toolchain install --profile minimal --component clippy,rustfmt --target ${{ matrix.target }} -- "${{ matrix.rust }}"
+        rustup component add rustfmt --toolchain ${{ matrix.rust }}-${{ matrix.target }}
+        rustup default ${{ matrix.rust }}
+        fi
+    - name: Setup Rust target
+      shell: bash
+      run: |
+        mkdir -p "$HOME/.cargo"
+        cat << EOF > "$HOME/.cargo"/config.toml
+        [build]
+        target = "${{ matrix.target }}"
+        EOF
