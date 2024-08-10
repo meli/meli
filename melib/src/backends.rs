@@ -113,7 +113,10 @@ pub const NOTMUCH_ERROR_MSG: &str = "this version of meli is not compiled with n
 #[cfg(not(feature = "notmuch"))]
 pub const NOTMUCH_ERROR_DETAILS: &str = "";
 
-#[cfg(all(feature = "notmuch", target_family = "unix"))]
+#[cfg(all(
+    feature = "notmuch",
+    all(target_family = "unix", not(target_os = "macos"))
+))]
 pub const NOTMUCH_ERROR_DETAILS: &str = r#"If you have installed the library manually, try setting the `LD_LIBRARY_PATH` environment variable to its `lib` directory. Otherwise, set it to the location of libnotmuch.5.so. Example:
 
 LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/path/to/notmuch/lib" meli
