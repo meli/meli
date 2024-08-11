@@ -1,0 +1,73 @@
+[terminal.themes.ibm-modern]
+"theme_default" = { fg = "$Black100", bg = "$White0", attrs = "Default" }
+"status.bar" = { fg = "$Black100", bg = "$Magenta40", attrs = "theme_default" }
+"status.notification" = { fg = "$Black100", bg = "$Magenta40", attrs = "theme_default" }
+"tab.focused" = { fg = "$White0", bg = "$Purple40", attrs = "theme_default" }
+"tab.unfocused" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"tab.bar" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"widgets.list.header" = { fg = "theme_default", bg = "theme_default", attrs = "Bold" }
+"widgets.form.label" = { fg = "theme_default", bg = "theme_default", attrs = "Bold" }
+"widgets.form.field" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"widgets.form.highlighted" = { fg = "theme_default", bg = "$Cyan30", attrs = "theme_default" }
+"widgets.options.highlighted" = { fg = "$Cyan10", bg = "$Teal30", attrs = "theme_default" }
+"mail.sidebar" = { fg = "theme_default", bg = "$CoolGray10", attrs = "theme_default" }
+"mail.sidebar_account_name" = { fg = "mail.sidebar", attrs = "Bold" }
+"mail.sidebar_unread_count" = { fg = "$Magenta40", bg = "$CoolGray10" }
+"mail.sidebar_index" = { fg = "theme_default", bg = "theme_default" }
+"mail.sidebar_highlighted" = { fg = "theme_default", bg = "$CoolGray10" }
+"mail.sidebar_highlighted_unread_count" = { from = "mail.sidebar_highlighted" }
+"mail.sidebar_highlighted_index" = { fg = "mail.sidebar_index", bg = "mail.sidebar_highlighted", attrs = "theme_default" }
+"mail.sidebar_highlighted_account" = { fg = "mail.sidebar_highlighted", bg = "mail.sidebar_highlighted", attrs = "theme_default" }
+"mail.sidebar_highlighted_account_name" = { fg = "mail.sidebar_highlighted_account", bg = "mail.sidebar_highlighted_account", attrs = "Bold" }
+"mail.sidebar_highlighted_account_unread_count" = { fg = "mail.sidebar_unread_count", bg = "mail.sidebar_highlighted_account", attrs = "theme_default" }
+"mail.sidebar_highlighted_account_index" = { fg = "mail.sidebar_index", bg = "mail.sidebar_highlighted_account", attrs = "theme_default" }
+"mail.listing.compact.even" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"mail.listing.compact.odd" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"mail.listing.compact.even_unseen" = { fg = "$Black100", bg = "theme_default", attrs = "theme_default" }
+"mail.listing.compact.odd_unseen" = { fg = "$Black100", bg = "theme_default", attrs = "theme_default" }
+"mail.listing.compact.even_selected" = { fg = "$CoolGray10", attrs = "theme_default" }
+"mail.listing.compact.odd_selected" = { fg = "$CoolGray10", attrs = "theme_default" }
+"mail.listing.compact.even_highlighted" = { fg = "theme_default", bg = "$CoolGray10", attrs = "theme_default" }
+"mail.listing.compact.odd_highlighted" = { fg = "theme_default", bg = "$CoolGray10", attrs = "theme_default" }
+"mail.listing.conversations" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"mail.listing.conversations.subject" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"mail.listing.conversations.from" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"mail.listing.conversations.date" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"mail.listing.conversations.unseen" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"mail.listing.conversations.highlighted" = { fg = "theme_default", bg = "$CoolGray10", attrs = "Bold" }
+"mail.listing.conversations.selected" = { fg = "$CoolGray10", bg = "$CoolGray30", attrs = "theme_default" }
+"mail.listing.plain.even" = { fg = "mail.listing.compact.even", bg = "mail.listing.compact.even", attrs = "theme_default" }
+"mail.listing.plain.odd" = { fg = "mail.listing.compact.odd", bg = "mail.listing.compact.odd", attrs = "theme_default" }
+"mail.listing.plain.even_unseen" = { fg = "$Black100", bg = "$CoolGray30", attrs = "theme_default" }
+"mail.listing.plain.odd_unseen" = { fg = "$Black100", bg = "$CoolGray30", attrs = "theme_default" }
+"mail.listing.plain.even_selected" = { fg = "theme_default", bg = "LightCoral", attrs = "theme_default" }
+"mail.listing.plain.odd_selected" = { fg = "theme_default", bg = "LightCoral", attrs = "theme_default" }
+"mail.listing.plain.even_highlighted" = { fg = "theme_default", bg = "$CoolGray10", attrs = "theme_default" }
+"mail.listing.plain.odd_highlighted" = { fg = "theme_default", bg = "$CoolGray10", attrs = "theme_default" }
+"mail.view.headers" = { fg = "$Black100", bg = "$Purple40", attrs = "theme_default" }
+"mail.view.headers_names" = { fg = "$Black100", bg = "$Magenta40", attrs = "mail.view.headers" }
+"mail.view.headers_area" = { fg = "theme_default", bg = "$Purple40", attrs = "theme_default" }
+"mail.view.body" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"mail.view.thread.indentation.a" = { fg = "theme_default", bg = "CornflowerBlue", attrs = "theme_default" }
+"mail.view.thread.indentation.b" = { fg = "theme_default", bg = "Red1", attrs = "theme_default" }
+"mail.view.thread.indentation.c" = { fg = "theme_default", bg = "Pink3", attrs = "theme_default" }
+"mail.view.thread.indentation.d" = { fg = "theme_default", bg = "Gold1", attrs = "theme_default" }
+"mail.view.thread.indentation.e" = { fg = "theme_default", bg = "Orange3", attrs = "theme_default" }
+"mail.view.thread.indentation.f" = { fg = "theme_default", bg = "CadetBlue", attrs = "theme_default" }
+"mail.listing.attachment_flag" = { fg = "$CoolGray30", bg = "theme_default", attrs = "theme_default" }
+"mail.listing.thread_snooze_flag" = { fg = "$Magenta40", bg = "theme_default", attrs = "theme_default" }
+"mail.listing.tag_default" = { fg = "$White0", bg = "$Black100", attrs = "Bold" }
+"pager.highlight_search" = { fg = "theme_default", bg = "$Teal30", attrs = "Bold" }
+"pager.highlight_search_current" = { fg = "$CoolGray10", bg = "$Teal30", attrs = "Bold" }
+
+[terminal.themes.ibm-modern.color_aliases]
+"Blue60" = "#0f62fe"
+"Black100" = "#000000"
+"White0" = "#ffffff"
+"Cyan30" = "#82cfff"
+"Purple40" = "#be95ff"
+"Magenta40" = "#ff7eb6"
+"Teal30" = "#3ddbd9"
+"Cyan10" = "#e5f6ff"
+"CoolGray10" = "#f2f4f8"
+"CoolGray30" = "#c1c7cd"
