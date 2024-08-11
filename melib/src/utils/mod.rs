@@ -27,6 +27,7 @@ pub mod futures;
 pub mod random;
 #[macro_use]
 pub mod logging;
+pub mod lock;
 pub mod parsec;
 pub mod percent_encoding;
 pub mod shellexpand;
