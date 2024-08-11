@@ -77,6 +77,99 @@ macro_rules! emoji_text_presentation_selector {
 pub const BRACKET_PASTE_START: &[u8] = b"\x1B[200~";
 pub const BRACKET_PASTE_END: &[u8] = b"\x1B[201~";
 
+/// `Display` utility to print text as a clickable hyperlink with the [`OSC8`]
+/// format.
+///
+/// [`OSC8`]: <https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda>
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// # use std::path::Path;
+/// # use meli::terminal::Hyperlink;
+/// fn print_path(path: &Path) {
+///     if let Some(hostname) = nix::unistd::gethostname()
+///         .ok()
+///         .and_then(|s| s.into_string().ok())
+///     {
+///         println!(
+///             "{}",
+///             Hyperlink::new(
+///                 &path.display(),
+///                 &format_args!("file://{hostname}{}", path.display())
+///             )
+///         );
+///     } else {
+///         println!("{}", path.display());
+///     }
+/// }
+/// ```
+#[derive(Copy, Clone)]
+pub struct Hyperlink<
+    'a,
+    'b,
+    'i,
+    T: std::fmt::Display + ?Sized,
+    U: std::fmt::Display + ?Sized,
+    I: std::fmt::Display + ?Sized,
+> {
+    pub id: Option<&'i I>,
+    pub text: &'a T,
+    pub url: &'b U,
+}
+
+impl<
+        'a,
+        'b,
+        'i,
+        T: std::fmt::Display + ?Sized,
+        U: std::fmt::Display + ?Sized,
+        I: std::fmt::Display + ?Sized,
+    > std::fmt::Display for Hyperlink<'a, 'b, 'i, T, U, I>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let id: &dyn std::fmt::Display = if let Some(ref id) = self.id { id } else { &"" };
+        write!(
+            f,
+            "\x1b]8;{ideq}{id};{url}\x07{text}\x1b]8;;\x07",
+            url = self.url,
+            text = self.text,
+            ideq = if self.id.is_some() { "id=" } else { "" },
+            id = id
+        )
+    }
+}
+
+impl<'a, 'b, T: std::fmt::Display + ?Sized, U: std::fmt::Display + ?Sized>
+    Hyperlink<'a, 'b, 'static, T, U, str>
+{
+    pub const fn new(text: &'a T, url: &'b U) -> Self {
+        Self {
+            id: None,
+            text,
+            url,
+        }
+    }
+}
+
+impl<
+        'a,
+        'b,
+        'i,
+        T: std::fmt::Display + ?Sized,
+        U: std::fmt::Display + ?Sized,
+        I: std::fmt::Display + ?Sized,
+    > Hyperlink<'a, 'b, 'i, T, U, I>
+{
+    pub const fn with_id(id: &'i I, text: &'a T, url: &'b U) -> Self {
+        Self {
+            id: Some(id),
+            text,
+            url,
+        }
+    }
+}
+
 // Some macros taken from termion:
 /// Create a CSI-introduced sequence.
 macro_rules! csi {

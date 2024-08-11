@@ -146,6 +146,23 @@ pub enum ToolOpt {
     },
 }
 
+fn print_path(path: &std::path::Path) {
+    if let Some(hostname) = nix::unistd::gethostname()
+        .ok()
+        .and_then(|s| s.into_string().ok())
+    {
+        println!(
+            "{}",
+            Hyperlink::new(
+                &path.display(),
+                &format_args!("file://{hostname}{}", path.display())
+            )
+        );
+    } else {
+        println!("{}", path.display());
+    }
+}
+
 impl Opt {
     /// Execute `self.subcommand` if any, and return its result. Otherwise
     /// return `None`.
@@ -174,7 +191,7 @@ impl Opt {
             }
             SubCommand::PrintConfigPath => {
                 let config_path = ret_err!(crate::conf::get_config_file());
-                println!("{}", config_path.display());
+                print_path(&config_path);
                 Ok(())
             }
             #[cfg(not(feature = "cli-docs"))]
@@ -217,19 +234,15 @@ impl Opt {
                 Ok(())
             }
             SubCommand::PrintAppDirectories => {
-                println!(
-                    "{}",
-                    xdg::BaseDirectories::with_prefix("meli")
+                print_path(&xdg::BaseDirectories::with_prefix("meli")
                         .expect(
                             "Could not find your XDG directories. If this is unexpected, please \
                          report it as a bug."
                         )
-                        .get_data_file("")
-                        .display()
-                );
+                        .get_data_file(""));
                 let mut temp_dir = std::env::temp_dir();
                 temp_dir.push("meli");
-                println!("{}", temp_dir.display());
+                print_path(&temp_dir);
                 Ok(())
             }
             #[cfg(not(feature = "cli-docs"))]
@@ -248,7 +261,7 @@ impl Opt {
             }
             SubCommand::PrintLogPath => {
                 let settings = ret_err!(crate::conf::Settings::new());
-                println!("{}", settings._logger.log_dest().display());
+                print_path(&settings._logger.log_dest());
                 Ok(())
             }
         })

@@ -59,3 +59,36 @@ fn test_terminal_text_presentation() {
         assert_eq!(&emoji.text_pr(), text);
     }
 }
+
+#[test]
+fn test_terminal_osc8_print() {
+    use crate::terminal::Hyperlink;
+
+    const TEST_CASES: &[(Hyperlink<str, str, str>, &str)] = &[
+        (
+            Hyperlink::new("text", "url"),
+            "\x1b]8;;url\x07text\x1b]8;;\x07",
+        ),
+        (
+            Hyperlink::new("/tmp/", "file:///tmp/"),
+            "\x1b]8;;file:///tmp/\x07/tmp/\x1b]8;;\x07",
+        ),
+        (
+            Hyperlink::new("meli(1)", "man:meli(1)"),
+            "\x1b]8;;man:meli(1)\x07meli(1)\x1b]8;;\x07",
+        ),
+        (
+            Hyperlink::with_id("duplicated", "meli(1)", "man:meli(1)"),
+            "\x1b]8;id=duplicated;man:meli(1)\x07meli(1)\x1b]8;;\x07",
+        ),
+        (
+            Hyperlink::with_id("duplicated", "meli(1)", "man:meli(1)"),
+            "\x1b]8;id=duplicated;man:meli(1)\x07meli(1)\x1b]8;;\x07",
+        ),
+    ];
+
+    for (input, output) in TEST_CASES {
+        println!("{}", input);
+        assert_eq!(&input.to_string(), output);
+    }
+}
