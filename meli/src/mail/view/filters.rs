@@ -342,11 +342,10 @@ impl ViewFilter {
             ..
         } = att.content_type
         {
-            let notice = Some(format!("multipart/related with {} parts.\n\n", parts.len()).into());
             return Ok(Self {
                 filter_invocation: String::new(),
                 content_type: att.content_type.clone(),
-                notice,
+                notice: None,
                 body_text: ViewFilterContent::InlineAttachments {
                     parts: parts
                         .iter()

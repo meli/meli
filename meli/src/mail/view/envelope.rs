@@ -998,7 +998,7 @@ impl Component for EnvelopeView {
                 }
 
                 self.force_draw_headers = false;
-
+                grid.clear_area(area.skip_rows(y), self.view_settings.theme_default);
                 context.dirty_areas.push_back(area.take_rows(y + 3));
                 if !self.view_settings.sticky_headers {
                     let height_p = self.pager.size().1;

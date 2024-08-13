@@ -320,8 +320,6 @@ impl ThreadView {
         let height = self.entries.len();
         let mut width = 0;
 
-        let mut highlight_reply_subjects: Vec<Option<usize>> =
-            Vec::with_capacity(self.entries.len());
         for e in &mut self.entries {
             let envelope: EnvelopeRef = context.accounts[&self.coordinates.0]
                 .collection
@@ -331,13 +329,11 @@ impl ThreadView {
             let date = timestamp_to_string(envelope.date(), Some("%Y-%m-%d %H:%M\0"), true);
             e.heading = if thread_node.show_subject() {
                 let subject = envelope.subject();
-                highlight_reply_subjects.push(Some(subject.grapheme_width()));
                 format!(
                     "{date} {subject:`>indent$} {from}",
                     indent = 2 * e.index.0 + subject.grapheme_width(),
                 )
             } else {
-                highlight_reply_subjects.push(None);
                 format!(
                     "{date} {from:`>indent$}",
                     indent = 2 * e.index.0 + from.grapheme_width()
@@ -349,7 +345,7 @@ impl ThreadView {
             return;
         }
         let theme_default = crate::conf::value(context, "theme_default");
-        let highlight_theme = crate::conf::value(context, "highlight");
+        let highlight_theme = crate::conf::value(context, "theme_default");
         if self.reversed {
             for (y, e) in self.entries.iter().rev().enumerate() {
                 {
@@ -375,10 +371,6 @@ impl ThreadView {
                         None,
                         None,
                     );
-                }
-                if highlight_reply_subjects[y].is_some() {
-                    let area = self.content.area().skip_rows(y).take_rows(1);
-                    self.content.grid_mut().change_theme(area, highlight_theme);
                 }
             }
         } else {
@@ -407,10 +399,6 @@ impl ThreadView {
                         None,
                     );
                 }
-                if highlight_reply_subjects[y].is_some() {
-                    let area = self.content.area().skip_rows(y).take(width - 2, y);
-                    self.content.grid_mut().change_theme(area, highlight_theme);
-                }
             }
         }
         self.visible_entries = vec![(0..self.entries.len()).collect()];
@@ -424,24 +412,19 @@ impl ThreadView {
         idx: usize,
         context: &Context,
     ) {
-        let visibles: Vec<&usize> = self.visible_entries.iter().flat_map(|v| v.iter()).collect();
-        if idx == *visibles[self.cursor_pos] {
-            let theme_default = crate::conf::value(context, "theme_default");
-            let bg_color = crate::conf::value(context, "highlight").bg;
-            let attrs = if self.use_color {
-                theme_default.attrs
-            } else {
-                Attr::REVERSE
-            };
+        if self
+            .visible_entries
+            .iter()
+            .flat_map(|v| v.iter())
+            .nth(self.cursor_pos)
+            == Some(&idx)
+        {
+            let mut highlight = crate::conf::value(context, "highlight");
+            if self.use_color {
+                highlight.attrs |= Attr::REVERSE;
+            }
 
-            grid.change_theme(
-                dest_area,
-                ThemeAttribute {
-                    fg: theme_default.fg,
-                    bg: bg_color,
-                    attrs,
-                },
-            );
+            grid.change_theme(dest_area, highlight);
             return;
         }
 
