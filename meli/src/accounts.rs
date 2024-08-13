@@ -917,6 +917,11 @@ impl Account {
                         self.main_loop_handler
                             .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(ev)));
                     }
+                    self.mailbox_entries
+                        .entry(mailbox_hash)
+                        .and_modify(|entry| {
+                            entry.status = MailboxStatus::Parsing(0, 0);
+                        });
                     let mailbox_job = self.backend.write().unwrap().fetch(mailbox_hash);
                     match mailbox_job {
                         Ok(mailbox_job) => {
@@ -1439,6 +1444,7 @@ impl Account {
                                 .into_iter()
                                 .map(|e| (e.hash(), e))
                                 .collect::<HashMap<EnvelopeHash, Envelope>>();
+                            let len = envelopes.len();
                             if let Some(updated_mailboxes) = self.collection.merge(
                                 envelopes,
                                 mailbox_hash,
@@ -1450,6 +1456,17 @@ impl Account {
                                     ));
                                 }
                             }
+                            self.mailbox_entries
+                                .entry(mailbox_hash)
+                                .and_modify(|entry| {
+                                    let prev_len =
+                                        if let MailboxStatus::Parsing(prev_len, _) = entry.status {
+                                            prev_len
+                                        } else {
+                                            0
+                                        };
+                                    entry.status = MailboxStatus::Parsing(prev_len + len, 0);
+                                });
                             self.main_loop_handler.send(ThreadEvent::UIEvent(
                                 UIEvent::MailboxUpdate((self.hash, mailbox_hash)),
                             ));
