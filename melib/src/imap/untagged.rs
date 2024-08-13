@@ -36,6 +36,7 @@ use crate::{
             generate_envelope_hash, FetchResponse, ImapLineSplit, RequiredResponses,
             UntaggedResponse,
         },
+        sync::cache::ignore_not_found,
         ImapConnection, MailboxSelection, UID,
     },
 };
@@ -69,7 +70,6 @@ impl ImapConnection {
         let mailbox =
             std::clone::Clone::clone(&self.uid_store.mailboxes.lock().await[&mailbox_hash]);
 
-        let mut cache_handle = self.uid_store.cache_handle();
         let mut response = Vec::with_capacity(8 * 1024);
         let untagged_response =
             match super::protocol_parser::untagged_responses(line).map(|(_, v, _)| v) {
@@ -163,10 +163,12 @@ impl ImapConnection {
                             }
                         }
                     }
-                    if let Ok(Some(ref mut cache_handle)) = cache_handle {
-                        for mailbox_hash in mboxes_to_update {
-                            cache_handle.update(mailbox_hash, &events)?;
-                        }
+                    for mailbox_hash in mboxes_to_update {
+                        use crate::imap::sync::cache::ImapCache;
+
+                        self.uid_store
+                            .update(mailbox_hash, &events)
+                            .or_else(ignore_not_found)?;
                     }
                     for (_, event) in events {
                         self.add_refresh_event(event);
@@ -225,9 +227,11 @@ impl ImapConnection {
                     })
                     .collect::<Vec<(_, [(UID, RefreshEvent); 1])>>();
                 for (mailbox_hash, pair) in events {
-                    if let Ok(Some(ref mut cache_handle)) = cache_handle {
-                        cache_handle.update(mailbox_hash, &pair)?;
-                    }
+                    use crate::imap::sync::cache::ImapCache;
+
+                    self.uid_store
+                        .update(mailbox_hash, &pair)
+                        .or_else(ignore_not_found)?;
                     let [(_, event)] = pair;
                     self.add_refresh_event(event);
                 }
@@ -317,9 +321,13 @@ impl ImapConnection {
                         mailbox.path(),
                     );
                 }
-                if let Ok(Some(ref mut cache_handle)) = cache_handle {
-                    if let Err(err) = cache_handle
+                {
+                    use crate::imap::sync::cache::ImapCache;
+
+                    if let Err(err) = self
+                        .uid_store
                         .insert_envelopes(mailbox_hash, &v)
+                        .or_else(ignore_not_found)
                         .chain_err_summary(|| {
                             format!(
                                 "Could not save envelopes in cache for mailbox {}",
@@ -421,9 +429,13 @@ impl ImapConnection {
                             }
                             mailbox.exists.lock().unwrap().insert_new(env.hash());
                         }
-                        if let Ok(Some(ref mut cache_handle)) = cache_handle {
-                            if let Err(err) = cache_handle
+                        {
+                            use crate::imap::sync::cache::ImapCache;
+
+                            if let Err(err) = self
+                                .uid_store
                                 .insert_envelopes(mailbox_hash, &v)
+                                .or_else(ignore_not_found)
                                 .chain_err_summary(|| {
                                     format!(
                                         "Could not save envelopes in cache for mailbox {}",
@@ -569,8 +581,10 @@ impl ImapConnection {
                                 kind: NewFlags(env_hash, flags),
                             },
                         )];
-                        if let Ok(Some(ref mut cache_handle)) = cache_handle {
-                            cache_handle.update(mailbox_hash, &event)?;
+                        {
+                            use crate::imap::sync::cache::ImapCache;
+
+                            self.uid_store.update(mailbox_hash, &event)?;
                         }
                         self.add_refresh_event(std::mem::replace(
                             &mut event[0].1,

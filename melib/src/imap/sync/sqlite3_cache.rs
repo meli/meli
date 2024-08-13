@@ -21,7 +21,7 @@
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
 use std::{
-    collections::BTreeSet,
+    collections::BTreeMap,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -33,7 +33,7 @@ use crate::{
     email::{Envelope, EnvelopeHash},
     error::{Error, ErrorKind, Result, ResultIntoError},
     imap::{
-        sync::cache::{CachedEnvelope, ImapCache, ImapCacheReset},
+        sync::cache::{CachedEnvelope, CachedState, ImapCache, ImapCacheReset},
         FetchResponse, ModSequence, SelectResponse, UIDStore, UID, UIDVALIDITY,
     },
     utils::sqlite3::{
@@ -48,7 +48,7 @@ type Sqlite3UID = i32;
 #[derive(Debug)]
 pub struct Sqlite3Cache {
     connection: Connection,
-    loaded_mailboxes: BTreeSet<MailboxHash>,
+    loaded_mailboxes: BTreeMap<MailboxHash, CachedState>,
     uid_store: Arc<UIDStore>,
     data_dir: Option<PathBuf>,
 }
@@ -75,6 +75,7 @@ const DB_DESCRIPTION: DatabaseDescription = DatabaseDescription {
     CREATE TABLE IF NOT EXISTS mailbox (
                 mailbox_hash     INTEGER UNIQUE,
                 uidvalidity      INTEGER,
+                max_uid          INTEGER,
                 flags            BLOB NOT NULL,
                 highestmodseq    INTEGER,
                 PRIMARY KEY (mailbox_hash)
@@ -83,7 +84,7 @@ const DB_DESCRIPTION: DatabaseDescription = DatabaseDescription {
     CREATE INDEX IF NOT EXISTS envelope_idx ON envelopes(hash);
     CREATE INDEX IF NOT EXISTS mailbox_idx ON mailbox(mailbox_hash);",
     ),
-    version: 3,
+    version: 4,
 };
 
 impl From<EnvelopeHash> for Value {
@@ -130,22 +131,10 @@ impl Sqlite3Cache {
 
         Ok(Box::new(Self {
             connection,
-            loaded_mailboxes: BTreeSet::default(),
+            loaded_mailboxes: BTreeMap::default(),
             uid_store,
             data_dir,
         }))
-    }
-
-    fn max_uid(&mut self, mailbox_hash: MailboxHash) -> Result<UID> {
-        let tx = self.connection.transaction()?;
-        let mut stmt = tx.prepare("SELECT MAX(uid) FROM envelopes WHERE mailbox_hash = ?1;")?;
-
-        let mut ret: Vec<UID> = stmt
-            .query_map(sqlite3::params![mailbox_hash], |row| {
-                row.get(0).map(|i: Sqlite3UID| i as UID)
-            })?
-            .collect::<std::result::Result<_, _>>()?;
-        Ok(ret.pop().unwrap_or(0))
     }
 }
 
@@ -165,39 +154,72 @@ impl ImapCache for Sqlite3Cache {
         Self::reset_db(&self.uid_store, self.data_dir.as_deref())
     }
 
-    fn mailbox_state(&mut self, mailbox_hash: MailboxHash) -> Result<Option<()>> {
-        if self.loaded_mailboxes.contains(&mailbox_hash) {
-            return Ok(Some(()));
+    fn max_uid(&mut self, mailbox_hash: MailboxHash) -> Result<Option<UID>> {
+        let tx = self.connection.transaction()?;
+        let env_max_uid: Option<UID> = {
+            let mut stmt = tx.prepare("SELECT MAX(uid) FROM envelopes WHERE mailbox_hash = ?1;")?;
+
+            let ret: Option<UID> = stmt.query_row(sqlite3::params![mailbox_hash], |row| {
+                row.get(0).map(|i: Option<Sqlite3UID>| i.map(|i| i as UID))
+            })?;
+            drop(stmt);
+            ret
+        };
+        let mut max_uid = {
+            let mut stmt = tx.prepare("SELECT max_uid FROM mailbox WHERE mailbox_hash = ?1;")?;
+
+            let ret: Option<UID> = stmt.query_row(sqlite3::params![mailbox_hash], |row| {
+                row.get(0).map(|i: Option<Sqlite3UID>| i.map(|i| i as UID))
+            })?;
+            drop(stmt);
+            ret
+        };
+        if let (Some(env_max_uid), true) = (env_max_uid, max_uid != env_max_uid) {
+            max_uid = Some(env_max_uid);
+            tx.execute(
+                "UPDATE mailbox SET max_uid=?1 where mailbox_hash = ?2;",
+                sqlite3::params![env_max_uid, mailbox_hash],
+            )?;
+            tx.commit()?;
         }
-        debug!("loading mailbox state {} from cache", mailbox_hash);
+        if let Some(max_uid) = max_uid {
+            self.uid_store
+                .max_uids
+                .lock()
+                .unwrap()
+                .insert(mailbox_hash, max_uid);
+        }
+        Ok(max_uid)
+    }
+
+    fn mailbox_state(&mut self, mailbox_hash: MailboxHash) -> Result<Option<CachedState>> {
+        if let Some(s) = self.loaded_mailboxes.get(&mailbox_hash) {
+            return Ok(Some(*s));
+        }
         let tx = self.connection.transaction()?;
         let mut stmt = tx.prepare(
-            "SELECT uidvalidity, flags, highestmodseq FROM mailbox WHERE mailbox_hash = ?1;",
+            "SELECT uidvalidity, max_uid, flags, highestmodseq FROM mailbox WHERE mailbox_hash = \
+             ?1;",
         )?;
 
         let mut ret = stmt.query_map(sqlite3::params![mailbox_hash], |row| {
             Ok((
                 row.get(0).map(|u: Sqlite3UID| u as UID)?,
-                row.get(1)?,
+                row.get(1)
+                    .map(|u: Option<Sqlite3UID>| u.map(|u| u as UID))?,
                 row.get(2)?,
+                row.get(3)?,
             ))
         })?;
         if let Some(v) = ret.next() {
-            let (uidvalidity, flags, highestmodseq): (UIDVALIDITY, Vec<u8>, Option<ModSequence>) =
-                v?;
-            debug!(
-                "mailbox state {} in cache uidvalidity {}",
-                mailbox_hash, uidvalidity
-            );
-            debug!(
-                "mailbox state {} in cache highestmodseq {:?}",
-                mailbox_hash, &highestmodseq
-            );
-            debug!(
-                "mailbox state {} inserting flags: {:?}",
-                mailbox_hash,
-                to_str!(&flags)
-            );
+            let (uidvalidity, max_uid, flags, highestmodseq): (
+                UIDVALIDITY,
+                Option<UID>,
+                Vec<u8>,
+                Option<ModSequence>,
+            ) = v?;
+            drop(ret);
+            drop(stmt);
             self.uid_store
                 .highestmodseqs
                 .lock()
@@ -217,16 +239,29 @@ impl ImapCache for Sqlite3Cache {
                 let hash = TagHash::from_bytes(f.as_bytes());
                 tag_lck.entry(hash).or_insert_with(|| f.to_string());
             }
-            self.loaded_mailboxes.insert(mailbox_hash);
-            Ok(Some(()))
+            if let Some(max_uid) = max_uid {
+                self.uid_store
+                    .max_uids
+                    .lock()
+                    .unwrap()
+                    .insert(mailbox_hash, max_uid);
+            };
+            let retval = CachedState {
+                highestmodseq,
+                uidvalidity,
+            };
+            self.loaded_mailboxes.insert(mailbox_hash, retval);
+            Ok(Some(retval))
         } else {
-            debug!("mailbox state {} not in cache", mailbox_hash);
             Ok(None)
         }
     }
 
-    fn clear(&mut self, mailbox_hash: MailboxHash, select_response: &SelectResponse) -> Result<()> {
-        debug!("clear mailbox_hash {} {:?}", mailbox_hash, select_response);
+    fn init_mailbox(
+        &mut self,
+        mailbox_hash: MailboxHash,
+        select_response: &SelectResponse,
+    ) -> Result<()> {
         self.loaded_mailboxes.remove(&mailbox_hash);
         let tx = self.connection.transaction()?;
         tx.execute(
@@ -240,55 +275,37 @@ impl ImapCache for Sqlite3Cache {
             )
         })?;
 
-        if let Some(Ok(highestmodseq)) = select_response.highestmodseq {
-            tx.execute(
-                "INSERT OR IGNORE INTO mailbox (uidvalidity, flags, highestmodseq, mailbox_hash) \
-                 VALUES (?1, ?2, ?3, ?4)",
-                sqlite3::params![
-                    select_response.uidvalidity as Sqlite3UID,
-                    select_response
-                        .flags
-                        .1
-                        .iter()
-                        .map(|s| s.as_str())
-                        .collect::<Vec<&str>>()
-                        .join("\0")
-                        .as_bytes(),
-                    highestmodseq,
-                    mailbox_hash
-                ],
+        let highestmodseq: Option<ModSequence> =
+            select_response.highestmodseq.transpose().unwrap_or(None);
+        tx.execute(
+            "INSERT OR IGNORE INTO mailbox (uidvalidity, flags, highestmodseq, mailbox_hash) \
+             VALUES (?1, ?2, ?3, ?4)",
+            sqlite3::params![
+                select_response.uidvalidity as Sqlite3UID,
+                select_response
+                    .flags
+                    .1
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<&str>>()
+                    .join("\0")
+                    .as_bytes(),
+                highestmodseq,
+                mailbox_hash
+            ],
+        )
+        .chain_err_summary(|| {
+            format!(
+                "Could not insert uidvalidity {} in header_cache of account {}",
+                select_response.uidvalidity, self.uid_store.account_name
             )
-            .chain_err_summary(|| {
-                format!(
-                    "Could not insert uidvalidity {} in header_cache of account {}",
-                    select_response.uidvalidity, self.uid_store.account_name
-                )
-            })?;
-        } else {
-            tx.execute(
-                "INSERT OR IGNORE INTO mailbox (uidvalidity, flags, mailbox_hash) VALUES (?1, ?2, \
-                 ?3)",
-                sqlite3::params![
-                    select_response.uidvalidity as Sqlite3UID,
-                    select_response
-                        .flags
-                        .1
-                        .iter()
-                        .map(|s| s.as_str())
-                        .collect::<Vec<&str>>()
-                        .join("\0")
-                        .as_bytes(),
-                    mailbox_hash
-                ],
-            )
-            .chain_err_summary(|| {
-                format!(
-                    "Could not insert mailbox {} in header_cache of account {}",
-                    select_response.uidvalidity, self.uid_store.account_name
-                )
-            })?;
-        }
+        })?;
         tx.commit()?;
+        let val = CachedState {
+            highestmodseq,
+            uidvalidity: select_response.uidvalidity,
+        };
+        self.loaded_mailboxes.insert(mailbox_hash, val);
         Ok(())
     }
 
@@ -298,84 +315,78 @@ impl ImapCache for Sqlite3Cache {
         select_response: &SelectResponse,
     ) -> Result<()> {
         if self.mailbox_state(mailbox_hash)?.is_none() {
-            return self.clear(mailbox_hash, select_response);
+            return Err(Error::new("Mailbox is not in cache").set_kind(ErrorKind::NotFound));
         }
 
         let tx = self.connection.transaction()?;
-        if let Some(Ok(highestmodseq)) = select_response.highestmodseq {
-            tx.execute(
-                "UPDATE mailbox SET flags=?1, highestmodseq =?2 where mailbox_hash = ?3;",
-                sqlite3::params![
-                    select_response
-                        .flags
-                        .1
-                        .iter()
-                        .map(|s| s.as_str())
-                        .collect::<Vec<&str>>()
-                        .join("\0")
-                        .as_bytes(),
-                    highestmodseq,
-                    mailbox_hash
-                ],
+        let highestmodseq: Option<ModSequence> =
+            select_response.highestmodseq.transpose().unwrap_or(None);
+        tx.execute(
+            "UPDATE mailbox SET flags = ?1, highestmodseq = ?2, uidvalidity = ?3 where \
+             mailbox_hash = ?4;",
+            sqlite3::params![
+                select_response
+                    .flags
+                    .1
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<&str>>()
+                    .join("\0")
+                    .as_bytes(),
+                highestmodseq,
+                select_response.uidvalidity,
+                mailbox_hash,
+            ],
+        )
+        .chain_err_summary(|| {
+            format!(
+                "Could not update mailbox {} in header_cache of account {}",
+                mailbox_hash, self.uid_store.account_name
             )
-            .chain_err_summary(|| {
-                format!(
-                    "Could not update mailbox {} in header_cache of account {}",
-                    mailbox_hash, self.uid_store.account_name
-                )
-            })?;
-        } else {
-            tx.execute(
-                "UPDATE mailbox SET flags=?1 where mailbox_hash = ?2;",
-                sqlite3::params![
-                    select_response
-                        .flags
-                        .1
-                        .iter()
-                        .map(|s| s.as_str())
-                        .collect::<Vec<&str>>()
-                        .join("\0")
-                        .as_bytes(),
-                    mailbox_hash
-                ],
-            )
-            .chain_err_summary(|| {
-                format!(
-                    "Could not update mailbox {} in header_cache of account {}",
-                    mailbox_hash, self.uid_store.account_name
-                )
-            })?;
-        }
+        })?;
         tx.commit()?;
+        let val = CachedState {
+            highestmodseq,
+            uidvalidity: select_response.uidvalidity,
+        };
+        self.loaded_mailboxes.insert(mailbox_hash, val);
         Ok(())
     }
 
-    fn envelopes(&mut self, mailbox_hash: MailboxHash) -> Result<Option<Vec<EnvelopeHash>>> {
-        debug!("envelopes mailbox_hash {}", mailbox_hash);
+    fn envelopes(
+        &mut self,
+        mailbox_hash: MailboxHash,
+        max_uid: UID,
+        batch_size: usize,
+    ) -> Result<Option<Vec<EnvelopeHash>>> {
         if self.mailbox_state(mailbox_hash)?.is_none() {
             return Ok(None);
         }
 
         let res = {
+            let min = max_uid.saturating_sub(batch_size).max(1);
+            let max = max_uid;
             let tx = self.connection.transaction()?;
             let mut stmt = tx.prepare(
-                "SELECT uid, envelope, modsequence FROM envelopes WHERE mailbox_hash = ?1;",
+                "SELECT uid, hash, envelope, modsequence FROM envelopes WHERE mailbox_hash = ?1 \
+                 AND uid <= ?2 AND uid >= ?3;",
             )?;
 
             #[allow(clippy::let_and_return)] // false positive, the let binding is needed
             // for the temporary to live long enough
             let x = stmt
-                .query_map(sqlite3::params![mailbox_hash], |row| {
+                .query_map(sqlite3::params![mailbox_hash, max, min], |row| {
                     Ok((
                         row.get(0).map(|i: Sqlite3UID| i as UID)?,
                         row.get(1)?,
                         row.get(2)?,
+                        row.get(3)?,
                     ))
                 })?
                 .collect::<std::result::Result<_, _>>();
             x
         };
-        let ret: Vec<(UID, Envelope, Option<ModSequence>)> = match res {
+        let ret: Vec<(UID, EnvelopeHash, Envelope, Option<ModSequence>)> = match res {
             Err(err) if matches!(&err, rusqlite::Error::FromSqlConversionFailure(_, _, _)) => {
                 drop(err);
                 self.reset()?;
@@ -389,9 +400,10 @@ impl ImapCache for Sqlite3Cache {
         let mut hash_index_lck = self.uid_store.hash_index.lock().unwrap();
         let mut uid_index_lck = self.uid_store.uid_index.lock().unwrap();
         let mut env_hashes = Vec::with_capacity(ret.len());
-        for (uid, env, modseq) in ret {
+        for (uid, hash, env, modseq) in ret {
+            debug_assert_eq!(hash, env.hash());
             env_hashes.push(env.hash());
-            max_uid = std::cmp::max(max_uid, uid);
+            max_uid = max_uid.max(uid);
             hash_index_lck.insert(env.hash(), (uid, mailbox_hash));
             uid_index_lck.insert((mailbox_hash, uid), env.hash());
             env_lck.insert(
@@ -404,11 +416,6 @@ impl ImapCache for Sqlite3Cache {
                 },
             );
         }
-        self.uid_store
-            .max_uids
-            .lock()
-            .unwrap()
-            .insert(mailbox_hash, max_uid);
         Ok(Some(env_hashes))
     }
 
@@ -417,11 +424,6 @@ impl ImapCache for Sqlite3Cache {
         mailbox_hash: MailboxHash,
         fetches: &[FetchResponse<'_>],
     ) -> Result<()> {
-        debug!(
-            "insert_envelopes mailbox_hash {} len {}",
-            mailbox_hash,
-            fetches.len()
-        );
         let mut max_uid = self
             .uid_store
             .max_uids
@@ -430,16 +432,6 @@ impl ImapCache for Sqlite3Cache {
             .get(&mailbox_hash)
             .cloned()
             .unwrap_or_default();
-        if self.mailbox_state(mailbox_hash)?.is_none() {
-            log::trace!(
-                "insert_envelopes: Mailbox not in cache, mailbox_hash: {:?}, fetches: {:?} \
-                 backtrace:\n{}",
-                mailbox_hash,
-                fetches,
-                std::backtrace::Backtrace::capture()
-            );
-            return Err(Error::new("Mailbox is not in cache").set_kind(ErrorKind::NotFound));
-        }
         let Self {
             ref mut connection,
             ref uid_store,
@@ -459,8 +451,8 @@ impl ImapCache for Sqlite3Cache {
                 raw_fetch_value: _,
             } = item
             {
-                max_uid = std::cmp::max(max_uid, *uid);
-                tx.execute(
+                max_uid = max_uid.max(*uid);
+                let result = tx.execute(
                     "INSERT OR REPLACE INTO envelopes (hash, uid, mailbox_hash, modsequence, \
                      envelope) VALUES (?1, ?2, ?3, ?4, ?5)",
                     sqlite3::params![
@@ -470,23 +462,32 @@ impl ImapCache for Sqlite3Cache {
                         modseq,
                         &envelope
                     ],
-                )
-                .chain_err_summary(|| {
-                    format!(
+                );
+                if let Err(err) = result {
+                    let summary = format!(
                         "Could not insert envelope {} {} in header_cache of account {}",
                         envelope.message_id(),
                         envelope.hash(),
                         uid_store.account_name
-                    )
-                })?;
+                    );
+                    if err.sqlite_error_code() == Some(rusqlite::ErrorCode::ConstraintViolation) {
+                        // Our only constraint is the mailbox_hash foreign key.
+                        return Err(Error::from(err)
+                            .set_summary(summary)
+                            .set_kind(ErrorKind::NotFound));
+                    }
+                    return Err(Error::from(err).set_summary(summary));
+                }
             }
         }
         tx.commit()?;
-        self.uid_store
-            .max_uids
-            .lock()
-            .unwrap()
-            .insert(mailbox_hash, max_uid);
+        if let Ok(Some(new_max_uid)) = self.max_uid(mailbox_hash) {
+            self.uid_store
+                .max_uids
+                .lock()
+                .unwrap()
+                .insert(mailbox_hash, new_max_uid);
+        }
         Ok(())
     }
 
@@ -496,17 +497,6 @@ impl ImapCache for Sqlite3Cache {
         mailbox_hash: MailboxHash,
         flags: SmallVec<[FlagOp; 8]>,
     ) -> Result<()> {
-        if self.mailbox_state(mailbox_hash)?.is_none() {
-            log::trace!(
-                "update_flags: Mailbox not in cache, env_hashes: {:?}, mailbox_hash: {:?} flags \
-                 {:?} backtrace:\n{}",
-                env_hashes,
-                mailbox_hash,
-                flags,
-                std::backtrace::Backtrace::capture()
-            );
-            return Err(Error::new("Mailbox is not in cache").set_kind(ErrorKind::NotFound));
-        }
         let Self {
             ref mut connection,
             ref uid_store,
@@ -555,6 +545,13 @@ impl ImapCache for Sqlite3Cache {
         }
         drop(stmt);
         tx.commit()?;
+        if let Ok(Some(new_max_uid)) = self.max_uid(mailbox_hash) {
+            self.uid_store
+                .max_uids
+                .lock()
+                .unwrap()
+                .insert(mailbox_hash, new_max_uid);
+        }
         Ok(())
     }
 
@@ -563,16 +560,6 @@ impl ImapCache for Sqlite3Cache {
         mailbox_hash: MailboxHash,
         refresh_events: &[(UID, RefreshEvent)],
     ) -> Result<()> {
-        if self.mailbox_state(mailbox_hash)?.is_none() {
-            log::trace!(
-                "update: Mailbox not in cache, mailbox_hash: {:?}, refresh_events: {:?} \
-                 backtrace:\n{}",
-                mailbox_hash,
-                refresh_events,
-                std::backtrace::Backtrace::capture()
-            );
-            return Err(Error::new("Mailbox is not in cache").set_kind(ErrorKind::NotFound));
-        }
         {
             let Self {
                 ref mut connection,
@@ -639,12 +626,13 @@ impl ImapCache for Sqlite3Cache {
             }
             tx.commit()?;
         }
-        let new_max_uid = self.max_uid(mailbox_hash).unwrap_or(0);
-        self.uid_store
-            .max_uids
-            .lock()
-            .unwrap()
-            .insert(mailbox_hash, new_max_uid);
+        if let Ok(Some(new_max_uid)) = self.max_uid(mailbox_hash) {
+            self.uid_store
+                .max_uids
+                .lock()
+                .unwrap()
+                .insert(mailbox_hash, new_max_uid);
+        }
         Ok(())
     }
 

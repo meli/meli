@@ -57,7 +57,6 @@ use crate::{
             self, id_ext::id_ext_response, ImapLineSplit, ImapResponse, RequiredResponses,
             SelectResponse,
         },
-        sync::cache::ignore_not_found,
         Capabilities, ImapServerConf, UIDStore,
     },
     text::Truncate,
@@ -761,7 +760,10 @@ impl ImapConnection {
             stream: Err(Error::new("Offline".to_string())),
             id,
             server_conf: server_conf.clone(),
-            sync_policy: if *uid_store.keep_offline_cache.lock().unwrap() {
+            sync_policy: if uid_store
+                .keep_offline_cache
+                .load(std::sync::atomic::Ordering::SeqCst)
+            {
                 SyncPolicy::Basic
             } else {
                 SyncPolicy::None
@@ -1128,34 +1130,14 @@ impl ImapConnection {
         let select_response = protocol_parser::select_response(ret).chain_err_summary(|| {
             format!("Could not parse select response for mailbox {}", imap_path)
         })?;
-        {
-            if let Some(mut cache_handle) = self.uid_store.cache_handle()? {
-                if let Err(err) = cache_handle
-                    .mailbox_state(mailbox_hash)
-                    .and_then(|r| {
-                        if r.is_none() {
-                            cache_handle.clear(mailbox_hash, &select_response)
-                        } else {
-                            Ok(())
-                        }
-                    })
-                    .or_else(ignore_not_found)
-                {
-                    (self.uid_store.event_consumer)(
-                        self.uid_store.account_hash,
-                        BackendEvent::from(err),
-                    );
-                }
-            }
-            self.uid_store
-                .mailboxes
-                .lock()
-                .await
-                .entry(mailbox_hash)
-                .and_modify(|entry| {
-                    *entry.select.write().unwrap() = Some(select_response.clone());
-                });
-        }
+        self.uid_store
+            .mailboxes
+            .lock()
+            .await
+            .entry(mailbox_hash)
+            .and_modify(|entry| {
+                *entry.select.write().unwrap() = Some(select_response.clone());
+            });
         {
             let mut permissions = permissions.lock().unwrap();
             permissions.create_messages = !select_response.read_only;

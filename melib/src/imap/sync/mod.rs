@@ -34,53 +34,24 @@ pub mod ram_cache;
 #[cfg(feature = "sqlite3")]
 pub mod sqlite3_cache;
 
+#[cfg(test)]
+mod tests;
+
 impl ImapConnection {
     pub async fn resync(&mut self, mailbox_hash: MailboxHash) -> Result<Option<Vec<Envelope>>> {
-        log::trace!(
-            "resync mailbox_hash {} with policy {:?}",
-            mailbox_hash,
-            self.sync_policy
-        );
         if matches!(self.sync_policy, SyncPolicy::None) {
             return Ok(None);
         }
 
-        if let Some(mut cache_handle) = self.uid_store.cache_handle()? {
-            if cache_handle.mailbox_state(mailbox_hash)?.is_none() {
-                return Ok(None);
-            }
-
-            match self.sync_policy {
-                SyncPolicy::None => Ok(None),
-                SyncPolicy::Basic => self.resync_basic(cache_handle, mailbox_hash).await,
-                SyncPolicy::Condstore => self.resync_condstore(cache_handle, mailbox_hash).await,
-                SyncPolicy::CondstoreQresync => {
-                    self.resync_condstoreqresync(cache_handle, mailbox_hash)
-                        .await
-                }
-            }
-        } else {
-            Ok(None)
+        if self.uid_store.mailbox_state(mailbox_hash)?.is_none() {
+            return Ok(None);
         }
-    }
 
-    pub async fn load_cache(&self, mailbox_hash: MailboxHash) -> Option<Result<Vec<EnvelopeHash>>> {
-        log::trace!("load_cache {}", mailbox_hash);
-        let mut cache_handle = match self.uid_store.cache_handle() {
-            Ok(v) => v?,
-            Err(err) => return Some(Err(err)),
-        };
-        match cache_handle.mailbox_state(mailbox_hash) {
-            Err(err) => return Some(Err(err)),
-            Ok(Some(())) => {}
-            Ok(None) => {
-                return None;
-            }
-        };
-        match cache_handle.envelopes(mailbox_hash) {
-            Ok(Some(envs)) => Some(Ok(envs)),
-            Ok(None) => None,
-            Err(err) => Some(Err(err)),
+        match self.sync_policy {
+            SyncPolicy::None => Ok(None),
+            SyncPolicy::Basic => self.resync_basic(mailbox_hash).await,
+            SyncPolicy::Condstore => self.resync_condstore(mailbox_hash).await,
+            SyncPolicy::CondstoreQresync => self.resync_condstoreqresync(mailbox_hash).await,
         }
     }
 
@@ -89,10 +60,8 @@ impl ImapConnection {
     /// Disconnected IMAP4 Clients".
     pub async fn resync_basic(
         &mut self,
-        mut cache_handle: Box<dyn cache::ImapCache>,
         mailbox_hash: MailboxHash,
     ) -> Result<Option<Vec<Envelope>>> {
-        log::trace!("resync_basic mailbox_hash {:?}", mailbox_hash);
         let mut payload = vec![];
         let mut response = Vec::with_capacity(8 * 1024);
         let cached_uidvalidity = self
@@ -129,18 +98,15 @@ impl ImapConnection {
             .select_mailbox(mailbox_hash, &mut response, true)
             .await?;
         // 1. check UIDVALIDITY. If fail, discard cache and rebuild
-        log::trace!("Step 1. check UIDVALIDITY. If fail, discard cache and rebuild");
         if select_response.uidvalidity != current_uidvalidity {
-            cache_handle.clear(mailbox_hash, &select_response)?;
+            self.uid_store
+                .init_mailbox(mailbox_hash, &select_response)?;
             return Ok(None);
         }
-        cache_handle.update_mailbox(mailbox_hash, &select_response)?;
+        self.uid_store
+            .update_mailbox(mailbox_hash, &select_response)?;
 
         // 2. tag1 UID FETCH <lastseenuid+1>:* <descriptors>
-        log::trace!(
-            "Step 2. tag1 UID FETCH <lastseenuid+1>:* <descriptors> == {}:*",
-            max_uid + 1
-        );
         self.send_command(CommandBody::fetch(
             max_uid + 1..,
             common_attributes(),
@@ -149,13 +115,7 @@ impl ImapConnection {
         .await?;
         self.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
             .await?;
-        log::debug!(
-            "fetch response is {} bytes and {} lines",
-            response.len(),
-            String::from_utf8_lossy(&response).lines().count()
-        );
         let (_, mut v, _) = protocol_parser::fetch_responses(&response)?;
-        log::debug!("responses len is {}", v.len());
         for FetchResponse {
             ref uid,
             ref mut envelope,
@@ -184,7 +144,7 @@ impl ImapConnection {
             }
         }
         {
-            cache_handle
+            self.uid_store
                 .insert_envelopes(mailbox_hash, &v)
                 .chain_err_summary(|| {
                     format!(
@@ -240,7 +200,6 @@ impl ImapConnection {
             }
         }
         // 3. tag2 UID FETCH 1:<lastseenuid> FLAGS
-        log::trace!("Step 3. tag2 UID FETCH 1:<lastseenuid> FLAGS");
         let sequence_set = if max_uid == 0 {
             SequenceSet::from(..)
         } else {
@@ -319,7 +278,7 @@ impl ImapConnection {
             env_lck.remove(env_hash);
         }
         drop(env_lck);
-        cache_handle.update(mailbox_hash, &refresh_events)?;
+        self.uid_store.update(mailbox_hash, &refresh_events)?;
         for (_uid, ev) in refresh_events {
             self.add_refresh_event(ev);
         }
@@ -333,10 +292,8 @@ impl ImapConnection {
     /// Disconnected IMAP4 Clients", Section 6.1 "CONDSTORE Extension"
     pub async fn resync_condstore(
         &mut self,
-        mut cache_handle: Box<dyn cache::ImapCache>,
         mailbox_hash: MailboxHash,
     ) -> Result<Option<Vec<Envelope>>> {
-        log::trace!("resync_condstore: mailbox_hash {:?}", mailbox_hash);
         let mut payload = vec![];
         let mut response = Vec::with_capacity(8 * 1024);
         let cached_uidvalidity = self
@@ -373,7 +330,7 @@ impl ImapConnection {
             cached_highestmodseq.unwrap();
         if cached_highestmodseq.is_err() {
             // No MODSEQ is available for __this__ mailbox, fallback to basic sync
-            return self.resync_basic(cache_handle, mailbox_hash).await;
+            return self.resync_basic(mailbox_hash).await;
         }
         let cached_highestmodseq: ModSequence = cached_highestmodseq.unwrap();
 
@@ -401,7 +358,8 @@ impl ImapConnection {
             //     that this doesn't affect actions performed on client-generated fake UIDs;
             //     see Section 5); and
             //   * skip steps 1b and 2-II;
-            cache_handle.clear(mailbox_hash, &select_response)?;
+            self.uid_store
+                .init_mailbox(mailbox_hash, &select_response)?;
             return Ok(None);
         }
         if select_response.highestmodseq.is_none()
@@ -414,9 +372,10 @@ impl ImapConnection {
                     .unwrap()
                     .insert(mailbox_hash, Err(()));
             }
-            return self.resync_basic(cache_handle, mailbox_hash).await;
+            return self.resync_basic(mailbox_hash).await;
         }
-        cache_handle.update_mailbox(mailbox_hash, &select_response)?;
+        self.uid_store
+            .update_mailbox(mailbox_hash, &select_response)?;
         let new_highestmodseq = select_response.highestmodseq.unwrap().unwrap();
         let mut refresh_events = vec![];
         // 1b) Check the mailbox HIGHESTMODSEQ.
@@ -483,7 +442,7 @@ impl ImapConnection {
                 }
             }
             {
-                cache_handle
+                self.uid_store
                     .insert_envelopes(mailbox_hash, &v)
                     .chain_err_summary(|| {
                         format!(
@@ -644,7 +603,7 @@ impl ImapConnection {
             }
             drop(env_lck);
         }
-        cache_handle.update(mailbox_hash, &refresh_events)?;
+        self.uid_store.update(mailbox_hash, &refresh_events)?;
         for (_uid, ev) in refresh_events {
             self.add_refresh_event(ev);
         }
@@ -657,15 +616,14 @@ impl ImapConnection {
     /// [RFC7162](https://datatracker.ietf.org/doc/rfc7162/) "Quick Flag Changes Resynchronization (CONDSTORE) and Quick
     /// Mailbox Resynchronization (QRESYNC)"
     pub async fn resync_condstoreqresync(
-        &self,
-        _cache_handle: Box<dyn cache::ImapCache>,
-        _mailbox_hash: MailboxHash,
+        &mut self,
+        mailbox_hash: MailboxHash,
     ) -> Result<Option<Vec<Envelope>>> {
         log::trace!(
             "resync_condstoreqresync: mailbox_hash: {:?}, function unimplemented",
-            _mailbox_hash
+            mailbox_hash
         );
-        Ok(None)
+        self.resync_condstore(mailbox_hash).await
     }
 
     pub async fn init_mailbox(&mut self, mailbox_hash: MailboxHash) -> Result<SelectResponse> {
@@ -684,11 +642,6 @@ impl ImapConnection {
         let mut select_response = self
             .select_mailbox(mailbox_hash, &mut response, true)
             .await?;
-        log::trace!(
-            "mailbox: {} select_response: {:?}",
-            mailbox_path,
-            select_response
-        );
         {
             {
                 let mut uidvalidities = self.uid_store.uidvalidity.lock().unwrap();

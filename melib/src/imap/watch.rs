@@ -18,7 +18,10 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use imap_codec::imap_types::search::SearchKey;
 
@@ -33,7 +36,7 @@ pub struct ImapWatchKit {
 }
 
 pub async fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
-    debug!("poll with examine");
+    log::trace!("poll with examine");
     let ImapWatchKit {
         mut conn,
         main_conn: _,
@@ -49,12 +52,12 @@ pub async fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
             examine_updates(mailbox, &mut conn, &uid_store).await?;
         }
         //[ref:FIXME]: make sleep duration configurable
-        smol::Timer::after(std::time::Duration::from_secs(3 * 60)).await;
+        smol::Timer::after(Duration::from_secs(3 * 60)).await;
     }
 }
 
 pub async fn idle(kit: ImapWatchKit) -> Result<()> {
-    debug!("IDLE");
+    log::trace!("IDLE");
     /* IDLE only watches the connection's selected mailbox. We will IDLE on INBOX
      * and every ~5 minutes wake up and poll the others */
     let ImapWatchKit {
@@ -89,11 +92,6 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
 
         if let Some(v) = uidvalidities.get(&mailbox_hash) {
             if *v != select_response.uidvalidity {
-                if let Ok(Some(mut cache_handle)) = uid_store.cache_handle() {
-                    cache_handle
-                        .clear(mailbox_hash, &select_response)
-                        .or_else(ignore_not_found)?;
-                }
                 conn.add_refresh_event(RefreshEvent {
                     account_hash: uid_store.account_hash,
                     mailbox_hash,
@@ -108,24 +106,18 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
         let mailboxes_lck = timeout(uid_store.timeout, uid_store.mailboxes.lock()).await?;
         mailboxes_lck.clone()
     };
-    for (h, mailbox) in mailboxes.clone() {
-        if mailbox_hash == h {
-            continue;
-        }
-        examine_updates(mailbox, &mut conn, &uid_store).await?;
-    }
     conn.send_command(CommandBody::Idle).await?;
     let mut blockn = ImapBlockingConnection::from(conn);
-    let mut watch = std::time::Instant::now();
+    let mut watch = Instant::now();
     /* duration interval to send heartbeat */
-    const _10_MINS: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+    const _10_MINS: Duration = Duration::from_secs(10 * 60);
     /* duration interval to check other mailboxes for changes */
-    const _5_MINS: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+    const _5_MINS: Duration = Duration::from_secs(5 * 60);
     loop {
         let line = match timeout(Some(_10_MINS), blockn.as_stream()).await {
             Ok(Some(line)) => line,
             Ok(None) => {
-                debug!("IDLE connection dropped: {:?}", &blockn.err());
+                log::trace!("IDLE connection dropped: {:?}", &blockn.err());
                 blockn.conn.connect().await?;
                 let mut main_conn_lck = timeout(uid_store.timeout, main_conn.lock()).await?;
                 main_conn_lck.connect().await?;
@@ -144,7 +136,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                 continue;
             }
         };
-        let now = std::time::Instant::now();
+        let now = Instant::now();
         if now.duration_since(watch) >= _5_MINS {
             /* Time to poll all inboxes */
             let mut conn = timeout(uid_store.timeout, main_conn.lock()).await?;
@@ -174,14 +166,13 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                 .read_response(&mut response, RequiredResponses::empty())
                 .await?;
             for l in line.split_rn().chain(response.split_rn()) {
-                debug!("process_untagged {:?}", &l);
+                log::trace!("process_untagged {:?}", &l);
                 if l.starts_with(b"+ ")
                     || l.starts_with(b"* ok")
                     || l.starts_with(b"* ok")
                     || l.starts_with(b"* Ok")
                     || l.starts_with(b"* OK")
                 {
-                    debug!("ignore continuation mark");
                     continue;
                 }
                 blockn.conn.process_untagged(l).await?;
@@ -200,7 +191,7 @@ pub async fn examine_updates(
         return Ok(());
     }
     let mailbox_hash = mailbox.hash();
-    log::debug!("examining mailbox {} {}", mailbox_hash, mailbox.path());
+    log::trace!("examining mailbox {} {}", mailbox_hash, mailbox.path());
     if let Some(new_envelopes) = conn.resync(mailbox_hash).await? {
         for env in new_envelopes {
             conn.add_refresh_event(RefreshEvent {
@@ -210,7 +201,6 @@ pub async fn examine_updates(
             });
         }
     } else {
-        let cache_handle = uid_store.cache_handle();
         let mut response = Vec::with_capacity(8 * 1024);
         let select_response = conn
             .examine_mailbox(mailbox_hash, &mut response, true)
@@ -220,11 +210,6 @@ pub async fn examine_updates(
 
             if let Some(v) = uidvalidities.get(&mailbox_hash) {
                 if *v != select_response.uidvalidity {
-                    if let Ok(Some(mut cache_handle)) = cache_handle {
-                        cache_handle
-                            .clear(mailbox_hash, &select_response)
-                            .or_else(ignore_not_found)?;
-                    }
                     conn.add_refresh_event(RefreshEvent {
                         account_hash: uid_store.account_hash,
                         mailbox_hash,
@@ -262,7 +247,7 @@ pub async fn examine_updates(
                     RequiredResponses::LIST_REQUIRED | RequiredResponses::STATUS,
                 )
                 .await?;
-                debug!(
+                log::trace!(
                     "list return status out: {}",
                     String::from_utf8_lossy(&response)
                 );
@@ -315,7 +300,7 @@ pub async fn examine_updates(
                 .await?;
             let v = protocol_parser::search_results(response.as_slice()).map(|(_, v)| v)?;
             if v.is_empty() {
-                debug!(
+                log::trace!(
                     "search response was empty: {}",
                     String::from_utf8_lossy(&response)
                 );
@@ -335,13 +320,13 @@ pub async fn examine_updates(
         } else {
             return Ok(());
         }
-        log::debug!(
+        log::trace!(
             "fetch response is {} bytes and {} lines",
             response.len(),
             String::from_utf8_lossy(&response).lines().count()
         );
         let (_, mut v, _) = protocol_parser::fetch_responses(&response)?;
-        log::debug!("responses len is {}", v.len());
+        log::trace!("responses len is {}", v.len());
         for FetchResponse {
             ref uid,
             ref mut envelope,
@@ -370,8 +355,9 @@ pub async fn examine_updates(
                 }
             }
         }
-        if let Ok(Some(mut cache_handle)) = cache_handle {
-            cache_handle
+        {
+            let mut uid_store = Arc::clone(uid_store);
+            uid_store
                 .insert_envelopes(mailbox_hash, &v)
                 .or_else(ignore_not_found)
                 .chain_err_summary(|| {
@@ -402,7 +388,7 @@ pub async fn examine_updates(
                 continue;
             }
             let env = envelope.unwrap();
-            debug!(
+            log::trace!(
                 "Create event {} {} {}",
                 env.hash(),
                 env.subject(),

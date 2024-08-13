@@ -90,6 +90,7 @@ impl ManageSieveConnection {
                 account_name.into(),
                 event_consumer,
                 server_conf.timeout,
+                false,
             )
         });
         Ok(Self {
