@@ -130,7 +130,7 @@ impl MailView {
                 {
                     Ok(fut) => {
                         let mut handle = account.main_loop_handler.job_executor.spawn(
-                            "fetch-envelopes".into(),
+                            "fetch-envelope".into(),
                             fut,
                             account.is_async(),
                         );
@@ -154,6 +154,7 @@ impl MailView {
                             }
                         } else {
                             self.state = MailViewState::LoadingBody {
+                                main_loop_handler: self.main_loop_handler.clone(),
                                 handle,
                                 pending_action: pending_action.take(),
                             };
@@ -437,10 +438,9 @@ impl Component for MailView {
                 if self.active_jobs.contains(job_id) =>
             {
                 match self.state {
-                    MailViewState::LoadingBody {
-                        ref mut handle,
-                        pending_action: _,
-                    } if handle.job_id == *job_id => {
+                    MailViewState::LoadingBody { ref mut handle, .. }
+                        if handle.job_id == *job_id =>
+                    {
                         match handle.chan.try_recv() {
                             Err(_) => { /* Job was canceled */ }
                             Ok(None) => { /* something happened, perhaps a worker

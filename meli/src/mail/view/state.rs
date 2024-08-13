@@ -22,7 +22,9 @@
 use melib::{text::Truncate, Envelope, Error, Mail, Result};
 
 use super::{EnvelopeView, MailView, ViewSettings};
-use crate::{jobs::JoinHandle, mailbox_settings, Component, Context, ShortcutMaps, UIEvent};
+use crate::{
+    jobs::JoinHandle, mailbox_settings, Component, Context, ShortcutMaps, ThreadEvent, UIEvent,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PendingReplyAction {
@@ -39,6 +41,7 @@ pub enum MailViewState {
         pending_action: Option<PendingReplyAction>,
     },
     LoadingBody {
+        main_loop_handler: crate::MainLoopHandler,
         handle: JoinHandle<Result<Vec<u8>>>,
         pending_action: Option<PendingReplyAction>,
     },
@@ -51,6 +54,23 @@ pub enum MailViewState {
         env_view: Box<EnvelopeView>,
         stack: Vec<Box<dyn Component>>,
     },
+}
+
+impl Drop for MailViewState {
+    fn drop(&mut self) {
+        let Self::LoadingBody {
+            handle,
+            main_loop_handler,
+            ..
+        } = self
+        else {
+            return;
+        };
+        let Some(ev) = handle.cancel() else {
+            return;
+        };
+        main_loop_handler.send(ThreadEvent::UIEvent(UIEvent::StatusEvent(ev)));
+    }
 }
 
 impl std::fmt::Display for MailViewState {
