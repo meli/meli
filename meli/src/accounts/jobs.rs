@@ -26,7 +26,7 @@ use futures::stream::Stream;
 use melib::{backends::*, email::*, error::Result, LogLevel};
 use smallvec::SmallVec;
 
-use crate::{is_variant, jobs::JoinHandle};
+use crate::{is_variant, jobs::JoinHandle, StatusEvent};
 
 pub enum MailboxJobRequest {
     Mailboxes {
@@ -90,6 +90,19 @@ impl std::fmt::Display for MailboxJobRequest {
             Self::RenameMailbox { new_path, .. } => write!(f, "Rename mailbox to {new_path}"),
             Self::SetMailboxPermissions { .. } => write!(f, "Set mailbox permissions"),
             Self::SetMailboxSubscription { .. } => write!(f, "Set mailbox subscription"),
+        }
+    }
+}
+
+impl MailboxJobRequest {
+    pub fn cancel(&self) -> Option<StatusEvent> {
+        match self {
+            Self::Mailboxes { handle } => handle.cancel(),
+            Self::CreateMailbox { handle, .. } => handle.cancel(),
+            Self::DeleteMailbox { handle, .. } => handle.cancel(),
+            Self::RenameMailbox { handle, .. } => handle.cancel(),
+            Self::SetMailboxPermissions { handle, .. } => handle.cancel(),
+            Self::SetMailboxSubscription { handle, .. } => handle.cancel(),
         }
     }
 }
@@ -208,10 +221,27 @@ impl std::fmt::Display for JobRequest {
 impl JobRequest {
     is_variant! { is_watch, Watch { .. } }
     is_variant! { is_online, IsOnline { .. } }
+    is_variant! { is_any_fetch, Fetch { .. } }
 
     pub fn is_fetch(&self, mailbox_hash: MailboxHash) -> bool {
         matches!(self, Self::Fetch {
                  mailbox_hash: h, ..
              } if *h == mailbox_hash)
+    }
+
+    pub fn cancel(&self) -> Option<StatusEvent> {
+        match self {
+            Self::Generic { handle, .. } => handle.cancel(),
+            Self::Mailbox(inner) => inner.cancel(),
+            Self::Fetch { handle, .. } => handle.cancel(),
+            Self::IsOnline { handle, .. } => handle.cancel(),
+            Self::Refresh { handle, .. } => handle.cancel(),
+            Self::SetFlags { handle, .. } => handle.cancel(),
+            Self::SaveMessage { handle, .. } => handle.cancel(),
+            Self::DeleteMessages { handle, .. } => handle.cancel(),
+            Self::Watch { handle, .. } => handle.cancel(),
+            Self::SendMessage => None,
+            Self::SendMessageBackground { handle, .. } => handle.cancel(),
+        }
     }
 }

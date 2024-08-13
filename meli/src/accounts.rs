@@ -1323,9 +1323,20 @@ impl Account {
             .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
                 StatusEvent::JobFinished(*job_id),
             )));
+        let job_id = *job_id;
+        macro_rules! is_canceled {
+            ($handle:expr) => {{
+                if $handle.is_canceled() {
+                    self.main_loop_handler
+                        .job_executor
+                        .set_job_success(job_id, false);
+                    /* canceled */
+                    return true;
+                }
+            }};
+        }
 
-        if let Some(mut job) = self.active_jobs.remove(job_id) {
-            let job_id = *job_id;
+        if let Some(mut job) = self.active_jobs.remove(&job_id) {
             match job {
                 JobRequest::Mailbox(inner) => {
                     self.process_mailbox_event(job_id, inner);
@@ -1336,6 +1347,7 @@ impl Account {
                     ref mut handle,
                     ..
                 } => {
+                    is_canceled! { handle };
                     log::trace!("got payload in status for {}", mailbox_hash);
                     match handle.chan.try_recv() {
                         Err(_) => {
@@ -1439,6 +1451,7 @@ impl Account {
                     {
                         return true;
                     }
+                    is_canceled! { handle };
                     if let Ok(Some(is_online)) = handle.chan.try_recv() {
                         self.main_loop_handler.send(ThreadEvent::UIEvent(
                             UIEvent::AccountStatusChange(self.hash, None),
@@ -1473,6 +1486,7 @@ impl Account {
                     {
                         return true;
                     }
+                    is_canceled! { handle };
                     match handle.chan.try_recv() {
                         Err(_) => { /* canceled */ }
                         Ok(None) => {}
@@ -1502,70 +1516,77 @@ impl Account {
                     ref env_hashes,
                     ref mailbox_hash,
                     ref flags,
-                } => match handle.chan.try_recv() {
-                    Ok(Some(Err(err))) => {
-                        self.main_loop_handler
-                            .job_executor
-                            .set_job_success(job_id, false);
-                        self.main_loop_handler
-                            .send(ThreadEvent::UIEvent(UIEvent::Notification {
-                                title: Some(format!("{}: could not set flag", &self.name).into()),
-                                source: None,
-                                body: err.to_string().into(),
-                                kind: Some(NotificationType::Error(err.kind)),
-                            }));
-                    }
-                    Ok(Some(Ok(()))) => {
-                        for env_hash in env_hashes.iter() {
-                            if !self.collection.contains_key(&env_hash) {
-                                continue;
-                            }
-                            let mut env_lck = self.collection.envelopes.write().unwrap();
-                            env_lck.entry(env_hash).and_modify(|entry| {
-                                for op in flags.iter() {
-                                    match op {
-                                        FlagOp::Set(f) => {
-                                            let mut flags = entry.flags();
-                                            flags.set(*f, true);
-                                            entry.set_flags(flags);
-                                        }
-                                        FlagOp::UnSet(f) => {
-                                            let mut flags = entry.flags();
-                                            flags.set(*f, false);
-                                            entry.set_flags(flags);
-                                        }
-                                        FlagOp::SetTag(t) => {
-                                            entry
-                                                .tags_mut()
-                                                .insert(TagHash::from_bytes(t.as_bytes()));
-                                        }
-                                        FlagOp::UnSetTag(t) => {
-                                            entry
-                                                .tags_mut()
-                                                .shift_remove(&TagHash::from_bytes(t.as_bytes()));
+                } => {
+                    is_canceled! { handle };
+                    match handle.chan.try_recv() {
+                        Ok(Some(Err(err))) => {
+                            self.main_loop_handler
+                                .job_executor
+                                .set_job_success(job_id, false);
+                            self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                UIEvent::Notification {
+                                    title: Some(
+                                        format!("{}: could not set flag", &self.name).into(),
+                                    ),
+                                    source: None,
+                                    body: err.to_string().into(),
+                                    kind: Some(NotificationType::Error(err.kind)),
+                                },
+                            ));
+                        }
+                        Ok(Some(Ok(()))) => {
+                            for env_hash in env_hashes.iter() {
+                                if !self.collection.contains_key(&env_hash) {
+                                    continue;
+                                }
+                                let mut env_lck = self.collection.envelopes.write().unwrap();
+                                env_lck.entry(env_hash).and_modify(|entry| {
+                                    for op in flags.iter() {
+                                        match op {
+                                            FlagOp::Set(f) => {
+                                                let mut flags = entry.flags();
+                                                flags.set(*f, true);
+                                                entry.set_flags(flags);
+                                            }
+                                            FlagOp::UnSet(f) => {
+                                                let mut flags = entry.flags();
+                                                flags.set(*f, false);
+                                                entry.set_flags(flags);
+                                            }
+                                            FlagOp::SetTag(t) => {
+                                                entry
+                                                    .tags_mut()
+                                                    .insert(TagHash::from_bytes(t.as_bytes()));
+                                            }
+                                            FlagOp::UnSetTag(t) => {
+                                                entry.tags_mut().shift_remove(
+                                                    &TagHash::from_bytes(t.as_bytes()),
+                                                );
+                                            }
                                         }
                                     }
+                                });
+                                #[cfg(feature = "sqlite3")]
+                                if let Some(env) = env_lck.get(&env_hash).cloned() {
+                                    drop(env_lck);
+                                    self.update_cached_env(env, None);
                                 }
-                            });
-                            #[cfg(feature = "sqlite3")]
-                            if let Some(env) = env_lck.get(&env_hash).cloned() {
-                                drop(env_lck);
-                                self.update_cached_env(env, None);
+                            }
+                            for env_hash in env_hashes.iter() {
+                                self.collection.update_flags(env_hash, *mailbox_hash);
+                                self.main_loop_handler
+                                    .send(ThreadEvent::UIEvent(UIEvent::EnvelopeUpdate(env_hash)));
                             }
                         }
-                        for env_hash in env_hashes.iter() {
-                            self.collection.update_flags(env_hash, *mailbox_hash);
-                            self.main_loop_handler
-                                .send(ThreadEvent::UIEvent(UIEvent::EnvelopeUpdate(env_hash)));
-                        }
+                        Err(_) | Ok(None) => {}
                     }
-                    Err(_) | Ok(None) => {}
-                },
+                }
                 JobRequest::SaveMessage {
                     ref mut handle,
                     ref bytes,
                     ..
                 } => {
+                    is_canceled! { handle };
                     if let Ok(Some(Err(err))) = handle.chan.try_recv() {
                         self.main_loop_handler
                             .job_executor
@@ -1607,6 +1628,7 @@ impl Account {
                 }
                 JobRequest::SendMessage => {}
                 JobRequest::SendMessageBackground { ref mut handle, .. } => {
+                    is_canceled! { handle };
                     if let Ok(Some(Err(err))) = handle.chan.try_recv() {
                         self.main_loop_handler
                             .job_executor
@@ -1621,6 +1643,7 @@ impl Account {
                     }
                 }
                 JobRequest::DeleteMessages { ref mut handle, .. } => {
+                    is_canceled! { handle };
                     if let Ok(Some(Err(err))) = handle.chan.try_recv() {
                         self.main_loop_handler
                             .job_executor
@@ -1670,6 +1693,7 @@ impl Account {
                     ref mut on_finish,
                     log_level,
                 } => {
+                    is_canceled! { handle };
                     match handle.chan.try_recv() {
                         Ok(Some(Err(err))) => {
                             self.main_loop_handler

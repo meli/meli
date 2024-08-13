@@ -26,7 +26,10 @@ use std::{
     future::Future,
     iter,
     panic::catch_unwind,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc, Mutex,
+    },
     thread,
     time::Duration,
 };
@@ -49,6 +52,7 @@ pub enum IsAsync {
 }
 
 type AsyncTask = async_task::Runnable;
+type AtomicUnixTimestamp = Arc<AtomicU64>;
 
 fn find_task(
     local: &Worker<MeliTask>,
@@ -119,12 +123,47 @@ pub struct MeliTask {
 #[derive(Clone, Debug)]
 /// A spawned future's metadata for book-keeping.
 pub struct JobMetadata {
-    pub id: JobId,
-    pub desc: Cow<'static, str>,
-    pub timer: bool,
-    pub started: UnixTimestamp,
-    pub finished: Option<UnixTimestamp>,
-    pub succeeded: bool,
+    id: JobId,
+    desc: Cow<'static, str>,
+    timer: bool,
+    started: UnixTimestamp,
+    finished: AtomicUnixTimestamp,
+    succeeded: bool,
+}
+
+impl JobMetadata {
+    pub fn id(&self) -> &JobId {
+        &self.id
+    }
+
+    pub fn description(&self) -> &str {
+        &self.desc
+    }
+
+    pub fn is_timer(&self) -> bool {
+        self.timer
+    }
+
+    pub fn started(&self) -> UnixTimestamp {
+        self.started
+    }
+
+    pub fn finished(&self) -> Option<UnixTimestamp> {
+        let value = self.finished.load(Ordering::SeqCst);
+        if value == 0 {
+            return None;
+        }
+        Some(value)
+    }
+
+    fn set_finished(&self, new_value: Option<UnixTimestamp>) {
+        let new_value = new_value.unwrap_or_default();
+        self.finished.store(new_value, Ordering::SeqCst);
+    }
+
+    pub fn succeeded(&self) -> bool {
+        self.succeeded
+    }
 }
 
 #[derive(Debug)]
@@ -145,7 +184,7 @@ struct TimerPrivate {
     value: Duration,
     active: bool,
     handle: Option<async_task::Task<()>>,
-    cancel: Arc<Mutex<bool>>,
+    cancel: Arc<AtomicBool>,
 }
 
 #[derive(Debug)]
@@ -272,8 +311,8 @@ impl JobExecutor {
         let finished_sender = self.sender.clone();
         let job_id = JobId::new();
         let injector = self.global_queue.clone();
-        let cancel = Arc::new(Mutex::new(false));
-        let cancel2 = cancel.clone();
+        let finished = Arc::new(AtomicU64::new(0));
+        let cancel = Arc::new(AtomicBool::new(false));
 
         self.jobs.lock().unwrap().insert(
             job_id,
@@ -281,34 +320,39 @@ impl JobExecutor {
                 id: job_id,
                 desc: desc.clone(),
                 started: datetime::now(),
-                finished: None,
+                finished: finished.clone(),
                 succeeded: true,
                 timer: false,
             },
         );
 
         // Create a task and schedule it for execution.
-        let (handle, task) = async_task::spawn(
-            async move {
-                let res = future.await;
-                let _ = sender.send(res);
-                finished_sender
-                    .send(ThreadEvent::JobFinished(job_id))
-                    .unwrap();
-            },
-            move |task| {
-                if *cancel.lock().unwrap() {
-                    return;
-                }
-                let desc = desc.clone();
-                injector.push(MeliTask {
-                    task,
-                    id: job_id,
-                    desc,
-                    timer: false,
-                })
-            },
-        );
+        let (handle, task) = {
+            let cancel = cancel.clone();
+            let finished = finished.clone();
+            async_task::spawn(
+                async move {
+                    let res = future.await;
+                    let _ = sender.send(res);
+                    finished.store(datetime::now(), Ordering::SeqCst);
+                    finished_sender
+                        .send(ThreadEvent::JobFinished(job_id))
+                        .unwrap();
+                },
+                move |task| {
+                    if cancel.load(Ordering::SeqCst) {
+                        return;
+                    }
+                    let desc = desc.clone();
+                    injector.push(MeliTask {
+                        task,
+                        id: job_id,
+                        desc,
+                        timer: false,
+                    })
+                },
+            )
+        };
         handle.schedule();
         for unparker in self.parkers.iter() {
             unparker.unpark();
@@ -316,7 +360,8 @@ impl JobExecutor {
 
         JoinHandle {
             task: Arc::new(Mutex::new(Some(task))),
-            cancel: cancel2,
+            cancel,
+            finished,
             chan: receiver,
             job_id,
         }
@@ -339,7 +384,7 @@ impl JobExecutor {
     pub fn create_timer(self: Arc<Self>, interval: Duration, value: Duration) -> Timer {
         let timer = TimerPrivate {
             interval,
-            cancel: Arc::new(Mutex::new(false)),
+            cancel: Arc::new(AtomicBool::new(false)),
             value,
             active: true,
             handle: None,
@@ -367,46 +412,48 @@ impl JobExecutor {
         let sender = self.sender.clone();
         let injector = self.global_queue.clone();
         let timers = self.timers.clone();
-        let cancel = Arc::new(Mutex::new(false));
-        let cancel2 = cancel.clone();
-        let (task, handle) = async_task::spawn(
-            async move {
-                let mut value = value;
-                loop {
-                    smol::Timer::after(value).await;
-                    sender
-                        .send(ThreadEvent::UIEvent(UIEvent::Timer(id)))
-                        .unwrap();
-                    if let Some(interval) = timers.lock().unwrap().get(&id).and_then(|timer| {
-                        if timer.interval.as_millis() == 0 && timer.interval.as_secs() == 0 {
-                            None
-                        } else if timer.active {
-                            Some(timer.interval)
+        let cancel = Arc::new(AtomicBool::new(false));
+        let (task, handle) = {
+            let cancel = cancel.clone();
+            async_task::spawn(
+                async move {
+                    let mut value = value;
+                    loop {
+                        smol::Timer::after(value).await;
+                        sender
+                            .send(ThreadEvent::UIEvent(UIEvent::Timer(id)))
+                            .unwrap();
+                        if let Some(interval) = timers.lock().unwrap().get(&id).and_then(|timer| {
+                            if timer.interval.as_millis() == 0 && timer.interval.as_secs() == 0 {
+                                None
+                            } else if timer.active {
+                                Some(timer.interval)
+                            } else {
+                                None
+                            }
+                        }) {
+                            value = interval;
                         } else {
-                            None
+                            break;
                         }
-                    }) {
-                        value = interval;
-                    } else {
-                        break;
                     }
-                }
-            },
-            move |task| {
-                if *cancel.lock().unwrap() {
-                    return;
-                }
-                injector.push(MeliTask {
-                    task,
-                    id: job_id,
-                    desc: "timer".into(),
-                    timer: true,
-                })
-            },
-        );
+                },
+                move |task| {
+                    if cancel.load(Ordering::SeqCst) {
+                        return;
+                    }
+                    injector.push(MeliTask {
+                        task,
+                        id: job_id,
+                        desc: Cow::Borrowed("timer"),
+                        timer: true,
+                    })
+                },
+            )
+        };
         self.timers.lock().unwrap().entry(id).and_modify(|timer| {
             timer.handle = Some(handle);
-            timer.cancel = cancel2;
+            timer.cancel = cancel;
             timer.active = true;
         });
         task.schedule();
@@ -419,7 +466,7 @@ impl JobExecutor {
         let mut timers_lck = self.timers.lock().unwrap();
         if let Some(timer) = timers_lck.get_mut(&id) {
             timer.active = false;
-            *timer.cancel.lock().unwrap() = true;
+            timer.cancel.store(true, Ordering::SeqCst);
         }
     }
 
@@ -432,7 +479,7 @@ impl JobExecutor {
 
     pub fn set_job_finished(&self, id: JobId) {
         self.jobs.lock().unwrap().entry(id).and_modify(|entry| {
-            entry.finished = Some(datetime::now());
+            entry.set_finished(Some(datetime::now()));
         });
     }
 
@@ -450,19 +497,37 @@ pub type JobChannel<T> = oneshot::Receiver<T>;
 pub struct JoinHandle<T> {
     pub task: Arc<Mutex<Option<async_task::Task<()>>>>,
     pub chan: JobChannel<T>,
-    pub cancel: Arc<Mutex<bool>>,
+    pub cancel: Arc<AtomicBool>,
+    finished: AtomicUnixTimestamp,
     pub job_id: JobId,
 }
 
 impl<T> JoinHandle<T> {
     pub fn cancel(&self) -> Option<StatusEvent> {
-        let mut lck = self.cancel.lock().unwrap();
-        if !*lck {
-            *lck = true;
+        let was_active = self.cancel.swap(true, Ordering::SeqCst);
+        if was_active {
+            self.set_finished(Some(datetime::now()));
             Some(StatusEvent::JobCanceled(self.job_id))
         } else {
             None
         }
+    }
+
+    pub fn finished(&self) -> Option<UnixTimestamp> {
+        let value = self.finished.load(Ordering::SeqCst);
+        if value == 0 {
+            return None;
+        }
+        Some(value)
+    }
+
+    fn set_finished(&self, new_value: Option<UnixTimestamp>) {
+        let new_value = new_value.unwrap_or_default();
+        self.finished.store(new_value, Ordering::SeqCst);
+    }
+
+    pub fn is_canceled(&self) -> bool {
+        self.cancel.load(Ordering::SeqCst)
     }
 }
 

@@ -117,23 +117,23 @@ impl JobManager {
 
         self.length = entries.len();
         entries.sort_by(|_, a, _, b| match (self.sort_col, self.sort_order) {
-            (Column::_0, SortOrder::Asc) => a.id.cmp(&b.id),
-            (Column::_0, SortOrder::Desc) => b.id.cmp(&b.id),
-            (Column::_1, SortOrder::Asc) => a.desc.cmp(&b.desc),
-            (Column::_1, SortOrder::Desc) => b.desc.cmp(&a.desc),
-            (Column::_2, SortOrder::Asc) => a.started.cmp(&b.started),
-            (Column::_2, SortOrder::Desc) => b.started.cmp(&a.started),
-            (Column::_3, SortOrder::Asc) => a.finished.cmp(&b.finished),
-            (Column::_3, SortOrder::Desc) => b.finished.cmp(&a.finished),
-            (Column::_4, SortOrder::Asc) if a.finished.is_some() && b.finished.is_some() => {
-                a.succeeded.cmp(&b.succeeded)
+            (Column::_0, SortOrder::Asc) => a.id().cmp(b.id()),
+            (Column::_0, SortOrder::Desc) => b.id().cmp(b.id()),
+            (Column::_1, SortOrder::Asc) => a.description().cmp(b.description()),
+            (Column::_1, SortOrder::Desc) => b.description().cmp(a.description()),
+            (Column::_2, SortOrder::Asc) => a.started().cmp(&b.started()),
+            (Column::_2, SortOrder::Desc) => b.started().cmp(&a.started()),
+            (Column::_3, SortOrder::Asc) => a.finished().cmp(&b.finished()),
+            (Column::_3, SortOrder::Desc) => b.finished().cmp(&a.finished()),
+            (Column::_4, SortOrder::Asc) if a.finished().is_some() && b.finished().is_some() => {
+                a.succeeded().cmp(&b.succeeded())
             }
-            (Column::_4, SortOrder::Desc) if a.finished.is_some() && b.finished.is_some() => {
-                b.succeeded.cmp(&a.succeeded)
+            (Column::_4, SortOrder::Desc) if a.finished().is_some() && b.finished().is_some() => {
+                b.succeeded().cmp(&a.succeeded())
             }
-            (Column::_4, SortOrder::Asc) if a.finished.is_none() => std::cmp::Ordering::Less,
+            (Column::_4, SortOrder::Asc) if a.finished().is_none() => std::cmp::Ordering::Less,
             (Column::_4, SortOrder::Asc) => std::cmp::Ordering::Greater,
-            (Column::_4, SortOrder::Desc) if a.finished.is_none() => std::cmp::Ordering::Greater,
+            (Column::_4, SortOrder::Desc) if a.finished().is_none() => std::cmp::Ordering::Greater,
             (Column::_4, SortOrder::Desc) => std::cmp::Ordering::Less,
         });
         self.entries = entries;
@@ -147,9 +147,9 @@ impl JobManager {
 
         for c in self.entries.values() {
             // title
-            self.min_width[0] = self.min_width[0].max(c.id.to_string().len());
+            self.min_width[0] = self.min_width[0].max(c.id().to_string().len());
             // desc
-            self.min_width[1] = self.min_width[1].max(c.desc.len());
+            self.min_width[1] = self.min_width[1].max(c.description().len());
         }
         self.min_width[2] = "1970-01-01 00:00:00".len();
         self.min_width[3] = self.min_width[2];
@@ -193,7 +193,7 @@ impl JobManager {
             {
                 let area = self.data_columns.columns[0].area().nth_row(idx);
                 self.data_columns.columns[0].grid_mut().write_string(
-                    &e.id.to_string(),
+                    &e.id().to_string(),
                     self.theme_default.fg,
                     self.theme_default.bg,
                     self.theme_default.attrs,
@@ -206,7 +206,7 @@ impl JobManager {
             {
                 let area = self.data_columns.columns[1].area().nth_row(idx);
                 self.data_columns.columns[1].grid_mut().write_string(
-                    &e.desc,
+                    e.description(),
                     self.theme_default.fg,
                     self.theme_default.bg,
                     self.theme_default.attrs,
@@ -220,7 +220,7 @@ impl JobManager {
                 let area = self.data_columns.columns[2].area().nth_row(idx);
                 self.data_columns.columns[2].grid_mut().write_string(
                     &datetime::timestamp_to_string(
-                        e.started,
+                        e.started(),
                         Some(RFC3339_DATETIME_AND_SPACE),
                         true,
                     ),
@@ -236,7 +236,7 @@ impl JobManager {
             {
                 let area = self.data_columns.columns[3].area().nth_row(idx);
                 self.data_columns.columns[3].grid_mut().write_string(
-                    &if let Some(t) = e.finished {
+                    &if let Some(t) = e.finished() {
                         Cow::Owned(datetime::timestamp_to_string(
                             t,
                             Some(RFC3339_DATETIME_AND_SPACE),
@@ -257,8 +257,8 @@ impl JobManager {
             {
                 let area = self.data_columns.columns[4].area().nth_row(idx);
                 self.data_columns.columns[4].grid_mut().write_string(
-                    &if e.finished.is_some() {
-                        Cow::Owned(format!("{:?}", e.succeeded))
+                    &if e.finished().is_some() {
+                        Cow::Owned(format!("{:?}", e.succeeded()))
                     } else {
                         Cow::Borrowed("-")
                     },
