@@ -223,7 +223,7 @@ where
 {
     pub account_id: Id<Account>,
     pub filter: Option<F>,
-    pub sort: Option<Comparator<OBJ>>,
+    pub sort: Option<Vec<Comparator<OBJ>>>,
     #[serde(default)]
     pub position: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -233,7 +233,7 @@ where
     pub anchor_offset: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u64>,
-    #[serde(default = "bool_false")]
+    #[serde(default = "false_val")]
     pub calculate_total: bool,
     #[serde(skip)]
     _ph: PhantomData<fn() -> OBJ>,
@@ -259,7 +259,7 @@ where
 
     _impl!(account_id: Id<Account>);
     _impl!(filter: Option<F>);
-    _impl!(sort: Option<Comparator<OBJ>>);
+    _impl!(sort: Option<Vec<Comparator<OBJ>>>);
     _impl!(position: u64);
     _impl!(anchor: Option<String>);
     _impl!(anchor_offset: u64);
@@ -278,14 +278,6 @@ where
 
 pub fn u64_zero(num: &u64) -> bool {
     *num == 0
-}
-
-pub fn bool_false() -> bool {
-    false
-}
-
-pub fn bool_true() -> bool {
-    true
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -967,7 +959,7 @@ where
     /// and expensive for servers to calculate, particularly with complex
     /// filters, so clients should take care to only request the total when
     /// needed.
-    #[serde(default = "bool_false")]
+    #[serde(default = "false_val")]
     pub calculate_total: bool,
 
     #[serde(skip)]

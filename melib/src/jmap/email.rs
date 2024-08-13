@@ -27,17 +27,18 @@ use serde_json::{value::RawValue, Value};
 use smallvec::SmallVec;
 
 use crate::{
+    conf::false_val,
     email::{
         address::{Address, MailboxAddress},
         headers::HeaderName,
     },
     jmap::{
+        comparator::Comparator,
         deserialize_from_str,
         filters::{Filter, FilterCondition, FilterTrait},
         mailbox::MailboxObject,
         methods::{
-            bool_false, u64_zero, Changes, Get, Query, QueryChanges, QueryChangesResponse,
-            ResultField, Set,
+            u64_zero, Changes, Get, Query, QueryChanges, QueryChangesResponse, ResultField, Set,
         },
         objects::{BlobObject, Id, Object},
         protocol::Method,
@@ -429,7 +430,12 @@ impl EmailQuery {
         _ph: PhantomData,
     };
 
-    pub fn new(query_call: Query<Filter<EmailFilterCondition, EmailObject>, EmailObject>) -> Self {
+    pub fn new(
+        mut query_call: Query<Filter<EmailFilterCondition, EmailObject>, EmailObject>,
+    ) -> Self {
+        if query_call.sort.is_none() {
+            query_call.sort = Some(vec![Comparator::new("receivedAt".into())]);
+        }
         Self {
             query_call,
             collapse_threads: false,
@@ -446,12 +452,12 @@ pub struct EmailGet {
     pub get_call: Get<EmailObject>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub body_properties: Vec<String>,
-    #[serde(default = "bool_false")]
+    #[serde(default = "false_val")]
     pub fetch_text_body_values: bool,
-    #[serde(default = "bool_false")]
+    #[serde(default = "false_val")]
     #[serde(rename = "fetchHTMLBodyValues")]
     pub fetch_html_body_values: bool,
-    #[serde(default = "bool_false")]
+    #[serde(default = "false_val")]
     pub fetch_all_body_values: bool,
     #[serde(default)]
     #[serde(skip_serializing_if = "u64_zero")]
@@ -829,7 +835,7 @@ impl EmailQueryChanges {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct EmailQueryChangesResponse {
     ///o  The "collapseThreads" argument that was used with "Email/query".
-    #[serde(default = "bool_false")]
+    #[serde(default = "false_val")]
     pub collapse_threads: bool,
     #[serde(flatten)]
     pub query_changes_response: QueryChangesResponse<EmailObject>,

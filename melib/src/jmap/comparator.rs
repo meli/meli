@@ -19,43 +19,36 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::marker::PhantomData;
+use std::{borrow::Cow, marker::PhantomData};
 
 use crate::jmap::objects::Object;
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Comparator<OBJ: Object> {
-    property: String,
-    #[serde(default = "bool_true")]
-    is_ascending: bool,
+    pub property: Cow<'static, str>,
+    pub is_ascending: bool,
     // [ref:TODO] implement collations
-    collation: Option<String>,
-    //#[serde(flatten)]
-    additional_properties: Vec<String>,
-
+    pub collation: Option<Cow<'static, str>>,
+    #[serde(flatten, default, skip_serializing_if = "Vec::is_empty")]
+    pub additional_properties: Vec<Cow<'static, str>>,
+    #[serde(skip)]
     _ph: PhantomData<fn() -> OBJ>,
 }
 
 impl<OBJ: Object> Comparator<OBJ> {
-    pub fn new() -> Self {
+    pub fn new(property: Cow<'static, str>) -> Self {
         Self {
-            property: String::new(),
-            is_ascending: true,
+            property,
+            is_ascending: false,
             collation: None,
             additional_properties: Vec::new(),
             _ph: PhantomData,
         }
     }
 
-    _impl!(property: String);
+    _impl!(property: Cow<'static, str>);
     _impl!(is_ascending: bool);
-    _impl!(collation: Option<String>);
-    _impl!(additional_properties: Vec<String>);
-}
-
-impl<OBJ: Object> Default for Comparator<OBJ> {
-    fn default() -> Self {
-        Self::new()
-    }
+    _impl!(collation: Option<Cow<'static, str>>);
+    _impl!(additional_properties: Vec<Cow<'static, str>>);
 }

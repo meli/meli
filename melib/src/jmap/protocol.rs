@@ -248,15 +248,20 @@ pub async fn get_message_list(
     Ok(ids)
 }
 
-#[derive(Clone, Copy)]
-pub enum EmailFetchState {
-    Start { batch_size: u64 },
-    Ongoing { position: u64, batch_size: u64 },
+pub struct EmailFetcher {
+    pub connection: Arc<FutureMutex<JmapConnection>>,
+    pub store: Arc<Store>,
+    pub batch_size: u64,
+    pub state: EmailFetchState,
 }
 
-impl EmailFetchState {
+pub enum EmailFetchState {
+    Start,
+    Ongoing { position: u64 },
+}
+
+impl EmailFetcher {
     pub async fn must_update_state(
-        &self,
         conn: &JmapConnection,
         mailbox_hash: MailboxHash,
         state: State<EmailObject>,
@@ -288,27 +293,20 @@ impl EmailFetchState {
         }
     }
 
-    pub async fn fetch(
-        &mut self,
-        conn: &mut JmapConnection,
-        store: &Store,
-        mailbox_hash: MailboxHash,
-    ) -> Result<Vec<Envelope>> {
+    pub async fn fetch(&mut self, mailbox_hash: MailboxHash) -> Result<Vec<Envelope>> {
         loop {
-            match *self {
-                Self::Start { batch_size } => {
-                    *self = Self::Ongoing {
-                        position: 0,
-                        batch_size,
-                    };
+            match self.state {
+                EmailFetchState::Start => {
+                    self.state = EmailFetchState::Ongoing { position: 0 };
                     continue;
                 }
-                Self::Ongoing {
-                    mut position,
-                    batch_size,
-                } => {
+                EmailFetchState::Ongoing { mut position } => {
+                    let mut conn = self.connection.lock().await;
+                    conn.connect().await?;
                     let mail_account_id = conn.session_guard().await?.mail_account_id();
-                    let mailbox_id = store.mailboxes.read().unwrap()[&mailbox_hash].id.clone();
+                    let mailbox_id = self.store.mailboxes.read().unwrap()[&mailbox_hash]
+                        .id
+                        .clone();
                     let email_query_call: EmailQuery = EmailQuery::new(
                         Query::new()
                             .account_id(mail_account_id.clone())
@@ -318,7 +316,7 @@ impl EmailFetchState {
                                     .into(),
                             )))
                             .position(position)
-                            .limit(Some(batch_size)),
+                            .limit(Some(self.batch_size)),
                     )
                     .collapse_threads(false);
 
@@ -352,22 +350,23 @@ impl EmailFetchState {
                     let GetResponse::<EmailObject> { list, state, .. } = e;
                     conn.last_method_response = Some(res_text);
 
-                    if self.must_update_state(conn, mailbox_hash, state).await? {
-                        *self = Self::Start { batch_size };
+                    if Self::must_update_state(&conn, mailbox_hash, state).await? {
+                        self.state = EmailFetchState::Start;
                         continue;
                     }
+                    drop(conn);
                     let mut total = BTreeSet::default();
                     let mut unread = BTreeSet::default();
                     let mut ret = Vec::with_capacity(list.len());
                     for obj in list {
-                        let env = store.add_envelope(obj).await;
+                        let env = self.store.add_envelope(obj).await;
                         total.insert(env.hash());
                         if !env.is_seen() {
                             unread.insert(env.hash());
                         }
                         ret.push(env);
                     }
-                    let mut mailboxes_lck = store.mailboxes.write().unwrap();
+                    let mut mailboxes_lck = self.store.mailboxes.write().unwrap();
                     mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
                         mbox.total_emails.lock().unwrap().insert_existing_set(total);
                         mbox.unread_emails
@@ -375,11 +374,8 @@ impl EmailFetchState {
                             .unwrap()
                             .insert_existing_set(unread);
                     });
-                    position += batch_size;
-                    *self = Self::Ongoing {
-                        position,
-                        batch_size,
-                    };
+                    position += self.batch_size;
+                    self.state = EmailFetchState::Ongoing { position };
                     return Ok(ret);
                 }
             }
