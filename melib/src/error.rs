@@ -29,6 +29,8 @@ use std::{
     sync::Arc,
 };
 
+pub use nix::errno::Errno;
+
 pub type Result<T> = result::Result<T, Error>;
 
 mod network;
@@ -52,7 +54,7 @@ pub enum ErrorKind {
     Bug,
     Network(NetworkErrorKind),
     TimedOut,
-    OSError,
+    OSError(Errno),
     Platform,
     NotImplemented,
     NotSupported,
@@ -76,7 +78,7 @@ impl std::fmt::Display for ErrorKind {
             ),
             Self::Platform => write!(fmt, "Platform/Runtime environment error (OS or hardware)"),
             Self::TimedOut => write!(fmt, "Timed out error"),
-            Self::OSError => write!(fmt, "OS error"),
+            Self::OSError(errno) => write!(fmt, "OS error {}: {}", *errno as i32, errno.desc()),
             Self::Configuration => write!(fmt, "Configuration error"),
             Self::NotImplemented => write!(fmt, "Not implemented error"),
             Self::NotSupported => write!(fmt, "Not supported error"),
@@ -106,7 +108,7 @@ impl ErrorKind {
     is_variant! { is_not_implemented, NotImplemented }
     is_variant! { is_not_supported, NotSupported }
     is_variant! { is_not_found, NotFound }
-    is_variant! { is_oserror, OSError }
+    is_variant! { is_oserror, OSError(_) }
     is_variant! { is_protocol_error, ProtocolError }
     is_variant! { is_protocol_not_supported, ProtocolNotSupported }
     is_variant! { is_timeout, TimedOut }
@@ -427,7 +429,7 @@ impl From<io::ErrorKind> for ErrorKind {
             | io::ErrorKind::ConnectionAborted
             | io::ErrorKind::NotConnected => Self::Network(NetworkErrorKind::ConnectionFailed),
             io::ErrorKind::TimedOut => Self::TimedOut,
-            _ => Self::OSError,
+            _ => Self::Platform,
         }
     }
 }
@@ -443,6 +445,8 @@ impl From<io::Error> for Error {
         let s = err.to_string();
         let kind = if s.contains("failed to lookup address information") {
             ErrorKind::Network(NetworkErrorKind::HostLookupFailed)
+        } else if let Some(errno) = err.raw_os_error() {
+            ErrorKind::OSError(Errno::from_raw(errno))
         } else {
             err.kind().into()
         };
@@ -544,7 +548,7 @@ impl From<std::ffi::NulError> for Error {
 impl From<nix::Error> for Error {
     #[inline]
     fn from(err: nix::Error) -> Self {
-        Self::from_inner(Arc::new(err)).set_kind(ErrorKind::Platform)
+        Self::from_inner(Arc::new(err)).set_kind(ErrorKind::OSError(err))
     }
 }
 
@@ -563,8 +567,8 @@ impl From<notify::Error> for Error {
         let kind = match err.kind {
             notify::ErrorKind::MaxFilesWatch
             | notify::ErrorKind::WatchNotFound
-            | notify::ErrorKind::Generic(_) => ErrorKind::Platform,
-            notify::ErrorKind::Io(_) => ErrorKind::OSError,
+            | notify::ErrorKind::Generic(_)
+            | notify::ErrorKind::Io(_) => ErrorKind::Platform,
             notify::ErrorKind::PathNotFound => ErrorKind::Configuration,
             notify::ErrorKind::InvalidConfig(_) => ErrorKind::Bug,
         };

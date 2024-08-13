@@ -101,7 +101,7 @@ impl InputHandler {
     }
 
     fn kill(&self) {
-        let _ = nix::unistd::write(self.pipe.1.as_raw_fd(), &[1]);
+        let _ = nix::unistd::write(&self.pipe.1, &[1]);
         self.tx.send(InputCommand::Kill).unwrap();
     }
 

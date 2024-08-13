@@ -291,7 +291,7 @@ impl ImapStream {
                 .chain_err_summary(|| format!("Could not initiate TLS negotiation to {}.", path))?;
                 AsyncWrapper::new(Connection::new_tls(conn))
                     .chain_err_summary(|| format!("{} connection failed.", path))
-                    .chain_err_kind(ErrorKind::OSError)?
+                    .chain_err_kind(ErrorKind::External)?
             }
         } else {
             AsyncWrapper::new({

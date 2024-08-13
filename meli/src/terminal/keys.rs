@@ -22,7 +22,7 @@
 use std::os::fd::{AsFd, AsRawFd, OwnedFd};
 
 use crossbeam::{channel::Receiver, select};
-use nix::poll::{poll, PollFd, PollFlags};
+use nix::poll::{poll, PollFd, PollFlags, PollTimeout};
 use serde::{Serialize, Serializer};
 use termion::{
     event::{
@@ -242,13 +242,13 @@ pub fn get_events(
 ) {
     let stdin = std::io::stdin();
     let stdin2 = std::io::stdin();
-    let stdin2_fd = stdin2.as_fd();
-    let stdin_fd = PollFd::new(&stdin2_fd, PollFlags::POLLIN);
-    let new_command_pollfd = nix::poll::PollFd::new(new_command_fd, nix::poll::PollFlags::POLLIN);
+    let stdin_fd = PollFd::new(stdin2.as_fd(), PollFlags::POLLIN);
+    let new_command_pollfd = PollFd::new(new_command_fd.as_fd(), PollFlags::POLLIN);
     let mut input_mode = InputMode::Normal;
     let mut paste_buf = String::with_capacity(256);
     let mut stdin_iter = stdin.events_and_raw();
-    'poll_while: while let Ok(_n_raw) = poll(&mut [new_command_pollfd, stdin_fd], -1) {
+    'poll_while: while let Ok(_n_raw) = poll(&mut [new_command_pollfd, stdin_fd], PollTimeout::NONE)
+    {
         select! {
             default => {
                 if stdin_fd.revents().is_some() {
@@ -295,9 +295,9 @@ pub fn get_events(
                 use nix::sys::time::TimeValLike;
                 let mut buf = [0;2];
                 let mut read_fd_set = nix::sys::select::FdSet::new();
-                read_fd_set.insert(new_command_fd);
+                read_fd_set.insert(new_command_fd.as_fd());
                 let mut error_fd_set = nix::sys::select::FdSet::new();
-                error_fd_set.insert(new_command_fd);
+                error_fd_set.insert(new_command_fd.as_fd());
                 let timeval:  nix::sys::time::TimeSpec = nix::sys::time::TimeSpec::seconds(2);
                 let pselect_result = nix::sys::select::pselect(None, Some(&mut read_fd_set), None, Some(&mut error_fd_set), Some(&timeval), None);
                 if pselect_result.is_err() || error_fd_set.highest().map(|bfd| bfd.as_raw_fd()) == Some(new_command_fd.as_raw_fd()) || read_fd_set.highest().map(|bfd| bfd.as_raw_fd()) != Some(new_command_fd.as_raw_fd()) {

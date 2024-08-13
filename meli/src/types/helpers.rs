@@ -23,10 +23,7 @@ use std::{
     fs,
     fs::OpenOptions,
     io::{Read, Write},
-    os::{
-        fd::{FromRawFd, OwnedFd},
-        unix::fs::PermissionsExt,
-    },
+    os::{fd::OwnedFd, unix::fs::PermissionsExt},
     path::{Path, PathBuf},
 };
 
@@ -126,15 +123,13 @@ impl File {
 }
 
 pub fn pipe() -> Result<(OwnedFd, OwnedFd)> {
-    nix::unistd::pipe()
-        .map(|(fd1, fd2)| unsafe { (OwnedFd::from_raw_fd(fd1), OwnedFd::from_raw_fd(fd2)) })
-        .map_err(|err| {
-            Error::new("Could not create pipe")
-                .set_source(Some(
-                    (Box::new(err) as Box<dyn std::error::Error + Send + Sync + 'static>).into(),
-                ))
-                .set_kind(ErrorKind::OSError)
-        })
+    nix::unistd::pipe().map_err(|err| {
+        Error::new("Could not create pipe")
+            .set_source(Some(
+                (Box::new(err) as Box<dyn std::error::Error + Send + Sync + 'static>).into(),
+            ))
+            .set_kind(ErrorKind::Platform)
+    })
 }
 
 #[cfg(test)]

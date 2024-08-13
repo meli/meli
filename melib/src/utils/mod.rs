@@ -224,7 +224,7 @@ pub mod hostname {
         let retval = nix::unistd::gethostname().map_err(|err| {
             Error::new("Could not discover local hostname")
                 .set_source(Some(src_err_arc_wrap! {err}))
-                .set_kind(ErrorKind::OSError)
+                .set_kind(ErrorKind::Platform)
         });
         if retval.is_err() {
             let mut hostn_buf = String::with_capacity(256);

@@ -20,7 +20,12 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
-use std::os::raw::c_int;
+//! Signal handler setup.
+
+use std::os::{
+    fd::{AsFd, AsRawFd},
+    raw::c_int,
+};
 
 use crate::*;
 
@@ -34,7 +39,7 @@ pub fn notify(
         nix::unistd::pipe().map_err(|err| std::io::Error::from_raw_os_error(err as i32))?;
     let alarm_handler = move |info: &nix::libc::siginfo_t| {
         let value = unsafe { info.si_value().sival_ptr as u8 };
-        let _ = nix::unistd::write(alarm_pipe_w, &[value]);
+        let _ = nix::unistd::write(alarm_pipe_w.as_fd(), &[value]);
     };
     unsafe {
         signal_hook_registry::register_sigaction(signal_hook::consts::SIGALRM, alarm_handler)?;
@@ -42,7 +47,7 @@ pub fn notify(
     let (s, r) = crossbeam::channel::bounded(100);
     let mut signals = signal_hook::iterator::Signals::new(signals)?;
     let _ = nix::fcntl::fcntl(
-        alarm_pipe_r,
+        alarm_pipe_r.as_raw_fd(),
         nix::fcntl::FcntlArg::F_SETFL(nix::fcntl::OFlag::O_NONBLOCK),
     );
     std::thread::spawn(move || {

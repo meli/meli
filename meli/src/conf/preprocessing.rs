@@ -255,7 +255,7 @@ changequote(`"', `"')dnl
                 _ => {
                     return Err(Error::new("Could not process configuration with `m4`")
                         .set_source(Some(Arc::new(err)))
-                        .set_kind(ErrorKind::OSError))
+                        .set_kind(ErrorKind::Platform))
                 }
             },
         };

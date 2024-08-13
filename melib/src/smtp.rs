@@ -147,14 +147,15 @@ impl Password {
                 })
                 .await
                 .chain_err_summary(|| format!("Could not execute CommandEval value: {}", command))
-                .chain_err_kind(ErrorKind::OSError)?;
+                .chain_err_kind(ErrorKind::External)?;
                 if !output.status.success() {
                     return Err(Error::new(format!(
                         "SMTP password evaluation command `{}` returned {}: {}",
                         command,
                         output.status,
                         String::from_utf8_lossy(&output.stderr)
-                    )));
+                    ))
+                    .set_kind(ErrorKind::External));
                 }
                 if output.stdout.ends_with(b"\n") {
                     output.stdout.pop();

@@ -314,7 +314,7 @@ pub fn get_config_file() -> Result<PathBuf> {
                 xdg_dirs.get_config_home().display()
             )
         })
-        .chain_err_kind(ErrorKind::OSError)
+        .chain_err_kind(ErrorKind::Platform)
 }
 
 impl FileSettings {
