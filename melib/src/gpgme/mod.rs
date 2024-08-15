@@ -268,7 +268,7 @@ impl Context {
             gpgme_error_try(&lib, call!(&lib, gpgme_new)(&mut ptr))?;
             call!(&lib, gpgme_set_io_cbs)(ptr, &mut io_cbs);
         }
-        let ret = Self {
+        let mut ret = Self {
             inner: Arc::new(ContextInner {
                 inner: std::ptr::NonNull::new(ptr)
                     .ok_or_else(|| Error::new("Could not use libgpgme").set_kind(ErrorKind::Bug))?,
@@ -276,10 +276,10 @@ impl Context {
             }),
             io_state,
         };
-        ret.set_flag(GpgmeFlag::AutoKeyRetrieve, false)?;
-        ret.set_flag(GpgmeFlag::OfflineMode, true)?;
-        ret.set_flag(GpgmeFlag::AsciiArmor, true)?;
-        ret.set_auto_key_locate(LocateKey::LOCAL)?;
+        ret.set_flag(GpgmeFlag::AutoKeyRetrieve, false)?
+            .set_flag(GpgmeFlag::OfflineMode, true)?
+            .set_flag(GpgmeFlag::AsciiArmor, true)?
+            .set_auto_key_locate(LocateKey::LOCAL)?;
         Ok(ret)
     }
 
@@ -301,7 +301,7 @@ impl Context {
         Ok(())
     }
 
-    pub fn set_flag(&self, flag: GpgmeFlag, value: bool) -> Result<()> {
+    pub fn set_flag(&mut self, flag: GpgmeFlag, value: bool) -> Result<&mut Self> {
         match flag {
             GpgmeFlag::AutoKeyRetrieve => {}
             GpgmeFlag::OfflineMode => {
@@ -311,7 +311,7 @@ impl Context {
                         if value { 1 } else { 0 },
                     );
                 };
-                return Ok(());
+                return Ok(self);
             }
             GpgmeFlag::AsciiArmor => {
                 unsafe {
@@ -320,7 +320,7 @@ impl Context {
                         if value { 1 } else { 0 },
                     );
                 };
-                return Ok(());
+                return Ok(self);
             }
         };
         const VALUE_ON: &[u8; 2] = b"1\0";
@@ -332,7 +332,8 @@ impl Context {
         self.set_flag_inner(
             raw_flag,
             if value { VALUE_ON } else { VALUE_OFF }.as_ptr() as *const ::std::os::raw::c_char,
-        )
+        )?;
+        Ok(self)
     }
 
     fn get_flag_inner(

@@ -37,7 +37,6 @@
 use std::{
     borrow::Cow,
     collections::BTreeSet,
-    env,
     os::fd::{AsRawFd, FromRawFd, OwnedFd},
     path::{Path, PathBuf},
     sync::Arc,
@@ -745,13 +744,14 @@ impl State {
     fn exec_command(&mut self, cmd: Action) {
         match cmd {
             SetEnv(key, val) => {
-                env::set_var(key.as_str(), val.as_str());
+                // SAFETY: we only modify our environment from the main process/thread.
+                std::env::set_var(key.as_str(), val.as_str());
             }
             PrintEnv(key) => {
                 self.context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
-                        env::var(key.as_str()).unwrap_or_else(|e| e.to_string()),
+                        std::env::var(key.as_str()).unwrap_or_else(|e| e.to_string()),
                     )));
             }
             ChangeCurrentDirectory(dir) => {

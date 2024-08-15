@@ -41,7 +41,7 @@ pub unsafe extern "C" fn gpgme_register_io_cb(
     fnc_data: *mut ::std::os::raw::c_void,
     tag: *mut *mut ::std::os::raw::c_void,
 ) -> gpgme_error_t {
-    let io_state: Arc<Mutex<IoState>> = Arc::from_raw(data as *const _);
+    let io_state: Arc<Mutex<IoState>> = unsafe { Arc::from_raw(data as *const _) };
     let io_state_copy = io_state.clone();
     let mut io_state_lck = io_state.lock().unwrap();
     let idx = io_state_lck.max_idx;
@@ -62,7 +62,7 @@ pub unsafe extern "C" fn gpgme_register_io_cb(
         fd,
         io_state: io_state_copy,
     }));
-    std::ptr::write(tag, tag_data as *mut _);
+    unsafe { std::ptr::write(tag, tag_data as *mut _) };
     io_state_lck.ops.insert(idx, gpgfd);
     drop(io_state_lck);
     let _ = Arc::into_raw(io_state);
@@ -73,7 +73,7 @@ pub unsafe extern "C" fn gpgme_register_io_cb(
 /// # Safety
 /// .
 pub unsafe extern "C" fn gpgme_remove_io_cb(tag: *mut ::std::os::raw::c_void) {
-    let tag_data: Arc<TagData> = Arc::from_raw(tag as *const _);
+    let tag_data: Arc<TagData> = unsafe { Arc::from_raw(tag as *const _) };
     let mut io_state_lck = tag_data.io_state.lock().unwrap();
     let fd = io_state_lck.ops.remove(&tag_data.idx).unwrap();
     fd.sender.try_send(()).unwrap();
@@ -91,15 +91,16 @@ pub unsafe extern "C" fn gpgme_event_io_cb(
 ) {
     if type_ == gpgme_event_io_t_GPGME_EVENT_DONE {
         let err = type_data as gpgme_io_event_done_data_t;
-        let io_state: Arc<Mutex<IoState>> = Arc::from_raw(data as *const _);
+        let io_state: Arc<Mutex<IoState>> = unsafe { Arc::from_raw(data as *const _) };
         let io_state_lck = io_state.lock().unwrap();
         io_state_lck.sender.try_send(()).unwrap();
-        *io_state_lck.done.lock().unwrap() = Some(gpgme_error_try(&io_state_lck.lib, (*err).err));
+        *io_state_lck.done.lock().unwrap() =
+            Some(gpgme_error_try(&io_state_lck.lib, unsafe { (*err).err }));
         drop(io_state_lck);
         let _ = Arc::into_raw(io_state);
     } else if type_ == gpgme_event_io_t_GPGME_EVENT_NEXT_KEY {
         if let Some(inner) = std::ptr::NonNull::new(type_data as gpgme_key_t) {
-            let io_state: Arc<Mutex<IoState>> = Arc::from_raw(data as *const _);
+            let io_state: Arc<Mutex<IoState>> = unsafe { Arc::from_raw(data as *const _) };
             let io_state_lck = io_state.lock().unwrap();
             io_state_lck
                 .key_sender

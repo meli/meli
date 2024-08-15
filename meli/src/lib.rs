@@ -21,6 +21,7 @@
 
 #![deny(
     rustdoc::redundant_explicit_links,
+    unsafe_op_in_unsafe_fn,
     /* groups */
     clippy::correctness,
     clippy::suspicious,

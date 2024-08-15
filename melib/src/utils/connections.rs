@@ -457,7 +457,7 @@ impl Connection {
 
     #[inline]
     unsafe fn __getsockopt<T: Copy>(&self, opt: c_int, val: c_int) -> std::io::Result<T> {
-        let mut slot: T = std::mem::zeroed();
+        let mut slot: T = unsafe { std::mem::zeroed() };
         let mut len = std::mem::size_of::<T>() as libc::socklen_t;
         syscall!(getsockopt(
             self.as_raw_fd(),
