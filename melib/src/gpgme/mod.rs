@@ -25,15 +25,17 @@
 use std::{
     borrow::Cow,
     collections::HashMap,
-    ffi::{CStr, CString, OsStr},
+    ffi::{c_void, CStr, CString, OsStr},
     future::Future,
     io::Seek,
+    mem::ManuallyDrop,
     os::unix::{
         ffi::OsStrExt,
         io::{AsRawFd, RawFd},
     },
     path::Path,
     pin::Pin,
+    ptr::NonNull,
     sync::{Arc, Mutex},
 };
 
@@ -42,13 +44,13 @@ use serde::{
     de::{self, Deserialize},
     Deserializer, Serialize, Serializer,
 };
-use smol::Async;
+use smol::{
+    channel::{Receiver, Sender},
+    Async,
+};
 
 use crate::{
-    email::{
-        pgp::{DecryptionMetadata, Recipient},
-        Address,
-    },
+    email::pgp::{DecryptionMetadata, Recipient},
     error::{Error, ErrorKind, Result, ResultIntoError},
 };
 
@@ -64,24 +66,29 @@ macro_rules! call {
     }};
 }
 
-macro_rules! c_string_literal {
-    ($lit:literal) => {{
-        unsafe {
-            CStr::from_bytes_with_nul_unchecked(concat!($lit, "\0").as_bytes()).as_ptr()
-                as *const ::std::os::raw::c_char
-        }
-    }};
-}
 pub mod bindings;
+#[cfg(test)]
+mod tests;
 use bindings::*;
+pub mod key;
+pub use key::*;
 pub mod io;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum GpgmeFlag {
-    ///"auto-key-retrieve"
+    /// "auto-key-retrieve"
     AutoKeyRetrieve,
     OfflineMode,
     AsciiArmor,
+}
+
+impl GpgmeFlag {
+    // SAFETY: Value is NULL terminated.
+    const AUTO_KEY_RETRIEVE: &'static CStr =
+        unsafe { CStr::from_bytes_with_nul_unchecked(b"auto-key-retrieve\0") };
+    // SAFETY: Value is NULL terminated.
+    const AUTO_KEY_LOCATE: &'static CStr =
+        unsafe { CStr::from_bytes_with_nul_unchecked(b"auto-key-locate\0") };
 }
 
 bitflags! {
@@ -186,14 +193,17 @@ impl std::fmt::Display for LocateKey {
     }
 }
 
+type Done = Arc<Mutex<Option<Result<()>>>>;
+
+#[derive(Debug)]
 struct IoState {
     max_idx: usize,
     ops: HashMap<usize, GpgmeFd>,
-    done: Arc<Mutex<Option<Result<()>>>>,
-    sender: smol::channel::Sender<()>,
-    receiver: smol::channel::Receiver<()>,
-    key_sender: smol::channel::Sender<KeyInner>,
-    key_receiver: smol::channel::Receiver<KeyInner>,
+    done: Done,
+    sender: Sender<()>,
+    receiver: Receiver<()>,
+    key_sender: Sender<KeyInner>,
+    key_receiver: Receiver<KeyInner>,
     lib: Arc<libloading::Library>,
 }
 
@@ -201,32 +211,40 @@ unsafe impl Send for IoState {}
 unsafe impl Sync for IoState {}
 
 pub struct ContextInner {
-    inner: std::ptr::NonNull<gpgme_context>,
+    ptr: NonNull<gpgme_context>,
     lib: Arc<libloading::Library>,
 }
 
 unsafe impl Send for ContextInner {}
 unsafe impl Sync for ContextInner {}
 
+#[derive(Clone)]
 pub struct Context {
     inner: Arc<ContextInner>,
-    io_state: Arc<Mutex<IoState>>,
+    io_state: Arc<IoStateWrapper>,
 }
-
-unsafe impl Send for Context {}
-unsafe impl Sync for Context {}
 
 impl Drop for ContextInner {
     #[inline]
     fn drop(&mut self) {
-        unsafe { call!(self.lib, gpgme_release)(self.inner.as_mut()) }
+        unsafe { call!(self.lib, gpgme_release)(self.ptr.as_mut()) }
     }
 }
 
 impl Context {
     pub fn new() -> Result<Self> {
-        let lib =
-            Arc::new(unsafe { libloading::Library::new(libloading::library_filename("gpgme")) }?);
+        let lib = Arc::new(
+            match unsafe { libloading::Library::new(libloading::library_filename("gpgme")) } {
+                Ok(v) => v,
+                Err(err) => {
+                    let source = Error::from(err).set_kind(ErrorKind::LinkedLibrary("gpgme"));
+                    let mut err =
+                        Error::new("Could not use libgpgme").set_kind(ErrorKind::NotFound);
+                    err.source = Some(Box::new(source));
+                    return Err(err);
+                }
+            },
+        );
         if unsafe { call!(&lib, gpgme_check_version)(GPGME_VERSION.as_bytes().as_ptr()) }.is_null()
         {
             return Err(Error::new(format!(
@@ -237,13 +255,14 @@ impl Context {
                         .to_string_lossy()
                 },
             ))
-            .set_kind(ErrorKind::External));
+            .set_kind(ErrorKind::LinkedLibrary("gpgme")));
         };
         let (sender, receiver) = smol::channel::unbounded();
         let (key_sender, key_receiver) = smol::channel::unbounded();
 
         let mut ptr = std::ptr::null_mut();
-        let io_state = Arc::new(Mutex::new(IoState {
+
+        let (io_state, mut io_cbs) = IoStateWrapper::new(IoState {
             max_idx: 0,
             ops: HashMap::default(),
             done: Arc::new(Mutex::new(None)),
@@ -252,17 +271,7 @@ impl Context {
             key_sender,
             key_receiver,
             lib: lib.clone(),
-        }));
-        let add_priv_data = io_state.clone();
-        let event_priv_data = io_state.clone();
-
-        let mut io_cbs = gpgme_io_cbs {
-            add: Some(io::gpgme_register_io_cb),
-            add_priv: Arc::into_raw(add_priv_data) as *mut ::std::os::raw::c_void, /* add_priv: *mut ::std::os::raw::c_void, */
-            remove: Some(io::gpgme_remove_io_cb),
-            event: Some(io::gpgme_event_io_cb),
-            event_priv: Arc::into_raw(event_priv_data) as *mut ::std::os::raw::c_void, /* pub event_priv: *mut ::std::os::raw::c_void, */
-        };
+        });
 
         unsafe {
             gpgme_error_try(&lib, call!(&lib, gpgme_new)(&mut ptr))?;
@@ -270,8 +279,14 @@ impl Context {
         }
         let mut ret = Self {
             inner: Arc::new(ContextInner {
-                inner: std::ptr::NonNull::new(ptr)
-                    .ok_or_else(|| Error::new("Could not use libgpgme").set_kind(ErrorKind::Bug))?,
+                ptr: NonNull::new(ptr).ok_or_else(|| {
+                    Error::new("Could not use libgpgme")
+                        .set_details(
+                            "gpgme_new
+                            returned a NULL value.",
+                        )
+                        .set_kind(ErrorKind::LinkedLibrary("gpgme"))
+                })?,
                 lib,
             }),
             io_state,
@@ -283,18 +298,14 @@ impl Context {
         Ok(ret)
     }
 
-    fn set_flag_inner(
-        &self,
-        raw_flag: *const ::std::os::raw::c_char,
-        raw_value: *const ::std::os::raw::c_char,
-    ) -> Result<()> {
+    fn set_flag_inner(&self, raw_flag: &'static CStr, raw_value: &CStr) -> Result<()> {
         unsafe {
             gpgme_error_try(
                 &self.inner.lib,
                 call!(&self.inner.lib, gpgme_set_ctx_flag)(
-                    self.inner.inner.as_ptr(),
-                    raw_flag,
-                    raw_value,
+                    self.inner.ptr.as_ptr(),
+                    raw_flag.as_ptr(),
+                    raw_value.as_ptr(),
                 ),
             )?;
         }
@@ -307,7 +318,7 @@ impl Context {
             GpgmeFlag::OfflineMode => {
                 unsafe {
                     call!(&self.inner.lib, gpgme_set_offline)(
-                        self.inner.inner.as_ptr(),
+                        self.inner.ptr.as_ptr(),
                         if value { 1 } else { 0 },
                     );
                 };
@@ -316,44 +327,42 @@ impl Context {
             GpgmeFlag::AsciiArmor => {
                 unsafe {
                     call!(&self.inner.lib, gpgme_set_armor)(
-                        self.inner.inner.as_ptr(),
+                        self.inner.ptr.as_ptr(),
                         if value { 1 } else { 0 },
                     );
                 };
                 return Ok(self);
             }
         };
-        const VALUE_ON: &[u8; 2] = b"1\0";
-        const VALUE_OFF: &[u8; 2] = b"0\0";
+        // SAFETY: Value is NULL terminated.
+        const VALUE_ON: &CStr = unsafe { CStr::from_bytes_with_nul_unchecked(b"1\0") };
+        // SAFETY: Value is NULL terminated.
+        const VALUE_OFF: &CStr = unsafe { CStr::from_bytes_with_nul_unchecked(b"0\0") };
         let raw_flag = match flag {
-            GpgmeFlag::AutoKeyRetrieve => c_string_literal!("auto-key-retrieve"),
+            GpgmeFlag::AutoKeyRetrieve => GpgmeFlag::AUTO_KEY_RETRIEVE,
             GpgmeFlag::AsciiArmor | GpgmeFlag::OfflineMode => unreachable!(),
         };
-        self.set_flag_inner(
-            raw_flag,
-            if value { VALUE_ON } else { VALUE_OFF }.as_ptr() as *const ::std::os::raw::c_char,
-        )?;
+        self.set_flag_inner(raw_flag, if value { VALUE_ON } else { VALUE_OFF })?;
         Ok(self)
     }
 
-    fn get_flag_inner(
-        &self,
-        raw_flag: *const ::std::os::raw::c_char,
-    ) -> *const ::std::os::raw::c_char {
-        unsafe { call!(&self.inner.lib, gpgme_get_ctx_flag)(self.inner.inner.as_ptr(), raw_flag) }
+    fn get_flag_inner(&self, raw_flag: &'static CStr) -> *const ::std::os::raw::c_char {
+        unsafe {
+            call!(&self.inner.lib, gpgme_get_ctx_flag)(self.inner.ptr.as_ptr(), raw_flag.as_ptr())
+        }
     }
 
     pub fn get_flag(&self, flag: GpgmeFlag) -> Result<bool> {
         let raw_flag = match flag {
-            GpgmeFlag::AutoKeyRetrieve => c_string_literal!("auto-key-retrieve"),
+            GpgmeFlag::AutoKeyRetrieve => GpgmeFlag::AUTO_KEY_RETRIEVE,
             GpgmeFlag::OfflineMode => {
                 return Ok(unsafe {
-                    call!(&self.inner.lib, gpgme_get_offline)(self.inner.inner.as_ptr()) > 0
+                    call!(&self.inner.lib, gpgme_get_offline)(self.inner.ptr.as_ptr()) > 0
                 });
             }
             GpgmeFlag::AsciiArmor => {
                 return Ok(unsafe {
-                    call!(&self.inner.lib, gpgme_get_armor)(self.inner.inner.as_ptr()) > 0
+                    call!(&self.inner.lib, gpgme_get_armor)(self.inner.ptr.as_ptr()) > 0
                 });
             }
         };
@@ -361,26 +370,28 @@ impl Context {
         Ok(!val.is_null())
     }
 
-    pub fn set_auto_key_locate(&self, val: LocateKey) -> Result<()> {
-        let auto_key_locate: *const ::std::os::raw::c_char = c_string_literal!("auto-key-locate");
+    pub fn set_auto_key_locate(&mut self, val: LocateKey) -> Result<&mut Self> {
         if val == LocateKey::NODEFAULT {
-            self.set_flag_inner(auto_key_locate, c_string_literal!("clear,nodefault"))
+            self.set_flag_inner(
+                GpgmeFlag::AUTO_KEY_LOCATE,
+                // SAFETY: Value is NULL terminated.
+                unsafe { CStr::from_bytes_with_nul_unchecked(b"clear,nodefault\0") },
+            )?;
         } else {
             let mut accum = val.to_string();
             accum.push('\0');
             self.set_flag_inner(
-                auto_key_locate,
+                GpgmeFlag::AUTO_KEY_LOCATE,
                 CStr::from_bytes_with_nul(accum.as_bytes())
-                    .map_err(|err| format!("Expected `{}`: {}", accum.as_str(), err))?
-                    .as_ptr() as *const _,
-            )
+                    .map_err(|err| format!("Expected `{}`: {}", accum.as_str(), err))?,
+            )?;
         }
+        Ok(self)
     }
 
     pub fn get_auto_key_locate(&self) -> Result<LocateKey> {
-        let auto_key_locate: *const ::std::os::raw::c_char = c_string_literal!("auto-key-locate");
-        let raw_value =
-            unsafe { CStr::from_ptr(self.get_flag_inner(auto_key_locate)) }.to_string_lossy();
+        let raw_value = unsafe { CStr::from_ptr(self.get_flag_inner(GpgmeFlag::AUTO_KEY_LOCATE)) }
+            .to_string_lossy();
         let mut val = LocateKey::NODEFAULT;
         if !raw_value.contains("nodefault") {
             for mechanism in raw_value.split(',') {
@@ -432,7 +443,7 @@ impl Context {
             lib: self.inner.lib.clone(),
             kind: DataKind::Memory,
             bytes,
-            inner: std::ptr::NonNull::new(ptr).ok_or_else(|| {
+            inner: NonNull::new(ptr).ok_or_else(|| {
                 Error::new("Could not create libgpgme data").set_kind(ErrorKind::Bug)
             })?,
         })
@@ -462,7 +473,7 @@ impl Context {
             lib: self.inner.lib.clone(),
             kind: DataKind::Memory,
             bytes,
-            inner: std::ptr::NonNull::new(ptr).ok_or_else(|| {
+            inner: NonNull::new(ptr).ok_or_else(|| {
                 Error::new("Could not create libgpgme data").set_kind(ErrorKind::Bug)
             })?,
         })
@@ -477,7 +488,7 @@ impl Context {
             gpgme_error_try(
                 &self.inner.lib,
                 call!(&self.inner.lib, gpgme_op_verify_start)(
-                    self.inner.inner.as_ptr(),
+                    self.inner.ptr.as_ptr(),
                     signature.inner.as_mut(),
                     text.inner.as_mut(),
                     std::ptr::null_mut(),
@@ -485,16 +496,8 @@ impl Context {
             )?;
         }
 
-        let ctx = self.inner.clone();
-        let io_state = self.io_state.clone();
-        let io_state_lck = self.io_state.lock().unwrap();
-        let done = io_state_lck.done.clone();
-        let fut = io_state_lck
-            .ops
-            .values()
-            .map(|a| Async::new(a.clone()).unwrap())
-            .collect::<Vec<Async<GpgmeFd>>>();
-        drop(io_state_lck);
+        let ctx = self.clone();
+        let (done, fut) = self.io_state.done_fut()?;
         Ok(async move {
             let _s = signature;
             let _t = text;
@@ -545,15 +548,16 @@ impl Context {
                 }
             }))
             .await;
-            debug!("done with fut join");
+            log::trace!("done with fut join");
             let rcv = {
-                let io_state_lck = io_state.lock().unwrap();
+                let io_state_lck = ctx.io_state.lock().unwrap();
                 io_state_lck.receiver.clone()
             };
             let _ = rcv.recv().await;
             {
-                let verify_result: gpgme_verify_result_t =
-                    unsafe { call!(&ctx.lib, gpgme_op_verify_result)(ctx.inner.as_ptr()) };
+                let verify_result: gpgme_verify_result_t = unsafe {
+                    call!(&ctx.inner.lib, gpgme_op_verify_result)(ctx.inner.ptr.as_ptr())
+                };
                 if verify_result.is_null() {
                     return Err(Error::new(
                         "Unspecified libgpgme error: gpgme_op_verify_result returned NULL.",
@@ -561,19 +565,16 @@ impl Context {
                     .set_kind(ErrorKind::External));
                 }
             }
-            let io_state_lck = io_state.lock().unwrap();
-            let ret = io_state_lck
-                .done
-                .lock()
-                .unwrap()
-                .take()
-                .unwrap_or_else(|| Err(Error::new("Unspecified libgpgme error")));
+            let io_state_lck = ctx.io_state.lock().unwrap();
+            let ret = io_state_lck.done.lock().unwrap().take().unwrap_or_else(|| {
+                Err(Error::new("Unspecified libgpgme error").set_kind(ErrorKind::Bug))
+            });
             ret
         })
     }
 
     pub fn keylist(
-        &mut self,
+        &self,
         secret: bool,
         pattern: Option<String>,
     ) -> Result<impl Future<Output = Result<Vec<Key>>>> {
@@ -586,7 +587,7 @@ impl Context {
             gpgme_error_try(
                 &self.inner.lib,
                 call!(&self.inner.lib, gpgme_op_keylist_start)(
-                    self.inner.inner.as_ptr(),
+                    self.inner.ptr.as_ptr(),
                     pattern
                         .as_ref()
                         .map(|cs| cs.as_ptr())
@@ -597,16 +598,8 @@ impl Context {
             )?;
         }
 
-        let ctx = self.inner.clone();
-        let io_state = self.io_state.clone();
-        let io_state_lck = self.io_state.lock().unwrap();
-        let done = io_state_lck.done.clone();
-        let fut = io_state_lck
-            .ops
-            .values()
-            .map(|a| Async::new(a.clone()).unwrap())
-            .collect::<Vec<Async<GpgmeFd>>>();
-        drop(io_state_lck);
+        let ctx = self.clone();
+        let (done, fut) = self.io_state.done_fut()?;
         Ok(async move {
             futures::future::join_all(fut.iter().map(|fut| {
                 let done = done.clone();
@@ -656,7 +649,7 @@ impl Context {
             }))
             .await;
             let (rcv, key_receiver) = {
-                let io_state_lck = io_state.lock().unwrap();
+                let io_state_lck = ctx.io_state.lock().unwrap();
                 (
                     io_state_lck.receiver.clone(),
                     io_state_lck.key_receiver.clone(),
@@ -665,11 +658,11 @@ impl Context {
             let _ = rcv.recv().await;
             unsafe {
                 gpgme_error_try(
-                    &ctx.lib,
-                    call!(&ctx.lib, gpgme_op_keylist_end)(ctx.inner.as_ptr()),
+                    &ctx.inner.lib,
+                    call!(&ctx.inner.lib, gpgme_op_keylist_end)(ctx.inner.ptr.as_ptr()),
                 )?;
             }
-            io_state
+            ctx.io_state
                 .lock()
                 .unwrap()
                 .done
@@ -679,9 +672,10 @@ impl Context {
                 .unwrap_or_else(|| Err(Error::new("Unspecified libgpgme error")))?;
             let mut keys = vec![];
             while let Ok(inner) = key_receiver.try_recv() {
-                let key = Key::new(inner, ctx.lib.clone());
+                let key = Key::new(inner, ctx.inner.lib.clone());
                 keys.push(key);
             }
+            drop(ctx);
             Ok(keys)
         })
     }
@@ -702,13 +696,13 @@ impl Context {
                 &self.inner.lib,
                 call!(&self.inner.lib, gpgme_data_new)(&mut sig),
             )?;
-            call!(&self.inner.lib, gpgme_signers_clear)(self.inner.inner.as_ptr());
+            call!(&self.inner.lib, gpgme_signers_clear)(self.inner.ptr.as_ptr());
             for k in sign_keys {
                 gpgme_error_try(
                     &self.inner.lib,
                     call!(&self.inner.lib, gpgme_signers_add)(
-                        self.inner.inner.as_ptr(),
-                        k.inner.inner.as_ptr(),
+                        self.inner.ptr.as_ptr(),
+                        k.inner.ptr.as_ptr(),
                     ),
                 )?;
             }
@@ -718,7 +712,7 @@ impl Context {
             gpgme_error_try(
                 &self.inner.lib,
                 call!(&self.inner.lib, gpgme_op_sign_start)(
-                    self.inner.inner.as_ptr(),
+                    self.inner.ptr.as_ptr(),
                     text.inner.as_mut(),
                     sig,
                     gpgme_sig_mode_t_GPGME_SIG_MODE_DETACH,
@@ -729,19 +723,13 @@ impl Context {
             lib: self.inner.lib.clone(),
             kind: DataKind::Memory,
             bytes: Pin::new(vec![]),
-            inner: std::ptr::NonNull::new(sig)
-                .ok_or_else(|| Error::new("internal libgpgme error").set_kind(ErrorKind::Bug))?,
+            inner: NonNull::new(sig).ok_or_else(|| {
+                Error::new("internal libgpgme error").set_kind(ErrorKind::LinkedLibrary("gpgme"))
+            })?,
         };
 
-        let io_state = self.io_state.clone();
-        let io_state_lck = self.io_state.lock().unwrap();
-        let done = io_state_lck.done.clone();
-        let fut = io_state_lck
-            .ops
-            .values()
-            .map(|a| Async::new(a.clone()).unwrap())
-            .collect::<Vec<Async<GpgmeFd>>>();
-        drop(io_state_lck);
+        let ctx = self.clone();
+        let (done, fut) = self.io_state.done_fut()?;
         Ok(async move {
             futures::future::join_all(fut.iter().map(|fut| {
                 let done = done.clone();
@@ -791,10 +779,10 @@ impl Context {
             }))
             .await;
             {
-                let rcv = io_state.lock().unwrap().receiver.clone();
+                let rcv = ctx.io_state.lock().unwrap().receiver.clone();
                 let _ = rcv.recv().await;
             }
-            io_state
+            ctx.io_state
                 .lock()
                 .unwrap()
                 .done
@@ -825,7 +813,7 @@ impl Context {
             gpgme_error_try(
                 &self.inner.lib,
                 call!(&self.inner.lib, gpgme_op_decrypt_start)(
-                    self.inner.inner.as_ptr(),
+                    self.inner.ptr.as_ptr(),
                     cipher.inner.as_mut(),
                     plain,
                 ),
@@ -835,20 +823,13 @@ impl Context {
             lib: self.inner.lib.clone(),
             kind: DataKind::Memory,
             bytes: Pin::new(vec![]),
-            inner: std::ptr::NonNull::new(plain)
-                .ok_or_else(|| Error::new("internal libgpgme error").set_kind(ErrorKind::Bug))?,
+            inner: NonNull::new(plain).ok_or_else(|| {
+                Error::new("internal libgpgme error").set_kind(ErrorKind::LinkedLibrary("gpgme"))
+            })?,
         };
 
-        let ctx = self.inner.clone();
-        let io_state = self.io_state.clone();
-        let io_state_lck = self.io_state.lock().unwrap();
-        let done = io_state_lck.done.clone();
-        let fut = io_state_lck
-            .ops
-            .values()
-            .map(|a| Async::new(a.clone()).unwrap())
-            .collect::<Vec<Async<GpgmeFd>>>();
-        drop(io_state_lck);
+        let ctx = self.clone();
+        let (done, fut) = self.io_state.done_fut()?;
         Ok(async move {
             let _c = cipher;
             futures::future::join_all(fut.iter().map(|fut| {
@@ -898,9 +879,9 @@ impl Context {
                 }
             }))
             .await;
-            let rcv = { io_state.lock().unwrap().receiver.clone() };
+            let rcv = { ctx.io_state.lock().unwrap().receiver.clone() };
             let _ = rcv.recv().await;
-            io_state
+            ctx.io_state
                 .lock()
                 .unwrap()
                 .done
@@ -910,12 +891,12 @@ impl Context {
                 .unwrap_or_else(|| Err(Error::new("Unspecified libgpgme error")))?;
 
             let decrypt_result =
-                unsafe { call!(&ctx.lib, gpgme_op_decrypt_result)(ctx.inner.as_ptr()) };
+                unsafe { call!(&ctx.inner.lib, gpgme_op_decrypt_result)(ctx.inner.ptr.as_ptr()) };
             if decrypt_result.is_null() {
                 return Err(Error::new(
                     "Unspecified libgpgme error: gpgme_op_decrypt_result returned NULL.",
                 )
-                .set_kind(ErrorKind::External));
+                .set_kind(ErrorKind::LinkedLibrary("gpgme")));
             }
             let mut recipients = vec![];
             let is_mime;
@@ -953,7 +934,7 @@ impl Context {
                         } else {
                             None
                         },
-                        status: gpgme_error_try(&ctx.lib, (*recipient_iter).status),
+                        status: gpgme_error_try(&ctx.inner.lib, (*recipient_iter).status),
                     });
                     recipient_iter = (*recipient_iter).next;
                 }
@@ -986,7 +967,7 @@ impl Context {
             );
         }
         unsafe {
-            call!(&self.inner.lib, gpgme_signers_clear)(self.inner.inner.as_ptr());
+            call!(&self.inner.lib, gpgme_signers_clear)(self.inner.ptr.as_ptr());
         }
 
         let also_sign: bool = if let Some(keys) = sign_keys {
@@ -998,8 +979,8 @@ impl Context {
                         gpgme_error_try(
                             &self.inner.lib,
                             call!(&self.inner.lib, gpgme_signers_add)(
-                                self.inner.inner.as_ptr(),
-                                k.inner.inner.as_ptr(),
+                                self.inner.ptr.as_ptr(),
+                                k.inner.ptr.as_ptr(),
                             ),
                         )?;
                     }
@@ -1011,7 +992,7 @@ impl Context {
         };
         let mut cipher: gpgme_data_t = std::ptr::null_mut();
         let mut raw_keys: Vec<gpgme_key_t> = Vec::with_capacity(encrypt_keys.len() + 1);
-        raw_keys.extend(encrypt_keys.iter().map(|k| k.inner.inner.as_ptr()));
+        raw_keys.extend(encrypt_keys.iter().map(|k| k.inner.ptr.as_ptr()));
         raw_keys.push(std::ptr::null_mut());
         unsafe {
             gpgme_error_try(
@@ -1022,7 +1003,7 @@ impl Context {
                 &self.inner.lib,
                 if also_sign {
                     call!(&self.inner.lib, gpgme_op_encrypt_sign_start)(
-                        self.inner.inner.as_ptr(),
+                        self.inner.ptr.as_ptr(),
                         raw_keys.as_mut_ptr(),
                         gpgme_encrypt_flags_t_GPGME_ENCRYPT_NO_ENCRYPT_TO
                             | gpgme_encrypt_flags_t_GPGME_ENCRYPT_NO_COMPRESS,
@@ -1031,7 +1012,7 @@ impl Context {
                     )
                 } else {
                     call!(&self.inner.lib, gpgme_op_encrypt_start)(
-                        self.inner.inner.as_ptr(),
+                        self.inner.ptr.as_ptr(),
                         raw_keys.as_mut_ptr(),
                         gpgme_encrypt_flags_t_GPGME_ENCRYPT_NO_ENCRYPT_TO
                             | gpgme_encrypt_flags_t_GPGME_ENCRYPT_NO_COMPRESS,
@@ -1045,20 +1026,13 @@ impl Context {
             lib: self.inner.lib.clone(),
             kind: DataKind::Memory,
             bytes: Pin::new(vec![]),
-            inner: std::ptr::NonNull::new(cipher)
-                .ok_or_else(|| Error::new("internal libgpgme error").set_kind(ErrorKind::Bug))?,
+            inner: NonNull::new(cipher).ok_or_else(|| {
+                Error::new("internal libgpgme error").set_kind(ErrorKind::LinkedLibrary("gpgme"))
+            })?,
         };
 
-        let ctx = self.inner.clone();
-        let io_state = self.io_state.clone();
-        let io_state_lck = self.io_state.lock().unwrap();
-        let done = io_state_lck.done.clone();
-        let fut = io_state_lck
-            .ops
-            .values()
-            .map(|a| Async::new(a.clone()).unwrap())
-            .collect::<Vec<Async<GpgmeFd>>>();
-        drop(io_state_lck);
+        let ctx = self.clone();
+        let (done, fut) = self.io_state.done_fut()?;
         Ok(async move {
             futures::future::join_all(fut.iter().map(|fut| {
                 let done = done.clone();
@@ -1107,9 +1081,9 @@ impl Context {
                 }
             }))
             .await;
-            let rcv = { io_state.lock().unwrap().receiver.clone() };
+            let rcv = { ctx.io_state.lock().unwrap().receiver.clone() };
             let _ = rcv.recv().await;
-            io_state
+            ctx.io_state
                 .lock()
                 .unwrap()
                 .done
@@ -1119,12 +1093,12 @@ impl Context {
                 .unwrap_or_else(|| Err(Error::new("Unspecified libgpgme error")))?;
 
             let encrypt_result =
-                unsafe { call!(&ctx.lib, gpgme_op_encrypt_result)(ctx.inner.as_ptr()) };
+                unsafe { call!(&ctx.inner.lib, gpgme_op_encrypt_result)(ctx.inner.ptr.as_ptr()) };
             if encrypt_result.is_null() {
                 return Err(Error::new(
                     "Unspecified libgpgme error: gpgme_op_encrypt_result returned NULL.",
                 )
-                .set_kind(ErrorKind::External));
+                .set_kind(ErrorKind::LinkedLibrary("gpgme")));
             }
             /* Rewind cursor */
             cipher
@@ -1134,6 +1108,165 @@ impl Context {
             let _ = &plain;
             cipher.into_bytes()
         })
+    }
+
+    pub fn engine_info(&self) -> Result<Vec<EngineInfo>> {
+        let mut ptr: gpgme_engine_info_t =
+            unsafe { call!(&self.inner.lib, gpgme_ctx_get_engine_info)(self.inner.ptr.as_ptr()) };
+        let mut retval = vec![];
+        macro_rules! to_s {
+            ($p:expr) => {{
+                if $p.is_null() {
+                    None
+                } else {
+                    unsafe { Some(CStr::from_ptr($p).to_string_lossy().to_string()) }
+                }
+            }};
+        }
+        while let Some(eng) = NonNull::new(ptr) {
+            let eng_ref = unsafe { eng.as_ref() };
+            ptr = eng_ref.next;
+            retval.push(EngineInfo {
+                protocol: eng_ref.protocol.into(),
+                file_name: to_s! {eng_ref.file_name},
+                version: to_s! {eng_ref.version},
+                req_version: to_s! {eng_ref.req_version},
+                home_dir: to_s! {eng_ref.home_dir},
+            });
+        }
+
+        Ok(retval)
+    }
+
+    pub fn set_engine_info(
+        &mut self,
+        protocol: Protocol,
+        file_name: Option<Cow<'static, CStr>>,
+        home_dir: Option<Cow<'static, CStr>>,
+    ) -> Result<()> {
+        unsafe {
+            gpgme_error_try(
+                &self.inner.lib,
+                call!(&self.inner.lib, gpgme_ctx_set_engine_info)(
+                    self.inner.ptr.as_ptr(),
+                    protocol as u32,
+                    file_name
+                        .as_ref()
+                        .map(|c| c.as_ptr())
+                        .unwrap_or_else(std::ptr::null),
+                    home_dir
+                        .as_ref()
+                        .map(|c| c.as_ptr())
+                        .unwrap_or_else(std::ptr::null),
+                ),
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn set_protocol(&mut self, protocol: Protocol) -> Result<()> {
+        unsafe {
+            gpgme_error_try(
+                &self.inner.lib,
+                call!(&self.inner.lib, gpgme_set_protocol)(
+                    self.inner.ptr.as_ptr(),
+                    protocol as u32,
+                ),
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn import_key(&mut self, mut key_data: Data) -> Result<()> {
+        unsafe {
+            gpgme_error_try(
+                &self.inner.lib,
+                call!(&self.inner.lib, gpgme_op_import)(
+                    self.inner.ptr.as_ptr(),
+                    key_data.inner.as_mut(),
+                ),
+            )?;
+        }
+        let result =
+            unsafe { call!(&self.inner.lib, gpgme_op_import_result)(self.inner.ptr.as_ptr()) };
+        if let Some(ptr) = NonNull::new(result) {
+            let res = unsafe { ptr.as_ref() };
+            if res.imported == 0 && res.secret_imported == 0 {
+                return Err(Error::new("Key was not imported."));
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(test)]
+    pub fn set_passphrase_cb(
+        &mut self,
+        cb: gpgme_passphrase_cb_t,
+        data: Option<*mut c_void>,
+    ) -> Result<()> {
+        unsafe {
+            call!(&self.inner.lib, gpgme_get_pinentry_mode)(self.inner.ptr.as_ptr());
+        }
+        unsafe {
+            gpgme_error_try(
+                &self.inner.lib,
+                call!(&self.inner.lib, gpgme_set_pinentry_mode)(
+                    self.inner.ptr.as_ptr(),
+                    if cb.is_none() {
+                        gpgme_pinentry_mode_t_GPGME_PINENTRY_MODE_DEFAULT
+                    } else {
+                        gpgme_pinentry_mode_t_GPGME_PINENTRY_MODE_LOOPBACK
+                    },
+                ),
+            )?;
+        }
+        unsafe {
+            call!(&self.inner.lib, gpgme_set_passphrase_cb)(
+                self.inner.ptr.as_ptr(),
+                cb,
+                data.unwrap_or(std::ptr::null_mut()),
+            );
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct EngineInfo {
+    pub protocol: Protocol,
+    pub file_name: Option<String>,
+    pub version: Option<String>,
+    pub req_version: Option<String>,
+    pub home_dir: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[repr(u32)]
+pub enum Protocol {
+    OpenPGP = 0,
+    CMS = 1,
+    GPGCONF = 2,
+    ASSUAN = 3,
+    G13 = 4,
+    UISERVER = 5,
+    SPAWN = 6,
+    DEFAULT = 254,
+    UNKNOWN = 255,
+}
+
+impl From<u32> for Protocol {
+    fn from(val: u32) -> Self {
+        match val {
+            0 => Self::OpenPGP,
+            1 => Self::CMS,
+            2 => Self::GPGCONF,
+            3 => Self::ASSUAN,
+            4 => Self::G13,
+            5 => Self::UISERVER,
+            6 => Self::SPAWN,
+            254 => Self::DEFAULT,
+            _ => Self::UNKNOWN,
+        }
     }
 }
 
@@ -1167,7 +1300,7 @@ enum DataKind {
 
 #[derive(Debug)]
 pub struct Data {
-    inner: std::ptr::NonNull<bindings::gpgme_data>,
+    inner: NonNull<bindings::gpgme_data>,
     kind: DataKind,
     #[allow(dead_code)]
     bytes: std::pin::Pin<Vec<u8>>,
@@ -1200,12 +1333,24 @@ impl Drop for Data {
 struct GpgmeFd {
     fd: RawFd,
     fnc: GpgmeIOCb,
-    fnc_data: *mut ::std::os::raw::c_void,
+    fnc_data: *mut c_void,
     idx: usize,
     write: bool,
-    sender: smol::channel::Sender<()>,
-    receiver: smol::channel::Receiver<()>,
+    sender: Sender<()>,
+    receiver: Receiver<()>,
     io_state: Arc<Mutex<IoState>>,
+}
+
+impl std::fmt::Debug for GpgmeFd {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fmt.debug_struct(identify!(GpgmeFd))
+            .field("fd", &self.fd)
+            .field("fnc", &self.fnc)
+            .field("fnc_data", &self.fnc_data)
+            .field("idx", &self.idx)
+            .field("write", &self.write)
+            .finish_non_exhaustive()
+    }
 }
 
 unsafe impl Send for GpgmeFd {}
@@ -1214,132 +1359,6 @@ unsafe impl Sync for GpgmeFd {}
 impl AsRawFd for GpgmeFd {
     fn as_raw_fd(&self) -> RawFd {
         self.fd
-    }
-}
-
-#[derive(Clone)]
-struct KeyInner {
-    inner: std::ptr::NonNull<_gpgme_key>,
-}
-
-unsafe impl Send for KeyInner {}
-unsafe impl Sync for KeyInner {}
-
-pub struct Key {
-    inner: KeyInner,
-    lib: Arc<libloading::Library>,
-}
-unsafe impl Send for Key {}
-unsafe impl Sync for Key {}
-
-impl Clone for Key {
-    fn clone(&self) -> Self {
-        let lib = self.lib.clone();
-        unsafe {
-            call!(&self.lib, gpgme_key_ref)(self.inner.inner.as_ptr());
-        }
-        Self {
-            inner: self.inner.clone(),
-            lib,
-        }
-    }
-}
-
-impl Key {
-    #[inline(always)]
-    fn new(inner: KeyInner, lib: Arc<libloading::Library>) -> Self {
-        Self { inner, lib }
-    }
-
-    pub fn primary_uid(&self) -> Option<Address> {
-        unsafe {
-            if (*(self.inner.inner.as_ptr())).uids.is_null() {
-                return None;
-            }
-            let uid = (*(self.inner.inner.as_ptr())).uids;
-            if (*uid).name.is_null() && (*uid).email.is_null() {
-                None
-            } else if (*uid).name.is_null() {
-                Some(Address::new(
-                    None,
-                    CStr::from_ptr((*uid).email).to_string_lossy().to_string(),
-                ))
-            } else if (*uid).email.is_null() {
-                Some(Address::new(
-                    None,
-                    CStr::from_ptr((*uid).name).to_string_lossy().to_string(),
-                ))
-            } else {
-                Some(Address::new(
-                    Some(CStr::from_ptr((*uid).name).to_string_lossy().to_string()),
-                    CStr::from_ptr((*uid).email).to_string_lossy().to_string(),
-                ))
-            }
-        }
-    }
-
-    pub fn revoked(&self) -> bool {
-        unsafe { (*self.inner.inner.as_ptr()).revoked() > 0 }
-    }
-
-    pub fn expired(&self) -> bool {
-        unsafe { (*self.inner.inner.as_ptr()).expired() > 0 }
-    }
-
-    pub fn disabled(&self) -> bool {
-        unsafe { (*self.inner.inner.as_ptr()).disabled() > 0 }
-    }
-
-    pub fn invalid(&self) -> bool {
-        unsafe { (*self.inner.inner.as_ptr()).invalid() > 0 }
-    }
-
-    pub fn can_encrypt(&self) -> bool {
-        unsafe { (*self.inner.inner.as_ptr()).can_encrypt() > 0 }
-    }
-
-    pub fn can_sign(&self) -> bool {
-        unsafe { (*self.inner.inner.as_ptr()).can_sign() > 0 }
-    }
-
-    pub fn secret(&self) -> bool {
-        unsafe { (*self.inner.inner.as_ptr()).secret() > 0 }
-    }
-
-    pub fn fingerprint(&self) -> Cow<'_, str> {
-        (unsafe { CStr::from_ptr((*(self.inner.inner.as_ptr())).fpr) }).to_string_lossy()
-    }
-}
-
-impl std::fmt::Debug for Key {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        fmt.debug_struct(crate::identify!(Key))
-            .field("fingerprint", &self.fingerprint())
-            .field("uid", &self.primary_uid())
-            .field("can_encrypt", &self.can_encrypt())
-            .field("can_sign", &self.can_sign())
-            .field("secret", &self.secret())
-            .field("revoked", &self.revoked())
-            .field("expired", &self.expired())
-            .field("invalid", &self.invalid())
-            .finish()
-    }
-}
-
-impl PartialEq for Key {
-    fn eq(&self, other: &Self) -> bool {
-        self.fingerprint() == other.fingerprint()
-    }
-}
-
-impl Eq for Key {}
-
-impl Drop for Key {
-    #[inline]
-    fn drop(&mut self) {
-        unsafe {
-            call!(&self.lib, gpgme_key_unref)(self.inner.inner.as_ptr());
-        }
     }
 }
 
@@ -1368,3 +1387,75 @@ impl Drop for Key {
 //       String::from_utf8_lossy(&plain.into_bytes().unwrap())
 //    );
 //}
+
+mod wrapper {
+    use super::*;
+
+    /// Wrapper type to free IO state and `add_priv`, `event_priv` leaked
+    /// references.
+    #[repr(transparent)]
+    pub(super) struct IoStateWrapper(ManuallyDrop<Arc<Mutex<IoState>>>);
+
+    impl IoStateWrapper {
+        pub(super) fn new(state: IoState) -> (Arc<Self>, gpgme_io_cbs) {
+            let inner = Arc::new(Mutex::new(state));
+            let add_priv = Arc::into_raw(Arc::clone(&inner))
+                .cast_mut()
+                .cast::<c_void>();
+            let event_priv = Arc::into_raw(Arc::clone(&inner))
+                .cast_mut()
+                .cast::<c_void>();
+
+            let io_cbs = gpgme_io_cbs {
+                add: Some(io::gpgme_register_io_cb),
+                add_priv,
+                remove: Some(io::gpgme_remove_io_cb),
+                event: Some(io::gpgme_event_io_cb),
+                event_priv,
+            };
+
+            (Arc::new(Self(ManuallyDrop::new(inner))), io_cbs)
+        }
+
+        pub(super) fn done_fut(&self) -> Result<(Done, Vec<Async<GpgmeFd>>)> {
+            let (done, fut) = if let Ok(io_state_lck) = self.0.lock() {
+                let done = io_state_lck.done.clone();
+                (
+                    done,
+                    io_state_lck
+                        .ops
+                        .values()
+                        .map(|a| Async::new(a.clone()).unwrap())
+                        .collect::<Vec<Async<GpgmeFd>>>(),
+                )
+            } else {
+                return Err(Error::new("Could not use gpgme library")
+                    .set_details("The context's IO state mutex was poisoned.")
+                    .set_kind(ErrorKind::Bug));
+            };
+            Ok((done, fut))
+        }
+    }
+
+    impl Drop for IoStateWrapper {
+        fn drop(&mut self) {
+            // SAFETY: struct unit value is ManuallyDrop, so no Drop impls are called on the
+            // uninit value.
+            // let inner = unsafe { ManuallyDrop::take(&mut self.0) };
+            // SAFETY: take add_priv reference
+            unsafe { Arc::decrement_strong_count(&self.0) };
+            // SAFETY: take event_priv reference
+            unsafe { Arc::decrement_strong_count(&self.0) };
+        }
+    }
+
+    impl std::ops::Deref for IoStateWrapper {
+        type Target = Arc<Mutex<IoState>>;
+
+        fn deref(&self) -> &Self::Target {
+            &self.0
+        }
+    }
+}
+
+use wrapper::IoStateWrapper;

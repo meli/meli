@@ -143,7 +143,7 @@ pub struct Context {
     pub realized: IndexMap<ComponentId, Option<ComponentId>>,
     pub unrealized: IndexSet<ComponentId>,
     pub main_loop_handler: MainLoopHandler,
-    receiver: Receiver<ThreadEvent>,
+    pub receiver: Receiver<ThreadEvent>,
     input_thread: InputHandler,
     current_dir: PathBuf,
     /// Children processes
