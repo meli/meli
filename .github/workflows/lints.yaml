@@ -1,0 +1,72 @@
+# SPDX-License-Identifier: EUPL-1.2
+name: Run cargo lints
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+  RUSTFLAGS: "-D warnings -W unreachable-pub -W rust-2021-compatibility -C debuginfo=0"
+  RUSTUP_MAX_RETRIES: 10
+  RUST_BACKTRACE: short
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.gitea/**'
+      - 'melib/src/**'
+      - 'melib/Cargo.toml'
+      - 'meli/src/**'
+      - 'meli/Cargo.toml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+
+jobs:
+  test:
+    name: Run lints
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [linux-amd64, ]
+        include:
+          - build: linux-amd64
+            os: ubuntu-latest
+            rust: stable
+            target: x86_64-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install sudo for act
+        if: env.ACT == 'true'
+        run: apt-get update && apt-get install --assume-yes --no-install-recommends sudo
+      - id: os-deps
+        name: install OS dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev pkg-config mandoc libssl-dev
+      - uses: ./.github/actions/rustup-setup
+      - uses: ./.github/actions/cargo-setup
+      - name: rustfmt
+        if: success() || failure()
+        run: |
+          cargo fmt --check --all
+      - name: clippy
+        if: success() || failure()
+        run: |
+          cargo clippy --no-deps --all-features --all --tests --examples --benches --bins
+      - name: cargo-derivefmt melib
+        if: success() || failure()
+        run: |
+          cargo derivefmt --manifest-path ./melib/Cargo.toml
+      - name: cargo-derivefmt meli
+        if: success() || failure()
+        run: |
+          cargo derivefmt --manifest-path ./meli/Cargo.toml
+      - name: cargo-derivefmt fuzz
+        if: success() || failure()
+        run: |
+          cargo derivefmt --manifest-path ./fuzz/Cargo.toml
+      - name: cargo-derivefmt tools
+        if: success() || failure()
+        run: |
+          cargo derivefmt --manifest-path ./tools/Cargo.toml

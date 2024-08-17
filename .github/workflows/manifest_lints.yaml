@@ -37,41 +37,31 @@ jobs:
             target: x86_64-unknown-linux-gnu
     steps:
       - uses: actions/checkout@v3
+      - name: Install sudo for act
+        if: env.ACT == 'true'
+        run: apt-get update && apt-get install --assume-yes --no-install-recommends sudo
       - id: os-deps
         name: install OS dependencies
         run: |
-          apt-get update
-          apt-get install -y mandoc
+          sudo apt-get update
+          sudo apt-get install -y mandoc
+      - uses: ./.github/actions/rustup-setup
+      - uses: ./.github/actions/cargo-setup
       - name: Find meli MSRV from meli/Cargo.toml.
         run: echo MELI_MSRV=$(grep -m1 rust-version meli/Cargo.toml | head -n1 | cut -d'"' -f 2 | head -n1) >> $GITHUB_ENV
+      - name: Cargo cache setup
+        id: cache-cargo
+        uses: actions/cache@v4
+        with:
+          path: cargo-cache
+          key: ${{ runner.os }}-cargo-cache
       - id: rustup-setup
         name: Install Rustup and toolchains
         shell: bash
         run: |
-          if ! command -v rustup &>/dev/null; then
-            curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused --location --silent --show-error --fail "https://sh.rustup.rs" | sh -s -- --default-toolchain none -y
-            source "${HOME}/.cargo/env"
-            echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> $GITHUB_PATH
-            echo "CARGO_HOME=${CARGO_HOME:-$HOME/.cargo}" >> $GITHUB_ENV
-            rustup toolchain install --profile minimal --component "rustfmt" --target "${{ matrix.target }}" -- "${{ env.MELI_MSRV }}"
-            rustup component add rustfmt --toolchain ${{ env.MELI_MSRV }}-${{ matrix.target }}
-            rustup toolchain install --profile minimal --component "rustfmt" --target "${{ matrix.target }}" -- "${{ matrix.rust }}"
-            rustup component add rustfmt --toolchain ${{ matrix.rust }}-${{ matrix.target }}
-            rustup default ${{ matrix.rust }}
-          fi
-      - name: Setup Rust target
-        run: |
-          mkdir -p "${{ env.CARGO_HOME }}"
-          cat << EOF > "${{ env.CARGO_HOME }}"/config.toml
-          [build]
-          target = "${{ matrix.target }}"
-          EOF
-      - if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }} && matrix.target
-        name: Add manifest lint dependencies
-        run: |
-          source "${HOME}/.cargo/env"
-          cargo install --quiet --version 1.0.9 --target "${{ matrix.target }}" cargo-sort
-          cargo install --quiet --version 0.15.1 --target "${{ matrix.target }}" cargo-msrv
+          rustup toolchain install --profile minimal --component "rustfmt" --target "${{ matrix.target }}" -- "${{ env.MELI_MSRV }}"
+          rustup component add rustfmt --toolchain ${{ env.MELI_MSRV }}-${{ matrix.target }}
+          rustup default ${{ matrix.rust }}
       - name: cargo-msrv verify melib MSRV
         if: success() || failure()
         run: |

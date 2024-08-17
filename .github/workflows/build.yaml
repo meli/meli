@@ -1,0 +1,66 @@
+# SPDX-License-Identifier: EUPL-1.2
+name: Build and run Tests
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+  RUSTFLAGS: "-D warnings -W unreachable-pub -W rust-2021-compatibility -C debuginfo=0"
+  RUSTUP_MAX_RETRIES: 10
+  RUST_BACKTRACE: short
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.gitea/**'
+      - 'melib/src/**'
+      - 'melib/Cargo.toml'
+      - 'meli/src/**'
+      - 'meli/Cargo.toml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+
+jobs:
+  test:
+    name: Run tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [linux-amd64, ]
+        include:
+          - build: linux-amd64
+            os: ubuntu-latest
+            rust: stable
+            target: x86_64-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install sudo for act
+        if: env.ACT == 'true'
+        run: apt-get update && apt-get install --assume-yes --no-install-recommends sudo
+      - id: os-deps
+        name: install OS dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev pkg-config mandoc libssl-dev make
+      - uses: ./.github/actions/rustup-setup
+      - uses: ./.github/actions/cargo-setup
+      - name: cargo-check
+        run: |
+          cargo check --all-features --all --tests --examples --benches --bins
+      - name: Compile
+        if: success() || failure()
+        run: cargo test --all --no-fail-fast --all-features --no-run --locked
+      - name: cargo test
+        run: |
+          cargo nextest run --all --no-fail-fast --all-features --future-incompat-report -E 'not (test(smtp::test::test_smtp))'
+          #cargo test --all --no-fail-fast --all-features -- --nocapture --quiet
+      - name: rustdoc build
+        if: success() || failure() # always run even if other steps fail, except when cancelled <https://stackoverflow.com/questions/58858429/how-to-run-a-github-actions-step-even-if-the-previous-step-fails-while-still-f>
+        run: |
+          make build-rustdoc
+      - name: rustdoc tests
+        if: success() || failure()
+        run: |
+          make test-docs
