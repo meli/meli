@@ -496,7 +496,7 @@ pub fn query_to_sql(q: &Query) -> String {
                 s.extend(escape_double_quote(t).chars());
                 s.push_str("%\" ");
             }
-            AllText(t) => {
+            Body(t) | AllText(t) => {
                 s.push_str("body_text LIKE \"%");
                 s.extend(escape_double_quote(t).chars());
                 s.push_str("%\" ");

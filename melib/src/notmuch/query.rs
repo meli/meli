@@ -22,6 +22,7 @@
 use std::{borrow::Cow, ffi::CString, ptr::NonNull, sync::Arc};
 
 use crate::{
+    email::HeaderName,
     error::{Error, ErrorKind, Result},
     notmuch::{
         ffi::{
@@ -118,11 +119,11 @@ impl Drop for Query<'_> {
 }
 
 pub trait MelibQueryToNotmuchQuery {
-    fn query_to_string(&self, ret: &mut String);
+    fn query_to_string(&self, ret: &mut String) -> Result<()>;
 }
 
 impl MelibQueryToNotmuchQuery for crate::search::Query {
-    fn query_to_string(&self, ret: &mut String) {
+    fn query_to_string(&self, ret: &mut String) -> Result<()> {
         use crate::search::Query::*;
         match self {
             Before(timestamp) => {
@@ -167,8 +168,59 @@ impl MelibQueryToNotmuchQuery for crate::search::Query {
                 }
                 ret.push('"');
             }
-            InReplyTo(_s) | References(_s) | AllAddresses(_s) => {}
-            /* * * * */
+            AllAddresses(s) => {
+                return <Self as MelibQueryToNotmuchQuery>::query_to_string(
+                    &Or(
+                        Box::new(From(s.to_string())),
+                        Box::new(Or(
+                            Box::new(Cc(s.to_string())),
+                            Box::new(Bcc(s.to_string())),
+                        )),
+                    ),
+                    ret,
+                );
+            }
+            Header(t, v) if t == HeaderName::MESSAGE_ID => {
+                ret.push_str("id:\"");
+                for c in v.chars() {
+                    if c == '"' {
+                        ret.push_str("\\\"");
+                    } else {
+                        ret.push(c);
+                    }
+                }
+                ret.push('"');
+            }
+            InReplyTo(s) => {
+                return <Self as MelibQueryToNotmuchQuery>::query_to_string(
+                    &Header(HeaderName::IN_REPLY_TO, s.to_string()),
+                    ret,
+                )
+            }
+            References(s) => {
+                return <Self as MelibQueryToNotmuchQuery>::query_to_string(
+                    &Header(HeaderName::REFERENCES, s.to_string()),
+                    ret,
+                )
+            }
+            Header(t, v) => {
+                // See: <https://stackoverflow.com/questions/37480617/search-for-custom-header-value-in-notmuch>
+                for c in t.as_str().chars() {
+                    if c == '-' {
+                        continue;
+                    }
+                    ret.push(c);
+                }
+                ret.push_str(":\"");
+                for c in v.chars() {
+                    if c == '"' {
+                        ret.push_str("\\\"");
+                    } else {
+                        ret.push(c);
+                    }
+                }
+                ret.push('"');
+            }
             Body(s) => {
                 ret.push_str("body:\"");
                 for c in s.chars() {
@@ -224,27 +276,30 @@ impl MelibQueryToNotmuchQuery for crate::search::Query {
             }
             And(q1, q2) => {
                 ret.push('(');
-                q1.query_to_string(ret);
+                q1.query_to_string(ret)?;
                 ret.push_str(") AND (");
-                q2.query_to_string(ret);
+                q2.query_to_string(ret)?;
                 ret.push(')');
             }
             Or(q1, q2) => {
                 ret.push('(');
-                q1.query_to_string(ret);
+                q1.query_to_string(ret)?;
                 ret.push_str(") OR (");
-                q2.query_to_string(ret);
+                q2.query_to_string(ret)?;
                 ret.push(')');
             }
             Not(q) => {
                 ret.push_str("(NOT (");
-                q.query_to_string(ret);
+                q.query_to_string(ret)?;
                 ret.push_str("))");
             }
-            Answered => todo!(),
-            AnsweredBy { .. } => todo!(),
-            Larger { .. } => todo!(),
-            Smaller { .. } => todo!(),
+            Answered | AnsweredBy { .. } | Larger { .. } | Smaller { .. } => {
+                return Err(
+                    Error::new(format!("{:?} query is not implemented for notmuch", self))
+                        .set_kind(ErrorKind::NotImplemented),
+                );
+            }
         }
+        Ok(())
     }
 }

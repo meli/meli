@@ -679,6 +679,13 @@ impl From<crate::search::Query> for Filter<EmailFilterCondition, EmailObject> {
                             .into(),
                     );
                 }
+                Header(ref t, ref v) => {
+                    *f = Filter::Condition(
+                        EmailFilterCondition::new()
+                            .header(vec![t.as_str().into(), v.to_string().into()])
+                            .into(),
+                    );
+                }
                 AllAddresses(_) => {
                     // [ref:TODO]: implement AllAddresses query for jmap
                 }

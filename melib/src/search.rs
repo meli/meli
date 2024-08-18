@@ -24,9 +24,12 @@ use std::{borrow::Cow, convert::TryFrom};
 pub use query_parser::query;
 use Query::*;
 
-use crate::utils::{
-    datetime::{formats, UnixTimestamp},
-    parsec::*,
+use crate::{
+    email::headers::HeaderName,
+    utils::{
+        datetime::{formats, UnixTimestamp},
+        parsec::*,
+    },
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -35,7 +38,7 @@ pub enum Query {
     After(UnixTimestamp),
     Between(UnixTimestamp, UnixTimestamp),
     On(UnixTimestamp),
-    /* * * * */
+    Header(HeaderName, String),
     From(String),
     To(String),
     Cc(String),
@@ -43,11 +46,9 @@ pub enum Query {
     InReplyTo(String),
     References(String),
     AllAddresses(String),
-    /* * * * */
     Body(String),
     Subject(String),
     AllText(String),
-    /* * * * */
     Flags(Vec<String>),
     HasAttachment,
     And(Box<Query>, Box<Query>),
@@ -84,10 +85,15 @@ impl QueryTrait for crate::Envelope {
                 self.date() > timestamp.saturating_sub(60 * 60 * 24)
                     && self.date() < *timestamp + 60 * 60 * 24
             }
-            From(s) => self.other_headers()["From"].contains(s),
-            To(s) => self.other_headers()["To"].contains(s),
-            Cc(s) => self.other_headers()["Cc"].contains(s),
-            Bcc(s) => self.other_headers()["Bcc"].contains(s),
+            Header(name, needle) => self
+                .other_headers()
+                .get(name)
+                .map(|h| h.contains(needle.as_str()))
+                .unwrap_or(false),
+            From(s) => self.other_headers()[HeaderName::FROM].contains(s),
+            To(s) => self.other_headers()[HeaderName::TO].contains(s),
+            Cc(s) => self.other_headers()[HeaderName::CC].contains(s),
+            Bcc(s) => self.other_headers()[HeaderName::BCC].contains(s),
             AllAddresses(s) => {
                 self.is_match(&From(s.clone()))
                     || self.is_match(&To(s.clone()))
@@ -95,19 +101,19 @@ impl QueryTrait for crate::Envelope {
                     || self.is_match(&Bcc(s.clone()))
             }
             Flags(v) => v.iter().any(|s| self.flags() == s.as_str()),
-            Subject(s) => self.other_headers()["Subject"].contains(s),
+            Subject(s) => self.other_headers()[HeaderName::SUBJECT].contains(s),
             HasAttachment => self.has_attachments(),
             And(q_a, q_b) => self.is_match(q_a) && self.is_match(q_b),
             Or(q_a, q_b) => self.is_match(q_a) || self.is_match(q_b),
             Not(q) => !self.is_match(q),
-            InReplyTo(_) => {
-                log::warn!("Filtering with InReplyTo is unimplemented.");
-                false
-            }
-            References(_) => {
-                log::warn!("Filtering with References is unimplemented.");
-                false
-            }
+            InReplyTo(s) => <Self as QueryTrait>::is_match(
+                self,
+                &Query::Header(HeaderName::IN_REPLY_TO, s.to_string()),
+            ),
+            References(s) => <Self as QueryTrait>::is_match(
+                self,
+                &Query::Header(HeaderName::REFERENCES, s.to_string()),
+            ),
             AllText(_) => {
                 log::warn!("Filtering with AllText is unimplemented.");
                 false
@@ -271,6 +277,58 @@ pub mod query_parser {
         .map(Query::Bcc)
     }
 
+    fn message_id<'a>() -> impl Parser<'a, Query> {
+        prefix(
+            whitespace_wrap(either(
+                match_literal("message-id:"),
+                match_literal("msg-id:"),
+            )),
+            whitespace_wrap(literal()),
+        )
+        .map(|s| Query::Header(HeaderName::MESSAGE_ID, s))
+    }
+
+    fn in_reply_to<'a>() -> impl Parser<'a, Query> {
+        prefix(
+            whitespace_wrap(match_literal("in-reply-to:")),
+            whitespace_wrap(literal()),
+        )
+        .map(|s| Query::Header(HeaderName::IN_REPLY_TO, s))
+    }
+
+    fn references<'a>() -> impl Parser<'a, Query> {
+        prefix(
+            whitespace_wrap(match_literal("references:")),
+            whitespace_wrap(literal()),
+        )
+        .map(|s| Query::Header(HeaderName::REFERENCES, s))
+    }
+
+    fn header<'a>() -> impl Parser<'a, Query> {
+        prefix(
+            whitespace_wrap(match_literal("header:")),
+            pair(
+                suffix(
+                    whitespace_wrap(move |input| {
+                        is_not(b",").parse(input).and_then(|(last_input, _)| {
+                            {
+                                |s| {
+                                    <HeaderName as std::str::FromStr>::from_str(s)
+                                        .map(|res| ("", res))
+                                        .map_err(|_| s)
+                                }
+                            }
+                            .parse(last_input)
+                        })
+                    }),
+                    whitespace_wrap(match_literal(",")),
+                ),
+                whitespace_wrap(literal()),
+            ),
+        )
+        .map(|(t1, t2)| Query::Header(t1, t2))
+    }
+
     fn all_addresses<'a>() -> impl Parser<'a, Query> {
         prefix(
             whitespace_wrap(match_literal("all-addresses:")),
@@ -283,7 +341,7 @@ pub mod query_parser {
         move |input| {
             whitespace_wrap(match_literal_anycase("or"))
                 .parse(input)
-                .and_then(|(last_input, _)| query().parse(debug!(last_input)))
+                .and_then(|(last_input, _)| query().parse(last_input))
         }
     }
 
@@ -308,9 +366,12 @@ pub mod query_parser {
 
     fn has_attachment<'a>() -> impl Parser<'a, Query> {
         move |input| {
-            whitespace_wrap(match_literal_anycase("has:attachment"))
-                .map(|()| Query::HasAttachment)
-                .parse(input)
+            whitespace_wrap(either(
+                match_literal_anycase("has:attachment"),
+                match_literal_anycase("has:attachments"),
+            ))
+            .map(|()| Query::HasAttachment)
+            .parse(input)
         }
     }
 
@@ -332,11 +393,17 @@ pub mod query_parser {
     fn flags<'a>() -> impl Parser<'a, Query> {
         move |input| {
             whitespace_wrap(either(
-                either(
-                    match_literal_anycase("flags:"),
-                    match_literal_anycase("tags:"),
-                ),
                 match_literal_anycase("is:"),
+                either(
+                    either(
+                        match_literal_anycase("flag:"),
+                        match_literal_anycase("flags:"),
+                    ),
+                    either(
+                        match_literal_anycase("tag:"),
+                        match_literal_anycase("tags:"),
+                    ),
+                ),
             ))
             .parse(input)
             .and_then(|(rest, _)| {
@@ -375,7 +442,7 @@ pub mod query_parser {
     ///
     /// let input = "test";
     /// let query = query().parse(input);
-    /// assert_eq!(Ok(("", Query::AllText("test".to_string()))), query);
+    /// assert_eq!(Ok(("", Query::Body("test".to_string()))), query);
     /// ```
     pub fn query<'a>() -> impl Parser<'a, Query> {
         move |input| {
@@ -385,6 +452,10 @@ pub mod query_parser {
                 .or_else(|_| to().parse(input))
                 .or_else(|_| cc().parse(input))
                 .or_else(|_| bcc().parse(input))
+                .or_else(|_| message_id().parse(input))
+                .or_else(|_| in_reply_to().parse(input))
+                .or_else(|_| references().parse(input))
+                .or_else(|_| header().parse(input))
                 .or_else(|_| all_addresses().parse(input))
                 .or_else(|_| subject().parse(input))
                 .or_else(|_| before().parse(input))
@@ -409,7 +480,7 @@ pub mod query_parser {
                         .map(|(_, s)| s != "and" && s != "or" && s != "not")
                         .unwrap_or(false)
                 {
-                    result.map(|(r, s)| (r, AllText(s)))
+                    result.map(|(r, s)| (r, Body(s)))
                 } else {
                     Err("")
                 }
@@ -474,13 +545,13 @@ mod tests {
                 "",
                 And(
                     Box::new(Subject("test".to_string())),
-                    Box::new(AllText("i".to_string()))
+                    Box::new(Body("i".to_string()))
                 )
             )),
             query().parse_complete("subject:test and i")
         );
         assert_eq!(
-            Ok(("", AllText("test".to_string()))),
+            Ok(("", Body("test".to_string()))),
             query().parse_complete("test")
         );
         assert_eq!(
@@ -545,6 +616,28 @@ mod tests {
             )),
             query().parse_complete(
                 "(from:Manos and (subject:foo or subject:bar) and (from:woo or from:my))"
+            )
+        );
+        assert_eq!(
+            Ok((
+                "",
+                Or(
+                    Box::new(Header(
+                        HeaderName::MESSAGE_ID,
+                        "123_user@example.org".to_string()
+                    )),
+                    Box::new(And(
+                        Box::new(Header(
+                            HeaderName::MESSAGE_ID,
+                            "1234_user@example.org".to_string()
+                        )),
+                        Box::new(Body("header:List-ID,meli-devel".to_string()))
+                    ))
+                )
+            )),
+            query().parse_complete(
+                "(message-id:123_user@example.org or (msg-id:1234_user@example.org) and \
+                 (header:List-ID,meli-devel))"
             )
         );
         assert_eq!(

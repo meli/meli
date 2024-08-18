@@ -287,9 +287,11 @@ Sqlite3 on the contrary at reasonable mailbox sizes should have a non noticeable
 .HorizontalRule
 .Bl -dash -compact
 .It
-.Li query = \&"(\&" query \&")\&" | from | to | cc | bcc | alladdresses | subject | flags | has_attachments | query \&"or\&" query | query \&"and\&" query | not query
+.Li query = \&"(\&" query \&")\&" | from | to | cc | bcc | message_id | in_reply_to | references | header | all_addresses | subject | flags | has_attachment | query \&"or\&" query | query \&"and\&" query | not query
 .It
 .Li not = \&"not\&" | \&"!\&"
+.It
+.Li has_attachment = \&"has:attachment\&" | \&"has:attachments\&"
 .It
 .Li quoted = ALPHA / SP *(ALPHA / DIGIT / SP)
 .It
@@ -301,6 +303,8 @@ Sqlite3 on the contrary at reasonable mailbox sizes should have a non noticeable
 .It
 .Li flagterm = flagval | flagval \&",\&" flagterm
 .It
+.Li flags = \&"flag:\&" flag | \&"flags:\&" flag | \&"tag:\&" flag | \&"tags:\&" flag | \&"is:\&" flag
+.It
 .Li from = \&"from:\&" term
 .It
 .Li to = \&"to:\&" term
@@ -309,11 +313,21 @@ Sqlite3 on the contrary at reasonable mailbox sizes should have a non noticeable
 .It
 .Li bcc = \&"bcc:\&" term
 .It
-.Li alladdresses = \&"alladdresses:\&" term
+.Li message_id = \&"message-id:\&" term | \&"msg-id:\&" term
+.It
+.Li in_reply_to = \&"in-reply-to:\&" term
+.It
+.Li references = \&"references:\&" term
+.It
+.Li header = \&"header:\&" field_name \&",\&" field_value
+.It
+.Li field_name = term
+.It
+.Li field_value = term
+.It
+.Li all_addresses = \&"all-addresses:\&" term
 .It
 .Li subject = \&"subject:\&" term
-.It
-.Li flags = \&"flags:\&" flag | \&"tags:\&" flag | \&"is:\&" flag
 .El
 .Sh FLAGS
 .Nm

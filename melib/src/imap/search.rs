@@ -197,6 +197,14 @@ impl ToImapSearch for Query {
                     s.extend(escape_double_quote(t).chars());
                     s.push('"');
                 }
+                Q(Header(t, v)) => {
+                    space_pad!(s);
+                    s.push_str(r#"HEADER ""#);
+                    s.push_str(t.as_str());
+                    s.push_str(r#"" ""#);
+                    s.extend(escape_double_quote(v).chars());
+                    s.push('"');
+                }
                 Q(AllAddresses(t)) => {
                     let is_empty = space_pad!(s);
                     if !is_empty {
@@ -261,7 +269,7 @@ mod tests {
     #[test]
     fn test_imap_query_search() {
         let (_, q) = query().parse_complete("subject: test and i").unwrap();
-        assert_eq!(&q.to_imap_search(), r#"SUBJECT "test" TEXT "i""#);
+        assert_eq!(&q.to_imap_search(), r#"SUBJECT "test" BODY "i""#);
 
         let (_, q) = query().parse_complete("is:unseen").unwrap();
         assert_eq!(&q.to_imap_search(), r#"UNSEEN"#);

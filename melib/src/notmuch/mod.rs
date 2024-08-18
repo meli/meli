@@ -978,7 +978,7 @@ impl MailBackend for NotmuchDb {
             } else {
                 String::new()
             };
-            melib_query.query_to_string(&mut query_s);
+            melib_query.query_to_string(&mut query_s)?;
             let query: Query = Query::new(&database, &query_s)?;
             let iter = query.search()?;
             for message in iter {
