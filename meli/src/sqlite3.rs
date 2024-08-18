@@ -171,10 +171,7 @@ impl AccountCache {
         let body = match op.await.map(|bytes| envelope.body_bytes(&bytes)) {
             Ok(body) => body.text(Text::Plain),
             Err(err) => {
-                log::error!(
-                    "Failed to open envelope {}: {err}",
-                    envelope.message_id_display(),
-                );
+                log::error!("Failed to open envelope {}: {err}", envelope.message_id());
                 return Err(err);
             }
         };
@@ -187,13 +184,10 @@ impl AccountCache {
                 "INSERT OR IGNORE INTO accounts (name) VALUES (?1)",
                 params![acc_name,],
             ) {
-                log::error!(
-                    "Failed to insert envelope {}: {err}",
-                    envelope.message_id_display(),
-                );
+                log::error!("Failed to insert envelope {}: {err}", envelope.message_id());
                 return Err(Error::new(format!(
                     "Failed to insert envelope {}: {err}",
-                    envelope.message_id_display(),
+                    envelope.message_id(),
                 )));
             }
             let account_id: i32 = {
@@ -223,7 +217,7 @@ impl AccountCache {
                         envelope.field_cc_to_string(),
                         envelope.field_bcc_to_string(),
                         envelope.subject().into_owned().trim_end_matches('\u{0}'),
-                        envelope.message_id_display().to_string(),
+                        envelope.message_id().to_string(),
                         envelope
                             .in_reply_to_display()
                             .map(|f| f.to_string())
@@ -238,10 +232,7 @@ impl AccountCache {
                 .map_err(|e| Error::new(e.to_string()))
             {
                 drop(tx);
-                log::error!(
-                    "Failed to insert envelope {}: {err}",
-                    envelope.message_id_display(),
-                );
+                log::error!("Failed to insert envelope {}: {err}", envelope.message_id());
             } else {
                 tx.commit()?;
             }
@@ -375,7 +366,7 @@ impl AccountCache {
                                     e.field_cc_to_string(),
                                     e.field_bcc_to_string(),
                                     e.subject().into_owned().trim_end_matches('\u{0}'),
-                                    e.message_id_display().to_string(),
+                                    e.message_id().to_string(),
                                     e.in_reply_to_display()
                                         .map(|f| f.to_string())
                                         .unwrap_or_default(),
@@ -387,7 +378,7 @@ impl AccountCache {
                                 ],
                             )
                             .chain_err_summary(|| {
-                                format!("Failed to insert envelope {}", e.message_id_display())
+                                format!("Failed to insert envelope {}", e.message_id())
                             })?;
                         }
                     }

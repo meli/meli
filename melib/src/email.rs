@@ -75,10 +75,7 @@
 //!
 //! let envelope = Envelope::from_bytes(raw_mail.as_bytes(), None).expect("Could not parse mail");
 //! assert_eq!(envelope.subject().as_ref(), "gratuitously encoded subject");
-//! assert_eq!(
-//!     envelope.message_id_display().as_ref(),
-//!     "<h2g7f.z0gy2pgaen5m@example.com>"
-//! );
+//! assert_eq!(envelope.message_id(), "h2g7f.z0gy2pgaen5m@example.com");
 //!
 //! let body = envelope.body_bytes(raw_mail.as_bytes());
 //! assert_eq!(body.content_type().to_string().as_str(), "multipart/mixed");
@@ -298,8 +295,8 @@ impl std::fmt::Debug for Envelope {
             .field("Date", &self.date)
             .field("From", &self.from)
             .field("To", &self.to)
-            .field("Message-ID", &self.message_id_display())
-            .field("In-Reply-To", &self.in_reply_to_display())
+            .field("Message-ID", &self.message_id)
+            .field("In-Reply-To", &self.in_reply_to)
             .field("References", &self.references)
             .field("Flags", &self.flags)
             .field("Hash", &self.hash)
@@ -366,7 +363,7 @@ impl Envelope {
         let (headers, body) = match parser::mail(bytes) {
             Ok(v) => v,
             Err(e) => {
-                debug!("error in parsing mail\n{:?}\n", e);
+                log::debug!("error in parsing mail\n{:?}\n", e);
                 let error_msg = String::from("Mail cannot be shown because of errors.");
                 return Err(Error::new(error_msg));
             }
@@ -438,7 +435,7 @@ impl Envelope {
                             self.has_attachments =
                                 Attachment::check_if_has_attachments_quick(body, boundary);
                         } else {
-                            debug!(
+                            log::debug!(
                                 "{:?} has no boundary field set in multipart/mixed content-type \
                                  field.",
                                 &self
@@ -647,14 +644,6 @@ impl Envelope {
 
     pub fn message_id(&self) -> &MessageID {
         &self.message_id
-    }
-
-    pub fn message_id_display(&self) -> Cow<str> {
-        String::from_utf8_lossy(self.message_id.val())
-    }
-
-    pub fn message_id_raw(&self) -> Cow<str> {
-        String::from_utf8_lossy(self.message_id.raw())
     }
 
     pub fn set_date(&mut self, new_val: &[u8]) -> &mut Self {

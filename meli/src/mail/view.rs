@@ -582,15 +582,14 @@ impl Component for MailView {
                                         }
                                         Err(err) => {
                                             let err_string = format!(
-                                                "Failed to open envelope {}: {}",
+                                                "Failed to open envelope {:?}: {}",
                                                 context.accounts[&account_hash]
                                                     .collection
                                                     .envelopes
                                                     .read()
                                                     .unwrap()
                                                     .get(&env_hash)
-                                                    .map(|env| env.message_id_display())
-                                                    .unwrap_or_else(|| "Not found".into()),
+                                                    .map(|env| env.message_id()),
                                                 err
                                             );
                                             log::error!("{err_string}");

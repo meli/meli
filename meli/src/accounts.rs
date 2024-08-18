@@ -630,7 +630,7 @@ impl Account {
                             JobRequest::Generic {
                                 name: format!(
                                     "Update envelope {} in sqlite3 cache",
-                                    envelope.message_id_display()
+                                    envelope.message_id().display_brackets()
                                 )
                                 .into(),
                                 handle,

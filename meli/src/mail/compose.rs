@@ -335,15 +335,15 @@ impl Composer {
                         if !acc.is_empty() {
                             acc.push(' ');
                         }
-                        acc.push_str(&x.to_string());
+                        acc.push_str(&x.display_brackets().to_string());
                         acc
                     }),
-                envelope.message_id_display()
+                envelope.message_id().display_brackets()
             ),
         );
         ret.draft.set_header(
             HeaderName::IN_REPLY_TO,
-            envelope.message_id_display().into(),
+            envelope.message_id().display_brackets().to_string(),
         );
 
         if let Some(reply_to) = envelope.other_headers().get(HeaderName::TO) {
@@ -540,7 +540,7 @@ To: {}
             let mut attachment = AttachmentBuilder::new(b"");
             let mut disposition: ContentDisposition = ContentDispositionKind::Attachment.into();
             {
-                disposition.filename = Some(format!("{}.eml", env.message_id_raw()));
+                disposition.filename = Some(format!("{}.eml", env.message_id()));
             }
             attachment
                 .set_raw(bytes.to_vec())

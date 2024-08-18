@@ -837,7 +837,7 @@ impl Component for EnvelopeView {
                     (HeaderName::SUBJECT, envelope.subject()),
                     (
                         HeaderName::MESSAGE_ID,
-                        format!("<{}>", envelope.message_id_raw())
+                        envelope.message_id().display_brackets().to_string()
                     )
                 );
                 if self.view_settings.expand_headers {
@@ -1496,7 +1496,7 @@ impl Component for EnvelopeView {
                 let mut path = std::path::Path::new(path).to_path_buf().expand();
 
                 if path.is_dir() {
-                    path.push(format!("{}.eml", self.mail.message_id_raw()));
+                    path.push(format!("{}.eml", self.mail.message_id()));
                 }
                 if path.is_relative() {
                     path = context.current_dir().join(&path);
@@ -1567,7 +1567,7 @@ impl Component for EnvelopeView {
                 } else if a_i == 0 {
                     // Save entire message as eml
                     if path.is_dir() {
-                        path.push(format!("{}.eml", self.mail.message_id_raw()));
+                        path.push(format!("{}.eml", self.mail.message_id()));
                     }
                     if path.is_relative() {
                         path = context.current_dir().join(&path);

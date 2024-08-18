@@ -555,6 +555,28 @@ impl StrBuilder {
 #[derive(Clone, Default, Deserialize, Serialize)]
 pub struct MessageID(pub Vec<u8>, pub StrBuilder);
 
+impl MessageID {
+    pub fn display_brackets(&self) -> impl std::fmt::Display + '_ {
+        MessageIDBracket(self)
+    }
+
+    /// Formats a slice of [`MessageID`]es with their
+    /// [`MessageID::display_brackets`] method, separated by comma or
+    /// `separator` if passed.
+    pub fn display_slice(slice: &[Self], separator: Option<&str>) -> String {
+        let separator = separator.unwrap_or(", ");
+        match slice.first() {
+            None => String::new(),
+            Some(f) if slice.len() == 1 => f.display_brackets().to_string(),
+            Some(_) => slice
+                .iter()
+                .map(|a| a.display_brackets().to_string())
+                .collect::<Vec<String>>()
+                .join(separator),
+        }
+    }
+}
+
 impl StrBuild for MessageID {
     fn new(string: &[u8], slice: &[u8]) -> Self {
         let offset = string.find(slice).unwrap_or(0);
@@ -578,15 +600,24 @@ impl StrBuild for MessageID {
     }
 }
 
+struct MessageIDBracket<'a>(&'a MessageID);
+
+impl<'a> std::fmt::Display for MessageIDBracket<'a> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(fmt, "<")?;
+        write!(fmt, "{}", self.0)?;
+        write!(fmt, ">")
+    }
+}
+
 impl std::fmt::Display for MessageID {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if self.val().is_ascii() {
-            write!(f, "{}", unsafe {
-                std::str::from_utf8_unchecked(self.val())
-            })
-        } else {
-            write!(f, "{}", String::from_utf8_lossy(self.val()))
-        }
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let val = String::from_utf8_lossy(self.val());
+        write!(
+            fmt,
+            "{}",
+            val.trim().trim_start_matches('<').trim_end_matches('>')
+        )
     }
 }
 
@@ -595,6 +626,8 @@ impl PartialEq for MessageID {
         self.raw() == other.raw()
     }
 }
+
+impl Eq for MessageID {}
 
 impl PartialEq<str> for MessageID {
     fn eq(&self, other: &str) -> bool {
@@ -615,7 +648,13 @@ impl PartialEq<&str> for MessageID {
 
 impl std::fmt::Debug for MessageID {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", String::from_utf8(self.raw().to_vec()).unwrap())
+        write!(f, "{}", String::from_utf8_lossy(self.raw()))
+    }
+}
+
+impl Hash for MessageID {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.raw().hash(state)
     }
 }
 

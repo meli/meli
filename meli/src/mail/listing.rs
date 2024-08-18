@@ -800,7 +800,7 @@ pub trait MailListingTrait: ListingTrait {
                                     .collect();
                                 if path.is_dir() {
                                     if envs.len() == 1 {
-                                        path.push(format!("{}.mbox", envs[0].message_id_raw()));
+                                        path.push(format!("{}.mbox", envs[0].message_id()));
                                     } else {
                                         let now = datetime::timestamp_to_string(
                                             datetime::now(),
@@ -810,7 +810,7 @@ pub trait MailListingTrait: ListingTrait {
                                         path.push(format!(
                                             "{}-{}-{}_envelopes.mbox",
                                             now,
-                                            envs[0].message_id_raw(),
+                                            envs[0].message_id(),
                                             envs.len(),
                                         ));
                                     }

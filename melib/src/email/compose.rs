@@ -199,17 +199,17 @@ impl Draft {
                     .iter()
                     .fold(String::new(), |mut acc, x| {
                         if !acc.is_empty() {
-                            acc.push(' ');
+                            acc.push_str("\n ");
                         }
-                        acc.push_str(&x.to_string());
+                        acc.push_str(&x.display_brackets().to_string());
                         acc
                     }),
-                envelope.message_id_display()
+                envelope.message_id().display_brackets()
             ),
         );
         ret.headers_mut().insert(
             HeaderName::IN_REPLY_TO,
-            envelope.message_id_display().into(),
+            envelope.message_id().display_brackets().to_string(),
         );
         // "Mail-Followup-To/(To+Cc+(Mail-Reply-To/Reply-To/From)) for follow-up,
         // Mail-Reply-To/Reply-To/From for reply-to-author."

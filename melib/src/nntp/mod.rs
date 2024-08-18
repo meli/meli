@@ -34,7 +34,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::get_path_hash;
 mod store;
 pub use store::*;
 #[macro_use]
@@ -49,7 +48,9 @@ pub use connection::*;
 
 use crate::{
     backends::prelude::*,
+    email::address::{MessageID, StrBuild},
     error::{Error, ErrorKind, Result, ResultIntoError},
+    get_path_hash,
     utils::futures::timeout,
 };
 pub type UID = usize;
@@ -118,7 +119,7 @@ pub struct UIDStore {
     account_hash: AccountHash,
     account_name: Arc<str>,
     capabilities: Arc<Mutex<Capabilities>>,
-    message_id_index: Arc<FutureMutex<HashMap<String, EnvelopeHash>>>,
+    message_id_index: Arc<FutureMutex<HashMap<MessageID, EnvelopeHash>>>,
     hash_index: Arc<Mutex<HashMap<EnvelopeHash, (UID, MailboxHash)>>>,
     uid_index: Arc<FutureMutex<HashMap<(MailboxHash, UID), EnvelopeHash>>>,
 
@@ -291,7 +292,12 @@ impl MailBackend for NntpType {
                         res.split_rn()
                             .skip(1)
                             .map(|s| s.trim())
-                            .filter(|msg_id| !message_id_lck.contains_key(*msg_id))
+                            .filter(|msg_id| {
+                                !message_id_lck.contains_key(&MessageID::new(
+                                    msg_id.as_bytes(),
+                                    msg_id.as_bytes(),
+                                ))
+                            })
                             .map(str::to_string)
                             .collect::<Vec<String>>()
                     };
@@ -319,7 +325,7 @@ impl MailBackend for NntpType {
                                 unseen.insert_new(env.hash());
                             }
                             env_hash_set.insert(env.hash());
-                            message_id_lck.insert(env.message_id_display().to_string(), env.hash());
+                            message_id_lck.insert(env.message_id().clone(), env.hash());
                             hash_index_lck.insert(env.hash(), (num, mailbox_hash));
                             uid_index_lck.insert((mailbox_hash, num), env.hash());
                             latest_article = std::cmp::max(latest_article, env.timestamp);
@@ -957,7 +963,7 @@ impl FetchState {
                 } else {
                     unseen.insert_new(env.hash());
                 }
-                message_id_lck.insert(env.message_id_display().to_string(), env.hash());
+                message_id_lck.insert(env.message_id().clone(), env.hash());
                 hash_index_lck.insert(env.hash(), (num, mailbox_hash));
                 uid_index_lck.insert((mailbox_hash, num), env.hash());
                 if let Some(ref mut v) = latest_article {

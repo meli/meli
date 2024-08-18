@@ -81,7 +81,7 @@ ouiijDaaCCGQRgrpH3q4QYYXWDihxBE+7KCDDjnUIEVAADs=
 
 let envelope = Envelope::from_bytes(raw_mail.as_bytes(), None).expect("Could not parse mail");
 assert_eq!(envelope.subject().as_ref(), "gratuitously encoded subject");
-assert_eq!(envelope.message_id_display().as_ref(), "<h2g7f.z0gy2pgaen5m@example.com>");
+assert_eq!(&envelope.message_id().display_bracket().to_string(), "<h2g7f.z0gy2pgaen5m@example.com>");
 
 let body = envelope.body_bytes(raw_mail.as_bytes());
 assert_eq!(body.content_type().to_string().as_str(), "multipart/mixed");
