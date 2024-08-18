@@ -43,7 +43,7 @@ pub mod sync;
 pub mod untagged;
 
 use std::{
-    collections::{hash_map::DefaultHasher, BTreeSet, HashMap, HashSet},
+    collections::{hash_map::DefaultHasher, BTreeMap, BTreeSet, HashMap, HashSet},
     convert::TryFrom,
     hash::Hasher,
     num::NonZeroU32,
@@ -157,7 +157,7 @@ pub struct UIDStore {
     pub capabilities: Arc<Mutex<Capabilities>>,
     pub hash_index: Arc<Mutex<HashMap<EnvelopeHash, (UID, MailboxHash)>>>,
     pub uid_index: Arc<Mutex<HashMap<(MailboxHash, UID), EnvelopeHash>>>,
-    pub msn_index: Arc<Mutex<HashMap<MailboxHash, Vec<UID>>>>,
+    pub msn_index: Arc<Mutex<HashMap<MailboxHash, BTreeMap<MessageSequenceNumber, UID>>>>,
 
     pub byte_cache: Arc<Mutex<HashMap<UID, EnvelopeCache>>>,
     pub collection: Collection,

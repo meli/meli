@@ -116,7 +116,8 @@ impl ImapConnection {
                         msn_index.extend(
                             super::protocol_parser::search_results(&response)?
                                 .1
-                                .into_iter(),
+                                .into_iter()
+                                .enumerate(),
                         );
                     }
                     let mut events = vec![];
@@ -173,14 +174,17 @@ impl ImapConnection {
 
                     return Ok(true);
                 }
-                let deleted_uid = self
+                let Some(deleted_uid) = self
                     .uid_store
                     .msn_index
                     .lock()
                     .unwrap()
                     .entry(mailbox_hash)
                     .or_default()
-                    .remove(TryInto::<usize>::try_into(n).unwrap().saturating_sub(1));
+                    .remove(&TryInto::<usize>::try_into(n).unwrap().saturating_sub(1))
+                else {
+                    return Ok(true);
+                };
                 imap_log!(trace, self, "expunge {}, UID = {}", n, deleted_uid);
                 let deleted_hash: crate::email::EnvelopeHash = match self
                     .uid_store
@@ -253,6 +257,7 @@ impl ImapConnection {
                     ref mut envelope,
                     ref mut flags,
                     ref references,
+                    ref message_sequence_number,
                     ..
                 } in &mut v
                 {
@@ -291,7 +296,7 @@ impl ImapConnection {
                             .unwrap()
                             .entry(mailbox_hash)
                             .or_default()
-                            .push(uid);
+                            .insert(*message_sequence_number, uid);
                     }
                     self.uid_store
                         .hash_index
@@ -433,6 +438,7 @@ impl ImapConnection {
                             if let FetchResponse {
                                 envelope: Some(envelope),
                                 uid: Some(uid),
+                                message_sequence_number,
                                 ..
                             } = response
                             {
@@ -449,7 +455,7 @@ impl ImapConnection {
                                         .unwrap()
                                         .entry(mailbox_hash)
                                         .or_default()
-                                        .push(uid);
+                                        .insert(message_sequence_number, uid);
                                 }
                                 self.uid_store
                                     .hash_index

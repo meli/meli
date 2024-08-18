@@ -382,7 +382,13 @@ pub async fn examine_updates(
                 })?;
         }
 
-        for FetchResponse { uid, envelope, .. } in v {
+        for FetchResponse {
+            uid,
+            envelope,
+            message_sequence_number,
+            ..
+        } in v
+        {
             if uid.is_none() || envelope.is_none() {
                 continue;
             }
@@ -408,7 +414,7 @@ pub async fn examine_updates(
                 .unwrap()
                 .entry(mailbox_hash)
                 .or_default()
-                .push(uid);
+                .insert(message_sequence_number, uid);
             uid_store
                 .hash_index
                 .lock()
