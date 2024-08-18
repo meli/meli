@@ -815,7 +815,13 @@ pub trait MailListingTrait: ListingTrait {
                                         ));
                                     }
                                 }
-                                let mut file = BufWriter::new(File::create(&path)?);
+                                let mut file = BufWriter::new(
+                                    File::options()
+                                        .read(true)
+                                        .write(true)
+                                        .create_new(true)
+                                        .open(&path)?,
+                                );
                                 let mut iter = envs.iter().zip(bytes);
                                 let tags_lck = collection.tag_index.read().unwrap();
                                 if let Some((env, ref bytes)) = iter.next() {

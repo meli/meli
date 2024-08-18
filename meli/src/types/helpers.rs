@@ -103,7 +103,11 @@ impl File {
         }
         fn inner(path: &Path, bytes: &[u8], delete_on_drop: bool) -> Result<File> {
             let path = path.expand();
-            let mut f = std::fs::File::create(&path)?;
+            let mut f = std::fs::File::options()
+                .read(true)
+                .write(true)
+                .create_new(true)
+                .open(&path)?;
             let metadata = f.metadata()?;
             let mut permissions = metadata.permissions();
 
