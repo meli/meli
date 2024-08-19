@@ -1221,8 +1221,8 @@ pub fn envelope(input: &[u8]) -> IResult<&[u8], Envelope> {
             }
             if let Some(in_reply_to) = in_reply_to {
                 env.set_in_reply_to(&in_reply_to);
-                if let Some(in_reply_to) = env.in_reply_to().cloned() {
-                    env.push_references(in_reply_to);
+                if let Some(in_reply_to) = env.in_reply_to().map(|r| r.as_ref().clone()) {
+                    env.push_references(&in_reply_to);
                 }
             }
 

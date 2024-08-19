@@ -841,17 +841,15 @@ impl Component for EnvelopeView {
                     )
                 );
                 if self.view_settings.expand_headers {
-                    if let Some(val) = envelope.in_reply_to_display() {
+                    if let Some(val) = envelope.in_reply_to() {
                         print_header!(
-                            (HeaderName::IN_REPLY_TO, val),
+                            (
+                                HeaderName::IN_REPLY_TO,
+                                melib::MessageID::display_slice(val.refs(), Some(" "))
+                            ),
                             (
                                 HeaderName::REFERENCES,
-                                envelope
-                                    .references()
-                                    .iter()
-                                    .map(std::string::ToString::to_string)
-                                    .collect::<Vec<String>>()
-                                    .join(", ")
+                                melib::MessageID::display_slice(envelope.references(), Some(" "))
                             )
                         );
                     }

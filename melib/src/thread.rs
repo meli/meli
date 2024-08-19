@@ -606,9 +606,9 @@ pub struct Threads {
     tree_index: Arc<RwLock<Vec<ThreadNodeHash>>>,
     pub groups: HashMap<ThreadHash, ThreadGroup>,
 
-    message_ids: HashMap<Vec<u8>, ThreadNodeHash>,
-    pub message_ids_set: HashSet<Vec<u8>>,
-    pub missing_message_ids: HashSet<Vec<u8>>,
+    message_ids: HashMap<MessageID, ThreadNodeHash>,
+    pub message_ids_set: HashSet<MessageID>,
+    pub missing_message_ids: HashSet<MessageID>,
     pub hash_set: HashSet<EnvelopeHash>,
     pub thread_to_envelope: HashMap<ThreadHash, Vec<EnvelopeHash>>,
     pub envelope_to_thread: HashMap<EnvelopeHash, ThreadHash>,
@@ -669,13 +669,13 @@ impl Threads {
         let thread_nodes: HashMap<ThreadNodeHash, ThreadNode> =
             HashMap::with_capacity_and_hasher((length as f64 * 1.2) as usize, Default::default());
         /* A hash table of Message IDs */
-        let message_ids: HashMap<Vec<u8>, ThreadNodeHash> =
+        let message_ids: HashMap<MessageID, ThreadNodeHash> =
             HashMap::with_capacity_and_hasher(length, Default::default());
         /* A hash set of Message IDs we haven't encountered yet as an Envelope */
-        let missing_message_ids: HashSet<Vec<u8>> =
+        let missing_message_ids: HashSet<MessageID> =
             HashSet::with_capacity_and_hasher(length, Default::default());
         /* A hash set of Message IDs we have encountered as a MessageID */
-        let message_ids_set: HashSet<Vec<u8>> =
+        let message_ids_set: HashSet<MessageID> =
             HashSet::with_capacity_and_hasher(length, Default::default());
         let hash_set: HashSet<EnvelopeHash> =
             HashSet::with_capacity_and_hasher(length, Default::default());
@@ -791,7 +791,7 @@ impl Threads {
             }
         }
         if let Some((message_id, _)) = self.message_ids.iter().find(|(_, h)| **h == t_id) {
-            self.missing_message_ids.insert(message_id.to_vec());
+            self.missing_message_ids.insert(message_id.clone());
         }
     }
 
@@ -901,7 +901,7 @@ impl Threads {
             if !envelopes_lck.contains_key(&env_hash) {
                 return false;
             }
-            let message_id = envelopes_lck[&env_hash].message_id().raw();
+            let message_id = envelopes_lck[&env_hash].message_id();
             if self.message_ids.contains_key(message_id)
                 && !self.missing_message_ids.contains(message_id)
             {
@@ -924,12 +924,15 @@ impl Threads {
             }
         }
         let envelopes_lck = envelopes.read().unwrap();
-        let message_id = envelopes_lck[&env_hash].message_id().raw();
-        let reply_to_id: Option<ThreadNodeHash> = envelopes_lck[&env_hash]
-            .in_reply_to()
-            .map(StrBuild::raw)
-            .filter(|irt| irt != &message_id)
-            .and_then(|r| self.message_ids.get(r).cloned());
+        let message_id = envelopes_lck[&env_hash].message_id();
+        let reply_to_id: Option<ThreadNodeHash> =
+            envelopes_lck[&env_hash].in_reply_to().and_then(|r| {
+                r.refs()
+                    .iter()
+                    .rev()
+                    .filter(|irt| irt != &message_id)
+                    .find_map(|r| self.message_ids.get(r).cloned())
+            });
 
         if other_mailbox
             && reply_to_id.is_none()
@@ -937,7 +940,7 @@ impl Threads {
             && !envelopes_lck[&env_hash]
                 .references()
                 .iter()
-                .any(|r| self.message_ids.contains_key(r.raw()))
+                .any(|r| self.message_ids.contains_key(r))
         {
             return false;
         }
@@ -953,7 +956,7 @@ impl Threads {
                     None
                 },
             )
-            .unwrap_or_else(|| ThreadNodeHash::from(message_id));
+            .unwrap_or_else(|| ThreadNodeHash::from(message_id.raw()));
         {
             let node = self.thread_nodes.entry(new_id).or_default();
             node.message = Some(env_hash);
@@ -999,8 +1002,8 @@ impl Threads {
             };
         }
 
-        self.message_ids.insert(message_id.to_vec(), new_id);
-        self.message_ids_set.insert(message_id.to_vec());
+        self.message_ids.insert(message_id.clone(), new_id);
+        self.message_ids_set.insert(message_id.clone());
         self.missing_message_ids.remove(message_id);
         self.hash_set.insert(env_hash);
         self.thread_to_envelope
@@ -1012,10 +1015,20 @@ impl Threads {
             make!((reply_to_id) parent of (new_id), self);
         } else if let Some(r) = envelopes_lck[&env_hash]
             .in_reply_to()
-            .map(StrBuild::raw)
-            .filter(|irt| irt != &message_id)
+            .clone()
+            .into_iter()
+            .find_map(|r| {
+                r.refs()
+                    .iter()
+                    .rev()
+                    .filter(|irt| *irt != message_id)
+                    .find(|r| {
+                        self.message_ids.contains_key(r) && !self.missing_message_ids.contains(r)
+                    })
+                    .cloned()
+            })
         {
-            let reply_to_id = ThreadNodeHash::from(r);
+            let reply_to_id = ThreadNodeHash::from(&r.raw());
             self.thread_nodes.insert(
                 reply_to_id,
                 ThreadNode {
@@ -1036,25 +1049,30 @@ impl Threads {
                 }),
             );
             make!((reply_to_id) parent of (new_id), self);
-            self.message_ids.insert(r.to_vec(), reply_to_id);
-            self.message_ids_set.insert(r.to_vec());
-            self.missing_message_ids.insert(r.to_vec());
+            self.message_ids.insert(r.clone(), reply_to_id);
+            self.message_ids_set.insert(r.clone());
+            self.missing_message_ids.insert(r);
         }
 
         if envelopes_lck[&env_hash].references.is_some() {
             let mut current_descendant_id = new_id;
-            let mut references = envelopes_lck[&env_hash].references();
-            if references.first().filter(|irt| irt.raw() != message_id)
-                == envelopes_lck[&env_hash].in_reply_to().as_ref()
+            let mut references = envelopes_lck[&env_hash].references().to_vec();
+            if envelopes_lck[&env_hash]
+                .in_reply_to()
+                .map(|r| {
+                    r.refs().last().as_ref()
+                        == references.first().filter(|irt| *irt != message_id).as_ref()
+                })
+                .unwrap_or(false)
             {
                 references.reverse();
             }
 
             for reference in references.into_iter().rev() {
-                if reference.raw() == message_id {
+                if &reference == message_id {
                     continue;
                 }
-                if let Some(&id) = self.message_ids.get(reference.raw()) {
+                if let Some(&id) = self.message_ids.get(&reference) {
                     if self.thread_nodes[&id].date > self.thread_nodes[&current_descendant_id].date
                         || self.thread_nodes[&current_descendant_id].parent.is_some()
                     {
@@ -1084,9 +1102,9 @@ impl Threads {
                         }),
                     );
                     make!((id) parent of (current_descendant_id), self);
-                    self.missing_message_ids.insert(reference.raw().to_vec());
-                    self.message_ids.insert(reference.raw().to_vec(), id);
-                    self.message_ids_set.insert(reference.raw().to_vec());
+                    self.missing_message_ids.insert(reference.clone());
+                    self.message_ids.insert(reference.clone(), id);
+                    self.message_ids_set.insert(reference.clone());
                     current_descendant_id = id;
                 }
             }
@@ -1108,7 +1126,7 @@ impl Threads {
                 .message_ids
                 .iter()
                 .map(|(a, &b)| (b, a.to_vec()))
-                .collect::<HashMap<ThreadNodeHash, Vec<u8>>>(),
+                .collect::<HashMap<ThreadNodeHash, MessageID>>(),
             &envelopes,
         );
         */
@@ -1507,7 +1525,7 @@ fn print_threadnodes(
 fn save_graph(
     node_arr: &[ThreadNodeHash],
     nodes: &HashMap<ThreadNodeHash, ThreadNode>,
-    ids: &HashMap<ThreadNodeHash, Vec<u8>>,
+    ids: &HashMap<ThreadNodeHash, MessageID>,
     envelopes: &Envelopes,
 ) {
     let envelopes = envelopes.read().unwrap();

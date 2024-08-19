@@ -219,8 +219,8 @@ impl AccountCache {
                         envelope.subject().into_owned().trim_end_matches('\u{0}'),
                         envelope.message_id().to_string(),
                         envelope
-                            .in_reply_to_display()
-                            .map(|f| f.to_string())
+                            .in_reply_to()
+                            .map(|f| melib::MessageID::display_slice(f.refs(), Some(" ")))
                             .unwrap_or_default(),
                         envelope.field_references_to_string(),
                         i64::from(envelope.flags().bits()),
@@ -367,8 +367,11 @@ impl AccountCache {
                                     e.field_bcc_to_string(),
                                     e.subject().into_owned().trim_end_matches('\u{0}'),
                                     e.message_id().to_string(),
-                                    e.in_reply_to_display()
-                                        .map(|f| f.to_string())
+                                    e.in_reply_to()
+                                        .map(|f| melib::MessageID::display_slice(
+                                            f.refs(),
+                                            Some(" ")
+                                        ))
                                         .unwrap_or_default(),
                                     e.field_references_to_string(),
                                     i64::from(e.flags().bits()),

@@ -658,15 +658,63 @@ impl Hash for MessageID {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct References {
-    pub raw: Vec<u8>,
-    pub refs: Vec<MessageID>,
+    refs: Vec<MessageID>,
 }
 
 impl std::fmt::Debug for References {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:#?}", self.refs)
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let mut dbg_t = fmt.debug_tuple(crate::identify! {References});
+        for r in &self.refs {
+            dbg_t.field(r);
+        }
+        dbg_t.finish()
+    }
+}
+
+impl References {
+    pub fn new(refs: Vec<MessageID>) -> Option<Self> {
+        if refs.is_empty() {
+            return None;
+        }
+        Some(Self { refs })
+    }
+
+    pub fn push(&mut self, new: MessageID) {
+        self.refs.push(new);
+    }
+
+    /// A parent reference should only be removed in order to break cycles (when
+    /// an envelope refers to its own `Message-ID` as a parent).
+    pub fn remove(&mut self, msgid: &MessageID) {
+        self.refs.retain(|r| r != msgid);
+    }
+
+    pub fn refs(&self) -> &[MessageID] {
+        &self.refs
+    }
+}
+
+impl Extend<MessageID> for References {
+    /// Insert new [`MessageID`] values, de-duplicated.
+    fn extend<T: IntoIterator<Item = MessageID>>(&mut self, iter: T) {
+        for elem in iter {
+            if !self.refs.contains(&elem) {
+                self.refs.push(elem);
+            }
+        }
+    }
+}
+
+impl<'a> Extend<&'a MessageID> for References {
+    /// Insert new [`MessageID`] values, de-duplicated.
+    fn extend<T: IntoIterator<Item = &'a MessageID>>(&mut self, iter: T) {
+        for elem in iter {
+            if !self.refs.contains(elem) {
+                self.refs.push(elem.clone());
+            }
+        }
     }
 }
 

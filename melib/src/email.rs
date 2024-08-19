@@ -266,22 +266,19 @@ crate::declare_u64_hash!(EnvelopeHash);
 /// bytes into an `Attachment` object.
 #[derive(Clone, Deserialize, Serialize)]
 pub struct Envelope {
-    // ----- IMAP4rev1 -----
     pub date: String,
     pub subject: Option<String>,
     pub from: SmallVec<[Address; 1]>,
-    // pub sender
-    // pub reply_to
     pub to: SmallVec<[Address; 1]>,
     pub cc: SmallVec<[Address; 1]>,
     pub bcc: Vec<Address>,
-    pub in_reply_to: Option<MessageID>,
+    pub in_reply_to: Option<References>,
+    pub references: Option<References>,
     pub message_id: MessageID,
+    pub other_headers: HeaderMap,
     // ----- Other -----
     pub hash: EnvelopeHash,
     pub timestamp: UnixTimestamp,
-    pub references: Option<References>,
-    pub other_headers: HeaderMap,
     pub thread: ThreadNodeHash,
     pub flags: Flag,
     pub has_attachments: bool,
@@ -461,8 +458,15 @@ impl Envelope {
          *
          * if self.message_id.is_none()  ...
          */
-        if let Some(x) = self.in_reply_to.clone() {
-            self.push_references(x);
+        if let Some(ref x) = self.in_reply_to {
+            match self.references {
+                Some(ref mut s) => {
+                    s.extend(x.refs());
+                }
+                None => {
+                    self.references = Some(x.clone());
+                }
+            }
         }
         if let Ok(d) = parser::dates::rfc5322_date(self.date.as_bytes()) {
             self.set_datetime(d);
@@ -471,17 +475,8 @@ impl Envelope {
             let hash = self.hash;
             self.set_message_id(format!("<{:x}>", hash.0).as_bytes());
         }
-        if self.references.is_some() {
-            if let Some(pos) = self
-                .references
-                .as_ref()
-                .map(|r| &r.refs)
-                .unwrap()
-                .iter()
-                .position(|r| r == &self.message_id)
-            {
-                self.references.as_mut().unwrap().refs.remove(pos);
-            }
+        if let Some(ref mut r) = self.references {
+            r.remove(&self.message_id);
         }
 
         Ok(())
@@ -624,22 +619,13 @@ impl Envelope {
         }
     }
 
-    pub fn in_reply_to(&self) -> Option<&MessageID> {
-        self.in_reply_to
-            .as_ref()
-            .or_else(|| self.references.as_ref().and_then(|r| r.refs.last()))
-    }
-
-    pub fn in_reply_to_display(&self) -> Option<Cow<str>> {
-        self.in_reply_to
-            .as_ref()
-            .map(|m| String::from_utf8_lossy(m.val()))
-    }
-
-    pub fn in_reply_to_raw(&self) -> Option<Cow<str>> {
-        self.in_reply_to
-            .as_ref()
-            .map(|m| String::from_utf8_lossy(m.raw()))
+    pub fn in_reply_to(&'_ self) -> Option<Cow<'_, References>> {
+        self.in_reply_to.as_ref().map(Cow::Borrowed).or_else(|| {
+            self.references
+                .as_ref()
+                .and_then(|r| r.refs().last())
+                .and_then(|msgid| Some(Cow::Owned(References::new(vec![msgid.clone()])?)))
+        })
     }
 
     pub fn message_id(&self) -> &MessageID {
@@ -673,21 +659,33 @@ impl Envelope {
     }
 
     pub fn set_in_reply_to(&mut self, new_val: &[u8]) -> &mut Self {
-        // [ref:FIXME]: msg_id_list
-        let new_val = new_val.trim();
         if !new_val.is_empty() {
-            let val = match parser::address::msg_id(new_val) {
-                Ok(v) => v.1,
-                Err(_) => {
-                    self.in_reply_to = Some(MessageID::new(new_val, new_val));
-                    return self;
-                }
-            };
-            self.in_reply_to = Some(val);
-        } else {
             self.in_reply_to = None;
+            {
+                let parse_result = parser::address::msg_id_list(new_val);
+                if let Ok((_, value)) = parse_result {
+                    for v in value {
+                        self.push_in_reply_to(v);
+                    }
+                }
+            }
+            self.other_headers_mut().insert(
+                HeaderName::IN_REPLY_TO,
+                String::from_utf8_lossy(new_val).to_string(),
+            );
         }
         self
+    }
+
+    pub fn push_in_reply_to(&mut self, new_ref: MessageID) {
+        match self.in_reply_to {
+            Some(ref mut s) => {
+                s.extend(std::iter::once(new_ref));
+            }
+            None => {
+                self.in_reply_to = References::new(vec![new_ref]);
+            }
+        }
     }
 
     pub fn set_subject(&mut self, new_val: Vec<u8>) -> &mut Self {
@@ -719,28 +717,13 @@ impl Envelope {
         self
     }
 
-    pub fn push_references(&mut self, new_ref: MessageID) {
+    pub fn push_references(&mut self, new_refs: &References) {
         match self.references {
             Some(ref mut s) => {
-                if s.refs.contains(&new_ref) {
-                    if s.refs[s.refs.len() - 1] != new_ref {
-                        if let Some(index) = s.refs.iter().position(|x| *x == new_ref) {
-                            s.refs.remove(index);
-                        } else {
-                            panic!();
-                        }
-                    } else {
-                        return;
-                    }
-                }
-                s.refs.push(new_ref);
+                s.extend(new_refs.refs());
             }
             None => {
-                let v = vec![new_ref];
-                self.references = Some(References {
-                    raw: "".into(),
-                    refs: v,
-                });
+                self.references = Some(new_refs.clone());
             }
         }
     }
@@ -752,33 +735,21 @@ impl Envelope {
             {
                 let parse_result = parser::address::msg_id_list(new_val);
                 if let Ok((_, value)) = parse_result {
-                    for v in value {
-                        self.push_references(v);
-                    }
+                    self.references = References::new(value);
                 }
             }
-            match self.references {
-                Some(ref mut s) => {
-                    s.raw = new_val.into();
-                }
-                None => {
-                    self.references = Some(References {
-                        raw: new_val.into(),
-                        refs: Vec::new(),
-                    });
-                }
-            }
+            self.other_headers_mut().insert(
+                HeaderName::REFERENCES,
+                String::from_utf8_lossy(new_val).to_string(),
+            );
         }
         self
     }
 
-    pub fn references(&self) -> SmallVec<[&MessageID; 8]> {
+    pub fn references(&self) -> &[MessageID] {
         match self.references {
-            Some(ref s) => s.refs.iter().fold(SmallVec::new(), |mut acc, x| {
-                acc.push(x);
-                acc
-            }),
-            None => SmallVec::new(),
+            Some(ref s) => s.refs(),
+            None => &[],
         }
     }
 

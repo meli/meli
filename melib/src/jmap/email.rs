@@ -286,14 +286,14 @@ impl From<EmailObject> for crate::Envelope {
         if let Some(v) = t.message_id.first() {
             env.set_message_id(v.as_bytes());
         }
-        if let Some(ref in_reply_to) = t.in_reply_to {
-            env.set_in_reply_to(in_reply_to[0].as_bytes());
-            if let Some(in_reply_to) = env.in_reply_to().cloned() {
-                env.push_references(in_reply_to);
-            }
-        }
         if let Some(v) = t.headers.get(HeaderName::REFERENCES.as_str()) {
             env.set_references(v.as_bytes());
+        }
+        if let Some(ref in_reply_to) = t.in_reply_to {
+            env.set_in_reply_to(in_reply_to[0].as_bytes());
+            if let Some(in_reply_to) = env.in_reply_to().map(|r| r.as_ref().clone()) {
+                env.push_references(&in_reply_to);
+            }
         }
         if let Some(v) = t.headers.get(HeaderName::DATE.as_str()) {
             env.set_date(v.as_bytes());
@@ -372,7 +372,7 @@ impl From<EmailObject> for crate::Envelope {
         }
 
         if let (Some(ref mut r), message_id) = (&mut env.references, &env.message_id) {
-            r.refs.retain(|r| r != message_id);
+            r.remove(message_id);
         }
 
         env
