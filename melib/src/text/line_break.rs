@@ -1700,7 +1700,13 @@ impl Iterator for LineBreakText {
             ReflowState::No { ref mut cur_index } | ReflowState::All { ref mut cur_index } => {
                 if let Some(line) = self.text[*cur_index..].split('\n').next() {
                     let ret = line.to_string();
-                    *cur_index += line.len() + 2;
+                    let mut chop_index = line.len() + 1;
+                    while *cur_index + chop_index < self.text.len()
+                        && !self.text.is_char_boundary(*cur_index + chop_index)
+                    {
+                        chop_index += 1;
+                    }
+                    *cur_index += chop_index;
                     return Some(ret);
                 }
                 None
