@@ -325,7 +325,7 @@ impl ThreadView {
                 .collection
                 .get_env(e.msg_hash);
             let thread_node = &threads.thread_nodes()[&e.index.1];
-            let from = Address::display_name_slice(envelope.from());
+            let from = Address::display_name_slice(envelope.from(), None);
             let date = timestamp_to_string(envelope.date(), Some("%Y-%m-%d %H:%M\0"), true);
             e.heading = if thread_node.show_subject() {
                 let subject = envelope.subject();

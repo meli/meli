@@ -357,7 +357,8 @@ impl Address {
 
     /// Formats a slice of `Address`es with their `Address::display` method,
     /// separated by comma or `separator` if passed.
-    pub fn display_slice(slice: &[Self]) -> String {
+    pub fn display_slice(slice: &[Self], separator: Option<&str>) -> String {
+        let separator = separator.unwrap_or(", ");
         match slice.first() {
             None => String::new(),
             Some(f) if slice.len() == 1 => f.display().to_string(),
@@ -365,13 +366,14 @@ impl Address {
                 .iter()
                 .map(|a| a.display().to_string())
                 .collect::<Vec<String>>()
-                .join(", "),
+                .join(separator),
         }
     }
 
     /// Formats a slice of `Address`es with their `Address::display_name`
     /// method, separated by comma or `separator` if passed.
-    pub fn display_name_slice(slice: &[Self]) -> String {
+    pub fn display_name_slice(slice: &[Self], separator: Option<&str>) -> String {
+        let separator = separator.unwrap_or(", ");
         match slice.first() {
             None => String::new(),
             Some(f) if slice.len() == 1 => f.display_name().to_string(),
@@ -379,7 +381,7 @@ impl Address {
                 .iter()
                 .map(|a| a.display_name().to_string())
                 .collect::<Vec<String>>()
-                .join(", "),
+                .join(separator),
         }
     }
 }

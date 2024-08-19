@@ -505,13 +505,7 @@ impl Envelope {
                 .unwrap_or_default()
                 .to_string()
         } else {
-            self.bcc.iter().fold(String::new(), |mut acc, x| {
-                if !acc.is_empty() {
-                    acc.push_str(", ");
-                }
-                acc.push_str(&x.to_string());
-                acc
-            })
+            Address::display_slice(self.bcc(), None)
         }
     }
 
@@ -519,13 +513,7 @@ impl Envelope {
         if self.cc.is_empty() {
             self.other_headers.get("Cc").unwrap_or_default().to_string()
         } else {
-            self.cc.iter().fold(String::new(), |mut acc, x| {
-                if !acc.is_empty() {
-                    acc.push_str(", ");
-                }
-                acc.push_str(&x.to_string());
-                acc
-            })
+            Address::display_slice(self.cc(), None)
         }
     }
 
@@ -536,13 +524,7 @@ impl Envelope {
                 .unwrap_or_default()
                 .to_string()
         } else {
-            self.from.iter().fold(String::new(), |mut acc, x| {
-                if !acc.is_empty() {
-                    acc.push_str(", ");
-                }
-                acc.push_str(&x.to_string());
-                acc
-            })
+            Address::display_slice(self.from(), None)
         }
     }
 
@@ -562,16 +544,7 @@ impl Envelope {
         if self.to.is_empty() {
             self.other_headers.get("To").unwrap_or_default().to_string()
         } else {
-            self.to
-                .iter()
-                .map(|a| format!("{}", a))
-                .fold(String::new(), |mut acc, x| {
-                    if !acc.is_empty() {
-                        acc.push_str(", ");
-                    }
-                    acc.push_str(&x);
-                    acc
-                })
+            Address::display_slice(self.to(), None)
         }
     }
 
@@ -583,15 +556,7 @@ impl Envelope {
                 .unwrap_or_default()
                 .to_string()
         } else {
-            refs.iter()
-                .map(|a| a.to_string())
-                .fold(String::new(), |mut acc, x| {
-                    if !acc.is_empty() {
-                        acc.push_str(", ");
-                    }
-                    acc.push_str(&x);
-                    acc
-                })
+            MessageID::display_slice(refs, Some("\n "))
         }
     }
 

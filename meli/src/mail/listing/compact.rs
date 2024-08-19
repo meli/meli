@@ -1007,7 +1007,7 @@ impl CompactListing {
                 context,
                 (self.cursor_pos.0, self.cursor_pos.1),
             ),
-            from: FromString(Address::display_name_slice(from)),
+            from: FromString(Address::display_name_slice(from, None)),
             tags: TagString(tags_string, colors),
             unseen: thread.unseen() > 0,
             highlight_self,

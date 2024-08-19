@@ -707,7 +707,7 @@ impl PlainListing {
                 context,
                 (self.cursor_pos.0, self.cursor_pos.1),
             ),
-            from: FromString(Address::display_name_slice(e.from())),
+            from: FromString(Address::display_name_slice(e.from(), None)),
             tags: TagString(tags, colors),
             unseen: !e.is_seen(),
             highlight_self: false,
