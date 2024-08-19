@@ -1199,25 +1199,39 @@ pub fn envelope(input: &[u8]) -> IResult<&[u8], Envelope> {
                 {
                     env.set_datetime(d);
                 }
+                env.other_headers_mut()
+                    .insert(HeaderName::DATE, String::from_utf8_lossy(&date).to_string());
             }
 
             if let Some(subject) = subject {
                 env.set_subject(subject.to_vec());
+                env.other_headers_mut().insert(
+                    HeaderName::SUBJECT,
+                    String::from_utf8_lossy(&subject).to_string(),
+                );
             }
 
             if let Some(from) = from {
+                env.other_headers_mut()
+                    .insert(HeaderName::FROM, Address::display_slice(&from, None));
                 env.set_from(from);
             }
             if let Some(to) = to {
+                env.other_headers_mut()
+                    .insert(HeaderName::TO, Address::display_slice(&to, None));
                 env.set_to(to);
             }
 
             if let Some(cc) = cc {
+                env.other_headers_mut()
+                    .insert(HeaderName::CC, Address::display_slice(&cc, None));
                 env.set_cc(cc);
             }
 
             if let Some(bcc) = bcc {
                 env.set_bcc(bcc.to_vec());
+                env.other_headers_mut()
+                    .insert(HeaderName::BCC, Address::display_slice(&bcc, None));
             }
             if let Some(in_reply_to) = in_reply_to {
                 env.set_in_reply_to(&in_reply_to);
