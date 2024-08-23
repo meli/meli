@@ -525,6 +525,11 @@ impl Component for MailboxManager {
                     }
                     return true;
                 }
+                UIEvent::ComponentUnrealize(id) if s.id() == *id => {
+                    self.mode = ViewMode::List;
+                    self.set_dirty(true);
+                    return true;
+                }
                 _ => {}
             }
             return s.process_event(event, context);

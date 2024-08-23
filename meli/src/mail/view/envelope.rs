@@ -1350,6 +1350,13 @@ impl Component for EnvelopeView {
                 self.set_dirty(true);
                 return true;
             }
+            (ForceCharset::Dialog(selector), UIEvent::ComponentUnrealize(id))
+                if *id == selector.id() =>
+            {
+                self.force_charset = ForceCharset::None;
+                self.set_dirty(true);
+                return true;
+            }
             (ForceCharset::Dialog(selector), _) => {
                 if selector.process_event(event, context) {
                     return true;
