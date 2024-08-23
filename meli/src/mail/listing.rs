@@ -1970,12 +1970,26 @@ impl Component for Listing {
                     UIEvent::Input(ref key)
                         if shortcut!(key == shortcuts[Shortcuts::GENERAL]["home_page"]) =>
                     {
+                        if !self.cmd_buf.is_empty() {
+                            self.cmd_buf.clear();
+                            self.component.set_modifier_active(false);
+                            context
+                                .replies
+                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                        }
                         self.component.set_movement(PageMovement::Home);
                         return true;
                     }
                     UIEvent::Input(ref key)
                         if shortcut!(key == shortcuts[Shortcuts::GENERAL]["end_page"]) =>
                     {
+                        if !self.cmd_buf.is_empty() {
+                            self.cmd_buf.clear();
+                            self.component.set_modifier_active(false);
+                            context
+                                .replies
+                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                        }
                         self.component.set_movement(PageMovement::End);
                         return true;
                     }
