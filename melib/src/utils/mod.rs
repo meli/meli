@@ -142,6 +142,11 @@ macro_rules! declare_u64_hash {
                 write!(fmt, "{}", self.0)
             }
         }
+        impl From<&[u8]> for $type_name {
+            fn from(bytes: &[u8]) -> Self {
+                Self::from_bytes(bytes)
+            }
+        }
         #[cfg(feature = "sqlite3")]
         impl rusqlite::types::ToSql for $type_name {
             fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput> {
