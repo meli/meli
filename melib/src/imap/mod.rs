@@ -214,9 +214,10 @@ impl UIDStore {
         #[cfg(not(feature = "sqlite3"))]
         return Ok(None);
         #[cfg(feature = "sqlite3")]
-        return Ok(Some(sync::sqlite3_cache::Sqlite3Cache::get(Arc::clone(
-            self,
-        ))?));
+        return Ok(Some(sync::sqlite3_cache::Sqlite3Cache::get(
+            Arc::clone(self),
+            None,
+        )?));
     }
 
     pub fn reset_db(self: &Arc<Self>) -> Result<()> {
@@ -228,7 +229,7 @@ impl UIDStore {
         #[cfg(feature = "sqlite3")]
         use crate::imap::sync::cache::ImapCacheReset;
         #[cfg(feature = "sqlite3")]
-        return sync::sqlite3_cache::Sqlite3Cache::reset_db(self);
+        return sync::sqlite3_cache::Sqlite3Cache::reset_db(self, None);
     }
 }
 

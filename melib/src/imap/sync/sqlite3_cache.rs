@@ -20,7 +20,11 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
-use std::{collections::BTreeSet, sync::Arc};
+use std::{
+    collections::BTreeSet,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use smallvec::SmallVec;
 
@@ -46,12 +50,14 @@ pub struct Sqlite3Cache {
     connection: Connection,
     loaded_mailboxes: BTreeSet<MailboxHash>,
     uid_store: Arc<UIDStore>,
+    data_dir: Option<PathBuf>,
 }
 
 const DB_DESCRIPTION: DatabaseDescription = DatabaseDescription {
     name: "header_cache.db",
     identifier: None,
     application_prefix: "meli",
+    directory: None,
     init_script: Some(
         "PRAGMA foreign_keys = true;
     PRAGMA encoding = 'UTF-8';
@@ -103,9 +109,11 @@ impl FromSql for ModSequence {
 }
 
 impl Sqlite3Cache {
-    pub fn get(uid_store: Arc<UIDStore>) -> Result<Box<dyn ImapCache>> {
+    pub fn get(uid_store: Arc<UIDStore>, data_dir: Option<&Path>) -> Result<Box<dyn ImapCache>> {
+        let data_dir = data_dir.map(|p| p.to_path_buf());
         let db_desc = DatabaseDescription {
             identifier: Some(uid_store.account_name.to_string().into()),
+            directory: data_dir.clone().map(|p| p.into()),
             ..DB_DESCRIPTION.clone()
         };
         let connection = match db_desc.open_or_create_db() {
@@ -124,6 +132,7 @@ impl Sqlite3Cache {
             connection,
             loaded_mailboxes: BTreeSet::default(),
             uid_store,
+            data_dir,
         }))
     }
 
@@ -141,9 +150,10 @@ impl Sqlite3Cache {
 }
 
 impl ImapCacheReset for Sqlite3Cache {
-    fn reset_db(uid_store: &UIDStore) -> Result<()> {
+    fn reset_db(uid_store: &UIDStore, data_dir: Option<&Path>) -> Result<()> {
         let db_desc = DatabaseDescription {
             identifier: Some(uid_store.account_name.to_string().into()),
+            directory: data_dir.map(|p| p.to_path_buf().into()),
             ..DB_DESCRIPTION.clone()
         };
         db_desc.reset_db()
@@ -152,7 +162,7 @@ impl ImapCacheReset for Sqlite3Cache {
 
 impl ImapCache for Sqlite3Cache {
     fn reset(&mut self) -> Result<()> {
-        Self::reset_db(&self.uid_store)
+        Self::reset_db(&self.uid_store, self.data_dir.as_deref())
     }
 
     fn mailbox_state(&mut self, mailbox_hash: MailboxHash) -> Result<Option<()>> {
@@ -427,6 +437,7 @@ impl ImapCache for Sqlite3Cache {
             ref mut connection,
             ref uid_store,
             loaded_mailboxes: _,
+            data_dir: _,
         } = self;
         let tx = connection.transaction()?;
         for item in fetches {
@@ -485,6 +496,7 @@ impl ImapCache for Sqlite3Cache {
             ref mut connection,
             ref uid_store,
             loaded_mailboxes: _,
+            data_dir: _,
         } = self;
         let tx = connection.transaction()?;
         let values = std::rc::Rc::new(env_hashes.iter().map(Value::from).collect::<Vec<Value>>());
@@ -544,6 +556,7 @@ impl ImapCache for Sqlite3Cache {
                 ref mut connection,
                 ref uid_store,
                 loaded_mailboxes: _,
+                data_dir: _,
             } = self;
             let tx = connection.transaction()?;
             let mut hash_index_lck = uid_store.hash_index.lock().unwrap();

@@ -43,6 +43,7 @@ const DB: DatabaseDescription = DatabaseDescription {
     name: "index.db",
     identifier: None,
     application_prefix: "meli",
+    directory: None,
     init_script: Some(
         "CREATE TABLE IF NOT EXISTS envelopes (
                     id               INTEGER PRIMARY KEY,

@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::convert::TryFrom;
+use std::{convert::TryFrom, path::Path};
 
 use super::*;
 use crate::{
@@ -110,7 +110,7 @@ pub trait ImapCache: Send + std::fmt::Debug {
 }
 
 pub trait ImapCacheReset: Send + std::fmt::Debug {
-    fn reset_db(uid_store: &UIDStore) -> Result<()>
+    fn reset_db(uid_store: &UIDStore, data_dir: Option<&Path>) -> Result<()>
     where
         Self: Sized;
 }

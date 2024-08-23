@@ -37,6 +37,7 @@ mod inner {
         name: "nntp_store.db",
         application_prefix: "meli",
         identifier: None,
+        directory: None,
         init_script: Some(
             "PRAGMA foreign_keys = true;
 PRAGMA encoding = 'UTF-8';

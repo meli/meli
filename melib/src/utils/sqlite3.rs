@@ -19,7 +19,12 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{borrow::Cow, os::unix::fs::PermissionsExt, path::PathBuf, sync::Arc};
+use std::{
+    borrow::Cow,
+    os::unix::fs::PermissionsExt,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput};
 pub use rusqlite::{self, config::DbConfig, params, Connection};
@@ -40,6 +45,9 @@ pub struct DatabaseDescription {
     /// directories, used for when the consumer application is not `meli`
     /// itself.
     pub application_prefix: &'static str,
+    /// Optionally override file system location instead of saving at `XDG` data
+    /// directory.
+    pub directory: Option<Cow<'static, Path>>,
     /// A script that initializes the schema of the database.
     pub init_script: Option<&'static str>,
     /// The current value of the `user_version` `PRAGMA` of the `sqlite3`
@@ -60,16 +68,65 @@ impl DatabaseDescription {
             || self.name.into(),
             |id| format!("{}_{}", id, self.name).into(),
         );
+
+        for (field_name, field_value) in [
+            ("name", self.name),
+            ("identifier", self.identifier.as_deref().unwrap_or_default()),
+            ("application_prefix", self.application_prefix),
+        ] {
+            if field_value.contains(std::path::MAIN_SEPARATOR_STR) {
+                return Err(Error::new(format!(
+                    "Database description for `{}{}{}` field {} cannot contain current platform's \
+                     path separator {}. Got: {}.",
+                    self.identifier.as_deref().unwrap_or_default(),
+                    if self.identifier.is_none() { "" } else { ":" },
+                    self.name,
+                    field_name,
+                    std::path::MAIN_SEPARATOR_STR,
+                    field_value,
+                ))
+                .set_kind(ErrorKind::ValueError));
+            }
+        }
+
+        if let Some(directory) = self.directory.as_deref() {
+            if !directory.is_dir() {
+                return Err(Error::new(format!(
+                    "Database description for `{}{}{}` expects a valid directory path value. Got: \
+                     {}.",
+                    self.identifier.as_deref().unwrap_or_default(),
+                    if self.identifier.is_none() { "" } else { ":" },
+                    self.name,
+                    directory.display()
+                ))
+                .set_kind(ErrorKind::ValueError));
+            }
+            return Ok(directory.join(name.as_ref()));
+        }
         let data_dir =
             xdg::BaseDirectories::with_prefix(self.application_prefix).map_err(|err| {
                 Error::new(format!(
+                    "Could not create sqlite3 database file for `{}{}{}` in XDG data directory.",
+                    self.identifier.as_deref().unwrap_or_default(),
+                    if self.identifier.is_none() { "" } else { ":" },
+                    self.name,
+                ))
+                .set_details(format!(
                     "Could not open XDG data directory with prefix {}",
                     self.application_prefix
                 ))
+                .set_kind(ErrorKind::Platform)
                 .set_source(Some(Arc::new(err)))
             })?;
         data_dir.place_data_file(name.as_ref()).map_err(|err| {
-            Error::new(format!("Could not create `{}`", name)).set_source(Some(Arc::new(err)))
+            Error::new(format!(
+                "Could not create sqlite3 database file for `{}{}{}` in XDG data directory.",
+                self.identifier.as_deref().unwrap_or_default(),
+                if self.identifier.is_none() { "" } else { ":" },
+                self.name,
+            ))
+            .set_kind(ErrorKind::Platform)
+            .set_source(Some(Arc::new(err)))
         })
     }
 
