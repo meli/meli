@@ -24,9 +24,10 @@ use std::{io::Write, path::Path};
 
 use assert_cmd::{assert::OutputAssertExt, Command};
 use predicates::prelude::*;
+use sealed_test::prelude::*;
 use tempfile::TempDir;
 
-#[test]
+#[sealed_test]
 fn test_cli_subcommands() {
     for var in [
         "PAGER",

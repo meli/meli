@@ -27,12 +27,12 @@ use std::{
     path::Path,
 };
 
+use sealed_test::prelude::*;
 use tempfile::TempDir;
 
 use crate::error::{Errno, ErrorKind};
 
-#[test]
-#[ignore]
+#[sealed_test]
 fn test_shellexpandtrait() {
     use super::shellexpand::*;
 
@@ -151,8 +151,7 @@ fn test_shellexpandtrait() {
 }
 
 #[cfg(target_os = "linux")]
-#[test]
-#[ignore]
+#[sealed_test]
 fn test_shellexpandtrait_impls() {
     use super::shellexpand::*;
 
