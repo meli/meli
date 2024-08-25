@@ -2992,7 +2992,65 @@ impl Listing {
         let must_highlight_account: bool = cursor.account == self.accounts[aidx].index;
 
         let mut lines: Vec<Line> = Vec::new();
+        let mail_sidebar_highlighted_value =
+            crate::conf::value(context, "mail.sidebar_highlighted");
+        let mail_sidebar_highlighted_account_name_value =
+            crate::conf::value(context, "mail.sidebar_highlighted_account_name");
+        let mail_sidebar_account_name_value =
+            crate::conf::value(context, "mail.sidebar_account_name");
+        let mail_sidebar_highlighted_index_value =
+            crate::conf::value(context, "mail.sidebar_highlighted_index");
+        let mail_sidebar_highlighted_unread_count_value =
+            crate::conf::value(context, "mail.sidebar_highlighted_unread_count");
+        let mail_sidebar_highlighted_account_value =
+            crate::conf::value(context, "mail.sidebar_highlighted_account");
+        let mail_sidebar_highlighted_account_index_value =
+            crate::conf::value(context, "mail.sidebar_highlighted_account_index");
+        let mail_sidebar_highlighted_account_unread_count_value =
+            crate::conf::value(context, "mail.sidebar_highlighted_account_unread_count");
+        let mail_sidebar_value = crate::conf::value(context, "mail.sidebar");
+        let mail_sidebar_index_value = crate::conf::value(context, "mail.sidebar_index");
+        let mail_sidebar_unread_count_value =
+            crate::conf::value(context, "mail.sidebar_unread_count");
+        let has_sibling_str: &str = account_settings!(
+            context[self.accounts[aidx].hash]
+                .listing
+                .sidebar_mailbox_tree_has_sibling
+        )
+        .as_ref()
+        .map(|s| s.as_str())
+        .unwrap_or(" ");
+        let no_sibling_str: &str = account_settings!(
+            context[self.accounts[aidx].hash]
+                .listing
+                .sidebar_mailbox_tree_no_sibling
+        )
+        .as_ref()
+        .map(|s| s.as_str())
+        .unwrap_or(" ");
 
+        let has_sibling_leaf_str: &str = account_settings!(
+            context[self.accounts[aidx].hash]
+                .listing
+                .sidebar_mailbox_tree_has_sibling_leaf
+        )
+        .as_ref()
+        .map(|s| s.as_str())
+        .unwrap_or(" ");
+
+        let no_sibling_leaf_str: &str = account_settings!(
+            context[self.accounts[aidx].hash]
+                .listing
+                .sidebar_mailbox_tree_no_sibling_leaf
+        )
+        .as_ref()
+        .map(|s| s.as_str())
+        .unwrap_or(" ");
+        let relative_menu_indices = *account_settings!(
+            context[self.accounts[aidx].hash]
+                .listing
+                .relative_menu_indices
+        );
         for (
             i,
             &MailboxMenuEntry {
@@ -3038,16 +3096,16 @@ impl Listing {
 
         let account_attrs = if must_highlight_account {
             if cursor.menu == MenuEntryCursor::Status {
-                let mut v = crate::conf::value(context, "mail.sidebar_highlighted");
+                let mut v = mail_sidebar_highlighted_value;
                 if !context.settings.terminal.use_color() {
                     v.attrs |= Attr::REVERSE;
                 }
                 v
             } else {
-                crate::conf::value(context, "mail.sidebar_highlighted_account_name")
+                mail_sidebar_highlighted_account_name_value
             }
         } else {
-            crate::conf::value(context, "mail.sidebar_account_name")
+            mail_sidebar_account_name_value
         };
         // Print account name first
         self.menu.grid_mut().write_string(
@@ -3122,9 +3180,9 @@ impl Listing {
                     _ => false,
                 } {
                     let mut ret = (
-                        crate::conf::value(context, "mail.sidebar_highlighted"),
-                        crate::conf::value(context, "mail.sidebar_highlighted_index"),
-                        crate::conf::value(context, "mail.sidebar_highlighted_unread_count"),
+                        mail_sidebar_highlighted_value,
+                        mail_sidebar_highlighted_index_value,
+                        mail_sidebar_highlighted_unread_count_value,
                     );
 
                     if !context.settings.terminal.use_color() {
@@ -3135,19 +3193,16 @@ impl Listing {
                     ret
                 } else {
                     (
-                        crate::conf::value(context, "mail.sidebar_highlighted_account"),
-                        crate::conf::value(context, "mail.sidebar_highlighted_account_index"),
-                        crate::conf::value(
-                            context,
-                            "mail.sidebar_highlighted_account_unread_count",
-                        ),
+                        mail_sidebar_highlighted_account_value,
+                        mail_sidebar_highlighted_account_index_value,
+                        mail_sidebar_highlighted_account_unread_count_value,
                     )
                 }
             } else {
                 (
-                    crate::conf::value(context, "mail.sidebar"),
-                    crate::conf::value(context, "mail.sidebar_index"),
-                    crate::conf::value(context, "mail.sidebar_unread_count"),
+                    mail_sidebar_value,
+                    mail_sidebar_index_value,
+                    mail_sidebar_unread_count_value,
                 )
             };
             self.menu.grid_mut().change_theme(area.nth_row(y + 1), att);
@@ -3169,48 +3224,8 @@ impl Listing {
                 ctr
             };
 
-            let has_sibling_str: &str = account_settings!(
-                context[self.accounts[aidx].hash]
-                    .listing
-                    .sidebar_mailbox_tree_has_sibling
-            )
-            .as_ref()
-            .map(|s| s.as_str())
-            .unwrap_or(" ");
-            let no_sibling_str: &str = account_settings!(
-                context[self.accounts[aidx].hash]
-                    .listing
-                    .sidebar_mailbox_tree_no_sibling
-            )
-            .as_ref()
-            .map(|s| s.as_str())
-            .unwrap_or(" ");
-
-            let has_sibling_leaf_str: &str = account_settings!(
-                context[self.accounts[aidx].hash]
-                    .listing
-                    .sidebar_mailbox_tree_has_sibling_leaf
-            )
-            .as_ref()
-            .map(|s| s.as_str())
-            .unwrap_or(" ");
-
-            let no_sibling_leaf_str: &str = account_settings!(
-                context[self.accounts[aidx].hash]
-                    .listing
-                    .sidebar_mailbox_tree_no_sibling_leaf
-            )
-            .as_ref()
-            .map(|s| s.as_str())
-            .unwrap_or(" ");
-
             let (x, _) = self.menu.grid_mut().write_string(
-                &if *account_settings!(
-                    context[self.accounts[aidx].hash]
-                        .listing
-                        .relative_menu_indices
-                ) && must_highlight_account
-                {
+                &if relative_menu_indices && must_highlight_account {
                     format!(
                         "{:>width$}",
                         (l.inc - cursor.menu).abs(),
