@@ -58,22 +58,14 @@ impl BackendOp for NntpOp {
         Ok(Box::pin(async move {
             let mut res = String::with_capacity(8 * 1024);
             let mut conn = connection.lock().await;
-            let path = uid_store.mailboxes.lock().await[&mailbox_hash]
-                .name()
-                .to_string();
-            conn.send_command(format!("GROUP {}", path).as_bytes())
-                .await?;
-            conn.read_response(&mut res, false, &["211 "]).await?;
-            if !res.starts_with("211 ") {
-                return Err(Error::new(format!(
-                    "{} Could not select newsgroup {}: expected GROUP response but got: {}",
-                    &uid_store.account_name, path, res
-                )));
-            }
+            conn.select_group(mailbox_hash, false, &mut res).await?;
             conn.send_command(format!("ARTICLE {}", uid).as_bytes())
                 .await?;
             conn.read_response(&mut res, true, &["220 "]).await?;
             if !res.starts_with("220 ") {
+                let path = uid_store.mailboxes.lock().await[&mailbox_hash]
+                    .name()
+                    .to_string();
                 return Err(Error::new(format!(
                     "{} Could not select article {}: expected ARTICLE response but got: {}",
                     &uid_store.account_name, path, res
