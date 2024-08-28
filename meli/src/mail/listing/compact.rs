@@ -334,6 +334,15 @@ impl MailListingTrait for CompactListing {
                 .highlight_self
         )
         .is_true();
+        let highlight_self_colwidth: usize = mailbox_settings!(
+            context[self.cursor_pos.0][&self.cursor_pos.1]
+                .listing
+                .highlight_self_flag
+        )
+        .as_ref()
+        .map(|s| s.as_str())
+        .unwrap_or(super::DEFAULT_HIGHLIGHT_SELF_FLAG)
+        .grapheme_width();
         let mut itoa_buffer = itoa::Buffer::new();
         'items_for_loop: for thread in items {
             let thread_node = &threads.thread_nodes()[&threads.thread_ref(thread).root()];
@@ -466,9 +475,8 @@ impl MailListingTrait for CompactListing {
                     .unwrap_or(255),
             );
             row_widths.3.push(
-                entry_strings
-                    .flag
-                    .grapheme_width()
+                (entry_strings.flag.grapheme_width()
+                    + usize::from(entry_strings.highlight_self) * highlight_self_colwidth)
                     .try_into()
                     .unwrap_or(255),
             );
@@ -480,7 +488,8 @@ impl MailListingTrait for CompactListing {
             min_width.1 = min_width.1.max(entry_strings.date.grapheme_width()); /* date */
             min_width.2 = min_width.2.max(entry_strings.from.grapheme_width()); /* from */
             min_width.3 = min_width.3.max(
-                entry_strings.flag.grapheme_width() + usize::from(entry_strings.highlight_self),
+                entry_strings.flag.grapheme_width()
+                    + usize::from(entry_strings.highlight_self) * highlight_self_colwidth,
             );
             min_width.4 = min_width.4.max(
                 entry_strings.subject.grapheme_width() + 1 + entry_strings.tags.grapheme_width(),
