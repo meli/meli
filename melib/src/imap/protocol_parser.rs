@@ -302,12 +302,12 @@ pub enum ImapResponse {
 
 impl TryFrom<&'_ [u8]> for ImapResponse {
     type Error = Error;
-    fn try_from(val: &'_ [u8]) -> Result<Self> {
-        let val: &[u8] = val.split_rn().last().unwrap_or(val);
+    fn try_from(original_val: &'_ [u8]) -> Result<Self> {
+        let val: &[u8] = original_val.split_rn().last().unwrap_or(original_val);
         let mut val = val[val.find(b" ").ok_or_else(|| {
             Error::new(format!(
                 "Expected tagged IMAP response (OK,NO,BAD, etc) but found {:?}",
-                val
+                String::from_utf8_lossy(original_val)
             ))
         })? + 1..]
             .trim();
@@ -317,7 +317,7 @@ impl TryFrom<&'_ [u8]> for ImapResponse {
             val = &val[..val.rfind(b"(").ok_or_else(|| {
                 Error::new(format!(
                     "Expected tagged IMAP response (OK,NO,BAD, etc) but found {:?}",
-                    val
+                    String::from_utf8_lossy(original_val)
                 ))
             })?];
         }
@@ -335,7 +335,7 @@ impl TryFrom<&'_ [u8]> for ImapResponse {
         } else {
             return Err(Error::new(format!(
                 "Expected tagged IMAP response (OK,NO,BAD, etc) but found {:?}",
-                val
+                String::from_utf8_lossy(original_val)
             )));
         })
     }
