@@ -370,7 +370,7 @@ impl std::fmt::Display for Error {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone, Copy)]
 struct ErrorChainDisplay<'e> {
     current: &'e Error,
     counter: usize,

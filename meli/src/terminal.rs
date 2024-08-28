@@ -104,7 +104,7 @@ pub const BRACKET_PASTE_END: &[u8] = b"\x1B[201~";
 ///     }
 /// }
 /// ```
-#[derive(Copy, Clone)]
+#[derive(Clone, Copy)]
 pub struct Hyperlink<
     'a,
     'b,

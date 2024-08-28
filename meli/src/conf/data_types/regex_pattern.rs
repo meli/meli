@@ -27,7 +27,7 @@ const fn lf_val() -> u8 {
     b'\n'
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum RegexValue {
     Default {
         pattern: regex::Regex,
@@ -72,7 +72,7 @@ impl RegexValue {
     }
 }
 
-#[derive(Clone, Copy, Serialize, Deserialize, Debug)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub struct RegexOptions {
     #[serde(default = "crate::conf::true_val")]
     unicode: bool,
