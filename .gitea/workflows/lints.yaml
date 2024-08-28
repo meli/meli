@@ -84,7 +84,8 @@ jobs:
         name: Add lint dependencies
         run: |
           cargo install --quiet --version 1.0.9 --target "${{ matrix.target }}" cargo-sort
-          RUSTFLAGS="" cargo install --locked --target "${{ matrix.target }}" --git https://github.com/dcchut/cargo-derivefmt --rev 2ff93de7fb418180458dd1ba27e5655607c23ab6 --bin cargo-derivefmt
+          # "This package is currently implemented using rust-analyzer internals, so cannot be published on crates.io."
+          RUSTFLAGS="" cargo install --locked --target "${{ matrix.target }}" --git https://github.com/dcchut/cargo-derivefmt --rev 95da8eee343de4adb25850893873b979258aed7f --bin cargo-derivefmt
       - name: rustfmt
         if: success() || failure()
         run: |
@@ -97,15 +98,17 @@ jobs:
         if: success() || failure()
         run: |
           cargo derivefmt --manifest-path ./melib/Cargo.toml
+          git checkout meli/src/conf/overrides.rs
+          git add ./melib/ && git diff --quiet && git diff --cached --quiet
       - name: cargo-derivefmt meli
         if: success() || failure()
         run: |
           cargo derivefmt --manifest-path ./meli/Cargo.toml
-      - name: cargo-derivefmt fuzz
-        if: success() || failure()
-        run: |
-          cargo derivefmt --manifest-path ./fuzz/Cargo.toml
+          git checkout meli/src/conf/overrides.rs
+          git add ./meli/ && git diff --quiet && git diff --cached --quiet
       - name: cargo-derivefmt tools
         if: success() || failure()
         run: |
           cargo derivefmt --manifest-path ./tools/Cargo.toml
+          git checkout meli/src/conf/overrides.rs
+          git add ./tools/ && git diff --quiet && git diff --cached --quiet
