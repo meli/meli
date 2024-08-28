@@ -179,7 +179,7 @@ impl DatabaseDescription {
                     }
                     self.reset_db()?;
                     second_try = true;
-                    return Ok(conn);
+                    return Ok(None);
                 }
 
                 if version == 0 {
@@ -190,12 +190,12 @@ impl DatabaseDescription {
                         .map_err(|err| Error::new(err.to_string()))?;
                 }
 
-                Ok(conn)
+                Ok(Some(conn))
             };
             inner_fn().unwrap();
             match inner_fn() {
-                Ok(_) if second_try => continue,
-                Ok(conn) => return Ok(conn),
+                Ok(None) => continue,
+                Ok(Some(conn)) => return Ok(conn),
                 Err(err) => {
                     return Err(Error::new(format!(
                         "{}: Could not open or create database",
@@ -219,6 +219,11 @@ impl DatabaseDescription {
                 .set_kind(ErrorKind::from(err.kind()))
                 .set_source(Some(Arc::new(err)))
         })?;
+        log::info!(
+            "{} {} database reset successful",
+            self.name,
+            db_path.display()
+        );
         Ok(())
     }
 }
