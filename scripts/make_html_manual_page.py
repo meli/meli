@@ -52,7 +52,6 @@ def clear_line(signum, frame):
 signal.signal(signal.SIGWINCH, clear_line)
 
 MIRRORS = [
-    "http://linux.die.net/man/%S/%N",
     "http://man7.org/linux/man-pages/man%S/%N.%S.html",
     "http://manpages.debian.org/stable/%N.%S.en.html",
     "http://man.bsd.lv/%N.%S",
@@ -63,6 +62,7 @@ MIRRORS = [
     "http://man.bsd.lv/POSIX-2013/%N.%S",  # last resorts
     "http://man.bsd.lv/UNIX-7/%N.%S",
     "https://www.unix.com/man-page/mojave/%S/%N/",
+    "http://linux.die.net/man/%S/%N",
 ]
 
 
@@ -278,7 +278,7 @@ if __name__ == "__main__":
 
     NO_TTY = args.no_tty
     html_output = subprocess.run(
-        f'{args.mandoc} -I os="rendered by mandoc" -Kutf-8 -Ofragment,toc,includes="#%I"{refs_url} -Thtml "{args.page}" | sed \'s/\s*<\/pre/<\/pre/\'',
+        f'{args.mandoc} -I os="rendered by mandoc" -Kutf-8 -Ofragment,toc,includes="#%I"{refs_url} -Thtml "{args.page}" | sed \'s/\\s*<\\/pre/<\\/pre/\'',
         stdout=PIPE,
         shell=True,
         check=True,
@@ -406,5 +406,5 @@ if __name__ == "__main__":
             </style>
             """
             )
-        f.write(soup.prettify())
+        f.write(str(soup))
     print("Written to ", args.output)
