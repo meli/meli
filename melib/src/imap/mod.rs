@@ -999,23 +999,17 @@ impl MailBackend for ImapType {
                     .await?;
                 conn.read_response(&mut response, RequiredResponses::empty())
                     .await?;
-                imap_log!(
-                    trace,
-                    conn,
-                    "EXPUNGE response: {}",
-                    &String::from_utf8_lossy(&response)
-                );
             } else {
                 conn.send_command(CommandBody::Expunge).await?;
                 conn.read_response(&mut response, RequiredResponses::empty())
                     .await?;
-                imap_log!(
-                    trace,
-                    conn,
-                    "EXPUNGE response: {}",
-                    &String::from_utf8_lossy(&response)
-                );
             }
+            imap_log!(
+                trace,
+                conn,
+                "EXPUNGE response: {}",
+                &String::from_utf8_lossy(&response)
+            );
             Ok(())
         }))
     }
