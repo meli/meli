@@ -59,6 +59,7 @@ pub fn connect<A: ToSocketAddrs>(addr: A, timeout: Option<Duration>) -> Result<T
     }
     Err(happy
         .error
+        .take()
         .unwrap_or_else(|| Error::new(ErrorKind::InvalidInput, "could not resolve to any address")))
 }
 
@@ -140,7 +141,12 @@ impl HappyEyeballs {
             },
             Err(e) if e.raw_os_error() == Some(libc::EINPROGRESS) => {
                 let interest = Event::writable(self.attempts.len());
-                match self.poller.add(&sock, interest) {
+                // SAFETY; `sock` is added to `self.attempts` and is deleted in `poll_once` or
+                // when `Self` is dropped.
+                // `polling` crate says:
+                //
+                // > The source must be delete()d from this Poller before it is dropped.
+                match unsafe { self.poller.add(&sock, interest) } {
                     Ok(()) => {
                         self.attempts.push(Some((saddr, sock)));
                         self.attempts_in_progress += 1;
@@ -155,9 +161,9 @@ impl HappyEyeballs {
     }
 
     fn poll_once(&mut self, timeout: Option<Duration>) -> Result<Option<TcpStream>> {
-        let mut events = Vec::new();
+        let mut events = polling::Events::new();
         self.poller.wait(&mut events, timeout)?;
-        for evt in &events {
+        for evt in events.iter() {
             assert!(evt.writable);
             let (sock_addr, sock) = self.attempts[evt.key].take().expect("attempt exists");
             self.attempts_in_progress -= 1;
@@ -191,6 +197,15 @@ impl HappyEyeballs {
                 self.set_error(err);
                 None
             }
+        }
+    }
+}
+
+impl Drop for HappyEyeballs {
+    fn drop(&mut self) {
+        for (_, socket) in self.attempts.drain(..).flatten() {
+            // The source must be delete()d from the Poller before it is dropped.
+            _ = self.poller.delete(&socket);
         }
     }
 }
