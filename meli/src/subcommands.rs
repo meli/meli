@@ -297,7 +297,7 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
             let mut input = String::new();
             println!(
                 "Connected. Type a valid IMAP command such as LIST \"\" \"*\" and CAPABILITY hit \
-                 Return. Exit with Ctrl+C or with the command QUIT."
+                 Return. Exit with Ctrl+C or with the command LOGOUT."
             );
             loop {
                 use std::io;
