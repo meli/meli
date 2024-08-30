@@ -27,7 +27,9 @@
 //! - Version 4 [RFC 6350: vCard Format Specification](https://datatracker.ietf.org/doc/rfc6350/)
 //! - Parameter escaping [RFC 6868 Parameter Value Encoding in iCalendar and vCard](https://datatracker.ietf.org/doc/rfc6868/)
 
-use std::{collections::HashMap, convert::TryInto};
+use std::convert::TryInto;
+
+use indexmap::IndexMap;
 
 use super::*;
 use crate::{
@@ -63,14 +65,14 @@ const FOOTER: &str = "END:VCARD";
 
 #[derive(Debug)]
 pub struct VCard<T: VCardVersion>(
-    HashMap<String, ContentLine>,
+    IndexMap<String, ContentLine>,
     std::marker::PhantomData<*const T>,
 );
 
 impl<V: VCardVersion> VCard<V> {
     pub fn new_v4() -> VCard<impl VCardVersion> {
         VCard(
-            HashMap::default(),
+            IndexMap::default(),
             std::marker::PhantomData::<*const VCardVersion4>,
         )
     }
@@ -106,7 +108,7 @@ impl CardDeserializer {
             &input[HEADER_LF.len()..input.len() - FOOTER_LF.len()]
         };
 
-        let mut ret = HashMap::default();
+        let mut ret = IndexMap::default();
 
         enum Stage {
             Group,
@@ -198,15 +200,15 @@ impl<V: VCardVersion> TryInto<Card> for VCard<V> {
             }
             hasher.finish()
         }));
-        if let Some(val) = self.0.remove("FN") {
+        if let Some(val) = self.0.swap_remove("FN") {
             card.set_name(val.value);
         } else {
             return Err(Error::new("FN entry missing in VCard.").set_kind(ErrorKind::ValueError));
         }
-        if let Some(val) = self.0.remove("NICKNAME") {
+        if let Some(val) = self.0.swap_remove("NICKNAME") {
             card.set_additionalname(val.value);
         }
-        if let Some(val) = self.0.remove("BDAY") {
+        if let Some(val) = self.0.swap_remove("BDAY") {
             /* 4.3.4.  DATE-AND-OR-TIME
 
             Either a DATE-TIME, a DATE, or a TIME value.  To allow unambiguous
@@ -234,13 +236,13 @@ impl<V: VCardVersion> TryInto<Card> for VCard<V> {
                 crate::utils::datetime::timestamp_from_string(val.value.as_str(), "%Y%m%d\0")
                     .unwrap_or_default();
         }
-        if let Some(val) = self.0.remove("EMAIL") {
+        if let Some(val) = self.0.swap_remove("EMAIL") {
             card.set_email(val.value);
         }
-        if let Some(val) = self.0.remove("URL") {
+        if let Some(val) = self.0.swap_remove("URL") {
             card.set_url(val.value);
         }
-        if let Some(val) = self.0.remove("KEY") {
+        if let Some(val) = self.0.swap_remove("KEY") {
             card.set_key(val.value);
         }
         for (k, v) in self.0.into_iter() {
