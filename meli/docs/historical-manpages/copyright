@@ -1,0 +1,42 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Comment: This directory contains various manual pages that may be of use to meli users.
+
+Files: mailaddr.7.gz
+Comment: Sourced from debian manpages package.
+Copyright: Copyright (c) 1983, 1987 The Regents of the University of California.
+License: 6.5 (Berkeley) 2/14/89
+ Redistribution and use in source and binary forms are permitted
+ provided that the above copyright notice and this paragraph are
+ duplicated in all such forms and that any documentation,
+ advertising materials, and other materials related to such
+ distribution and use acknowledge that the software was developed
+ by the University of California, Berkeley.  The name of the
+ University may not be used to endorse or promote products derived
+ from this software without specific prior written permission.
+ THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR
+ IMPLIED WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED
+ WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+
+Files: maildir.5.en.gz
+Comment: Sourced from debian maildrop package.
+Copyright: Copyright 1998 - 2007 Double Precision, Inc.
+License: GPLv3 with OpenSSL linking extension
+ This software is released under the GPL, version 3 (see COPYING.GPL).
+ Additionally, compiling, linking, and/or using the OpenSSL toolkit in
+ conjunction with this software is allowed.
+
+Files: mbox.5.en.gz
+Comment: Sourced from debian mutt package.
+Copyright: Copyright (C) 2000 Thomas Roessler <roessler@does-not-exist.org>
+License: public-domain
+ This document is in the public domain and may be distributed and
+ changed arbitrarily.
+
+Files: mbox.5qmail.en.gz
+Comment: Sourced from (now obsolete) debian qmail package.
+Copyright: D. J. Bernstein
+License:  From http://cr.yp.to/qmail/dist.html
+ I hereby place the qmail package (in particular, qmail-1.03.tar.gz,
+ with MD5 checksum 622f65f982e380dbe86e6574f3abcb7c) into the public
+ domain.  You are free to modify the package, distribute modified
+ versions, etc.
