@@ -29,9 +29,12 @@ use std::{
     future::Future,
     io::Seek,
     mem::ManuallyDrop,
-    os::unix::{
-        ffi::OsStrExt,
-        io::{AsRawFd, RawFd},
+    os::{
+        fd::{AsFd, BorrowedFd, OwnedFd},
+        unix::{
+            ffi::OsStrExt,
+            io::{AsRawFd, RawFd},
+        },
     },
     path::Path,
     pin::Pin,
@@ -204,6 +207,7 @@ struct IoState {
     receiver: Receiver<()>,
     key_sender: Sender<KeyInner>,
     key_receiver: Receiver<KeyInner>,
+    // ops: HashMap<usize, Arc<GpgmeFd>>,
     lib: Arc<libloading::Library>,
 }
 
@@ -513,7 +517,7 @@ impl Context {
                             unsafe {
                                 (fut.get_ref().fnc.unwrap())(
                                     fut.get_ref().fnc_data,
-                                    fut.get_ref().fd,
+                                    fut.get_ref().as_raw_fd(),
                                 )
                             };
                             if done.lock().unwrap().is_none() {
@@ -534,7 +538,7 @@ impl Context {
                             unsafe {
                                 (fut.get_ref().fnc.unwrap())(
                                     fut.get_ref().fnc_data,
-                                    fut.get_ref().fd,
+                                    fut.get_ref().as_raw_fd(),
                                 )
                             };
                             if done.lock().unwrap().is_none() {
@@ -613,7 +617,7 @@ impl Context {
                             unsafe {
                                 (fut.get_ref().fnc.unwrap())(
                                     fut.get_ref().fnc_data,
-                                    fut.get_ref().fd,
+                                    fut.get_ref().as_raw_fd(),
                                 )
                             };
                             if done.lock().unwrap().is_none() {
@@ -634,7 +638,7 @@ impl Context {
                             unsafe {
                                 (fut.get_ref().fnc.unwrap())(
                                     fut.get_ref().fnc_data,
-                                    fut.get_ref().fd,
+                                    fut.get_ref().as_raw_fd(),
                                 )
                             };
                             if done.lock().unwrap().is_none() {
@@ -743,7 +747,7 @@ impl Context {
                             unsafe {
                                 (fut.get_ref().fnc.unwrap())(
                                     fut.get_ref().fnc_data,
-                                    fut.get_ref().fd,
+                                    fut.get_ref().as_raw_fd(),
                                 )
                             };
                             if done.lock().unwrap().is_none() {
@@ -764,7 +768,7 @@ impl Context {
                             unsafe {
                                 (fut.get_ref().fnc.unwrap())(
                                     fut.get_ref().fnc_data,
-                                    fut.get_ref().fd,
+                                    fut.get_ref().as_raw_fd(),
                                 )
                             };
                             if done.lock().unwrap().is_none() {
@@ -844,7 +848,7 @@ impl Context {
                             unsafe {
                                 (fut.get_ref().fnc.unwrap())(
                                     fut.get_ref().fnc_data,
-                                    fut.get_ref().fd,
+                                    fut.get_ref().as_raw_fd(),
                                 )
                             };
                             if done.lock().unwrap().is_none() {
@@ -865,7 +869,7 @@ impl Context {
                             unsafe {
                                 (fut.get_ref().fnc.unwrap())(
                                     fut.get_ref().fnc_data,
-                                    fut.get_ref().fd,
+                                    fut.get_ref().as_raw_fd(),
                                 )
                             };
                             if done.lock().unwrap().is_none() {
@@ -1046,7 +1050,7 @@ impl Context {
                             unsafe {
                                 (fut.get_ref().fnc.unwrap())(
                                     fut.get_ref().fnc_data,
-                                    fut.get_ref().fd,
+                                    fut.get_ref().as_raw_fd(),
                                 )
                             };
                             if done.lock().unwrap().is_none() {
@@ -1067,7 +1071,7 @@ impl Context {
                             unsafe {
                                 (fut.get_ref().fnc.unwrap())(
                                     fut.get_ref().fnc_data,
-                                    fut.get_ref().fd,
+                                    fut.get_ref().as_raw_fd(),
                                 )
                             };
                             if done.lock().unwrap().is_none() {
@@ -1328,10 +1332,10 @@ impl Drop for Data {
     }
 }
 
-#[repr(C)]
 #[derive(Clone)]
+#[repr(C)]
 struct GpgmeFd {
-    fd: RawFd,
+    fd: Arc<ManuallyDrop<OwnedFd>>,
     fnc: GpgmeIOCb,
     fnc_data: *mut c_void,
     idx: usize,
@@ -1358,7 +1362,13 @@ unsafe impl Sync for GpgmeFd {}
 
 impl AsRawFd for GpgmeFd {
     fn as_raw_fd(&self) -> RawFd {
-        self.fd
+        self.fd.as_raw_fd()
+    }
+}
+
+impl AsFd for GpgmeFd {
+    fn as_fd(&'_ self) -> BorrowedFd<'_> {
+        self.fd.as_fd()
     }
 }
 
@@ -1425,8 +1435,8 @@ mod wrapper {
                     io_state_lck
                         .ops
                         .values()
-                        .map(|a| Async::new(a.clone()).unwrap())
-                        .collect::<Vec<Async<GpgmeFd>>>(),
+                        .map(|a| Async::new(a.clone()))
+                        .collect::<std::io::Result<Vec<Async<GpgmeFd>>>>()?,
                 )
             } else {
                 return Err(Error::new("Could not use gpgme library")

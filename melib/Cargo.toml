@@ -19,6 +19,7 @@ path = "src/lib.rs"
 
 [dependencies]
 async-fn-stream = { version = "=0.2.2" }
+async-io = { version = "2" }
 base64 = { version = "^0.13", optional = true }
 bitflags = { version = "2.4", features = ["serde"] }
 data-encoding = { version = "2.1.1" }
@@ -44,7 +45,7 @@ serde_derive = { version = "1.0" }
 serde_json = { version = "1.0", features = ["raw_value"] }
 serde_path_to_error = { version = "0.1" }
 smallvec = { version = "^1.5.0", features = ["serde"] }
-smol = { version = "1.0.0" }
+smol = { version = "2" }
 socket2 = { version = "0.5", features = [] }
 unicode-segmentation = { version = "1.2.1", default-features = false }
 url = { version = "2.4", optional = true }

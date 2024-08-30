@@ -20,7 +20,14 @@
  */
 
 //! Connections layers (TCP/fd/TLS/Deflate) to use with remote backends.
-use std::{borrow::Cow, os::unix::io::AsRawFd, time::Duration};
+use std::{
+    borrow::Cow,
+    os::{
+        fd::{AsFd, BorrowedFd, OwnedFd},
+        unix::io::AsRawFd,
+    },
+    time::Duration,
+};
 
 use flate2::{read::DeflateDecoder, write::DeflateEncoder, Compression};
 #[cfg(any(target_os = "openbsd", target_os = "netbsd", target_os = "haiku"))]
@@ -49,7 +56,7 @@ pub enum Connection {
         trace: bool,
     },
     Fd {
-        inner: std::os::unix::io::RawFd,
+        inner: OwnedFd,
         id: Option<&'static str>,
         trace: bool,
     },
@@ -287,7 +294,7 @@ impl Connection {
             Fd { inner, .. } => {
                 // [ref:VERIFY]
                 nix::fcntl::fcntl(
-                    *inner,
+                    inner.as_raw_fd(),
                     nix::fcntl::FcntlArg::F_SETFL(if nonblocking {
                         nix::fcntl::OFlag::O_NONBLOCK
                     } else {
@@ -489,14 +496,6 @@ impl Connection {
     }
 }
 
-impl Drop for Connection {
-    fn drop(&mut self) {
-        if let Fd { ref inner, .. } = self {
-            let _ = nix::unistd::close(*inner);
-        }
-    }
-}
-
 impl std::io::Read for Connection {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let res = match self {
@@ -505,7 +504,7 @@ impl std::io::Read for Connection {
             Tls { ref mut inner, .. } => inner.read(buf),
             Fd { ref inner, .. } => {
                 use std::os::unix::io::{FromRawFd, IntoRawFd};
-                let mut f = unsafe { std::fs::File::from_raw_fd(*inner) };
+                let mut f = unsafe { std::fs::File::from_raw_fd(inner.as_raw_fd()) };
                 let ret = f.read(buf);
                 let _ = f.into_raw_fd();
                 ret
@@ -570,7 +569,7 @@ impl std::io::Write for Connection {
             Tls { ref mut inner, .. } => inner.write(buf),
             Fd { ref inner, .. } => {
                 use std::os::unix::io::{FromRawFd, IntoRawFd};
-                let mut f = unsafe { std::fs::File::from_raw_fd(*inner) };
+                let mut f = unsafe { std::fs::File::from_raw_fd(inner.as_raw_fd()) };
                 let ret = f.write(buf);
                 let _ = f.into_raw_fd();
                 ret
@@ -586,7 +585,7 @@ impl std::io::Write for Connection {
             Tls { ref mut inner, .. } => inner.flush(),
             Fd { ref inner, .. } => {
                 use std::os::unix::io::{FromRawFd, IntoRawFd};
-                let mut f = unsafe { std::fs::File::from_raw_fd(*inner) };
+                let mut f = unsafe { std::fs::File::from_raw_fd(inner.as_raw_fd()) };
                 let ret = f.flush();
                 let _ = f.into_raw_fd();
                 ret
@@ -602,11 +601,25 @@ impl std::os::unix::io::AsRawFd for Connection {
             Tcp { ref inner, .. } => inner.as_raw_fd(),
             #[cfg(feature = "tls")]
             Tls { ref inner, .. } => inner.get_ref().as_raw_fd(),
-            Fd { ref inner, .. } => *inner,
+            Fd { ref inner, .. } => inner.as_raw_fd(),
             Deflate { ref inner, .. } => inner.get_ref().get_ref().as_raw_fd(),
         }
     }
 }
+
+impl AsFd for Connection {
+    fn as_fd(&'_ self) -> BorrowedFd<'_> {
+        match self {
+            Tcp { ref inner, .. } => inner.as_fd(),
+            #[cfg(feature = "tls")]
+            Tls { ref inner, .. } => inner.get_ref().as_fd(),
+            Fd { ref inner, .. } => inner.as_fd(),
+            Deflate { ref inner, .. } => inner.get_ref().get_ref().as_fd(),
+        }
+    }
+}
+
+unsafe impl async_io::IoSafe for Connection {}
 
 #[deprecated = "While it supports IPv6, it does not implement the happy eyeballs algorithm. Use \
                 {std_net,smol}::tcp_stream_connect instead."]

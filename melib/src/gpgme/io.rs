@@ -23,6 +23,7 @@ use std::{
     ffi::{c_int, c_void},
     io::{self, Read, Seek, Write},
     mem::ManuallyDrop,
+    os::fd::{FromRawFd, OwnedFd},
     ptr::NonNull,
 };
 
@@ -78,15 +79,20 @@ pub unsafe extern "C" fn gpgme_register_io_cb(
         let idx = io_state_lck.max_idx;
         io_state_lck.max_idx += 1;
         let (sender, receiver) = smol::channel::unbounded();
-        let gpgfd = GpgmeFd {
-            fd,
-            fnc,
-            fnc_data,
-            idx,
-            write: dir == 0,
-            sender,
-            receiver,
-            io_state: io_state_copy.clone(),
+        let gpgfd = {
+            // SAFETY: `fd` is a valid file descriptor which we don't own, but wrapping it
+            // in ManuallyDrop allows as to borrow it with AsFd trait.
+            let fd = unsafe { OwnedFd::from_raw_fd(fd) };
+            GpgmeFd {
+                fd: ManuallyDrop::new(fd).into(),
+                fnc,
+                fnc_data,
+                idx,
+                write: dir == 0,
+                sender,
+                receiver,
+                io_state: io_state_copy.clone(),
+            }
         };
         {
             let tag_data = Arc::into_raw(Arc::new(TagData {
