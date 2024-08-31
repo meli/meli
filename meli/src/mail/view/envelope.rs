@@ -245,7 +245,7 @@ impl EnvelopeView {
                             inner: Box::new(a.clone()),
                             display: {
                                 let mut v = vec![];
-                                EnvelopeView::attachment_to_display_helper(
+                                Self::attachment_to_display_helper(
                                     &parts[0],
                                     main_loop_handler,
                                     active_jobs,
@@ -262,7 +262,7 @@ impl EnvelopeView {
                         if view_settings.auto_verify_signatures.is_true() {
                             let verify_fut = crate::mail::pgp::verify(a.clone());
                             let handle = main_loop_handler.job_executor.spawn(
-                                "gpg::verify-sig".into(),
+                                "gpg::verify".into(),
                                 verify_fut,
                                 IsAsync::Blocking,
                             );
@@ -1033,7 +1033,7 @@ impl Component for EnvelopeView {
                 } else {
                     &body
                 };
-                if let Ok(filter) = ViewFilter::new_html(attachment, context) {
+                if let Ok(filter) = ViewFilter::new_html(attachment, &self.view_settings, context) {
                     self.filters.push(filter);
                 }
             } else if self.view_settings.auto_choose_multipart_alternative
@@ -1055,13 +1055,18 @@ impl Component for EnvelopeView {
                         .iter()
                         .find(|a| a.is_html())
                         .unwrap_or(&body),
+                    &self.view_settings,
                     context,
                 ) {
                     self.filters.push(filter);
-                } else if let Ok(filter) = ViewFilter::new_attachment(&body, context) {
+                } else if let Ok(filter) =
+                    ViewFilter::new_attachment(&body, &self.view_settings, context)
+                {
                     self.filters.push(filter);
                 }
-            } else if let Ok(filter) = ViewFilter::new_attachment(&body, context) {
+            } else if let Ok(filter) =
+                ViewFilter::new_attachment(&body, &self.view_settings, context)
+            {
                 self.filters.push(filter);
             }
             self.body_text = String::from_utf8_lossy(
@@ -1090,11 +1095,14 @@ impl Component for EnvelopeView {
                                     if filter_invocation.is_empty() {
                                         None
                                     } else {
-                                        Some(format!("Text filtered by `{filter_invocation}`\n\n"))
+                                        Some(format!("Text filtered by `{filter_invocation}`"))
                                     }
                                 })
                                 .unwrap_or_default(),
                         );
+                        if !text.is_empty() {
+                            text.push('\n');
+                        }
                         match body_text {
                             ViewFilterContent::Filtered { inner } => text.push_str(
                                 &self.options.convert(&mut self.links, &self.body, inner),
@@ -1104,7 +1112,7 @@ impl Component for EnvelopeView {
                                 text.push_str("Filter job running in background.")
                             }
                             ViewFilterContent::InlineAttachments { parts } => {
-                                stack.extend(parts.iter());
+                                stack.extend(parts.iter().rev());
                             }
                         }
                     }
@@ -1118,6 +1126,9 @@ impl Component for EnvelopeView {
                 text.push_str("\n\n");
             }
             text.push_str(&self.attachment_tree);
+            while text.ends_with('\n') {
+                text.pop();
+            }
             let cursor_pos = self.pager.cursor_pos();
             self.view_settings.body_theme = crate::conf::value(context, "mail.view.body");
             self.pager = Pager::from_string(
@@ -1645,7 +1656,9 @@ impl Component for EnvelopeView {
                         | ContentType::Text { .. }
                         | ContentType::PGPSignature
                         | ContentType::CMSSignature => {
-                            if let Ok(filter) = ViewFilter::new_attachment(attachment, context) {
+                            if let Ok(filter) =
+                                ViewFilter::new_attachment(attachment, &self.view_settings, context)
+                            {
                                 self.filters.push(filter);
                             }
                             self.initialised = false;
