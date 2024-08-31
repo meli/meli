@@ -562,15 +562,15 @@ pub fn printenv(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     Ok((input, Ok(PrintEnv(key.to_string()))))
 }
 pub fn currentdir(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
-    let mut check = arg_init! { min_arg:0, max_arg: 0, currentdir};
-    let (input, _) = tag("cwd")(input.ltrim())?;
+    let mut check = arg_init! { min_arg:0, max_arg: 0, pwd};
+    let (input, _) = alt((tag("cwd"), tag("pwd")))(input.ltrim())?;
     arg_chk!(start check, input);
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
     Ok((input, Ok(CurrentDirectory)))
 }
 pub fn change_currentdir(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
-    let mut check = arg_init! { min_arg:1, max_arg: 1, change_currentdir};
+    let mut check = arg_init! { min_arg: 1, max_arg: 1, cd};
     let (input, _) = tag("cd")(input.ltrim())?;
     arg_chk!(start check, input);
     let (input, _) = is_a(" ")(input)?;
