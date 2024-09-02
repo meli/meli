@@ -23,8 +23,6 @@
 use crate::{
     email::{
         address::*,
-        headers::{HeaderMap, HeaderName},
-        mailto::Mailto,
         parser::{
             address::*,
             dates::rfc5322_date,
@@ -138,26 +136,6 @@ fn test_email_parser_address_list() {
         rfc2822address_list(s).unwrap()
     );
 }
-
-//    // [ref:FIXME]: add file
-//#[test]
-//fn test_email_parser_attachments() {
-//            use std::io::Read;
-//            let mut buffer: Vec<u8> = Vec::new();
-//            let _ = std::fs::File::open("").unwrap().read_to_end(&mut buffer);
-//            let boundary = b"b1_4382d284f0c601a737bb32aaeda53160";
-//            let (_, body) = match mail(&buffer) {
-//                Ok(v) => v,
-//                Err(_) => panic!(),
-//            };
-//            let attachments = parts(body, boundary).unwrap().1;
-//            assert_eq!(attachments.len(), 4);
-//            let v: Vec<&str> = attachments
-//                .iter()
-//                .map(|v| std::str::from_utf8(v).unwrap())
-//                .collect();
-//    //println!("attachments {:?}", v);
-//}
 
 #[test]
 fn test_email_parser_addresses() {
@@ -463,73 +441,6 @@ fn test_email_parser_msg_id() {
     let c = msg_id(s).unwrap().1;
     assert_eq!(&msg_id_list(value).unwrap().1, &[a, c]);
 }
-
-#[rustfmt::skip]
-    #[test]
-    fn test_email_parser_mailto_parse() {
-        let value = "mailto:1001084@bugs.debian.org?In-Reply-To=%3C168435582154.540248.\
-             1403466294276093439%40xxxxxxxxxxxxxx%3E&References=%3C163857393129.1083042.\
-             11053317018847169002.reportbug%40xxxxxxxxxxxxxx%3E%0A%20%3C168435582154.540248.\
-             1403466294276093439%40xxxxxxxxxxxxxx%3E&subject=Re%3A%20ITP%3A%20meli%20--%\
-             20terminal%20mail%20client&body=On%20Wed%2C%2017%20May%202023%2022%3A37%3A01%20%\
-             2B0200%20xxxxx%20zzzzzzzzzz%20%3Cdr%40xxxxxxxx%3E%20wrote%3A%0A%3E%200.7.2%\
-             2B20230517%20draft%201%20needs%20embedding%208%20crates%20%286%20missing%2C%201%\
-             20unwanted%2C%201%20ahead%29%3B%0A%3E%20runs%20and%20seems%20to%20work%20from%20a%\
-             20brief%20test%20use.%0A%3E%20%0A%3E%20Main%20tasks%20are%20still%20to%20keep%\
-             20package%20up-to-date%20with%20upstream%20releases%2C%20and%0A%3E%20to%20package%\
-             20more%20of%20the%20crates%20currently%20embedded.%0A%3E%20%0A%3E%20Here%27s%20how%\
-             20you%20can%20help%3A%0A%3E%20%0A%3E%20As%20user%20running%20Debian%2C%20you%20can%\
-             20test%20this%20draft%20package%3A%20Either%20build%20it%0A%3E%20yourself%20from%\
-             20source%20or%20tell%20%28by%20posting%20to%20this%20bugreport%29%20if%20you%0A%3E%\
-             20prefer%20testing%20the%20binary%20packages%20I%20built%20-%20then%20I%20will%\
-             20share%20those.%0A%3E%20%0A%3E%20As%20developer%20%28but%20no%20need%20to%20be%\
-             20official%20member%20of%20Debian%21%29%2C%20you%20can%0A%3E%20join%20the%20Debian%\
-             20Rust%20team%20and%20help%20package%20these%20missing%20crates%3A%0A%3E%20https%3A%\
-             2F%2Fsalsa.debian.org%2Fdebian%2Fmeli%2F-%2Fblob%2Fdebian%2Flatest%2Fdebian%2FTODO%\
-             0A%3E%20%0A%3E%20%0A%3E%20%20-%20JJJJJ%0A%3E%20%0A%3E%20--%20%0A%3E%20%20%2A%20JJJJJ%\
-             20xxxxxxxxxx%20-%20idealist%20%26%20Internet-arkitekt%0A%3E%20%20%2A%20Tlf.%3A%20%\
-             2B45%20%20%20Website%3A%20http%3A%2F%2Fxxxxxxxxxxx%2F%0A%3E%20%0A%3E%20%20%5Bx%5D%\
-             20quote%20me%20freely%20%20%5B%20%5D%20ask%20before%20reusing%20%20%5B%20%5D%20keep%\
-             20private";
-        let (rest, mailto) = crate::parser::generic::mailto(value.as_bytes())
-            .map_err(|err| match err {
-                nom::Err::Failure(err) | nom::Err::Error(err) => {
-                    format!(
-                        "kind {:?} at: {:?}",
-                        err,
-                        String::from_utf8_lossy(err.input)
-                    )
-                }
-                nom::Err::Incomplete(_) => "incomplete input".to_string(),
-            })
-            .unwrap();
-        println!(
-            "rest = {}, mailto = {:#?}",
-            String::from_utf8_lossy(rest),
-            mailto
-        );
-
-        assert_eq!(
-            mailto,
-            Mailto {
-                address: vec![
-                    Address::new(None, "1001084@bugs.debian.org".to_string())
-
-                ],
-                body: Some(
-                    "On Wed, 17 May 2023 22:37:01 +0200 xxxxx zzzzzzzzzz <dr@xxxxxxxx> wrote:\n> 0.7.2+20230517 draft 1 needs embedding 8 crates (6 missing, 1 unwanted, 1 ahead);\n> runs and seems to work from a brief test use.\n> \n> Main tasks are still to keep package up-to-date with upstream releases, and\n> to package more of the crates currently embedded.\n> \n> Here's how you can help:\n> \n> As user running Debian, you can test this draft package: Either build it\n> yourself from source or tell (by posting to this bugreport) if you\n> prefer testing the binary packages I built - then I will share those.\n> \n> As developer (but no need to be official member of Debian!), you can\n> join the Debian Rust team and help package these missing crates:\n> https://salsa.debian.org/debian/meli/-/blob/debian/latest/debian/TODO\n> \n> \n>  - JJJJJ\n> \n> -- \n>  * JJJJJ xxxxxxxxxx - idealist & Internet-arkitekt\n>  * Tlf.: +45   Website: http://xxxxxxxxxxx/\n> \n>  [x] quote me freely  [ ] ask before reusing  [ ] keep private".to_string(),
-                ),
-                headers: {
-                    let mut map = HeaderMap::new();
-                    map.insert(HeaderName::TO, "1001084@bugs.debian.org".into());
-                    map.insert(HeaderName::IN_REPLY_TO, "<168435582154.540248.1403466294276093439@xxxxxxxxxxxxxx>".into());
-                    map.insert(HeaderName::REFERENCES, "<163857393129.1083042.11053317018847169002.reportbug@xxxxxxxxxxxxxx>\n <168435582154.540248.1403466294276093439@xxxxxxxxxxxxxx>".into());
-                    map.insert(HeaderName::SUBJECT, "Re: ITP: meli -- terminal mail client".into());
-                    map
-                },
-
-            });
-    }
 
 #[test]
 fn test_email_parser_dates_date_new() {

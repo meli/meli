@@ -1042,7 +1042,11 @@ pub mod generic {
             ));
         }
         input = &input[b"mailto:".len()..];
-        let mut decoded_owned = percent_decode(input).decode_utf8().unwrap().to_string();
+        let Ok(mut decoded_owned) = String::from_utf8(input.to_vec()) else {
+            return Err(nom::Err::Error(
+                (input, "mailto(): Not valid UTF-8.").into(),
+            ));
+        };
 
         let mut substitutions = vec![];
         for (i, _) in decoded_owned.match_indices('&') {
@@ -1063,7 +1067,15 @@ pub mod generic {
         let end = decoded.as_bytes().iter().position(|e| *e == b'?');
         let end_or_len = end.unwrap_or(decoded.len());
 
-        if let Ok(addr) = Address::list_try_from(&decoded[..end_or_len]) {
+        if let Ok(addr) = percent_decode(decoded[..end_or_len].as_bytes())
+            .decode_utf8()
+            .map_err(|_| nom::Err::Error((input, "mailto(): Not valid UTF-8.")))
+            .and_then(|s| {
+                Address::list_try_from(s.as_bytes()).map_err(|_| {
+                    nom::Err::Error((input, "mailto(): doesn't start with an address."))
+                })
+            })
+        {
             address = addr;
             decoded = if decoded[end_or_len..].is_empty() {
                 &decoded[end_or_len..]
@@ -1096,41 +1108,42 @@ pub mod generic {
             headers.insert(HeaderName::TO, full_address);
         }
 
-        while !decoded.is_empty() {
-            if decoded.starts_with("&amp;") {
-                decoded = &decoded["&amp;".len()..];
-                continue;
-            }
-
-            let tag = if let Some(tag_pos) = decoded.as_bytes().iter().position(|e| *e == b'=') {
-                let ret = &decoded[0..tag_pos];
-                decoded = &decoded[tag_pos + 1..];
+        let mut i = 0;
+        while !decoded[i..].is_empty() {
+            let tag = if let Some(tag_pos) = decoded[i..].as_bytes().iter().position(|e| *e == b'=')
+            {
+                let ret = &decoded[i..][0..tag_pos];
+                i += tag_pos + 1;
                 ret
-            } else if decoded.as_bytes().starts_with(b"body") {
-                let ret = &decoded[0.."body".len()];
-                decoded = &decoded[("body".len() + 1)..];
+            } else if decoded[i..].as_bytes().starts_with(b"body") {
+                let ret = &decoded[i..][0.."body".len()];
+                i += "body".len() + 1;
                 ret
             } else {
                 return Err(nom::Err::Error(
                     (
                         input,
-                        format!("mailto(): extra characters found in input: {}", decoded),
+                        format!(
+                            "mailto(): extra characters found in input: {}",
+                            &decoded[i..]
+                        ),
                     )
                         .into(),
                 ));
             };
 
-            let value_end = if tag == "body" {
-                decoded.len()
-            } else {
-                decoded
-                    .as_bytes()
-                    .iter()
-                    .position(|e| *e == b'&')
-                    .unwrap_or(decoded.len())
-            };
+            let value_end = decoded[i..]
+                .as_bytes()
+                .iter()
+                .position(|e| *e == b'&')
+                .unwrap_or_else(|| decoded[i..].len());
 
-            let value = decoded[..value_end].to_string();
+            let Ok(value) = percent_decode(decoded[i..][..value_end].as_bytes())
+                .decode_utf8()
+                .map(|v| v.to_string())
+            else {
+                return Err(nom::Err::Error((input, "mailto(): invalid UTF-8.").into()));
+            };
             match tag {
                 "body" if body.is_none() => {
                     body = Some(value);
@@ -1152,15 +1165,14 @@ pub mod generic {
                                 hdr,
                                 value
                             );
-                        }
-                        if !headers.contains_key(&hdr) {
+                        } else if !headers.contains_key(&hdr) {
                             headers.insert(hdr, value);
                         }
                     }
                     Ok(hdr) => {
                         log::warn!(
                             "parsing mailto(): header {} is not a known header and it will be \
-                             ignored.Value was {:?}",
+                             ignored. Value was {:?}",
                             hdr,
                             value
                         );
@@ -1172,10 +1184,10 @@ pub mod generic {
                     }
                 },
             }
-            if decoded[value_end..].is_empty() {
+            if decoded[i..][value_end..].is_empty() {
                 break;
             }
-            decoded = &decoded[value_end + 1..];
+            i += value_end + 1;
         }
         Ok((
             input,
@@ -2083,12 +2095,11 @@ pub mod encodings {
                 break;
             }
         }
-        if tag_end_idx.is_none() {
+        let Some(tag_end_idx) = tag_end_idx else {
             return Err(nom::Err::Error(
                 (input, "encoded_word(): expected end tag").into(),
             ));
-        }
-        let tag_end_idx = tag_end_idx.unwrap();
+        };
 
         if tag_end_idx + 2 >= input.len() || input[2 + tag_end_idx] != b'?' {
             return Err(nom::Err::Error(
@@ -2106,12 +2117,11 @@ pub mod encodings {
                 break;
             }
         }
-        if encoded_end_idx.is_none() {
+        let Some(encoded_end_idx) = encoded_end_idx else {
             return Err(nom::Err::Error(
                 (input, "encoded_word(): expected input after end tag").into(),
             ));
-        }
-        let encoded_end_idx = encoded_end_idx.unwrap();
+        };
         let encoded_text = &input[3 + tag_end_idx..encoded_end_idx];
 
         let s: Vec<u8> = match input[tag_end_idx + 1] {
