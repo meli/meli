@@ -894,6 +894,10 @@ impl Account {
         if mailbox_hash.is_null() {
             return Err(0);
         }
+        if matches!(self.mailbox_entries[&mailbox_hash].status, MailboxStatus::Failed(ref err) if err.is_recoverable())
+        {
+            self.mailbox_entries[&mailbox_hash].status = MailboxStatus::None;
+        }
         match self.mailbox_entries[&mailbox_hash].status {
             MailboxStatus::Available | MailboxStatus::Parsing(_, _)
                 if self
