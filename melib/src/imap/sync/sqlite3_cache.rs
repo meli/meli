@@ -401,7 +401,9 @@ impl ImapCache for Sqlite3Cache {
         let mut uid_index_lck = self.uid_store.uid_index.lock().unwrap();
         let mut env_hashes = Vec::with_capacity(ret.len());
         for (uid, hash, env, modseq) in ret {
-            debug_assert_eq!(hash, env.hash());
+            if hash != env.hash() {
+                return Ok(None);
+            }
             env_hashes.push(env.hash());
             max_uid = max_uid.max(uid);
             hash_index_lck.insert(env.hash(), (uid, mailbox_hash));
