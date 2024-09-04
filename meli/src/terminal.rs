@@ -170,6 +170,173 @@ impl<
     }
 }
 
+/// Create an OSC-introduced sequence.
+macro_rules! osc {
+    ($( $l:expr ),*) => { concat!("\x1b]", $( $l ),*) };
+}
+
+/// Derive an OSC sequence struct.
+macro_rules! derive_osc_sequence {
+    ($(#[$outer:meta])*
+    ($name:ident, $value:expr)) => {
+        $(#[$outer])*
+        #[derive(Copy, Clone, Eq, PartialEq, Debug)]
+        pub struct $name;
+
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(f, osc!($value))
+            }
+        }
+
+        impl AsRef<str> for $name {
+            fn as_ref(&self) -> &'static str {
+                osc!($value)
+            }
+        }
+    };
+}
+
+pub trait EscapeSequenceParse: Sized {
+    fn parse(bytes: &str) -> Option<Self>;
+}
+
+pub trait EscapeSequenceQuery: Sized {
+    type Reply: EscapeSequenceParse;
+    const PREFIX: &'static str;
+
+    fn parse(bytes: &str) -> Option<Self::Reply> {
+        if !bytes.starts_with(Self::PREFIX) {
+            return None;
+        }
+        <Self::Reply as EscapeSequenceParse>::parse(&bytes[Self::PREFIX.len()..])
+    }
+}
+
+impl EscapeSequenceQuery for QueryBackground {
+    type Reply = Color;
+    const PREFIX: &'static str = "\x1b]11;";
+}
+
+impl EscapeSequenceQuery for QueryForeground {
+    type Reply = Color;
+    const PREFIX: &'static str = "\x1b]10;";
+}
+
+impl EscapeSequenceParse for Color {
+    fn parse(mut bytes: &str) -> Option<Self> {
+        // OSC Escape sequence.
+        // Terminal background report:
+        melib::log::trace!("osc10/11 background query: {:?}", bytes,);
+
+        // meli::terminal::keys: EscapeSequence is [27, 93, 49, 49, 59, 114, 103, 98,
+        // 58, 49, 99, 49, 99, 47, 49, 98, 49, 98, 47, 49, 57, 49, 57] ==
+        // "\u{1b}]11;rgb:1c1c/1b1b/1919" meli::terminal: osc11 background
+        // query: [114, 103, 98, 58, 49, 99, 49, 99, 47, 49, 98, 49, 98, 47, 49, 57, 49,
+        // 57] == "rgb:1c1c/1b1b/1919" meli::terminal::keys: EscapeSequence
+        // parsed None
+        if bytes.starts_with("rgba:") {
+            bytes = &bytes["rgba:".len()..];
+            // Formats:
+            // rgba:RRRR/GGGG/BBBB/AAAA
+            if bytes.len() == "RRRR/GGGG/BBBB/AAAA".len() {
+                return parse_rgba(bytes);
+            }
+
+            return None;
+        } else if bytes.starts_with("rgb:") {
+            bytes = &bytes["rgb:".len()..];
+            // Formats:
+            // rgb:R/G/B
+            // rgb:RR/GG/BB
+            // rgb:RRRR/GGGG/BBBB
+            if bytes.len() == "R/G/B".len() {
+                return parse_rgb(bytes);
+            }
+            if bytes.len() == "RR/GG/BB".len() {
+                return parse_rgb(bytes);
+            }
+            if bytes.len() == "RRRR/GGGG/BBBB".len() {
+                return parse_rgb(bytes);
+            }
+
+            return None;
+        }
+        None
+    }
+}
+
+/// From the `xparsecolor` man page:
+/// > An RGB Device specification is identified by the prefix `rgb:` and
+/// > conforms to the following syntax:
+/// > ```text
+/// > rgb:<red>/<green>/<blue>
+/// >
+/// > <red>, <green>, <blue> := h | hh | hhh | hhhh
+/// > h := single hexadecimal digits (case insignificant)
+/// > ```
+/// > Note that *h* indicates the value scaled in 4 bits,
+/// > *hh* the value scaled in 8 bits, *hhh* the value scaled in 12 bits,
+/// > and *hhhh* the value scaled in 16 bits, respectively.
+fn parse_rgb(input: &str) -> Option<Color> {
+    let mut parts = input.split('/');
+    let r = parse_channel_scaled(parts.next()?)?;
+    let g = parse_channel_scaled(parts.next()?)?;
+    let b = parse_channel_scaled(parts.next()?)?;
+    if parts.next().is_none() {
+        Some(Color::Rgb(r as u8, g as u8, b as u8))
+    } else {
+        None
+    }
+}
+
+/// Some terminals such as urxvt (rxvt-unicode) optionally support
+/// an alpha channel and sometimes return colors in the format
+/// `rgba:<red>/<green>/<blue>/<alpha>`.
+///
+/// Dropping the alpha channel is a best-effort thing as
+/// the effective color (when combined with a background color)
+/// could have a completely different perceived lightness value.
+///
+/// Test with `urxvt -depth 32 -fg grey90 -bg rgba:0000/0000/4444/cccc`
+fn parse_rgba(input: &str) -> Option<Color> {
+    let mut parts = input.split('/');
+    let r = parse_channel_scaled(parts.next()?)?;
+    let g = parse_channel_scaled(parts.next()?)?;
+    let b = parse_channel_scaled(parts.next()?)?;
+    let _a = parse_channel_scaled(parts.next()?)?;
+    if parts.next().is_none() {
+        Some(Color::Rgb(r as u8, g as u8, b as u8))
+    } else {
+        None
+    }
+}
+
+fn parse_channel_scaled(input: &str) -> Option<u16> {
+    let len = input.len();
+    if (1..=4).contains(&len) {
+        let max = u32::pow(16, len as u32) - 1;
+        let value = u32::from_str_radix(input, 16).ok()?;
+        Some((u16::MAX as u32 * value / max) as u16)
+    } else {
+        None
+    }
+}
+// const ST: &[u8] = b"\x1b\\";
+// const QUERY_FG: &[u8] = b"\x1b]10;?";
+// const FG_RESPONSE_PREFIX: &[u8] = b"\x1b]10;";
+// const QUERY_BG: &[u8] = b"\x1b]11;?";
+// const BG_RESPONSE_PREFIX: &[u8] = b"\x1b]11;";
+derive_osc_sequence!(
+    /// Query background color.
+    (QueryBackground, "11;?\x1b\\")
+);
+
+derive_osc_sequence!(
+    /// Query foreground color.
+    (QueryForeground, "10;?\x1b\\")
+);
+
 // Some macros taken from termion:
 /// Create a CSI-introduced sequence.
 macro_rules! csi {

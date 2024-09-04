@@ -484,6 +484,7 @@ impl State {
         }
 
         s.screen.switch_to_alternate_screen(&s.context);
+        s.screen.do_background_query();
         for i in 0..s.context.accounts.len() {
             if !s.context.accounts[i].backend_capabilities.is_remote {
                 s.context.accounts[i].watch(None);

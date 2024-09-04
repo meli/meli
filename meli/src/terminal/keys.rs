@@ -22,11 +22,12 @@
 use std::os::fd::{AsFd, AsRawFd, OwnedFd};
 
 use crossbeam::{channel::Receiver, select};
+use melib::log;
 use nix::poll::{poll, PollFd, PollFlags, PollTimeout};
 use serde::{Serialize, Serializer};
 use termion::{
     event::{
-        Event as TermionEvent, Key as TermionKey, MouseButton as TermionMouseButton,
+        Event as TEvent, Key as TKey, MouseButton as TermionMouseButton,
         MouseEvent as TermionMouseEvent,
     },
     input::TermReadEventsAndRaw,
@@ -177,26 +178,26 @@ impl<'a> From<&'a String> for Key {
     }
 }
 
-impl From<TermionKey> for Key {
-    fn from(k: TermionKey) -> Self {
+impl From<TKey> for Key {
+    fn from(k: TKey) -> Self {
         match k {
-            TermionKey::Backspace => Self::Backspace,
-            TermionKey::Left => Self::Left,
-            TermionKey::Right => Self::Right,
-            TermionKey::Up => Self::Up,
-            TermionKey::Down => Self::Down,
-            TermionKey::Home => Self::Home,
-            TermionKey::End => Self::End,
-            TermionKey::PageUp => Self::PageUp,
-            TermionKey::PageDown => Self::PageDown,
-            TermionKey::Delete => Self::Delete,
-            TermionKey::Insert => Self::Insert,
-            TermionKey::F(u) => Self::F(u),
-            TermionKey::Char(c) => Self::Char(c),
-            TermionKey::Alt(c) => Self::Alt(c),
-            TermionKey::Ctrl(c) => Self::Ctrl(c),
-            TermionKey::Null => Self::Null,
-            TermionKey::Esc => Self::Esc,
+            TKey::Backspace => Self::Backspace,
+            TKey::Left => Self::Left,
+            TKey::Right => Self::Right,
+            TKey::Up => Self::Up,
+            TKey::Down => Self::Down,
+            TKey::Home => Self::Home,
+            TKey::End => Self::End,
+            TKey::PageUp => Self::PageUp,
+            TKey::PageDown => Self::PageDown,
+            TKey::Delete => Self::Delete,
+            TKey::Insert => Self::Insert,
+            TKey::F(u) => Self::F(u),
+            TKey::Char(c) => Self::Char(c),
+            TKey::Alt(c) => Self::Alt(c),
+            TKey::Ctrl(c) => Self::Ctrl(c),
+            TKey::Null => Self::Null,
+            TKey::Esc => Self::Esc,
             _ => Self::Char(' '),
         }
     }
@@ -208,10 +209,11 @@ impl PartialEq<Key> for &Key {
     }
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 /// Keep track of whether we're accepting normal user input or a pasted string.
 enum InputMode {
     Normal,
+    EscapeSequence(Vec<u8>),
     Paste(Vec<u8>),
 }
 
@@ -245,6 +247,8 @@ pub fn get_events(
     let stdin_fd = PollFd::new(stdin2.as_fd(), PollFlags::POLLIN);
     let new_command_pollfd = PollFd::new(new_command_fd.as_fd(), PollFlags::POLLIN);
     let mut input_mode = InputMode::Normal;
+    let mut esc_seq_buf = vec![];
+    let mut palette = (None, None);
     let mut paste_buf = String::with_capacity(256);
     let mut stdin_iter = stdin.events_and_raw();
     'poll_while: while let Ok(_n_raw) = poll(&mut [new_command_pollfd, stdin_fd], PollTimeout::NONE)
@@ -254,23 +258,52 @@ pub fn get_events(
                 if stdin_fd.revents().is_some() {
                     'stdin_while: for c in stdin_iter.by_ref() {
                         match (c, &mut input_mode) {
-                            (Ok((TermionEvent::Key(k), bytes)), InputMode::Normal) => {
+                            (Ok((TEvent::Key(TKey::Alt(']')), _)), InputMode::Normal)=> {
+                                esc_seq_buf.clear();
+                                esc_seq_buf.extend_from_slice(b"\x1b]");
+                                input_mode = InputMode::EscapeSequence(std::mem::take(&mut esc_seq_buf));
+
+                                continue 'stdin_while;
+                            }
+                            (Ok((TEvent::Key(TKey::Alt('\\')), _)), InputMode::EscapeSequence(ref mut buf)) => {
+                                esc_seq_buf = std::mem::take(buf);
+                                input_mode = InputMode::Normal;
+                                log::trace!("EscapeSequence is {:?} == {:?}", &esc_seq_buf, String::from_utf8_lossy(&esc_seq_buf));
+                                if let Some(bg) = QueryBackground::parse(&String::from_utf8_lossy(&esc_seq_buf)) {
+                                    log::trace!("EscapeSequence parsed bg {:?}", bg);
+                                    palette.1 = Some(bg);
+                                } else if let Some(fg) = QueryForeground::parse(&String::from_utf8_lossy(&esc_seq_buf)) {
+                                    log::trace!("EscapeSequence parsed fg {:?}", fg);
+                                    palette.0 = Some(fg);
+                                }
+                                if let (Some(fg), Some(bg)) = palette {
+                                    log::trace!("compute_scheme_contrast(fg {:?}, bg {:?}) = {:?}", fg, bg, Color::compute_scheme_contrast(fg, bg));
+                                    palette.0.take();
+                                    palette.1.take();
+                                }
+                                continue 'stdin_while;
+                            }
+                            (Ok((TEvent::Key(_), ref bytes)), InputMode::EscapeSequence(ref mut buf)) => {
+                                buf.extend(bytes);
+                                continue 'stdin_while;
+                            }
+                            (Ok((TEvent::Key(k), bytes)), InputMode::Normal) => {
                                 closure((Key::from(k), bytes));
                                 continue 'poll_while;
                             }
                             (
-                                Ok((TermionEvent::Key(TermionKey::Char(k)), ref mut bytes)), InputMode::Paste(ref mut buf),
+                                Ok((TEvent::Key(TKey::Char(k)), ref mut bytes)), InputMode::Paste(ref mut buf),
                             ) => {
                                 paste_buf.push(k);
                                 let bytes = std::mem::take(bytes);
                                 buf.extend(bytes.into_iter());
                                 continue 'stdin_while;
                             }
-                            (Ok((TermionEvent::Unsupported(ref k), _)), _) if k.as_slice() == BRACKET_PASTE_START => {
+                            (Ok((TEvent::Unsupported(ref k), _)), _) if k.as_slice() == BRACKET_PASTE_START => {
                                 input_mode = InputMode::Paste(Vec::new());
                                 continue 'stdin_while;
                             }
-                            (Ok((TermionEvent::Unsupported(ref k), _)), InputMode::Paste(ref mut buf))
+                            (Ok((TEvent::Unsupported(ref k), _)), InputMode::Paste(ref mut buf))
                                 if k.as_slice() == BRACKET_PASTE_END =>
                                 {
                                     let buf = std::mem::take(buf);
@@ -280,15 +313,23 @@ pub fn get_events(
                                     closure((ret, buf));
                                     continue 'poll_while;
                                 }
-                            (Ok((TermionEvent::Mouse(mev), bytes)), InputMode::Normal) => {
+                            (Ok((TEvent::Mouse(mev), bytes)), InputMode::Normal) => {
                                 closure((Key::Mouse(mev.into()), bytes));
                                 continue 'poll_while;
                                 }
-                            _ => {
+                            other => {
+                                log::trace!("get_events other = {:?}", other);
                                 continue 'poll_while;
                             } // Mouse events or errors.
                         }
                     }
+                    if let InputMode::EscapeSequence(ref mut buf) = input_mode {
+                        esc_seq_buf = std::mem::take(buf);
+                        input_mode = InputMode::Normal;
+                        log::trace!("EscapeSequence is {:?} == {:?}", &esc_seq_buf, String::from_utf8_lossy(&esc_seq_buf));
+                        log::trace!("EscapeSequence parsed {:?}", QueryBackground::parse(&String::from_utf8_lossy(&esc_seq_buf)));
+                    }
+
                 }
             },
             recv(rx) -> cmd => {

@@ -68,8 +68,8 @@ pub enum Color {
 
 impl Color {
     /// Returns the `u8` representation of the `Color`.
-    pub fn as_byte(self) -> u8 {
-        match self {
+    pub fn as_byte(self) -> Option<u8> {
+        Some(match self {
             Self::Black => 0x00,
             Self::Red => 0x01,
             Self::Green => 0x02,
@@ -79,9 +79,9 @@ impl Color {
             Self::Cyan => 0x06,
             Self::White => 0x07,
             Self::Byte(b) => b,
-            Self::Rgb(_, _, _) => unreachable!(),
+            Self::Rgb(_, _, _) => return None,
             Self::Default => 0x00,
-        }
+        })
     }
 
     pub fn from_byte(val: u8) -> Self {
@@ -126,7 +126,7 @@ impl Color {
             | b @ Self::Magenta
             | b @ Self::Cyan
             | b @ Self::White
-            | b @ Self::Default => AnsiValue(b.as_byte()),
+            | b @ Self::Default => AnsiValue(b.as_byte().unwrap_or_default()),
             Self::Byte(b) => AnsiValue(b),
             Self::Rgb(_, _, _) => AnsiValue(0),
         }
@@ -1018,5 +1018,88 @@ pub mod aliases {
         pub const GREY85: Self = Self::Byte(253);
         pub const GREY89: Self = Self::Byte(254);
         pub const GREY93: Self = Self::Byte(255);
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum ColorContrast {
+    #[default]
+    Dark,
+    Light,
+    Other,
+}
+
+impl Color {
+    pub fn compute_scheme_contrast(fg: Self, bg: Self) -> ColorContrast {
+        const PERCEPTUAL_MIDDLE_GRAY: u8 = 50;
+        let fg = fg.perceived_lightness();
+        let bg = bg.perceived_lightness();
+        if bg < fg {
+            ColorContrast::Dark
+        } else if bg > fg || bg > PERCEPTUAL_MIDDLE_GRAY {
+            ColorContrast::Light
+        } else {
+            ColorContrast::Dark
+        }
+    }
+
+    /// The perceived lightness of the color
+    /// as a value between `0` (black) and `100` (white)
+    /// where `50` is the perceptual "middle grey".
+    ///
+    /// ```
+    /// # use meli::terminal::Color;
+    /// # let color = Color::default();
+    /// let is_dark = color.perceived_lightness() <= 50;
+    /// ```
+    pub fn perceived_lightness(&self) -> u8 {
+        luminance_to_perceived_lightness(luminance(self))
+    }
+
+    pub fn into_rgb(&self) -> (u8, u8, u8) {
+        match self {
+            Self::Black => (0, 0, 0),
+            Self::Red => (255, 0, 0),
+            Self::Green => (0, 255, 0),
+            Self::Yellow => todo!(),
+            Self::Blue => (0, 0, 255),
+            Self::Magenta => todo!(),
+            Self::Cyan => todo!(),
+            Self::White => (255, 255, 255),
+            Self::Byte(_b) => todo!(),
+            Self::Rgb(r, g, b) => (*r, *g, *b),
+            Self::Default => (0, 0, 0),
+        }
+    }
+}
+
+// Implementation of determining the perceived lightness
+// follows this excellent answer: https://stackoverflow.com/a/56678483
+
+fn srgb_to_lin(channel: f64) -> f64 {
+    if channel < 0.04045 {
+        channel / 12.92
+    } else {
+        ((channel + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+fn luminance(color: &Color) -> f64 {
+    let (r, g, b) = color.into_rgb();
+    let r = f64::from(r) / f64::from(u8::MAX);
+    let g = f64::from(g) / f64::from(u8::MAX);
+    let b = f64::from(b) / f64::from(u8::MAX);
+    0.0722f64.mul_add(
+        srgb_to_lin(b),
+        0.2126f64.mul_add(srgb_to_lin(r), 0.7152 * srgb_to_lin(g)),
+    )
+}
+
+// Perceptual lightness (L*)
+fn luminance_to_perceived_lightness(luminance: f64) -> u8 {
+    if luminance < 216. / 24389. {
+        (luminance * (24389. / 27.)) as u8
+    } else {
+        luminance.cbrt().mul_add(116., -16.) as u8
     }
 }

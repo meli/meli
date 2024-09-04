@@ -133,11 +133,12 @@ impl Component for SVGScreenshotFilter {
                             Color::Default => {
                                 unreachable!();
                             }
-                            c if c.as_byte() < 16 => {
-                                rect = rect.set("class", format!("c{}", c.as_byte()).as_str());
+                            c if matches!(c.as_byte(), Some(c) if c < 16) => {
+                                rect = rect
+                                    .set("class", format!("c{}", c.as_byte().unwrap()).as_str());
                             }
-                            c => {
-                                let c = c.as_byte();
+                            c if c.as_byte().is_some() => {
+                                let c = c.as_byte().unwrap();
                                 let (r, g, b) = XTERM_COLORS[c as usize];
                                 let class = if classes.contains_key(&(r, g, b)) {
                                     classes[&(r, g, b)]
@@ -148,6 +149,7 @@ impl Component for SVGScreenshotFilter {
                                 };
                                 rect = rect.set("class", format!("f{:x}", class).as_str());
                             }
+                            _ => {}
                         }
                         rows_group = rows_group.add(rect);
                     }
@@ -202,12 +204,12 @@ impl Component for SVGScreenshotFilter {
                                 };
                                 text_el = text_el.set("class", format!("f{:x}", class).as_str());
                             }
-                            c if c.as_byte() < 16 => {
-                                text_el =
-                                    text_el.set("class", format!("c{}", c.as_byte()).as_str());
+                            c if matches!(c.as_byte(), Some(c) if c < 16) => {
+                                text_el = text_el
+                                    .set("class", format!("c{}", c.as_byte().unwrap()).as_str());
                             }
-                            c => {
-                                let c = c.as_byte();
+                            c if c.as_byte().is_some() => {
+                                let c = c.as_byte().unwrap();
                                 let (r, g, b) = XTERM_COLORS[c as usize];
                                 let class = if classes.contains_key(&(r, g, b)) {
                                     classes[&(r, g, b)]
@@ -218,6 +220,7 @@ impl Component for SVGScreenshotFilter {
                                 };
                                 text_el = text_el.set("class", format!("f{:x}", class).as_str());
                             }
+                            _ => {}
                         };
                         row_group = row_group.add(text_el);
                         text.clear();
@@ -259,11 +262,11 @@ impl Component for SVGScreenshotFilter {
                     Color::Default => {
                         unreachable!();
                     }
-                    c if c.as_byte() < 16 => {
-                        rect = rect.set("class", format!("c{}", c.as_byte()).as_str());
+                    c if matches!(c.as_byte(), Some(c) if c  < 16) => {
+                        rect = rect.set("class", format!("c{}", c.as_byte().unwrap()).as_str());
                     }
-                    c => {
-                        let c = c.as_byte();
+                    c if c.as_byte().is_some() => {
+                        let c = c.as_byte().unwrap();
                         let (r, g, b) = XTERM_COLORS[c as usize];
                         let class = if classes.contains_key(&(r, g, b)) {
                             classes[&(r, g, b)]
@@ -274,6 +277,7 @@ impl Component for SVGScreenshotFilter {
                         };
                         rect = rect.set("class", format!("f{:x}", class).as_str());
                     }
+                    _ => {}
                 }
                 rows_group = rows_group.add(rect);
             }
@@ -326,11 +330,12 @@ impl Component for SVGScreenshotFilter {
                         };
                         text_el = text_el.set("class", format!("f{:x}", class).as_str());
                     }
-                    c if c.as_byte() < 16 => {
-                        text_el = text_el.set("class", format!("c{}", c.as_byte()).as_str());
+                    c if matches!(c.as_byte(), Some(c) if c  < 16) => {
+                        text_el =
+                            text_el.set("class", format!("c{}", c.as_byte().unwrap()).as_str());
                     }
-                    c => {
-                        let c = c.as_byte();
+                    c if c.as_byte().is_some() => {
+                        let c = c.as_byte().unwrap();
                         let (r, g, b) = XTERM_COLORS[c as usize];
                         let class = if classes.contains_key(&(r, g, b)) {
                             classes[&(r, g, b)]
@@ -341,6 +346,7 @@ impl Component for SVGScreenshotFilter {
                         };
                         text_el = text_el.set("class", format!("f{:x}", class).as_str());
                     }
+                    _ => {}
                 }
                 row_group = row_group.add(text_el);
                 text.clear();

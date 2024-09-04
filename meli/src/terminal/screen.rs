@@ -29,8 +29,8 @@ use crate::{
     terminal::{
         cells::CellBuffer, Alignment, BracketModeEnd, BracketModeStart, Cell, Color,
         DisableAlternateScrollMode, DisableMouse, DisableSGRMouse, EnableAlternateScrollMode,
-        EnableMouse, EnableSGRMouse, Pos, RestoreWindowTitleIconFromStack,
-        SaveWindowTitleIconToStack,
+        EnableMouse, EnableSGRMouse, Pos, QueryBackground, QueryForeground,
+        RestoreWindowTitleIconFromStack, SaveWindowTitleIconToStack,
     },
     Attr, Context, ThemeAttribute,
 };
@@ -78,6 +78,7 @@ pub struct Virtual;
 
 pub struct Tty {
     stdout: Option<StateStdout>,
+    background_query: Option<Color>,
     mouse: bool,
     draw_horizontal_segment_fn: DrawHorizontalSegmentFn,
 }
@@ -94,11 +95,10 @@ impl Tty {
     }
 
     #[inline]
-    pub fn mouse(&self) -> bool {
+    pub const fn mouse(&self) -> bool {
         self.mouse
     }
 
-    #[inline]
     pub fn set_mouse(&mut self, mouse: bool) -> &mut Self {
         self.mouse = mouse;
         let Some(stdout) = self.stdout.as_mut() else {
@@ -277,6 +277,7 @@ impl Screen<Tty> {
             Tty {
                 stdout: None,
                 mouse: false,
+                background_query: None,
                 draw_horizontal_segment_fn: Self::draw_horizontal_segment,
             },
             theme_default,
@@ -487,6 +488,19 @@ impl Screen<Tty> {
                 }
             }
         }
+    }
+
+    pub const fn background_query(&self) -> Option<Color> {
+        self.display.background_query
+    }
+
+    pub fn do_background_query(&mut self) {
+        let Some(stdout) = self.display.stdout.as_mut() else {
+            return;
+        };
+        write!(stdout, "{}", QueryBackground.as_ref()).expect("Could not write to stdout");
+        write!(stdout, "{}", QueryForeground.as_ref()).expect("Could not write to stdout");
+        _ = stdout.flush();
     }
 }
 
