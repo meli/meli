@@ -260,7 +260,7 @@ impl StderrLogger {
 
 impl Log for StderrLogger {
     fn enabled(&self, metadata: &Metadata) -> bool {
-        !["polling", "async_io"]
+        !["polling", "async_io", "tracing"]
             .iter()
             .any(|t| metadata.target().starts_with(t))
             && (metadata.level() <= Level::from(self.log_level())
