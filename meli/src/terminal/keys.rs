@@ -275,6 +275,8 @@ pub fn get_events(
                                 } else if let Some(fg) = QueryForeground::parse(&String::from_utf8_lossy(&esc_seq_buf)) {
                                     log::trace!("EscapeSequence parsed fg {:?}", fg);
                                     palette.0 = Some(fg);
+                                } else {
+                                    log::trace!("EscapeSequence unknown");
                                 }
                                 if let (Some(fg), Some(bg)) = palette {
                                     log::trace!("compute_scheme_contrast(fg {:?}, bg {:?}) = {:?}", fg, bg, Color::compute_scheme_contrast(fg, bg));

@@ -417,6 +417,11 @@ derive_csi_sequence!(
     (BracketModeEnd, "?2004l")
 );
 
+derive_csi_sequence!(
+    #[doc = "Query Synchronized Output support. `CSI ? 2026 $ p`"]
+    (QuerySynchronizedOutputSupport, "?2026$p")
+);
+
 pub struct Ask {
     pub message: String,
 }

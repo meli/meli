@@ -30,7 +30,8 @@ use crate::{
         cells::CellBuffer, Alignment, BracketModeEnd, BracketModeStart, Cell, Color,
         DisableAlternateScrollMode, DisableMouse, DisableSGRMouse, EnableAlternateScrollMode,
         EnableMouse, EnableSGRMouse, Pos, QueryBackground, QueryForeground,
-        RestoreWindowTitleIconFromStack, SaveWindowTitleIconToStack,
+        QuerySynchronizedOutputSupport, RestoreWindowTitleIconFromStack,
+        SaveWindowTitleIconToStack,
     },
     Attr, Context, ThemeAttribute,
 };
@@ -500,6 +501,8 @@ impl Screen<Tty> {
         };
         write!(stdout, "{}", QueryBackground.as_ref()).expect("Could not write to stdout");
         write!(stdout, "{}", QueryForeground.as_ref()).expect("Could not write to stdout");
+        write!(stdout, "{}", QuerySynchronizedOutputSupport.as_ref())
+            .expect("Could not write to stdout");
         _ = stdout.flush();
     }
 }
