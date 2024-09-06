@@ -19,6 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+//! A string buffer that supports input operations, meant to be used in text
+//! input widgets.
+
 use melib::text::TextProcessing;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -29,6 +32,7 @@ pub struct UText {
 }
 
 impl UText {
+    /// Creates a new [`UText`] with the cursor initialized at the end.
     pub fn new(content: String) -> Self {
         Self {
             cursor_pos: content.len(),
@@ -37,6 +41,7 @@ impl UText {
         }
     }
 
+    /// Set cursor to position. If new value is out of bounds, do nothing.
     pub fn set_cursor(&mut self, cursor_pos: usize) {
         if cursor_pos > self.content.len() {
             return;
@@ -47,26 +52,38 @@ impl UText {
         self.cursor_pos = cursor_pos;
     }
 
+    /// Inner content as a string slice.
     pub fn as_str(&self) -> &str {
         self.content.as_str()
     }
 
+    /// Clear string content and set cursor to zero.
     pub fn clear(&mut self) {
         self.content.clear();
         self.cursor_pos = 0;
         self.grapheme_cursor_pos = 0;
     }
 
+    /// Consume self and return owned inner string value.
     pub fn into_string(self) -> String {
         self.content
     }
+
+    /// Reset with new content.
+    pub fn set_content(&mut self, new_val: String) {
+        *self = Self::new(new_val);
+    }
+
     pub fn grapheme_len(&self) -> usize {
         self.content.split_graphemes().len()
     }
 
-    pub fn cursor_inc(&mut self) {
+    /// Increase cursor.
+    ///
+    /// Returns `false` if cursor is at boundary and did not move.
+    pub fn cursor_inc(&mut self) -> bool {
         if self.cursor_pos >= self.content.len() {
-            return;
+            return false;
         }
 
         let (_, right) = self.content.split_at(self.cursor_pos);
@@ -74,88 +91,101 @@ impl UText {
             self.cursor_pos += graph.len();
             self.grapheme_cursor_pos += 1;
         }
+
+        true
     }
-    pub fn cursor_dec(&mut self) {
+
+    /// Decrease cursor.
+    ///
+    /// Returns `false` if cursor is at boundary and did not move.
+    pub fn cursor_dec(&mut self) -> bool {
         if self.cursor_pos == 0 {
-            return;
+            return false;
         }
         let (left, _) = self.content.split_at(self.cursor_pos);
         if let Some((_, graph)) = left.last_grapheme() {
             self.cursor_pos -= graph.len();
             self.grapheme_cursor_pos -= 1;
         }
+        true
     }
 
+    /// Return the *byte* position of the cursor.
     pub fn cursor_pos(&self) -> usize {
         self.cursor_pos
     }
 
+    /// Return the position of the cursor.
     pub fn grapheme_pos(&self) -> usize {
         self.grapheme_cursor_pos
     }
 
-    /*
-     * Insert code point `k` in position `self.cursor_pos`:
-     *
-     * before:
-     *
-     * self.content = xxxxxx....xxxxxxx;
-     *                             ^
-     *                      self.cursor_pos
-     *
-     * after:
-     *
-     * self.content = xxxxxx....xxxxkxxx;
-     *                              ^
-     *                       self.cursor_pos
-     */
-    pub fn insert_char(&mut self, k: char) {
+    /// Insert code point `k` in position `self.cursor_pos`
+    ///
+    /// Returns `false` if nothing was inserted.
+    ///
+    /// Before:
+    ///
+    /// ```text
+    /// self.content = xxxxxx....xxxxxxx;
+    ///                             ^
+    ///                      self.cursor_pos
+    /// ```
+    ///
+    /// After:
+    ///
+    /// ```text
+    /// self.content = xxxxxx....xxxxkxxx;
+    ///                              ^
+    ///                       self.cursor_pos
+    /// ```
+    pub fn insert_char(&mut self, k: char) -> bool {
         if k.is_control() {
-            return;
+            return false;
         }
 
         self.content.insert(self.cursor_pos, k);
         self.cursor_pos += k.len_utf8();
         self.grapheme_cursor_pos += 1;
+        true
     }
 
-    /*
-     * remove grapheme cluster that ends on `self.cursor_pos`:
-     *
-     * before:
-     *
-     * self.content = xxxxxx....xxggxxx;
-     *                             ^
-     *                      self.cursor_pos
-     *
-     * after:
-     *
-     * self.content = xxxxxx....xxxxxx;
-     *                           ^
-     *                    self.cursor_pos
-     */
-    pub fn backspace(&mut self) {
+    /// Remove grapheme cluster that ends on `self.cursor_pos`.
+    ///
+    /// Before:
+    ///
+    /// ```text
+    /// self.content = xxxxxx....xxggxxx;
+    ///                             ^
+    ///                      self.cursor_pos
+    /// ```
+    ///
+    /// After:
+    ///
+    /// ```text
+    /// self.content = xxxxxx....xxxxxx;
+    ///                           ^
+    ///                    self.cursor_pos
+    /// ```
+    pub fn backspace(&mut self) -> bool {
         if self.content.is_empty() {
-            return;
+            return false;
         }
         let (offset, graph_len) = {
-            /*
-             * Split string at cursor_pos:
-             */
+            // Split string at cursor_pos:
             let (left, _) = self.content.split_at(self.cursor_pos);
-            /*
-             * left = xxxxxx....xxgg;
-             * right = xxx;
-             */
+            // left = xxxxxx....xxgg;
+            // right = xxx;
             if let Some((offset, graph)) = left.last_grapheme() {
                 (offset, graph.len())
             } else {
-                return;
+                return false;
             }
         };
         self.cursor_dec();
 
         self.content.drain(offset..offset + graph_len).count();
+        true
     }
 
     pub fn cut_left(&mut self) {
@@ -171,5 +201,35 @@ impl UText {
         self.cursor_pos = 0;
         self.grapheme_cursor_pos = 0;
         self.content.drain(..offset).count();
+    }
+
+    /// Transpose the two graphemes around the cursor.
+    ///
+    /// When given at the end of the text content, it transposes the last two
+    /// graphemes on the line.
+    pub fn transpose(&mut self) {
+        if self.content.is_empty() {
+            return;
+        }
+        if self.cursor_pos >= self.content.len() {
+            // Last two graphemes.
+            if let Some((i, _)) = self.content.last_grapheme() {
+                if let Some((j, penult)) = self.content[..i].last_grapheme() {
+                    let penult = penult.to_string();
+                    self.content.drain(j..i);
+                    self.content.push_str(&penult);
+                }
+            }
+            return;
+        }
+        if let Some((i, next)) = self.content[..self.cursor_pos].last_grapheme() {
+            let next = next.len();
+            if let Some((j, prev)) = self.content[..self.cursor_pos][..i].last_grapheme() {
+                let prev = prev.to_string();
+                self.content.drain(j..i);
+                self.content.insert_str(j + next, &prev);
+                self.cursor_inc();
+            }
+        }
     }
 }

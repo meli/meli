@@ -19,12 +19,17 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+//! Text input widgets.
+
 use super::*;
 use crate::melib::text::Truncate;
 
+/// Text input widget.
 pub struct TextField {
     inner: UText,
     autocomplete: Option<(AutoCompleteFn, Box<AutoComplete>)>,
+    theme_attr: Option<ThemeAttribute>,
+    highlight: Option<ThemeAttribute>,
     id: ComponentId,
 }
 
@@ -34,7 +39,7 @@ impl std::fmt::Debug for TextField {
             .field("id", &self.id)
             .field("inner", &self.inner)
             .field("has AutoComplete", &self.autocomplete.is_some())
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -43,6 +48,8 @@ impl Default for TextField {
         Self {
             inner: UText::new(String::with_capacity(256)),
             autocomplete: None,
+            theme_attr: None,
+            highlight: None,
             id: ComponentId::default(),
         }
     }
@@ -53,38 +60,60 @@ impl TextField {
         Self {
             inner,
             autocomplete,
+            theme_attr: None,
+            highlight: None,
             id: ComponentId::default(),
         }
     }
 
+    /// Text content as a string slice.
     pub fn as_str(&self) -> &str {
         self.inner.as_str()
     }
 
+    /// Reset with new content.
+    pub fn set_content(&mut self, new_val: String) {
+        self.inner.set_content(new_val);
+    }
+
+    /// Cursor position as seen by the user: the cursor is seen moving by
+    /// jumping between graphemes boundaries.
     pub fn cursor(&self) -> usize {
         self.inner.grapheme_pos()
     }
 
+    /// Byte cursor position meant to be used for accessing the inner string
+    /// slice.
+    pub fn byte_cursor(&self) -> usize {
+        self.inner.cursor_pos()
+    }
+
+    /// Increase the cursor position to the next grapheme boundary.
     pub fn cursor_inc(&mut self) {
         self.inner.cursor_inc();
     }
 
+    /// Decrease the cursor position to the previous grapheme boundary.
     pub fn cursor_dec(&mut self) {
         self.inner.cursor_dec();
     }
 
+    /// Returns `true` if inner text is empty.
     pub fn is_empty(&self) -> bool {
         self.as_str().is_empty()
     }
 
+    /// Consume self and return the inner text as an owned string.
     pub fn into_string(self) -> String {
         self.inner.into_string()
     }
 
+    /// Clear inner string content and set cursor to zero.
     pub fn clear(&mut self) {
         self.inner.clear()
     }
 
+    /// Draw cursor at given area along with autocomplete suggestions, if any.
     pub fn draw_cursor(
         &mut self,
         grid: &mut CellBuffer,
@@ -99,10 +128,15 @@ impl TextField {
             self.inner.grapheme_pos()
         };
 
+        let highlight_attr = self.highlight.unwrap_or_else(|| {
+            let val = crate::conf::value(context, "highlight");
+            self.highlight = Some(val);
+            val
+        });
         grid.change_colors(
             area.skip_cols(pos).take_cols(1),
-            crate::conf::value(context, "theme_default").fg,
-            crate::conf::value(context, "highlight").bg,
+            highlight_attr.fg,
+            highlight_attr.bg,
         );
         if self.inner.grapheme_len() <= 2 {
             return;
@@ -117,7 +151,11 @@ impl TextField {
 
 impl Component for TextField {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        let theme_attr = crate::conf::value(context, "widgets.form.field");
+        let theme_attr = self.theme_attr.unwrap_or_else(|| {
+            let val = crate::conf::value(context, "widgets.form.field");
+            self.theme_attr = Some(val);
+            val
+        });
         let width = area.width();
         let str = self.as_str();
         /* Calculate which part of the str is visible
@@ -250,57 +288,122 @@ impl Component for TextField {
                     self.inner.insert_char(c);
                 }
             }
-            UIEvent::InsertInput(Key::Alt('b')) => { /* Meta+B  Backward one word */ }
+            UIEvent::InsertInput(Key::Alt('b')) => {
+                // Meta+B Backward one alphanumeric word
+
+                let initial = self.inner.cursor_pos();
+                while self.inner.as_str()[..self.inner.cursor_pos()]
+                    .chars()
+                    .last()
+                    .map(|c| c.is_ascii_whitespace())
+                    .unwrap_or_default()
+                {
+                    if !self.inner.cursor_dec() {
+                        break;
+                    }
+                }
+                if self.inner.cursor_pos() == initial {
+                    // We didn't skip whitespace to reach the end of the previous word, so skip
+                    // nonwhitespace instead.
+                    while self.inner.as_str()[..self.inner.cursor_pos()]
+                        .chars()
+                        .last()
+                        .map(|c| !c.is_ascii_whitespace())
+                        .unwrap_or_default()
+                    {
+                        if !self.inner.cursor_dec() {
+                            break;
+                        }
+                    }
+                }
+            }
+            UIEvent::InsertInput(Key::Alt('f')) => {
+                // Meta+F Forward one alphanumeric word (Move to its end)
+
+                let initial = self.inner.cursor_pos();
+                while self.inner.as_str()[..self.inner.cursor_pos()]
+                    .chars()
+                    .last()
+                    .map(|c| c.is_ascii_whitespace())
+                    .unwrap_or_default()
+                {
+                    if !self.inner.cursor_inc() {
+                        break;
+                    }
+                }
+                if self.inner.cursor_pos() == initial {
+                    // We didn't skip whitespace to reach the start of the next word, so skip
+                    // nonwhitespace instead.
+                    while self.inner.as_str()[..self.inner.cursor_pos()]
+                        .chars()
+                        .last()
+                        .map(|c| !c.is_ascii_whitespace())
+                        .unwrap_or_default()
+                    {
+                        if !self.inner.cursor_inc() {
+                            break;
+                        }
+                    }
+                } else {
+                    // self.inner.cursor_dec();
+                }
+            }
             UIEvent::InsertInput(Key::Backspace) | UIEvent::InsertInput(Key::Ctrl('h')) => {
-                /* Ctrl+H  Delete previous character */
-                self.inner.backspace();
-                if let Some(ac) = self.autocomplete.as_mut() {
-                    ac.1.set_suggestions(Vec::new());
+                // Ctrl+H  Delete previous character
+                if self.inner.backspace() {
+                    if let Some(ac) = self.autocomplete.as_mut() {
+                        ac.1.set_suggestions(Vec::new());
+                    }
+                }
+            }
+            UIEvent::InsertInput(Key::Delete) | UIEvent::InsertInput(Key::Ctrl('d')) => {
+                // Delete one character
+                if self.inner.cursor_inc() {
+                    self.inner.backspace();
                 }
             }
             UIEvent::InsertInput(Key::Ctrl('t')) => {
-                /* Ctrl+T  Transpose characters */
-                self.inner.set_cursor(0);
+                // Ctrl+T Transpose characters
+                self.inner.transpose();
             }
-            UIEvent::InsertInput(Key::Ctrl('a')) => {
-                /* Beginning of line */
+            UIEvent::InsertInput(Key::Ctrl('a')) | UIEvent::InsertInput(Key::Home) => {
+                // Beginning of line
                 self.inner.set_cursor(0);
             }
             UIEvent::InsertInput(Key::Ctrl('b')) => {
-                /* Backward one character */
-                self.inner.cursor_dec();
-            }
-            UIEvent::InsertInput(Key::Ctrl('d')) => {
-                /* Delete one character */
+                // Backward one character
                 self.inner.cursor_dec();
             }
             UIEvent::InsertInput(Key::Ctrl('f')) => {
-                /* Ctrl+F / →  Forward one character */
+                // Ctrl+F / → Forward one character
                 self.inner.cursor_inc();
             }
             UIEvent::InsertInput(Key::Ctrl('w')) => {
-                /* Cut previous word */
+                // Cut previous word
                 while self.inner.as_str()[..self.inner.cursor_pos()]
                     .last_grapheme()
                     .map(|(_, graph)| !graph.is_empty() && graph.trim().is_empty())
                     .unwrap_or(false)
                 {
-                    self.inner.backspace();
+                    if !self.inner.backspace() {
+                        break;
+                    }
                 }
                 while self.inner.as_str()[..self.inner.cursor_pos()]
                     .last_grapheme()
                     .map(|(_, graph)| !graph.is_empty() && !graph.trim().is_empty())
                     .unwrap_or(false)
                 {
-                    self.inner.backspace();
+                    if !self.inner.backspace() {
+                        break;
+                    }
                 }
             }
             UIEvent::InsertInput(Key::Ctrl('u')) => self.inner.cut_left(),
-            UIEvent::InsertInput(Key::Ctrl('e')) => {
-                /* Ctrl+E End of line */
+            UIEvent::InsertInput(Key::Ctrl('e')) | UIEvent::InsertInput(Key::End) => {
+                // Ctrl+E End of line
                 self.inner.set_cursor(self.inner.as_str().len());
             }
-            /* [ref:TODO]: add rest of readline shortcuts */
             _ => {
                 return false;
             }
@@ -321,7 +424,7 @@ impl Component for TextField {
 }
 
 impl std::fmt::Display for TextField {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.as_str(),)
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(fmt, "{}", self.as_str())
     }
 }

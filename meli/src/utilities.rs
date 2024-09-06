@@ -21,11 +21,13 @@
 
 //! Various useful utilities.
 
+use std::collections::HashSet;
+
+use indexmap::IndexMap;
 use melib::{text::Reflow, ShellExpandTrait};
 
-pub type AutoCompleteFn = Box<dyn Fn(&Context, &str) -> Vec<AutoCompleteEntry> + Send + Sync>;
-
 use super::*;
+use crate::{components::ExtendShortcutsMaps, jobs::JobId, melib::text::TextProcessing};
 
 mod pager;
 pub use self::pager::*;
@@ -36,20 +38,16 @@ pub use self::text::*;
 mod widgets;
 pub use self::widgets::*;
 
-// TODO: remove
-//mod layouts;
-//pub use self::layouts::*;
-
 mod dialogs;
 pub use self::dialogs::*;
 
 mod tables;
-use std::collections::HashSet;
-
-use indexmap::IndexMap;
-
 pub use self::tables::*;
-use crate::{components::ExtendShortcutsMaps, jobs::JobId, melib::text::TextProcessing};
+
+#[cfg(test)]
+mod tests;
+
+pub type AutoCompleteFn = Box<dyn Fn(&Context, &str) -> Vec<AutoCompleteEntry> + Send + Sync>;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum SearchMovement {
