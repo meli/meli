@@ -19,6 +19,8 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use std::borrow::Cow;
+
 use indexmap::IndexMap;
 use melib::Card;
 
@@ -116,13 +118,21 @@ impl ContactManager {
         }
 
         self.form = FormWidget::new(
-            ("Save".into(), FormButtonAction::Accept),
+            if self.card.external_resource() {
+                ("Cancel(Esc)".into(), FormButtonAction::Cancel)
+            } else {
+                ("Save".into(), FormButtonAction::Accept)
+            },
             /* cursor_up_shortcut */ context.settings.shortcuts.general.scroll_up.clone(),
             /* cursor_down_shortcut */
             context.settings.shortcuts.general.scroll_down.clone(),
         );
-        self.form
-            .add_button(("Cancel(Esc)".into(), FormButtonAction::Cancel));
+        if !self.card.external_resource() {
+            self.form
+                .add_button(("Export".into(), FormButtonAction::Other("Export")));
+            self.form
+                .add_button(("Cancel(Esc)".into(), FormButtonAction::Cancel));
+        }
         self.form
             .push(("NAME".into(), self.card.name().to_string()));
         self.form.push((
@@ -229,6 +239,32 @@ impl Component for ContactManager {
                         }
                         Some(FormButtonAction::Cancel) => {
                             self.unrealize(context);
+                        }
+                        Some(FormButtonAction::Other("Export")) => {
+                            let card = if self.has_changes {
+                                let fields = self.form.clone().collect().unwrap();
+                                let fields: IndexMap<String, String> = fields
+                                    .into_iter()
+                                    .map(|(s, v)| {
+                                        (
+                                            s.to_string(),
+                                            match v {
+                                                Field::Text(v) => v.as_str().to_string(),
+                                                Field::Choice(mut v, c, _) => {
+                                                    v.remove(c).to_string()
+                                                }
+                                            },
+                                        )
+                                    })
+                                    .collect();
+                                let mut card = Card::from(fields);
+                                card.set_id(*self.card.id());
+                                Cow::Owned(card)
+                            } else {
+                                Cow::Borrowed(&self.card)
+                            };
+                            super::export_to_vcard(&card, self.account_pos, context);
+                            return true;
                         }
                         Some(FormButtonAction::Reset | FormButtonAction::Other(_)) => {}
                     }

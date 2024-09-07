@@ -582,7 +582,6 @@ impl Component for ContactList {
                         )));
                     return true;
                 }
-
                 UIEvent::Input(ref key)
                     if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["edit_contact"]) =>
                 {
@@ -603,6 +602,20 @@ impl Component for ContactList {
                         .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
                             ScrollUpdate::End(self.id),
                         )));
+                    return true;
+                }
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["export_contact"]) =>
+                {
+                    if self.length == 0 {
+                        return true;
+                    }
+                    let card = {
+                        let account = &context.accounts[self.account_pos];
+                        let book = &account.address_book;
+                        book[&self.id_positions[self.cursor_pos]].clone()
+                    };
+                    super::export_to_vcard(&card, self.account_pos, context);
                     return true;
                 }
                 UIEvent::Input(ref key)

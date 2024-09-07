@@ -34,6 +34,7 @@ enum FormFocus {
 
 type Cursor = usize;
 
+#[derive(Clone)]
 pub enum Field {
     Text(TextField),
     Choice(Vec<Cow<'static, str>>, Cursor, ComponentId),
@@ -223,6 +224,24 @@ where
     id: ComponentId,
 }
 
+impl<T: 'static + std::fmt::Debug + Copy + Default + Clone + Send + Sync> Clone for FormWidget<T> {
+    fn clone(&self) -> Self {
+        Self {
+            fields: self.fields.clone(),
+            layout: self.layout.clone(),
+            buttons: self.buttons.clone(),
+            focus: self.focus,
+            hide_buttons: self.hide_buttons,
+            field_name_max_length: self.field_name_max_length,
+            cursor: self.cursor,
+            dirty: true,
+            cursor_up_shortcut: self.cursor_up_shortcut.clone(),
+            cursor_down_shortcut: self.cursor_down_shortcut.clone(),
+            id: ComponentId::default(),
+        }
+    }
+}
+
 impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Default for FormWidget<T> {
     fn default() -> Self {
         Self {
@@ -334,15 +353,15 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> FormWidget<T> 
     }
 
     pub fn collect(self) -> Option<HashMap<Cow<'static, str>, Field>> {
-        if self.buttons_result().is_some() {
+        if self.buttons.result.is_some() {
             Some(self.fields)
         } else {
             None
         }
     }
 
-    pub fn buttons_result(&self) -> Option<T> {
-        self.buttons.result
+    pub fn buttons_result(&mut self) -> Option<T> {
+        self.buttons.result.take()
     }
 }
 
@@ -554,6 +573,22 @@ where
     }
 }
 
+impl<T: 'static + std::fmt::Debug + Copy + Default + Clone + Send + Sync> Clone
+    for ButtonWidget<T>
+{
+    fn clone(&self) -> Self {
+        Self {
+            buttons: self.buttons.clone(),
+            layout: self.layout.clone(),
+            result: self.result,
+            cursor: self.cursor,
+            focus: self.focus,
+            dirty: true,
+            id: ComponentId::default(),
+        }
+    }
+}
+
 impl<T> ButtonWidget<T>
 where
     T: 'static + std::fmt::Debug + Copy + Default + Send + Sync,
@@ -579,8 +614,8 @@ where
         self.result.is_some()
     }
 
-    pub fn result(&self) -> Option<T> {
-        self.result
+    pub fn result(&mut self) -> Option<T> {
+        self.result.take()
     }
 
     pub fn set_focus(&mut self, new_val: bool) {

@@ -21,13 +21,16 @@
 
 //! Text input widgets.
 
+use std::sync::Arc;
+
 use super::*;
 use crate::melib::text::Truncate;
 
 /// Text input widget.
+#[derive(Clone)]
 pub struct TextField {
     inner: UText,
-    autocomplete: Option<(AutoCompleteFn, Box<AutoComplete>)>,
+    autocomplete: Option<(Arc<AutoCompleteFn>, Box<AutoComplete>)>,
     theme_attr: Option<ThemeAttribute>,
     highlight: Option<ThemeAttribute>,
     id: ComponentId,
@@ -59,7 +62,7 @@ impl TextField {
     pub fn new(inner: UText, autocomplete: Option<(AutoCompleteFn, Box<AutoComplete>)>) -> Self {
         Self {
             inner,
-            autocomplete,
+            autocomplete: autocomplete.map(|(a, b)| (Arc::new(a), b)),
             theme_attr: None,
             highlight: None,
             id: ComponentId::default(),

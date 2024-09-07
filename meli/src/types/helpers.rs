@@ -86,15 +86,45 @@ impl File {
         let mut dir = std::env::temp_dir();
 
         let path = if let Some(p) = path {
+            if p.try_exists().unwrap_or_default() && p.is_dir() {
+                if let Some(filename) = filename {
+                    p.push(filename);
+                    'exists: while p.try_exists().unwrap_or_default() {
+                        for i in 0..u8::MAX {
+                            p.pop();
+                            p.push(format!("{filename}_{i}"));
+                            if p.try_exists().unwrap_or_default() {
+                                break 'exists;
+                            }
+                        }
+                        while p.try_exists().unwrap_or_default() {
+                            p.pop();
+                            p.push(format!("{filename}_{}", Uuid::new_v4().as_simple()));
+                        }
+                    }
+                } else {
+                    let u = Uuid::new_v4();
+                    p.push(u.as_simple().to_string());
+                }
+            }
             p
         } else {
             dir.push("meli");
             std::fs::DirBuilder::new().recursive(true).create(&dir)?;
             if let Some(filename) = filename {
                 dir.push(filename);
-                while dir.try_exists().unwrap_or_default() {
-                    dir.pop();
-                    dir.push(format!("{filename}_{}", Uuid::new_v4().as_simple()));
+                'exists: while dir.try_exists().unwrap_or_default() {
+                    for i in 0..u8::MAX {
+                        dir.pop();
+                        dir.push(format!("{filename}_{i}"));
+                        if dir.try_exists().unwrap_or_default() {
+                            break 'exists;
+                        }
+                    }
+                    while dir.try_exists().unwrap_or_default() {
+                        dir.pop();
+                        dir.push(format!("{filename}_{}", Uuid::new_v4().as_simple()));
+                    }
                 }
             } else {
                 let u = Uuid::new_v4();
