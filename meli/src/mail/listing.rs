@@ -674,6 +674,51 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                     }
                 }
+                ListingAction::SendToTrash => {
+                    use melib::backends::SpecialUsageMailbox;
+
+                    let Some(trash_mbox_hash) = account
+                        .special_use_mailbox(SpecialUsageMailbox::Trash)
+                        .or_else(|| account.special_use_mailbox(SpecialUsageMailbox::Junk))
+                    else {
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(
+                                "Cannot send mail to trash because no Trash folder is configured."
+                                    .to_string(),
+                            ),
+                        ));
+                        return;
+                    };
+                    let job = account.backend.write().unwrap().copy_messages(
+                        env_hashes,
+                        mailbox_hash,
+                        trash_mbox_hash,
+                        /* move? */ true,
+                    );
+                    match job {
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::StatusEvent(
+                                StatusEvent::DisplayMessage(err.to_string()),
+                            ));
+                        }
+                        Ok(fut) => {
+                            let handle = account.main_loop_handler.job_executor.spawn(
+                                "move-to-trash".into(),
+                                fut,
+                                account.is_async(),
+                            );
+                            account.insert_job(
+                                handle.job_id,
+                                JobRequest::Generic {
+                                    name: "taking out the trash".into(),
+                                    handle,
+                                    on_finish: None,
+                                    log_level: LogLevel::INFO,
+                                },
+                            );
+                        }
+                    }
+                }
                 ListingAction::Delete => {
                     let job = account
                         .backend
@@ -1787,7 +1832,8 @@ impl Component for Listing {
                         | Action::Listing(a @ ListingAction::MoveToOtherAccount(_, _))
                         | Action::Listing(a @ ListingAction::ExportMbox(_, _))
                         | Action::Listing(a @ ListingAction::Flag(_))
-                        | Action::Listing(a @ ListingAction::Tag(_)) => {
+                        | Action::Listing(a @ ListingAction::Tag(_))
+                        | Action::Listing(a @ ListingAction::SendToTrash) => {
                             let focused = self.component.get_focused_items(context);
                             self.component.perform_action(context, focused, a);
                             let should_be_unselected: bool = matches!(
@@ -1795,6 +1841,7 @@ impl Component for Listing {
                                 ListingAction::Delete
                                     | ListingAction::MoveTo(_)
                                     | ListingAction::MoveToOtherAccount(_, _)
+                                    | ListingAction::SendToTrash
                             );
                             let mut row_updates: SmallVec<[EnvelopeHash; 8]> = SmallVec::new();
                             for (k, v) in self.component.selection().iter_mut() {
@@ -2008,6 +2055,15 @@ impl Component for Listing {
                         if shortcut!(key == shortcuts[Shortcuts::LISTING]["set_seen"]) =>
                     {
                         let mut event = UIEvent::Action(Action::Listing(ListingAction::SetSeen));
+                        if self.process_event(&mut event, context) {
+                            return true;
+                        }
+                    }
+                    UIEvent::Input(ref key)
+                        if shortcut!(key == shortcuts[Shortcuts::LISTING]["send_to_trash"]) =>
+                    {
+                        let mut event =
+                            UIEvent::Action(Action::Listing(ListingAction::SendToTrash));
                         if self.process_event(&mut event, context) {
                             return true;
                         }

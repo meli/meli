@@ -49,6 +49,7 @@ pub enum ListingAction {
     Select(String),
     SetSeen,
     SetUnseen,
+    SendToTrash,
     CopyTo(MailboxPath),
     CopyToOtherAccount(AccountName, MailboxPath),
     MoveTo(MailboxPath),
