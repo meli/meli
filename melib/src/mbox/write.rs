@@ -179,7 +179,7 @@ impl MboxFormat {
                 writer.write_all(line_ending)?;
 
                 if body.starts_with(b"From ") {
-                    writer.write_all(&[b'>'])?;
+                    writer.write_all(b">")?;
                 }
                 let mut i = 0;
                 if crlf {
@@ -187,13 +187,13 @@ impl MboxFormat {
                         if body[i..].starts_with(CRLF) {
                             writer.write_all(CRLF)?;
                             if body[i..].starts_with(b"\r\nFrom ") {
-                                writer.write_all(&[b'>'])?;
+                                writer.write_all(b">")?;
                             }
                             i += 2;
                         } else if body[i] == b'\n' {
                             writer.write_all(CRLF)?;
                             if body[i..].starts_with(b"\nFrom ") {
-                                writer.write_all(&[b'>'])?;
+                                writer.write_all(b">")?;
                             }
                             i += 1;
                         } else {
@@ -206,13 +206,13 @@ impl MboxFormat {
                         if body[i..].starts_with(CRLF) {
                             writer.write_all(LF)?;
                             if body[i..].starts_with(b"\r\nFrom ") {
-                                writer.write_all(&[b'>'])?;
+                                writer.write_all(b">")?;
                             }
                             i += 2;
                         } else {
                             writer.write_all(&[body[i]])?;
                             if body[i..].starts_with(b"\nFrom ") {
-                                writer.write_all(&[b'>'])?;
+                                writer.write_all(b">")?;
                             }
                             i += 1;
                         }

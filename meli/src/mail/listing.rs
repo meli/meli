@@ -113,9 +113,8 @@ impl<T> RowsState<T> {
             self.env_order.insert(env_hash, index);
             self.all_envelopes.insert(env_hash);
         }
-        if !self.all_threads.contains(&thread) {
+        if self.all_threads.insert(thread) {
             self.thread_order.insert(thread, index);
-            self.all_threads.insert(thread);
             self.thread_to_env.insert(thread, env_hashes);
         } else {
             self.thread_to_env

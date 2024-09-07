@@ -1606,22 +1606,22 @@ fn atom_specials(input: &[u8]) -> IResult<&[u8], u8> {
 
 #[inline(always)]
 fn raw_chars(input: &[u8]) -> IResult<&[u8], u8> {
-    byte_in_slice(&[b'(', b')', b'{', b' '])(input)
+    byte_in_slice(b"(){ ")(input)
 }
 
 #[inline(always)]
 fn list_wildcards(input: &[u8]) -> IResult<&[u8], u8> {
-    byte_in_slice(&[b'%', b'*'])(input)
+    byte_in_slice(b"%*")(input)
 }
 
 #[inline(always)]
 fn quoted_specials(input: &[u8]) -> IResult<&[u8], u8> {
-    byte_in_slice(&[b'"', b'\\'])(input)
+    byte_in_slice(b"\"\\")(input)
 }
 
 #[inline(always)]
 fn resp_specials(input: &[u8]) -> IResult<&[u8], u8> {
-    byte_in_slice(&[b']'])(input)
+    byte_in_slice(b"]")(input)
 }
 
 #[inline(always)]

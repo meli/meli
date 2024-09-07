@@ -1624,10 +1624,7 @@ impl Iterator for LineBreakText {
                         *state = LineBreakTextState::AtLine {
                             cur_index: *cur_index + line.len() + 1,
                         };
-                        return Some(
-                            line.trim_end_matches(|c| c == '\r' || c == '\n')
-                                .to_string(),
-                        );
+                        return Some(line.trim_end_matches(['\r', '\n']).to_string());
                     }
                     if breaks.len() < 2 {
                         let mut line = line;
@@ -1673,14 +1670,14 @@ impl Iterator for LineBreakText {
                         if !line[*within_line_index..end_offset].is_empty() {
                             if *within_line_index == 0 {
                                 let ret = line[*within_line_index..end_offset]
-                                    .trim_end_matches(|c| c == '\r' || c == '\n');
+                                    .trim_end_matches(['\r', '\n']);
                                 *within_line_index = end_offset;
                                 return Some(ret.to_string());
                             } else {
                                 let ret = format!(
                                     "⤷{}",
                                     &line[*within_line_index..end_offset]
-                                        .trim_end_matches(|c| c == '\r' || c == '\n')
+                                        .trim_end_matches(['\r', '\n'])
                                 );
                                 *within_line_index = end_offset;
                                 return Some(ret);

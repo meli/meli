@@ -299,8 +299,7 @@ impl Component for StatusBar {
                     crate::command::command_completion_suggestions(self.ex_buffer.as_str());
 
                 suggestions.extend(command_completion_suggestions.iter().filter_map(|e| {
-                    if !unique_suggestions.contains(e.as_str()) {
-                        unique_suggestions.insert(e.as_str());
+                    if unique_suggestions.insert(e.as_str()) {
                         Some(e.clone().into())
                     } else {
                         None

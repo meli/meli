@@ -930,11 +930,11 @@ impl EmbeddedGrid {
                     stdin
                         .write_all((terminal_size.1).to_string().as_bytes())
                         .unwrap();
-                    stdin.write_all(&[b';']).unwrap();
+                    stdin.write_all(b";").unwrap();
                     stdin
                         .write_all((terminal_size.0).to_string().as_bytes())
                         .unwrap();
-                    stdin.write_all(&[b't']).unwrap();
+                    stdin.write_all(b"t").unwrap();
                     stdin.flush().unwrap();
                 } else {
                     //log::trace!("ignoring unknown code {}",
@@ -947,15 +947,15 @@ impl EmbeddedGrid {
                 // Result is CSI r ; c R
                 //log::trace!("report cursor position");
                 //log::trace!("got {}", EscCode::from((&(*state), byte)));
-                stdin.write_all(&[b'\x1b', b'[']).unwrap();
+                stdin.write_all(b"\x1b[").unwrap();
                 stdin
                     .write_all((cursor.1 + 1).to_string().as_bytes())
                     .unwrap();
-                stdin.write_all(&[b';']).unwrap();
+                stdin.write_all(b";").unwrap();
                 stdin
                     .write_all((cursor.0 + 1).to_string().as_bytes())
                     .unwrap();
-                stdin.write_all(&[b'R']).unwrap();
+                stdin.write_all(b"R").unwrap();
                 stdin.flush().unwrap();
                 *state = State::Normal;
             }
