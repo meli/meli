@@ -41,6 +41,7 @@ use crate::{
     accounts::JobRequest,
     jobs::{IsAsync, JoinHandle},
     terminal::embedded::Terminal,
+    types::{sanitize_filename, File},
 };
 
 #[cfg(feature = "gpgme")]
@@ -1867,10 +1868,25 @@ impl Component for Composer {
                     account_settings!(context[self.account_hash].composing.wrap_header_preamble)
                         .clone(),
                 );
+                let filename = format!(
+                    "{date}_{subject}_{to}_{in_reply_to}",
+                    date = self.draft.headers.get(HeaderName::DATE).unwrap_or_default(),
+                    subject = self
+                        .draft
+                        .headers
+                        .get(HeaderName::SUBJECT)
+                        .unwrap_or_default(),
+                    to = self.draft.headers.get(HeaderName::TO).unwrap_or_default(),
+                    in_reply_to = self
+                        .draft
+                        .headers
+                        .get(HeaderName::IN_REPLY_TO)
+                        .unwrap_or_default()
+                );
 
                 let f = match File::create_temp_file(
                     self.draft.to_edit_string().as_bytes(),
-                    None,
+                    sanitize_filename(filename).as_deref(),
                     None,
                     Some("eml"),
                     true,

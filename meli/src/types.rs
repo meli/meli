@@ -33,12 +33,8 @@
 //! [`UIEvent`] is the type passed around
 //! [`Component`]'s when something happens.
 
-#[macro_use]
-mod helpers;
-
 use std::{borrow::Cow, sync::Arc};
 
-pub use helpers::*;
 use indexmap::IndexMap;
 use melib::{
     backends::{AccountHash, BackendEvent, MailboxHash},
@@ -53,6 +49,10 @@ use super::{
     terminal::*,
 };
 use crate::components::{Component, ComponentId, ScrollUpdate};
+
+#[macro_use]
+mod helpers;
+pub use helpers::*;
 
 pub type UIMessage = Box<dyn 'static + std::any::Any + Send + Sync>;
 

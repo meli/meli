@@ -91,7 +91,11 @@ impl File {
             dir.push("meli");
             std::fs::DirBuilder::new().recursive(true).create(&dir)?;
             if let Some(filename) = filename {
-                dir.push(filename)
+                dir.push(filename);
+                while dir.try_exists().unwrap_or_default() {
+                    dir.pop();
+                    dir.push(format!("{filename}_{}", Uuid::new_v4().as_simple()));
+                }
             } else {
                 let u = Uuid::new_v4();
                 dir.push(u.as_simple().to_string());
@@ -134,6 +138,25 @@ pub fn pipe() -> Result<(OwnedFd, OwnedFd)> {
             ))
             .set_kind(ErrorKind::Platform)
     })
+}
+
+/// Create a shell-friendly filename by removing control characters and
+/// replacing characters that need escaping.
+pub fn sanitize_filename(og: String) -> Option<String> {
+    use regex::Regex;
+
+    let regex = Regex::new(r"(?m)[[:space:]]+").ok()?; // _
+    let mut ret = regex.replace_all(&og, "_").to_string();
+    let regex = Regex::new(r"(?m)[[:punct:]]").ok()?; // -
+    ret = regex.replace_all(&ret, "-").to_string();
+    let regex = Regex::new(r"(?m)[[:cntrl:]]*").ok()?; //
+    ret = regex.replace_all(&ret, "").to_string();
+    let regex = Regex::new(r"(?m)[[:blank:]]*").ok()?; //
+    ret = regex.replace_all(&ret, "").to_string();
+    let regex = Regex::new(r"^[[:punct:]]*").ok()?; //
+    ret = regex.replace_all(&ret, "").to_string();
+    let regex = Regex::new(r"[[:punct:]]*$").ok()?; //
+    Some(regex.replace_all(&ret, "").to_string())
 }
 
 #[cfg(test)]
@@ -179,5 +202,13 @@ mod tests {
         assert!(tempdir.path().join("test").try_exists().unwrap());
 
         _ = tempdir.close();
+    }
+
+    #[test]
+    fn test_file_sanitize_filename() {
+        assert_eq!(
+            sanitize_filename("Re: Some long subject - \"User Dot. Name\" <user1@example.com> Sent from my bPad 2024-09-07, on   a sunny Saturday".to_string()),
+            Some("Re--Some-long-subject----User-Dot--Name---user1-example-com--Sent-from-my-bPad-2024-09-07--on-a-sunny-Saturday".to_string())
+        );
     }
 }
