@@ -32,7 +32,7 @@ pub enum EditAttachmentCursor {
 pub enum EditAttachmentMode {
     Overview,
     Edit {
-        inner: Box<FormWidget<FormButtonActions>>,
+        inner: Box<FormWidget<FormButtonAction>>,
         no: usize,
     },
 }
@@ -42,7 +42,7 @@ pub struct EditAttachments {
     /// For shortcut setting retrieval.
     pub account_hash: Option<AccountHash>,
     pub mode: EditAttachmentMode,
-    pub buttons: ButtonWidget<FormButtonActions>,
+    pub buttons: ButtonWidget<FormButtonAction>,
     pub cursor: EditAttachmentCursor,
     pub dirty: bool,
     pub id: ComponentId,
@@ -50,8 +50,8 @@ pub struct EditAttachments {
 
 impl EditAttachments {
     pub fn new(account_hash: Option<AccountHash>) -> Self {
-        //ButtonWidget::new(("Add".into(), FormButtonActions::Other("add")));
-        let mut buttons = ButtonWidget::new(("Go Back".into(), FormButtonActions::Cancel));
+        //ButtonWidget::new(("Add".into(), FormButtonAction::Other("add")));
+        let mut buttons = ButtonWidget::new(("Go Back".into(), FormButtonAction::Cancel));
         buttons.set_focus(true);
         buttons.set_cursor(1);
         Self {
@@ -70,7 +70,7 @@ impl EditAttachmentsRefMut<'_, '_> {
         &self,
         no: usize,
         context: &Context,
-    ) -> Option<Box<FormWidget<FormButtonActions>>> {
+    ) -> Option<Box<FormWidget<FormButtonAction>>> {
         if no >= self.draft.attachments().len() {
             return None;
         }
@@ -79,7 +79,7 @@ impl EditAttachmentsRefMut<'_, '_> {
         let shortcuts = self.shortcuts(context);
 
         let mut ret = FormWidget::new(
-            ("Save".into(), FormButtonActions::Accept),
+            ("Save".into(), FormButtonAction::Accept),
             /* cursor_up_shortcut */
             shortcuts
                 .get(Shortcuts::COMPOSING)
@@ -92,8 +92,8 @@ impl EditAttachmentsRefMut<'_, '_> {
                 .unwrap_or_else(|| context.settings.shortcuts.composing.scroll_down.clone()),
         );
 
-        ret.add_button(("Reset".into(), FormButtonActions::Reset));
-        ret.add_button(("Cancel".into(), FormButtonActions::Cancel));
+        ret.add_button(("Reset".into(), FormButtonAction::Reset));
+        ret.add_button(("Cancel".into(), FormButtonAction::Cancel));
         ret.push(("Filename".into(), filename.unwrap_or_default().to_string()));
         ret.push(("Mime type".into(), mime_type.to_string()));
         Some(Box::new(ret))
@@ -198,10 +198,10 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
         {
             if inner.process_event(event, context) {
                 match inner.buttons_result() {
-                    Some(FormButtonActions::Accept) | Some(FormButtonActions::Cancel) => {
+                    Some(FormButtonAction::Accept) | Some(FormButtonAction::Cancel) => {
                         self.inner.mode = EditAttachmentMode::Overview;
                     }
-                    Some(FormButtonActions::Reset) => {
+                    Some(FormButtonAction::Reset) => {
                         let no = *no;
                         if let Some(inner) = self.new_edit_widget(no, context) {
                             self.inner.mode = EditAttachmentMode::Edit { inner, no };

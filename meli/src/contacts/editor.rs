@@ -23,8 +23,10 @@ use indexmap::IndexMap;
 use melib::Card;
 
 use crate::{
-    terminal::*, CellBuffer, Component, ComponentId, Context, Field, FormWidget, Key, StatusEvent,
-    ThemeAttribute, UIDialog, UIEvent,
+    terminal::*,
+    utilities::{FormButtonAction, FormWidget},
+    CellBuffer, Component, ComponentId, Context, Field, Key, StatusEvent, ThemeAttribute, UIDialog,
+    UIEvent,
 };
 
 #[derive(Debug)]
@@ -40,7 +42,7 @@ pub struct ContactManager {
     parent_id: Option<ComponentId>,
     pub card: Card,
     mode: ViewMode,
-    form: FormWidget<bool>,
+    form: FormWidget<FormButtonAction>,
     pub account_pos: usize,
     content: Screen<Virtual>,
     theme_default: ThemeAttribute,
@@ -114,12 +116,13 @@ impl ContactManager {
         }
 
         self.form = FormWidget::new(
-            ("Save".into(), true),
+            ("Save".into(), FormButtonAction::Accept),
             /* cursor_up_shortcut */ context.settings.shortcuts.general.scroll_up.clone(),
             /* cursor_down_shortcut */
             context.settings.shortcuts.general.scroll_down.clone(),
         );
-        self.form.add_button(("Cancel(Esc)".into(), false));
+        self.form
+            .add_button(("Cancel(Esc)".into(), FormButtonAction::Cancel));
         self.form
             .push(("NAME".into(), self.card.name().to_string()));
         self.form.push((
@@ -200,7 +203,7 @@ impl Component for ContactManager {
                 if self.form.process_event(event, context) {
                     match self.form.buttons_result() {
                         None => {}
-                        Some(true) => {
+                        Some(FormButtonAction::Accept) => {
                             let fields = std::mem::take(&mut self.form).collect().unwrap();
                             let fields: IndexMap<String, String> = fields
                                 .into_iter()
@@ -224,9 +227,10 @@ impl Component for ContactManager {
                             ));
                             self.unrealize(context);
                         }
-                        Some(false) => {
+                        Some(FormButtonAction::Cancel) => {
                             self.unrealize(context);
                         }
+                        Some(FormButtonAction::Reset | FormButtonAction::Other(_)) => {}
                     }
                     self.set_dirty(true);
                     if matches!(event, UIEvent::InsertInput(_)) {

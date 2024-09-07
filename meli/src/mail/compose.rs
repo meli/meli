@@ -1179,7 +1179,7 @@ impl Component for Composer {
                 {
                     if matches!(
                         widget.buttons.result(),
-                        Some(FormButtonActions::Cancel | FormButtonActions::Accept)
+                        Some(FormButtonAction::Cancel | FormButtonAction::Accept)
                     ) {
                         self.mode = ViewMode::Edit;
                     }

@@ -196,7 +196,7 @@ impl std::fmt::Display for Field {
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum FormButtonActions {
+pub enum FormButtonAction {
     Accept,
     Reset,
     #[default]
