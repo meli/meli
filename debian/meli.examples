@@ -1,2 +1,3 @@
-meli/docs/samples/sample-config.toml
-meli/docs/samples/themes
+contrib/*
+meli/docs/mail.vim
+meli/docs/samples/*

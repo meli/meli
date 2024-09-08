@@ -12,6 +12,7 @@ repository = "https://git.meli-email.org/meli/meli.git"
 keywords = ["mail", "mua", "maildir", "terminal", "imap"]
 categories = ["command-line-utilities", "email"]
 default-run = "meli"
+exclude = ["/docs/historical-manpages"]
 
 [[bin]]
 name = "meli"

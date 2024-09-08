@@ -1,3 +1,4 @@
 meli/docs/*.1
 meli/docs/*.5
 meli/docs/*.7
+meli/docs/external-tools.md
