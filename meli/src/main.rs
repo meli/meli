@@ -78,8 +78,8 @@ fn run_app(mut opt: Opt) -> Result<()> {
         state = subcommands::view(path, sender, receiver.clone())?;
     } else {
         state = State::new(None, sender, receiver.clone())?;
-        #[cfg(feature = "svgscreenshot")]
-        state.register_component(Box::new(svg::SVGScreenshotFilter::new()));
+        // #[cfg(feature = "svgscreenshot")]
+        // state.register_component(Box::new(svg::SVGScreenshotFilter::new()));
         let window = Box::new(Tabbed::new(
             vec![
                 Box::new(listing::Listing::new(&mut state.context)),

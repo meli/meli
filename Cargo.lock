@@ -1353,7 +1353,6 @@ dependencies = [
  "signal-hook-registry",
  "smallvec",
  "structopt",
- "svg",
  "syn 1.0.109",
  "tempfile",
  "termion",
@@ -2252,12 +2251,6 @@ name = "subtle"
 version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
-
-[[package]]
-name = "svg"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02d815ad337e8449d2374d4248448645edfe74e699343dd5719139d93fa87112"
 
 [[package]]
 name = "syn"

@@ -43,7 +43,7 @@ signal-hook = { version = "^0.3", default-features = false, features = ["iterato
 signal-hook-registry = { version = "1.2.0", default-features = false }
 smallvec = { version = "^1.5.0", features = ["serde"] }
 structopt = { version = "0.3.26", default-features = false }
-svg_crate = { version = "^0.13", optional = true, package = "svg" }
+# svg_crate = { version = "^0.13", optional = true, package = "svg" }
 termion = { version = "1.5.1", default-features = false }
 toml = { version = "0.8", default-features = false, features = ["display","preserve_order","parse"] }
 xdg = { version = "2.1.0" }
@@ -57,7 +57,7 @@ smtp = ["melib/smtp"]
 smtp-trace = ["smtp", "melib/smtp-trace"]
 dbus-notifications = ["dep:notify-rust"]
 cli-docs = ["dep:flate2"]
-svgscreenshot = ["dep:svg_crate"]
+# svgscreenshot = ["dep:svg_crate"]
 gpgme = ["melib/gpgme"]
 # Static / vendoring features.
 tls-static = ["melib/tls-static"]

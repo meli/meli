@@ -146,8 +146,8 @@ pub use mailbox_management::*;
 pub mod jobs_view;
 pub use jobs_view::*;
 
-#[cfg(feature = "svgscreenshot")]
-pub mod svg;
+// #[cfg(feature = "svgscreenshot")]
+// pub mod svg;
 
 #[macro_use]
 pub mod conf;
