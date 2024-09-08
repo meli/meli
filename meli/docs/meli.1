@@ -649,7 +649,7 @@ catchall for general errors
 process panic
 .El
 .Sh ENVIRONMENT
-.Bl -tag -width "$XDG_CONFIG_HOME/meli/plugins/*" -offset indent
+.Bl -tag -width "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" -offset indent
 .It Ev EDITOR
 Specifies the editor to use
 .It Ev MELI_CONFIG
@@ -665,7 +665,7 @@ overrides this.
 .Sh FILES
 .Nm
 uses the following parts of the XDG standard:
-.Bl -tag -width "$XDG_CONFIG_HOME/meli/plugins/*" -offset indent
+.Bl -tag -width "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" -offset indent
 .It Ev XDG_CONFIG_HOME
 defaults to
 .Pa ~/.config/
@@ -675,17 +675,13 @@ defaults to
 .El
 .Pp
 and appropriates the following locations:
-.Bl -tag -width "$XDG_CONFIG_HOME/meli/plugins/*" -offset indent
+.Bl -tag -width "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" -offset indent
 .It Pa $XDG_CONFIG_HOME/meli/
 User configuration directory
 .It Pa $XDG_CONFIG_HOME/meli/config.toml
 User configuration file, see
 .Xr meli.conf 5
 for its syntax and values.
-.It Pa $XDG_CONFIG_HOME/meli/hooks/*
-Reserved for event hooks.
-.It Pa $XDG_CONFIG_HOME/meli/plugins/*
-Reserved for plugin files.
 .It Pa $XDG_CACHE_HOME/meli/*
 Internal cached data used by meli.
 .It Pa $XDG_DATA_HOME/meli/*

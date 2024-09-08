@@ -343,10 +343,8 @@ impl State {
         sender: Sender<ThreadEvent>,
         receiver: Receiver<ThreadEvent>,
     ) -> Result<Self> {
-        /*
-         * Create async channel to block the input-thread if we need to fork and stop
-         * it from reading stdin, see get_events() for details
-         */
+        // Create async channel to block the input-thread if we need to fork and stop it
+        // from reading stdin, see get_events() for details
         let input_thread = unbounded();
         let input_thread_pipe = crate::types::pipe()?;
         let backends = Backends::new();
@@ -355,20 +353,6 @@ impl State {
         } else {
             Settings::new()?
         });
-        /*
-        let mut plugin_manager = PluginManager::new();
-        for (_, p) in settings.plugins.clone() {
-            if crate::plugins::PluginKind::Backend == p.kind() {
-                debug!("registering {:?}", &p);
-                crate::plugins::backend::PluginBackend::register(
-                    plugin_manager.listener(),
-                    p.clone(),
-                    &mut backends,
-                );
-            }
-            plugin_manager.register(p)?;
-        }
-        */
 
         let (cols, rows) = termion::terminal_size().chain_err_summary(|| {
             "Could not determine terminal size. Are you running this on a tty? If yes, do you need \
