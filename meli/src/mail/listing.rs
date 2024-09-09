@@ -1162,11 +1162,13 @@ pub struct Listing {
     show_menu_scrollbar: ShowMenuScrollbar,
     startup_checks_rate: RateLimit,
     id: ComponentId,
+    // Configurable settings
     theme_default: ThemeAttribute,
-
     sidebar_divider: char,
     sidebar_divider_theme: ThemeAttribute,
-
+    mail_view_divider: char,
+    mail_view_divider_theme: ThemeAttribute,
+    // State
     menu_visibility: bool,
     cmd_buf: String,
     /// This is the width of the right container to the entire width.
@@ -1278,6 +1280,22 @@ impl Component for Listing {
                 self.component.draw(grid, area, context);
                 if self.component.unfocused() {
                     if let Some(ref mut view) = self.view {
+                        if let Some(view_area) = self.component.view_area() {
+                            if view_area != area {
+                                let divider_area =
+                                    area.nth_col(area.width() - view_area.width() - 1);
+                                for row in grid.bounds_iter(divider_area) {
+                                    for c in row {
+                                        grid[c]
+                                            .set_ch(self.mail_view_divider)
+                                            .set_fg(self.mail_view_divider_theme.fg)
+                                            .set_bg(self.mail_view_divider_theme.bg)
+                                            .set_attrs(self.mail_view_divider_theme.attrs);
+                                    }
+                                }
+                                context.dirty_areas.push_back(divider_area);
+                            }
+                        }
                         view.draw(grid, self.component.view_area().unwrap_or(area), context);
                     }
                 }
@@ -1294,6 +1312,9 @@ impl Component for Listing {
                 self.sidebar_divider =
                     *account_settings!(context[account_hash].listing.sidebar_divider);
                 self.sidebar_divider_theme = conf::value(context, "mail.sidebar_divider");
+                self.mail_view_divider =
+                    *account_settings!(context[account_hash].listing.mail_view_divider);
+                self.mail_view_divider_theme = conf::value(context, "mail.view.divider");
                 self.menu.grid_mut().empty();
                 self.set_dirty(true);
             }
@@ -2905,6 +2926,10 @@ impl Listing {
                 context[first_account_hash].listing.sidebar_divider
             ),
             sidebar_divider_theme: conf::value(context, "mail.sidebar_divider"),
+            mail_view_divider: *account_settings!(
+                context[first_account_hash].listing.mail_view_divider
+            ),
+            mail_view_divider_theme: conf::value(context, "mail.view.divider"),
             menu_visibility: !*account_settings!(
                 context[first_account_hash].listing.hide_sidebar_on_launch
             ),

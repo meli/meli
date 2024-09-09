@@ -317,6 +317,7 @@ pub const DEFAULT_KEYS: &[&str] = &[
     "mail.listing.conversations.highlighted",
     "mail.listing.conversations.selected",
     "mail.listing.conversations.highlighted_selected",
+    "mail.view.divider",
     "mail.view.headers",
     "mail.view.headers_names",
     "mail.view.headers_area",
@@ -1243,6 +1244,7 @@ impl Default for Themes {
                 bg: "mail.sidebar_highlighted_account"
             }
         );
+        add!("mail.view.divider");
 
         /* CompactListing */
         add!("mail.listing.compact.even",

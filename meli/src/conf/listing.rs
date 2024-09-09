@@ -167,6 +167,10 @@ pub struct ListingSettings {
     /// Hide sidebar on launch. Default: "false"
     #[serde(default = "false_val", alias = "hide-sidebar-on-launch")]
     pub hide_sidebar_on_launch: bool,
+
+    /// Default: ' '
+    #[serde(default = "default_divider")]
+    pub mail_view_divider: char,
 }
 
 const fn default_divider() -> char {
@@ -203,6 +207,7 @@ impl Default for ListingSettings {
             relative_menu_indices: true,
             relative_list_indices: true,
             hide_sidebar_on_launch: false,
+            mail_view_divider: default_divider(),
         }
     }
 }
@@ -246,6 +251,7 @@ impl DotAddressable for ListingSettings {
                     "relative_menu_indices" => self.relative_menu_indices.lookup(field, tail),
                     "relative_list_indices" => self.relative_list_indices.lookup(field, tail),
                     "hide_sidebar_on_launch" => self.hide_sidebar_on_launch.lookup(field, tail),
+                    "mail_view_divider" => self.mail_view_divider.lookup(field, tail),
                     other => Err(Error::new(format!(
                         "{} has no field named {}",
                         parent_field, other
