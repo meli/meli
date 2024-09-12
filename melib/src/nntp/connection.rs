@@ -154,32 +154,41 @@ impl NntpStream {
             }
 
             {
-                // [ref:FIXME]: This is blocking
-                let socket = ret.stream.into_inner()?;
-                let mut conn_result = connector.connect(path, socket);
-                if let Err(native_tls::HandshakeError::WouldBlock(midhandshake_stream)) =
-                    conn_result
-                {
-                    let mut midhandshake_stream = Some(midhandshake_stream);
-                    loop {
-                        match midhandshake_stream.take().unwrap().handshake() {
-                            Ok(r) => {
-                                conn_result = Ok(r);
-                                break;
-                            }
-                            Err(native_tls::HandshakeError::WouldBlock(stream)) => {
-                                midhandshake_stream = Some(stream);
-                            }
-                            p => {
-                                p.chain_err_kind(ErrorKind::Network(
-                                    NetworkErrorKind::InvalidTLSConnection,
-                                ))?;
+                let path = Arc::new(path.to_string());
+                let conn = smol::unblock({
+                    let socket = ret.stream.into_inner()?;
+                    let path = Arc::clone(&path);
+                    move || {
+                        let conn_result = connector.connect(&path, socket);
+                        if let Err(native_tls::HandshakeError::WouldBlock(midhandshake_stream)) =
+                            conn_result
+                        {
+                            let mut midhandshake_stream = Some(midhandshake_stream);
+                            loop {
+                                match midhandshake_stream.take().unwrap().handshake() {
+                                    Ok(r) => {
+                                        return Ok(r);
+                                    }
+                                    Err(native_tls::HandshakeError::WouldBlock(stream)) => {
+                                        midhandshake_stream = Some(stream);
+                                    }
+                                    Err(err) => {
+                                        return Err(Error::from(err).set_kind(ErrorKind::Network(
+                                            NetworkErrorKind::InvalidTLSConnection,
+                                        )));
+                                    }
+                                }
                             }
                         }
+                        conn_result.chain_err_kind(ErrorKind::Network(
+                            NetworkErrorKind::InvalidTLSConnection,
+                        ))
                     }
-                }
+                })
+                .await
+                .chain_err_summary(|| format!("Could not initiate TLS negotiation to {}.", path))?;
                 ret.stream = AsyncWrapper::new({
-                    let conn = Connection::new_tls(conn_result?);
+                    let conn = Connection::new_tls(conn);
                     #[cfg(feature = "nntp-trace")]
                     {
                         conn.trace(true).with_id("nntp")
