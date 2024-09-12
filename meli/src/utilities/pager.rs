@@ -804,7 +804,6 @@ impl Component for Pager {
                         )),
                         parent: Some(self.id()),
                     });
-                    self.dirty = true;
                 }
                 return true;
             }
