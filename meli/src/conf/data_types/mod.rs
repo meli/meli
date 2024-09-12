@@ -41,11 +41,16 @@ impl<'de> Deserialize<'de> for IndexStyle {
     {
         let s = <String>::deserialize(deserializer)?;
         match s.as_str() {
-            "Plain" | "plain" => Ok(Self::Plain),
-            "Threaded" | "threaded" => Ok(Self::Threaded),
-            "Compact" | "compact" => Ok(Self::Compact),
-            "Conversations" | "conversations" => Ok(Self::Conversations),
-            _ => Err(de::Error::custom("invalid `index_style` value")),
+            plain if plain.eq_ignore_ascii_case("plain") => Ok(Self::Plain),
+            threaded if threaded.eq_ignore_ascii_case("threaded") => Ok(Self::Threaded),
+            compact if compact.eq_ignore_ascii_case("compact") => Ok(Self::Compact),
+            conversations if conversations.eq_ignore_ascii_case("conversations") => {
+                Ok(Self::Conversations)
+            }
+            _ => Err(de::Error::custom(
+                "invalid `index_style` value, expected one of: \"plain\", \"threaded\", \
+                 \"compact\" or \"conversations\".",
+            )),
         }
     }
 }
@@ -94,7 +99,12 @@ impl<'de> Deserialize<'de> for SearchBackend {
                 Ok(Self::None)
             }
             auto if auto.eq_ignore_ascii_case("auto") => Ok(Self::Auto),
-            _ => Err(de::Error::custom("invalid `search_backend` value")),
+            _ => Err(de::Error::custom(if cfg!(feature = "sqlite3") {
+                "invalid `search_backend` value, expected one of: \"sqlite3\", \"sqlite\", \
+                 \"none\" or \"auto\"."
+            } else {
+                "invalid `search_backend` value, expected one of: \"none\" or \"auto\"."
+            })),
         }
     }
 }

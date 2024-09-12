@@ -43,6 +43,7 @@ impl DotAddressable for bool {}
 impl DotAddressable for String {}
 impl DotAddressable for char {}
 impl DotAddressable for data_types::IndexStyle {}
+impl DotAddressable for data_types::SearchBackend {}
 impl DotAddressable for u64 {}
 impl DotAddressable for TagHash {}
 impl DotAddressable for crate::terminal::Color {}
@@ -54,7 +55,6 @@ impl DotAddressable for melib::LogLevel {}
 impl DotAddressable for PathBuf {}
 impl DotAddressable for ToggleFlag {}
 impl DotAddressable for ActionFlag {}
-impl DotAddressable for data_types::SearchBackend {}
 impl DotAddressable for melib::SpecialUsageMailbox {}
 impl<T: DotAddressable> DotAddressable for Option<T> {}
 impl<T: DotAddressable> DotAddressable for Vec<T> {}
