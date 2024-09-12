@@ -19,7 +19,10 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::process::{Command, Stdio};
+use std::{
+    collections::VecDeque,
+    process::{Command, Stdio},
+};
 
 use melib::utils::{shellexpand::ShellExpandTrait, xdg::query_default_app};
 
@@ -1314,23 +1317,25 @@ impl Component for EnvelopeView {
                     self.active_jobs.remove(job_id);
                 }
                 UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id))
-                    if self.filters.iter_mut().any(|filter| {
+                    if self.filters.iter().any(|f| f.contains_job_id(*job_id)) =>
+                {
+                    let mut stack = self.filters.iter_mut().collect::<VecDeque<&mut _>>();
+                    while let Some(filter) = stack.pop_front() {
                         if let Some(cb) = filter.event_handler {
                             if cb(
                                 filter,
                                 &mut UIEvent::StatusEvent(StatusEvent::JobFinished(*job_id)),
                                 context,
                             ) {
-                                return true;
+                                break;
                             }
-                        };
-                        false
-                    }) =>
-                {
-                    log::trace!(
-                        "after calling job event handles, filters are: {:?}",
-                        &self.filters
-                    );
+                        }
+                        if let ViewFilterContent::InlineAttachments { ref mut parts, .. } =
+                            filter.body_text
+                        {
+                            stack.extend(parts.iter_mut());
+                        }
+                    }
                     self.links.clear();
                     self.regenerate_body_text();
                     self.initialised = false;
@@ -1338,7 +1343,6 @@ impl Component for EnvelopeView {
                 }
                 _ => {}
             }
-            log::trace!("envelope.rs got job finished: {:?}", event);
         }
         match (&mut self.force_charset, &event) {
             (ForceCharset::Dialog(selector), UIEvent::FinishedUIDialog(id, results))

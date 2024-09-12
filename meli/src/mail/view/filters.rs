@@ -93,7 +93,8 @@ impl std::fmt::Debug for ViewFilterContent {
                 .finish(),
             InlineAttachments { ref parts } => fmt
                 .debug_struct(stringify!(ViewFilterContent::InlineAttachments))
-                .field("parts", &parts.len())
+                .field("parts_no", &parts.len())
+                .field("parts", &parts)
                 .finish(),
         }
     }
@@ -276,13 +277,13 @@ impl ViewFilter {
         };
         let filter_invocation2 = filter_invocation.to_string();
         let open_html_shortcut = settings.shortcuts.envelope_view.open_html.clone();
-        let on_success_notice_cb = move || {
+        let on_success_notice_cb = Arc::new(move || {
             format!(
                 "Text piped through `{}` Press `{}` to open in web browser.",
                 filter_invocation2, open_html_shortcut
             )
             .into()
-        };
+        });
         let mut job_handle = context.main_loop_handler.job_executor.spawn(
             filter_invocation.to_string().into(),
             job,
@@ -300,11 +301,17 @@ impl ViewFilter {
             id: ComponentId::default(),
         };
         if let Ok(Some(job_result)) = try_recv_timeout!(&mut job_handle.chan) {
+            retval.body_text = ViewFilterContent::Running {
+                job_id: job_handle.job_id,
+                on_success_notice_cb: on_success_notice_cb.clone(),
+                job_handle,
+                view_settings: view_settings.clone(),
+            };
             retval.event_handler = Some(Self::html_process_event);
             Self::process_job_result(
                 &mut retval,
                 Ok(Some(job_result)),
-                Arc::new(on_success_notice_cb),
+                on_success_notice_cb,
                 view_settings,
                 context,
             );
@@ -313,7 +320,7 @@ impl ViewFilter {
         Ok(Self {
             body_text: ViewFilterContent::Running {
                 job_id: job_handle.job_id,
-                on_success_notice_cb: Arc::new(on_success_notice_cb),
+                on_success_notice_cb,
                 job_handle,
                 view_settings: view_settings.clone(),
             },
@@ -464,7 +471,7 @@ impl ViewFilter {
                             verify_fut,
                             IsAsync::Blocking,
                         );
-                        let on_success_notice_cb = || "Verified signature.".into();
+                        let on_success_notice_cb = Arc::new(|| "Verified signature.".into());
                         let mut retval = Self {
                             filter_invocation: "gpg::verify".into(),
                             content_type: att.content_type.clone(),
@@ -477,11 +484,17 @@ impl ViewFilter {
                             id: ComponentId::default(),
                         };
                         if let Ok(Some(job_result)) = try_recv_timeout!(&mut job_handle.chan) {
+                            retval.body_text = ViewFilterContent::Running {
+                                job_id: job_handle.job_id,
+                                on_success_notice_cb: on_success_notice_cb.clone(),
+                                job_handle,
+                                view_settings: view_settings.clone(),
+                            };
                             retval.event_handler = None;
                             Self::process_job_result(
                                 &mut retval,
                                 Ok(Some(job_result)),
-                                Arc::new(on_success_notice_cb),
+                                on_success_notice_cb,
                                 view_settings,
                                 context,
                             );
@@ -490,7 +503,7 @@ impl ViewFilter {
                         return Ok(Self {
                             body_text: ViewFilterContent::Running {
                                 job_id: job_handle.job_id,
-                                on_success_notice_cb: Arc::new(on_success_notice_cb),
+                                on_success_notice_cb,
                                 job_handle,
                                 view_settings: view_settings.clone(),
                             },
@@ -551,7 +564,7 @@ impl ViewFilter {
                             decrypt_fut,
                             IsAsync::Blocking,
                         );
-                        let on_success_notice_cb = || "Decrypted content.".into();
+                        let on_success_notice_cb = Arc::new(|| "Decrypted content.".into());
                         let mut retval = Self {
                             filter_invocation: "gpg::decrypt".into(),
                             content_type: att.content_type.clone(),
@@ -564,11 +577,17 @@ impl ViewFilter {
                             id: ComponentId::default(),
                         };
                         if let Ok(Some(job_result)) = try_recv_timeout!(&mut job_handle.chan) {
+                            retval.body_text = ViewFilterContent::Running {
+                                job_id: job_handle.job_id,
+                                on_success_notice_cb: on_success_notice_cb.clone(),
+                                job_handle,
+                                view_settings: view_settings.clone(),
+                            };
                             retval.event_handler = None;
                             Self::process_job_result(
                                 &mut retval,
                                 Ok(Some(job_result)),
-                                Arc::new(on_success_notice_cb),
+                                on_success_notice_cb,
                                 view_settings,
                                 context,
                             );
@@ -577,7 +596,7 @@ impl ViewFilter {
                         return Ok(Self {
                             body_text: ViewFilterContent::Running {
                                 job_id: job_handle.job_id,
-                                on_success_notice_cb: Arc::new(on_success_notice_cb),
+                                on_success_notice_cb,
                                 job_handle,
                                 view_settings: view_settings.clone(),
                             },
@@ -612,7 +631,7 @@ impl ViewFilter {
                     decrypt_fut,
                     IsAsync::Blocking,
                 );
-                let on_success_notice_cb = || "Decrypted content.".into();
+                let on_success_notice_cb = Arc::new(|| "Decrypted content.".into());
                 let mut retval = Self {
                     filter_invocation: "gpg::decrypt".into(),
                     content_type: att.content_type.clone(),
@@ -625,11 +644,17 @@ impl ViewFilter {
                     id: ComponentId::default(),
                 };
                 if let Ok(Some(job_result)) = try_recv_timeout!(&mut job_handle.chan) {
+                    retval.body_text = ViewFilterContent::Running {
+                        job_id: job_handle.job_id,
+                        on_success_notice_cb: on_success_notice_cb.clone(),
+                        job_handle,
+                        view_settings: view_settings.clone(),
+                    };
                     retval.event_handler = None;
                     Self::process_job_result(
                         &mut retval,
                         Ok(Some(job_result)),
-                        Arc::new(on_success_notice_cb),
+                        on_success_notice_cb,
                         view_settings,
                         context,
                     );
@@ -638,7 +663,7 @@ impl ViewFilter {
                 return Ok(Self {
                     body_text: ViewFilterContent::Running {
                         job_id: job_handle.job_id,
-                        on_success_notice_cb: Arc::new(on_success_notice_cb),
+                        on_success_notice_cb,
                         job_handle,
                         view_settings: view_settings.clone(),
                     },
@@ -744,28 +769,35 @@ impl ViewFilter {
         );
         if matches!(event, UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id)) if self_.contains_job_id(*job_id))
         {
-            if let ViewFilterContent::Running {
-                job_id: _,
-                mut job_handle,
-                on_success_notice_cb,
-                view_settings,
-            } = std::mem::replace(
-                &mut self_.body_text,
-                ViewFilterContent::Filtered {
-                    inner: String::new(),
-                },
-            ) {
-                log::trace!("job_process_event: inside if let ");
-                let job_result = job_handle.chan.try_recv();
-                Self::process_job_result(
-                    self_,
-                    job_result,
+            if matches!(self_.body_text, ViewFilterContent::Running { .. }) {
+                if let ViewFilterContent::Running {
+                    job_id: _,
+                    mut job_handle,
                     on_success_notice_cb,
-                    &view_settings,
-                    context,
-                );
+                    view_settings,
+                } = std::mem::replace(
+                    &mut self_.body_text,
+                    ViewFilterContent::Filtered {
+                        inner: String::new(),
+                    },
+                ) {
+                    log::trace!("job_process_event: inside if let ");
+                    let job_result = job_handle.chan.try_recv();
+                    Self::process_job_result(
+                        self_,
+                        job_result,
+                        on_success_notice_cb,
+                        &view_settings,
+                        context,
+                    );
+                }
+                return true;
             }
-            return true;
+            if let ViewFilterContent::InlineAttachments { ref mut parts, .. } = self_.body_text {
+                return parts
+                    .iter_mut()
+                    .any(|p| Self::job_process_event(p, event, context));
+            }
         }
         false
     }
