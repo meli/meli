@@ -21,7 +21,11 @@
 
 use melib::{search::Query, Error, Result, ToggleFlag};
 
-use crate::conf::{data_types::IndexStyle, default_values::*, DotAddressable};
+use crate::conf::{
+    data_types::{IndexStyle, ThreadLayout},
+    default_values::*,
+    DotAddressable,
+};
 
 /// Settings for mail listings
 ///
@@ -171,6 +175,10 @@ pub struct ListingSettings {
     /// Default: ' '
     #[serde(default = "default_divider")]
     pub mail_view_divider: char,
+
+    /// Default: "auto"
+    #[serde(default)]
+    pub thread_layout: ThreadLayout,
 }
 
 const fn default_divider() -> char {
@@ -208,6 +216,7 @@ impl Default for ListingSettings {
             relative_list_indices: true,
             hide_sidebar_on_launch: false,
             mail_view_divider: default_divider(),
+            thread_layout: ThreadLayout::default(),
         }
     }
 }
@@ -252,6 +261,7 @@ impl DotAddressable for ListingSettings {
                     "relative_list_indices" => self.relative_list_indices.lookup(field, tail),
                     "hide_sidebar_on_launch" => self.hide_sidebar_on_launch.lookup(field, tail),
                     "mail_view_divider" => self.mail_view_divider.lookup(field, tail),
+                    "thread_layout" => self.thread_layout.lookup(field, tail),
                     other => Err(Error::new(format!(
                         "{} has no field named {}",
                         parent_field, other

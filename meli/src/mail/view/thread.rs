@@ -27,7 +27,7 @@ use melib::{
 };
 
 use super::*;
-use crate::components::PageMovement;
+use crate::{components::PageMovement, conf::data_types::ThreadLayout};
 
 #[derive(Debug)]
 struct ThreadEntry {
@@ -65,7 +65,8 @@ pub struct ThreadView {
     visible_entries: Vec<Vec<usize>>,
     //indentation_colors: [ThemeAttribute; 6],
     use_color: bool,
-    horizontal: Option<bool>,
+    last_width: usize,
+    thread_layout: ThreadLayout,
     movement: Option<PageMovement>,
     dirty: bool,
     content: Screen<Virtual>,
@@ -106,7 +107,10 @@ impl ThreadView {
             //    crate::conf::value(context, "mail.view.thread.indentation.f"),
             //],
             use_color: context.settings.terminal.use_color(),
-            horizontal: None,
+            last_width: 0,
+            thread_layout: *mailbox_settings!(
+                context[coordinates.0][&coordinates.1].listing.thread_layout
+            ),
             expanded_pos: 0,
             new_expanded_pos: 0,
             visible_entries: vec![],
@@ -561,11 +565,25 @@ impl ThreadView {
         context.dirty_areas.push_back(area);
     }
 
+    /// Calculate if a `ThreadLayout` value of `Auto` would be vertical.
+    fn calculate_auto_thread_layout_is_vertical(&self) -> bool {
+        if self.last_width == 0 {
+            return true;
+        }
+        // Sorry, I'm just hardcoding this for now.
+        self.content.area().width().min(self.last_width / 2) > 62
+    }
+
     fn draw_vert(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.entries.is_empty() {
             return;
         }
         let mid = self.content.area().width().min(area.width() / 2);
+        if matches!(self.thread_layout, ThreadLayout::Auto)
+            && !self.calculate_auto_thread_layout_is_vertical()
+        {
+            return self.draw_horz(grid, area, context);
+        }
 
         let theme_default = crate::conf::value(context, "theme_default");
         // First draw the thread subject on the first row
@@ -777,6 +795,7 @@ impl Component for ThreadView {
         if !self.is_dirty() {
             return;
         }
+        self.last_width = area.width();
 
         // If user has selected another mail to view, change to it
         if self.new_expanded_pos != self.expanded_pos {
@@ -787,7 +806,7 @@ impl Component for ThreadView {
             self.entries[self.new_expanded_pos]
                 .mailview
                 .draw(grid, area, context);
-        } else if Some(true) == self.horizontal {
+        } else if matches!(self.thread_layout, ThreadLayout::Horizontal) {
             self.draw_horz(grid, area, context);
         } else {
             self.draw_vert(grid, area, context);
@@ -832,12 +851,29 @@ impl Component for ThreadView {
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["toggle_layout"]) =>
             {
-                if let Some(ref mut v) = self.horizontal {
-                    *v = !*v;
-                } else {
-                    self.horizontal = Some(true);
+                if self.entries.len() > 1 {
+                    match self.thread_layout {
+                        ThreadLayout::Auto if self.calculate_auto_thread_layout_is_vertical() => {
+                            self.thread_layout = ThreadLayout::Horizontal;
+                        }
+                        ThreadLayout::Auto => {
+                            self.thread_layout = ThreadLayout::Vertical;
+                        }
+                        ThreadLayout::Horizontal => {
+                            self.thread_layout = ThreadLayout::Auto;
+                        }
+                        ThreadLayout::Vertical => {
+                            self.thread_layout = ThreadLayout::Horizontal;
+                        }
+                    }
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::UpdateSubStatus(format!(
+                            "thread_layout set to {}",
+                            toml::Value::try_from(self.thread_layout).expect("Cannot fail")
+                        ))));
+                    self.set_dirty(true);
                 }
-                self.set_dirty(true);
                 true
             }
             UIEvent::Input(ref key)

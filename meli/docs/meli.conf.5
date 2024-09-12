@@ -1709,6 +1709,15 @@ Show relative indices in listings to quickly help with jumping to them.
 .It Ic hide_sidebar_on_launch Ar boolean
 Start app with sidebar hidden.
 .Pq Em false \" default value
+.It Ic mail_view_divider Ar char
+Character to show in the divider space between mail view and listing.
+.Pq Em ' ' \" default value
+.It Ic thread_layout Ar "auto" | "vertical" | "horizontal"
+Force specific layout in thread view.
+The layout can also be toggled at runtime with the
+.Li listing.toggle_layout
+shortcut.
+.Pq Em "auto"
 .El
 .Ss Examples of sidebar mailbox tree customization
 .HorizontalRule

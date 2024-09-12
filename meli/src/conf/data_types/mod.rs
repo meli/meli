@@ -122,3 +122,42 @@ impl Serialize for SearchBackend {
         }
     }
 }
+
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum ThreadLayout {
+    Vertical,
+    Horizontal,
+    #[default]
+    Auto,
+}
+
+impl<'de> Deserialize<'de> for ThreadLayout {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = <String>::deserialize(deserializer)?;
+        match s.as_str() {
+            vertical if vertical.eq_ignore_ascii_case("vertical") => Ok(Self::Vertical),
+            horizontal if horizontal.eq_ignore_ascii_case("horizontal") => Ok(Self::Horizontal),
+            auto if auto.eq_ignore_ascii_case("auto") => Ok(Self::Auto),
+            _ => Err(de::Error::custom(
+                "invalid `thread_layout` value, expected one of: \"vertical\", \"horizontal\" or \
+                 \"auto\".",
+            )),
+        }
+    }
+}
+
+impl Serialize for ThreadLayout {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Self::Vertical => serializer.serialize_str("vertical"),
+            Self::Horizontal => serializer.serialize_str("horizontal"),
+            Self::Auto => serializer.serialize_str("auto"),
+        }
+    }
+}
