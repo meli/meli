@@ -234,6 +234,7 @@ fn run_app(mut opt: Opt) -> Result<()> {
                                     break;
                                 }
                             }
+                            state.rcv_event(UIEvent::StatusEvent(StatusEvent::JobFinished(id)));
                         },
                     }
                 },
