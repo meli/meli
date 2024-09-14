@@ -167,17 +167,22 @@ pub struct NntpType {
 
 impl MailBackend for NntpType {
     fn capabilities(&self) -> MailBackendCapabilities {
+        let mut metadata = None;
         let mut extensions = self
             .uid_store
             .capabilities
             .lock()
             .unwrap()
             .iter()
-            .map(|c| {
-                (
+            .filter_map(|c| {
+                if let Some(stripped) = c.strip_prefix("IMPLEMENTATION ") {
+                    metadata = Some(serde_json::json!( { "IMPLEMENTATION": stripped } ));
+                    return None;
+                }
+                Some((
                     c.to_string(),
                     MailBackendExtensionStatus::Unsupported { comment: None },
-                )
+                ))
             })
             .collect::<Vec<(String, MailBackendExtensionStatus)>>();
         let mut supports_submission = false;
@@ -215,7 +220,7 @@ impl MailBackend for NntpType {
             supports_tags: false,
             supports_submission,
             extra_submission_headers: &[HeaderName::NEWSGROUPS],
-            metadata: None,
+            metadata,
         }
     }
 
