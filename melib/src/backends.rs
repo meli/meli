@@ -61,19 +61,6 @@ pub mod prelude {
 }
 use prelude::*;
 
-#[macro_export]
-macro_rules! get_path_hash {
-    ($path:expr) => {{
-        use std::{
-            collections::hash_map::DefaultHasher,
-            hash::{Hash, Hasher},
-        };
-        let mut hasher = DefaultHasher::new();
-        $path.hash(&mut hasher);
-        hasher.finish()
-    }};
-}
-
 pub type BackendCreator = Box<
     dyn Fn(
         &AccountSettings,

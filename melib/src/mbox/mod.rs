@@ -133,6 +133,7 @@
 use std::{
     collections::hash_map::HashMap,
     io::{BufReader, Read},
+    os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
     str::FromStr,
     sync::{mpsc::channel, Arc, Mutex, RwLock},
@@ -152,7 +153,6 @@ use crate::{
     backends::prelude::*,
     email::{parser::BytesExt, *},
     error::{Error, ErrorKind, IntoError, Result, WrapResultIntoError},
-    get_path_hash,
     utils::{lock::*, shellexpand::ShellExpandTrait},
 };
 pub mod write;
@@ -955,7 +955,8 @@ impl MailBackend for MboxType {
                             | notify::event::ModifyKind::Other,
                         ) => {
                             for pathbuf in event.paths {
-                                let mailbox_hash = MailboxHash(get_path_hash!(&pathbuf));
+                                let mailbox_hash =
+                                    MailboxHash::from_bytes(pathbuf.as_os_str().as_bytes());
                                 let file = match std::fs::OpenOptions::new()
                                     .read(true)
                                     .write(true)
@@ -1019,7 +1020,8 @@ impl MailBackend for MboxType {
                                     .values()
                                     .any(|f| f.fs_path == pathbuf)
                                 {
-                                    let mailbox_hash = MailboxHash(get_path_hash!(&pathbuf));
+                                    let mailbox_hash =
+                                        MailboxHash::from_bytes(pathbuf.as_os_str().as_bytes());
                                     (sender)(
                                         account_hash,
                                         BackendEvent::Refresh(RefreshEvent {
@@ -1047,7 +1049,8 @@ impl MailBackend for MboxType {
                                 .values()
                                 .any(|f| f.fs_path == *src)
                             {
-                                let mailbox_hash = MailboxHash(get_path_hash!(&src));
+                                let mailbox_hash =
+                                    MailboxHash::from_bytes(src.as_os_str().as_bytes());
                                 (sender)(
                                     account_hash,
                                     BackendEvent::Refresh(RefreshEvent {
@@ -1309,7 +1312,7 @@ impl MboxType {
             .file_name()
             .map(|f| f.to_string_lossy().into())
             .unwrap_or_default();
-        let hash = MailboxHash(get_path_hash!(&ret.path));
+        let hash = MailboxHash::from_bytes(ret.path.as_os_str().as_bytes());
 
         let read_only = if let Ok(metadata) = std::fs::metadata(&ret.path) {
             metadata.permissions().readonly()
@@ -1347,7 +1350,7 @@ impl MboxType {
         /* Look for other mailboxes */
         for (k, f) in s.mailboxes.iter() {
             if let Some(path_str) = f.extra.get("path") {
-                let hash = MailboxHash(get_path_hash!(path_str));
+                let hash = MailboxHash::from_bytes(path_str.as_bytes());
                 let pathbuf: PathBuf = Path::new(path_str).expand();
                 if !pathbuf.try_exists().unwrap_or(false) || pathbuf.is_dir() {
                     return Err(Error::new(format!(

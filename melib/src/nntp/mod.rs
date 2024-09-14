@@ -50,7 +50,6 @@ use crate::{
     backends::prelude::*,
     email::address::{MessageID, StrBuild},
     error::{Error, ErrorKind, Result, ResultIntoError},
-    get_path_hash,
     utils::futures::timeout,
 };
 pub type UID = usize;
@@ -665,7 +664,7 @@ impl NntpType {
         let account_name = s.name.to_string().into();
         let mut mailboxes = HashMap::default();
         for (k, _f) in s.mailboxes.iter() {
-            let mailbox_hash = MailboxHash(get_path_hash!(&k));
+            let mailbox_hash = MailboxHash::from_bytes(k.as_bytes());
             mailboxes.insert(
                 mailbox_hash,
                 NntpMailbox {
@@ -765,7 +764,7 @@ impl NntpType {
                 if s.len() != 3 {
                     continue;
                 }
-                let mailbox_hash = MailboxHash(get_path_hash!(&s[0]));
+                let mailbox_hash = MailboxHash::from_bytes(s[0].as_bytes());
                 mailboxes_lck.entry(mailbox_hash).and_modify(|m| {
                     *m.high_watermark.lock().unwrap() = usize::from_str(s[1]).unwrap_or(0);
                     *m.low_watermark.lock().unwrap() = usize::from_str(s[2]).unwrap_or(0);
