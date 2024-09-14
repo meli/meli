@@ -539,15 +539,32 @@ impl NntpConnection {
         force: bool,
         res: &mut String,
     ) -> Result<()> {
+        let path = self
+            .uid_store
+            .mailboxes
+            .lock()
+            .await
+            .get(&mailbox_hash)
+            .ok_or_else(|| Error::new("No such mailbox").set_kind(ErrorKind::NotFound))?
+            .name()
+            .to_string();
+        self.select_group_by_name(&path, force, res).await?;
+        Ok(())
+    }
+
+    pub async fn select_group_by_name(
+        &mut self,
+        path: &str,
+        force: bool,
+        res: &mut String,
+    ) -> Result<MailboxHash> {
+        let mailbox_hash = MailboxHash::from_bytes(path.as_bytes());
         if !force {
             match self.stream.as_ref()?.current_mailbox {
-                MailboxSelection::Select(m) if m == mailbox_hash => return Ok(()),
+                MailboxSelection::Select(m) if m == mailbox_hash => return Ok(mailbox_hash),
                 _ => {}
             }
         }
-        let path = self.uid_store.mailboxes.lock().await[&mailbox_hash]
-            .name()
-            .to_string();
         self.send_command(format!("GROUP {}", path).as_bytes())
             .await?;
         self.read_response(res, false, command_to_replycodes("GROUP"))
@@ -559,7 +576,7 @@ impl NntpConnection {
                 )
             })?;
         self.stream.as_mut()?.current_mailbox = MailboxSelection::Select(mailbox_hash);
-        Ok(())
+        Ok(mailbox_hash)
     }
 
     pub async fn send_multiline_data_block(&mut self, message: &[u8]) -> Result<()> {
