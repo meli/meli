@@ -52,6 +52,22 @@ To use the optional gpg feature, you must have `libgpgme` installed in your syst
 In Debian-like systems, install the `libgpgme11` package.
 `meli` detects the library's presence on runtime.
 
+## Building and running on Android with `termux`
+
+This is not a supported or stable setup so caveat emptor.
+
+At the time of writing this, Android is not a stable Rust target.
+The packaged Rust from `termux` will be used.
+
+The following steps should suffice to build and run `meli` on `termux`:
+
+```console
+$ pkg install rust perl make m4 man
+$ cargo install meli # ensure .cargo/bin is in your PATH
+```
+
+Exporting `EDITOR` and `PAGER` might be useful.
+
 ## Development
 
 Development builds can be built and/or run with
