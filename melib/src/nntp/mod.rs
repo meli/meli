@@ -110,6 +110,7 @@ pub struct NntpServerConf {
     pub require_auth: bool,
     pub danger_accept_invalid_certs: bool,
     pub extension_use: NntpExtensionUse,
+    pub timeout_dur: Option<Duration>,
 }
 
 type Capabilities = HashSet<String>;
@@ -245,6 +246,7 @@ impl MailBackend for NntpType {
     fn refresh(&mut self, mailbox_hash: MailboxHash) -> ResultFuture<()> {
         let uid_store = self.uid_store.clone();
         let connection = self.connection.clone();
+        let timeout_dur = self.server_conf.timeout_dur;
         Ok(Box::pin(async move {
             /* To get updates, either issue NEWNEWS if it's supported by the server, and
              * fallback to OVER otherwise */
@@ -271,7 +273,7 @@ impl MailBackend for NntpType {
                 )
             };
             let mut res = String::with_capacity(8 * 1024);
-            let mut conn = timeout(Some(Duration::from_secs(60 * 16)), connection.lock()).await?;
+            let mut conn = timeout(timeout_dur, connection.lock()).await?;
             if let Some(mut latest_article) = latest_article {
                 let mut unseen = LazyCountSet::new();
                 let timestamp = latest_article - 10 * 60;
@@ -358,8 +360,9 @@ impl MailBackend for NntpType {
     fn mailboxes(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
         let uid_store = self.uid_store.clone();
         let connection = self.connection.clone();
+        let timeout_dur = self.server_conf.timeout_dur;
         Ok(Box::pin(async move {
-            Self::nntp_mailboxes(&connection).await?;
+            Self::nntp_mailboxes(&connection, timeout_dur).await?;
             let mailboxes_lck = uid_store.mailboxes.lock().await;
             let ret = mailboxes_lck
                 .iter()
@@ -371,19 +374,16 @@ impl MailBackend for NntpType {
 
     fn is_online(&self) -> ResultFuture<()> {
         let connection = self.connection.clone();
+        let timeout_dur = self.server_conf.timeout_dur;
         Ok(Box::pin(async move {
-            match timeout(Some(Duration::from_secs(60 * 16)), connection.lock()).await {
-                Ok(mut conn) => {
-                    log::trace!("is_online");
-                    match timeout(Some(Duration::from_secs(60 * 16)), conn.connect()).await {
-                        Ok(Ok(())) => Ok(()),
-                        Err(err) | Ok(Err(err)) => {
-                            conn.stream = Err(err.clone());
-                            conn.connect().await
-                        }
-                    }
+            let mut conn = timeout(timeout_dur, connection.lock()).await?;
+            log::trace!("is_online");
+            match timeout(timeout_dur, conn.connect()).await {
+                Ok(Ok(())) => Ok(()),
+                Err(err) | Ok(Err(err)) => {
+                    conn.stream = Err(err.clone());
+                    conn.connect().await
                 }
-                Err(err) => Err(err),
             }
         }))
     }
@@ -578,29 +578,23 @@ impl MailBackend for NntpType {
         _flags: Option<Flag>,
     ) -> ResultFuture<()> {
         let connection = self.connection.clone();
+        let timeout_dur = self.server_conf.timeout_dur;
         Ok(Box::pin(async move {
-            match timeout(Some(Duration::from_secs(60 * 16)), connection.lock()).await {
-                Ok(mut conn) => {
-                    match &conn.stream {
-                        Ok(stream) => {
-                            if !stream.supports_submission {
-                                return Err(Error::new("Server prohibits posting."));
-                            }
-                        }
-                        Err(err) => return Err(err.clone()),
-                    }
-                    let mut res = String::with_capacity(8 * 1024);
-                    if let Some(mailbox_hash) = mailbox_hash {
-                        conn.select_group(mailbox_hash, false, &mut res).await?;
-                    }
-                    conn.send_command(b"POST").await?;
-                    conn.read_response(&mut res, false, &["340 "]).await?;
-                    conn.send_multiline_data_block(&bytes).await?;
-                    conn.read_response(&mut res, false, &["240 "]).await?;
-                    Ok(())
-                }
-                Err(err) => Err(err),
+            let mut conn = timeout(timeout_dur, connection.lock()).await?;
+            let stream = conn.stream.as_ref()?;
+            if !stream.supports_submission {
+                return Err(Error::new("Server prohibits posting."));
             }
+            // [ref:TODO] normalize CRLF in `bytes`
+            let mut res = String::with_capacity(8 * 1024);
+            if let Some(mailbox_hash) = mailbox_hash {
+                conn.select_group(mailbox_hash, false, &mut res).await?;
+            }
+            conn.send_command(b"POST").await?;
+            conn.read_response(&mut res, false, &["340 "]).await?;
+            conn.send_multiline_data_block(&bytes).await?;
+            conn.read_response(&mut res, false, &["240 "]).await?;
+            Ok(())
         }))
     }
 }
@@ -629,6 +623,14 @@ impl NntpType {
             )));
         }
 
+        let timeout_dur = {
+            let timeout = get_conf_val!(s["timeout"], 16_u64)?;
+            if timeout == 0 {
+                None
+            } else {
+                Some(Duration::from_secs(timeout))
+            }
+        };
         let server_conf = NntpServerConf {
             server_hostname: server_hostname.to_string(),
             server_username: if require_auth {
@@ -652,6 +654,7 @@ impl NntpType {
             extension_use: NntpExtensionUse {
                 deflate: get_conf_val!(s["use_deflate"], false)?,
             },
+            timeout_dur,
         };
         let account_hash = AccountHash::from_bytes(s.name.as_bytes());
         let account_name = s.name.to_string().into();
@@ -697,9 +700,12 @@ impl NntpType {
         }))
     }
 
-    pub async fn nntp_mailboxes(connection: &Arc<FutureMutex<NntpConnection>>) -> Result<()> {
+    pub async fn nntp_mailboxes(
+        connection: &Arc<FutureMutex<NntpConnection>>,
+        timeout_dur: Option<Duration>,
+    ) -> Result<()> {
         let mut res = String::with_capacity(8 * 1024);
-        let mut conn = connection.lock().await;
+        let mut conn = timeout(timeout_dur, connection.lock()).await?;
         let mut mailboxes = {
             let mailboxes_lck = conn.uid_store.mailboxes.lock().await;
             mailboxes_lck
@@ -838,6 +844,7 @@ impl NntpType {
         }
         get_conf_val!(s["use_deflate"], false)?;
         get_conf_val!(s["danger_accept_invalid_certs"], false)?;
+        get_conf_val!(s["timeout"], 16_u64)?;
         let extra_keys = s
             .extra
             .keys()
