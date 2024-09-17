@@ -119,18 +119,18 @@ type Capabilities = HashSet<String>;
 
 #[derive(Debug)]
 pub struct UIDStore {
-    account_hash: AccountHash,
-    account_name: Arc<str>,
-    capabilities: Arc<Mutex<Capabilities>>,
-    message_id_index: Arc<FutureMutex<HashMap<MessageID, EnvelopeHash>>>,
-    hash_index: Arc<Mutex<HashMap<EnvelopeHash, (UID, MailboxHash)>>>,
-    uid_index: Arc<FutureMutex<HashMap<(MailboxHash, UID), EnvelopeHash>>>,
+    pub account_hash: AccountHash,
+    pub account_name: Arc<str>,
+    pub capabilities: Arc<Mutex<Capabilities>>,
+    pub message_id_index: Arc<FutureMutex<HashMap<MessageID, EnvelopeHash>>>,
+    pub hash_index: Arc<Mutex<HashMap<EnvelopeHash, (UID, MailboxHash)>>>,
+    pub uid_index: Arc<FutureMutex<HashMap<(MailboxHash, UID), EnvelopeHash>>>,
 
-    collection: Collection,
-    store: Arc<FutureMutex<Option<store::Store>>>,
-    mailboxes: Arc<FutureMutex<HashMap<MailboxHash, NntpMailbox>>>,
-    is_online: Arc<FutureMutex<(Instant, Result<()>)>>,
-    event_consumer: BackendEventConsumer,
+    pub collection: Collection,
+    pub store: Arc<FutureMutex<Option<store::Store>>>,
+    pub mailboxes: Arc<FutureMutex<HashMap<MailboxHash, NntpMailbox>>>,
+    pub is_online: Arc<FutureMutex<(Instant, Result<()>)>>,
+    pub event_consumer: BackendEventConsumer,
 }
 
 impl UIDStore {
@@ -160,11 +160,11 @@ impl UIDStore {
 
 #[derive(Debug)]
 pub struct NntpType {
-    _is_subscribed: Arc<IsSubscribedFn>,
-    connection: Arc<FutureMutex<NntpConnection>>,
-    server_conf: NntpServerConf,
-    uid_store: Arc<UIDStore>,
-    _can_create_flags: Arc<Mutex<bool>>,
+    pub _is_subscribed: Arc<IsSubscribedFn>,
+    pub connection: Arc<FutureMutex<NntpConnection>>,
+    pub server_conf: NntpServerConf,
+    pub uid_store: Arc<UIDStore>,
+    pub _can_create_flags: Arc<Mutex<bool>>,
 }
 
 impl MailBackend for NntpType {
