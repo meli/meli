@@ -220,16 +220,25 @@ impl Flag {
 /// the raw bytes that describe the email in `bytes`. Its body as an
 /// `melib::email::Attachment` can be parsed on demand
 /// with the `melib::email::Mail::body` method.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub struct Mail {
     pub envelope: Envelope,
     pub bytes: Vec<u8>,
 }
 
+impl std::fmt::Debug for Mail {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fmt.debug_struct(crate::identify!(Mail))
+            .field("bytes", &self.bytes.len())
+            .field("envelope", &self.envelope)
+            .finish()
+    }
+}
+
 impl Deref for Mail {
     type Target = Envelope;
 
-    fn deref(&self) -> &Envelope {
+    fn deref(&self) -> &Self::Target {
         &self.envelope
     }
 }
@@ -252,6 +261,25 @@ impl Mail {
 
     pub fn body(&self) -> Attachment {
         self.envelope.body_bytes(&self.bytes)
+    }
+
+    pub fn as_mbox(&self) -> Vec<u8> {
+        use crate::mbox::*;
+        let mut out = std::io::BufWriter::new(Vec::with_capacity(self.bytes.len() + 120));
+        let format = MboxFormat::MboxCl2;
+        format
+            .append(
+                &mut out,
+                self.bytes(),
+                None,                          // Envelope From
+                Some(self.envelope.timestamp), // Delivered date
+                Default::default(),            // Flags and tags
+                MboxMetadata::None,
+                true,
+                false,
+            )
+            .expect("Could not write mbox");
+        out.into_inner().unwrap()
     }
 }
 
