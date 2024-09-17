@@ -48,7 +48,10 @@ pub use connection::*;
 
 use crate::{
     backends::prelude::*,
-    email::address::{MessageID, StrBuild},
+    email::{
+        address::{MessageID, StrBuild},
+        Mail,
+    },
     error::{Error, ErrorKind, Result, ResultIntoError},
     utils::futures::timeout,
 };
@@ -873,6 +876,41 @@ impl NntpType {
             .iter()
             .cloned()
             .collect::<Vec<String>>()
+    }
+
+    pub fn article_message_id(
+        &self,
+        mailbox_hash: MailboxHash,
+        msg_id: MessageID,
+    ) -> ResultFuture<Mail> {
+        let connection = self.connection.clone();
+        let timeout_dur = self.server_conf.timeout_dur;
+        Ok(Box::pin(async move {
+            let mut conn = timeout(timeout_dur, connection.lock()).await?;
+            timeout(timeout_dur, conn.connect()).await??;
+            let mut res = String::with_capacity(8 * 1024);
+            conn.select_group(mailbox_hash, false, &mut res).await?;
+            conn.send_command(format!("ARTICLE {}", msg_id.display_brackets()).as_bytes())
+                .await?;
+            let reply_code = conn
+                .read_response(&mut res, true, command_to_replycodes("ARTICLE"))
+                .await
+                .chain_err_summary(|| {
+                    format!(
+                        "{} Could not select newsgroup: expected ARTICLE response but got: {}",
+                        &conn.uid_store.account_name, res
+                    )
+                })
+                .chain_err_kind(ErrorKind::ProtocolError)?;
+            if reply_code == 430 {
+                return Err(
+                    Error::new("No article with that message-id").set_kind(ErrorKind::NotFound)
+                );
+            }
+            let pos = res.find("\r\n").unwrap_or(0) + 2;
+
+            Mail::new(res.as_bytes()[pos..].to_vec(), None)
+        }))
     }
 }
 
