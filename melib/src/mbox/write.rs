@@ -46,13 +46,13 @@ impl MboxFormat {
             writer.write_all(line_ending)?;
             writer.write_all(line_ending)?;
         }
-        writer.write_all(&b"From "[..])?;
+        writer.write_all(b"From ")?;
         if let Some(from) = envelope_from {
             writer.write_all(from.address_spec_raw())?;
         } else {
-            writer.write_all(&b"MAILER-DAEMON"[..])?;
+            write!(writer, "{}", uuid::Uuid::nil().as_simple())?;
         }
-        writer.write_all(&b" "[..])?;
+        writer.write_all(b" ")?;
         writer.write_all(
             datetime::timestamp_to_string(
                 delivery_date.unwrap_or_else(datetime::now),
