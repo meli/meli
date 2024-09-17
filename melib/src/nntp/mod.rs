@@ -658,7 +658,7 @@ impl NntpType {
             use_starttls,
             danger_accept_invalid_certs,
             extension_use: NntpExtensionUse {
-                deflate: get_conf_val!(s["use_deflate"], false)?,
+                deflate: get_conf_val!(s["use_deflate"], true)?,
             },
             timeout_dur,
         };
