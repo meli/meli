@@ -53,6 +53,7 @@ use crate::{
         Mail,
     },
     error::{Error, ErrorKind, Result, ResultIntoError},
+    parser::BytesExt,
     utils::futures::timeout,
 };
 pub type UID = usize;
@@ -580,7 +581,7 @@ impl MailBackend for NntpType {
 
     fn submit(
         &self,
-        bytes: Vec<u8>,
+        mut bytes: Vec<u8>,
         mailbox_hash: Option<MailboxHash>,
         _flags: Option<Flag>,
     ) -> ResultFuture<()> {
@@ -594,7 +595,48 @@ impl MailBackend for NntpType {
             }
             // [ref:TODO] normalize CRLF in `bytes`
             let mut res = String::with_capacity(8 * 1024);
-            if let Some(mailbox_hash) = mailbox_hash {
+            if let Some((mailbox_hash, path)) = mailbox_hash
+                .map_or_else(
+                    || {
+                        Box::pin(async { Ok(None) })
+                            as BoxFuture<Result<Option<(MailboxHash, String)>>>
+                    },
+                    |m| {
+                        let uid_store = conn.uid_store.clone();
+                        Box::pin(async move {
+                            Ok(Some((
+                                m,
+                                uid_store
+                                    .mailboxes
+                                    .lock()
+                                    .await
+                                    .get(&m)
+                                    .ok_or_else(|| {
+                                        Error::new("No such mailbox").set_kind(ErrorKind::NotFound)
+                                    })?
+                                    .name()
+                                    .to_string(),
+                            )))
+                        })
+                            as BoxFuture<Result<Option<(MailboxHash, String)>>>
+                    },
+                )
+                .await?
+            {
+                if bytes
+                    .find(b"\r\n\r\n")
+                    .map(|pos| bytes.as_slice().split_at(pos).0)
+                    .filter(|hdrs| {
+                        !hdrs.starts_with(b"Newsgroups: ")
+                            && !hdrs.contains_subsequence(b"\nNewsgroups: ")
+                    })
+                    .is_some()
+                {
+                    let newsgroups_hdr = format!("Newsgroups: {}\r\n", path);
+                    let len = newsgroups_hdr.len();
+                    bytes.extend(newsgroups_hdr.into_bytes());
+                    bytes.rotate_right(len);
+                }
                 conn.select_group(mailbox_hash, false, &mut res).await?;
             }
             conn.send_command(b"POST").await?;
