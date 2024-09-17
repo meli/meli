@@ -1274,12 +1274,11 @@ macro_rules! get_conf_val {
 }
 
 impl MboxType {
-    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         s: &AccountSettings,
         _is_subscribed: Box<dyn Fn(&str) -> bool>,
         event_consumer: BackendEventConsumer,
-    ) -> Result<Box<dyn MailBackend>> {
+    ) -> Result<Box<Self>> {
         let path = Path::new(s.root_mailbox.as_str()).expand();
         if !path.try_exists().unwrap_or(false) {
             return Err(Error::new(format!(

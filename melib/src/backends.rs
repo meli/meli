@@ -137,6 +137,10 @@ pub const NOTMUCH_ERROR_DETAILS: &str = r#"If notmuch is installed but the libra
 
 impl Backends {
     pub fn new() -> Self {
+        const fn as_dyn_b<T: MailBackend + 'static>(self_: Box<T>) -> Box<dyn MailBackend> {
+            self_ as Box<dyn MailBackend>
+        }
+
         let mut b = Self {
             map: HashMap::with_capacity_and_hasher(1, Default::default()),
         };
@@ -147,7 +151,9 @@ impl Backends {
             b.register(
                 "maildir".to_string(),
                 Backend {
-                    create_fn: Box::new(|| Box::new(|f, i, ev| MaildirType::new(f, i, ev))),
+                    create_fn: Box::new(|| {
+                        Box::new(|f, i, ev| MaildirType::new(f, i, ev).map(as_dyn_b))
+                    }),
                     validate_conf_fn: Box::new(MaildirType::validate_config),
                 },
             );
@@ -159,7 +165,9 @@ impl Backends {
             b.register(
                 "mbox".to_string(),
                 Backend {
-                    create_fn: Box::new(|| Box::new(|f, i, ev| MboxType::new(f, i, ev))),
+                    create_fn: Box::new(|| {
+                        Box::new(|f, i, ev| MboxType::new(f, i, ev).map(as_dyn_b))
+                    }),
                     validate_conf_fn: Box::new(MboxType::validate_config),
                 },
             );
@@ -171,7 +179,9 @@ impl Backends {
             b.register(
                 "imap".to_string(),
                 Backend {
-                    create_fn: Box::new(|| Box::new(|f, i, ev| ImapType::new(f, i, ev))),
+                    create_fn: Box::new(|| {
+                        Box::new(|f, i, ev| ImapType::new(f, i, ev).map(as_dyn_b))
+                    }),
                     validate_conf_fn: Box::new(ImapType::validate_config),
                 },
             );
@@ -183,7 +193,9 @@ impl Backends {
             b.register(
                 "nntp".to_string(),
                 Backend {
-                    create_fn: Box::new(|| Box::new(|f, i, ev| NntpType::new(f, i, ev))),
+                    create_fn: Box::new(|| {
+                        Box::new(|f, i, ev| NntpType::new(f, i, ev).map(as_dyn_b))
+                    }),
                     validate_conf_fn: Box::new(NntpType::validate_config),
                 },
             );
@@ -195,7 +207,9 @@ impl Backends {
             b.register(
                 "notmuch".to_string(),
                 Backend {
-                    create_fn: Box::new(|| Box::new(|f, i, ev| NotmuchDb::new(f, i, ev))),
+                    create_fn: Box::new(|| {
+                        Box::new(|f, i, ev| NotmuchDb::new(f, i, ev).map(as_dyn_b))
+                    }),
                     validate_conf_fn: Box::new(NotmuchDb::validate_config),
                 },
             );
@@ -207,7 +221,9 @@ impl Backends {
             b.register(
                 "jmap".to_string(),
                 Backend {
-                    create_fn: Box::new(|| Box::new(|f, i, ev| JmapType::new(f, i, ev))),
+                    create_fn: Box::new(|| {
+                        Box::new(|f, i, ev| JmapType::new(f, i, ev).map(as_dyn_b))
+                    }),
                     validate_conf_fn: Box::new(JmapType::validate_config),
                 },
             );

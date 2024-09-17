@@ -1259,12 +1259,11 @@ impl MailBackend for JmapType {
 }
 
 impl JmapType {
-    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         s: &AccountSettings,
         is_subscribed: Box<dyn Fn(&str) -> bool + Send + Sync>,
         event_consumer: BackendEventConsumer,
-    ) -> Result<Box<dyn MailBackend>> {
+    ) -> Result<Box<Self>> {
         let online_status = OnlineStatus(Arc::new(FutureMutex::new((
             std::time::Instant::now(),
             Err(Error::new("Account is uninitialised.")),

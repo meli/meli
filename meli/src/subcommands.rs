@@ -257,7 +257,7 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
         ToolOpt::ImapShell { .. } => {
             use melib::imap::{imap_codec::imap_types::command::CommandBody, RequiredResponses};
 
-            let mut imap = melib::imap::ImapType::new(
+            let imap = melib::imap::ImapType::new(
                 &account_conf.account,
                 Box::new(|_| true),
                 melib::BackendEventConsumer::new(std::sync::Arc::new(|_, _| ())),
@@ -268,9 +268,6 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
                 futures::executor::block_on(ex.run(futures::future::pending::<()>()));
             });
 
-            let imap = (imap.as_any_mut())
-                .downcast_mut::<melib::imap::ImapType>()
-                .unwrap();
             let mut conn = melib::imap::ImapConnection::new_connection(
                 &imap.server_conf,
                 "ImapType::shell".into(),

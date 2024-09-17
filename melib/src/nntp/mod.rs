@@ -604,12 +604,11 @@ impl MailBackend for NntpType {
 }
 
 impl NntpType {
-    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         s: &AccountSettings,
         is_subscribed: Box<dyn Fn(&str) -> bool + Send + Sync>,
         event_consumer: BackendEventConsumer,
-    ) -> Result<Box<dyn MailBackend>> {
+    ) -> Result<Box<Self>> {
         let server_hostname = get_conf_val!(s["server_hostname"])?;
         let server_port = get_conf_val!(s["server_port"], 119)?;
         let use_tls = get_conf_val!(s["use_tls"], server_port == 563)?;

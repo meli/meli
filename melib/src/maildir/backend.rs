@@ -594,12 +594,11 @@ impl MailBackend for MaildirType {
 }
 
 impl MaildirType {
-    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         settings: &AccountSettings,
         is_subscribed: Box<dyn Fn(&str) -> bool>,
         event_consumer: BackendEventConsumer,
-    ) -> Result<Box<dyn MailBackend>> {
+    ) -> Result<Box<Self>> {
         let config = Arc::new(Configuration::new(settings)?);
 
         let mut mailboxes: HashMap<MailboxHash, MaildirMailbox> = Default::default();

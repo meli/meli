@@ -1357,12 +1357,11 @@ impl MailBackend for ImapType {
 }
 
 impl ImapType {
-    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         s: &AccountSettings,
         is_subscribed: Box<dyn Fn(&str) -> bool + Send + Sync>,
         event_consumer: BackendEventConsumer,
-    ) -> Result<Box<dyn MailBackend>> {
+    ) -> Result<Box<Self>> {
         let server_hostname = get_conf_val!(s["server_hostname"])?;
         let server_username = get_conf_val!(s["server_username"])?;
         let use_oauth2: bool = get_conf_val!(s["use_oauth2"], false)?;
