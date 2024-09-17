@@ -2582,6 +2582,10 @@ pub fn send_draft_async(
             .is_true()
     {
         filters_stack.push(Box::new(crate::mail::pgp::sign_filter(
+            (account_settings!(context[account_hash].pgp.auto_sign).is_true()
+                && gpg_state.sign_keys.is_empty())
+            .then(|| account_settings!(context[account_hash].pgp.sign_key).clone())
+            .flatten(),
             gpg_state.sign_keys,
         )?));
     } else if gpg_state
@@ -2590,11 +2594,29 @@ pub fn send_draft_async(
         .is_true()
     {
         filters_stack.push(Box::new(crate::mail::pgp::encrypt_filter(
-            if gpg_state.sign_mail.unwrap_or(ActionFlag::False).is_true() {
-                Some(gpg_state.sign_keys.clone())
-            } else {
-                None
-            },
+            gpg_state.encrypt_for_self.then_some(()).map_or_else(
+                || Ok(None),
+                |()| {
+                    draft.headers().get(HeaderName::TO).map_or_else(
+                        || Ok(None),
+                        |s| Some(melib::Address::try_from(s)).transpose(),
+                    )
+                },
+            )?,
+            (gpg_state.sign_mail.unwrap_or(ActionFlag::False).is_true()
+                && gpg_state.sign_keys.is_empty())
+            .then(|| account_settings!(context[account_hash].pgp.sign_key).clone())
+            .flatten(),
+            gpg_state
+                .sign_mail
+                .unwrap_or(ActionFlag::False)
+                .is_true()
+                .then(|| gpg_state.sign_keys.clone()),
+            gpg_state
+                .encrypt_keys
+                .is_empty()
+                .then(|| account_settings!(context[account_hash].pgp.encrypt_key).clone())
+                .flatten(),
             gpg_state.encrypt_keys,
         )?));
     }

@@ -81,15 +81,12 @@ async fn verify_inner(a: Attachment, cache: Arc<Mutex<BTreeMap<u64, Result<()>>>
 }
 
 pub fn sign_filter(
-    sign_keys: Vec<Key>,
-) -> Result<
-    impl FnOnce(AttachmentBuilder) -> Pin<Box<dyn Future<Output = Result<AttachmentBuilder>> + Send>>
-        + Send,
-> {
-    Ok(
-        move |a: AttachmentBuilder| -> Pin<Box<dyn Future<Output = Result<AttachmentBuilder>>+Send>> {
-            Box::pin(async move {
-                let a: Attachment = a.into();
+    default_key: Option<String>,
+    mut sign_keys: Vec<Key>,
+) -> Result<impl FnOnce(AttachmentBuilder) -> AttachmentBoxFuture + Send> {
+    Ok(move |a: AttachmentBuilder| -> AttachmentBoxFuture {
+        Box::pin(async move {
+            if let Some(default_key) = default_key {
                 let mut ctx = Context::new()?;
                 let data = ctx.new_data_mem(&melib_pgp::convert_attachment_to_rfc_spec(
                                 a.into_raw().as_bytes(),
@@ -119,17 +116,55 @@ pub fn sign_filter(
 }
 
 pub fn encrypt_filter(
-    sign_keys: Option<Vec<Key>>,
-    encrypt_keys: Vec<Key>,
-) -> Result<
-    impl FnOnce(AttachmentBuilder) -> Pin<Box<dyn Future<Output = Result<AttachmentBuilder>> + Send>>
-        + Send,
-> {
-    Ok(
-        move |a: AttachmentBuilder| -> Pin<Box<dyn Future<Output = Result<AttachmentBuilder>>+Send>> {
-            Box::pin(async move {
-                let a: Attachment = a.into();
-                log::trace!("main attachment is {:?}", &a);
+    encrypt_for_self: Option<melib::Address>,
+    default_sign_key: Option<String>,
+    mut sign_keys: Option<Vec<Key>>,
+    default_encrypt_key: Option<String>,
+    mut encrypt_keys: Vec<Key>,
+) -> Result<impl FnOnce(AttachmentBuilder) -> AttachmentBoxFuture + Send> {
+    Ok(move |a: AttachmentBuilder| -> AttachmentBoxFuture {
+        Box::pin(async move {
+            if let Some(default_key) = default_sign_key {
+                let mut ctx = Context::new()?;
+                ctx.set_auto_key_locate(LocateKey::LOCAL)?;
+                let keys = ctx.keylist(true, Some(default_key.clone()))?.await?;
+                if keys.is_empty() {
+                    return Err(Error::new(format!(
+                        "Could not locate sign key with ID `{}`",
+                        default_key
+                    )));
+                }
+                if let Some(ref mut sign_keys) = sign_keys {
+                    sign_keys.extend(keys);
+                } else {
+                    sign_keys = Some(keys);
+                }
+            }
+            if let Some(ref sign_keys) = sign_keys {
+                if sign_keys.is_empty() {
+                    return Err(Error::new(
+                        "No key was selected for signing; please select one.",
+                    ));
+                }
+            }
+            if let Some(default_key) = default_encrypt_key {
+                let mut ctx = Context::new()?;
+                ctx.set_auto_key_locate(LocateKey::LOCAL)?;
+                let keys = ctx.keylist(false, Some(default_key.clone()))?.await?;
+                if keys.is_empty() {
+                    return Err(Error::new(format!(
+                        "Could not locate encryption key with ID `{}`",
+                        default_key
+                    )));
+                }
+                encrypt_keys.extend(keys);
+            }
+            if encrypt_keys.is_empty() {
+                return Err(Error::new(
+                    "No key was selected for encryption; please select one.",
+                ));
+            }
+            if let Some(encrypt_for_self) = encrypt_for_self {
                 let mut ctx = Context::new()?;
                 let data = ctx.new_data_mem(
                     a.into_raw().as_bytes()
