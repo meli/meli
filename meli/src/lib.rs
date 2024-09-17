@@ -164,3 +164,5 @@ pub mod mailcap;
 
 pub mod accounts;
 pub use self::accounts::Account;
+
+pub mod patch_retrieve;
