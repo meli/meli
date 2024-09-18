@@ -864,6 +864,9 @@ impl Component for ViewFilter {
         if let Some(ref mut f) = self.event_handler {
             return f(self, event, context);
         }
+        if let ViewFilterContent::InlineAttachments { ref mut parts, .. } = self.body_text {
+            return parts.iter_mut().any(|p| p.process_event(event, context));
+        }
         false
     }
 
