@@ -27,7 +27,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use melib::{error::*, uuid::Uuid, ShellExpandTrait};
+use melib::{
+    error::*,
+    text::{TextProcessing, Truncate},
+    uuid::Uuid,
+    ShellExpandTrait,
+};
 
 /// Temporary file that can optionally cleaned up when it is dropped.
 #[derive(Debug)]
@@ -78,85 +83,101 @@ impl File {
     /// so make sure to add it on `context.temp_files` to reap it later.
     pub fn create_temp_file(
         bytes: &[u8],
-        filename: Option<&str>,
-        path: Option<&mut PathBuf>,
+        mut filename: Option<&str>,
+        mut path: Option<&mut PathBuf>,
         extension: Option<&str>,
         delete_on_drop: bool,
     ) -> Result<Self> {
-        let mut dir = std::env::temp_dir();
-
-        let path = if let Some(p) = path {
-            if p.try_exists().unwrap_or_default() && p.is_dir() {
+        loop {
+            let mut dir = std::env::temp_dir();
+            let path = if let Some(ref mut p) = path {
+                if p.try_exists().unwrap_or_default() && p.is_dir() {
+                    if let Some(filename) = filename {
+                        p.push(filename);
+                        'exists: while p.try_exists().unwrap_or_default() {
+                            for i in 0..u8::MAX {
+                                p.pop();
+                                p.push(format!("{filename}_{i}"));
+                                if p.try_exists().unwrap_or_default() {
+                                    break 'exists;
+                                }
+                            }
+                            while p.try_exists().unwrap_or_default() {
+                                p.pop();
+                                p.push(format!("{filename}_{}", Uuid::new_v4().as_simple()));
+                            }
+                        }
+                    } else {
+                        let u = Uuid::new_v4();
+                        p.push(u.as_simple().to_string());
+                    }
+                }
+                p
+            } else {
+                dir.push("meli");
+                std::fs::DirBuilder::new().recursive(true).create(&dir)?;
                 if let Some(filename) = filename {
-                    p.push(filename);
-                    'exists: while p.try_exists().unwrap_or_default() {
+                    dir.push(filename);
+                    'exists: while dir.try_exists().unwrap_or_default() {
                         for i in 0..u8::MAX {
-                            p.pop();
-                            p.push(format!("{filename}_{i}"));
-                            if p.try_exists().unwrap_or_default() {
+                            dir.pop();
+                            dir.push(format!("{filename}_{i}"));
+                            if dir.try_exists().unwrap_or_default() {
                                 break 'exists;
                             }
                         }
-                        while p.try_exists().unwrap_or_default() {
-                            p.pop();
-                            p.push(format!("{filename}_{}", Uuid::new_v4().as_simple()));
+                        while dir.try_exists().unwrap_or_default() {
+                            dir.pop();
+                            dir.push(format!("{filename}_{}", Uuid::new_v4().as_simple()));
                         }
                     }
                 } else {
                     let u = Uuid::new_v4();
-                    p.push(u.as_simple().to_string());
+                    dir.push(u.as_simple().to_string());
                 }
+                &mut dir
+            };
+            if let Some(ext) = extension {
+                path.set_extension(ext);
             }
-            p
-        } else {
-            dir.push("meli");
-            std::fs::DirBuilder::new().recursive(true).create(&dir)?;
-            if let Some(filename) = filename {
-                dir.push(filename);
-                'exists: while dir.try_exists().unwrap_or_default() {
-                    for i in 0..u8::MAX {
-                        dir.pop();
-                        dir.push(format!("{filename}_{i}"));
-                        if dir.try_exists().unwrap_or_default() {
-                            break 'exists;
-                        }
-                    }
-                    while dir.try_exists().unwrap_or_default() {
-                        dir.pop();
-                        dir.push(format!("{filename}_{}", Uuid::new_v4().as_simple()));
-                    }
+            fn inner(path: &Path, bytes: &[u8], delete_on_drop: bool) -> Result<File> {
+                let path = path.expand();
+                let mut f = std::fs::File::options()
+                    .read(true)
+                    .write(true)
+                    .create_new(true)
+                    .open(&path)?;
+                let metadata = f.metadata()?;
+                let mut permissions = metadata.permissions();
+
+                permissions.set_mode(0o600); // Read/write for owner only.
+                f.set_permissions(permissions)?;
+
+                f.write_all(bytes)?;
+                f.flush()?;
+                Ok(File {
+                    path,
+                    delete_on_drop,
+                })
+            }
+            match (inner(path, bytes, delete_on_drop), filename) {
+                (Err(err), Some(ref mut val))
+                    if matches!(
+                        err.kind,
+                        ErrorKind::OSError(Errno::ENAMETOOLONG | Errno::EEXIST)
+                    ) && val.grapheme_len() > 1 =>
+                {
+                    val.truncate_at_boundary(val.grapheme_len().saturating_sub(1));
+                    filename = Some(val);
                 }
-            } else {
-                let u = Uuid::new_v4();
-                dir.push(u.as_simple().to_string());
+                (Err(err), _) => {
+                    return Err(err).chain_err_summary(|| {
+                        format!("Could not create file at path {}", path.display())
+                    })
+                }
+                (ok @ Ok(_), _) => return ok,
             }
-            &mut dir
-        };
-        if let Some(ext) = extension {
-            path.set_extension(ext);
         }
-        fn inner(path: &Path, bytes: &[u8], delete_on_drop: bool) -> Result<File> {
-            let path = path.expand();
-            let mut f = std::fs::File::options()
-                .read(true)
-                .write(true)
-                .create_new(true)
-                .open(&path)?;
-            let metadata = f.metadata()?;
-            let mut permissions = metadata.permissions();
-
-            permissions.set_mode(0o600); // Read/write for owner only.
-            f.set_permissions(permissions)?;
-
-            f.write_all(bytes)?;
-            f.flush()?;
-            Ok(File {
-                path,
-                delete_on_drop,
-            })
-        }
-        inner(path, bytes, delete_on_drop)
-            .chain_err_summary(|| format!("Could not create file at path {}", path.display()))
     }
 }
 
@@ -177,7 +198,7 @@ pub fn sanitize_filename(og: String) -> Option<String> {
 
     let regex = Regex::new(r"(?m)[[:space:]]+").ok()?; // _
     let mut ret = regex.replace_all(&og, "_").to_string();
-    let regex = Regex::new(r"(?m)[[:punct:]]").ok()?; // -
+    let regex = Regex::new(r"(?m)[[:punct:]]+").ok()?; // -
     ret = regex.replace_all(&ret, "-").to_string();
     let regex = Regex::new(r"(?m)[[:cntrl:]]*").ok()?; //
     ret = regex.replace_all(&ret, "").to_string();
@@ -185,6 +206,8 @@ pub fn sanitize_filename(og: String) -> Option<String> {
     ret = regex.replace_all(&ret, "").to_string();
     let regex = Regex::new(r"^[[:punct:]]*").ok()?; //
     ret = regex.replace_all(&ret, "").to_string();
+    let regex = Regex::new(r"(?m)__+").ok()?; // -
+    ret = regex.replace_all(&ret, "_").to_string();
     let regex = Regex::new(r"[[:punct:]]*$").ok()?; //
     Some(regex.replace_all(&ret, "").to_string())
 }
@@ -238,7 +261,7 @@ mod tests {
     fn test_file_sanitize_filename() {
         assert_eq!(
             sanitize_filename("Re: Some long subject - \"User Dot. Name\" <user1@example.com> Sent from my bPad 2024-09-07, on   a sunny Saturday".to_string()),
-            Some("Re--Some-long-subject----User-Dot--Name---user1-example-com--Sent-from-my-bPad-2024-09-07--on-a-sunny-Saturday".to_string())
+            Some("Re-Some-long-subject-User-Dot-Name-user1-example-com-Sent-from-my-bPad-2024-09-07-on-a-sunny-Saturday".to_string())
         );
     }
 }
