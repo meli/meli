@@ -767,7 +767,7 @@ impl Component for EnvelopeView {
                                             None,
                                             Some(0)
                                         );
-                                    let (__x, __y) =
+                                    let (__x, mut __y) =
                                         grid.write_string(
                                             &$string,
                                             hdr_theme.fg,
@@ -777,6 +777,15 @@ impl Component for EnvelopeView {
                                             Some(_x + 1),
                                             Some(2)
                                         );
+                                    if __y > 0 {
+                                        if __y > 3 && !self.view_settings.expand_headers {
+                                            __y = 3;
+                                        }
+                                        grid.clear_area(
+                                            area.skip_rows(y + _y + 1).take_rows(__y).take_cols(2),
+                                            hdr_area_theme,
+                                        );
+                                    }
                                     y += _y +__y + 1;
                                 }
                             } else {
