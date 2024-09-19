@@ -23,7 +23,6 @@ use std::{
     collections::{hash_map::DefaultHasher, BTreeMap},
     future::Future,
     hash::{Hash, Hasher},
-    pin::Pin,
     sync::{Arc, Mutex},
 };
 
@@ -37,6 +36,8 @@ use melib::{
     log,
     parser::BytesExt,
 };
+
+use super::AttachmentBoxFuture;
 
 pub async fn decrypt(raw: Vec<u8>) -> Result<(melib_pgp::DecryptionMetadata, Vec<u8>)> {
     let mut ctx = Context::new()?;
@@ -88,31 +89,47 @@ pub fn sign_filter(
         Box::pin(async move {
             if let Some(default_key) = default_key {
                 let mut ctx = Context::new()?;
-                let data = ctx.new_data_mem(&melib_pgp::convert_attachment_to_rfc_spec(
-                                a.into_raw().as_bytes(),
-                ))?;
-                let sig_attachment = Attachment::new(
-                    ContentType::PGPSignature,
-                    Default::default(),
-                    ctx.sign(sign_keys, data)?.await?,
-                );
-                let a: AttachmentBuilder = a.into();
-                let parts = vec![a, sig_attachment.into()];
-                let boundary = ContentType::make_boundary(&parts);
-                Ok(Attachment::new(
-                    ContentType::Multipart {
-                        boundary: boundary.into_bytes(),
-                        kind: MultipartType::Signed,
-                        parts: parts.into_iter().map(|a| a.into()).collect::<Vec<_>>(),
-                        parameters: vec![],
-                    },
-                    Default::default(),
-                    vec![],
-                )
-                .into())
-            })
-        },
-    )
+                ctx.set_auto_key_locate(LocateKey::LOCAL)?;
+                let keys = ctx.keylist(false, Some(default_key.clone()))?.await?;
+                if keys.is_empty() {
+                    return Err(Error::new(format!(
+                        "Could not locate sign key with ID `{}`",
+                        default_key
+                    )));
+                }
+                sign_keys.extend(keys);
+            }
+            if sign_keys.is_empty() {
+                return Err(Error::new(
+                    "No key was selected for signing; please select one.",
+                ));
+            }
+            let a: Attachment = a.into();
+            let mut ctx = Context::new()?;
+            let data = ctx.new_data_mem(&melib_pgp::convert_attachment_to_rfc_spec(
+                a.into_raw().as_bytes(),
+            ))?;
+            let sig_attachment = Attachment::new(
+                ContentType::PGPSignature,
+                Default::default(),
+                ctx.sign(sign_keys, data)?.await?,
+            );
+            let a: AttachmentBuilder = a.into();
+            let parts = vec![a, sig_attachment.into()];
+            let boundary = ContentType::make_boundary(&parts);
+            Ok(Attachment::new(
+                ContentType::Multipart {
+                    boundary: boundary.into_bytes(),
+                    kind: MultipartType::Signed,
+                    parts: parts.into_iter().map(|a| a.into()).collect::<Vec<_>>(),
+                    parameters: vec![],
+                },
+                Default::default(),
+                vec![],
+            )
+            .into())
+        })
+    })
 }
 
 pub fn encrypt_filter(
@@ -166,37 +183,62 @@ pub fn encrypt_filter(
             }
             if let Some(encrypt_for_self) = encrypt_for_self {
                 let mut ctx = Context::new()?;
-                let data = ctx.new_data_mem(
-                    a.into_raw().as_bytes()
-                )?;
+                ctx.set_auto_key_locate(LocateKey::LOCAL)?;
+                let keys = ctx
+                    .keylist(false, Some(encrypt_for_self.to_string()))?
+                    .await?;
+                if keys.is_empty() {
+                    return Err(Error::new(format!(
+                        "Could not locate personal encryption key for address `{}`",
+                        encrypt_for_self
+                    )));
+                }
+                for key in keys {
+                    if !encrypt_keys.contains(&key) {
+                        encrypt_keys.push(key);
+                    }
+                }
+            }
+            let a: Attachment = a.into();
+            log::trace!(
+                "main attachment is {:?} sign_keys = {:?} encrypt_keys = {:?}",
+                &a,
+                &sign_keys,
+                &encrypt_keys
+            );
+            let mut ctx = Context::new()?;
+            let data = ctx.new_data_mem(a.into_raw().as_bytes())?;
 
-                let sig_attachment = {
-                    let mut a = Attachment::new(
-                            ContentType::OctetStream { name: None, parameters: vec![] },
-                            Default::default(),
-                            ctx.encrypt(sign_keys, encrypt_keys, data)?.await?,
-                        );
-                        a.content_disposition = ContentDisposition::from(br#"attachment; filename="msg.asc""#);
-                        a
-                };
-                let mut a: AttachmentBuilder = AttachmentBuilder::new(b"Version: 1\n");
-
-                a.set_content_type_from_bytes(b"application/pgp-encrypted");
-                a.set_content_disposition(ContentDisposition::from(b"attachment"));
-                let parts = vec![a, sig_attachment.into()];
-                let boundary = ContentType::make_boundary(&parts);
-                Ok(Attachment::new(
-                    ContentType::Multipart {
-                        boundary: boundary.into_bytes(),
-                        kind: MultipartType::Encrypted,
-                        parts: parts.into_iter().map(|a| a.into()).collect::<Vec<_>>(),
+            let enc_attachment = {
+                let mut a = Attachment::new(
+                    ContentType::OctetStream {
+                        name: None,
                         parameters: vec![],
                     },
                     Default::default(),
-                    vec![],
-                )
-                .into())
-            })
-        },
-    )
+                    ctx.encrypt(sign_keys, encrypt_keys, data)?.await?,
+                );
+                a.content_disposition =
+                    ContentDisposition::from(br#"attachment; filename="msg.asc""#);
+                a
+            };
+            let mut a: AttachmentBuilder = AttachmentBuilder::new(b"Version: 1\n");
+
+            a.set_content_type_from_bytes(b"application/pgp-encrypted");
+            a.set_content_disposition(ContentDisposition::from(b"attachment"));
+            let parts = vec![a, enc_attachment.into()];
+            let boundary = ContentType::make_boundary(&parts);
+            Ok(Attachment::new(
+                ContentType::Multipart {
+                    boundary: boundary.into_bytes(),
+                    kind: MultipartType::Encrypted,
+                    parts: parts.into_iter().map(|a| a.into()).collect::<Vec<_>>(),
+                    parameters: vec![],
+                },
+                Default::default(),
+                vec![],
+            )
+            .into())
+        })
+    })
 }

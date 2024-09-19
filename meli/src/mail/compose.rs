@@ -888,6 +888,8 @@ impl Component for Composer {
                 self.gpg_state.sign_mail =
                     Some(*account_settings!(context[self.account_hash].pgp.auto_sign));
             }
+            self.gpg_state.encrypt_for_self =
+                *account_settings!(context[self.account_hash].pgp.encrypt_for_self);
             if !self.draft.headers().contains_key(HeaderName::FROM)
                 || self.draft.headers()[HeaderName::FROM].is_empty()
             {
@@ -2564,16 +2566,7 @@ pub fn send_draft_async(
     let format_flowed = *account_settings!(context[account_hash].composing.format_flowed);
     let event_sender = context.main_loop_handler.sender.clone();
     #[cfg(feature = "gpgme")]
-    #[allow(clippy::type_complexity)]
-    let mut filters_stack: Vec<
-        Box<
-            dyn FnOnce(
-                    AttachmentBuilder,
-                )
-                    -> Pin<Box<dyn Future<Output = Result<AttachmentBuilder>> + Send>>
-                + Send,
-        >,
-    > = vec![];
+    let mut filters_stack: Vec<AttachmentFilterBox> = vec![];
     #[cfg(feature = "gpgme")]
     if gpg_state.sign_mail.unwrap_or(ActionFlag::False).is_true()
         && !gpg_state
@@ -2623,13 +2616,14 @@ pub fn send_draft_async(
     let send_mail = account_settings!(context[account_hash].send_mail).clone();
     let send_cb = context.accounts[&account_hash].send_async(send_mail);
     let mut content_type = ContentType::default();
-    if format_flowed {
-        if let ContentType::Text {
+    if let (
+        true,
+        ContentType::Text {
             ref mut parameters, ..
-        } = content_type
-        {
-            parameters.push((b"format".to_vec(), b"flowed".to_vec()));
-        }
+        },
+    ) = (format_flowed, &mut content_type)
+    {
+        parameters.push((b"format".to_vec(), b"flowed".to_vec()));
     }
     let mut body: AttachmentBuilder = Attachment::new(
         content_type,

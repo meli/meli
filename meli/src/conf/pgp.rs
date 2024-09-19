@@ -60,6 +60,10 @@ pub struct PGPSettings {
     #[serde(default = "none", alias = "encrypt-key")]
     pub encrypt_key: Option<String>,
 
+    /// Default: true
+    #[serde(default = "true_val", alias = "encrypt-for-self")]
+    pub encrypt_for_self: bool,
+
     /// Allow remote lookups
     /// Default: False
     #[serde(
@@ -99,6 +103,7 @@ impl Default for PGPSettings {
             auto_decrypt: true.into(),
             auto_sign: false.into(),
             auto_encrypt: false.into(),
+            encrypt_for_self: true,
             sign_key: None,
             decrypt_key: None,
             encrypt_key: None,

@@ -21,18 +21,21 @@
 
 //! Entities that handle Mail specific functions.
 
+use std::{future::Future, pin::Pin};
+
 use indexmap::IndexMap;
 use melib::{
     backends::{AccountHash, Mailbox, MailboxHash},
     email::{attachment_types::*, attachments::*},
+    text::{TextProcessing, Truncate},
     thread::ThreadNodeHash,
 };
+use uuid::Uuid;
 
 use super::*;
-use crate::{
-    melib::text::{TextProcessing, Truncate},
-    uuid::Uuid,
-};
+
+pub type AttachmentBoxFuture = Pin<Box<dyn Future<Output = Result<AttachmentBuilder>> + Send>>;
+pub type AttachmentFilterBox = Box<dyn FnOnce(AttachmentBuilder) -> AttachmentBoxFuture + Send>;
 
 pub mod listing;
 pub use crate::listing::*;
