@@ -76,16 +76,13 @@ jobs:
         if: success() || failure()
         run: |
           source "${HOME}/.cargo/env"
-          cargo-msrv --output-format json --log-level trace --log-target stdout --path meli verify -- cargo check --all-targets
-          cargo-msrv --output-format json --log-level trace --log-target stdout --path melib verify -- cargo check --all-targets
+          make -f ./.gitea/Makefile.manifest-lint cargo-msrv
       - name: cargo-sort
         if: success() || failure()
         run: |
           source "${HOME}/.cargo/env"
-          cargo-sort --check --check-format --grouped --order package,bin,lib,dependencies,features,build-dependencies,dev-dependencies,workspace fuzz
-          cargo-sort --check --check-format --grouped --order package,bin,lib,dependencies,features,build-dependencies,dev-dependencies,workspace tools
-          cargo-sort --check --check-format --grouped --order package,bin,lib,dependencies,features,build-dependencies,dev-dependencies,workspace --workspace
+          make -f ./.gitea/Makefile.manifest-lint cargo-sort
       - name: Check debian/changelog is up-to-date.
         if: success() || failure()
         run: |
-          ./scripts/check_debian_changelog.sh
+          make -f ./.gitea/Makefile.manifest-lint check-debian-changelog
