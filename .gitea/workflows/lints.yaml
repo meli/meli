@@ -89,26 +89,20 @@ jobs:
       - name: rustfmt
         if: success() || failure()
         run: |
-          cargo fmt --check --all
+          make -f .gitea/Makefile.lint rustfmt
       - name: clippy
         if: success() || failure()
         run: |
-          cargo clippy --no-deps --all-features --all --tests --examples --benches --bins
+          make -f .gitea/Makefile.lint clippy
       - name: cargo-derivefmt melib
         if: success() || failure()
         run: |
-          cargo derivefmt --manifest-path ./melib/Cargo.toml
-          git checkout meli/src/conf/overrides.rs
-          git add ./melib/ && git diff --quiet && git diff --cached --quiet
+          make -f .gitea/Makefile.lint cargo-derivefmt-melib
       - name: cargo-derivefmt meli
         if: success() || failure()
         run: |
-          cargo derivefmt --manifest-path ./meli/Cargo.toml
-          git checkout meli/src/conf/overrides.rs
-          git add ./meli/ && git diff --quiet && git diff --cached --quiet
+          make -f .gitea/Makefile.lint cargo-derivefmt-meli
       - name: cargo-derivefmt tools
         if: success() || failure()
         run: |
-          cargo derivefmt --manifest-path ./tools/Cargo.toml
-          git checkout meli/src/conf/overrides.rs
-          git add ./tools/ && git diff --quiet && git diff --cached --quiet
+          make -f .gitea/Makefile.lint cargo-derivefmt-tools
