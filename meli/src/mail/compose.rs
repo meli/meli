@@ -131,7 +131,7 @@ enum ViewMode {
     EmbeddedPty,
     SelectRecipients(UIDialog<Address>),
     #[cfg(feature = "gpgme")]
-    SelectEncryptKey(bool, gpg::KeySelection),
+    SelectKey(bool, gpg::KeySelection),
     Send(UIConfirmationDialog),
     WaitingForSendResult(UIDialog<char>, JoinHandle<Result<()>>),
 }
@@ -1075,30 +1075,50 @@ impl Component for Composer {
                 .draw(grid, inner_area, context);
             }
             ViewMode::Send(ref mut s) => {
-                s.draw(grid, body_area, context);
+                let inner_area = area.center_inside((
+                    area.width().saturating_sub(2),
+                    area.height().saturating_sub(2),
+                ));
+                s.draw(grid, inner_area, context);
             }
             #[cfg(feature = "gpgme")]
-            ViewMode::SelectEncryptKey(
+            ViewMode::SelectKey(
                 _,
                 gpg::KeySelection::Loaded {
                     ref mut widget,
                     keys: _,
                 },
             ) => {
-                widget.draw(grid, body_area, context);
+                let inner_area = area.center_inside((
+                    area.width().saturating_sub(2),
+                    area.height().saturating_sub(2),
+                ));
+                widget.draw(grid, inner_area, context);
             }
             #[cfg(feature = "gpgme")]
-            ViewMode::SelectEncryptKey(_, _) => {}
+            ViewMode::SelectKey(_, _) => {}
             ViewMode::SelectRecipients(ref mut s) => {
-                s.draw(grid, body_area, context);
+                let inner_area = area.center_inside((
+                    area.width().saturating_sub(2),
+                    area.height().saturating_sub(2),
+                ));
+                s.draw(grid, inner_area, context);
             }
             ViewMode::Discard(_, ref mut s) => {
+                let inner_area = area.center_inside((
+                    area.width().saturating_sub(2),
+                    area.height().saturating_sub(2),
+                ));
                 /* Let user choose whether to quit with/without saving or cancel */
-                s.draw(grid, body_area, context);
+                s.draw(grid, inner_area, context);
             }
             ViewMode::WaitingForSendResult(ref mut s, _) => {
+                let inner_area = area.center_inside((
+                    area.width().saturating_sub(2),
+                    area.height().saturating_sub(2),
+                ));
                 /* Let user choose whether to wait for success or cancel */
-                s.draw(grid, body_area, context);
+                s.draw(grid, inner_area, context);
             }
         }
 
@@ -1278,10 +1298,9 @@ impl Component for Composer {
                 self.set_dirty(true);
             }
             #[cfg(feature = "gpgme")]
-            (
-                ViewMode::SelectEncryptKey(_, ref mut selector),
-                UIEvent::ComponentUnrealize(ref id),
-            ) if *id == selector.id() => {
+            (ViewMode::SelectKey(_, ref mut selector), UIEvent::ComponentUnrealize(ref id))
+                if *id == selector.id() =>
+            {
                 self.mode = ViewMode::Edit;
                 self.set_dirty(true);
                 return true;
@@ -1410,7 +1429,7 @@ impl Component for Composer {
             }
             #[cfg(feature = "gpgme")]
             (
-                ViewMode::SelectEncryptKey(is_encrypt, ref mut selector),
+                ViewMode::SelectKey(is_encrypt, ref mut selector),
                 UIEvent::FinishedUIDialog(id, result),
             ) if *id == selector.id() => {
                 if let Some(Some(key)) = result.downcast_mut::<Option<melib::gpgme::Key>>() {
@@ -1427,7 +1446,7 @@ impl Component for Composer {
                 return true;
             }
             #[cfg(feature = "gpgme")]
-            (ViewMode::SelectEncryptKey(_, ref mut selector), _) => {
+            (ViewMode::SelectKey(_, ref mut selector), _) => {
                 if selector.process_event(event, context) {
                     self.set_dirty(true);
                     return true;
@@ -1717,7 +1736,7 @@ impl Component for Composer {
                 }) {
                     Ok(widget) => {
                         self.gpg_state.sign_mail = Some(ActionFlag::from(true));
-                        self.mode = ViewMode::SelectEncryptKey(false, widget);
+                        self.mode = ViewMode::SelectKey(false, widget);
                     }
                     Err(err) => {
                         context.replies.push_back(UIEvent::Notification {
@@ -1758,7 +1777,7 @@ impl Component for Composer {
                 }) {
                     Ok(widget) => {
                         self.gpg_state.encrypt_mail = Some(ActionFlag::from(true));
-                        self.mode = ViewMode::SelectEncryptKey(true, widget);
+                        self.mode = ViewMode::SelectKey(true, widget);
                     }
                     Err(err) => {
                         context.replies.push_back(UIEvent::Notification {
@@ -2286,7 +2305,7 @@ impl Component for Composer {
                 widget.is_dirty() || self.pager.is_dirty() || self.form.is_dirty()
             }
             #[cfg(feature = "gpgme")]
-            ViewMode::SelectEncryptKey(_, ref widget) => {
+            ViewMode::SelectKey(_, ref widget) => {
                 widget.is_dirty() || self.pager.is_dirty() || self.form.is_dirty()
             }
             ViewMode::Send(ref widget) => {
@@ -2310,7 +2329,7 @@ impl Component for Composer {
                 widget.set_dirty(value);
             }
             #[cfg(feature = "gpgme")]
-            ViewMode::SelectEncryptKey(_, ref mut widget) => {
+            ViewMode::SelectKey(_, ref mut widget) => {
                 widget.set_dirty(value);
             }
             ViewMode::Send(ref mut widget) => {

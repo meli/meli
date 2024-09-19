@@ -581,7 +581,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             // padding
             + 3
             // buttons row
-            + if self.single_only { 1 } else { 5 };
+            + if self.single_only { 3 } else { 5 };
         if !self.content.resize_with_context(width, height, context) {
             self.dirty = false;
             return;
