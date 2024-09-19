@@ -24,8 +24,10 @@
 
 use std::{borrow::Cow, ffi::CStr, ptr::NonNull, sync::Arc};
 
-use super::bindings::*;
-use crate::email::Address;
+use crate::{
+    email::Address,
+    gpgme::{bindings::*, gpgme_error_to_string},
+};
 
 #[derive(Clone)]
 pub struct KeyInner {
@@ -154,5 +156,54 @@ impl Drop for Key {
         unsafe {
             call!(&self.lib, gpgme_key_unref)(self.inner.ptr.as_ptr());
         }
+    }
+}
+
+pub struct InvalidKeyError {
+    pub fingerprint: String,
+    pub reason: String,
+    pub gpgme_error: gpgme_error_t,
+}
+
+pub(super) struct InvalidKeysIter<'a> {
+    lib: Arc<libloading::Library>,
+    ptr: gpgme_invalid_key_t,
+    _ph: std::marker::PhantomData<&'a _gpgme_invalid_key>,
+}
+
+impl<'a> InvalidKeysIter<'a> {
+    pub(super) fn new(ptr: gpgme_invalid_key_t, lib: Arc<libloading::Library>) -> Self {
+        Self {
+            lib,
+            ptr,
+            _ph: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<'a> Iterator for InvalidKeysIter<'a> {
+    type Item = InvalidKeyError;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let invalid_key = NonNull::new(self.ptr)?;
+        let invalid_key_ref = unsafe { invalid_key.as_ref() };
+        self.ptr = invalid_key_ref.next;
+        Some(InvalidKeyError {
+            fingerprint: unsafe { CStr::from_ptr(invalid_key_ref.fpr) }
+                .to_string_lossy()
+                .to_string(),
+            reason: gpgme_error_to_string(&self.lib, invalid_key_ref.reason),
+            gpgme_error: invalid_key_ref.reason,
+        })
+    }
+}
+
+impl std::fmt::Display for InvalidKeyError {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fmt.debug_struct(crate::identify!(InvalidKeyError))
+            .field("Fingerprint", &self.fingerprint)
+            .field("Reason", &self.reason)
+            .field("Gpgme error code", &self.gpgme_error)
+            .finish()
     }
 }

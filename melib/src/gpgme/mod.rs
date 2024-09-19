@@ -998,33 +998,53 @@ impl Context {
         let mut raw_keys: Vec<gpgme_key_t> = Vec::with_capacity(encrypt_keys.len() + 1);
         raw_keys.extend(encrypt_keys.iter().map(|k| k.inner.ptr.as_ptr()));
         raw_keys.push(std::ptr::null_mut());
+        debug_assert_eq!(raw_keys.len(), encrypt_keys.len() + 1);
         unsafe {
             gpgme_error_try(
                 &self.inner.lib,
                 call!(&self.inner.lib, gpgme_data_new)(&mut cipher),
             )?;
-            gpgme_error_try(
+            if let Err(mut err) = gpgme_error_try(
                 &self.inner.lib,
                 if also_sign {
                     call!(&self.inner.lib, gpgme_op_encrypt_sign_start)(
                         self.inner.ptr.as_ptr(),
-                        raw_keys.as_mut_ptr(),
+                        raw_keys.as_mut_slice().as_mut_ptr(),
                         gpgme_encrypt_flags_t_GPGME_ENCRYPT_NO_ENCRYPT_TO
-                            | gpgme_encrypt_flags_t_GPGME_ENCRYPT_NO_COMPRESS,
+                            | gpgme_encrypt_flags_t_GPGME_ENCRYPT_NO_COMPRESS
+                            | gpgme_encrypt_flags_t_GPGME_ENCRYPT_ALWAYS_TRUST,
                         plain.inner.as_mut(),
                         cipher,
                     )
                 } else {
                     call!(&self.inner.lib, gpgme_op_encrypt_start)(
                         self.inner.ptr.as_ptr(),
-                        raw_keys.as_mut_ptr(),
+                        raw_keys.as_mut_slice().as_mut_ptr(),
                         gpgme_encrypt_flags_t_GPGME_ENCRYPT_NO_ENCRYPT_TO
-                            | gpgme_encrypt_flags_t_GPGME_ENCRYPT_NO_COMPRESS,
+                            | gpgme_encrypt_flags_t_GPGME_ENCRYPT_NO_COMPRESS
+                            | gpgme_encrypt_flags_t_GPGME_ENCRYPT_ALWAYS_TRUST,
                         plain.inner.as_mut(),
                         cipher,
                     )
                 },
-            )?;
+            ) {
+                let result =
+                    call!(&self.inner.lib, gpgme_op_encrypt_result)(self.inner.ptr.as_ptr());
+                if let Some(ptr) = NonNull::new(result) {
+                    let error = InvalidKeysIter::new(
+                        ptr.as_ref().invalid_recipients,
+                        self.inner.lib.clone(),
+                    )
+                    .map(|err| err.to_string())
+                    .collect::<Vec<String>>()
+                    .join(",");
+                    if !error.is_empty() {
+                        err = err.set_details(error);
+                    }
+                }
+
+                return Err(err);
+            };
         }
         let mut cipher = Data {
             lib: self.inner.lib.clone(),
@@ -1087,28 +1107,40 @@ impl Context {
             .await;
             let rcv = { ctx.io_state.lock().unwrap().receiver.clone() };
             let _ = rcv.recv().await;
-            ctx.io_state
+            if let Err(mut err) = ctx
+                .io_state
                 .lock()
                 .unwrap()
                 .done
                 .lock()
                 .unwrap()
                 .take()
-                .unwrap_or_else(|| Err(Error::new("Unspecified libgpgme error")))?;
+                .unwrap_or_else(|| Err(Error::new("Unspecified libgpgme error")))
+            {
+                let result = unsafe {
+                    call!(&ctx.inner.lib, gpgme_op_encrypt_result)(ctx.inner.ptr.as_ptr())
+                };
+                if let Some(ptr) = NonNull::new(result) {
+                    let error = InvalidKeysIter::new(
+                        unsafe { ptr.as_ref() }.invalid_recipients,
+                        ctx.inner.lib.clone(),
+                    )
+                    .map(|err| err.to_string())
+                    .collect::<Vec<String>>()
+                    .join(",");
+                    if !error.is_empty() {
+                        err = err.set_details(error);
+                    }
+                }
 
-            let encrypt_result =
-                unsafe { call!(&ctx.inner.lib, gpgme_op_encrypt_result)(ctx.inner.ptr.as_ptr()) };
-            if encrypt_result.is_null() {
-                return Err(Error::new(
-                    "Unspecified libgpgme error: gpgme_op_encrypt_result returned NULL.",
-                )
-                .set_kind(ErrorKind::LinkedLibrary("gpgme")));
+                return Err(err.set_kind(ErrorKind::LinkedLibrary("gpgme")));
             }
-            /* Rewind cursor */
+
+            // Rewind cursor
             cipher
                 .seek(std::io::SeekFrom::Start(0))
                 .chain_err_summary(|| "libgpgme error: could not perform seek on plain text")?;
-            // disjoint-capture-in-closures
+            // Keep plain alive long enough
             let _ = &plain;
             cipher.into_bytes()
         })
@@ -1274,11 +1306,8 @@ impl From<u32> for Protocol {
     }
 }
 
-fn gpgme_error_try(lib: &libloading::Library, error_code: GpgmeError) -> Result<()> {
+fn gpgme_error_to_string(lib: &libloading::Library, error_code: GpgmeError) -> String {
     const ERR_MAX_LEN: usize = 256;
-    if error_code == 0 {
-        return Ok(());
-    }
     let mut buf: Vec<u8> = vec![0; ERR_MAX_LEN];
     unsafe {
         call!(lib, gpgme_strerror_r)(
@@ -1290,11 +1319,16 @@ fn gpgme_error_try(lib: &libloading::Library, error_code: GpgmeError) -> Result<
     while buf.ends_with(&b"\0"[..]) {
         buf.pop();
     }
-    Err(Error::from(
-        String::from_utf8(buf)
-            .unwrap_or_else(|err| String::from_utf8_lossy(&err.into_bytes()).to_string()),
-    )
-    .set_summary(format!("libgpgme error {}", error_code)))
+    String::from_utf8(buf)
+        .unwrap_or_else(|err| String::from_utf8_lossy(&err.into_bytes()).to_string())
+}
+
+fn gpgme_error_try(lib: &libloading::Library, error_code: GpgmeError) -> Result<()> {
+    if error_code == 0 {
+        return Ok(());
+    }
+    Err(Error::from(gpgme_error_to_string(lib, error_code))
+        .set_summary(format!("libgpgme error {}", error_code)))
 }
 
 #[derive(Debug)]
