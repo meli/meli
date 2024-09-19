@@ -85,19 +85,19 @@ jobs:
           cargo install --quiet --version 0.9.54 --target "${{ matrix.target }}" cargo-nextest
       - name: cargo-check
         run: |
-          cargo check --all-features --all --tests --examples --benches --bins
-      - name: Compile
+          make -f ./.gitea/Makefile.build cargo-check
+      - name: cargo-test-compiles
         if: success() || failure()
-        run: cargo test --all --no-fail-fast --all-features --no-run --locked
-      - name: cargo test
         run: |
-          cargo nextest run --all --no-fail-fast --all-features --future-incompat-report -E 'not (test(smtp::test::test_smtp))'
-          #cargo test --all --no-fail-fast --all-features -- --nocapture --quiet
+          make -f ./.gitea/Makefile.build cargo-test-compiles
+      - name: cargo-test
+        run: |
+          make -f ./.gitea/Makefile.build cargo-test
       - name: rustdoc build
         if: success() || failure() # always run even if other steps fail, except when cancelled <https://stackoverflow.com/questions/58858429/how-to-run-a-github-actions-step-even-if-the-previous-step-fails-while-still-f>
         run: |
-          make build-rustdoc
+          make -f ./.gitea/Makefile.build rustdoc-build
       - name: rustdoc tests
         if: success() || failure()
         run: |
-          make test-docs
+          make -f ./.gitea/Makefile.build rustdoc-test

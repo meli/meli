@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: EUPL-1.2
+#
+# Makefile for: "Build and run Tests" workflow, in .gitea/workflows/build.yaml
+
+.POSIX:
+.SUFFIXES:
+CARGO_INCREMENTAL ?= 0
+CARGO_NET_RETRY ?= 10
+CARGO_REGISTRIES_CRATES_IO_PROTOCOL ?= sparse
+RUSTFLAGS ?= -D warnings -W unreachable-pub -W rust-2021-compatibility -C debuginfo=0
+RUSTUP_MAX_RETRIES ?= 10
+RUST_BACKTRACE ?= short
+
+.PHONY: all
+all: cargo-check compile cargo-test rustdoc-build rustdoc-test
+	printf "All completed.\n"
+
+.PHONY: cargo-check
+cargo-check:
+	printf "cargo-check\n"
+	cargo check --all-features --all --tests --examples --benches --bins
+.PHONY: cargo-test-compiles
+cargo-test-compiles:
+	printf "cargo-test-compiles\n"
+	cargo test --all --no-fail-fast --all-features --no-run --locked
+.PHONY: cargo-test
+cargo-test:
+	printf "cargo-test\n"
+	cargo nextest run --all --no-fail-fast --all-features --future-incompat-report -E 'not (test(smtp::test::test_smtp))'
+.PHONY: rustdoc-build
+rustdoc-build:
+	printf "rustdoc-build\n"
+	env DISPLAY= WAYLAND_DISPLAY= make build-rustdoc
+.PHONY: rustdoc-test
+rustdoc-test:
+	printf "rustdoc-test\n"
+	make test-docs
