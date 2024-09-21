@@ -111,12 +111,14 @@ pub struct DbConnection {
 
 impl DbConnection {
     pub fn get_revision_uuid(&self) -> u64 {
-        unsafe {
+        let ret: ::std::os::raw::c_ulong = unsafe {
             call!(self.lib, notmuch_database_get_revision)(
                 self.inner.lock().unwrap().as_mut(),
                 std::ptr::null_mut(),
             )
-        }
+        };
+        #[allow(clippy::useless_conversion)]
+        u64::from(ret)
     }
 
     #[allow(clippy::too_many_arguments)] // Don't judge me clippy.

@@ -207,7 +207,7 @@ fn timestamp_to_string_inner(
 ) -> String {
     let mut new_tm: libc::tm = unsafe { std::mem::zeroed() };
     unsafe {
-        let i: i64 = timestamp.try_into().unwrap_or(0);
+        let i = timestamp.try_into().unwrap_or(0);
         if local {
             localtime_r(std::ptr::addr_of!(i), std::ptr::addr_of_mut!(new_tm));
         } else {

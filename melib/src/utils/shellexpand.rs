@@ -261,7 +261,7 @@ pub mod impls {
         let mut buf: Vec<u8> = vec![0; BUF_SIZE * std::mem::size_of::<::libc::dirent64>()];
         let mut entries = Vec::new();
         loop {
-            let n: i64 = unsafe {
+            let n = unsafe {
                 ::libc::syscall(
                     ::libc::SYS_getdents64,
                     dir.as_raw_fd(),

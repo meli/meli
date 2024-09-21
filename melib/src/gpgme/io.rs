@@ -224,13 +224,24 @@ impl Seek for Data {
     #[inline]
     fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
         let (off, whence) = match pos {
-            io::SeekFrom::Start(off) => (off.try_into().unwrap_or(i64::MAX), libc::SEEK_SET),
+            io::SeekFrom::Start(off) => (
+                off.try_into()
+                    .map_err(|_| io::Error::from_raw_os_error(libc::EOVERFLOW))?,
+                libc::SEEK_SET,
+            ),
             io::SeekFrom::End(off) => (off.saturating_abs(), libc::SEEK_END),
             io::SeekFrom::Current(off) => (off, libc::SEEK_CUR),
         };
-        let result = unsafe { call!(self.lib, gpgme_data_seek)(self.inner.as_ptr(), off, whence) };
+        let result = unsafe {
+            call!(self.lib, gpgme_data_seek)(
+                self.inner.as_ptr(),
+                libc::off_t::try_from(off)
+                    .map_err(|_| io::Error::from_raw_os_error(libc::EOVERFLOW))?,
+                whence,
+            )
+        };
         if result >= 0 {
-            Ok(result as u64)
+            Ok(u64::try_from(result).map_err(|_| io::Error::from_raw_os_error(libc::EOVERFLOW))?)
         } else {
             Err(io::Error::last_os_error())
         }
