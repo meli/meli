@@ -149,69 +149,6 @@ impl Truncate for String {
     }
 }
 
-pub trait GlobMatch {
-    fn matches_glob(&self, s: &str) -> bool;
-    fn is_glob(&self) -> bool;
-}
-
-impl GlobMatch for str {
-    fn matches_glob(&self, _pattern: &str) -> bool {
-        let pattern: Vec<&Self> = _pattern
-            .strip_suffix('/')
-            .unwrap_or(_pattern)
-            .split_graphemes();
-        let s: Vec<&Self> = self.strip_suffix('/').unwrap_or(self).split_graphemes();
-
-        // Taken from https://research.swtch.com/glob
-
-        let mut px = 0;
-        let mut sx = 0;
-        let mut next_px = 0;
-        let mut next_sx = 0;
-        while px < pattern.len() || sx < s.len() {
-            if px < pattern.len() {
-                match pattern[px] {
-                    "?" => {
-                        if sx < s.len() {
-                            px += 1;
-                            sx += 1;
-                            continue;
-                        }
-                    }
-                    "*" => {
-                        // Try to match at sx.
-                        // If that doesn't work out,
-                        // restart at sx+1 next.
-                        next_px = px;
-                        next_sx = sx + 1;
-                        px += 1;
-                        continue;
-                    }
-                    p => {
-                        if sx < s.len() && s[sx] == p {
-                            px += 1;
-                            sx += 1;
-                            continue;
-                        }
-                    }
-                }
-            }
-            // Mismatch. Maybe restart.
-            if 0 < next_sx && next_sx <= s.len() {
-                px = next_px;
-                sx = next_sx;
-                continue;
-            }
-            return false;
-        }
-        true
-    }
-
-    fn is_glob(&self) -> bool {
-        self.contains('*')
-    }
-}
-
 pub mod hex {
     use std::fmt::Write;
 
@@ -235,6 +172,7 @@ pub mod hex {
     }
 }
 
+#[cfg(test)]
 pub const _ALICE_CHAPTER_1: &str = r#"CHAPTER I. Down the Rabbit-Hole
 
 Alice was beginning to get very tired of sitting by her sister on the 
@@ -285,27 +223,3 @@ she fell past it.
 think nothing of tumbling down stairs! How brave they’ll all think me at 
 home! Why, I wouldn’t say anything about it, even if I fell off the top 
 of the house!’ (Which was very likely true.)"#;
-
-#[cfg(test)]
-mod tests {
-    use crate::text::GlobMatch;
-
-    #[test]
-    fn test_globmatch() {
-        assert!("INBOX".matches_glob("INBOX"));
-        assert!("INBOX/".matches_glob("INBOX"));
-        assert!("INBOX".matches_glob("INBO?"));
-
-        assert!("INBOX/Sent".matches_glob("INBOX/*"));
-        assert!(!"INBOX/Sent".matches_glob("INBOX"));
-        assert!(!"INBOX/Sent".matches_glob("*/Drafts"));
-        assert!("INBOX/Sent".matches_glob("*/Sent"));
-
-        assert!("INBOX/Archives/2047".matches_glob("*"));
-        assert!("INBOX/Archives/2047".matches_glob("INBOX/*/2047"));
-        assert!("INBOX/Archives/2047".matches_glob("INBOX/Archives/2*047"));
-        assert!("INBOX/Archives/2047".matches_glob("INBOX/Archives/204?"));
-
-        assert!(!"INBOX/Lists/".matches_glob("INBOX/Lists/*"));
-    }
-}

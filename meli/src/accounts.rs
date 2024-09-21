@@ -41,9 +41,8 @@ use melib::{
     backends::{prelude::*, Backends},
     error::{Error, ErrorKind, NetworkErrorKind, Result},
     log,
-    text::GlobMatch,
     thread::Threads,
-    utils::{futures::sleep, random},
+    utils::{fnmatch::Fnmatch, futures::sleep, random},
     AddressBook, SortField, SortOrder,
 };
 use smallvec::SmallVec;
@@ -213,7 +212,7 @@ impl Account {
                     || s.account
                         .subscribed_mailboxes
                         .iter()
-                        .any(|m| path.matches_glob(m))
+                        .any(|m| path.fnmatches(m))
             }),
             event_consumer,
         )?;

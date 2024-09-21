@@ -21,15 +21,16 @@
 
 //! # mailcap file - Find mailcap entries to execute attachments.
 //!
-//! Implements [RFC 1524 A User Agent Configuration Mechanism For Multimedia
+//! Implements [RFC1524 A User Agent Configuration Mechanism For Multimedia
 //! Mail Format Information](https://www.rfc-editor.org/rfc/inline-errata/rfc1524.html)
+
 use std::{
     io::{Read, Write},
     path::PathBuf,
     process::{Command, Stdio},
 };
 
-use melib::{email::Attachment, log, text::GlobMatch, Error, Result};
+use melib::{email::Attachment, log, utils::fnmatch::Fnmatch, Error, Result};
 
 use crate::{
     state::Context,
@@ -104,7 +105,7 @@ impl MailcapEntry {
                 let key = parts_iter.next().unwrap();
                 let cmd = parts_iter.next().unwrap();
                 //let flags = parts_iter.next().unwrap();
-                if key.starts_with(&content_type) || key.matches_glob(&content_type) {
+                if key.starts_with(&content_type) || key.fnmatches(&content_type) {
                     let mut copiousoutput = false;
                     #[allow(clippy::while_let_on_iterator)]
                     while let Some(flag) = parts_iter.next() {
@@ -126,7 +127,7 @@ impl MailcapEntry {
                 let key = parts_iter.next().unwrap();
                 let cmd = parts_iter.next().unwrap();
                 //let flags = parts_iter.next().unwrap();
-                if key.starts_with(&content_type) || key.matches_glob(&content_type) {
+                if key.starts_with(&content_type) || key.fnmatches(&content_type) {
                     let mut copiousoutput = false;
                     #[allow(clippy::while_let_on_iterator)]
                     while let Some(flag) = parts_iter.next() {
