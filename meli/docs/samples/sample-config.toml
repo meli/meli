@@ -16,6 +16,7 @@
 #listing.index_style = "Conversations" # or [plain, threaded, compact]
 #identity="email@example.com"
 #display_name = "Name"
+## Need to explicitly list mailboxes of interest:
 #subscribed_mailboxes = ["INBOX", "INBOX/Sent", "INBOX/Drafts", "INBOX/Junk"]
 #
 ## Set mailbox-specific settings
@@ -46,9 +47,7 @@
 #listing.index_style = "Conversations"
 #identity = "username@example.com"
 #display_name = "Name Name"
-### match every mailbox:
-#subscribed_mailboxes = ["*" ]
-### match specific mailboxes:
+### show only specific mailboxes, overriding the server's subscribed status.
 ##subscribed_mailboxes = ["INBOX", "INBOX/Sent", "INBOX/Drafts", "INBOX/Junk"]
 #
 ## Setting up an account for an already existing notmuch database
@@ -77,9 +76,7 @@
 #listing.index_style = "Conversations"
 #identity = "username@gmail.com"
 #display_name = "Name Name"
-### match every mailbox:
-#subscribed_mailboxes = ["*" ]
-### Gmail auto saves sent mail to Sent folder, so don't duplicate the effort:
+## Gmail auto saves sent mail to Sent folder, so don't duplicate the effort:
 #composing.store_sent_mail = false
 #
 ##[accounts."jmap account"]
@@ -91,7 +88,6 @@
 ##server_password="changeme"
 ##listing.index_style = "Conversations"
 ##identity = "user@hostname.local"
-##subscribed_mailboxes = ["*", ]
 #
 #[pager]
 #filter = "COLUMNS=72 /usr/local/bin/pygmentize -l email"

@@ -77,7 +77,6 @@ root_mailbox = "/path/to/root/folder"
 format = "Maildir"
 listing.index_style = "Compact"
 identity="email@example.com"
-subscribed_mailboxes = ["folder", "folder/Sent"] # or [ "*", ] for all mailboxes
 display_name = "Name"
 send_mail = 'msmtp --read-recipients --read-envelope-from'
 #send_mail = { hostname = "smtp.example.com", port = 587, auth = { type = "auto", username = "user", password = { type = "command_eval", value = "gpg2 --no-tty -q -d ~/.passwords/user.gpg" } }, security = { type = "STARTTLS" } }
@@ -119,9 +118,7 @@ use_starttls=true #optional
 send_mail = { hostname = "smtp.example.com", port = 587, auth = { type = "auto", username = "user", password = { type = "command_eval", value = "gpg2 --no-tty -q -d ~/.passwords/user.gpg" } }, security = { type = "STARTTLS" } }
 display_name = "Name Name"
 identity = "username@example.com"
-## match every mailbox:
-subscribed_mailboxes = ["*" ]
-## match specific mailboxes:
+## show only specific mailboxes:
 #subscribed_mailboxes = ["INBOX", "INBOX/Sent", "INBOX/Drafts", "INBOX/Junk"]
 .Ed
 .Ss Gmail account example
@@ -137,9 +134,7 @@ server_port="993"
 listing.index_style = "Conversations"
 identity = "username@gmail.com"
 display_name = "Name Name"
-## match every mailbox:
-subscribed_mailboxes = ["*" ]
-## Gmail auto saves sent mail to Sent folder, so don't duplicate the effort:
+# Gmail auto saves sent mail to Sent folder, so don't duplicate the effort:
 composing.store_sent_mail = false
 .Ed
 
@@ -156,7 +151,6 @@ server_url="http://localhost:8080"
 server_username="user@hostname.local"
 server_password="changeme"
 identity = "user@hostname.local"
-subscribed_mailboxes = ["*", ]
 .Ed
 .Ss fastmail.com account example
 .Lk https://fastmail.com/ Fastmail
@@ -174,7 +168,6 @@ server_username="user@fastmail.com"
 server_password="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 use_token=true
 identity = "My Name <user@fastmail.com>"
-subscribed_mailboxes = ["*", ]
 send_mail = "server_submission"
 .Ed
 .Sh NOTMUCH ACCOUNT

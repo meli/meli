@@ -52,6 +52,7 @@ pub struct AccountSettings {
     pub display_name: Option<String>,
     #[serde(default)]
     pub order: (SortField, SortOrder),
+    #[serde(default)]
     pub subscribed_mailboxes: Vec<String>,
     #[serde(default)]
     pub mailboxes: IndexMap<String, MailboxConf>,
