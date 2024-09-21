@@ -22,6 +22,7 @@ async-fn-stream = { version = "=0.2.2" }
 async-io = { version = "2" }
 base64 = { version = "^0.13", optional = true }
 bitflags = { version = "2.4", features = ["serde"] }
+cfg-if = { version = "^1.0.0" }
 chrono = { version = "^0.4", default-features = false }
 data-encoding = { version = "2.1.1" }
 encoding = { version = "0.2.33", default-features = false }

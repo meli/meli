@@ -1368,6 +1368,7 @@ dependencies = [
  "async-io",
  "base64 0.13.1",
  "bitflags 2.6.0",
+ "cfg-if",
  "chrono",
  "data-encoding",
  "encoding",

@@ -334,3 +334,42 @@ fn test_fd_locks() {
         )
         .unwrap();
 }
+
+#[test]
+fn test_fnmatch() {
+    use crate::utils::fnmatch::*;
+
+    for n in [
+        "INBOX",
+        "Folder",
+        "Something/with/separator",
+        "local.group.name",
+    ] {
+        assert!(n.fnmatches("*"), "`*` should match with {:?}", n);
+    }
+
+    assert!(!".leading.period".fnmatches("*"));
+    assert!("INBOX/Sent".fnmatches("INBOX/*"));
+    assert!("INBOX/nested/mailbox".fnmatches("INBOX/*"));
+    assert!(!"INBOX".fnmatches("INBOX/*"));
+    assert!(!"Other".fnmatches("INBOX/*"));
+
+    assert!("nntp.taxonomy.niche".fnmatches("nntp.taxonomy.*"));
+    assert!(!"nntp.other".fnmatches("nntp.taxonomy.*"));
+    assert!("all.nested.niche".fnmatches("all.*"));
+
+    for n in ["Archives/2012", "Archives/2015"] {
+        assert!(
+            n.fnmatches("Archives/201?"),
+            "`Archives/201?` should match with {:?}",
+            n
+        );
+    }
+    for n in ["Archives/2005", "Archives/2021"] {
+        assert!(
+            !n.fnmatches("Archives/201?"),
+            "`Archives/201?` should not match with {:?}",
+            n
+        );
+    }
+}

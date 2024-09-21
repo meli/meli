@@ -23,6 +23,7 @@
 
 pub mod connections;
 pub mod datetime;
+pub mod fnmatch;
 pub mod futures;
 pub mod random;
 pub mod vobject;
