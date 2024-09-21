@@ -379,125 +379,6 @@ impl EnvelopeView {
         self.display = display;
         self.attachment_tree = attachment_tree;
         self.attachment_paths = attachment_paths;
-        self.regenerate_body_text();
-    }
-
-    pub fn regenerate_body_text(&mut self) {
-        self.body_text = Self::attachment_displays_to_text(&self.display, true);
-    }
-
-    pub fn attachment_displays_to_text(
-        displays: &[AttachmentDisplay],
-        show_comments: bool,
-    ) -> String {
-        let mut acc = String::new();
-        for d in displays {
-            use AttachmentDisplay::*;
-            match d {
-                Alternative {
-                    inner: _,
-                    shown_display,
-                    display,
-                } => {
-                    acc.push_str(&Self::attachment_displays_to_text(
-                        &display[*shown_display..(*shown_display + 1)],
-                        show_comments,
-                    ));
-                }
-                InlineText {
-                    inner: _,
-                    text,
-                    comment: Some(comment),
-                } if show_comments => {
-                    acc.push_str(comment);
-                    if !acc.ends_with("\n\n") {
-                        acc.push_str("\n\n");
-                    }
-                    acc.push_str(text);
-                }
-                InlineText {
-                    inner: _,
-                    text,
-                    comment: _,
-                } => acc.push_str(text),
-                InlineOther { inner } => {
-                    if !acc.ends_with("\n\n") {
-                        acc.push_str("\n\n");
-                    }
-                    acc.push_str(&inner.to_string());
-                    if !acc.ends_with("\n\n") {
-                        acc.push_str("\n\n");
-                    }
-                }
-                Attachment { inner: _ } => {}
-                SignedPending {
-                    inner: _,
-                    display,
-                    handle: _,
-                    job_id: _,
-                } => {
-                    if show_comments {
-                        acc.push_str("Waiting for signature verification.\n\n");
-                    }
-                    acc.push_str(&Self::attachment_displays_to_text(display, show_comments));
-                }
-                SignedUnverified { inner: _, display } => {
-                    if show_comments {
-                        acc.push_str("Unverified signature.\n\n");
-                    }
-                    acc.push_str(&Self::attachment_displays_to_text(display, show_comments))
-                }
-                SignedFailed {
-                    inner: _,
-                    display,
-                    error,
-                } => {
-                    if show_comments {
-                        let _ = writeln!(acc, "Failed to verify signature: {}.\n", error);
-                    }
-                    acc.push_str(&Self::attachment_displays_to_text(display, show_comments));
-                }
-                SignedVerified {
-                    inner: _,
-                    display,
-                    description,
-                } => {
-                    if show_comments {
-                        if description.is_empty() {
-                            acc.push_str("Verified signature.\n\n");
-                        } else {
-                            acc.push_str(description);
-                            acc.push_str("\n\n");
-                        }
-                    }
-                    acc.push_str(&Self::attachment_displays_to_text(display, show_comments));
-                }
-                EncryptedPending { .. } => acc.push_str("Waiting for decryption result."),
-                EncryptedFailed { inner: _, error } => {
-                    let _ = write!(acc, "Decryption failed: {}.", &error);
-                }
-                EncryptedSuccess {
-                    inner: _,
-                    plaintext: _,
-                    plaintext_display,
-                    description,
-                } => {
-                    if show_comments {
-                        if description.is_empty() {
-                            acc.push_str("Successfully decrypted.\n\n");
-                        } else {
-                            acc.push_str(description);
-                            acc.push_str("\n\n");
-                        }
-                    }
-                    acc.push_str(&Self::attachment_displays_to_text(
-                        plaintext_display,
-                        show_comments,
-                    ));
-                }
-            }
-        }
-        acc
     }
 
     fn attachment_displays_to_tree(
@@ -719,6 +600,10 @@ impl EnvelopeView {
                 lidx
             ))));
         None
+    }
+
+    pub fn body_text(&self) -> &str {
+        &self.body_text
     }
 }
 
@@ -1030,7 +915,7 @@ impl Component for EnvelopeView {
             }
         };
 
-        if self.filters.is_empty() || self.body_text.is_empty() {
+        if self.filters.is_empty() {
             let body = self.mail.body();
             if body.is_html() {
                 let attachment = if let Some(sub) = match body.content_type {
@@ -1081,15 +966,12 @@ impl Component for EnvelopeView {
             {
                 self.filters.push(filter);
             }
-            self.body_text = String::from_utf8_lossy(
-                &body.decode(Option::<Charset>::from(&self.force_charset).into()),
-            )
-            .to_string();
         }
         if !self.initialised {
             self.initialised = true;
             let mut text = if !self.filters.is_empty() {
                 let mut text = String::new();
+                self.body_text.clear();
                 if let Some(last) = self.filters.last() {
                     let mut stack = vec![last];
                     while let Some(ViewFilter {
@@ -1115,10 +997,16 @@ impl Component for EnvelopeView {
                         if !text.is_empty() {
                             text.push('\n');
                         }
+                        if !self.body_text.is_empty() {
+                            self.body_text.push('\n');
+                        }
                         match body_text {
-                            ViewFilterContent::Filtered { inner } => text.push_str(
-                                &self.options.convert(&mut self.links, &self.body, inner),
-                            ),
+                            ViewFilterContent::Filtered { inner } => {
+                                let payload =
+                                    self.options.convert(&mut self.links, &self.body, inner);
+                                text.push_str(&payload);
+                                self.body_text.push_str(&payload);
+                            }
                             ViewFilterContent::Error { inner } => text.push_str(&inner.to_string()),
                             ViewFilterContent::Running { .. } => {
                                 text.push_str("Filter job running in background.")
@@ -1318,7 +1206,6 @@ impl Component for EnvelopeView {
                     }
                     if caught {
                         self.links.clear();
-                        self.regenerate_body_text();
                         self.initialised = false;
                         self.set_dirty(true);
                     }
@@ -1346,7 +1233,6 @@ impl Component for EnvelopeView {
                         }
                     }
                     self.links.clear();
-                    self.regenerate_body_text();
                     self.initialised = false;
                     self.set_dirty(true);
                 }

@@ -22,7 +22,6 @@
 use std::{
     collections::HashSet,
     convert::TryFrom,
-    fmt::Write as _,
     io::Write,
     process::{Command, Stdio},
 };
@@ -199,25 +198,27 @@ impl MailView {
                 ref env,
                 ref env_view,
                 ..
-            } => (
-                bytes,
-                EnvelopeView::attachment_displays_to_text(&env_view.display, false),
-                env,
-            ),
+            } => (bytes, env_view.body_text(), env),
             MailViewState::Error { .. } => {
                 return;
             }
         };
         let composer = match action {
-            PendingReplyAction::Reply => {
-                Box::new(Composer::reply_to_select(coordinates, reply_body, context))
-            }
-            PendingReplyAction::ReplyToAuthor => {
-                Box::new(Composer::reply_to_author(coordinates, reply_body, context))
-            }
-            PendingReplyAction::ReplyToAll => {
-                Box::new(Composer::reply_to_all(coordinates, reply_body, context))
-            }
+            PendingReplyAction::Reply => Box::new(Composer::reply_to_select(
+                coordinates,
+                reply_body.to_string(),
+                context,
+            )),
+            PendingReplyAction::ReplyToAuthor => Box::new(Composer::reply_to_author(
+                coordinates,
+                reply_body.to_string(),
+                context,
+            )),
+            PendingReplyAction::ReplyToAll => Box::new(Composer::reply_to_all(
+                coordinates,
+                reply_body.to_string(),
+                context,
+            )),
             PendingReplyAction::ForwardAttachment => {
                 Box::new(Composer::forward(coordinates, bytes, env, true, context))
             }
