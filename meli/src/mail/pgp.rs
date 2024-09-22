@@ -33,7 +33,6 @@ use melib::{
     },
     error::*,
     gpgme::*,
-    log,
     parser::BytesExt,
 };
 
@@ -199,13 +198,33 @@ pub fn encrypt_filter(
                     }
                 }
             }
-            let a: Attachment = a.into();
-            log::trace!(
-                "main attachment is {:?} sign_keys = {:?} encrypt_keys = {:?}",
-                &a,
-                &sign_keys,
-                &encrypt_keys
-            );
+            let a: Attachment = if let Some(sign_keys) = sign_keys {
+                let a: Attachment = a.into();
+                let mut ctx = Context::new()?;
+                let data = ctx.new_data_mem(&melib_pgp::convert_attachment_to_rfc_spec(
+                    a.into_raw().as_bytes(),
+                ))?;
+                let sig_attachment = Attachment::new(
+                    ContentType::PGPSignature,
+                    Default::default(),
+                    ctx.sign(sign_keys, data)?.await?,
+                );
+                let a: AttachmentBuilder = a.into();
+                let parts = vec![a, sig_attachment.into()];
+                let boundary = ContentType::make_boundary(&parts);
+                Attachment::new(
+                    ContentType::Multipart {
+                        boundary: boundary.into_bytes(),
+                        kind: MultipartType::Signed,
+                        parts: parts.into_iter().map(|a| a.into()).collect::<Vec<_>>(),
+                        parameters: vec![],
+                    },
+                    Default::default(),
+                    vec![],
+                )
+            } else {
+                a.into()
+            };
             let mut ctx = Context::new()?;
             let data = ctx.new_data_mem(a.into_raw().as_bytes())?;
 
@@ -216,7 +235,7 @@ pub fn encrypt_filter(
                         parameters: vec![],
                     },
                     Default::default(),
-                    ctx.encrypt(sign_keys, encrypt_keys, data)?.await?,
+                    ctx.encrypt(encrypt_keys, data)?.await?,
                 );
                 a.content_disposition =
                     ContentDisposition::from(br#"attachment; filename="msg.asc""#);

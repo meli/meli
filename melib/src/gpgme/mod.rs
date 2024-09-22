@@ -961,7 +961,6 @@ impl Context {
 
     pub fn encrypt(
         &mut self,
-        sign_keys: Option<Vec<Key>>,
         encrypt_keys: Vec<Key>,
         mut plain: Data,
     ) -> Result<impl Future<Output = Result<Vec<u8>>> + Send> {
@@ -974,26 +973,6 @@ impl Context {
             call!(&self.inner.lib, gpgme_signers_clear)(self.inner.ptr.as_ptr());
         }
 
-        let also_sign: bool = if let Some(keys) = sign_keys {
-            if keys.is_empty() {
-                false
-            } else {
-                for k in keys {
-                    unsafe {
-                        gpgme_error_try(
-                            &self.inner.lib,
-                            call!(&self.inner.lib, gpgme_signers_add)(
-                                self.inner.ptr.as_ptr(),
-                                k.inner.ptr.as_ptr(),
-                            ),
-                        )?;
-                    }
-                }
-                true
-            }
-        } else {
-            false
-        };
         let mut cipher: gpgme_data_t = std::ptr::null_mut();
         let mut raw_keys: Vec<gpgme_key_t> = Vec::with_capacity(encrypt_keys.len() + 1);
         raw_keys.extend(encrypt_keys.iter().map(|k| k.inner.ptr.as_ptr()));
@@ -1006,27 +985,15 @@ impl Context {
             )?;
             if let Err(mut err) = gpgme_error_try(
                 &self.inner.lib,
-                if also_sign {
-                    call!(&self.inner.lib, gpgme_op_encrypt_sign_start)(
-                        self.inner.ptr.as_ptr(),
-                        raw_keys.as_mut_slice().as_mut_ptr(),
-                        gpgme_encrypt_flags_t_GPGME_ENCRYPT_NO_ENCRYPT_TO
-                            | gpgme_encrypt_flags_t_GPGME_ENCRYPT_NO_COMPRESS
-                            | gpgme_encrypt_flags_t_GPGME_ENCRYPT_ALWAYS_TRUST,
-                        plain.inner.as_mut(),
-                        cipher,
-                    )
-                } else {
-                    call!(&self.inner.lib, gpgme_op_encrypt_start)(
-                        self.inner.ptr.as_ptr(),
-                        raw_keys.as_mut_slice().as_mut_ptr(),
-                        gpgme_encrypt_flags_t_GPGME_ENCRYPT_NO_ENCRYPT_TO
-                            | gpgme_encrypt_flags_t_GPGME_ENCRYPT_NO_COMPRESS
-                            | gpgme_encrypt_flags_t_GPGME_ENCRYPT_ALWAYS_TRUST,
-                        plain.inner.as_mut(),
-                        cipher,
-                    )
-                },
+                call!(&self.inner.lib, gpgme_op_encrypt_start)(
+                    self.inner.ptr.as_ptr(),
+                    raw_keys.as_mut_slice().as_mut_ptr(),
+                    gpgme_encrypt_flags_t_GPGME_ENCRYPT_NO_ENCRYPT_TO
+                        | gpgme_encrypt_flags_t_GPGME_ENCRYPT_NO_COMPRESS
+                        | gpgme_encrypt_flags_t_GPGME_ENCRYPT_ALWAYS_TRUST,
+                    plain.inner.as_mut(),
+                    cipher,
+                ),
             ) {
                 let result =
                     call!(&self.inner.lib, gpgme_op_encrypt_result)(self.inner.ptr.as_ptr());
