@@ -217,7 +217,7 @@ impl Account {
             event_consumer,
         )?;
 
-        let data_dir = xdg::BaseDirectories::with_profile("meli", &name).unwrap();
+        let data_dir = xdg::BaseDirectories::with_profile("meli", &name)?;
         let mut contacts = Contacts::with_account(settings.account());
 
         if let Ok(data) = data_dir.place_data_file("contacts") {

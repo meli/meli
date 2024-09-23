@@ -301,11 +301,7 @@ pub fn get_config_file() -> Result<PathBuf> {
     if let Ok(path) = env::var("MELI_CONFIG") {
         return Ok(PathBuf::from(path).expand());
     }
-    let xdg_dirs = xdg::BaseDirectories::with_prefix("meli").map_err(|err| {
-        Error::new("Could not detect XDG directories for user")
-            .set_source(Some(std::sync::Arc::new(Box::new(err))))
-            .set_kind(ErrorKind::NotSupported)
-    })?;
+    let xdg_dirs = xdg::BaseDirectories::with_prefix("meli")?;
     xdg_dirs
         .place_config_file("config.toml")
         .chain_err_summary(|| {
