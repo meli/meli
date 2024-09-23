@@ -414,7 +414,7 @@ impl Component for MailView {
                     let account = &mut context.accounts[&coordinates.0];
                     {
                         for card in results.iter() {
-                            account.address_book.add_card(card.clone());
+                            account.contacts.add_card(card.clone());
                         }
                     }
                     self.contact_selector = None;

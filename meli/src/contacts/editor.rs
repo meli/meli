@@ -230,7 +230,7 @@ impl Component for ContactManager {
                             let mut new_card = Card::from(fields);
                             new_card.set_id(*self.card.id());
                             context.accounts[self.account_pos]
-                                .address_book
+                                .contacts
                                 .add_card(new_card);
                             context.replies.push_back(UIEvent::StatusEvent(
                                 StatusEvent::DisplayMessage("Saved.".into()),

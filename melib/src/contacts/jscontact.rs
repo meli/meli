@@ -23,7 +23,7 @@
 use std::hash::Hasher;
 
 use crate::{
-    addressbook::{Card, CardId},
+    contacts::{Card, CardId},
     error::Result,
 };
 

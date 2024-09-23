@@ -43,7 +43,7 @@ use melib::{
     log,
     thread::Threads,
     utils::{fnmatch::Fnmatch, futures::sleep, random},
-    AddressBook, SortField, SortOrder,
+    Contacts, SortField, SortOrder,
 };
 use smallvec::SmallVec;
 
@@ -129,7 +129,7 @@ pub struct Account {
     pub mailboxes_order: Vec<MailboxHash>,
     pub tree: Vec<MailboxNode>,
     pub collection: Collection,
-    pub address_book: AddressBook,
+    pub contacts: Contacts,
     pub settings: AccountConf,
     pub backend: Arc<RwLock<Box<dyn MailBackend>>>,
 
@@ -143,7 +143,7 @@ pub struct Account {
 impl Drop for Account {
     fn drop(&mut self) {
         if let Ok(data_dir) = xdg::BaseDirectories::with_profile("meli", &self.name) {
-            if let Ok(data) = data_dir.place_data_file("addressbook") {
+            if let Ok(data) = data_dir.place_data_file("contacts") {
                 /* place result in cache directory */
                 let f = match fs::File::create(data) {
                     Ok(f) => f,
@@ -158,7 +158,7 @@ impl Drop for Account {
                 permissions.set_mode(0o600); // Read/write for owner only.
                 f.set_permissions(permissions).unwrap();
                 let writer = io::BufWriter::new(f);
-                if let Err(err) = serde_json::to_writer(writer, &self.address_book) {
+                if let Err(err) = serde_json::to_writer(writer, &self.contacts) {
                     eprintln!("{}", err);
                 };
             };
@@ -218,16 +218,16 @@ impl Account {
         )?;
 
         let data_dir = xdg::BaseDirectories::with_profile("meli", &name).unwrap();
-        let mut address_book = AddressBook::with_account(settings.account());
+        let mut contacts = Contacts::with_account(settings.account());
 
-        if let Ok(data) = data_dir.place_data_file("addressbook") {
+        if let Ok(data) = data_dir.place_data_file("contacts") {
             if data.exists() {
                 let reader = io::BufReader::new(fs::File::open(data).unwrap());
-                let result: result::Result<AddressBook, _> = serde_json::from_reader(reader);
+                let result: result::Result<Contacts, _> = serde_json::from_reader(reader);
                 if let Ok(data_t) = result {
                     for (id, c) in data_t.cards {
-                        if !address_book.card_exists(id) && !c.external_resource() {
-                            address_book.add_card(c);
+                        if !contacts.card_exists(id) && !c.external_resource() {
+                            contacts.add_card(c);
                         }
                     }
                 }
@@ -313,7 +313,7 @@ impl Account {
             mailbox_entries: Default::default(),
             mailboxes_order: Default::default(),
             tree: Default::default(),
-            address_book,
+            contacts,
             collection: backend.collection(),
             settings,
             main_loop_handler,

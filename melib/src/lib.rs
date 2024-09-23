@@ -86,7 +86,7 @@
 //! - Decode attachments (see module [`email::attachments`])
 //! - Create new mail (see [`email::Draft`](email::compose::Draft))
 //! - Send mail with an SMTP client (see module [`smtp`])
-//! - Manage an `addressbook` i.e. have contacts (see module [`addressbook`])
+//! - Manage contacts (see module [`contacts`])
 //! - Build thread structures out of a list of mail via their `In-Reply-To` and
 //!   `References` header values (see module [`thread`])
 //!
@@ -141,8 +141,8 @@ pub use utils::{
     SortField, SortOrder,
 };
 
-pub mod addressbook;
-pub use addressbook::*;
+pub mod contacts;
+pub use contacts::*;
 pub mod backends;
 pub use backends::*;
 mod collection;

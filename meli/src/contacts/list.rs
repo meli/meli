@@ -122,17 +122,17 @@ impl ContactList {
     fn initialize(&mut self, context: &Context) {
         self.data_columns.clear();
         let account = &context.accounts[self.account_pos];
-        let book = &account.address_book;
-        self.length = book.len();
+        let contacts = &account.contacts;
+        self.length = contacts.len();
 
         self.id_positions.clear();
-        if self.id_positions.capacity() < book.len() {
-            self.id_positions.reserve(book.len());
+        if self.id_positions.capacity() < contacts.len() {
+            self.id_positions.reserve(contacts.len());
         }
         self.dirty = true;
         let mut min_width = ("Name".len(), "E-mail".len(), 0, "external".len(), 0, 0);
 
-        for c in book.values() {
+        for c in contacts.values() {
             /* name */
             let name = c.name().split_graphemes().len();
             if name > 0 {
@@ -164,8 +164,8 @@ impl ContactList {
         );
 
         let account = &context.accounts[self.account_pos];
-        let book = &account.address_book;
-        let mut book_values = book.values().collect::<Vec<&Card>>();
+        let contacts = &account.contacts;
+        let mut book_values = contacts.values().collect::<Vec<&Card>>();
         book_values.sort_unstable_by_key(|c| c.name());
         for (idx, c) in book_values.iter().enumerate() {
             self.id_positions.push(*c.id());
@@ -294,7 +294,7 @@ impl ContactList {
         };
 
         grid.change_theme(area, account_attrs);
-        let s = format!(" [{}]", context.accounts[a.index].address_book.len());
+        let s = format!(" [{}]", context.accounts[a.index].contacts.len());
         /* Print account name */
         grid.write_string(
             &a.name,
@@ -589,8 +589,8 @@ impl Component for ContactList {
                         return true;
                     }
                     let account = &mut context.accounts[self.account_pos];
-                    let book = &mut account.address_book;
-                    let card = book[&self.id_positions[self.cursor_pos]].clone();
+                    let contacts = &mut account.contacts;
+                    let card = contacts[&self.id_positions[self.cursor_pos]].clone();
                     let mut manager = Box::new(ContactManager::new(context));
                     manager.set_parent_id(self.id);
                     manager.card = card;
@@ -612,8 +612,8 @@ impl Component for ContactList {
                     }
                     let card = {
                         let account = &context.accounts[self.account_pos];
-                        let book = &account.address_book;
-                        book[&self.id_positions[self.cursor_pos]].clone()
+                        let contacts = &account.contacts;
+                        contacts[&self.id_positions[self.cursor_pos]].clone()
                     };
                     super::export_to_vcard(&card, self.account_pos, context);
                     return true;
@@ -626,8 +626,8 @@ impl Component for ContactList {
                     }
                     let account = &context.accounts[self.account_pos];
                     let account_hash = account.hash();
-                    let book = &account.address_book;
-                    let card = &book[&self.id_positions[self.cursor_pos]];
+                    let contacts = &account.contacts;
+                    let card = &contacts[&self.id_positions[self.cursor_pos]];
                     let mut draft: Draft = Draft::default();
                     *draft.headers_mut().get_mut("To").unwrap() =
                         format!("{} <{}>", &card.name(), &card.email());
@@ -649,7 +649,7 @@ impl Component for ContactList {
                     }
                     // [ref:TODO]: add a confirmation dialog?
                     context.accounts[self.account_pos]
-                        .address_book
+                        .contacts
                         .remove_card(self.id_positions[self.cursor_pos]);
                     self.initialized = false;
                     self.set_dirty(true);
@@ -936,7 +936,7 @@ impl Component for ContactList {
     fn status(&self, context: &Context) -> String {
         format!(
             "{} entries",
-            context.accounts[self.account_pos].address_book.len()
+            context.accounts[self.account_pos].contacts.len()
         )
     }
 }

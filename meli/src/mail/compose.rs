@@ -31,7 +31,7 @@ use std::{
 use indexmap::IndexSet;
 use melib::{
     email::attachment_types::{ContentType, MultipartType},
-    list_management, Address, AddressBook, Draft, HeaderName, SpecialUsageMailbox, SubjectPrefix,
+    list_management, Address, Contacts, Draft, HeaderName, SpecialUsageMailbox, SubjectPrefix,
     UnixTimestamp,
 };
 use nix::sys::wait::WaitStatus;
@@ -637,7 +637,7 @@ To: {}
                     k.into(),
                     headers[k].to_string(),
                     Box::new(move |c, term| {
-                        let book: &AddressBook = &c.accounts[&account_hash].address_book;
+                        let book: &Contacts = &c.accounts[&account_hash].contacts;
                         let results: Vec<String> = book.search(term);
                         results
                             .into_iter()

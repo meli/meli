@@ -1,5 +1,5 @@
 /*
- * meli - addressbook module
+ * meli - contacts module
  *
  * Copyright 2019 Manos Pitsidianakis
  *

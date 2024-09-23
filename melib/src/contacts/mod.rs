@@ -1,5 +1,5 @@
 /*
- * meli - addressbook module
+ * meli - contacts module
  *
  * Copyright 2019 Manos Pitsidianakis
  *
@@ -79,7 +79,7 @@ impl From<String> for CardId {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct AddressBook {
+pub struct Contacts {
     display_name: String,
     created: UnixTimestamp,
     last_edited: UnixTimestamp,
@@ -129,7 +129,7 @@ impl Hash for Card {
     }
 }
 
-impl AddressBook {
+impl Contacts {
     pub fn new(display_name: String) -> Self {
         Self {
             display_name,
@@ -219,7 +219,7 @@ impl AddressBook {
     }
 }
 
-impl Deref for AddressBook {
+impl Deref for Contacts {
     type Target = IndexMap<CardId, Card>;
 
     fn deref(&self) -> &IndexMap<CardId, Card> {
