@@ -325,12 +325,10 @@ impl FileSettings {
                     .set_kind(ErrorKind::Configuration));
             }
             #[cfg(not(test))]
-            let ask = crate::terminal::Ask {
-                message: format!(
-                    "No configuration found. Would you like to generate one in {}?",
-                    path_string
-                ),
-            };
+            let ask = crate::terminal::Ask::new(format!(
+                "No configuration found. Would you like to generate one in {}?",
+                path_string
+            ));
             #[cfg(not(test))]
             if ask.run() {
                 create_config_file(&config_path)?;

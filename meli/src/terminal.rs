@@ -422,17 +422,49 @@ derive_csi_sequence!(
     (QuerySynchronizedOutputSupport, "?2026$p")
 );
 
-pub struct Ask {
-    pub message: String,
+pub struct Ask<'m> {
+    message: Cow<'m, str>,
+    default: Option<bool>,
 }
 
-impl Ask {
+impl<'m> Ask<'m> {
+    pub fn new<M>(m: M) -> Self
+    where
+        M: Into<Cow<'m, str>>,
+    {
+        let message = m.into();
+        Self {
+            message,
+            default: Some(true),
+        }
+    }
+
+    pub fn yes_by_default(self, default: bool) -> Self {
+        Self {
+            default: Some(default),
+            ..self
+        }
+    }
+
+    pub fn without_default(self) -> Self {
+        Self {
+            default: None,
+            ..self
+        }
+    }
+
     pub fn run(self) -> bool {
         let mut buffer = String::new();
         let stdin = std::io::stdin();
         let mut handle = stdin.lock();
 
-        print!("{} [Y/n] ", &self.message);
+        let default = match self.default {
+            None => "y/n",
+            Some(true) => "Y/n",
+            Some(false) => "y/N",
+        };
+
+        print!("{} [{default}] ", self.message.as_ref());
         let _ = std::io::stdout().flush();
         loop {
             buffer.clear();
@@ -440,15 +472,16 @@ impl Ask {
                 .read_line(&mut buffer)
                 .expect("Could not read from stdin.");
 
-            match buffer.trim() {
-                "" | "Y" | "y" | "yes" | "YES" | "Yes" => {
+            match (buffer.trim(), self.default) {
+                ("", Some(val)) => return val,
+                ("Y" | "y" | "yes" | "YES" | "Yes", _) => {
                     return true;
                 }
-                "n" | "N" | "no" | "No" | "NO" => {
+                ("n" | "N" | "no" | "No" | "NO", _) => {
                     return false;
                 }
                 _ => {
-                    print!("\n{} [Y/n] ", &self.message);
+                    print!("\n{} [{default}] ", self.message.as_ref());
                     let _ = std::io::stdout().flush();
                 }
             }
