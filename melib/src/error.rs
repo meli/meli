@@ -98,6 +98,9 @@ macro_rules! is_variant {
 }
 
 impl ErrorKind {
+    /// Handy alias for "Already exists" error.
+    pub const ALREADY_EXISTS: Self = Self::OSError(Errno::EEXIST);
+
     is_variant! { is_authentication, Authentication }
     is_variant! { is_bug, Bug }
     is_variant! { is_configuration, Configuration }

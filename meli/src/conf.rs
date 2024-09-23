@@ -345,6 +345,7 @@ impl FileSettings {
             );
         }
 
+        crate::version_migrations::version_setup(&config_path)?;
         Self::validate(config_path, false)
     }
 
