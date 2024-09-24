@@ -37,6 +37,7 @@ pub mod shellexpand;
 pub mod sqlite3;
 #[cfg(test)]
 mod tests;
+pub mod urn;
 pub mod xdg;
 
 pub mod html_escape {
