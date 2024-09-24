@@ -67,7 +67,7 @@ impl From<String> for CardId {
     fn from(s: String) -> Self {
         use std::{collections::hash_map::DefaultHasher, str::FromStr};
 
-        if let Ok(u) = Uuid::parse_str(s.as_str()) {
+        if let Ok(u) = Uuid::try_parse(s.as_str()) {
             Self::Uuid(u)
         } else if let Ok(num) = u64::from_str(s.trim()) {
             Self::Hash(num)

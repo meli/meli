@@ -49,8 +49,12 @@ use crate::error::{ErrorKind, Result, ResultIntoError};
 pub type UnixTimestamp = u64;
 
 pub mod formats {
+    //! Format string constants for use with `strftime`/`strptime`.
+
     /// `<date>`T`<time>`
     pub const RFC3339_DATETIME: &str = "%Y-%m-%dT%H:%M:%S\0";
+    /// `<date>`T`<time>Z`
+    pub const RFC3339_DATETIME_Z: &str = "%Y-%m-%dT%H:%M:%SZ\0";
     /// `<date>`T`<time>`
     pub const RFC3339_DATETIME_AND_SPACE: &str = "%Y-%m-%d %H:%M:%S\0";
 
