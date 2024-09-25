@@ -43,6 +43,7 @@ pub mod prelude {
         sync::Arc,
     };
 
+    pub use indexmap::{self, IndexMap, IndexSet};
     pub use smallvec::{self, SmallVec};
 
     pub use super::{

@@ -129,7 +129,7 @@ pub struct UIDStore {
 
     pub collection: Collection,
     pub store: Arc<FutureMutex<Option<store::Store>>>,
-    pub mailboxes: Arc<FutureMutex<HashMap<MailboxHash, NntpMailbox>>>,
+    pub mailboxes: Arc<FutureMutex<IndexMap<MailboxHash, NntpMailbox>>>,
     pub is_online: Arc<FutureMutex<(Instant, Result<()>)>>,
     pub is_subscribed: IsSubscribedFn,
     pub event_consumer: BackendEventConsumer,
@@ -706,7 +706,7 @@ impl NntpType {
         };
         let account_hash = AccountHash::from_bytes(s.name.as_bytes());
         let account_name = s.name.to_string().into();
-        let mut mailboxes = HashMap::default();
+        let mut mailboxes = IndexMap::default();
         for (k, _f) in s.mailboxes.iter() {
             let mailbox_hash = MailboxHash::from_bytes(k.as_bytes());
             mailboxes.insert(
@@ -804,7 +804,7 @@ impl NntpType {
             let mut mailboxes_lck = conn.uid_store.mailboxes.lock().await;
             for l in res.split_rn().skip(1) {
                 let s = l.split_whitespace().collect::<SmallVec<[&str; 4]>>();
-                if s.len() != 3 {
+                if s.len() != 4 {
                     continue;
                 }
                 let mailbox_hash = MailboxHash::from_bytes(s[0].as_bytes());
@@ -813,6 +813,37 @@ impl NntpType {
                     *m.low_watermark.lock().unwrap() = usize::from_str(s[2]).unwrap_or(0);
                 });
             }
+        }
+        // Ok, done collecting information about groups specified in configuration. Now
+        // retrieve all other groups:
+        conn.send_command(b"LIST ACTIVE").await?;
+        conn.read_response(&mut res, true, &["215 "])
+            .await
+            .chain_err_summary(|| {
+                format!(
+                    "Could not get newsgroups {}: expected LIST ACTIVE response but got: {}",
+                    &conn.uid_store.account_name, res
+                )
+            })
+            .chain_err_kind(ErrorKind::ProtocolError)?;
+        let mut mailboxes_lck = conn.uid_store.mailboxes.lock().await;
+        for l in res.split_rn().skip(1) {
+            let s = l.split_whitespace().collect::<SmallVec<[&str; 4]>>();
+            if s.is_empty() || s.len() != 4 || !(conn.uid_store.is_subscribed)(s[0]) {
+                continue;
+            }
+            let mailbox_hash = MailboxHash::from_bytes(s[0].as_bytes());
+            mailboxes_lck
+                .entry(mailbox_hash)
+                .or_insert_with(|| NntpMailbox {
+                    hash: mailbox_hash,
+                    nntp_path: s[0].to_string(),
+                    high_watermark: Arc::new(Mutex::new(usize::from_str(s[1]).unwrap_or(0))),
+                    low_watermark: Arc::new(Mutex::new(usize::from_str(s[2]).unwrap_or(0))),
+                    latest_article: Arc::new(Mutex::new(None)),
+                    exists: Default::default(),
+                    unseen: Default::default(),
+                });
         }
         Ok(())
     }
