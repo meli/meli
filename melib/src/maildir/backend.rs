@@ -142,6 +142,7 @@ pub struct MaildirType {
     pub mailbox_index: Arc<Mutex<HashMap<EnvelopeHash, MailboxHash>>>,
     pub hash_indexes: HashIndexes,
     pub event_consumer: BackendEventConsumer,
+    pub is_subscribed: IsSubscribedFn,
     pub collection: Collection,
     pub path: PathBuf,
     pub config: Arc<Configuration>,
@@ -596,7 +597,7 @@ impl MailBackend for MaildirType {
 impl MaildirType {
     pub fn new(
         settings: &AccountSettings,
-        is_subscribed: Box<dyn Fn(&str) -> bool>,
+        is_subscribed: IsSubscribedFn,
         event_consumer: BackendEventConsumer,
     ) -> Result<Box<Self>> {
         let config = Arc::new(Configuration::new(settings)?);
@@ -745,6 +746,7 @@ impl MaildirType {
         Ok(Box::new(Self {
             name: settings.name.to_string(),
             mailboxes,
+            is_subscribed,
             hash_indexes: Arc::new(Mutex::new(hash_indexes)),
             mailbox_index: Default::default(),
             event_consumer,

@@ -259,7 +259,7 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
 
             let imap = melib::imap::ImapType::new(
                 &account_conf.account,
-                Box::new(|_| true),
+                Default::default(),
                 melib::BackendEventConsumer::new(std::sync::Arc::new(|_, _| ())),
             )?;
 

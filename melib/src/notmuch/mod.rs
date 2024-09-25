@@ -274,7 +274,7 @@ impl NotmuchDb {
 
     pub fn new(
         s: &AccountSettings,
-        _is_subscribed: Box<dyn Fn(&str) -> bool>,
+        _is_subscribed: IsSubscribedFn,
         event_consumer: BackendEventConsumer,
     ) -> Result<Box<Self>> {
         let mut dlpath = Cow::Borrowed(Self::DEFAULT_DYLIB_NAME);

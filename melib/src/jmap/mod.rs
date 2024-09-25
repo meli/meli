@@ -293,7 +293,7 @@ pub struct Store {
     pub mailboxes_index: Arc<RwLock<HashMap<MailboxHash, HashSet<EnvelopeHash>>>>,
     pub mailbox_state: Arc<FutureMutex<State<mailbox::MailboxObject>>>,
     pub online_status: OnlineStatus,
-    pub is_subscribed: Arc<IsSubscribedFn>,
+    pub is_subscribed: IsSubscribedFn,
     pub core_capabilities: Arc<Mutex<IndexMap<String, CapabilitiesObject>>>,
     pub event_consumer: BackendEventConsumer,
 }
@@ -1261,7 +1261,7 @@ impl MailBackend for JmapType {
 impl JmapType {
     pub fn new(
         s: &AccountSettings,
-        is_subscribed: Box<dyn Fn(&str) -> bool + Send + Sync>,
+        is_subscribed: IsSubscribedFn,
         event_consumer: BackendEventConsumer,
     ) -> Result<Box<Self>> {
         let online_status = OnlineStatus(Arc::new(FutureMutex::new((
@@ -1278,7 +1278,7 @@ impl JmapType {
             extra_identities: s.extra_identities.clone(),
             online_status,
             event_consumer,
-            is_subscribed: Arc::new(IsSubscribedFn(is_subscribed)),
+            is_subscribed,
             collection: Collection::default(),
             core_capabilities: Arc::new(Mutex::new(IndexMap::default())),
             byte_cache: Default::default(),

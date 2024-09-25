@@ -79,7 +79,7 @@ pub trait PublicInbox {
             extra,
         };
 
-        NntpType::new(&account_conf, Box::new(|_| true), event_consumer)
+        NntpType::new(&account_conf, Default::default(), event_consumer)
     }
 }
 

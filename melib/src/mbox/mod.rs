@@ -1276,7 +1276,7 @@ macro_rules! get_conf_val {
 impl MboxType {
     pub fn new(
         s: &AccountSettings,
-        _is_subscribed: Box<dyn Fn(&str) -> bool>,
+        _is_subscribed: IsSubscribedFn,
         event_consumer: BackendEventConsumer,
     ) -> Result<Box<Self>> {
         let path = Path::new(s.root_mailbox.as_str()).expand();

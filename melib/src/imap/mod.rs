@@ -240,7 +240,7 @@ impl UIDStore {
 
 #[derive(Debug)]
 pub struct ImapType {
-    pub _is_subscribed: Arc<IsSubscribedFn>,
+    pub _is_subscribed: IsSubscribedFn,
     pub connection: Arc<FutureMutex<ImapConnection>>,
     pub server_conf: ImapServerConf,
     pub uid_store: Arc<UIDStore>,
@@ -1359,7 +1359,7 @@ impl MailBackend for ImapType {
 impl ImapType {
     pub fn new(
         s: &AccountSettings,
-        is_subscribed: Box<dyn Fn(&str) -> bool + Send + Sync>,
+        is_subscribed: IsSubscribedFn,
         event_consumer: BackendEventConsumer,
     ) -> Result<Box<Self>> {
         let server_hostname = get_conf_val!(s["server_hostname"])?;
@@ -1439,7 +1439,7 @@ impl ImapType {
 
         Ok(Box::new(Self {
             server_conf,
-            _is_subscribed: Arc::new(IsSubscribedFn(is_subscribed)),
+            _is_subscribed: is_subscribed,
             connection: Arc::new(FutureMutex::new(connection)),
             uid_store,
         }))

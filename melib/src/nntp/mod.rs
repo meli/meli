@@ -131,6 +131,7 @@ pub struct UIDStore {
     pub store: Arc<FutureMutex<Option<store::Store>>>,
     pub mailboxes: Arc<FutureMutex<HashMap<MailboxHash, NntpMailbox>>>,
     pub is_online: Arc<FutureMutex<(Instant, Result<()>)>>,
+    pub is_subscribed: IsSubscribedFn,
     pub event_consumer: BackendEventConsumer,
 }
 
@@ -155,17 +156,16 @@ impl UIDStore {
                 Instant::now(),
                 Err(Error::new("Account is uninitialised.")),
             ))),
+            is_subscribed: IsSubscribedFn::default(),
         }
     }
 }
 
 #[derive(Debug)]
 pub struct NntpType {
-    pub _is_subscribed: Arc<IsSubscribedFn>,
     pub connection: Arc<FutureMutex<NntpConnection>>,
     pub server_conf: NntpServerConf,
     pub uid_store: Arc<UIDStore>,
-    pub _can_create_flags: Arc<Mutex<bool>>,
 }
 
 impl MailBackend for NntpType {
@@ -651,7 +651,7 @@ impl MailBackend for NntpType {
 impl NntpType {
     pub fn new(
         s: &AccountSettings,
-        is_subscribed: Box<dyn Fn(&str) -> bool + Send + Sync>,
+        is_subscribed: IsSubscribedFn,
         event_consumer: BackendEventConsumer,
     ) -> Result<Box<Self>> {
         let server_hostname = get_conf_val!(s["server_hostname"])?;
@@ -735,14 +735,13 @@ impl NntpType {
             } else {
                 Default::default()
             },
+            is_subscribed,
             ..UIDStore::new(account_hash, account_name, event_consumer)
         });
         let connection = NntpConnection::new_connection(&server_conf, uid_store.clone());
 
         Ok(Box::new(Self {
             server_conf,
-            _is_subscribed: Arc::new(IsSubscribedFn(is_subscribed)),
-            _can_create_flags: Arc::new(Mutex::new(false)),
             connection: Arc::new(FutureMutex::new(connection)),
             uid_store,
         }))

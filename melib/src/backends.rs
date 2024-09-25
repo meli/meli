@@ -62,11 +62,7 @@ pub mod prelude {
 use prelude::*;
 
 pub type BackendCreator = Box<
-    dyn Fn(
-        &AccountSettings,
-        Box<dyn Fn(&str) -> bool + Send + Sync>,
-        BackendEventConsumer,
-    ) -> Result<Box<dyn MailBackend>>,
+    dyn Fn(&AccountSettings, IsSubscribedFn, BackendEventConsumer) -> Result<Box<dyn MailBackend>>,
 >;
 
 pub type BackendValidateConfigFn = Box<dyn Fn(&mut AccountSettings) -> Result<()>>;
@@ -349,6 +345,24 @@ impl Deref for BackendEventConsumer {
 
     fn deref(&self) -> &Self::Target {
         &(*self.0)
+    }
+}
+
+impl From<Arc<dyn Fn(AccountHash, BackendEvent) + Send + Sync>> for BackendEventConsumer {
+    fn from(val: Arc<dyn Fn(AccountHash, BackendEvent) + Send + Sync>) -> Self {
+        Self(val)
+    }
+}
+
+impl From<Box<dyn Fn(AccountHash, BackendEvent) + Send + Sync>> for BackendEventConsumer {
+    fn from(val: Box<dyn Fn(AccountHash, BackendEvent) + Send + Sync>) -> Self {
+        Self(val.into())
+    }
+}
+
+impl Default for BackendEventConsumer {
+    fn default() -> Self {
+        Self(Arc::new(|_, _| {}))
     }
 }
 
@@ -821,7 +835,26 @@ impl LazyCountSet {
     }
 }
 
-pub struct IsSubscribedFn(pub Box<dyn Fn(&str) -> bool + Send + Sync>);
+#[derive(Clone)]
+pub struct IsSubscribedFn(Arc<dyn Fn(&str) -> bool + Send + Sync>);
+
+impl From<Arc<dyn Fn(&str) -> bool + Send + Sync>> for IsSubscribedFn {
+    fn from(val: Arc<dyn Fn(&str) -> bool + Send + Sync>) -> Self {
+        Self(val)
+    }
+}
+
+impl From<Box<dyn Fn(&str) -> bool + Send + Sync>> for IsSubscribedFn {
+    fn from(val: Box<dyn Fn(&str) -> bool + Send + Sync>) -> Self {
+        Self(val.into())
+    }
+}
+
+impl Default for IsSubscribedFn {
+    fn default() -> Self {
+        Self(Arc::new(|_| true))
+    }
+}
 
 impl std::fmt::Debug for IsSubscribedFn {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -830,8 +863,9 @@ impl std::fmt::Debug for IsSubscribedFn {
 }
 
 impl std::ops::Deref for IsSubscribedFn {
-    type Target = Box<dyn Fn(&str) -> bool + Send + Sync>;
-    fn deref(&self) -> &Box<dyn Fn(&str) -> bool + Send + Sync> {
-        &self.0
+    type Target = dyn Fn(&str) -> bool + Send + Sync;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref()
     }
 }

@@ -203,7 +203,7 @@ impl Account {
         let s = settings.clone();
         let backend = map.get(&settings.account().format)(
             settings.account(),
-            Box::new(move |path: &str| {
+            (Box::new(move |path: &str| {
                 // disjoint-capture-in-closures
                 let _ = &s;
                 s.account.subscribed_mailboxes.is_empty()
@@ -213,7 +213,8 @@ impl Account {
                         .subscribed_mailboxes
                         .iter()
                         .any(|m| path.fnmatches(m))
-            }),
+            }) as Box<dyn Fn(&str) -> bool + Send + Sync>)
+                .into(),
             event_consumer,
         )?;
 
