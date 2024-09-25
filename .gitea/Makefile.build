@@ -12,26 +12,26 @@ RUSTUP_MAX_RETRIES ?= 10
 RUST_BACKTRACE ?= short
 
 .PHONY: all
-all: cargo-check compile cargo-test rustdoc-build rustdoc-test
-	printf "All completed.\n"
+all: cargo-check cargo-test-compiles cargo-test rustdoc-build rustdoc-test
+	@printf "All completed.\n"
 
 .PHONY: cargo-check
 cargo-check:
-	printf "cargo-check\n"
+	@printf "cargo-check\n"
 	cargo check --all-features --all --tests --examples --benches --bins
 .PHONY: cargo-test-compiles
 cargo-test-compiles:
-	printf "cargo-test-compiles\n"
+	@printf "cargo-test-compiles\n"
 	cargo test --all --no-fail-fast --all-features --no-run --locked
 .PHONY: cargo-test
 cargo-test:
-	printf "cargo-test\n"
+	@printf "cargo-test\n"
 	cargo nextest run --all --no-fail-fast --all-features --future-incompat-report -E 'not (test(smtp::test::test_smtp))'
 .PHONY: rustdoc-build
 rustdoc-build:
-	printf "rustdoc-build\n"
+	@printf "rustdoc-build\n"
 	env DISPLAY= WAYLAND_DISPLAY= make build-rustdoc
 .PHONY: rustdoc-test
 rustdoc-test:
-	printf "rustdoc-test\n"
+	@printf "rustdoc-test\n"
 	make test-docs

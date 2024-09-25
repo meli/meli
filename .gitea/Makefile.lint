@@ -12,32 +12,32 @@ RUSTUP_MAX_RETRIES ?= 10
 RUST_BACKTRACE ?= short
 
 .PHONY: all
-all: rustfmt clippy cargo-derivefmt-melib cargo-derivefmt-meli cargo-derifmt-tools
-	printf "All completed.\n"
+all: rustfmt clippy cargo-derivefmt-melib cargo-derivefmt-meli cargo-derivefmt-tools
+	@printf "All completed.\n"
 
 .PHONY: rustfmt
 rustfmt:
-	printf "rustfmt\n"
+	@printf "rustfmt\n"
 	cargo fmt --check --all
 .PHONY: clippy
 clippy:
-	printf "clippy\n"
+	@printf "clippy\n"
 	cargo clippy --no-deps --all-features --all --tests --examples --benches --bins
 .PHONY: cargo-derivefmt-melib
 cargo-derivefmt-melib:
-	printf "cargo-derivefmt-melib\n"
+	@printf "cargo-derivefmt-melib\n"
 	cargo derivefmt --manifest-path ./melib/Cargo.toml
 	git checkout meli/src/conf/overrides.rs
-	git add ./melib/ && git diff --quiet && git diff --cached --quiet
+	git add --update ./melib/ && git diff --quiet && git diff --cached --quiet
 .PHONY: cargo-derivefmt-meli
 cargo-derivefmt-meli:
-	printf "cargo-derivefmt-meli\n"
+	@printf "cargo-derivefmt-meli\n"
 	cargo derivefmt --manifest-path ./meli/Cargo.toml
 	git checkout meli/src/conf/overrides.rs
-	git add ./meli/ && git diff --quiet && git diff --cached --quiet
+	git add --update ./meli/ && git diff --quiet && git diff --cached --quiet
 .PHONY: cargo-derivefmt-tools
 cargo-derivefmt-tools:
-	printf "cargo-derivefmt-tools\n"
+	@printf "cargo-derivefmt-tools\n"
 	cargo derivefmt --manifest-path ./tools/Cargo.toml
 	git checkout meli/src/conf/overrides.rs
-	git add ./tools/ && git diff --quiet && git diff --cached --quiet
+	git add --update ./tools/ && git diff --quiet && git diff --cached --quiet
