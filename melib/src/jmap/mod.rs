@@ -794,13 +794,51 @@ impl MailBackend for JmapType {
 
     fn set_mailbox_subscription(
         &mut self,
-        _mailbox_hash: MailboxHash,
-        _val: bool,
+        mailbox_hash: MailboxHash,
+        val: bool,
     ) -> ResultFuture<()> {
-        Err(Error::new(
-            "Setting mailbox subscription is currently unimplemented for the JMAP backend.",
-        )
-        .set_kind(ErrorKind::NotImplemented))
+        let store = self.store.clone();
+        let mailbox_id: Id<mailbox::MailboxObject> = {
+            let mailboxes_lck = store.mailboxes.read().unwrap();
+            let Some(id) = mailboxes_lck.get(&mailbox_hash).map(|m| m.id.clone()) else {
+                return Err(
+                    Error::new(format!("Mailbox with hash {} not found", mailbox_hash))
+                        .set_kind(ErrorKind::NotFound),
+                );
+            };
+            id
+        };
+        let connection = self.connection.clone();
+        Ok(Box::pin(async move {
+            let mailbox_state = store.mailbox_state.lock().await.clone();
+            let mut conn = connection.lock().await;
+            let mail_account_id = conn.session_guard().await?.mail_account_id();
+            let mailbox_set_call = mailbox::MailboxSet::new(
+                Set::<mailbox::MailboxObject>::new(mailbox_state)
+                    .account_id(mail_account_id)
+                    .update(Some({
+                        indexmap! {
+                            mailbox_id.clone().into() => serde_json::json!{indexmap! {
+                                "isSubscribed" => val
+                            }}
+                        }
+                    })),
+            );
+
+            let mut req = Request::new(conn.request_no.clone());
+            let _prev_seq = req.add_call(&mailbox_set_call).await;
+            let res_text = conn.send_request(serde_json::to_string(&req)?).await?;
+            let v: MethodResponse = deserialize_from_str(&res_text)?;
+            conn.store.online_status.update_timestamp(None).await;
+            let SetResponse::<mailbox::MailboxObject> { new_state, .. } =
+                SetResponse::<mailbox::MailboxObject>::try_from(
+                    *v.method_responses.last().unwrap(),
+                )?;
+            *conn.store.mailbox_state.lock().await = Some(new_state);
+            conn.last_method_response = Some(res_text);
+
+            Ok(())
+        }))
     }
 
     fn set_mailbox_permissions(
