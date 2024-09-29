@@ -82,7 +82,7 @@ pub mod session;
 use session::*;
 
 pub mod objects;
-use objects::{BlobObject, Id, Object, State};
+use objects::{BlobObject, Id, State};
 
 pub mod methods;
 use methods::{
@@ -291,7 +291,8 @@ pub struct Store {
     pub collection: Collection,
     pub mailboxes: Arc<RwLock<HashMap<MailboxHash, JmapMailbox>>>,
     pub mailboxes_index: Arc<RwLock<HashMap<MailboxHash, HashSet<EnvelopeHash>>>>,
-    pub mailbox_state: Arc<FutureMutex<State<mailbox::MailboxObject>>>,
+    pub mailbox_state: Arc<FutureMutex<Option<State<mailbox::MailboxObject>>>>,
+    pub email_state: Arc<FutureMutex<Option<State<email::EmailObject>>>>,
     pub online_status: OnlineStatus,
     pub is_subscribed: IsSubscribedFn,
     pub core_capabilities: Arc<Mutex<IndexMap<String, CapabilitiesObject>>>,
@@ -703,7 +704,7 @@ impl MailBackend for JmapType {
             let mut conn = connection.lock().await;
             let mail_account_id = conn.session_guard().await?.mail_account_id();
             let mailbox_set_call = mailbox::MailboxSet::new(
-                Set::<mailbox::MailboxObject>::new(Some(mailbox_state))
+                Set::<mailbox::MailboxObject>::new(mailbox_state)
                     .account_id(mail_account_id)
                     .update(Some({
                         indexmap! {
@@ -744,7 +745,7 @@ impl MailBackend for JmapType {
             let mut conn = connection.lock().await;
             let mail_account_id = conn.session_guard().await?.mail_account_id();
             let mailbox_set_call = mailbox::MailboxSet::new(
-                Set::<mailbox::MailboxObject>::new(Some(mailbox_state))
+                Set::<mailbox::MailboxObject>::new(mailbox_state)
                     .account_id(mail_account_id)
                     .create(Some({
                         let id: Id<mailbox::MailboxObject> = path.as_str().into();
@@ -870,9 +871,10 @@ impl MailBackend for JmapType {
             }
             let conn = connection.lock().await;
             let mail_account_id = conn.session_guard().await?.mail_account_id();
+            let state = conn.store.email_state.lock().await.clone();
 
             let email_set_call = email::EmailSet::new(
-                Set::<email::EmailObject>::new(None)
+                Set::<email::EmailObject>::new(state)
                     .account_id(mail_account_id)
                     .update(Some(update_map)),
             );
@@ -894,8 +896,13 @@ impl MailBackend for JmapType {
                 Ok(s) => s,
             };
             store.online_status.update_timestamp(None).await;
-            let m = SetResponse::<email::EmailObject>::try_from(v.method_responses.remove(0))?;
-            if let Some(ids) = m.not_updated {
+            let SetResponse {
+                not_updated,
+                new_state,
+                ..
+            } = SetResponse::<email::EmailObject>::try_from(v.method_responses.remove(0))?;
+            *conn.store.email_state.lock().await = Some(new_state);
+            if let Some(ids) = not_updated {
                 if !ids.is_empty() {
                     return Err(Error::new(format!(
                         "Could not update ids: {}",
@@ -983,9 +990,10 @@ impl MailBackend for JmapType {
             }
             let conn = connection.lock().await;
             let mail_account_id = conn.session_guard().await?.mail_account_id();
+            let state = conn.store.email_state.lock().await.clone();
 
             let email_set_call = email::EmailSet::new(
-                Set::<email::EmailObject>::new(None)
+                Set::<email::EmailObject>::new(state)
                     .account_id(mail_account_id.clone())
                     .update(Some(update_map)),
             );
@@ -1015,8 +1023,13 @@ impl MailBackend for JmapType {
                 Ok(s) => s,
             };
             store.online_status.update_timestamp(None).await;
-            let m = SetResponse::<email::EmailObject>::try_from(v.method_responses.remove(0))?;
-            if let Some(ids) = m.not_updated {
+            let SetResponse {
+                not_updated,
+                new_state,
+                ..
+            } = SetResponse::<email::EmailObject>::try_from(v.method_responses.remove(0))?;
+            *conn.store.email_state.lock().await = Some(new_state);
+            if let Some(ids) = not_updated {
                 return Err(Error::new(
                     ids.into_iter()
                         .map(|err| err.to_string())
@@ -1035,31 +1048,7 @@ impl MailBackend for JmapType {
                 drop(tag_index_lck);
             }
             let e = GetResponse::<email::EmailObject>::try_from(v.method_responses.pop().unwrap())?;
-            let GetResponse::<email::EmailObject> { list, state, .. } = e;
-            {
-                let (is_empty, is_equal) = {
-                    let mailboxes_lck = conn.store.mailboxes.read().unwrap();
-                    mailboxes_lck
-                        .get(&mailbox_hash)
-                        .map(|mbox| {
-                            let current_state_lck = mbox.email_state.lock().unwrap();
-                            (
-                                current_state_lck.is_some(),
-                                current_state_lck.as_ref() != Some(&state),
-                            )
-                        })
-                        .unwrap_or((true, true))
-                };
-                if is_empty {
-                    let mut mailboxes_lck = conn.store.mailboxes.write().unwrap();
-                    debug!("{:?}: inserting state {}", email::EmailObject::NAME, &state);
-                    mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
-                        *mbox.email_state.lock().unwrap() = Some(state);
-                    });
-                } else if !is_equal {
-                    conn.email_changes(mailbox_hash).await?;
-                }
-            }
+            let GetResponse::<email::EmailObject> { list, .. } = e;
             debug!(&list);
             for envobj in list {
                 let env_hash = id_map[&envobj.id];
@@ -1288,6 +1277,7 @@ impl JmapType {
             mailboxes: Default::default(),
             mailboxes_index: Default::default(),
             mailbox_state: Default::default(),
+            email_state: Default::default(),
         });
 
         Ok(Box::new(Self {

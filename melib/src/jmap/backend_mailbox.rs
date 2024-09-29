@@ -25,9 +25,8 @@ use crate::{
     backends::{BackendMailbox, LazyCountSet, MailboxPermissions, SpecialUsageMailbox},
     error::Result,
     jmap::{
-        email::EmailObject,
         mailbox::{JmapRights, MailboxObject},
-        objects::{Id, State},
+        objects::Id,
     },
     Mailbox, MailboxHash,
 };
@@ -50,7 +49,6 @@ pub struct JmapMailbox {
     pub unread_emails: Arc<Mutex<LazyCountSet>>,
     pub unread_threads: u64,
     pub usage: Arc<RwLock<SpecialUsageMailbox>>,
-    pub email_state: Arc<Mutex<Option<State<EmailObject>>>>,
     pub email_query_state: Arc<Mutex<Option<String>>>,
 }
 

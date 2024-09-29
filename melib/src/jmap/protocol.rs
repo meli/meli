@@ -137,7 +137,7 @@ pub async fn get_mailboxes(
         state,
         ..
     } = m;
-    *conn.store.mailbox_state.lock().await = state;
+    *conn.store.mailbox_state.lock().await = Some(state);
     conn.last_method_response = Some(res_text);
     // Is account set as `personal`? (`isPersonal` property). Then, even if
     // `isSubscribed` is false on a mailbox, it should be regarded as
@@ -193,7 +193,6 @@ pub async fn get_mailboxes(
                     total_threads,
                     unread_emails: Arc::new(Mutex::new(unread_emails)),
                     unread_threads,
-                    email_state: Arc::new(Mutex::new(None)),
                     email_query_state: Arc::new(Mutex::new(None)),
                 },
             )
@@ -268,24 +267,15 @@ impl EmailFetcher {
     ) -> Result<bool> {
         {
             let (is_empty, is_equal) = {
-                let mailboxes_lck = conn.store.mailboxes.read().unwrap();
-                mailboxes_lck
-                    .get(&mailbox_hash)
-                    .map(|mbox| {
-                        let current_state_lck = mbox.email_state.lock().unwrap();
-                        (
-                            current_state_lck.is_none(),
-                            current_state_lck.as_ref() == Some(&state),
-                        )
-                    })
-                    .unwrap_or((true, true))
+                let current_state_lck = conn.store.email_state.lock().await;
+                (
+                    current_state_lck.is_none(),
+                    current_state_lck.as_ref() == Some(&state),
+                )
             };
             if is_empty {
-                let mut mailboxes_lck = conn.store.mailboxes.write().unwrap();
                 debug!("{:?}: inserting state {}", EmailObject::NAME, &state);
-                mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
-                    *mbox.email_state.lock().unwrap() = Some(state);
-                });
+                *conn.store.email_state.lock().await = Some(state);
             } else if !is_equal {
                 conn.email_changes(mailbox_hash).await?;
             }

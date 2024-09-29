@@ -439,18 +439,12 @@ impl JmapConnection {
     }
 
     pub async fn email_changes(&self, mailbox_hash: MailboxHash) -> Result<()> {
-        let mut current_state: State<EmailObject> = if let Some(s) = self
-            .store
-            .mailboxes
-            .read()
-            .unwrap()
-            .get(&mailbox_hash)
-            .and_then(|mbox| mbox.email_state.lock().unwrap().clone())
-        {
-            s
-        } else {
-            return Ok(());
-        };
+        let mut current_state: State<EmailObject> =
+            if let Some(s) = self.store.email_state.lock().await.clone() {
+                s
+            } else {
+                return Ok(());
+            };
         let mail_account_id = self.session_guard().await?.mail_account_id();
         loop {
             let email_changes_call: EmailChanges = EmailChanges::new(
@@ -658,37 +652,32 @@ impl JmapConnection {
             }
             let GetResponse::<EmailObject> { list, .. } =
                 GetResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
-            let mut mailboxes_lck = self.store.mailboxes.write().unwrap();
-            for envobj in list {
-                if let Some(env_hash) = reverse_id_store_lck.get(&envobj.id) {
-                    let new_flags =
-                        protocol::keywords_to_flags(envobj.keywords().keys().cloned().collect());
-                    mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
-                        if new_flags.0.contains(Flag::SEEN) {
-                            mbox.unread_emails.lock().unwrap().remove(*env_hash);
-                        } else {
-                            mbox.unread_emails.lock().unwrap().insert_new(*env_hash);
-                        }
-                    });
-                    self.add_refresh_event(RefreshEvent {
-                        account_hash: self.store.account_hash,
-                        mailbox_hash,
-                        kind: RefreshEventKind::NewFlags(*env_hash, new_flags),
-                    });
+            {
+                let mut mailboxes_lck = self.store.mailboxes.write().unwrap();
+                for envobj in list {
+                    if let Some(env_hash) = reverse_id_store_lck.get(&envobj.id) {
+                        let new_flags = protocol::keywords_to_flags(
+                            envobj.keywords().keys().cloned().collect(),
+                        );
+                        mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
+                            if new_flags.0.contains(Flag::SEEN) {
+                                mbox.unread_emails.lock().unwrap().remove(*env_hash);
+                            } else {
+                                mbox.unread_emails.lock().unwrap().insert_new(*env_hash);
+                            }
+                        });
+                        self.add_refresh_event(RefreshEvent {
+                            account_hash: self.store.account_hash,
+                            mailbox_hash,
+                            kind: RefreshEventKind::NewFlags(*env_hash, new_flags),
+                        });
+                    }
                 }
             }
-            drop(mailboxes_lck);
             if changes_response.has_more_changes {
                 current_state = changes_response.new_state;
             } else {
-                self.store
-                    .mailboxes
-                    .write()
-                    .unwrap()
-                    .entry(mailbox_hash)
-                    .and_modify(|mbox| {
-                        *mbox.email_state.lock().unwrap() = Some(changes_response.new_state);
-                    });
+                *self.store.email_state.lock().await = Some(changes_response.new_state);
 
                 break;
             }
