@@ -1105,13 +1105,86 @@ impl MailBackend for JmapType {
 
     fn delete_messages(
         &mut self,
-        _env_hashes: EnvelopeHashBatch,
-        _mailbox_hash: MailboxHash,
+        env_hashes: EnvelopeHashBatch,
+        mailbox_hash: MailboxHash,
     ) -> ResultFuture<()> {
-        Err(
-            Error::new("Deleting messages is currently unimplemented for the JMAP backend.")
-                .set_kind(ErrorKind::NotImplemented),
-        )
+        {
+            let mailboxes_lck = self.store.mailboxes.read().unwrap();
+            if !mailboxes_lck.contains_key(&mailbox_hash) {
+                return Err(Error::new(format!(
+                    "Could not find source mailbox with hash {}",
+                    mailbox_hash
+                )));
+            };
+        }
+        let store = self.store.clone();
+        let connection = self.connection.clone();
+        Ok(Box::pin(async move {
+            let mut destroy_vec: Vec<Argument<Id<email::EmailObject>>> =
+                Vec::with_capacity(env_hashes.len());
+            for env_hash in env_hashes.iter() {
+                if let Some(id) = store.id_store.lock().await.get(&env_hash) {
+                    destroy_vec.push(Argument::Value(id.clone()));
+                }
+            }
+            let batch_len = destroy_vec.len();
+            let conn = connection.lock().await;
+            let mail_account_id = conn.session_guard().await?.mail_account_id();
+            let state = conn.store.email_state.lock().await.clone();
+
+            let email_set_call = email::EmailSet::new(
+                Set::<email::EmailObject>::new(state)
+                    .account_id(mail_account_id)
+                    .destroy(Some(destroy_vec)),
+            );
+
+            let mut req = Request::new(conn.request_no.clone());
+            let _prev_seq = req.add_call(&email_set_call).await;
+
+            let res_text = conn
+                .post_async(None, serde_json::to_string(&req)?)
+                .await?
+                .text()
+                .await?;
+
+            let mut v: MethodResponse = match deserialize_from_str(&res_text) {
+                Err(err) => {
+                    _ = conn.store.online_status.set(None, Err(err.clone())).await;
+                    return Err(err);
+                }
+                Ok(s) => s,
+            };
+            store.online_status.update_timestamp(None).await;
+            let SetResponse {
+                not_destroyed,
+                new_state,
+                ..
+            } = SetResponse::<email::EmailObject>::try_from(v.method_responses.remove(0))?;
+            *conn.store.email_state.lock().await = Some(new_state);
+            conn.add_backend_event(BackendEvent::RefreshBatch(
+                env_hashes
+                    .iter()
+                    .map(|h| RefreshEvent {
+                        account_hash: store.account_hash,
+                        mailbox_hash,
+                        kind: RefreshEventKind::Remove(h),
+                    })
+                    .collect(),
+            ));
+            if let Some(ids) = not_destroyed {
+                if !ids.is_empty() {
+                    return Err(Error::new(format!(
+                        "Could not destroy {}ids: {}",
+                        if ids.len() == batch_len { "" } else { "some " },
+                        ids.iter()
+                            .map(|err| err.to_string())
+                            .collect::<Vec<String>>()
+                            .join(",")
+                    )));
+                }
+            }
+            Ok(())
+        }))
     }
 
     // [ref:TODO] add support for BLOB extension

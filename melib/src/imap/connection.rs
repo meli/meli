@@ -1270,8 +1270,13 @@ impl ImapConnection {
         Ok(())
     }
 
+    #[inline]
     pub fn add_refresh_event(&self, ev: RefreshEvent) {
-        (self.uid_store.event_consumer)(self.uid_store.account_hash, BackendEvent::Refresh(ev));
+        self.add_backend_event(BackendEvent::Refresh(ev));
+    }
+
+    pub fn add_backend_event(&self, ev: BackendEvent) {
+        (self.uid_store.event_consumer)(self.uid_store.account_hash, ev);
     }
 
     async fn create_uid_msn_cache(

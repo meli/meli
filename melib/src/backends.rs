@@ -282,10 +282,10 @@ pub enum BackendEvent {
         level: LogLevel,
     },
     Refresh(RefreshEvent),
+    RefreshBatch(Vec<RefreshEvent>),
     AccountStateChange {
         message: Cow<'static, str>,
     },
-    //Job(Box<Future<Output = Result<()>> + Send + 'static>)
 }
 
 impl From<Error> for BackendEvent {

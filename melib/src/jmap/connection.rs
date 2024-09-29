@@ -434,8 +434,13 @@ impl JmapConnection {
         self.store.online_status.session_guard().await
     }
 
-    pub fn add_refresh_event(&self, event: RefreshEvent) {
-        (self.store.event_consumer)(self.store.account_hash, BackendEvent::Refresh(event));
+    #[inline]
+    pub fn add_refresh_event(&self, ev: RefreshEvent) {
+        self.add_backend_event(BackendEvent::Refresh(ev));
+    }
+
+    pub fn add_backend_event(&self, ev: BackendEvent) {
+        (self.store.event_consumer)(self.store.account_hash, ev);
     }
 
     pub async fn email_changes(&self, mailbox_hash: MailboxHash) -> Result<()> {
