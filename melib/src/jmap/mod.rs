@@ -502,7 +502,6 @@ impl MailBackend for JmapType {
                 .read()
                 .unwrap()
                 .iter()
-                .filter(|(_, f)| f.is_subscribed)
                 .map(|(&h, f)| (h, BackendMailbox::clone(f) as Mailbox))
                 .collect();
 
@@ -769,7 +768,6 @@ impl MailBackend for JmapType {
                 .read()
                 .unwrap()
                 .iter()
-                .filter(|(_, f)| f.is_subscribed)
                 .map(|(&h, f)| (h, BackendMailbox::clone(f) as Mailbox))
                 .collect();
             let id = new_mailboxes
@@ -784,12 +782,82 @@ impl MailBackend for JmapType {
 
     fn delete_mailbox(
         &mut self,
-        _mailbox_hash: MailboxHash,
+        mailbox_hash: MailboxHash,
     ) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
-        Err(
-            Error::new("Deleting a mailbox is currently unimplemented for the JMAP backend.")
-                .set_kind(ErrorKind::NotImplemented),
-        )
+        let mailbox_id: Id<mailbox::MailboxObject> = {
+            let mailboxes_lck = self.store.mailboxes.read().unwrap();
+            let Some(id) = mailboxes_lck.get(&mailbox_hash).map(|m| m.id.clone()) else {
+                return Err(
+                    Error::new(format!("Mailbox with hash {} not found", mailbox_hash))
+                        .set_kind(ErrorKind::NotFound),
+                );
+            };
+            id
+        };
+        let store = self.store.clone();
+        let connection = self.connection.clone();
+        Ok(Box::pin(async move {
+            let mut conn = connection.lock().await;
+            let mail_account_id = conn.session_guard().await?.mail_account_id();
+            let mailbox_state = store.mailbox_state.lock().await.clone();
+
+            let mailbox_set_call = mailbox::MailboxSet::new(
+                Set::<mailbox::MailboxObject>::new(mailbox_state)
+                    .account_id(mail_account_id)
+                    .destroy(Some(vec![mailbox_id.into()])),
+            );
+
+            let mut req = Request::new(conn.request_no.clone());
+            let _prev_seq = req.add_call(&mailbox_set_call).await;
+
+            let res_text = conn
+                .post_async(None, serde_json::to_string(&req)?)
+                .await?
+                .text()
+                .await?;
+
+            let mut v: MethodResponse = match deserialize_from_str(&res_text) {
+                Err(err) => {
+                    _ = store.online_status.set(None, Err(err.clone())).await;
+                    return Err(err);
+                }
+                Ok(s) => s,
+            };
+            store.online_status.update_timestamp(None).await;
+            let SetResponse {
+                not_destroyed,
+                new_state,
+                ..
+            } = SetResponse::<mailbox::MailboxObject>::try_from(v.method_responses.remove(0))?;
+            *store.mailbox_state.lock().await = Some(new_state);
+            if let Some(ids) = not_destroyed {
+                if !ids.is_empty() {
+                    return Err(Error::new(format!(
+                        "Could not delete mailbox: {}",
+                        ids.iter()
+                            .map(|err| err.to_string())
+                            .collect::<Vec<String>>()
+                            .join(",")
+                    )));
+                }
+            }
+            conn.add_refresh_event(RefreshEvent {
+                account_hash: store.account_hash,
+                mailbox_hash,
+                kind: RefreshEventKind::MailboxDelete(mailbox_hash),
+            });
+            let new_mailboxes = protocol::get_mailboxes(&mut conn, None).await?;
+            *store.mailboxes.write().unwrap() = new_mailboxes;
+
+            let new_mailboxes: HashMap<MailboxHash, Mailbox> = store
+                .mailboxes
+                .read()
+                .unwrap()
+                .iter()
+                .map(|(&h, f)| (h, BackendMailbox::clone(f) as Mailbox))
+                .collect();
+            Ok(new_mailboxes)
+        }))
     }
 
     fn set_mailbox_subscription(
