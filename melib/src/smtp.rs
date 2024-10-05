@@ -86,8 +86,6 @@ use crate::{
     error::{Error, ErrorKind, Result, ResultIntoError},
     utils::connections::{std_net::connect as tcp_stream_connect, Connection},
 };
-#[cfg(test)]
-mod tests;
 
 /// Kind of server security (StartTLS/TLS/None) the client should attempt
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]

@@ -81,7 +81,6 @@ tls-static = ["tls", "native-tls/vendored"]
 flate2 = { version = "1.0.16" }
 
 [dev-dependencies]
-mailin-embedded = { version = "0.8", features = ["rtls"] }
 sealed_test = { version = "1.1.0" }
 stderrlog = { version = "^0.5" }
 tempfile = { version = "3.3" }
