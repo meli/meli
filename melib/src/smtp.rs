@@ -518,11 +518,13 @@ impl SmtpConnection {
                         ret.read_lines(&mut res, Some((ReplyCode::_334, &[])))
                             .await
                             .chain_err_kind(ErrorKind::Authentication)?;
+                        #[allow(deprecated)]
                         let buf = base64::encode(&username);
                         ret.send_command(&[buf.as_bytes()]).await?;
                         ret.read_lines(&mut res, Some((ReplyCode::_334, &[])))
                             .await
                             .chain_err_kind(ErrorKind::Authentication)?;
+                        #[allow(deprecated)]
                         let buf = base64::encode(&password);
                         ret.send_command(&[buf.as_bytes()]).await?;
                     } else {
@@ -539,6 +541,7 @@ impl SmtpConnection {
                             buf.extend(username.as_bytes().to_vec());
                             buf.push(b'\0');
                             buf.extend(password);
+                            #[allow(deprecated)]
                             base64::encode(buf)
                         };
                         ret.send_command(&[b"AUTH PLAIN ", username_password.as_bytes()])

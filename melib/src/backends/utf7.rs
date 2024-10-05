@@ -100,6 +100,7 @@ fn encode_modified_utf7(text: &str) -> String {
     for value in text_u16 {
         input.extend_from_slice(&value.to_be_bytes());
     }
+    #[allow(deprecated)]
     let text_u16 = base64::encode(input);
     let text_u16 = text_u16.trim_end_matches('=');
     let result = text_u16.replace('/', ",");
@@ -134,6 +135,7 @@ fn decode_utf7_part(text: &str) -> String {
         text_b64 += "=";
     }
 
+    #[allow(deprecated)]
     let text_u16 = base64::decode(text_b64).unwrap();
     let (cow, _encoding_used, _had_errors) = UTF_16BE.decode(&text_u16);
     let result = cow.as_ref();

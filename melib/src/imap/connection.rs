@@ -447,6 +447,7 @@ impl ImapStream {
                     ))
                     .set_kind(ErrorKind::Authentication));
                 }
+                #[allow(deprecated)]
                 let xoauth2 = base64::decode(&server_conf.server_password)
                     .chain_err_summary(|| {
                         "Could not decode `server_password` from base64. Is the value correct?"
