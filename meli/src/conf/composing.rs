@@ -21,6 +21,8 @@
 
 //! Configuration for composing email.
 
+use std::path::PathBuf;
+
 use indexmap::IndexMap;
 use melib::{conf::ActionFlag, email::HeaderName};
 use serde::{de, Deserialize, Deserializer};
@@ -110,6 +112,34 @@ pub struct ComposingSettings {
     /// Disabled `compose-hooks`.
     #[serde(default, alias = "disabled-compose-hooks")]
     pub disabled_compose_hooks: Vec<String>,
+    /// Plain text file with signature that will pre-populate an email draft.
+    ///
+    /// Signatures must be explicitly enabled to be used, otherwise this setting
+    /// will be ignored.
+    ///
+    /// Default: `None`
+    #[serde(default, alias = "signature-file")]
+    pub signature_file: Option<PathBuf>,
+    /// Pre-populate email drafts with signature, if any.
+    ///
+    /// `meli` will lookup the signature value in this order:
+    ///
+    /// 1. The `signature_file` setting.
+    /// 2. `${XDG_CONFIG_DIR}/meli/<account>/signature`
+    /// 3. `${XDG_CONFIG_DIR}/meli/signature`
+    /// 4. `${XDG_CONFIG_DIR}/signature`
+    /// 5. `${HOME}/.signature`
+    /// 6. No signature otherwise.
+    ///
+    /// Default: `false`
+    #[serde(default = "false_val", alias = "use-signature")]
+    pub use_signature: bool,
+    /// Signature delimiter, that is, text that will be prefixed to your
+    /// signature to separate it from the email body.
+    ///
+    /// Default: `"\n\n-- \n"`
+    #[serde(default, alias = "signature-delimiter")]
+    pub signature_delimiter: Option<String>,
 }
 
 impl Default for ComposingSettings {
@@ -129,6 +159,9 @@ impl Default for ComposingSettings {
             reply_prefix: res(),
             custom_compose_hooks: vec![],
             disabled_compose_hooks: vec![],
+            signature_file: None,
+            use_signature: false,
+            signature_delimiter: None,
         }
     }
 }

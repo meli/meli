@@ -1030,6 +1030,36 @@ or draft body mention attachments but they are missing.
 .Ic empty-draft-warn
 — Warn if draft has no subject and no body.
 .El
+.It Ic signature_file Ar Path
+.Pq Em optional
+Plain text file with signature that will pre-populate an email draft.
+Signatures must be explicitly enabled to be used, otherwise this setting will be ignored.
+.Pq Em None \" default value
+.It Ic use_signature Ar bool
+Pre-populate email drafts with signature, if any.
+.Sy meli
+will lookup the signature value in this order:
+.Bl -enum -compact
+.It
+The
+.Ic signature_file
+setting.
+.It
+.Pa ${XDG_CONFIG_DIR}/meli/<account>/signature
+.It
+.Pa ${XDG_CONFIG_DIR}/meli/signature
+.It
+.Pa ${XDG_CONFIG_DIR}/signature
+.It
+.Pa ${HOME}/.signature
+.It
+No signature otherwise.
+.El
+.Pq Em false \" default value
+.It Ic signature_delimiter Ar String
+.Pq Em optional
+Signature delimiter, that is, text that will be prefixed to your signature to separate it from the email body.
+.Pq Ql \en\en\-\- \en
 .El
 .\"
 .\"

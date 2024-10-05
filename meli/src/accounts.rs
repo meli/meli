@@ -29,6 +29,7 @@ use std::{
     io,
     ops::{Index, IndexMut},
     os::unix::fs::PermissionsExt,
+    path::{Path, PathBuf},
     pin::Pin,
     result,
     sync::{Arc, RwLock},
@@ -42,7 +43,7 @@ use melib::{
     error::{Error, ErrorKind, NetworkErrorKind, Result},
     log,
     thread::Threads,
-    utils::{fnmatch::Fnmatch, futures::sleep, random},
+    utils::{fnmatch::Fnmatch, futures::sleep, random, shellexpand::ShellExpandTrait},
     Contacts, SortField, SortOrder,
 };
 use smallvec::SmallVec;
@@ -1799,6 +1800,33 @@ impl Account {
         } else {
             IsAsync::Blocking
         }
+    }
+
+    pub fn signature_file(&self) -> Option<PathBuf> {
+        xdg::BaseDirectories::with_profile("meli", &self.name)
+            .ok()
+            .and_then(|d| {
+                d.place_config_file("signature")
+                    .ok()
+                    .filter(|p| p.is_file())
+            })
+            .or_else(|| {
+                xdg::BaseDirectories::with_prefix("meli")
+                    .ok()
+                    .and_then(|d| {
+                        d.place_config_file("signature")
+                            .ok()
+                            .filter(|p| p.is_file())
+                    })
+            })
+            .or_else(|| {
+                xdg::BaseDirectories::new().ok().and_then(|d| {
+                    d.place_config_file("signature")
+                        .ok()
+                        .filter(|p| p.is_file())
+                })
+            })
+            .or_else(|| Some(Path::new("~/.signature").expand()).filter(|p| p.is_file()))
     }
 }
 

@@ -20,7 +20,9 @@
  */
 
 use std::{
+    borrow::Cow,
     convert::TryInto,
+    fmt::Write as _,
     future::Future,
     io::Write,
     pin::Pin,
@@ -241,7 +243,41 @@ impl Composer {
                 format!("meli {}", option_env!("CARGO_PKG_VERSION").unwrap_or("0.0")),
             );
         }
-        if *account_settings!(context[account_hash].composing.format_flowed) {
+        let format_flowed = *account_settings!(context[account_hash].composing.format_flowed);
+        if *account_settings!(context[account_hash].composing.use_signature) {
+            let override_value = account_settings!(context[account_hash].composing.signature_file)
+                .as_deref()
+                .map(Cow::Borrowed)
+                .filter(|p| p.as_ref().is_file());
+            let account_value = || {
+                context.accounts[&account_hash]
+                    .signature_file()
+                    .map(Cow::Owned)
+            };
+            if let Some(path) = override_value.or_else(account_value) {
+                match std::fs::read_to_string(path.as_ref()).chain_err_related_path(path.as_ref()) {
+                    Ok(sig) => {
+                        let mut delimiter =
+                            account_settings!(context[account_hash].composing.signature_delimiter)
+                                .as_deref()
+                                .map(Cow::Borrowed)
+                                .unwrap_or_else(|| Cow::Borrowed("\n\n-- \n"));
+                        if format_flowed {
+                            delimiter = Cow::Owned(delimiter.replace(" \n", " \n\n"));
+                        }
+                        _ = write!(&mut ret.draft.body, "{}{}", delimiter.as_ref(), sig);
+                    }
+                    Err(err) => {
+                        log::error!(
+                            "Could not open signature file for account `{}`: {}.",
+                            context.accounts[&account_hash].name(),
+                            err
+                        );
+                    }
+                }
+            }
+        }
+        if format_flowed {
             ret.pager.set_reflow(melib::text::Reflow::FormatFlowed);
         }
         ret
@@ -420,7 +456,7 @@ impl Composer {
                 .set_header(HeaderName::TO, envelope.field_from_to_string());
         }
         ret.draft.body = {
-            let mut ret = attribution_string(
+            let mut quoted = attribution_string(
                 account_settings!(
                     context[ret.account_hash]
                         .composing
@@ -437,11 +473,12 @@ impl Composer {
                 ),
             );
             for l in reply_body.lines() {
-                ret.push('>');
-                ret.push_str(l);
-                ret.push('\n');
+                quoted.push('>');
+                quoted.push_str(l);
+                quoted.push('\n');
             }
-            ret
+            _ = write!(&mut quoted, "{}", ret.draft.body);
+            quoted
         };
 
         ret.account_hash = coordinates.0;
