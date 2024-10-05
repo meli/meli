@@ -147,7 +147,7 @@ fn test_maildir_set_flags_regexp() {
             Path::new("/path/to/new/1423819205.29514_1.foo,U=123:2,S"),
             &[FlagOp::Set(Flag::FLAGGED | Flag::SEEN | Flag::REPLIED)]
         ),
-        Ok(Path::new("/path/to/new/1423819205.29514_1.foo:2,FRS").to_path_buf()),
+        Ok(Path::new("/path/to/new/1423819205.29514_1.foo,U=123:2,FRS").to_path_buf()),
         "Setting the same flags should not change the path"
     );
     assert_eq!(
@@ -156,7 +156,7 @@ fn test_maildir_set_flags_regexp() {
             Path::new("/path/to/new/1423819205.29514_1.foo,U=123:2,FRS"),
             &[FlagOp::UnSet(Flag::FLAGGED | Flag::SEEN | Flag::REPLIED)]
         ),
-        Ok(Path::new("/path/to/new/1423819205.29514_1.foo:2,").to_path_buf()),
+        Ok(Path::new("/path/to/new/1423819205.29514_1.foo,U=123:2,").to_path_buf()),
         "UnSetting all the set flags should change the path"
     );
     assert_eq!(
@@ -165,7 +165,7 @@ fn test_maildir_set_flags_regexp() {
             Path::new("/path/to/new/1423819205.29514_1.foo,U=123:2,FRS"),
             &[FlagOp::Set(Flag::FLAGGED | Flag::TRASHED)]
         ),
-        Ok(Path::new("/path/to/new/1423819205.29514_1.foo:2,FRST").to_path_buf()),
+        Ok(Path::new("/path/to/new/1423819205.29514_1.foo,U=123:2,FRST").to_path_buf()),
         "Setting new flags should change the path to include them"
     );
 }

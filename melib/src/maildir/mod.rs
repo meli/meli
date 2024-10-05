@@ -308,7 +308,7 @@ impl MaildirPathTrait for Path {
         flag
     }
 
-    fn set_flags(&self, flags: Flag, config: &Configuration) -> Result<PathBuf> {
+    fn set_flags(&self, flags: Flag, _config: &Configuration) -> Result<PathBuf> {
         let filename = self
             .file_name()
             .ok_or_else(|| format!("Could not get filename of `{}`", self.display(),))?
@@ -324,11 +324,7 @@ impl MaildirPathTrait for Path {
             );
             (filename.len(), true)
         };
-        let mut new_name: String = if let Some(ref rename_regex) = config.rename_regex {
-            rename_regex.replace_all(&filename[..idx], "").to_string()
-        } else {
-            filename[..idx].to_string()
-        };
+        let mut new_name: String = filename[..idx].to_string();
         if append_2 {
             new_name.push_str(":2,");
         }
