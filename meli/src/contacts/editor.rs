@@ -81,28 +81,7 @@ impl ContactManager {
         if !self.content.resize_with_context(100, 1, context) {
             return;
         }
-        let mut area = self.content.area();
-
-        let (x, _) = self.content.grid_mut().write_string(
-            "Last edited: ",
-            self.theme_default.fg,
-            self.theme_default.bg,
-            self.theme_default.attrs,
-            area,
-            None,
-            None,
-        );
-        area = area.skip_cols(x);
-        let (x, y) = self.content.grid_mut().write_string(
-            &self.card.last_edited(),
-            self.theme_default.fg,
-            self.theme_default.bg,
-            self.theme_default.attrs,
-            area,
-            None,
-            None,
-        );
-        area = area.skip(x, y);
+        let area = self.content.area();
 
         if self.card.external_resource() {
             self.mode = ViewMode::ReadOnly;
@@ -112,6 +91,25 @@ impl ContactManager {
                 self.theme_default.bg,
                 self.theme_default.attrs,
                 area,
+                None,
+                None,
+            );
+        } else {
+            let (x, _) = self.content.grid_mut().write_string(
+                "Last edited: ",
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs,
+                area,
+                None,
+                None,
+            );
+            self.content.grid_mut().write_string(
+                &self.card.last_edited(),
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs,
+                area.skip_cols(x),
                 None,
                 None,
             );
@@ -166,15 +164,12 @@ impl Component for ContactManager {
 
         if self.is_dirty() {
             grid.clear_area(area, self.theme_default);
-            grid.copy_area(self.content.grid(), area.skip_rows(2), self.content.area());
+            grid.copy_area(self.content.grid(), area, self.content.area());
             self.dirty = false;
         }
 
-        self.form.draw(
-            grid,
-            area.skip_rows(2 + self.content.area().height()),
-            context,
-        );
+        self.form
+            .draw(grid, area.skip_rows(self.content.area().height()), context);
         if let ViewMode::Discard(ref mut selector) = self.mode {
             /* Let user choose whether to quit with/without saving or cancel */
             selector.draw(grid, area, context);
