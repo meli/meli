@@ -94,6 +94,10 @@ impl ListingTrait for OfflineListing {
         false
     }
 
+    fn modifier_active(&self) -> bool {
+        false
+    }
+
     fn set_modifier_active(&mut self, _: bool) {}
 
     fn set_modifier_command(&mut self, _: Option<Modifier>) {}

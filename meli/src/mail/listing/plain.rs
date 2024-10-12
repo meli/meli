@@ -551,6 +551,10 @@ impl ListingTrait for PlainListing {
         !matches!(self.focus, Focus::None)
     }
 
+    fn modifier_active(&self) -> bool {
+        self.modifier_active
+    }
+
     fn set_modifier_active(&mut self, new_val: bool) {
         self.modifier_active = new_val;
     }
@@ -1726,11 +1730,18 @@ impl Component for PlainListing {
                     if !self.unfocused()
                         && shortcut!(key == shortcuts[Shortcuts::LISTING]["select_entry"]) =>
                 {
-                    if self.modifier_active && self.modifier_command.is_none() {
-                        self.modifier_command = Some(Modifier::default());
-                    } else if let Some(env_hash) = self.get_env_under_cursor(self.cursor_pos.2) {
+                    if let Some(env_hash) = self.get_env_under_cursor(self.new_cursor_pos.2) {
                         self.rows.update_selection_with_env(env_hash, |e| *e = !*e);
                         self.set_dirty(true);
+                    }
+                    return true;
+                }
+                UIEvent::Input(ref key)
+                    if !self.unfocused()
+                        && shortcut!(key == shortcuts[Shortcuts::LISTING]["select_motion"]) =>
+                {
+                    if self.modifier_active && self.modifier_command.is_none() {
+                        self.modifier_command = Some(Modifier::default());
                     }
                     return true;
                 }

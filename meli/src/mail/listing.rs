@@ -250,6 +250,17 @@ pub enum Modifier {
     Intersection,
 }
 
+impl std::fmt::Display for Modifier {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::SymmetricDifference => write!(fmt, "><"),
+            Self::Union => write!(fmt, "+"),
+            Self::Difference => write!(fmt, "-"),
+            Self::Intersection => write!(fmt, "*"),
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 /// Save theme colors to avoid looking them up again and again from settings
 pub struct ColorCache {
@@ -1009,6 +1020,7 @@ pub trait ListingTrait: Component {
     fn unfocused(&self) -> bool;
     fn view_area(&self) -> Option<Area>;
     fn set_modifier_active(&mut self, _new_val: bool);
+    fn modifier_active(&self) -> bool;
     fn set_modifier_command(&mut self, _new_val: Option<Modifier>);
     fn modifier_command(&self) -> Option<Modifier>;
     fn set_movement(&mut self, mvm: PageMovement);
@@ -2127,18 +2139,36 @@ impl Component for Listing {
                             && shortcut!(
                                 key == shortcuts[Shortcuts::LISTING]["union_modifier"]
                             )
-                            && self.component.modifier_command().is_some() =>
+                            && self.component.modifier_active() =>
                     {
                         self.component.set_modifier_command(Some(Modifier::Union));
+                        context
+                            .replies
+                            .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
+                                if let Some(modf) = self.component.modifier_command() {
+                                    format!("{} {}", modf, self.cmd_buf)
+                                } else {
+                                    self.cmd_buf.clone()
+                                },
+                            )));
                         return true;
                     }
                     UIEvent::Input(ref key)
                         if !self.component.unfocused()
                             && shortcut!(key == shortcuts[Shortcuts::LISTING]["diff_modifier"])
-                            && self.component.modifier_command().is_some() =>
+                            && self.component.modifier_active() =>
                     {
                         self.component
                             .set_modifier_command(Some(Modifier::Difference));
+                        context
+                            .replies
+                            .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
+                                if let Some(modf) = self.component.modifier_command() {
+                                    format!("{} {}", modf, self.cmd_buf)
+                                } else {
+                                    self.cmd_buf.clone()
+                                },
+                            )));
                         return true;
                     }
                     UIEvent::Input(ref key)
@@ -2146,10 +2176,19 @@ impl Component for Listing {
                             && shortcut!(
                                 key == shortcuts[Shortcuts::LISTING]["intersection_modifier"]
                             )
-                            && self.component.modifier_command().is_some() =>
+                            && self.component.modifier_active() =>
                     {
                         self.component
                             .set_modifier_command(Some(Modifier::Intersection));
+                        context
+                            .replies
+                            .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
+                                if let Some(modf) = self.component.modifier_command() {
+                                    format!("{} {}", modf, self.cmd_buf)
+                                } else {
+                                    self.cmd_buf.clone()
+                                },
+                            )));
                         return true;
                     }
                     UIEvent::Input(ref key)
@@ -2199,7 +2238,11 @@ impl Component for Listing {
                         context
                             .replies
                             .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
-                                self.cmd_buf.clone(),
+                                if let Some(modf) = self.component.modifier_command() {
+                                    format!("{} {}", modf, self.cmd_buf)
+                                } else {
+                                    self.cmd_buf.clone()
+                                },
                             )));
                         return true;
                     }
@@ -2703,7 +2746,11 @@ impl Component for Listing {
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
-                        self.cmd_buf.clone(),
+                        if let Some(modf) = self.component.modifier_command() {
+                            format!("{} {}", modf, self.cmd_buf)
+                        } else {
+                            self.cmd_buf.clone()
+                        },
                     )));
                 return true;
             }
@@ -2723,7 +2770,11 @@ impl Component for Listing {
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
-                        self.cmd_buf.clone(),
+                        if let Some(modf) = self.component.modifier_command() {
+                            format!("{} {}", modf, self.cmd_buf)
+                        } else {
+                            self.cmd_buf.clone()
+                        },
                     )));
                 return true;
             }
