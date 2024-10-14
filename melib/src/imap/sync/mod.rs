@@ -30,7 +30,6 @@ use indexmap::IndexSet;
 use super::*;
 
 pub mod cache;
-pub mod ram_cache;
 #[cfg(feature = "sqlite3")]
 pub mod sqlite3_cache;
 
