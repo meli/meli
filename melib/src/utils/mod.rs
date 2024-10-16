@@ -135,6 +135,11 @@ macro_rules! declare_u64_hash {
             }
 
             #[inline(always)]
+            pub const fn from_be_bytes(b: [u8; 8]) -> Self {
+                Self(u64::from_be_bytes(b))
+            }
+
+            #[inline(always)]
             pub const fn is_null(self) -> bool {
                 self.0 == 0
             }
@@ -162,9 +167,17 @@ macro_rules! declare_u64_hash {
             fn column_result(
                 value: rusqlite::types::ValueRef,
             ) -> rusqlite::types::FromSqlResult<Self> {
-                let b: i64 = rusqlite::types::FromSql::column_result(value)?;
-
-                Ok($type_name(b as u64))
+                use rusqlite::types::{FromSqlError, ValueRef};
+                match value {
+                    ValueRef::Integer(b) => Ok(Self(b as u64)),
+                    ValueRef::Blob(slice) => {
+                        let Ok(be): ::std::result::Result<[u8; 8], _> = slice.try_into() else {
+                            return Err(FromSqlError::InvalidType);
+                        };
+                        Ok(Self::from_be_bytes(be))
+                    }
+                    _other => Err(FromSqlError::InvalidType),
+                }
             }
         }
     };
