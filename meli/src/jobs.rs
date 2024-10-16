@@ -27,7 +27,7 @@ use std::{
     iter,
     panic::catch_unwind,
     sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicBool, Ordering},
         Arc, Mutex,
     },
     thread,
@@ -52,7 +52,36 @@ pub enum IsAsync {
 }
 
 type AsyncTask = async_task::Runnable;
-type AtomicUnixTimestamp = Arc<AtomicU64>;
+
+#[derive(Clone, Debug)]
+struct FinishedTimestamp(Arc<Mutex<UnixTimestamp>>);
+
+impl FinishedTimestamp {
+    fn finished(&self) -> Option<UnixTimestamp> {
+        match self.0.lock() {
+            Ok(v) if *v == 0 => None,
+            Ok(v) => Some(*v),
+            Err(poison) => {
+                let mut guard = poison.into_inner();
+                if *guard == 0 {
+                    *guard = UnixTimestamp::default();
+                }
+                Some(*guard)
+            }
+        }
+    }
+
+    fn set_finished(&self, new_value: Option<UnixTimestamp>) {
+        let new_value = new_value.unwrap_or_default();
+        match self.0.lock() {
+            Ok(mut f) => *f = new_value,
+            Err(poison) => {
+                let mut guard = poison.into_inner();
+                *guard = new_value;
+            }
+        }
+    }
+}
 
 fn find_task(
     local: &Worker<MeliTask>,
@@ -127,7 +156,7 @@ pub struct JobMetadata {
     desc: Cow<'static, str>,
     timer: bool,
     started: UnixTimestamp,
-    finished: AtomicUnixTimestamp,
+    finished: FinishedTimestamp,
     succeeded: bool,
 }
 
@@ -149,16 +178,7 @@ impl JobMetadata {
     }
 
     pub fn finished(&self) -> Option<UnixTimestamp> {
-        let value = self.finished.load(Ordering::SeqCst);
-        if value == 0 {
-            return None;
-        }
-        Some(value)
-    }
-
-    fn set_finished(&self, new_value: Option<UnixTimestamp>) {
-        let new_value = new_value.unwrap_or_default();
-        self.finished.store(new_value, Ordering::SeqCst);
+        self.finished.finished()
     }
 
     pub fn succeeded(&self) -> bool {
@@ -311,7 +331,9 @@ impl JobExecutor {
         let finished_sender = self.sender.clone();
         let job_id = JobId::new();
         let injector = self.global_queue.clone();
-        let finished = Arc::new(AtomicU64::new(0));
+        // We do not use `AtomicU64` because it's not portable, so ignore the lint.
+        #[allow(clippy::mutex_integer)]
+        let finished = FinishedTimestamp(Arc::new(Mutex::new(0)));
         let cancel = Arc::new(AtomicBool::new(false));
 
         self.jobs.lock().unwrap().insert(
@@ -334,7 +356,9 @@ impl JobExecutor {
                 async move {
                     let res = future.await;
                     let _ = sender.send(res);
-                    finished.store(datetime::now(), Ordering::SeqCst);
+                    if let Ok(mut guard) = finished.0.lock() {
+                        *guard = datetime::now();
+                    }
                     finished_sender
                         .send(ThreadEvent::JobFinished(job_id))
                         .unwrap();
@@ -479,7 +503,7 @@ impl JobExecutor {
 
     pub fn set_job_finished(&self, id: JobId) {
         self.jobs.lock().unwrap().entry(id).and_modify(|entry| {
-            entry.set_finished(Some(datetime::now()));
+            entry.finished.set_finished(Some(datetime::now()));
         });
     }
 
@@ -498,7 +522,7 @@ pub struct JoinHandle<T> {
     pub task: Arc<Mutex<Option<async_task::Task<()>>>>,
     pub chan: JobChannel<T>,
     pub cancel: Arc<AtomicBool>,
-    finished: AtomicUnixTimestamp,
+    finished: FinishedTimestamp,
     pub job_id: JobId,
 }
 
@@ -506,7 +530,7 @@ impl<T> JoinHandle<T> {
     pub fn cancel(&self) -> Option<StatusEvent> {
         let was_active = self.cancel.swap(true, Ordering::SeqCst);
         if was_active {
-            self.set_finished(Some(datetime::now()));
+            self.finished.set_finished(Some(datetime::now()));
             Some(StatusEvent::JobCanceled(self.job_id))
         } else {
             None
@@ -514,16 +538,7 @@ impl<T> JoinHandle<T> {
     }
 
     pub fn finished(&self) -> Option<UnixTimestamp> {
-        let value = self.finished.load(Ordering::SeqCst);
-        if value == 0 {
-            return None;
-        }
-        Some(value)
-    }
-
-    fn set_finished(&self, new_value: Option<UnixTimestamp>) {
-        let new_value = new_value.unwrap_or_default();
-        self.finished.store(new_value, Ordering::SeqCst);
+        self.finished.finished()
     }
 
     pub fn is_canceled(&self) -> bool {
