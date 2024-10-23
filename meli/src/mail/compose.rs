@@ -33,8 +33,9 @@ use std::{
 use indexmap::IndexSet;
 use melib::{
     email::attachment_types::{ContentType, MultipartType},
-    list_management, Address, Contacts, Draft, HeaderName, SpecialUsageMailbox, SubjectPrefix,
-    UnixTimestamp,
+    list_management,
+    parser::BytesExt,
+    Address, Contacts, Draft, HeaderName, SpecialUsageMailbox, SubjectPrefix, UnixTimestamp,
 };
 use nix::sys::wait::WaitStatus;
 
@@ -2184,14 +2185,16 @@ impl Component for Composer {
                     match Command::new("sh")
                         .args(["-c", command])
                         .stdin(Stdio::inherit())
-                        .stdout(Stdio::inherit())
+                        .stdout(Stdio::piped())
                         .stderr(Stdio::piped())
                         .spawn()
-                        .and_then(|child| Ok(child.wait_with_output()?.stderr))
+                        .and_then(|child| Ok(child.wait_with_output()?.stdout))
                     {
-                        Ok(stderr) => {
-                            log::trace!("stderr: {}", &String::from_utf8_lossy(&stderr));
-                            for path in stderr.split(|c| [b'\0', b'\t', b'\n'].contains(c)) {
+                        Ok(stdout) => {
+                            for path in stdout
+                                .split(|c| [b'\0', b'\t', b'\n'].contains(c))
+                                .filter(|p| !p.trim().is_empty())
+                            {
                                 match melib::email::compose::attachment_from_file(
                                     &String::from_utf8_lossy(path).as_ref(),
                                 ) {

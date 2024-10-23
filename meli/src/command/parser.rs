@@ -673,30 +673,32 @@ pub fn add_attachment<'a>(input: &'a [u8]) -> IResult<&'a [u8], Result<Action, C
             let (input, _) = eof(input)?;
             Ok((input, Ok(Compose(AddAttachment(path.to_string())))))
         },
-        |input: &'a [u8]| -> IResult<&'a [u8], Result<Action, CommandError>> {
-            let mut check = arg_init! { min_arg:0, max_arg: 0, add_attachment};
-            let (input, _) = tag("add-attachment-file-picker")(input.trim())?;
-            arg_chk!(start check, input);
-            arg_chk!(finish check, input);
-            let (input, _) = eof(input)?;
-            Ok((input, Ok(Compose(AddAttachmentFilePicker(None)))))
-        },
-        |input: &'a [u8]| -> IResult<&'a [u8], Result<Action, CommandError>> {
-            let mut check = arg_init! { min_arg:1, max_arg: 1, add_attachment_file_picker};
-            let (input, _) = tag("add-attachment-file-picker")(input.trim())?;
-            arg_chk!(start check, input);
-            let (input, _) = is_a(" ")(input)?;
-            let (input, _) = tag("<")(input.trim())?;
-            let (input, _) = is_a(" ")(input)?;
-            arg_chk!(inc check, input);
-            let (input, shell) = map_res(not_line_ending, std::str::from_utf8)(input)?;
-            arg_chk!(finish check, input);
-            let (input, _) = eof(input)?;
-            Ok((
-                input,
-                Ok(Compose(AddAttachmentFilePicker(Some(shell.to_string())))),
-            ))
-        },
+        alt((
+            |input: &'a [u8]| -> IResult<&'a [u8], Result<Action, CommandError>> {
+                let mut check = arg_init! { min_arg:1, max_arg: 1, add_attachment_file_picker};
+                let (input, _) = tag("add-attachment-file-picker")(input.trim())?;
+                arg_chk!(start check, input);
+                let (input, _) = is_a(" ")(input)?;
+                let (input, _) = tag("<")(input.trim())?;
+                let (input, _) = is_a(" ")(input)?;
+                arg_chk!(inc check, input);
+                let (input, shell) = map_res(not_line_ending, std::str::from_utf8)(input)?;
+                arg_chk!(finish check, input);
+                let (input, _) = eof(input)?;
+                Ok((
+                    input,
+                    Ok(Compose(AddAttachmentFilePicker(Some(shell.to_string())))),
+                ))
+            },
+            |input: &'a [u8]| -> IResult<&'a [u8], Result<Action, CommandError>> {
+                let mut check = arg_init! { min_arg:0, max_arg: 0, add_attachment};
+                let (input, _) = tag("add-attachment-file-picker")(input.trim())?;
+                arg_chk!(start check, input);
+                arg_chk!(finish check, input);
+                let (input, _) = eof(input)?;
+                Ok((input, Ok(Compose(AddAttachmentFilePicker(None)))))
+            },
+        )),
     ))(input)
 }
 pub fn remove_attachment(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
