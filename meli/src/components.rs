@@ -318,3 +318,28 @@ impl ComponentPath {
         self.tail.last()
     }
 }
+
+pub mod prelude {
+    pub use crate::components::*;
+    pub use crate::{
+        accounts::MailboxEntry,
+        command::*,
+        components::{
+            Component, ComponentAttr, ComponentId, ComponentPath, ExtendShortcutsMaps,
+            ScrollContext,
+        },
+        jobs::{JobId, JobMetadata},
+        melib::text::TextProcessing,
+        melib::{utils::datetime, SortOrder},
+        shortcut, AccountHash, Action,
+        Action::*,
+        Area, Attr, CellBuffer, Context, DataColumns, EnvelopeHash, Key, MailboxHash, Shortcuts,
+        StatusEvent,
+        TabAction::*,
+        ThemeAttribute, UIDialog, UIEvent, UIMode,
+    };
+
+    pub use std::borrow::Cow;
+
+    pub use indexmap::IndexMap;
+}
