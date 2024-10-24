@@ -140,11 +140,8 @@ pub use crate::mail::*;
 
 pub mod notifications;
 
-pub mod mailbox_management;
-pub use mailbox_management::*;
-
-pub mod jobs_view;
-pub use jobs_view::*;
+pub mod manage;
+pub use manage::*;
 
 // #[cfg(feature = "svgscreenshot")]
 // pub mod svg;

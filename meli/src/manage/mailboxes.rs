@@ -19,18 +19,22 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::borrow::Cow;
+use crate::components::prelude::*;
 
-use indexmap::IndexMap;
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MailboxAction {
+    Rename,
+    Move,
+    Subscribe,
+    Unsubscribe,
+}
 
-use super::*;
-use crate::{
-    jobs::{JobId, JobMetadata},
-    melib::{
-        utils::datetime::{self, formats::RFC3339_DATETIME_AND_SPACE},
-        SortOrder,
-    },
-};
+#[derive(Debug, Default, PartialEq)]
+enum ViewMode {
+    #[default]
+    List,
+    Action(UIDialog<MailboxAction>),
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(u8)]
@@ -39,27 +43,29 @@ enum Column {
     _1,
     _2,
     _3,
-    _4,
 }
 
 const fn _assert_len() {
-    if JobManager::HEADERS.len() != Column::_4 as usize + 1 {
-        panic!("JobManager::HEADERS length changed, please update Column enum accordingly.");
+    if MailboxManager::HEADERS.len() != Column::_3 as usize + 1 {
+        panic!("MailboxManager::HEADERS length changed, please update Column enum accordingly.");
     }
 }
 
 const _: () = _assert_len();
 
 #[derive(Debug)]
-pub struct JobManager {
+pub struct MailboxManager {
     cursor_pos: usize,
     new_cursor_pos: usize,
+    account_pos: usize,
+    account_hash: AccountHash,
     length: usize,
-    data_columns: DataColumns<5>,
-    min_width: [usize; 5],
+    data_columns: DataColumns<4>,
+    min_width: [usize; 4],
     sort_col: Column,
     sort_order: SortOrder,
-    entries: IndexMap<JobId, JobMetadata>,
+    entries: IndexMap<MailboxHash, MailboxEntry>,
+    mode: ViewMode,
 
     initialized: bool,
     theme_default: ThemeAttribute,
@@ -71,38 +77,34 @@ pub struct JobManager {
     id: ComponentId,
 }
 
-impl std::fmt::Display for JobManager {
+impl std::fmt::Display for MailboxManager {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "jobs")
+        write!(f, "mailboxes")
     }
 }
 
-impl JobManager {
-    const HEADERS: [&'static str; 5] = ["id", "desc", "started", "finished", "succeeded"];
+impl MailboxManager {
+    const HEADERS: [&'static str; 4] = ["name", "path", "size", "subscribed"];
 
-    pub fn new(context: &Context) -> Self {
+    pub fn new(context: &Context, account_pos: usize) -> Self {
+        let account_hash = context.accounts[account_pos].hash();
         let theme_default = crate::conf::value(context, "theme_default");
-        let highlight_theme = if context.settings.terminal.use_color() {
-            crate::conf::value(context, "highlight")
-        } else {
-            ThemeAttribute {
-                attrs: Attr::REVERSE,
-                ..ThemeAttribute::default()
-            }
-        };
         let mut data_columns = DataColumns::new(theme_default);
         data_columns.theme_config.set_single_theme(theme_default);
         Self {
             cursor_pos: 0,
             new_cursor_pos: 0,
+            account_hash,
+            mode: ViewMode::default(),
             entries: IndexMap::default(),
             length: 0,
+            account_pos,
             data_columns,
-            min_width: [0; 5],
-            sort_col: Column::_2,
-            sort_order: SortOrder::Desc,
+            sort_col: Column::_1,
+            sort_order: SortOrder::Asc,
+            min_width: [0; 4],
             theme_default,
-            highlight_theme,
+            highlight_theme: crate::conf::value(context, "highlight"),
             initialized: false,
             dirty: true,
             movement: None,
@@ -111,89 +113,73 @@ impl JobManager {
     }
 
     fn initialize(&mut self, context: &Context) {
-        self.set_dirty(true);
-
-        let mut entries = (*context.main_loop_handler.job_executor.jobs.lock().unwrap()).clone();
-
-        self.length = entries.len();
+        let account = &context.accounts[self.account_pos];
+        self.length = account.mailbox_entries.len();
+        let mut entries = account.mailbox_entries.clone();
         entries.sort_by(|_, a, _, b| match (self.sort_col, self.sort_order) {
-            (Column::_0, SortOrder::Asc) => a.id().cmp(b.id()),
-            (Column::_0, SortOrder::Desc) => b.id().cmp(b.id()),
-            (Column::_1, SortOrder::Asc) => a.description().cmp(b.description()),
-            (Column::_1, SortOrder::Desc) => b.description().cmp(a.description()),
-            (Column::_2, SortOrder::Asc) => a.started().cmp(&b.started()),
-            (Column::_2, SortOrder::Desc) => b.started().cmp(&a.started()),
-            (Column::_3, SortOrder::Asc) => a.finished().cmp(&b.finished()),
-            (Column::_3, SortOrder::Desc) => b.finished().cmp(&a.finished()),
-            (Column::_4, SortOrder::Asc) if a.finished().is_some() && b.finished().is_some() => {
-                a.succeeded().cmp(&b.succeeded())
+            (Column::_0, SortOrder::Asc) => a.ref_mailbox.name().cmp(b.ref_mailbox.name()),
+            (Column::_0, SortOrder::Desc) => b.ref_mailbox.name().cmp(a.ref_mailbox.name()),
+            (Column::_1, SortOrder::Asc) => a.ref_mailbox.path().cmp(b.ref_mailbox.path()),
+            (Column::_1, SortOrder::Desc) => b.ref_mailbox.path().cmp(a.ref_mailbox.path()),
+            (Column::_2, SortOrder::Asc) => {
+                let (_, a) = a.ref_mailbox.count().ok().unwrap_or((0, 0));
+                let (_, b) = b.ref_mailbox.count().ok().unwrap_or((0, 0));
+                a.cmp(&b)
             }
-            (Column::_4, SortOrder::Desc) if a.finished().is_some() && b.finished().is_some() => {
-                b.succeeded().cmp(&a.succeeded())
+            (Column::_2, SortOrder::Desc) => {
+                let (_, a) = a.ref_mailbox.count().ok().unwrap_or((0, 0));
+                let (_, b) = b.ref_mailbox.count().ok().unwrap_or((0, 0));
+                b.cmp(&a)
             }
-            (Column::_4, SortOrder::Asc) if a.finished().is_none() => std::cmp::Ordering::Less,
-            (Column::_4, SortOrder::Asc) => std::cmp::Ordering::Greater,
-            (Column::_4, SortOrder::Desc) if a.finished().is_none() => std::cmp::Ordering::Greater,
-            (Column::_4, SortOrder::Desc) => std::cmp::Ordering::Less,
+            (Column::_3, SortOrder::Asc)
+                if a.ref_mailbox.is_subscribed() && b.ref_mailbox.is_subscribed() =>
+            {
+                std::cmp::Ordering::Equal
+            }
+            (Column::_3, SortOrder::Asc) if a.ref_mailbox.is_subscribed() => {
+                std::cmp::Ordering::Greater
+            }
+            (Column::_3, SortOrder::Desc) if a.ref_mailbox.is_subscribed() => {
+                std::cmp::Ordering::Less
+            }
+            (Column::_3, SortOrder::Asc) => std::cmp::Ordering::Less,
+            (Column::_3, SortOrder::Desc) => std::cmp::Ordering::Greater,
         });
         self.entries = entries;
-
         macro_rules! hdr {
             ($idx:literal) => {{
                 Self::HEADERS[$idx].len() + if self.sort_col as u8 == $idx { 1 } else { 0 }
             }};
         }
-        self.min_width = [hdr!(0), hdr!(1), hdr!(2), hdr!(3), hdr!(4)];
+
+        self.set_dirty(true);
+        let mut min_width = [hdr!(0), hdr!(1), hdr!(2), hdr!(3)];
 
         for c in self.entries.values() {
             // title
-            self.min_width[0] = self.min_width[0].max(c.id().to_string().len());
-            // desc
-            self.min_width[1] = self.min_width[1].max(c.description().len());
+            min_width[0] = min_width[0].max(c.name().split_graphemes().len());
+            // path
+            min_width[1] = min_width[1].max(c.ref_mailbox.path().len());
         }
-        self.min_width[2] = "1970-01-01 00:00:00".len();
-        self.min_width[3] = self.min_width[2];
 
         // name column
-        _ = self.data_columns.columns[0].resize_with_context(
-            self.min_width[0],
-            self.length,
-            context,
-        );
+        _ = self.data_columns.columns[0].resize_with_context(min_width[0], self.length, context);
         self.data_columns.columns[0].grid_mut().clear(None);
         // path column
-        _ = self.data_columns.columns[1].resize_with_context(
-            self.min_width[1],
-            self.length,
-            context,
-        );
+        _ = self.data_columns.columns[1].resize_with_context(min_width[1], self.length, context);
         self.data_columns.columns[1].grid_mut().clear(None);
         // size column
-        _ = self.data_columns.columns[2].resize_with_context(
-            self.min_width[2],
-            self.length,
-            context,
-        );
+        _ = self.data_columns.columns[2].resize_with_context(min_width[2], self.length, context);
         self.data_columns.columns[2].grid_mut().clear(None);
         // subscribed column
-        _ = self.data_columns.columns[3].resize_with_context(
-            self.min_width[3],
-            self.length,
-            context,
-        );
+        _ = self.data_columns.columns[3].resize_with_context(min_width[3], self.length, context);
         self.data_columns.columns[3].grid_mut().clear(None);
-        _ = self.data_columns.columns[4].resize_with_context(
-            self.min_width[4],
-            self.length,
-            context,
-        );
-        self.data_columns.columns[4].grid_mut().clear(None);
 
         for (idx, e) in self.entries.values().enumerate() {
             {
                 let area = self.data_columns.columns[0].area().nth_row(idx);
                 self.data_columns.columns[0].grid_mut().write_string(
-                    &e.id().to_string(),
+                    e.name(),
                     self.theme_default.fg,
                     self.theme_default.bg,
                     self.theme_default.attrs,
@@ -206,7 +192,7 @@ impl JobManager {
             {
                 let area = self.data_columns.columns[1].area().nth_row(idx);
                 self.data_columns.columns[1].grid_mut().write_string(
-                    e.description(),
+                    e.ref_mailbox.path(),
                     self.theme_default.fg,
                     self.theme_default.bg,
                     self.theme_default.attrs,
@@ -218,12 +204,9 @@ impl JobManager {
 
             {
                 let area = self.data_columns.columns[2].area().nth_row(idx);
+                let (_unseen, total) = e.ref_mailbox.count().ok().unwrap_or((0, 0));
                 self.data_columns.columns[2].grid_mut().write_string(
-                    &datetime::timestamp_to_string(
-                        e.started(),
-                        Some(RFC3339_DATETIME_AND_SPACE),
-                        true,
-                    ),
+                    &total.to_string(),
                     self.theme_default.fg,
                     self.theme_default.bg,
                     self.theme_default.attrs,
@@ -236,31 +219,10 @@ impl JobManager {
             {
                 let area = self.data_columns.columns[3].area().nth_row(idx);
                 self.data_columns.columns[3].grid_mut().write_string(
-                    &if let Some(t) = e.finished() {
-                        Cow::Owned(datetime::timestamp_to_string(
-                            t,
-                            Some(RFC3339_DATETIME_AND_SPACE),
-                            true,
-                        ))
+                    if e.ref_mailbox.is_subscribed() {
+                        "yes"
                     } else {
-                        Cow::Borrowed("null")
-                    },
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
-                    area,
-                    None,
-                    None,
-                );
-            }
-
-            {
-                let area = self.data_columns.columns[4].area().nth_row(idx);
-                self.data_columns.columns[4].grid_mut().write_string(
-                    &if e.finished().is_some() {
-                        Cow::Owned(format!("{:?}", e.succeeded()))
-                    } else {
-                        Cow::Borrowed("-")
+                        "no"
                     },
                     self.theme_default.fg,
                     self.theme_default.bg,
@@ -273,7 +235,7 @@ impl JobManager {
         }
 
         if self.length == 0 {
-            let message = "No jobs.".to_string();
+            let message = "No mailboxes.".to_string();
             if self.data_columns.columns[0].resize_with_context(message.len(), self.length, context)
             {
                 let area = self.data_columns.columns[0].area();
@@ -288,13 +250,16 @@ impl JobManager {
                 );
             }
         }
+
+        self.min_width = min_width;
     }
 
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let rows = area.height();
-        if rows == 0 {
+        if rows < 2 {
             return;
         }
+
         if self.length == 0 {
             grid.clear_area(area, self.theme_default);
 
@@ -429,7 +394,7 @@ impl JobManager {
     }
 }
 
-impl Component for JobManager {
+impl Component for MailboxManager {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if !self.is_dirty() {
             return;
@@ -455,10 +420,10 @@ impl Component for JobManager {
                 if self.sort_col as usize == i {
                     use SortOrder::*;
                     let arrow = match (grid.ascii_drawing, self.sort_order) {
-                        (true, Asc) => DataColumns::<5>::ARROW_UP_ASCII,
-                        (true, Desc) => DataColumns::<5>::ARROW_DOWN_ASCII,
-                        (false, Asc) => DataColumns::<5>::ARROW_UP,
-                        (false, Desc) => DataColumns::<5>::ARROW_DOWN,
+                        (true, Asc) => DataColumns::<4>::ARROW_UP_ASCII,
+                        (true, Desc) => DataColumns::<4>::ARROW_DOWN_ASCII,
+                        (false, Asc) => DataColumns::<4>::ARROW_UP,
+                        (false, Desc) => DataColumns::<4>::ARROW_DOWN,
                     };
                     grid.write_string(
                         arrow,
@@ -474,8 +439,11 @@ impl Component for JobManager {
             }
             context.dirty_areas.push_back(area);
         }
-
-        self.draw_list(grid, area.skip_rows(1), context);
+        let area = area.skip_rows(1);
+        self.draw_list(grid, area, context);
+        if let ViewMode::Action(ref mut s) = self.mode {
+            s.draw(grid, area, context);
+        }
         self.dirty = false;
     }
 
@@ -485,15 +453,97 @@ impl Component for JobManager {
             self.initialized = false;
             self.set_dirty(true);
         }
+        if let ViewMode::Action(ref mut s) = self.mode {
+            match &event {
+                UIEvent::FinishedUIDialog(id, result) if s.id() == *id => {
+                    self.set_dirty(true);
+                    self.mode = ViewMode::List;
+                    if let Some(actions) = result.downcast_ref::<Vec<MailboxAction>>() {
+                        if actions.len() == 1 {
+                            use crate::actions::MailboxOperation;
+                            match actions[0] {
+                                MailboxAction::Move | MailboxAction::Rename => {
+                                    context.replies.push_back(UIEvent::CmdInput(Key::Paste(
+                                        format!(
+                                            "rename-mailbox \"{account_name}\" \
+                                             \"{mailbox_path_src}\" ",
+                                            account_name =
+                                                context.accounts[&self.account_hash].name(),
+                                            mailbox_path_src =
+                                                self.entries[self.cursor_pos].ref_mailbox.path()
+                                        ),
+                                    )));
+                                    context
+                                        .replies
+                                        .push_back(UIEvent::ChangeMode(UIMode::Command));
+                                }
+                                MailboxAction::Subscribe => {
+                                    if let Err(err) = context.accounts[&self.account_hash]
+                                        .mailbox_operation(MailboxOperation::Subscribe(
+                                            self.entries[self.cursor_pos]
+                                                .ref_mailbox
+                                                .path()
+                                                .to_string(),
+                                        ))
+                                    {
+                                        context.replies.push_back(UIEvent::Notification {
+                                            title: None,
+                                            source: None,
+                                            body: err.to_string().into(),
+                                            kind: Some(crate::types::NotificationType::Error(
+                                                err.kind,
+                                            )),
+                                        });
+                                    }
+                                }
+                                MailboxAction::Unsubscribe => {
+                                    if let Err(err) = context.accounts[&self.account_hash]
+                                        .mailbox_operation(MailboxOperation::Unsubscribe(
+                                            self.entries[self.cursor_pos]
+                                                .ref_mailbox
+                                                .path()
+                                                .to_string(),
+                                        ))
+                                    {
+                                        context.replies.push_back(UIEvent::Notification {
+                                            title: None,
+                                            source: None,
+                                            body: err.to_string().into(),
+                                            kind: Some(crate::types::NotificationType::Error(
+                                                err.kind,
+                                            )),
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    return true;
+                }
+                UIEvent::ComponentUnrealize(id) if s.id() == *id => {
+                    self.mode = ViewMode::List;
+                    self.set_dirty(true);
+                    return true;
+                }
+                _ => {}
+            }
+            return s.process_event(event, context);
+        }
 
         let shortcuts = self.shortcuts(context);
         match event {
-            UIEvent::StatusEvent(
-                StatusEvent::JobFinished(_) | StatusEvent::JobCanceled(_) | StatusEvent::NewJob(_),
-            ) => {
-                self.initialized = false;
+            UIEvent::AccountStatusChange(account_hash, msg)
+                if *account_hash == self.account_hash =>
+            {
+                self.initialize(context);
+
                 self.set_dirty(true);
-                return false;
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(match msg {
+                        Some(msg) => format!("{} {}", self.status(context), msg),
+                        None => self.status(context),
+                    })));
             }
             UIEvent::Action(Action::SortColumn(column, order)) => {
                 let column = match *column {
@@ -501,7 +551,6 @@ impl Component for JobManager {
                     1 => Column::_1,
                     2 => Column::_2,
                     3 => Column::_3,
-                    4 => Column::_4,
                     other => {
                         context.replies.push_back(UIEvent::StatusEvent(
                             StatusEvent::DisplayMessage(format!(
@@ -529,7 +578,6 @@ impl Component for JobManager {
                     2 => Column::_1,
                     3 => Column::_2,
                     4 => Column::_3,
-                    5 => Column::_4,
                     _ => {
                         return false;
                     }
@@ -591,8 +639,27 @@ impl Component for JobManager {
                 self.movement = Some(PageMovement::End);
                 return true;
             }
-            UIEvent::Resize => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["open_entry"]) =>
+            {
                 self.set_dirty(true);
+                self.mode = ViewMode::Action(UIDialog::new(
+                    "select action",
+                    vec![
+                        (MailboxAction::Rename, "rename".into()),
+                        (MailboxAction::Move, "move".into()),
+                        (MailboxAction::Subscribe, "subscribe".into()),
+                        (MailboxAction::Unsubscribe, "unsubscribe".into()),
+                    ],
+                    true,
+                    Some(Box::new(
+                        move |id: ComponentId, results: &[MailboxAction]| {
+                            Some(UIEvent::FinishedUIDialog(id, Box::new(results.to_vec())))
+                        },
+                    )),
+                    context,
+                ));
+                return true;
             }
             _ => {}
         }
@@ -601,15 +668,27 @@ impl Component for JobManager {
 
     fn is_dirty(&self) -> bool {
         self.dirty
+            || if let ViewMode::Action(ref s) = self.mode {
+                s.is_dirty()
+            } else {
+                false
+            }
     }
 
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
+        if let ViewMode::Action(ref mut s) = self.mode {
+            s.set_dirty(value);
+        }
     }
 
     fn kill(&mut self, uuid: ComponentId, context: &mut Context) {
         debug_assert!(uuid == self.id);
-        context.replies.push_back(UIEvent::Action(Tab(Kill(uuid))));
+        context
+            .replies
+            .push_back(UIEvent::Action(crate::command::Action::Tab(
+                crate::command::TabAction::Kill(uuid),
+            )));
     }
 
     fn shortcuts(&self, context: &Context) -> ShortcutMaps {
@@ -619,11 +698,6 @@ impl Component for JobManager {
             Shortcuts::GENERAL,
             context.settings.shortcuts.general.key_values(),
         );
-        map[Shortcuts::GENERAL].insert("sort by 1st column", Key::Char('1'));
-        map[Shortcuts::GENERAL].insert("sort by 2nd column", Key::Char('2'));
-        map[Shortcuts::GENERAL].insert("sort by 3rd column", Key::Char('3'));
-        map[Shortcuts::GENERAL].insert("sort by 4th column", Key::Char('4'));
-        map[Shortcuts::GENERAL].insert("sort by 5th column", Key::Char('5'));
 
         map
     }
@@ -636,10 +710,10 @@ impl Component for JobManager {
         true
     }
 
-    fn status(&self, _context: &Context) -> String {
+    fn status(&self, context: &Context) -> String {
         format!(
-            "{} entries. Use `sort <n> [asc/desc]` command or press column index number key \
-             (twice to toggle asc/desc) to sort",
+            "{} {} entries",
+            context.accounts[&self.account_hash].name(),
             self.entries.len()
         )
     }
