@@ -64,8 +64,20 @@ pub enum ListingAction {
     ToggleThreadSnooze,
 }
 
+#[derive(Debug, Eq, PartialEq)]
+pub enum ComposerTabAction {
+    SaveDraft,
+    ToggleSign,
+    ToggleEncrypt,
+    AddAttachment(String),
+    AddAttachmentFilePicker(Option<String>),
+    AddAttachmentPipe(String),
+    RemoveAttachment(usize),
+}
+
 #[derive(Debug, PartialEq)]
 pub enum TabAction {
+    ComposerAction(ComposerTabAction),
     Close,
     Kill(ComponentId),
     New(Option<Box<dyn Component>>),
@@ -93,13 +105,6 @@ pub enum ViewAction {
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum ComposeAction {
-    AddAttachment(String),
-    AddAttachmentFilePicker(Option<String>),
-    AddAttachmentPipe(String),
-    RemoveAttachment(usize),
-    SaveDraft,
-    ToggleSign,
-    ToggleEncrypt,
     Mailto(Mailto),
 }
 

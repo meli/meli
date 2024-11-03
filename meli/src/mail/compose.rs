@@ -2068,8 +2068,8 @@ impl Component for Composer {
                 self.set_dirty(true);
                 return true;
             }
-            UIEvent::Action(ref a) => match a {
-                Action::Compose(ComposeAction::AddAttachmentPipe(ref command)) => {
+            UIEvent::Action(Action::Tab(ComposerAction(ref a))) => match a {
+                ComposerTabAction::AddAttachmentPipe(ref command) => {
                     if command.is_empty() {
                         context.replies.push_back(UIEvent::Notification {
                             title: None,
@@ -2138,7 +2138,7 @@ impl Component for Composer {
                         }
                     }
                 }
-                Action::Compose(ComposeAction::AddAttachment(ref path)) => {
+                ComposerTabAction::AddAttachment(ref path) => {
                     let attachment = match melib::email::compose::attachment_from_file(path) {
                         Ok(a) => a,
                         Err(err) => {
@@ -2157,7 +2157,7 @@ impl Component for Composer {
                     self.set_dirty(true);
                     return true;
                 }
-                Action::Compose(ComposeAction::AddAttachmentFilePicker(ref command)) => {
+                ComposerTabAction::AddAttachmentFilePicker(ref command) => {
                     let command = if let Some(cmd) =
                         command
                             .as_ref()
@@ -2242,7 +2242,7 @@ impl Component for Composer {
                     self.set_dirty(true);
                     return true;
                 }
-                Action::Compose(ComposeAction::RemoveAttachment(idx)) => {
+                ComposerTabAction::RemoveAttachment(idx) => {
                     if *idx + 1 > self.draft.attachments().len() {
                         context.replies.push_back(UIEvent::StatusEvent(
                             StatusEvent::DisplayMessage(
@@ -2261,7 +2261,7 @@ impl Component for Composer {
                     self.set_dirty(true);
                     return true;
                 }
-                Action::Compose(ComposeAction::SaveDraft) => {
+                ComposerTabAction::SaveDraft => {
                     save_draft(
                         self.draft.clone().finalise().unwrap().as_bytes(),
                         context,
@@ -2273,7 +2273,7 @@ impl Component for Composer {
                     return true;
                 }
                 #[cfg(feature = "gpgme")]
-                Action::Compose(ComposeAction::ToggleSign) => {
+                ComposerTabAction::ToggleSign => {
                     let is_true = self
                         .gpg_state
                         .sign_mail
@@ -2284,7 +2284,7 @@ impl Component for Composer {
                     return true;
                 }
                 #[cfg(feature = "gpgme")]
-                Action::Compose(ComposeAction::ToggleEncrypt) => {
+                ComposerTabAction::ToggleEncrypt => {
                     let is_true = self
                         .gpg_state
                         .encrypt_mail
@@ -2294,7 +2294,6 @@ impl Component for Composer {
                     self.set_dirty(true);
                     return true;
                 }
-                _ => {}
             },
             UIEvent::Input(ref key)
                 if context

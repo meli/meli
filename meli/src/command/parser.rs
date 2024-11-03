@@ -660,7 +660,12 @@ pub fn add_attachment<'a>(input: &'a [u8]) -> IResult<&'a [u8], Result<Action, C
             let (input, cmd) = quoted_argument(input)?;
             arg_chk!(finish check, input);
             let (input, _) = eof(input)?;
-            Ok((input, Ok(Compose(AddAttachmentPipe(cmd.to_string())))))
+            Ok((
+                input,
+                Ok(Tab(ComposerAction(ComposerTabAction::AddAttachmentPipe(
+                    cmd.to_string(),
+                )))),
+            ))
         },
         |input: &'a [u8]| -> IResult<&'a [u8], Result<Action, CommandError>> {
             let mut check = arg_init! { min_arg:1, max_arg: 1, add_attachment};
@@ -671,7 +676,12 @@ pub fn add_attachment<'a>(input: &'a [u8]) -> IResult<&'a [u8], Result<Action, C
             let (input, path) = quoted_argument(input)?;
             arg_chk!(finish check, input);
             let (input, _) = eof(input)?;
-            Ok((input, Ok(Compose(AddAttachment(path.to_string())))))
+            Ok((
+                input,
+                Ok(Tab(ComposerAction(ComposerTabAction::AddAttachment(
+                    path.to_string(),
+                )))),
+            ))
         },
         alt((
             |input: &'a [u8]| -> IResult<&'a [u8], Result<Action, CommandError>> {
@@ -687,7 +697,9 @@ pub fn add_attachment<'a>(input: &'a [u8]) -> IResult<&'a [u8], Result<Action, C
                 let (input, _) = eof(input)?;
                 Ok((
                     input,
-                    Ok(Compose(AddAttachmentFilePicker(Some(shell.to_string())))),
+                    Ok(Tab(ComposerAction(
+                        ComposerTabAction::AddAttachmentFilePicker(Some(shell.to_string())),
+                    ))),
                 ))
             },
             |input: &'a [u8]| -> IResult<&'a [u8], Result<Action, CommandError>> {
@@ -696,7 +708,12 @@ pub fn add_attachment<'a>(input: &'a [u8]) -> IResult<&'a [u8], Result<Action, C
                 arg_chk!(start check, input);
                 arg_chk!(finish check, input);
                 let (input, _) = eof(input)?;
-                Ok((input, Ok(Compose(AddAttachmentFilePicker(None)))))
+                Ok((
+                    input,
+                    Ok(Tab(ComposerAction(
+                        ComposerTabAction::AddAttachmentFilePicker(None),
+                    ))),
+                ))
             },
         )),
     ))(input)
@@ -710,7 +727,12 @@ pub fn remove_attachment(input: &[u8]) -> IResult<&[u8], Result<Action, CommandE
     let (input, idx) = map_res(quoted_argument, usize::from_str)(input)?;
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
-    Ok((input, Ok(Compose(RemoveAttachment(idx)))))
+    Ok((
+        input,
+        Ok(Tab(ComposerAction(ComposerTabAction::RemoveAttachment(
+            idx,
+        )))),
+    ))
 }
 pub fn save_draft(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     let mut check = arg_init! { min_arg:0, max_arg: 0, save_draft };
@@ -718,7 +740,7 @@ pub fn save_draft(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> 
     arg_chk!(start check, input);
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
-    Ok((input, Ok(Compose(SaveDraft))))
+    Ok((input, Ok(Tab(ComposerAction(ComposerTabAction::SaveDraft)))))
 }
 pub fn create_mailbox(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     let mut check = arg_init! { min_arg:1, max_arg: 1, create_malbox};
@@ -963,8 +985,11 @@ pub fn toggle(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     for (tok, action) in [
         ("thread_snooze", Listing(ToggleThreadSnooze)),
         ("mouse", ToggleMouse),
-        ("sign", Compose(ToggleSign)),
-        ("encrypt", Compose(ToggleEncrypt)),
+        ("sign", Tab(ComposerAction(ComposerTabAction::ToggleSign))),
+        (
+            "encrypt",
+            Tab(ComposerAction(ComposerTabAction::ToggleEncrypt)),
+        ),
     ] {
         if let Ok((inner_input, _)) = tag!()(tok)(input.trim()) {
             input = inner_input;
