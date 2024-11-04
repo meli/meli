@@ -24,9 +24,17 @@
 
 /* Code from <https://github.com/iam-medvedev/rust-utf7-imap> */
 
-//! A Rust library for encoding and decoding [UTF-7](https://datatracker.ietf.org/doc/html/rfc2152) string as defined by the [IMAP](https://datatracker.ietf.org/doc/html/rfc3501) standard in [RFC 3501 (#5.1.3)](https://datatracker.ietf.org/doc/html/rfc3501#section-5.1.3).
+//! A Rust library for encoding and decoding [UTF-7] strings.
 //!
-//! Idea is based on Python [mutf7](https://github.com/cheshire-mouse/mutf7) library.
+//! A Rust library for encoding and decoding [UTF-7] strings. as defined by the
+//! [IMAP] standard in [RFC 3501 (#5.1.3)].
+//!
+//! Idea is based on Python [mutf7] library.
+//!
+//! [UTF-7]: <https://datatracker.ietf.org/doc/html/rfc2152>
+//! [IMAP]: <https://datatracker.ietf.org/doc/html/rfc3501>
+//! [RFC 3501 (#5.1.3)]: <https://datatracker.ietf.org/doc/html/rfc3501#section-5.1.3>
+//! [mutf7]: <https://github.com/cheshire-mouse/mutf7>
 
 use encoding_rs::UTF_16BE;
 use regex::{Captures, Regex};

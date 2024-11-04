@@ -411,14 +411,15 @@ pub type notmuch_database_get_revision = unsafe extern "C" fn(
 /// with initial components that match the path of 'database'.
 ///
 /// If this directory object does not exist in the database, this
-/// returns NOTMUCH_STATUS_SUCCESS and sets *directory to NULL.
+/// returns `NOTMUCH_STATUS_SUCCESS` and sets *directory to `NULL`.
 ///
 /// Otherwise the returned directory object is owned by the database
-/// and as such, will only be valid until notmuch_database_destroy is
+/// and as such, will only be valid until `notmuch_database_destroy` is
 /// called.
 ///
 /// Return value:
 ///
+/// ```text
 /// NOTMUCH_STATUS_SUCCESS: Successfully retrieved directory.
 ///
 /// NOTMUCH_STATUS_NULL_POINTER: The given 'directory' argument is NULL.
@@ -428,12 +429,16 @@ pub type notmuch_database_get_revision = unsafe extern "C" fn(
 ///
 /// NOTMUCH_STATUS_UPGRADE_REQUIRED: The caller must upgrade the
 ///      database to use this function.
+/// ```
 pub type notmuch_database_get_directory = unsafe extern "C" fn(
     database: *mut notmuch_database_t,
     path: *const ::std::os::raw::c_char,
     directory: *mut *mut notmuch_directory_t,
 ) -> notmuch_status_t;
 
+/// Add a message file to a database, indexing it for retrieval by
+/// future searches.
+///
 /// Add a message file to a database, indexing it for retrieval by
 /// future searches.  If a message already exists with the same message
 /// ID as the specified file, their indexes will be merged, and this
@@ -662,13 +667,17 @@ pub const NOTMUCH_EXCLUDE_FLAG: notmuch_exclude_t = 0;
 pub const NOTMUCH_EXCLUDE_TRUE: notmuch_exclude_t = 1;
 pub const NOTMUCH_EXCLUDE_FALSE: notmuch_exclude_t = 2;
 pub const notmuch_exclude_t_NOTMUCH_EXCLUDE_ALL: notmuch_exclude_t = 3;
-/// Exclude values for notmuch_query_set_omit_excluded. The strange
-/// order is to maintain backward compatibility: the old FALSE/TRUE
-/// options correspond to the new
-/// NOTMUCH_EXCLUDE_FLAG/NOTMUCH_EXCLUDE_TRUE options.
+
+/// Exclude values for notmuch_query_set_omit_excluded.
+///
+/// The strange order is to maintain backward compatibility: the old FALSE/TRUE
+/// options correspond to the new NOTMUCH_EXCLUDE_FLAG/NOTMUCH_EXCLUDE_TRUE
+/// options.
 pub type notmuch_exclude_t = u32;
-/// Specify whether to omit excluded results or simply flag them.  By
-/// default, this is set to TRUE.
+
+/// Specify whether to omit excluded results or simply flag them.
+///
+/// By default, this is set to TRUE.
 ///
 /// If set to TRUE or ALL, notmuch_query_search_messages will omit excluded
 /// messages from the results, and notmuch_query_search_threads will omit
@@ -699,12 +708,14 @@ pub type notmuch_query_set_omit_excluded =
 pub type notmuch_query_set_sort =
     unsafe extern "C" fn(query: *mut notmuch_query_t, sort: notmuch_sort_t);
 
-/// Return the sort specified for this query. See
-/// notmuch_query_set_sort.
+/// Return the sort specified for this query.
+///
+/// See notmuch_query_set_sort.
 pub type notmuch_query_get_sort =
     unsafe extern "C" fn(query: *const notmuch_query_t) -> notmuch_sort_t;
 
 /// Add a tag that will be excluded from the query results by default.
+///
 /// This exclusion will be ignored if this tag appears explicitly in
 /// the query.
 ///
@@ -724,6 +735,8 @@ pub type notmuch_query_add_tag_exclude = unsafe extern "C" fn(
     tag: *const ::std::os::raw::c_char,
 ) -> notmuch_status_t;
 
+/// Execute a query for threads.
+///
 /// Execute a query for threads, returning a notmuch_threads_t object
 /// which can be used to iterate over the results. The returned threads
 /// object is owned by the query and as such, will only be valid until
@@ -783,6 +796,8 @@ pub type notmuch_query_search_threads_st = unsafe extern "C" fn(
     out: *mut *mut notmuch_threads_t,
 ) -> notmuch_status_t;
 
+/// Execute a query for messages.
+///
 /// Execute a query for messages, returning a notmuch_messages_t object
 /// which can be used to iterate over the results. The returned
 /// messages object is owned by the query and as such, will only be
@@ -1505,6 +1520,8 @@ pub type notmuch_message_tags_to_maildir_flags =
 pub type notmuch_message_freeze =
     unsafe extern "C" fn(message: *mut notmuch_message_t) -> notmuch_status_t;
 
+/// Thaw the current 'message'.
+///
 /// Thaw the current 'message', synchronizing any changes that may have
 /// occurred while 'message' was frozen into the notmuch database.
 ///
@@ -1527,7 +1544,7 @@ pub type notmuch_message_freeze =
 pub type notmuch_message_thaw =
     unsafe extern "C" fn(message: *mut notmuch_message_t) -> notmuch_status_t;
 
-/// Destroy a notmuch_message_t object.
+/// Destroy a `notmuch_message_t` object.
 ///
 /// It can be useful to call this function in the case of a single
 /// query object with many messages in the result, (such as iterating
@@ -1536,9 +1553,7 @@ pub type notmuch_message_thaw =
 /// the messages get reclaimed when the containing query is destroyed.)
 pub type notmuch_message_destroy = unsafe extern "C" fn(message: *mut notmuch_message_t);
 
-/// ```text
-/// @name Message Properties
-/// ```
+/// Get message properties.
 ///
 /// This interface provides the ability to attach arbitrary (key,value)
 /// string pairs to a message, to remove such pairs, and to iterate

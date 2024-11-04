@@ -1410,6 +1410,8 @@ impl Attr {
     }
 }
 
+/// Bounds-safe iterator of cell indices in a row.
+///
 /// Use [`RowIterator`] to iterate the cells of a row without the need to do any
 /// bounds checking; the iterator will simply return `None` when it reaches the
 /// end of the row. [`RowIterator`] can be created via the

@@ -126,6 +126,8 @@ pub enum ScrollUpdate {
     },
 }
 
+/// A user interface component (also referred to as a UI widget).
+///
 /// Types implementing this Trait can draw on the terminal and receive events.
 /// If a type wants to skip drawing if it has not changed anything, it can hold
 /// some flag in its fields (eg `self.dirty = false`) and act upon that in their

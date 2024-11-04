@@ -38,6 +38,8 @@ impl std::fmt::Debug for Braille16bitColumn {
 }
 */
 
+/// Iterator for braille characters of a bitmap image.
+///
 /// Iterate on 2x4 pixel blocks from a bitmap and return a unicode braille
 /// character for each block. The iterator holds four lines of bitmaps
 /// encoded as `u16` numbers in swapped bit order, like the `xbm`

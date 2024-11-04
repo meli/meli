@@ -33,7 +33,7 @@ use crate::jmap::{
     thread::ThreadObject,
 };
 
-/// `UndoStatus`
+/// Whether the submission may be canceled.
 ///
 /// This represents whether the submission may be canceled.  This is
 /// server set on create and **MUST** be one of the following values:
@@ -68,12 +68,13 @@ pub enum UndoStatus {
     Canceled,
 }
 
-/// This represents the delivery status for each of the submission's
-/// recipients, if known.  This property **MAY** not be supported by all
-/// servers, in which case it will remain null.  Servers that support
-/// it **SHOULD** update the [`EmailSubmission`](`EmailSubmissionObject`) object
-/// each time the status of any of the recipients changes, even if some
-/// recipients are still being retried.
+/// The delivery status for each of the submission's recipients, if known.
+///
+/// This property **MAY** not be supported by all servers, in which case it will
+/// remain null. Servers that support it **SHOULD** update the
+/// [`EmailSubmission`](`EmailSubmissionObject`) object each time the status of
+/// any of the recipients changes, even if some recipients are still
+/// being retried.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeliveryStatusObject {
@@ -127,6 +128,8 @@ pub struct DeliveryStatusObject {
     pub displayed: Displayed,
 }
 
+/// Whether the message has been displayed to the recipient.
+///
 /// Represents whether the message has been displayed to the recipient.
 /// If a Message Disposition Notification (MDN) is received for
 /// this recipient with Disposition-Type (as per `[RFC8098]`,

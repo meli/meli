@@ -6,6 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+//! Percentage encoding utilities for URL strings.
+//!
 //! URLs use special characters to indicate the parts of the request.
 //! For example, a `?` question mark marks the end of a path and the start of a
 //! query string. In order for that character to exist inside a path, it needs

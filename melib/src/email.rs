@@ -216,10 +216,12 @@ impl Flag {
     }
 }
 
-///`Mail` holds both the envelope info of an email in its `envelope` field and
+/// Container type for both envelope and bytes data.
+///
+/// `Mail` holds both the envelope info of an email in its `envelope` field and
 /// the raw bytes that describe the email in `bytes`. Its body as an
-/// `melib::email::Attachment` can be parsed on demand
-/// with the `melib::email::Mail::body` method.
+/// [`Attachment`] can be parsed on demand
+/// with the [`Mail::body`] method.
 #[derive(Clone, Default)]
 pub struct Mail {
     pub envelope: Envelope,
