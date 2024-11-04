@@ -121,7 +121,13 @@ pub fn listing_action(input: &[u8]) -> IResult<&[u8], Result<Action, CommandErro
 }
 
 pub fn compose_action(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
-    alt((add_attachment, mailto, remove_attachment, save_draft))(input)
+    alt((
+        add_attachment,
+        mailto,
+        remove_attachment,
+        save_draft,
+        discard_draft,
+    ))(input)
 }
 
 pub fn account_action(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
@@ -741,6 +747,17 @@ pub fn save_draft(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> 
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
     Ok((input, Ok(Tab(ComposerAction(ComposerTabAction::SaveDraft)))))
+}
+pub fn discard_draft(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
+    let mut check = arg_init! { min_arg:0, max_arg: 0, discard_draft };
+    let (input, _) = tag("discard-draft")(input.trim())?;
+    arg_chk!(start check, input);
+    arg_chk!(finish check, input);
+    let (input, _) = eof(input)?;
+    Ok((
+        input,
+        Ok(Tab(ComposerAction(ComposerTabAction::DiscardDraft))),
+    ))
 }
 pub fn create_mailbox(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     let mut check = arg_init! { min_arg:1, max_arg: 1, create_malbox};

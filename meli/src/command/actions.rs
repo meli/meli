@@ -66,6 +66,7 @@ pub enum ListingAction {
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum ComposerTabAction {
+    DiscardDraft,
     SaveDraft,
     ToggleSign,
     ToggleEncrypt,

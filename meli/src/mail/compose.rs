@@ -2272,6 +2272,13 @@ impl Component for Composer {
                     self.set_dirty(true);
                     return true;
                 }
+                ComposerTabAction::DiscardDraft => {
+                    context
+                        .replies
+                        .push_back(UIEvent::Action(Tab(Kill(self.id))));
+                    self.set_dirty(true);
+                    return true;
+                }
                 #[cfg(feature = "gpgme")]
                 ComposerTabAction::ToggleSign => {
                     let is_true = self

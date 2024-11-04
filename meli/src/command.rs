@@ -426,6 +426,11 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                   tokens: &[One(Literal("save-draft"))],
                   parser: parser::save_draft
                 },
+                { tags: ["discard-draft"],
+                  desc: "discard draft",
+                  tokens: &[One(Literal("discard-draft"))],
+                  parser: parser::discard_draft
+                },
                 { tags: ["toggle sign "],
                   desc: "switch between sign/unsign for this draft",
                   tokens: &[One(Literal("toggle")), One(Literal("sign"))],
