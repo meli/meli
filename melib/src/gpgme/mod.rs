@@ -86,10 +86,10 @@ pub enum GpgmeFlag {
 }
 
 impl GpgmeFlag {
-    // SAFETY: Value is NULL terminated.
+    // SAFETY: Value is NUL terminated.
     const AUTO_KEY_RETRIEVE: &'static CStr =
         unsafe { CStr::from_bytes_with_nul_unchecked(b"auto-key-retrieve\0") };
-    // SAFETY: Value is NULL terminated.
+    // SAFETY: Value is NUL terminated.
     const AUTO_KEY_LOCATE: &'static CStr =
         unsafe { CStr::from_bytes_with_nul_unchecked(b"auto-key-locate\0") };
 }
@@ -338,9 +338,9 @@ impl Context {
                 return Ok(self);
             }
         };
-        // SAFETY: Value is NULL terminated.
+        // SAFETY: Value is NUL terminated.
         const VALUE_ON: &CStr = unsafe { CStr::from_bytes_with_nul_unchecked(b"1\0") };
-        // SAFETY: Value is NULL terminated.
+        // SAFETY: Value is NUL terminated.
         const VALUE_OFF: &CStr = unsafe { CStr::from_bytes_with_nul_unchecked(b"0\0") };
         let raw_flag = match flag {
             GpgmeFlag::AutoKeyRetrieve => GpgmeFlag::AUTO_KEY_RETRIEVE,
@@ -378,7 +378,7 @@ impl Context {
         if val == LocateKey::NODEFAULT {
             self.set_flag_inner(
                 GpgmeFlag::AUTO_KEY_LOCATE,
-                // SAFETY: Value is NULL terminated.
+                // SAFETY: Value is NUL terminated.
                 unsafe { CStr::from_bytes_with_nul_unchecked(b"clear,nodefault\0") },
             )?;
         } else {
