@@ -22,7 +22,7 @@
 #[cfg(target_os = "macos")]
 use std::os::fd::OwnedFd;
 use std::{
-    ffi::{CString, OsStr},
+    ffi::{CStr, CString, OsStr},
     mem::ManuallyDrop,
     os::unix::{
         ffi::OsStrExt,
@@ -80,6 +80,15 @@ ioctl_none_bad!(
 /// Create a new pseudoterminal (PTY) with given width, size and execute
 /// `command` in it.
 pub fn create_pty(width: usize, height: usize, command: &str) -> Result<Arc<Mutex<Terminal>>> {
+    let command_cstr = CString::new(command)
+        .chain_err_kind(ErrorKind::ValueError)
+        .chain_err_summary(|| {
+            format!(
+                "Could not convert command `{}` into a C string; it should contain no NUL bytes.",
+                command
+            )
+        })?;
+
     #[cfg(not(target_os = "macos"))]
     let (frontend_fd, backend_name): (nix::pty::PtyMaster, String) = {
         // Open a new PTY frontend
@@ -94,8 +103,8 @@ pub fn create_pty(width: usize, height: usize, command: &str) -> Result<Arc<Mute
 
         {
             let winsize = Winsize {
-                ws_row: <u16>::try_from(height).unwrap(),
-                ws_col: <u16>::try_from(width).unwrap(),
+                ws_row: <u16>::try_from(height).unwrap_or(u16::MAX),
+                ws_col: <u16>::try_from(width).unwrap_or(u16::MAX),
                 ws_xpixel: 0,
                 ws_ypixel: 0,
             };
@@ -108,8 +117,8 @@ pub fn create_pty(width: usize, height: usize, command: &str) -> Result<Arc<Mute
     #[cfg(target_os = "macos")]
     let (frontend_fd, backend_fd): (OwnedFd, OwnedFd) = {
         let winsize = Winsize {
-            ws_row: <u16>::try_from(height).unwrap(),
-            ws_col: <u16>::try_from(width).unwrap(),
+            ws_row: <u16>::try_from(height).unwrap_or(u16::MAX),
+            ws_col: <u16>::try_from(width).unwrap_or(u16::MAX),
             ws_xpixel: 0,
             ws_ypixel: 0,
         };
@@ -118,18 +127,50 @@ pub fn create_pty(width: usize, height: usize, command: &str) -> Result<Arc<Mute
         (ends.master, ends.slave)
     };
 
+    let mut shell_path = None;
+
+    // Find posix sh location, because POSIX shell is not always at /bin/sh
+    let path_var = std::process::Command::new("getconf")
+        .args(["PATH"])
+        .output()?
+        .stdout;
+    for mut p in std::env::split_paths(&OsStr::from_bytes(&path_var[..])) {
+        p.push("sh");
+        if p.exists() {
+            shell_path = Some(
+                CString::new(p.as_os_str().as_bytes())
+                    .chain_err_kind(ErrorKind::ValueError)
+                    .chain_err_summary(|| {
+                        format!(
+                            "Could not convert shell path `{}` into a C string; it should contain \
+                             no NUL bytes.",
+                            p.display()
+                        )
+                    })?,
+            );
+            break;
+        }
+    }
+
+    let Some(shell_path) = shell_path else {
+        return Err(Error::new(format!(
+            "Could not execute `{command}`: did not find the standard POSIX sh shell in PATH = {}",
+            String::from_utf8_lossy(&path_var)
+        )));
+    };
+
     let child_pid = match unsafe { fork()? } {
         ForkResult::Child => {
             #[cfg(not(target_os = "macos"))]
-            /* Open backend end for pseudoterminal */
+            // Open backend end for pseudoterminal
             let backend_fd = open(Path::new(&backend_name), OFlag::O_RDWR, stat::Mode::empty())?;
 
             // assign stdin, stdout, stderr to the pty
-            dup2(backend_fd.as_raw_fd(), STDIN_FILENO).unwrap();
-            dup2(backend_fd.as_raw_fd(), STDOUT_FILENO).unwrap();
-            dup2(backend_fd.as_raw_fd(), STDERR_FILENO).unwrap();
-            /* Become session leader */
-            nix::unistd::setsid().unwrap();
+            dup2(backend_fd.as_raw_fd(), STDIN_FILENO).expect("could not dup2 STDIN");
+            dup2(backend_fd.as_raw_fd(), STDOUT_FILENO).expect("could not dup2 STDOUT");
+            dup2(backend_fd.as_raw_fd(), STDERR_FILENO).expect("could not dup2 STDERR");
+            // Become session leader
+            nix::unistd::setsid().expect("Forked terminal process could not become session leader");
             match unsafe { set_controlling_terminal(backend_fd.as_raw_fd()) } {
                 Ok(c) if c < 0 => {
                     log::error!(
@@ -145,32 +186,14 @@ pub fn create_pty(width: usize, height: usize, command: &str) -> Result<Arc<Mute
                     std::process::exit(-1);
                 }
             }
-            /* Find posix sh location, because POSIX shell is not always at /bin/sh */
-            let path_var = std::process::Command::new("getconf")
-                .args(["PATH"])
-                .output()?
-                .stdout;
-            for mut p in std::env::split_paths(&OsStr::from_bytes(&path_var[..])) {
-                p.push("sh");
-                if p.exists() {
-                    if let Err(e) = nix::unistd::execv(
-                        &CString::new(p.as_os_str().as_bytes()).unwrap(),
-                        &[
-                            &CString::new("sh").unwrap(),
-                            &CString::new("-c").unwrap(),
-                            &CString::new(command.as_bytes()).unwrap(),
-                        ],
-                    ) {
-                        log::error!("Could not execute `{command}`: {e}");
-                        std::process::exit(-1);
-                    }
-                }
-            }
-            log::error!(
-                "Could not execute `{command}`: did not find the standard POSIX sh shell in PATH \
-                 = {}",
-                String::from_utf8_lossy(&path_var),
-            );
+            // SAFETY: Value is NUL terminated.
+            const SH: &CStr = unsafe { CStr::from_bytes_with_nul_unchecked(b"sh\0") };
+            // SAFETY: Value is NUL terminated.
+            const COMMAND_FLAG: &CStr = unsafe { CStr::from_bytes_with_nul_unchecked(b"-c\0") };
+            // nix::unistd::execv never fails, returns `Result<Infallible>` because it
+            // never returns.
+            nix::unistd::execv(&shell_path, &[SH, COMMAND_FLAG, &command_cstr])
+                .expect("Infallible");
             // We are in a separate process, so doing exit(-1) here won't affect the parent
             // process.
             std::process::exit(-1);
@@ -191,6 +214,8 @@ pub fn create_pty(width: usize, height: usize, command: &str) -> Result<Arc<Mute
             let frontend_file = unsafe { std::fs::File::from_raw_fd(frontend_fd) };
             Terminal::forward_pty_translate_escape_codes(pty_, frontend_file);
         })
-        .unwrap();
+        .chain_err_summary(|| {
+            "Could not spawn controlling thread for forked embedded terminal process"
+        })?;
     Ok(pty)
 }
