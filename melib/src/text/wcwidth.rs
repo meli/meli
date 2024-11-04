@@ -148,7 +148,7 @@ pub fn wcswidth(mut pwcs: WChar, mut n: usize) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::text::grapheme_clusters::TextProcessing;
+    use crate::text::{grapheme_clusters::TextProcessing, TextPresentation};
 
     #[test]
     fn test_wcwidth() {
@@ -176,6 +176,8 @@ mod tests {
         assert_eq!("●\u{FE0E}📎\u{FE0E}".grapheme_width(), 3);
         assert_eq!("🎃".grapheme_width(), 2);
         assert_eq!("👻".grapheme_width(), 2);
+        assert_eq!("🛡︎".grapheme_width(), 2);
+        assert_eq!("🛡︎".text_pr().grapheme_width(), 2);
 
         assert_eq!("こんにちわ世界".grapheme_width(), 14);
         assert_eq!("こ★ん■に●ち▲わ☆世◆界".grapheme_width(), 20);

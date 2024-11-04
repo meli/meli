@@ -21,46 +21,6 @@
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
 #[test]
-fn test_terminal_text_presentation() {
-    use crate::terminal::TextPresentation;
-
-    // A big thanks to every spammer, e-shop and even patch submitter who used
-    // emojis in subjects and inspired me to add this feature.
-    const TEST_CASES: &[(&str, &str)] = &[
-        (
-            "The Darkness Issue is now shipping worldwide 🦇",
-            "The Darkness Issue is now shipping worldwide 🦇︎",
-        ),
-        ("🐝 <user@example.com>", "🐝︎ <user@example.com>"),
-        (
-            "Happy Women's Day 🎀 - ΠΑΡΕ ΤΟ ΔΩΡΟ ΣΟΥ 🎁",
-            "Happy Women's Day 🎀︎ - ΠΑΡΕ ΤΟ ΔΩΡΟ ΣΟΥ 🎁︎",
-        ),
-        (
-            "💨 Εσύ θα προλάβεις; 🔴 🐇 Καλό Πάσχα!",
-            "💨︎ Εσύ θα προλάβεις; 🔴︎ 🐇︎ Καλό Πάσχα!",
-        ),
-        ("Dream drop 💤", "Dream drop 💤︎"),
-        (
-            "⭐ Αξιολόγησε τον επαγγελματία! ⭐",
-            "⭐︎ Αξιολόγησε τον επαγγελματία! ⭐︎",
-        ),
-        (
-            "🔓 MYSTERY UNLOCKED: 💀NEW💀 SIGNED VENTURE BROS. DVD SALE & MERCH RESTOCK",
-            "🔓︎ MYSTERY UNLOCKED: 💀︎NEW💀︎ SIGNED VENTURE BROS. DVD SALE & MERCH RESTOCK",
-        ),
-        (
-            "[PATCH RFC 00/26] Multifd 🔀 device state transfer support with VFIO consumer",
-            "[PATCH RFC 00/26] Multifd 🔀︎ device state transfer support with VFIO consumer",
-        ),
-    ];
-
-    for (emoji, text) in TEST_CASES {
-        assert_eq!(&emoji.text_pr(), text);
-    }
-}
-
-#[test]
 fn test_terminal_osc8_print() {
     use crate::terminal::Hyperlink;
 

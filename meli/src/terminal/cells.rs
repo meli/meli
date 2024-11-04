@@ -30,12 +30,12 @@ use std::{
 
 use melib::{
     log,
-    text::{search::KMP, wcwidth},
+    text::{search::KMP, wcwidth, TextPresentation},
 };
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use smallvec::SmallVec;
 
-use super::{Area, Color, Pos, ScreenGeneration, TextPresentation};
+use super::{Area, Color, Pos, ScreenGeneration};
 use crate::{state::Context, ThemeAttribute};
 
 /// In a scroll region up and down cursor movements shift the region vertically.
