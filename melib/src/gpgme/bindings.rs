@@ -317,6 +317,7 @@ pub struct _gpgme_sig_notation {
     pub flags: gpgme_sig_notation_flags_t,
     pub _bitfield_1: __BindgenBitfieldUnit<[u8; 4usize], u32>,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_sig_notation() {
@@ -459,6 +460,7 @@ pub struct _gpgme_engine_info {
     pub req_version: *const ::std::os::raw::c_char,
     pub home_dir: *mut ::std::os::raw::c_char,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_engine_info() {
@@ -547,6 +549,7 @@ pub struct _gpgme_tofu_info {
     pub encrlast: ::std::os::raw::c_ulong,
     pub description: *mut ::std::os::raw::c_char,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_tofu_info() {
@@ -715,6 +718,7 @@ pub struct _gpgme_subkey {
     pub curve: *mut ::std::os::raw::c_char,
     pub keygrip: *mut ::std::os::raw::c_char,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_subkey() {
@@ -1077,6 +1081,7 @@ pub struct _gpgme_key_sig {
     pub notations: gpgme_sig_notation_t,
     pub _last_notation: gpgme_sig_notation_t,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_key_sig() {
@@ -1347,6 +1352,7 @@ pub struct _gpgme_user_id {
     pub tofu: gpgme_tofu_info_t,
     pub last_update: ::std::os::raw::c_ulong,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_user_id() {
@@ -1563,6 +1569,7 @@ pub struct _gpgme_key {
     pub fpr: *mut ::std::os::raw::c_char,
     pub last_update: ::std::os::raw::c_ulong,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_key() {
@@ -1916,6 +1923,7 @@ pub struct _gpgme_invalid_key {
     pub fpr: *mut ::std::os::raw::c_char,
     pub reason: gpgme_error_t,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_invalid_key() {
@@ -2112,6 +2120,7 @@ pub struct gpgme_io_event_done_data {
     pub err: gpgme_error_t,
     pub op_err: gpgme_error_t,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout_gpgme_io_event_done_data() {
@@ -2163,6 +2172,7 @@ pub struct gpgme_io_cbs {
     pub event: gpgme_event_io_cb_t,
     pub event_priv: *mut ::std::os::raw::c_void,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout_gpgme_io_cbs() {
@@ -2289,6 +2299,7 @@ pub struct gpgme_data_cbs {
     pub seek: gpgme_data_seek_cb_t,
     pub release: gpgme_data_release_cb_t,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout_gpgme_data_cbs() {
@@ -2419,6 +2430,7 @@ pub type gpgme_key_unref = unsafe extern "C" fn(key: gpgme_key_t);
 pub struct _gpgme_op_encrypt_result {
     pub invalid_recipients: gpgme_invalid_key_t,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_op_encrypt_result() {
@@ -2527,6 +2539,7 @@ pub struct _gpgme_recipient {
     pub pubkey_algo: gpgme_pubkey_algo_t,
     pub status: gpgme_error_t,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_recipient() {
@@ -2602,6 +2615,7 @@ pub struct _gpgme_op_decrypt_result {
     pub session_key: *mut ::std::os::raw::c_char,
     pub symkey_algo: *mut ::std::os::raw::c_char,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_op_decrypt_result() {
@@ -2807,6 +2821,7 @@ pub struct _gpgme_new_signature {
     pub class: ::std::os::raw::c_uint,
     pub sig_class: ::std::os::raw::c_uint,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_new_signature() {
@@ -2922,6 +2937,7 @@ pub struct _gpgme_op_sign_result {
     pub invalid_signers: gpgme_invalid_key_t,
     pub signatures: gpgme_new_signature_t,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_op_sign_result() {
@@ -3005,6 +3021,7 @@ pub struct _gpgme_signature {
     pub pka_address: *mut ::std::os::raw::c_char,
     pub key: gpgme_key_t,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_signature() {
@@ -3249,6 +3266,7 @@ pub struct _gpgme_op_verify_result {
     pub _bitfield_1: __BindgenBitfieldUnit<[u8; 4usize], u32>,
     pub __bindgen_padding_0: u32,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_op_verify_result() {
@@ -3350,6 +3368,7 @@ pub struct _gpgme_import_status {
     pub result: gpgme_error_t,
     pub status: ::std::os::raw::c_uint,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_import_status() {
@@ -3425,6 +3444,7 @@ pub struct _gpgme_op_import_result {
     pub imports: gpgme_import_status_t,
     pub skipped_v3_keys: ::std::os::raw::c_int,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_op_import_result() {
@@ -3684,6 +3704,7 @@ pub struct _gpgme_op_genkey_result {
     pub pubkey: gpgme_data_t,
     pub seckey: gpgme_data_t,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_op_genkey_result() {
@@ -3947,6 +3968,7 @@ pub type gpgme_op_tofu_policy =
 pub struct _gpgme_op_keylist_result {
     pub _bitfield_1: __BindgenBitfieldUnit<[u8; 4usize], u32>,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 fn bindgen_test_layout__gpgme_op_keylist_result() {
     assert_eq!(
@@ -4046,6 +4068,7 @@ pub struct _gpgme_trust_item {
     pub _validity: [::std::os::raw::c_char; 2usize],
     pub name: *mut ::std::os::raw::c_char,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_trust_item() {
@@ -4247,6 +4270,7 @@ pub type gpgme_op_assuan_transact_ext = extern "C" fn(
 pub struct _gpgme_op_vfs_mount_result {
     pub mount_dir: *mut ::std::os::raw::c_char,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_op_vfs_mount_result() {
@@ -4322,6 +4346,7 @@ pub union gpgme_conf_arg__bindgen_ty_1 {
     pub string: *mut ::std::os::raw::c_char,
     _bindgen_union_align: u64,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout_gpgme_conf_arg__bindgen_ty_1() {
@@ -4384,6 +4409,7 @@ fn bindgen_test_layout_gpgme_conf_arg__bindgen_ty_1() {
         )
     );
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout_gpgme_conf_arg() {
@@ -4449,6 +4475,7 @@ pub struct gpgme_conf_opt {
     pub new_value: gpgme_conf_arg_t,
     pub user_data: *mut ::std::os::raw::c_void,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout_gpgme_conf_opt() {
@@ -4638,6 +4665,7 @@ pub struct gpgme_conf_comp {
     pub program_name: *mut ::std::os::raw::c_char,
     pub options: *mut gpgme_conf_opt,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout_gpgme_conf_comp() {
@@ -4746,6 +4774,7 @@ pub struct _gpgme_op_query_swdb_result {
     pub version: *mut ::std::os::raw::c_char,
     pub reldate: ::std::os::raw::c_ulong,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_op_query_swdb_result() {
@@ -5287,6 +5316,7 @@ pub type gpgme_trust_item_get_int_attr = extern "C" fn(
 pub struct _gpgme_op_assuan_result {
     pub err: gpgme_error_t,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_op_assuan_result() {
@@ -5366,6 +5396,7 @@ pub struct __va_list_tag {
     pub overflow_arg_area: *mut ::std::os::raw::c_void,
     pub reg_save_area: *mut ::std::os::raw::c_void,
 }
+#[cfg(target_arch = "x86_64")]
 #[test]
 #[allow(deref_nullptr)]
 fn bindgen_test_layout___va_list_tag() {
