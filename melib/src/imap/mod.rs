@@ -483,7 +483,6 @@ impl MailBackend for ImapType {
             }
             Ok(mailboxes
                 .iter()
-                .filter(|(_, f)| f.is_subscribed)
                 .map(|(h, f)| (*h, Box::new(Clone::clone(f)) as Mailbox))
                 .collect())
         }))
