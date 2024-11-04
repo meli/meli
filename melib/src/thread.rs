@@ -949,13 +949,13 @@ impl Threads {
             .message_ids
             .get(message_id)
             .cloned()
-            .or(
+            .or_else(|| {
                 if envelopes_lck[&env_hash].thread() != ThreadNodeHash::null() {
                     Some(envelopes_lck[&env_hash].thread())
                 } else {
                     None
-                },
-            )
+                }
+            })
             .unwrap_or_else(|| ThreadNodeHash::from(message_id.raw()));
         {
             let node = self.thread_nodes.entry(new_id).or_default();

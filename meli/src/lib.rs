@@ -43,6 +43,7 @@
     //clippy::ptr_as_ptr,
     clippy::doc_markdown,
     clippy::expect_fun_call,
+    clippy::or_fun_call,
     clippy::bool_to_int_with_if,
     clippy::borrow_as_ptr,
     clippy::cast_ptr_alignment,
