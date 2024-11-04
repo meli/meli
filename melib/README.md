@@ -2,30 +2,29 @@
 
 [![GitHub license](https://img.shields.io/github/license/meli/meli)](https://github.com/meli/meli/blob/master/COPYING) [![Crates.io](https://img.shields.io/crates/v/melib)](https://crates.io/crates/melib) [![docs.rs](https://docs.rs/melib/badge.svg)](https://docs.rs/melib)
 
-Library for handling mail.
+Library for handling email for email clients.
 
-## optional features
+## Optional Features
 
-| feature flag                 | dependencies                        | notes                    |
-|------------------------------|-------------------------------------|--------------------------|
-| `smtp`                       | `native-tls`, `base64`              | async SMTP client        |
-|------------------------------|-------------------------------------|--------------------------|
-| `imap`                       | `native-tls`                        |                          |
-|------------------------------|-------------------------------------|--------------------------|
-| `jmap`                       | `isahc`, `native-tls`, `serde_json` |                          |
-|------------------------------|-------------------------------------|--------------------------|
-| `nntp`                       | `native-tls`                        |                          |
-|------------------------------|-------------------------------------|--------------------------|
-| `maildir`                    | `notify`                            |                          |
-|------------------------------|-------------------------------------|--------------------------|
-| `mbox`                       | `notify`                            |                          |
-|------------------------------|-------------------------------------|--------------------------|
-| `notmuch`                    | `notify`                            |                          |
-|------------------------------|-------------------------------------|--------------------------|
-| `sqlite`                     | `rusqlite`                          | Used in IMAP cache.      |
-|------------------------------|-------------------------------------|--------------------------|
-| `gpgme`                      |                                     | GPG use with libgpgme.so |
-|------------------------------|-------------------------------------|--------------------------|
+| Feature flag  | Dependencies                                     | Notes                                              |
+|---------------|--------------------------------------------------|----------------------------------------------------|
+| `maildir`     | `notify` crate                                   | Provides the *maildir* backend                     |
+| `mbox`        | `notify` crate                                   | Provides the *mbox* backend                        |
+| `notmuch`     | `notify` crate                                   | Provides the *notmuch* backend                     |
+| `imap`        | `imap-codec` crate, `tls` feature                | Provides the *IMAP* backend                        |
+| `jmap`        | `http` feature, `url` crate with `serde` feature | Provides the *JMAP* backend                        |
+| `nntp`        | `tls` feature                                    | Provides the *NNTP* (Usenet) backend               |
+| `smtp`        | `base64` crate, `tls` feature                    | Integrated async *SMTP* client                     |
+| `sqlite3`     | `rusqlite` crate with `bundled-full` feature     | Used in caches                                     |
+| `gpgme`       |                                                  | *GPG* use by dynamically loading `libgpgme.so`     |
+| `http`        | `isahc` crate                                    | Used for *HTTP* client needs, notably JMAP`        |
+| `tls`         | `native-tls` crate                               |                                                    |
+| `http-static` | `isahc` crate with `static-curl` feature         | Links with `curl` statically                       |
+| `tls-static`  | `native-tls` crate with `vendored` feature       | Links with `OpenSSL` statically where it's used    |
+| `imap-trace`  | `imap` feature                                   | Connection trace logs on the `trace` logging level |
+| `jmap-trace`  | `jmap` feature                                   | Connection trace logs on the `trace` logging level |
+| `nntp-trace`  | `nntp` feature                                   | Connection trace logs on the `trace` logging level |
+| `smtp-trace`  | `smtp` feature                                   | Connection trace logs on the `trace` logging level |
 
 ## Example: Parsing bytes into an `Envelope`
 
