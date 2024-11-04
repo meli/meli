@@ -582,6 +582,20 @@ impl Component for JobManager {
                 self.movement = Some(PageMovement::End);
                 return true;
             }
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_right"]) =>
+            {
+                self.set_dirty(true);
+                self.movement = Some(PageMovement::Right(1));
+                return true;
+            }
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_left"]) =>
+            {
+                self.set_dirty(true);
+                self.movement = Some(PageMovement::Left(1));
+                return true;
+            }
             UIEvent::Resize => {
                 self.set_dirty(true);
             }
