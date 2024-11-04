@@ -18,7 +18,7 @@ all: rustfmt clippy cargo-derivefmt-melib cargo-derivefmt-meli cargo-derivefmt-t
 .PHONY: rustfmt
 rustfmt:
 	@printf "rustfmt\n"
-	cargo fmt --check --all
+	cargo +nightly fmt --check --all || cargo fmt --check --all
 .PHONY: clippy
 clippy:
 	@printf "clippy\n"
