@@ -169,14 +169,17 @@ impl MailListingTrait for CompactListing {
         &mut self.rows.row_updates
     }
 
-    fn selection(&mut self) -> &mut HashMap<EnvelopeHash, bool> {
+    fn selection(&self) -> &HashMap<EnvelopeHash, bool> {
+        &self.rows.selection
+    }
+
+    fn selection_mut(&mut self) -> &mut HashMap<EnvelopeHash, bool> {
         &mut self.rows.selection
     }
 
     fn get_focused_items(&self, _context: &Context) -> SmallVec<[EnvelopeHash; 8]> {
         let is_selection_empty = !self
-            .rows
-            .selection
+            .selection()
             .values()
             .cloned()
             .any(std::convert::identity);
@@ -184,8 +187,7 @@ impl MailListingTrait for CompactListing {
         let sel_iter = if !is_selection_empty {
             cursor_iter = None;
             Some(
-                self.rows
-                    .selection
+                self.selection()
                     .iter()
                     .filter(|(_, v)| **v)
                     .map(|(k, _)| *k),
@@ -768,10 +770,18 @@ impl ListingTrait for CompactListing {
         results: SmallVec<[EnvelopeHash; 512]>,
         context: &Context,
     ) {
+        if filter_term.is_empty() {
+            return;
+        }
+
         self.length = 0;
         self.filtered_selection.clear();
         self.filtered_order.clear();
         self.filter_term = filter_term;
+        self.rows.row_updates.clear();
+        for v in self.selection_mut().values_mut() {
+            *v = false;
+        }
 
         let account = &context.accounts[&self.cursor_pos.0];
         let threads = account.collection.get_threads(self.cursor_pos.1);
@@ -1009,8 +1019,7 @@ impl CompactListing {
             },
             flag: FlagString::new(
                 flags,
-                self.rows
-                    .selection
+                self.selection()
                     .get(&root_envelope.hash())
                     .cloned()
                     .unwrap_or(false),
@@ -1383,8 +1392,7 @@ impl CompactListing {
                     let thread =
                         threads.find_group(threads.thread_nodes[&env_thread_node_hash].group);
                     if self.rows.all_threads.contains(&thread) {
-                        self.rows
-                            .selection
+                        self.selection_mut()
                             .entry(env_hash)
                             .and_modify(|entry| *entry = true);
                     }

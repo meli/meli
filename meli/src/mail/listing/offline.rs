@@ -39,7 +39,11 @@ impl MailListingTrait for OfflineListing {
         &mut self._row_updates
     }
 
-    fn selection(&mut self) -> &mut HashMap<EnvelopeHash, bool> {
+    fn selection(&self) -> &HashMap<EnvelopeHash, bool> {
+        &self._selection
+    }
+
+    fn selection_mut(&mut self) -> &mut HashMap<EnvelopeHash, bool> {
         &mut self._selection
     }
 

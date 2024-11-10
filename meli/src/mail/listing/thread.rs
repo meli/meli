@@ -143,8 +143,8 @@ pub struct ThreadListing {
     #[allow(clippy::type_complexity)]
     _select_job: Option<(String, JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>)>,
     filter_term: String,
-    filtered_selection: Vec<EnvelopeHash>,
-    _filtered_order: HashMap<EnvelopeHash, usize>,
+    filtered_selection: Vec<ThreadHash>,
+    filtered_order: HashMap<ThreadHash, usize>,
     data_columns: DataColumns<5>,
     rows_drawn: SegmentTree,
     rows: RowsState<(ThreadHash, EnvelopeHash)>,
@@ -168,14 +168,17 @@ impl MailListingTrait for ThreadListing {
         &mut self.rows.row_updates
     }
 
-    fn selection(&mut self) -> &mut HashMap<EnvelopeHash, bool> {
+    fn selection(&self) -> &HashMap<EnvelopeHash, bool> {
+        &self.rows.selection
+    }
+
+    fn selection_mut(&mut self) -> &mut HashMap<EnvelopeHash, bool> {
         &mut self.rows.selection
     }
 
     fn get_focused_items(&self, _context: &Context) -> SmallVec<[EnvelopeHash; 8]> {
         let is_selection_empty: bool = !self
-            .rows
-            .selection
+            .selection()
             .values()
             .cloned()
             .any(std::convert::identity);
@@ -185,13 +188,7 @@ impl MailListingTrait for ThreadListing {
                 .into_iter()
                 .collect::<_>();
         }
-        SmallVec::from_iter(
-            self.rows
-                .selection
-                .iter()
-                .filter(|(_, &v)| v)
-                .map(|(k, _)| *k),
-        )
+        SmallVec::from_iter(self.selection().iter().filter(|(_, &v)| v).map(|(k, _)| *k))
     }
 
     /// Fill the `self.content` `CellBuffer` with the contents of the account
@@ -517,6 +514,10 @@ impl ListingTrait for ThreadListing {
         self.focus = Focus::None;
         self.rows.clear();
         self.initialized = false;
+        self.filtered_selection.clear();
+        self.filtered_order.clear();
+        self.filter_term.clear();
+        self.data_columns.clear();
     }
 
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
@@ -645,7 +646,7 @@ impl ListingTrait for ThreadListing {
             even: idx % 2 == 0,
             unseen: !envelope.is_seen(),
             highlighted: self.cursor_pos.2 == idx,
-            selected: self.rows.selection[&env_hash],
+            selected: self.selection()[&env_hash],
         );
 
         let x = self.data_columns.widths[0]
@@ -673,14 +674,57 @@ impl ListingTrait for ThreadListing {
     fn filter(
         &mut self,
         filter_term: String,
-        _results: SmallVec<[EnvelopeHash; 512]>,
+        results: SmallVec<[EnvelopeHash; 512]>,
         context: &Context,
     ) {
         if filter_term.is_empty() {
             return;
         }
 
-        let _account = &context.accounts[&self.cursor_pos.0];
+        self.length = 0;
+        self.filtered_selection.clear();
+        self.filtered_order.clear();
+        self.filter_term = filter_term;
+        self.rows.row_updates.clear();
+        for v in self.selection_mut().values_mut() {
+            *v = false;
+        }
+
+        let account = &context.accounts[&self.cursor_pos.0];
+        let threads = account.collection.get_threads(self.cursor_pos.1);
+        for env_hash in results {
+            if !account.collection.contains_key(&env_hash) {
+                continue;
+            }
+            let env_thread_node_hash = account.collection.get_env(env_hash).thread();
+            if !threads.thread_nodes.contains_key(&env_thread_node_hash) {
+                continue;
+            }
+            let thread = threads.find_group(threads.thread_nodes[&env_thread_node_hash].group);
+            if self.filtered_order.contains_key(&thread) {
+                continue;
+            }
+            if self.rows.all_threads.contains(&thread) {
+                self.filtered_selection.push(thread);
+                self.filtered_order
+                    .insert(thread, self.filtered_selection.len() - 1);
+            }
+        }
+        if !self.filtered_selection.is_empty() {
+            threads.group_inner_sort_by(
+                &mut self.filtered_selection,
+                self.sort,
+                &context.accounts[&self.cursor_pos.0].collection.envelopes,
+            );
+            self.new_cursor_pos.2 = self.cursor_pos.2.min(self.filtered_selection.len() - 1);
+        } else {
+            _ = self.data_columns.columns[0].resize_with_context(0, 0, context);
+        }
+        self.redraw_threads_list(
+            context,
+            Box::new(self.filtered_selection.clone().into_iter())
+                as Box<dyn Iterator<Item = ThreadHash>>,
+        );
     }
 
     fn view_area(&self) -> Option<Area> {
@@ -788,7 +832,7 @@ impl ThreadListing {
             search_job: None,
             _select_job: None,
             filtered_selection: Vec::new(),
-            _filtered_order: HashMap::default(),
+            filtered_order: HashMap::default(),
             dirty: true,
             force_draw: true,
             focus: Focus::None,
@@ -903,7 +947,7 @@ impl ThreadListing {
             subject: SubjectString(subject),
             flag: FlagString::new(
                 e.flags(),
-                self.rows.selection.get(&e.hash()).cloned().unwrap_or(false),
+                self.selection().get(&e.hash()).cloned().unwrap_or(false),
                 /* snoozed */ false,
                 !e.is_seen(),
                 e.has_attachments(),
@@ -1134,7 +1178,7 @@ impl ThreadListing {
             even: idx % 2 == 0,
             unseen: !envelope.is_seen(),
             highlighted: false,
-            selected: self.rows.selection[&env_hash]
+            selected: self.selection()[&env_hash]
         );
         self.seen_cache.insert(env_hash, envelope.is_seen());
 
@@ -1190,7 +1234,7 @@ impl ThreadListing {
                     even: (top_idx + i) % 2 == 0,
                     unseen: !self.seen_cache[&env_hash],
                     highlighted: self.cursor_pos.2 == (top_idx + i),
-                    selected: self.rows.selection[&env_hash]
+                    selected: self.selection()[&env_hash]
                 )
             } else {
                 row_attr!(self.color_cache, even: (top_idx + i) % 2 == 0, unseen: false, highlighted: true, selected: false)
@@ -1484,7 +1528,7 @@ impl Component for ThreadListing {
                         even: row % 2 == 0,
                         unseen: !envelope.is_seen(),
                         highlighted: false,
-                        selected: self.rows.selection[&env_hash]
+                        selected: self.selection()[&env_hash]
                     );
                     self.rows.row_attr_cache.insert(row, row_attr);
                     self.force_draw |= row >= top_idx && row < top_idx + rows;
@@ -1627,6 +1671,12 @@ impl Component for ThreadListing {
             }
             UIEvent::Resize => {
                 self.set_dirty(true);
+            }
+            UIEvent::Input(Key::Esc) if !self.unfocused() && !self.filter_term.is_empty() => {
+                self.set_coordinates((self.new_cursor_pos.0, self.new_cursor_pos.1));
+                self.refresh_mailbox(context, false);
+                self.set_dirty(true);
+                return true;
             }
             UIEvent::Input(ref key)
                 if !self.unfocused()

@@ -983,7 +983,8 @@ pub trait MailListingTrait: ListingTrait {
     }
 
     fn row_updates(&mut self) -> &mut SmallVec<[EnvelopeHash; 8]>;
-    fn selection(&mut self) -> &mut HashMap<EnvelopeHash, bool>;
+    fn selection(&self) -> &HashMap<EnvelopeHash, bool>;
+    fn selection_mut(&mut self) -> &mut HashMap<EnvelopeHash, bool>;
     fn get_focused_items(&self, _context: &Context) -> SmallVec<[EnvelopeHash; 8]>;
     fn redraw_threads_list(
         &mut self,
@@ -1892,7 +1893,7 @@ impl Component for Listing {
                                     | ListingAction::SendToTrash
                             );
                             let mut row_updates: SmallVec<[EnvelopeHash; 8]> = SmallVec::new();
-                            for (k, v) in self.component.selection().iter_mut() {
+                            for (k, v) in self.component.selection_mut().iter_mut() {
                                 if *v {
                                     *v = !should_be_unselected;
                                     row_updates.push(*k);
@@ -1906,7 +1907,7 @@ impl Component for Listing {
                             let row_updates: SmallVec<[EnvelopeHash; 8]> =
                                 self.component.get_focused_items(context);
                             for h in &row_updates {
-                                if let Some(val) = self.component.selection().get_mut(h) {
+                                if let Some(val) = self.component.selection_mut().get_mut(h) {
                                     *val = false;
                                 }
                             }
@@ -2214,7 +2215,7 @@ impl Component for Listing {
                         let row_updates: SmallVec<[EnvelopeHash; 8]> =
                             self.component.get_focused_items(context);
                         for h in &row_updates {
-                            if let Some(val) = self.component.selection().get_mut(h) {
+                            if let Some(val) = self.component.selection_mut().get_mut(h) {
                                 *val = false;
                             }
                         }

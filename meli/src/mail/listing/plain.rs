@@ -166,7 +166,11 @@ impl MailListingTrait for PlainListing {
         &mut self.rows.row_updates
     }
 
-    fn selection(&mut self) -> &mut HashMap<EnvelopeHash, bool> {
+    fn selection(&self) -> &HashMap<EnvelopeHash, bool> {
+        &self.rows.selection
+    }
+
+    fn selection_mut(&mut self) -> &mut HashMap<EnvelopeHash, bool> {
         &mut self.rows.selection
     }
 
