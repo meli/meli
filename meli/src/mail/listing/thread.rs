@@ -141,7 +141,7 @@ pub struct ThreadListing {
     #[allow(clippy::type_complexity)]
     search_job: Option<(String, JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>)>,
     #[allow(clippy::type_complexity)]
-    _select_job: Option<(String, JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>)>,
+    select_job: Option<(String, JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>)>,
     filter_term: String,
     filtered_selection: Vec<ThreadHash>,
     filtered_order: HashMap<ThreadHash, usize>,
@@ -830,7 +830,7 @@ impl ThreadListing {
             seen_cache: IndexMap::default(),
             filter_term: String::new(),
             search_job: None,
-            _select_job: None,
+            select_job: None,
             filtered_selection: Vec::new(),
             filtered_order: HashMap::default(),
             dirty: true,
@@ -1219,6 +1219,51 @@ impl ThreadListing {
         self.rows_drawn.update(idx, 1);
 
         *self.rows.entries.get_mut(idx).unwrap() = ((thread_hash, env_hash), entry_strings);
+    }
+
+    fn select(
+        &mut self,
+        search_term: &str,
+        results: Result<SmallVec<[EnvelopeHash; 512]>>,
+        context: &mut Context,
+    ) {
+        let account = &context.accounts[&self.cursor_pos.0];
+        match results {
+            Ok(results) => {
+                let threads = account.collection.get_threads(self.cursor_pos.1);
+                for env_hash in results {
+                    if !account.collection.contains_key(&env_hash) {
+                        continue;
+                    }
+                    let env_thread_node_hash = account.collection.get_env(env_hash).thread();
+                    if !threads.thread_nodes.contains_key(&env_thread_node_hash) {
+                        continue;
+                    }
+                    let thread =
+                        threads.find_group(threads.thread_nodes[&env_thread_node_hash].group);
+                    if self.rows.all_threads.contains(&thread) {
+                        self.selection_mut()
+                            .entry(env_hash)
+                            .and_modify(|entry| *entry = true);
+                    }
+                }
+            }
+            Err(err) => {
+                self.cursor_pos.2 = 0;
+                self.new_cursor_pos.2 = 0;
+                let message = format!(
+                    "Encountered an error while searching for `{}`: {}.",
+                    search_term, &err
+                );
+                log::error!("{}", message);
+                context.replies.push_back(UIEvent::Notification {
+                    title: Some("Could not perform search".into()),
+                    source: None,
+                    body: message.into(),
+                    kind: Some(crate::types::NotificationType::Error(err.kind)),
+                });
+            }
+        }
     }
 
     fn draw_relative_numbers(&self, grid: &mut CellBuffer, area: Area, top_idx: usize) {
@@ -1739,6 +1784,39 @@ impl Component for ThreadListing {
                     self.set_dirty(true);
                     return true;
                 }
+                Action::Listing(Select(ref search_term)) if !self.unfocused() => {
+                    match context.accounts[&self.cursor_pos.0].search(
+                        search_term,
+                        self.sort,
+                        self.cursor_pos.1,
+                    ) {
+                        Ok(job) => {
+                            let mut handle = context.accounts[&self.cursor_pos.0]
+                                .main_loop_handler
+                                .job_executor
+                                .spawn(
+                                    "select-by-search".into(),
+                                    job,
+                                    context.accounts[&self.cursor_pos.0].is_async(),
+                                );
+                            if let Ok(Some(search_result)) = try_recv_timeout!(&mut handle.chan) {
+                                self.select(search_term, search_result, context);
+                            } else {
+                                self.select_job = Some((search_term.to_string(), handle));
+                            }
+                        }
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::Notification {
+                                title: Some("Could not perform search".into()),
+                                source: None,
+                                body: err.to_string().into(),
+                                kind: Some(crate::types::NotificationType::Error(err.kind)),
+                            });
+                        }
+                    };
+                    self.set_dirty(true);
+                    return true;
+                }
                 _ => {}
             },
             UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id))
@@ -1761,6 +1839,21 @@ impl Component for ThreadListing {
                             source: Some(err),
                         });
                     }
+                }
+                self.set_dirty(true);
+            }
+            UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id))
+                if self
+                    .select_job
+                    .as_ref()
+                    .map(|(_, j)| j == job_id)
+                    .unwrap_or(false) =>
+            {
+                let (search_term, mut handle) = self.select_job.take().unwrap();
+                match handle.chan.try_recv() {
+                    Err(_) => { /* search was canceled */ }
+                    Ok(None) => { /* something happened, perhaps a worker thread panicked */ }
+                    Ok(Some(results)) => self.select(&search_term, results, context),
                 }
                 self.set_dirty(true);
             }
