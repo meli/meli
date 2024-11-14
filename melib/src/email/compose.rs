@@ -449,7 +449,7 @@ fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
             charset: Charset::UTF8,
             parameters: ref v,
         } if v.is_empty() => {
-            ret.push_str("\r\n");
+            ret.push_str("Content-Type: text/plain; charset=\"utf-8\"\r\n\r\n");
             for line in String::from_utf8_lossy(a.raw()).lines() {
                 ret.push_str(line);
                 ret.push_str("\r\n");
