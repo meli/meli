@@ -128,7 +128,7 @@ fn test_email_compose_attachments() {
     */
 
 #[test]
-fn test_composer_mime_encode_header() {
+fn test_email_compose_mime_encode_header() {
     use crate::email::compose::mime;
     let words = "compilers/2020a σε Rust";
     assert_eq!(
@@ -180,7 +180,7 @@ fn test_composer_mime_encode_header() {
 }
 
 #[test]
-fn test_composer_draft_from_str() {
+fn test_email_compose_draft_from_str() {
     assert_eq!(
         Draft::from_str("").unwrap_err().to_string(),
         Error::new("Empty input in Draft::from_str")
