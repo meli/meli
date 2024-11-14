@@ -20,7 +20,7 @@ path = "src/lib.rs"
 [dependencies]
 async-fn-stream = { version = "=0.2.2" }
 async-io = { version = "2" }
-base64 = { version = ">= 0.13, <= 0.22", optional = true }
+base64 = { version = ">= 0.13, <= 0.22" }
 bitflags = { version = "2.4", features = ["serde"] }
 cfg-if = { version = "^1.0.0" }
 chrono = { version = "^0.4", default-features = false }
@@ -70,7 +70,7 @@ nntp-trace = ["nntp"]
 maildir = ["notify"]
 mbox-notify = ["notify"]
 notmuch = ["notify"]
-smtp = ["tls", "base64"]
+smtp = ["tls"]
 smtp-trace = ["smtp"]
 sqlite3 = ["sqlite3-static"]
 sqlite3-static = ["rusqlite", "rusqlite/bundled-full"]

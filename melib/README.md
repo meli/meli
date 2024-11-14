@@ -14,7 +14,7 @@ Library for handling email for email clients.
 | `imap`        | `imap-codec` crate, `tls` feature                | Provides the *IMAP* backend                          |
 | `jmap`        | `http` feature, `url` crate with `serde` feature | Provides the *JMAP* backend                          |
 | `nntp`        | `tls` feature                                    | Provides the *NNTP* (Usenet) backend                 |
-| `smtp`        | `base64` crate, `tls` feature                    | Integrated async *SMTP* client                       |
+| `smtp`        | `tls` feature                                    | Integrated async *SMTP* client                       |
 | `sqlite3`     | `rusqlite` crate with `bundled-full` feature     | Used in caches                                       |
 | `gpgme`       |                                                  | *GPG* use by dynamically loading `libgpgme.so`       |
 | `http`        | `isahc` crate                                    | Used for *HTTP* client needs, notably JMAP`          |
