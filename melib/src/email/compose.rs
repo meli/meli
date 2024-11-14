@@ -426,10 +426,16 @@ fn build_multipart(
          it properly.\r\n",
     );
     for sub in parts {
+        if !ret.ends_with("\r\n") {
+            ret.push_str("\r\n");
+        }
         ret.push_str("--");
         ret.push_str(&boundary);
         ret.push_str("\r\n");
         print_attachment(ret, sub);
+    }
+    if !ret.ends_with("\r\n") {
+        ret.push_str("\r\n");
     }
     ret.push_str("--");
     ret.push_str(&boundary);
