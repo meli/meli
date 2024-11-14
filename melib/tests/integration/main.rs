@@ -20,7 +20,6 @@
 //
 
 mod configs;
-mod generating_email;
 mod mbox_parse;
 
 fn main() {}
