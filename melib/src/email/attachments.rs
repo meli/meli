@@ -134,9 +134,14 @@ impl AttachmentBuilder {
         self.body.display_bytes(&self.raw)
     }
 
-    pub fn set_raw(&mut self, raw: Vec<u8>) -> &mut Self {
+    fn set_raw_inner(&mut self, raw: Vec<u8>) -> &mut Self {
         self.raw = raw;
         self
+    }
+
+    pub fn set_raw<B: Into<Vec<u8>>>(&mut self, raw: B) -> &mut Self {
+        let raw: Vec<u8> = raw.into();
+        self.set_raw_inner(raw)
     }
 
     /// Set body to the entire raw contents, use this if raw contains only data
