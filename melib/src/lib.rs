@@ -170,7 +170,6 @@ pub mod imap;
 pub mod jmap;
 #[cfg(feature = "maildir")]
 pub mod maildir;
-#[cfg(feature = "mbox")]
 pub mod mbox;
 #[cfg(feature = "nntp")]
 pub mod nntp;

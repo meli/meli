@@ -136,7 +136,7 @@ use std::{
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
     str::FromStr,
-    sync::{mpsc::channel, Arc, Mutex, RwLock},
+    sync::{Arc, Mutex, RwLock},
 };
 
 use nom::{
@@ -147,12 +147,13 @@ use nom::{
     error::{Error as NomError, ErrorKind as NomErrorKind},
     IResult,
 };
+#[cfg(feature = "mbox-notify")]
 use notify::{event::EventKind as NotifyEvent, RecommendedWatcher, RecursiveMode, Watcher};
 
 use crate::{
     backends::prelude::*,
     email::{parser::BytesExt, *},
-    error::{Error, ErrorKind, IntoError, Result, WrapResultIntoError},
+    error::{Error, ErrorKind, Result, WrapResultIntoError},
     utils::{lock::*, shellexpand::ShellExpandTrait},
 };
 pub mod write;
@@ -789,13 +790,13 @@ impl<'a> Iterator for MessageIterator<'a> {
 /// Mbox backend
 #[derive(Debug)]
 pub struct MboxType {
-    account_name: String,
-    path: PathBuf,
-    collection: Collection,
-    mailbox_index: Arc<Mutex<HashMap<EnvelopeHash, MailboxHash>>>,
-    mailboxes: Arc<Mutex<HashMap<MailboxHash, MboxMailbox>>>,
-    prefer_mbox_type: Option<MboxFormat>,
-    event_consumer: BackendEventConsumer,
+    pub account_name: String,
+    pub path: PathBuf,
+    pub collection: Collection,
+    pub mailbox_index: Arc<Mutex<HashMap<EnvelopeHash, MailboxHash>>>,
+    pub mailboxes: Arc<Mutex<HashMap<MailboxHash, MboxMailbox>>>,
+    pub prefer_mbox_type: Option<MboxFormat>,
+    pub event_consumer: BackendEventConsumer,
 }
 
 impl MailBackend for MboxType {
@@ -921,7 +922,12 @@ impl MailBackend for MboxType {
         )
     }
 
+    #[cfg(feature = "mbox-notify")]
     fn watch(&self) -> ResultFuture<()> {
+        use std::sync::mpsc::channel;
+
+        use crate::error::IntoError;
+
         let sender = self.event_consumer.clone();
         let (tx, rx) = channel();
         let watcher = RecommendedWatcher::new(
@@ -1093,6 +1099,14 @@ impl MailBackend for MboxType {
                 }
             }
         }))
+    }
+
+    #[cfg(not(feature = "mbox-notify"))]
+    fn watch(&self) -> ResultFuture<()> {
+        Err(Error::new(
+            "Notifications for mbox backend require the `mbox-notify` build-time feature.",
+        )
+        .set_kind(ErrorKind::NotSupported))
     }
 
     fn mailboxes(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {

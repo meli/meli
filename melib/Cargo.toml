@@ -55,7 +55,7 @@ uuid = { version = "^1", features = ["serde", "v4", "v5"] }
 xdg = { version = "2.1.0" }
 
 [features]
-default = ["imap", "nntp", "maildir", "mbox", "smtp"]
+default = ["imap", "nntp", "maildir", "mbox-notify", "smtp"]
 
 debug-tracing = []
 gpgme = []
@@ -68,7 +68,7 @@ jmap-trace = ["jmap"]
 nntp = ["tls"]
 nntp-trace = ["nntp"]
 maildir = ["notify"]
-mbox = ["notify"]
+mbox-notify = ["notify"]
 notmuch = ["notify"]
 smtp = ["tls", "base64"]
 smtp-trace = ["smtp"]

@@ -155,7 +155,6 @@ impl Backends {
                 },
             );
         }
-        #[cfg(feature = "mbox")]
         {
             use crate::mbox::MboxType;
 

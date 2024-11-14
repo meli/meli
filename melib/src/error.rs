@@ -569,7 +569,7 @@ impl From<rusqlite::Error> for Error {
     }
 }
 
-#[cfg(any(feature = "maildir", feature = "mbox", feature = "notmuch"))]
+#[cfg(any(feature = "maildir", feature = "mbox-notify", feature = "notmuch"))]
 impl From<notify::Error> for Error {
     #[inline]
     fn from(err: notify::Error) -> Self {

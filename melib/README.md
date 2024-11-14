@@ -6,25 +6,25 @@ Library for handling email for email clients.
 
 ## Optional Features
 
-| Feature flag  | Dependencies                                     | Notes                                              |
-|---------------|--------------------------------------------------|----------------------------------------------------|
-| `maildir`     | `notify` crate                                   | Provides the *maildir* backend                     |
-| `mbox`        | `notify` crate                                   | Provides the *mbox* backend                        |
-| `notmuch`     | `notify` crate                                   | Provides the *notmuch* backend                     |
-| `imap`        | `imap-codec` crate, `tls` feature                | Provides the *IMAP* backend                        |
-| `jmap`        | `http` feature, `url` crate with `serde` feature | Provides the *JMAP* backend                        |
-| `nntp`        | `tls` feature                                    | Provides the *NNTP* (Usenet) backend               |
-| `smtp`        | `base64` crate, `tls` feature                    | Integrated async *SMTP* client                     |
-| `sqlite3`     | `rusqlite` crate with `bundled-full` feature     | Used in caches                                     |
-| `gpgme`       |                                                  | *GPG* use by dynamically loading `libgpgme.so`     |
-| `http`        | `isahc` crate                                    | Used for *HTTP* client needs, notably JMAP`        |
-| `tls`         | `native-tls` crate                               |                                                    |
-| `http-static` | `isahc` crate with `static-curl` feature         | Links with `curl` statically                       |
-| `tls-static`  | `native-tls` crate with `vendored` feature       | Links with `OpenSSL` statically where it's used    |
-| `imap-trace`  | `imap` feature                                   | Connection trace logs on the `trace` logging level |
-| `jmap-trace`  | `jmap` feature                                   | Connection trace logs on the `trace` logging level |
-| `nntp-trace`  | `nntp` feature                                   | Connection trace logs on the `trace` logging level |
-| `smtp-trace`  | `smtp` feature                                   | Connection trace logs on the `trace` logging level |
+| Feature flag  | Dependencies                                     | Notes                                                |
+|---------------|--------------------------------------------------|------------------------------------------------------|
+| `maildir`     | `notify` crate                                   | Provides the *maildir* backend                       |
+| `mbox-notify` | `notify` crate                                   | Provides notification support for the *mbox* backend |
+| `notmuch`     | `notify` crate                                   | Provides the *notmuch* backend                       |
+| `imap`        | `imap-codec` crate, `tls` feature                | Provides the *IMAP* backend                          |
+| `jmap`        | `http` feature, `url` crate with `serde` feature | Provides the *JMAP* backend                          |
+| `nntp`        | `tls` feature                                    | Provides the *NNTP* (Usenet) backend                 |
+| `smtp`        | `base64` crate, `tls` feature                    | Integrated async *SMTP* client                       |
+| `sqlite3`     | `rusqlite` crate with `bundled-full` feature     | Used in caches                                       |
+| `gpgme`       |                                                  | *GPG* use by dynamically loading `libgpgme.so`       |
+| `http`        | `isahc` crate                                    | Used for *HTTP* client needs, notably JMAP`          |
+| `tls`         | `native-tls` crate                               |                                                      |
+| `http-static` | `isahc` crate with `static-curl` feature         | Links with `curl` statically                         |
+| `tls-static`  | `native-tls` crate with `vendored` feature       | Links with `OpenSSL` statically where it's used      |
+| `imap-trace`  | `imap` feature                                   | Connection trace logs on the `trace` logging level   |
+| `jmap-trace`  | `jmap` feature                                   | Connection trace logs on the `trace` logging level   |
+| `nntp-trace`  | `nntp` feature                                   | Connection trace logs on the `trace` logging level   |
+| `smtp-trace`  | `smtp` feature                                   | Connection trace logs on the `trace` logging level   |
 
 ## Example: Parsing bytes into an `Envelope`
 
