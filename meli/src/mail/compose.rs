@@ -926,8 +926,11 @@ impl Component for Composer {
                 self.gpg_state.sign_mail =
                     Some(*account_settings!(context[self.account_hash].pgp.auto_sign));
             }
-            self.gpg_state.encrypt_for_self =
-                *account_settings!(context[self.account_hash].pgp.encrypt_for_self);
+            #[cfg(feature = "gpgme")]
+            {
+                self.gpg_state.encrypt_for_self =
+                    *account_settings!(context[self.account_hash].pgp.encrypt_for_self);
+            }
             if !self.draft.headers().contains_key(HeaderName::FROM)
                 || self.draft.headers()[HeaderName::FROM].is_empty()
             {
