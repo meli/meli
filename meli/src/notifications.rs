@@ -25,7 +25,6 @@ use std::process::{Command, Stdio};
 #[cfg(all(target_os = "linux", feature = "dbus-notifications"))]
 pub use dbus::*;
 use melib::{utils::datetime, UnixTimestamp};
-use smallvec::SmallVec;
 
 use super::*;
 
@@ -320,15 +319,16 @@ fn update_xbiff(path: &str) -> Result<()> {
 
 #[derive(Debug)]
 /// On-screen-display messages.
-pub struct DisplayMessage {
-    pub timestamp: UnixTimestamp,
-    pub msg: String,
+struct DisplayMessage {
+    timestamp: UnixTimestamp,
+    msg: String,
+    repeats: u8,
 }
 
 #[derive(Debug)]
 /// Show notifications on [`Screen`].
 pub struct DisplayMessageBox {
-    messages: SmallVec<[DisplayMessage; 8]>,
+    messages: Vec<DisplayMessage>,
     pub expiration_start: Option<UnixTimestamp>,
     pub active: bool,
     dirty: bool,
@@ -339,9 +339,9 @@ pub struct DisplayMessageBox {
 }
 
 impl DisplayMessageBox {
-    pub fn new(sc: &Screen<Tty>) -> Box<Self> {
-        Box::new(Self {
-            messages: SmallVec::new(),
+    pub fn new(sc: &Screen<Tty>) -> Self {
+        Self {
+            messages: Vec::new(),
             expiration_start: None,
             pos: 0,
             active: false,
@@ -349,26 +349,36 @@ impl DisplayMessageBox {
             initialised: false,
             cached_area: sc.area().into_empty(),
             id: ComponentId::default(),
-        })
+        }
     }
 
     #[inline]
     pub fn cached_area(&self) -> Area {
         self.cached_area
     }
-}
 
-impl std::ops::Deref for DisplayMessageBox {
-    type Target = SmallVec<[DisplayMessage; 8]>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.messages
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.messages.is_empty()
     }
-}
 
-impl std::ops::DerefMut for DisplayMessageBox {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.messages
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.messages.len()
+    }
+
+    #[inline]
+    pub fn try_push(&mut self, msg: String, timestamp: UnixTimestamp) -> bool {
+        if let Some(ref mut last) = self.messages.last_mut().filter(|el| el.msg == msg) {
+            last.repeats = last.repeats.saturating_add(1);
+            return false;
+        }
+        self.messages.push(DisplayMessage {
+            msg,
+            timestamp,
+            repeats: 1,
+        });
+        true
     }
 }
 

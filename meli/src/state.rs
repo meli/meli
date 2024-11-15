@@ -57,7 +57,7 @@ use super::*;
 use crate::{
     conf::data_types::SearchBackend,
     jobs::JobExecutor,
-    notifications::{DisplayMessage, DisplayMessageBox},
+    notifications::DisplayMessageBox,
     terminal::{get_events, Screen, Tty},
 };
 
@@ -292,7 +292,7 @@ pub struct State {
     component_tree: IndexMap<ComponentId, ComponentPath>,
     pub context: Box<Context>,
     timer: thread::JoinHandle<()>,
-    message_box: Box<DisplayMessageBox>,
+    message_box: DisplayMessageBox,
 }
 
 impl Drop for State {
@@ -1125,17 +1125,18 @@ impl State {
                 );
                 return;
             }
-            UIEvent::StatusEvent(StatusEvent::DisplayMessage(ref msg)) => {
-                self.message_box.push(DisplayMessage {
-                    timestamp: datetime::now(),
-                    msg: msg.clone(),
-                });
-                self.message_box.active = true;
-                self.message_box.initialised = false;
-                self.message_box.set_dirty(true);
-                self.message_box.expiration_start = None;
-                self.message_box.pos = self.message_box.len() - 1;
-                self.redraw();
+            UIEvent::StatusEvent(StatusEvent::DisplayMessage(ref mut msg)) => {
+                if self
+                    .message_box
+                    .try_push(std::mem::take(msg), datetime::now())
+                {
+                    self.message_box.active = true;
+                    self.message_box.initialised = false;
+                    self.message_box.set_dirty(true);
+                    self.message_box.expiration_start = None;
+                    self.message_box.pos = self.message_box.len() - 1;
+                    self.redraw();
+                }
             }
             UIEvent::FinishedUIDialog(ref id, ref mut results) if self.overlay.contains_key(id) => {
                 if let Some(ref mut action @ Some(_)) = results.downcast_mut::<Option<Action>>() {
