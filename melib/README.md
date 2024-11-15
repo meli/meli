@@ -10,7 +10,7 @@ Library for handling email for email clients.
 |---------------|--------------------------------------------------|------------------------------------------------------|
 | `maildir`     | `notify` crate                                   | Provides the *maildir* backend                       |
 | `mbox-notify` | `notify` crate                                   | Provides notification support for the *mbox* backend |
-| `notmuch`     | `notify` crate                                   | Provides the *notmuch* backend                       |
+| `notmuch`     | `maildir` feature                                | Provides the *notmuch* backend                       |
 | `imap`        | `imap-codec` crate, `tls` feature                | Provides the *IMAP* backend                          |
 | `jmap`        | `http` feature, `url` crate with `serde` feature | Provides the *JMAP* backend                          |
 | `nntp`        | `tls` feature                                    | Provides the *NNTP* (Usenet) backend                 |
