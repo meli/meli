@@ -11,6 +11,11 @@ if [ -n "${newly_added_files[0]}" ]
 then
     # Check for Copyright statement
     for newly_added_file in ${newly_added_files}; do
+        # Ignore symbolic links that resolve to directories, because their text content is the name of the directory.
+        if [ -L "${newly_added_file}" ] && [ -d "${newly_added_file}" ]
+        then
+          continue
+        fi
         files_without_header+=($(grep -L -e "This file is part of meli" -e "This file is part of melib" -e "SPDX-License-Identifier" "${newly_added_file}"))
     done
 

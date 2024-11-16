@@ -1,4 +1,5 @@
 #!/bin/bash
+#
 # SPDX-License-Identifier: EUPL-1.2
 
 usage() { printf "Check if latest version in debian/changelog matches the version in meli/Cargo.toml.\n\nUsage: %s [-q ] [-i]\n\n-q\tQuiet; no output.\n-i\tNon-interactive mode.\n" "${0}" 1>&2; exit 1; }
