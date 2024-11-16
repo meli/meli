@@ -95,6 +95,25 @@ pub enum ImapProtocol {
     ManageSieve,
 }
 
+impl ImapProtocol {
+    /// If `self` variant supports the `DEFLATE` extension, set a new value for
+    /// whether it will be used or not, otherwise silently ignore the new
+    /// value.
+    pub fn set_deflate(&mut self, value: bool) {
+        match self {
+            Self::ManageSieve => {}
+            Self::IMAP {
+                extension_use:
+                    ImapExtensionUse {
+                        ref mut deflate, ..
+                    },
+            } => {
+                *deflate = value;
+            }
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 #[non_exhaustive]
 pub struct ImapExtensionUse {
@@ -875,16 +894,15 @@ impl ImapConnection {
                         self.read_response(&mut ret, RequiredResponses::empty())
                             .await?;
                         match ImapResponse::try_from(ret.as_slice())? {
-                            ImapResponse::No(code)
-                            | ImapResponse::Bad(code)
-                            | ImapResponse::Preauth(code)
-                            | ImapResponse::Bye(code) => {
+                            ImapResponse::Bye(code) => {
                                 log::warn!(
                                     "Could not use COMPRESS=DEFLATE in account `{}`: server \
-                                     replied with `{}`",
+                                     replied with BYE `{}`. Retrying without deflate compression.",
                                     self.uid_store.account_name,
                                     code
                                 );
+                                self.stream.as_mut()?.protocol.set_deflate(false);
+                                return self.connect().await;
                             }
                             ImapResponse::Ok(_) => {
                                 let ImapStream {
@@ -904,6 +922,16 @@ impl ImapConnection {
                                     current_mailbox,
                                     timeout,
                                 });
+                            }
+                            ImapResponse::No(code)
+                            | ImapResponse::Bad(code)
+                            | ImapResponse::Preauth(code) => {
+                                log::warn!(
+                                    "Could not use COMPRESS=DEFLATE in account `{}`: server \
+                                     replied with {}",
+                                    self.uid_store.account_name,
+                                    code,
+                                );
                             }
                         }
                     }
