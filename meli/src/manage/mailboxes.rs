@@ -23,8 +23,9 @@ use crate::components::prelude::*;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum MailboxAction {
-    Rename,
+    Delete,
     Move,
+    Rename,
     Subscribe,
     Unsubscribe,
 }
@@ -477,6 +478,21 @@ impl Component for MailboxManager {
                                         .replies
                                         .push_back(UIEvent::ChangeMode(UIMode::Command));
                                 }
+                                MailboxAction::Delete => {
+                                    context.replies.push_back(UIEvent::CmdInput(Key::Paste(
+                                        format!(
+                                            "delete-mailbox \"{account_name}\" \
+                                             \"{mailbox_path_src}\" ",
+                                            account_name =
+                                                context.accounts[&self.account_hash].name(),
+                                            mailbox_path_src =
+                                                self.entries[self.cursor_pos].ref_mailbox.path()
+                                        ),
+                                    )));
+                                    context
+                                        .replies
+                                        .push_back(UIEvent::ChangeMode(UIMode::Command));
+                                }
                                 MailboxAction::Subscribe => {
                                     if let Err(err) = context.accounts[&self.account_hash]
                                         .mailbox_operation(MailboxOperation::Subscribe(
@@ -664,6 +680,7 @@ impl Component for MailboxManager {
                         (MailboxAction::Move, "move".into()),
                         (MailboxAction::Subscribe, "subscribe".into()),
                         (MailboxAction::Unsubscribe, "unsubscribe".into()),
+                        (MailboxAction::Delete, "delete (cannot be undone!)".into()),
                     ],
                     true,
                     Some(Box::new(
