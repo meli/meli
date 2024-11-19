@@ -39,11 +39,10 @@ set -o pipefail
 
 cd "$(dirname "${0}")"
 
-if [[ -z "${1+x}" ]]; then
-    read -r -p "List friends since which commit/tag? " since
-    echo
+if [ -z "${1+x}" ]; then
+    since="$(git describe --abbrev=0)"
 else
-    since=$1
+    since="${1}"
 fi
 
 git shortlog -s -n "${since}.." \
