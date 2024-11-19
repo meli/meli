@@ -2,6 +2,7 @@
 # You must remove unused comment lines for the released package.
 export RUSTUP_HOME=${HOME}/.rustup
 export DH_VERBOSE = 1
+export NO_MAN
 #export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 #export DEB_CFLAGS_MAINT_APPEND  = -Wall -pedantic
 #export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed

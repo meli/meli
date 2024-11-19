@@ -15,10 +15,10 @@
     ],
     "codeRepository": "https://git.meli-email.org/meli/meli.git",
     "dateCreated": "2016-04-25",
-    "dateModified": "2024-07-30",
+    "dateModified": "2024-11-19",
     "datePublished": "2017-07-23",
     "description": "BSD/Linux/macos terminal email client with support for multiple accounts and Maildir / mbox / notmuch / IMAP / JMAP / NNTP (Usenet).",
-    "downloadUrl": "https://git.meli-email.org/meli/meli/archive/v0.8.7.tar.gz",
+    "downloadUrl": "https://git.meli-email.org/meli/meli/archive/v0.8.8.tar.gz",
     "identifier": "https://meli-email.org/",
     "isPartOf": "https://meli-email.org/",
     "keywords": [
@@ -53,10 +53,10 @@
         "https://github.com/meli/meli",
         "https://lists.meli-email.org/"
     ],
-    "version": "0.8.7",
+    "version": "0.8.8",
     "contIntegration": "https://git.meli-email.org/meli/meli/actions",
     "developmentStatus": "active",
     "issueTracker": "https://git.meli-email.org/meli/meli/issues",
-    "readme": "https://git.meli-email.org/meli/meli/raw/commit/f2e9cac38e8e8e02de7312e5b6871279cf675c97/README.md",
-    "buildInstructions": "https://git.meli-email.org/meli/meli/raw/commit/f2e9cac38e8e8e02de7312e5b6871279cf675c97/BUILD.md"
+    "readme": "https://git.meli-email.org/meli/meli/raw/tag/v0.8.8/README.md",
+    "buildInstructions": "https://git.meli-email.org/meli/meli/raw/tag/v0.8.8/BUILD.md"
 }

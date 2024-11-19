@@ -1,16 +1,11 @@
-From: Manos Pitsidianakis <manos@pitsidianak.is>
-Date: Thu, 27 Feb 2014 16:06:15 +0100
-Subject: usr_bin_editor
-
-If EDITOR or VISUAL is not set, fall back to /usr/bin/editor,
-which is set by update-alternatives.
----
- meli/src/subcommands.rs | 1 +---
- 1 file changed, 1 insertion(+), 3 deletions(-)
-
---- a/meli/src/subcommands.rs
-+++ b/meli/src/subcommands.rs
-@@ -52,9 +52,7 @@
+Description: If EDITOR or VISUAL is not set, fall back to /usr/bin/editor, which is set by update-alternatives.
+Author: Manos Pitsidianakis <manos@pitsidianak.is>
+Last-Update: 2024-11-19
+Index: meli/meli/src/subcommands.rs
+===================================================================
+--- meli.orig/meli/src/subcommands.rs
++++ meli/meli/src/subcommands.rs
+@@ -56,9 +56,7 @@
  pub fn edit_config() -> Result<()> {
      let editor = std::env::var("EDITOR")
          .or_else(|_| std::env::var("VISUAL"))
@@ -18,6 +13,6 @@ which is set by update-alternatives.
 -            format!("Could not find any value in environment variables EDITOR and VISUAL. {err}")
 -        })?;
 +        .unwrap_or_else(|_| "/usr/bin/editor".into());
-     let config_path = crate::conf::get_config_file()?;
+     let config_path = conf::get_config_file()?;
  
      let mut cmd = Command::new(editor);

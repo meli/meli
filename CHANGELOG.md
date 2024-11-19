@@ -7,10 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-*WARNING*: This release contains a breaking change in the configuration file: a
-global composing option is not required anymore. Now, composing options are per
-account.
-
 <!-- ### Added -->
 
 <!-- ### Bug Fixes -->
@@ -24,6 +20,237 @@ account.
 <!-- ### Packaging -->
 
 <!-- ### Miscellaneous Tasks -->
+
+## [v0.8.8](https://git.meli-email.org/meli/meli/releases/tag/v0.8.8) - 2024-11-19
+
+*WARNING*: This release contains a breaking change in the configuration file: a
+global composing option is not required anymore. Now, composing options are per
+account.
+
+### Added
+
+- [**`f3d59ebf`**](https://git.meli-email.org/meli/meli/commit/f3d59ebf64db8b640bb23c42d3f6a9843c0547fe) `accounts: add force: bool arg to load()`
+- [**`33836a32`**](https://git.meli-email.org/meli/meli/commit/33836a3263d4750501fb032898fcbfb3f727f455) `melib/error: add WrapResultIntoError helper trait`
+- [**`3216324c`**](https://git.meli-email.org/meli/meli/commit/3216324cccdaa34afc5542def68abe34d73855f4) `melib/mbox: impl FromStr for MboxFormat`
+- [**`94f345d7`**](https://git.meli-email.org/meli/meli/commit/94f345d731329e029016495f1c674b6a9b17401a) `Implement mailbox renaming command`
+- [**`8d45ecc1`**](https://git.meli-email.org/meli/meli/commit/8d45ecc15d15c9885d5278dac7bba5f2c2829020) `melib/error: add related_path field`
+- [**`bf3a4c5d`**](https://git.meli-email.org/meli/meli/commit/bf3a4c5dc1f08fafea83d698c4c8bf882509106a) `error: add ErrorChainDisplay struct for better output`
+- [**`6be5fd26`**](https://git.meli-email.org/meli/meli/commit/6be5fd2610ae9d784c8fc9327f4a29fdc78f3179) `themes: add inheritance, and use themes when initializing grids`
+- [**`0ee7fc4d`**](https://git.meli-email.org/meli/meli/commit/0ee7fc4d950e9a69677e4538c00bb1426108922a) `Print clickable path links with subcommands`
+- [**`aed7a60f`**](https://git.meli-email.org/meli/meli/commit/aed7a60fb9c4f9f7eb61aaf1ac3505632b7896f1) `samples: add ibm-modern theme` in PR [`#469` "conf-refactor"](https://git.meli-email.org/meli/meli/pulls/469)
+- [**`4bbf446b`**](https://git.meli-email.org/meli/meli/commit/4bbf446bc168da4c81e0c27d9a738e3b80546e0c) `utils: add unix file locks module`
+- [**`6fbf569f`**](https://git.meli-email.org/meli/meli/commit/6fbf569fe0518925b6358eea5855c5c40a3fc110) `search: add Message-ID, and other header search support`
+- [**`26d33ce5`**](https://git.meli-email.org/meli/meli/commit/26d33ce5230dbc0864715ca8d12c3a262ea7e0eb) `address: add separator argument to display_slice()`
+- [**`32e3be8b`**](https://git.meli-email.org/meli/meli/commit/32e3be8b10baa7949e37c20243085aa37a860a30) `sqlite3: add optional directory field in DatabaseDescription`
+- [**`dbbb1529`**](https://git.meli-email.org/meli/meli/commit/dbbb1529e412390c408a9bbd9d694e4da95a715b) `Add missing ComponentUnrealize handlers`
+- [**`87d2cec9`**](https://git.meli-email.org/meli/meli/commit/87d2cec9d97cb1c9a756dc1c901c3837265e895a) `Add sealed_test dependency`
+- [**`604ae111`**](https://git.meli-email.org/meli/meli/commit/604ae1112801f2b3a2f78f00d826c60949b3fe4d) `Impl From<&[u8]> for u64-based hash newtypes`
+- [**`8205c7f5`**](https://git.meli-email.org/meli/meli/commit/8205c7f51a316c99852648b15fd7e3d80962875d) `melib: add JsContact module` in PR [`#479` "view-filters"](https://git.meli-email.org/meli/meli/pulls/479)
+- [**`2af5c8b6`**](https://git.meli-email.org/meli/meli/commit/2af5c8b6fd225b0f58a4f9cf7876a6302d13c618) `terminal: add QuerySynchronizedOutputSupport WIP`
+- [**`5c4faea5`**](https://git.meli-email.org/meli/meli/commit/5c4faea539de8761e717561c8d7442ef59face3d) `Add transpose shortcut and tests for text field`
+- [**`e9b87b2e`**](https://git.meli-email.org/meli/meli/commit/e9b87b2e40303649f838ad6b5f56d5093332b233) `melib/maildr: add rename_regex config option`
+- [**`8f0e1d66`**](https://git.meli-email.org/meli/meli/commit/8f0e1d664090029bb3b00529a96ba7f5630eae33) `Add human-readable identifiers in temp draft files`
+- [**`601e3711`**](https://git.meli-email.org/meli/meli/commit/601e37117c0531431720c80f228ede7d3574849c) `Add vCard exports`
+- [**`719e2eb2`**](https://git.meli-email.org/meli/meli/commit/719e2eb271a099f1ac912050c500a26b67bdec42) `listing: add customizable view divider like sidebar's` in PR [`#485` "listing: add customizable view divider like sidebar's"](https://git.meli-email.org/meli/meli/pulls/485)
+- [**`ba3ad8ed`**](https://git.meli-email.org/meli/meli/commit/ba3ad8ed18db14412979729591aac7b004cd7d90) `listing: always show mail_view_divider` in PR [`#486` "listing: always show mail_view_divider"](https://git.meli-email.org/meli/meli/pulls/486)
+- [**`46b2c3b1`**](https://git.meli-email.org/meli/meli/commit/46b2c3b1f716dadd226ebe421cc83c34642811d7) `Add listing.thread_layout config flag` in PR [`#487` "Add listing.thread_layout config flag"](https://git.meli-email.org/meli/meli/pulls/487)
+- [**`aaea3a5a`**](https://git.meli-email.org/meli/meli/commit/aaea3a5ab4452ee1cdd708c8948a204bc7a69a59) `nntp: add timeout conf flag`
+- [**`d4636bcc`**](https://git.meli-email.org/meli/meli/commit/d4636bcc70ecb2efc8a5b70579b446112ce8e67e) `nntp: interpret IMPLEMENTATION cap as metadata`
+- [**`5f120309`**](https://git.meli-email.org/meli/meli/commit/5f120309f9f79f9e59e43437b72d98941953a62e) `nntp: add select_group_by_name() method`
+- [**`9a9cd03d`**](https://git.meli-email.org/meli/meli/commit/9a9cd03d9ddbe3cb4d671f4370b45d29a0e6a53a) `nntp: add NntpType::article_message_id() method`
+- [**`7cfcbb7a`**](https://git.meli-email.org/meli/meli/commit/7cfcbb7ab1ac56569ddbfd61ff9aa823007536db) `Add patch_retrieve module` in PR [`#489` "Add `patch_retrieve` module"](https://git.meli-email.org/meli/meli/pulls/489)
+- [**`c82341f3`**](https://git.meli-email.org/meli/meli/commit/c82341f3af28447ece1902f276150769148bcadb) `File: try trimming filename if ENAMETOOLONG`
+- [**`23395491`**](https://git.meli-email.org/meli/meli/commit/23395491dbdea9feeef27963017b4a34a2dbb5ce) `compose/pgp: add encrypt_for_self flag`
+- [**`0b6988b7`**](https://git.meli-email.org/meli/meli/commit/0b6988b7cfe2c8ee23c53a4f228700394dc59781) `gpgme: add always trust flag to encrypt op`
+- [**`be3b3ef8`**](https://git.meli-email.org/meli/meli/commit/be3b3ef89b78a3b7e6221e8150102e829e672267) `melib/utils: add fnmatch(3) interface`
+- [**`32f7e50f`**](https://git.meli-email.org/meli/meli/commit/32f7e50fd44e5b602b051b51150a644eacd49968) `Add version migration support`
+- [**`a6c7621c`**](https://git.meli-email.org/meli/meli/commit/a6c7621ce3227e810d796e566ee20b00359b37fa) `jscontact: add {created,updated} fields`
+- [**`39592ad0`**](https://git.meli-email.org/meli/meli/commit/39592ad02c0730855d2ab16d8da6ed5f63235ad3) `jmap: implement changing mailbox subscription`
+- [**`ca7eb792`**](https://git.meli-email.org/meli/meli/commit/ca7eb7928439e3f42031677f7e7cbb1b1fdb4013) `jmap: Implement deleting email`
+- [**`b8e841bb`**](https://git.meli-email.org/meli/meli/commit/b8e841bbcd67e68a1a445821f058e7d12e963e28) `jmap: implement mailbox deletion`
+- [**`77e7c3df`**](https://git.meli-email.org/meli/meli/commit/77e7c3df608cc1996ef6cf8628d008ce69b39993) `Add support for signatures` in PR [`#500` "Add support for signatures"](https://git.meli-email.org/meli/meli/pulls/500)
+- [**`dba5b68b`**](https://git.meli-email.org/meli/meli/commit/dba5b68be8ede3b81eb3926bb5fb6affd9efc436) `components: add prelude module`
+- [**`f656aff0`**](https://git.meli-email.org/meli/meli/commit/f656aff08efb32a808009f4a0b133ba872659e66) `composer: add discard-draft command`
+- [**`789a88b2`**](https://git.meli-email.org/meli/meli/commit/789a88b28dbc819b7715432f8fcb3d908aa03f6a) `shortcuts: add select_motion equivalent to select_entry`
+- [**`cb2dd5de`**](https://git.meli-email.org/meli/meli/commit/cb2dd5def5167b8f4ca471540252e7687c48c148) `listing/threaded: impl missing select functionality` in PR [`#514` "listing/threaded: impl missing filter functionality"](https://git.meli-email.org/meli/meli/pulls/514)
+- [**`c1901c96`**](https://git.meli-email.org/meli/meli/commit/c1901c962d72d8177d813d6545b489731a8fbcd4) `melib/email/compose: add Content-Type header for utf8 text plain attachments`
+- [**`0e77bd5b`**](https://git.meli-email.org/meli/meli/commit/0e77bd5b4ca04a18b686f137fad388a9a4d3b7c2) `melib/email/compose/tests: add multipart mixed attachment test` in PR [`#515` "Fix incorrect multipart/mixed rendering when sending text with attachments under certain circumstances"](https://git.meli-email.org/meli/meli/pulls/515)
+- [**`7b1be139`**](https://git.meli-email.org/meli/meli/commit/7b1be139f25901e81b49bf04110d7fc8cd78a630) `melib: make mbox backend build by default`
+- [**`7ff1db14`**](https://git.meli-email.org/meli/meli/commit/7ff1db143f51d2cfc06097293e960ee17ceaab10) `manage-mailboxes: add delete option` in PR [`#520` "manage-mailboxes: add delete option"](https://git.meli-email.org/meli/meli/pulls/520)
+
+### Bug Fixes
+
+- [**`6b05279a`**](https://git.meli-email.org/meli/meli/commit/6b05279a0987315c401516cac8ff0b016a8e02a8) `Update time dep to fix 1.80.0 breakage`
+- [**`2084ce93`**](https://git.meli-email.org/meli/meli/commit/2084ce93756ea358ca826a33af014fad542ad07c) `Fix invalid cfg feature combinations for macos` in PR [`#471` "Fix invalid cfg feature combinations for macos"](https://git.meli-email.org/meli/meli/pulls/471)
+- [**`4707ec9f`**](https://git.meli-email.org/meli/meli/commit/4707ec9f2a20254438e576d40e98c3ce4cbffbba) `text/line_break: fix ReflowState::{No,All} break`
+- [**`86e25bc0`**](https://git.meli-email.org/meli/meli/commit/86e25bc017df714910798a811fb108bb7aa840af) `sqlite: fix database reset sequence`
+- [**`4d4e189c`**](https://git.meli-email.org/meli/meli/commit/4d4e189cb98bd12b58fa8f5cd694ca6a143e175c) `imap: code style fixups`
+- [**`335cca88`**](https://git.meli-email.org/meli/meli/commit/335cca88cb8a82e4fbe94b8491c771f68e4c2f41) `listing: fix highlight_self flag off by one error` in PR [`#477` "listing: fix highlight_self flag off by one error"](https://git.meli-email.org/meli/meli/pulls/477)
+- [**`80915832`**](https://git.meli-email.org/meli/meli/commit/80915832213de0866b0cec01beacaac04b3fe051) `mailto: rewrite parsing` in PR [`#480` "mailto-rewrite"](https://git.meli-email.org/meli/meli/pulls/480)
+- [**`65b32e77`**](https://git.meli-email.org/meli/meli/commit/65b32e7719de9155a29d91e63f5f42df4d17e299) `subcommands: Fix wrong help info in imap-shell prompt`
+- [**`d0c81749`**](https://git.meli-email.org/meli/meli/commit/d0c81749ee862cca089ee5c3120dc9c6e4c8c7a3) `conf::data_types: minor style and error msg fixups`
+- [**`7dbee81d`**](https://git.meli-email.org/meli/meli/commit/7dbee81dadddae09ad4149e378c608313910f44d) `view: fix nested filter jobs never being completed`
+- [**`f78884ce`**](https://git.meli-email.org/meli/meli/commit/f78884ce022bb9f4554f860698844c082a14bd92) `melib/nntp: fix an ancient FIXME`
+- [**`e0cfe8e4`**](https://git.meli-email.org/meli/meli/commit/e0cfe8e4d79a5a77e2f21811602f9c2ebe19359f) `Fix compilation for 32-bit architectures` in PR [`#492` "Fix compilation for 32-bit architectures"](https://git.meli-email.org/meli/meli/pulls/492)
+- [**`1b708a99`**](https://git.meli-email.org/meli/meli/commit/1b708a99904cd5542aef984302d8133d5ee98082) `melib: attempt FromSql from Blob for u64 hash` in PR [`#506` "melib: attempt FromSql from Blob for u64 hash"](https://git.meli-email.org/meli/meli/pulls/506)
+- [**`6c315580`**](https://git.meli-email.org/meli/meli/commit/6c315580b1e0dca1132febc7a8c2fceb08f4190d) `compose: fix add-attachment-file-picker`
+- [**`c6e9e424`**](https://git.meli-email.org/meli/meli/commit/c6e9e4245d52885c7adedfc4defbfe96662d1b3e) `listing/threaded: impl missing filter functionality`
+- [**`e7a164de`**](https://git.meli-email.org/meli/meli/commit/e7a164de0ce626712b7103a9a044f22a59b90298) `Configure some gpgme stuff under gpgme feature`
+
+### Changes
+
+- [**`8e300c46`**](https://git.meli-email.org/meli/meli/commit/8e300c46613be4ed35ae2dbd4e598e34c4531de4) `melib/jmap: call req text(). asap`
+- [**`374ea8ba`**](https://git.meli-email.org/meli/meli/commit/374ea8bacba32ef908ee2d93e07dc78c116d4fed) `accounts: extract tests to tests.rs file`
+- [**`7020cd66`**](https://git.meli-email.org/meli/meli/commit/7020cd66981f7ad3ab9cf413e156c248df593784) `meli: derive PartialEq/Eq for some types`
+- [**`69065859`**](https://git.meli-email.org/meli/meli/commit/6906585942d9943de07ffef2be3e199c45fb716d) `accounts: split mailbox to enum out of JobRequest`
+- [**`14f2d911`**](https://git.meli-email.org/meli/meli/commit/14f2d911933330d9a35480c420c6e64ad9cea21b) `melib/backends: change RefreshEvent field decl order`
+- [**`56b1bf28`**](https://git.meli-email.org/meli/meli/commit/56b1bf28eb82d360a019ff9caa7bbfc7c154f9bc) `meli/accounts: batch process refresh events`
+- [**`6513c188`**](https://git.meli-email.org/meli/meli/commit/6513c18810272135b6b57207b71304e5b3757f54) `melib/imap: on sync only update exists/unseen if loaded`
+- [**`a8dad317`**](https://git.meli-email.org/meli/meli/commit/a8dad31776fe078fc346c7494e09dfe4cc18447f) `melib/imap: renamed cache module to sync`
+- [**`9e9c04a3`**](https://git.meli-email.org/meli/meli/commit/9e9c04a3f67db859326c3854cc5f1a3162ff55f2) `Update indexmap dep to 2.3.0`
+- [**`2b3828d8`**](https://git.meli-email.org/meli/meli/commit/2b3828d8d2ea36cbf0f9cd0038ba45a4ce45028d) `Update futures dependency to 0.3.30`
+- [**`84812941`**](https://git.meli-email.org/meli/meli/commit/84812941475bfdf8ee3559d857ac0bcbd2e899ec) `melib/jmap: do not serialize server-set fields in Set create`
+- [**`eda6620c`**](https://git.meli-email.org/meli/meli/commit/eda6620cb4f44027d318dba401b3a623ed564dd8) `jmap: detect supported Auth schemes on connect` in PR [`#467` "jmap: detect supported Auth schemes on connect"](https://git.meli-email.org/meli/meli/pulls/467)
+- [**`35f12b15`**](https://git.meli-email.org/meli/meli/commit/35f12b1551884fc3d9af149b9574ad01462ebfac) `embedded: prevent double-close of pty fd` in PR [`#468` "embedded: prevent double-close of pty fd"](https://git.meli-email.org/meli/meli/pulls/468)
+- [**`0bed37b5`**](https://git.meli-email.org/meli/meli/commit/0bed37b5a751b75a48a2167b39d9f5693fdb04dd) `melib: use IndexMap in conf fields`
+- [**`f3ad824d`**](https://git.meli-email.org/meli/meli/commit/f3ad824df9dd6413123686f934eeff7f86e07e7c) `meli: use itoa to format offset indices in listings`
+- [**`1cfb0b15`**](https://git.meli-email.org/meli/meli/commit/1cfb0b1538712ed37085d9b864f240a0f3f3a5bf) `Update nix dependency to 0.29.0`
+- [**`9c1b4424`**](https://git.meli-email.org/meli/meli/commit/9c1b44245227d7c6511107521bf0af960f086032) `jobs: make cancel flag an AtomicBool`
+- [**`f06a9072`**](https://git.meli-email.org/meli/meli/commit/f06a9072d6ae834ac7207e62ba14115d5041a62a) `jmap: fetch mailbox with receivedAt descending sort`
+- [**`53b0d035`**](https://git.meli-email.org/meli/meli/commit/53b0d035e46d0178adb3c6620a5d5af02cc892de) `accounts: cancel any previous mailbox fetches`
+- [**`60833ee5`**](https://git.meli-email.org/meli/meli/commit/60833ee51d6f16b25fd51dd344a959838bff013a) `accounts: make mailbox available as soon as possible`
+- [**`28f45805`**](https://git.meli-email.org/meli/meli/commit/28f45805d7982a5be6d0ced893d88620e6548663) `mail/view: try cancel env fetch on Drop`
+- [**`2bb9b20d`**](https://git.meli-email.org/meli/meli/commit/2bb9b20d951b372de85b3710f276adf92b60707d) `mail/view: do not highlight reply subjects in thread`
+- [**`a4f344b3`**](https://git.meli-email.org/meli/meli/commit/a4f344b3963e8248443160edacc5e2582fe5f867) `Use create_new to avoid overwriting files`
+- [**`d6197e8b`**](https://git.meli-email.org/meli/meli/commit/d6197e8b24bd3d5078bce733c997986168a5e7cd) `listing: clear count modifier on Home/End`
+- [**`b798ca4a`**](https://git.meli-email.org/meli/meli/commit/b798ca4a95ca052f854c332b3231e9f5540c0fad) `imap: return cached response in {select,examine}_mailbox()`
+- [**`151fcebe`**](https://git.meli-email.org/meli/meli/commit/151fcebe5b92ae07acbd64a12ae2c6dfd835a9e0) `imap: use BTreeMap for message sequence number store`
+- [**`e48fcc33`**](https://git.meli-email.org/meli/meli/commit/e48fcc3367749d007afd237e6cbaf98514e65fc5) `imap/protocol_parser: also populate other_headers`
+- [**`1e11c29c`**](https://git.meli-email.org/meli/meli/commit/1e11c29c889d97567a7aebf40b74937e41910747) `imap: resync cache first when fetching a mailbox`
+- [**`1779ad5d`**](https://git.meli-email.org/meli/meli/commit/1779ad5d3a339d923fc88478459e1121f563ae9c) `imap: interpret empty server response as BYE`
+- [**`2d320688`**](https://git.meli-email.org/meli/meli/commit/2d320688ce1520a52c5bd00c964f207c2446808c) `mail/listing: pre-lookup conf values`
+- [**`4e967280`**](https://git.meli-email.org/meli/meli/commit/4e967280e17757488106b7489114dd0e76a53c96) `nntp: don't needlessly select group before ARTICLE` in PR [`#473` "Various"](https://git.meli-email.org/meli/meli/pulls/473)
+- [**`67b88d24`**](https://git.meli-email.org/meli/meli/commit/67b88d24fcfe4d522c7045daf5d5ee7427352a16) `Update polling dependency from "2.8" to "3"`
+- [**`14d74f36`**](https://git.meli-email.org/meli/meli/commit/14d74f36893116f01abce576e5467ff2cb9216c8) `Update smol dependency from "1" to "2"`
+- [**`b950fcea`**](https://git.meli-email.org/meli/meli/commit/b950fceab4e6b82f21ed7ef013e37f1ba2b4be66) `melib: Use IndexMap in VCard`
+- [**`32acc347`**](https://git.meli-email.org/meli/meli/commit/32acc3474fa0b6f2071ae9215aaadc1645e6346b) `view: show signature verification properly`
+- [**`ac1349b8`**](https://git.meli-email.org/meli/meli/commit/ac1349b8507fe192c1a3c1c5c8e6b4384098f520) `command: alias pwd to cwd`
+- [**`7c056e4b`**](https://git.meli-email.org/meli/meli/commit/7c056e4bdb421cf0e2d3a555567b7615af6a3cc5) `Retry loading mailbox on recoverable error` in PR [`#481` "Retry loading mailbox on recoverable error"](https://git.meli-email.org/meli/meli/pulls/481)
+- [**`cbafdcf7`**](https://git.meli-email.org/meli/meli/commit/cbafdcf73483dfae89c7e9f3b0c93b95ce97605a) `terminal: color report WIP`
+- [**`4a26cfa1`**](https://git.meli-email.org/meli/meli/commit/4a26cfa1067d19e11d5ec291063a5d2b4e3e8c03) `logging: disable tracing from output`
+- [**`90974e7c`**](https://git.meli-email.org/meli/meli/commit/90974e7c0d303cf525690d24977e84037c2772c4) `imap: cache miss if row env hash != row hash`
+- [**`4c44c440`**](https://git.meli-email.org/meli/meli/commit/4c44c440f699db2b09a49f3351c9c84fbf6999f8) `melib: #[ignore] shellexpand tests`
+- [**`dc9e91df`**](https://git.meli-email.org/meli/meli/commit/dc9e91df1f0a002c07b5867e9a96c67d332536f2) `contacts/editor: Use FormButtonAction in form`
+- [**`c0511901`**](https://git.meli-email.org/meli/meli/commit/c051190114c5e6fa46d3194d340f4daf9ccbe963) `Update debian/meli.{docs,examples} and Cargo exclude`
+- [**`592ce159`**](https://git.meli-email.org/meli/meli/commit/592ce15903195a1ae0a42101cb1c23d7584385a6) `mbox: use Uuid::nil() as default envelope from`
+- [**`6eeb4571`**](https://git.meli-email.org/meli/meli/commit/6eeb4571b74d156e11f688bb610e6fbaa0362202) `nntp: make all fields public`
+- [**`b27bac7f`**](https://git.meli-email.org/meli/meli/commit/b27bac7f8528403346e2b282762a124f82b9c8bc) `nntp: use DEFLATE when available by default`
+- [**`128b959f`**](https://git.meli-email.org/meli/meli/commit/128b959f36001b0dd1bd74ee32918fd7520bf6af) `nntp: prepend Newsgroups header if missing on NntpType::submit()`
+- [**`a69122f8`**](https://git.meli-email.org/meli/meli/commit/a69122f8b00a5a059a0da1bfee44437f79c23553) `pgp: use default sign/encrypt keys when no keys are selected`
+- [**`e6fa7093`**](https://git.meli-email.org/meli/meli/commit/e6fa7093bfc659dd70fb72c5cac27e9ec6aac7df) `view/envelope: trim headers values to 3 lines maximum`
+- [**`7f0157a9`**](https://git.meli-email.org/meli/meli/commit/7f0157a966c8511208597f354924c2a2138b5024) `compose: make dialogs bigger in height` in PR [`#490` "pgp: use default sign/encrypt keys when no keys are selected"](https://git.meli-email.org/meli/meli/pulls/490)
+- [**`e032acfa`**](https://git.meli-email.org/meli/meli/commit/e032acfab728197a47a7a346ed06b6892415ccdd) `view: pass filtered body to Composer as reply text` in PR [`#493` "view: pass filtered body to Composer as reply text"](https://git.meli-email.org/meli/meli/pulls/493)
+- [**`49dcbc5e`**](https://git.meli-email.org/meli/meli/commit/49dcbc5e58bec846fea427ba6b09e8ff8fe1f79d) `terminal: Extend Ask default actions, prompts`
+- [**`cd2e4bf3`**](https://git.meli-email.org/meli/meli/commit/cd2e4bf3a4f697eacb27c80f970cab6ec60c059d) `melib/utils: vendor urn crate`
+- [**`5915f125`**](https://git.meli-email.org/meli/meli/commit/5915f125c3a624f58ba53137527414b7a7b5d044) `backends: use IsSubscribedFn in method signatures`
+- [**`4f927bbe`**](https://git.meli-email.org/meli/meli/commit/4f927bbe6411fdc0703e6fe6743a80de9873cd0d) `nntp: properly return all nntp mailboxes`
+- [**`b930cb49`**](https://git.meli-email.org/meli/meli/commit/b930cb49401d746b335ca2eaa086db9371b951ca) `maildir: do not use rename_regex when only updating flags`
+- [**`27486f29`**](https://git.meli-email.org/meli/meli/commit/27486f2908069daf46ff941c333d43dda187a462) `Accept newer versions of base64 dependency`
+- [**`c3cac77d`**](https://git.meli-email.org/meli/meli/commit/c3cac77deefffc7781ed569d113a78df53206da6) `Update imap-codec dependency to 2.0.0-alpha.4`
+- [**`05f404ba`**](https://git.meli-email.org/meli/meli/commit/05f404ba1f70b997b33808e1d1d2daeb3e826f6c) `jobs: do not use AtomicU64` in PR [`#505` "jobs: do not use AtomicU64"](https://git.meli-email.org/meli/meli/pulls/505)
+- [**`46916895`**](https://git.meli-email.org/meli/meli/commit/469168959f61f236826c2a3e7638344194a2d026) `melib/gpgme: s/NULL/NUL when referring to NUL byte`
+- [**`81ace71b`**](https://git.meli-email.org/meli/meli/commit/81ace71b354168a0c7e5f9b5b6ab644105be1500) `terminal/embedded: lift error checking earlier`
+- [**`24114811`**](https://git.meli-email.org/meli/meli/commit/241148119680cf8ee82ef183f9d241389ef24de8) `manage: parse scroll_{left,right} actions`
+- [**`d2559e42`**](https://git.meli-email.org/meli/meli/commit/d2559e42e503d1720acfccae133c9b8d0845a90e) `imap: return all mailboxes, not just subscribed ones` in PR [`#509` "compose: fix add-attachment-file-picker"](https://git.meli-email.org/meli/meli/pulls/509)
+- [**`320fddad`**](https://git.meli-email.org/meli/meli/commit/320fddad410eb4426dca93b94d510c496ff99220) `melib/gpgme: disable layout tests on non-x86_64 hosts` in PR [`#511` "melib/gpgme: disable layout tests on non-x86_64 hosts"](https://git.meli-email.org/meli/meli/pulls/511)
+- [**`bcbcb012`**](https://git.meli-email.org/meli/meli/commit/bcbcb012efe5901287b9d3e746d871d91ca609ca) `melib/email/compose: ensure boundary always prefixed with CRLF`
+- [**`d21c686d`**](https://git.meli-email.org/meli/meli/commit/d21c686da7e6f407f1fef9dadd66516280abd538) `melib/attachments: Make AttachmentBuilder::set_raw generic`
+- [**`d5d34579`**](https://git.meli-email.org/meli/meli/commit/d5d34579148974364ea14e55357492c02b806c50) `melib/email/compose/tests: normalise test fn names`
+- [**`e9ec6761`**](https://git.meli-email.org/meli/meli/commit/e9ec6761f96ee12732a98cd6d3ac258fc7f1eca6) `melib: make base64 dep mandatory`
+- [**`30405216`**](https://git.meli-email.org/meli/meli/commit/3040521695b026273e8e960f3e9b517e88cdcf88) `melib: make notmuch feature depend on maildir feature`
+- [**`35fa8e94`**](https://git.meli-email.org/meli/meli/commit/35fa8e94a6552b0195a1c4d73ea42bdf08bb6f8f) `melib/imap: gracefully retry without DEFLATE on BYE` in PR [`#517` "Fix some unrelated bugs I found while debugging build failure on armhf"](https://git.meli-email.org/meli/meli/pulls/517)
+
+### Refactoring
+
+- [**`20d73292`**](https://git.meli-email.org/meli/meli/commit/20d732926364a8e7a63c610b01f9677d70ecdc21) `melib: replace async-stream dep with async-fn-stream`
+- [**`201081b6`**](https://git.meli-email.org/meli/meli/commit/201081b6d4abe2fd1f9cb32930eb6db92ba3ae8e) `meli/command: move tests to tests.rs`
+- [**`84cfa358`**](https://git.meli-email.org/meli/meli/commit/84cfa358de8f0897b4d9d16216d8284e0a259e6c) `conf: remove need for global send_mail setting`
+- [**`7be8912c`**](https://git.meli-email.org/meli/meli/commit/7be8912c1438853d72813277ba90197f603da23d) `Cargo.tomls: make formatting more consistent`
+- [**`e6877e89`**](https://git.meli-email.org/meli/meli/commit/e6877e89c2c8d0fb93637670478d5694e9b9b571) `melib/jmap: refactor some parser imports`
+- [**`f7ec6d6b`**](https://git.meli-email.org/meli/meli/commit/f7ec6d6bc5462fc594f65358f57db1b91514f086) `melib/jmap: implement mailbox rename`
+- [**`15d24ab0`**](https://git.meli-email.org/meli/meli/commit/15d24ab0e3df7674d1d98bcdfaae5993d525a274) `meli/jobs: refactor spawn_{blocking,specialized} to spawn()`
+- [**`6ee148c0`**](https://git.meli-email.org/meli/meli/commit/6ee148c04180b320a91d501e7b6bfbd1b96974b8) `Fix 1.80.0 clippy lints`
+- [**`de72bc6a`**](https://git.meli-email.org/meli/meli/commit/de72bc6ac75ad46a0cfb1c0cabc3a67692be4354) `melib/error.rs: move network stuff to submodule`
+- [**`a214a35c`**](https://git.meli-email.org/meli/meli/commit/a214a35c02fd3e84f5f527ab83141a55f549404e) `conf: refactor into submodules`
+- [**`978cefbb`**](https://git.meli-email.org/meli/meli/commit/978cefbb507038aa9ffc77690ed5ac72c9d6275c) `Replace Escape ascii char with hex literal`
+- [**`4b959f5c`**](https://git.meli-email.org/meli/meli/commit/4b959f5c4f20ff02a75ef708d975d8a1307b99e5) `Remove pcre feature/dependency`
+- [**`036586a2`**](https://git.meli-email.org/meli/meli/commit/036586a2f703172acdd21a28d9ad04550d88bcb3) `Update serde dependency to 1.0.205`
+- [**`191725b5`**](https://git.meli-email.org/meli/meli/commit/191725b5c2fb576b8ab7b5dd6ac5330b6f107fa5) `Fix some borrow checker error/warnings from upcoming 2024 edition`
+- [**`11798be8`**](https://git.meli-email.org/meli/meli/commit/11798be8042db350c5d26433fa863fff1f0c6376) `Replace Envelope::message_id_display() with Display impls`
+- [**`394236ba`**](https://git.meli-email.org/meli/meli/commit/394236ba8a2875eaeb0fb7cfe4d90855853523df) `email/address: Refactor References struct`
+- [**`a7c73fc8`**](https://git.meli-email.org/meli/meli/commit/a7c73fc8cf8bf076a31810817780a6336caf0d69) `gpgme: refactor Rust interface, add tests`
+- [**`41e1fdd5`**](https://git.meli-email.org/meli/meli/commit/41e1fdd55409bfecd226a30eb3100412fb23b345) `Fix cargo-derivefmt lints`
+- [**`a44486d9`**](https://git.meli-email.org/meli/meli/commit/a44486d90480b9d891a91a4cab887af7b856e946) `imap: fix minor clippy lint`
+- [**`0c0f8210`**](https://git.meli-email.org/meli/meli/commit/0c0f8210005be86f992c03f7b28e147cc8327cff) `Add a "move to Trash" shortcut`
+- [**`d20a9d0a`**](https://git.meli-email.org/meli/meli/commit/d20a9d0afadbc92a4e8907d53e1ba311fda34985) `Fix new clippy lints`
+- [**`e9a72072`**](https://git.meli-email.org/meli/meli/commit/e9a72072bfc989cffe3343195469dcb6d3041f4d) `Remove unused/obsolete plugins code and mentions`
+- [**`2ddd28ee`**](https://git.meli-email.org/meli/meli/commit/2ddd28ee852de785c2a764f8ad6c99782723234e) `main.rs: always send a JobFinished event to all components`
+- [**`571ae390`**](https://git.meli-email.org/meli/meli/commit/571ae390b8ae557cdf434a77a1e97068fcadfd6a) `pager.rs: don't set self dirty after filter selector` in PR [`#488` "view: fix nested filter jobs never being completed"](https://git.meli-email.org/meli/meli/pulls/488)
+- [**`6bc0caf4`**](https://git.meli-email.org/meli/meli/commit/6bc0caf4e0c8cd91ccaf789f57e6a37daead41bc) `melib: remove redundant get_path_hash macro`
+- [**`fc3308e4`**](https://git.meli-email.org/meli/meli/commit/fc3308e42829e1e65ad673c10a3cf49dcb53a967) `melib: Add Mail::as_mbox() method`
+- [**`b1f24cbe`**](https://git.meli-email.org/meli/meli/commit/b1f24cbe95faeb4bd59c7ae94c0eb94d801f06a1) `view/filters: forward events on child filters`
+- [**`1b201bf6`**](https://git.meli-email.org/meli/meli/commit/1b201bf6115f947263889174e17076ead88219a0) `Remove GlobMatch trait, replace usage with Fnmatch`
+- [**`8af003ab`**](https://git.meli-email.org/meli/meli/commit/8af003abd0f17fb8d30a4a00e2cdcbf8d97e3926) `Rename addressbook stuff to "contacts"`
+- [**`2069b4da`**](https://git.meli-email.org/meli/meli/commit/2069b4da098d68470441ff22602312cc34737574) `errors: impl From<xdg::BaseDirectoriesError>`
+- [**`7dee32ae`**](https://git.meli-email.org/meli/meli/commit/7dee32ae88bf72929be0bee8e77eedaa63d4daf5) `contacts: refactor Card to its own module`
+- [**`6d0d9680`**](https://git.meli-email.org/meli/meli/commit/6d0d96804057795b26001f6407f357152cbaed68) `jmap: move EmailObject state to Store`
+- [**`0c590bbc`**](https://git.meli-email.org/meli/meli/commit/0c590bbc0cd9b7f1c85ef85a86e4adbeb54ad512) `contact-editor: remove empty space` in PR [`#495` "Add version migration support"](https://git.meli-email.org/meli/meli/pulls/495)
+- [**`b2200ec3`**](https://git.meli-email.org/meli/meli/commit/b2200ec3abe9c5649d2628f88afe636f02a91be6) `Remove unused smtp tests` in PR [`#501` "Apply patches from upstream debian package"](https://git.meli-email.org/meli/meli/pulls/501)
+- [**`ae294945`**](https://git.meli-email.org/meli/meli/commit/ae29494575a6433abf1ef7bd1eb4103dcd287773) `remove unused module file`
+- [**`3558db51`**](https://git.meli-email.org/meli/meli/commit/3558db514adde57548f7d2bf185cb7c1fbf31124) `Move jobs and mailbox management Components together`
+- [**`3a931035`**](https://git.meli-email.org/meli/meli/commit/3a9310352050e9dc012c41e1e905fd3dd24d64cb) `command: move Composer actions under TabActions`
+- [**`441fda56`**](https://git.meli-email.org/meli/meli/commit/441fda568c753e1e512924f35ca42f079ef8369d) `terminal: move TextPresentation trait to melib`
+- [**`ee897942`**](https://git.meli-email.org/meli/meli/commit/ee897942486aa7c083a9113f728bd1b808b76d2e) `lints: deny clippy::or_fun_call`
+- [**`0d088962`**](https://git.meli-email.org/meli/meli/commit/0d088962d53f217ef1d06d7f67f72a05840505d6) `lints: Address clippy::too_long_first_doc_paragraph`
+- [**`ecc9b482`**](https://git.meli-email.org/meli/meli/commit/ecc9b4823e3d99dad4ec589a9fb9d619e6226fb1) `Small repo cleanups`
+
+### Documentation
+
+- [**`a83b4176`**](https://git.meli-email.org/meli/meli/commit/a83b4176b0113acd8f9a26283bb102ddb2ff6425) `meli.1: small fixes`
+- [**`72dea6f3`**](https://git.meli-email.org/meli/meli/commit/72dea6f3b236e116c1b165eb2d8169f0d3798d2f) `Manpage fixes`
+- [**`a55f65e1`**](https://git.meli-email.org/meli/meli/commit/a55f65e131f769951a0c0ba4df82cd896b5a344b) `meli.conf.5: Fix wrong default value type in default_header_values`
+- [**`57b45a9c`**](https://git.meli-email.org/meli/meli/commit/57b45a9c4ad7a6d8e15b29c26c307e72947d0d2f) `docs/historical-manpages: add DEP5 copyright file`
+- [**`00236b86`**](https://git.meli-email.org/meli/meli/commit/00236b86f6e19c3a2f45f308d8e22ff0fd2a3dbe) `docs: add meli.conf.examples(5) WIP`
+- [**`b88dc441`**](https://git.meli-email.org/meli/meli/commit/b88dc4412bc9ea4295ccbedaa499de3eacef911b) `Comment out svgfeature; no need to ship it` in PR [`#482` "milestone/0.8.8"](https://git.meli-email.org/meli/meli/pulls/482)
+- [**`b048c95a`**](https://git.meli-email.org/meli/meli/commit/b048c95a8689e32e4b072c5d960293fef354e36e) `BUILD.md: add instructions for Android build`
+- [**`593ed22b`**](https://git.meli-email.org/meli/meli/commit/593ed22ba166ee36ac52834ca0f040468a12c663) `pgp: perform gpgme's sign+encrypt manually` in PR [`#494` "pgp: perform gpgme's sign+encrypt manually"](https://git.meli-email.org/meli/meli/pulls/494)
+- [**`50922d97`**](https://git.meli-email.org/meli/meli/commit/50922d97b82fdeaae57658e3fbff58fc21f5701d) `melib/README.md: update and fix feature table`
+- [**`b912aabc`**](https://git.meli-email.org/meli/meli/commit/b912aabca22bb590eeab664b273f886e2fd99dac) `docs: add examples of file picker usage` in PR [`#516` "docs: add examples of file picker usage"](https://git.meli-email.org/meli/meli/pulls/516)
+
+### Packaging
+
+- [**`b55edd47`**](https://git.meli-email.org/meli/meli/commit/b55edd4727fcd2b0bc4b2712c97294e88a3ee001) `debian: update meli.docs and add meli.manpages`
+
+### Miscellaneous Tasks
+
+- [**`1232e16a`**](https://git.meli-email.org/meli/meli/commit/1232e16ad95143bb726e038a07f78366a53e7e83) `scripts/make_html_manual_page.py: don't prettify`
+- [**`6d520605`**](https://git.meli-email.org/meli/meli/commit/6d520605ff8958a5a1343c81078708fda17bc6c2) `Vendor vobject crate`
+- [**`b33433e4`**](https://git.meli-email.org/meli/meli/commit/b33433e457849a5212170efc6df135d6808acd5e) `Don't create backends as Box<dyn MailBackend>, but as Box<Self>`
+- [**`2001b4dd`**](https://git.meli-email.org/meli/meli/commit/2001b4dd06fd755a7577f087abc2669e55d97134) `Make subscribed_mailboxes conf val optional`
+- [**`6cfe4da0`**](https://git.meli-email.org/meli/meli/commit/6cfe4da0c1280d98a2962e8eeed92a9f38cfe018) `Enable rusqlite feature "modern_sqlite" always`
+- [**`707a129e`**](https://git.meli-email.org/meli/meli/commit/707a129ea40b489dd5f62782628c19e08213dc98) `Coalesce repeating TUI notification messages`
+- [**`f036f95e`**](https://git.meli-email.org/meli/meli/commit/f036f95eeebaa8273e226b6444c85352d641a828) `scripts: add generate_release_changelog_entry.sh`
+
+### Continuous Integration
+
+- [**`4684b601`**](https://git.meli-email.org/meli/meli/commit/4684b6016bfbba5e55e2c11e92be44025389ee02) `CI: remove env vars from action names` in PR [`#458` "Minor QoL fixes"](https://git.meli-email.org/meli/meli/pulls/458)
+- [**`7419b465`**](https://git.meli-email.org/meli/meli/commit/7419b465eaf2ce158aaad00c5f1dc21edda246cb) `CI: unpin rust version after updating time dependency` in PR [`#460` "Update `time` dep to fix 1.80.0 breakage"](https://git.meli-email.org/meli/meli/pulls/460)
+- [**`77da86eb`**](https://git.meli-email.org/meli/meli/commit/77da86eb0f08b55e4d6e496d0ac395bafe50b90c) `CI: Update cargo-derivefmt version`
+- [**`1b3f2732`**](https://git.meli-email.org/meli/meli/commit/1b3f2732b25085a4101fcb9906bd70295d96dfb0) `CI: Move build.yaml actions to Makefile.build`
+- [**`598a70f9`**](https://git.meli-email.org/meli/meli/commit/598a70f9df36a640345158ff15c779f9fa5fb3c3) `CI: move lints.yaml actions to Makefile.lint`
+- [**`7e800a8f`**](https://git.meli-email.org/meli/meli/commit/7e800a8f3f7cb3a7ff9f8f1163f8f5b94523ccf4) `CI: move manifest_lints.yaml actions to Makefile.manifest-lints`
+- [**`98652110`**](https://git.meli-email.org/meli/meli/commit/9865211076f88c098d83ae36d00b9a555bcc9356) `CI: prepend printf commands with @`
+- [**`ad79bf84`**](https://git.meli-email.org/meli/meli/commit/ad79bf84c23c035a9c0709cf4b3e19e455f40334) `.gitea/Makefile.lint: attempt cargo-fmt with +nightly`
 
 ## [v0.8.7](https://git.meli-email.org/meli/meli/releases/tag/v0.8.7) - 2024-07-30
 
@@ -1063,3 +1290,4 @@ Notable changes:
 [v0.8.5]: https://git.meli-email.org/meli/meli/releases/tag/v0.8.5
 [v0.8.6]: https://git.meli-email.org/meli/meli/releases/tag/v0.8.6
 [v0.8.7]: https://git.meli-email.org/meli/meli/releases/tag/v0.8.7
+[v0.8.8]: https://git.meli-email.org/meli/meli/releases/tag/v0.8.8

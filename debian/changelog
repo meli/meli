@@ -1,3 +1,287 @@
+meli (0.8.8-1) bookworm; urgency=low
+
+  WARNING: This release contains a breaking change in the configuration
+  file: a global composing option is not required anymore. Now, composing
+  options are per account.
+
+  Added
+  =====
+
+  -   f3d59ebf accounts: add force: bool arg to load()
+  -   33836a32 melib/error: add WrapResultIntoError helper trait
+  -   3216324c melib/mbox: impl FromStr for MboxFormat
+  -   94f345d7 Implement mailbox renaming command
+  -   8d45ecc1 melib/error: add related_path field
+  -   bf3a4c5d error: add ErrorChainDisplay struct for better output
+  -   6be5fd26
+      themes: add inheritance, and use themes when initializing grids
+  -   0ee7fc4d Print clickable path links with subcommands
+  -   aed7a60f samples: add ibm-modern theme in PR #469 "conf-refactor"
+  -   4bbf446b utils: add unix file locks module
+  -   6fbf569f search: add Message-ID, and other header search support
+  -   26d33ce5 address: add separator argument to display_slice()
+  -   32e3be8b
+      sqlite3: add optional directory field in DatabaseDescription
+  -   dbbb1529 Add missing ComponentUnrealize handlers
+  -   87d2cec9 Add sealed_test dependency
+  -   604ae111 Impl From<&[u8]> for u64-based hash newtypes
+  -   8205c7f5 melib: add JsContact module in PR #479 "view-filters"
+  -   2af5c8b6 terminal: add QuerySynchronizedOutputSupport WIP
+  -   5c4faea5 Add transpose shortcut and tests for text field
+  -   e9b87b2e melib/maildr: add rename_regex config option
+  -   8f0e1d66 Add human-readable identifiers in temp draft files
+  -   601e3711 Add vCard exports
+  -   719e2eb2 listing: add customizable view divider like sidebar's in PR
+      #485 "listing: add customizable view divider like sidebar's"
+  -   ba3ad8ed listing: always show mail_view_divider in PR #486 "listing:
+      always show mail_view_divider"
+  -   46b2c3b1 Add listing.thread_layout config flag in PR #487 "Add
+      listing.thread_layout config flag"
+  -   aaea3a5a nntp: add timeout conf flag
+  -   d4636bcc nntp: interpret IMPLEMENTATION cap as metadata
+  -   5f120309 nntp: add select_group_by_name() method
+  -   9a9cd03d nntp: add NntpType::article_message_id() method
+  -   7cfcbb7a Add patch_retrieve module in PR #489 "Add patch_retrieve
+      module"
+  -   c82341f3 File: try trimming filename if ENAMETOOLONG
+  -   23395491 compose/pgp: add encrypt_for_self flag
+  -   0b6988b7 gpgme: add always trust flag to encrypt op
+  -   be3b3ef8 melib/utils: add fnmatch(3) interface
+  -   32f7e50f Add version migration support
+  -   a6c7621c jscontact: add {created,updated} fields
+  -   39592ad0 jmap: implement changing mailbox subscription
+  -   ca7eb792 jmap: Implement deleting email
+  -   b8e841bb jmap: implement mailbox deletion
+  -   77e7c3df Add support for signatures in PR #500 "Add support for
+      signatures"
+  -   dba5b68b components: add prelude module
+  -   f656aff0 composer: add discard-draft command
+  -   789a88b2 shortcuts: add select_motion equivalent to select_entry
+  -   cb2dd5de listing/threaded: impl missing select functionality in PR
+      #514 "listing/threaded: impl missing filter functionality"
+  -   c1901c96
+      melib/email/compose: add Content-Type header for utf8 text plain attachments
+  -   0e77bd5b
+      melib/email/compose/tests: add multipart mixed attachment test in PR
+      #515 "Fix incorrect multipart/mixed rendering when sending text with
+      attachments under certain circumstances"
+  -   7b1be139 melib: make mbox backend build by default
+  -   7ff1db14 manage-mailboxes: add delete option in PR #520
+      "manage-mailboxes: add delete option"
+
+  Bug Fixes
+  =========
+
+  -   6b05279a Update time dep to fix 1.80.0 breakage
+  -   2084ce93 Fix invalid cfg feature combinations for macos in PR #471
+      "Fix invalid cfg feature combinations for macos"
+  -   4707ec9f text/line_break: fix ReflowState::{No,All} break
+  -   86e25bc0 sqlite: fix database reset sequence
+  -   4d4e189c imap: code style fixups
+  -   335cca88 listing: fix highlight_self flag off by one error in PR
+      #477 "listing: fix highlight_self flag off by one error"
+  -   80915832 mailto: rewrite parsing in PR #480 "mailto-rewrite"
+  -   65b32e77 subcommands: Fix wrong help info in imap-shell prompt
+  -   d0c81749 conf::data_types: minor style and error msg fixups
+  -   7dbee81d view: fix nested filter jobs never being completed
+  -   f78884ce melib/nntp: fix an ancient FIXME
+  -   e0cfe8e4 Fix compilation for 32-bit architectures in PR #492 "Fix
+      compilation for 32-bit architectures"
+  -   1b708a99 melib: attempt FromSql from Blob for u64 hash in PR #506
+      "melib: attempt FromSql from Blob for u64 hash"
+  -   6c315580 compose: fix add-attachment-file-picker
+  -   c6e9e424 listing/threaded: impl missing filter functionality
+  -   e7a164de Configure some gpgme stuff under gpgme feature
+
+  Changes
+  =======
+
+  -   8e300c46 melib/jmap: call req text(). asap
+  -   374ea8ba accounts: extract tests to tests.rs file
+  -   7020cd66 meli: derive PartialEq/Eq for some types
+  -   69065859 accounts: split mailbox to enum out of JobRequest
+  -   14f2d911 melib/backends: change RefreshEvent field decl order
+  -   56b1bf28 meli/accounts: batch process refresh events
+  -   6513c188 melib/imap: on sync only update exists/unseen if loaded
+  -   a8dad317 melib/imap: renamed cache module to sync
+  -   9e9c04a3 Update indexmap dep to 2.3.0
+  -   2b3828d8 Update futures dependency to 0.3.30
+  -   84812941
+      melib/jmap: do not serialize server-set fields in Set create
+  -   eda6620c jmap: detect supported Auth schemes on connect in PR #467
+      "jmap: detect supported Auth schemes on connect"
+  -   35f12b15 embedded: prevent double-close of pty fd in PR #468
+      "embedded: prevent double-close of pty fd"
+  -   0bed37b5 melib: use IndexMap in conf fields
+  -   f3ad824d meli: use itoa to format offset indices in listings
+  -   1cfb0b15 Update nix dependency to 0.29.0
+  -   9c1b4424 jobs: make cancel flag an AtomicBool
+  -   f06a9072 jmap: fetch mailbox with receivedAt descending sort
+  -   53b0d035 accounts: cancel any previous mailbox fetches
+  -   60833ee5 accounts: make mailbox available as soon as possible
+  -   28f45805 mail/view: try cancel env fetch on Drop
+  -   2bb9b20d mail/view: do not highlight reply subjects in thread
+  -   a4f344b3 Use create_new to avoid overwriting files
+  -   d6197e8b listing: clear count modifier on Home/End
+  -   b798ca4a imap: return cached response in {select,examine}_mailbox()
+  -   151fcebe imap: use BTreeMap for message sequence number store
+  -   e48fcc33 imap/protocol_parser: also populate other_headers
+  -   1e11c29c imap: resync cache first when fetching a mailbox
+  -   1779ad5d imap: interpret empty server response as BYE
+  -   2d320688 mail/listing: pre-lookup conf values
+  -   4e967280 nntp: don't needlessly select group before ARTICLE in PR
+      #473 "Various"
+  -   67b88d24 Update polling dependency from "2.8" to "3"
+  -   14d74f36 Update smol dependency from "1" to "2"
+  -   b950fcea melib: Use IndexMap in VCard
+  -   32acc347 view: show signature verification properly
+  -   ac1349b8 command: alias pwd to cwd
+  -   7c056e4b Retry loading mailbox on recoverable error in PR #481
+      "Retry loading mailbox on recoverable error"
+  -   cbafdcf7 terminal: color report WIP
+  -   4a26cfa1 logging: disable tracing from output
+  -   90974e7c imap: cache miss if row env hash != row hash
+  -   4c44c440 melib: #[ignore] shellexpand tests
+  -   dc9e91df contacts/editor: Use FormButtonAction in form
+  -   c0511901 Update debian/meli.{docs,examples} and Cargo exclude
+  -   592ce159 mbox: use Uuid::nil() as default envelope from
+  -   6eeb4571 nntp: make all fields public
+  -   b27bac7f nntp: use DEFLATE when available by default
+  -   128b959f
+      nntp: prepend Newsgroups header if missing on NntpType::submit()
+  -   a69122f8
+      pgp: use default sign/encrypt keys when no keys are selected
+  -   e6fa7093 view/envelope: trim headers values to 3 lines maximum
+  -   7f0157a9 compose: make dialogs bigger in height in PR #490 "pgp: use
+      default sign/encrypt keys when no keys are selected"
+  -   e032acfa view: pass filtered body to Composer as reply text in PR
+      #493 "view: pass filtered body to Composer as reply text"
+  -   49dcbc5e terminal: Extend Ask default actions, prompts
+  -   cd2e4bf3 melib/utils: vendor urn crate
+  -   5915f125 backends: use IsSubscribedFn in method signatures
+  -   4f927bbe nntp: properly return all nntp mailboxes
+  -   b930cb49 maildir: do not use rename_regex when only updating flags
+  -   27486f29 Accept newer versions of base64 dependency
+  -   c3cac77d Update imap-codec dependency to 2.0.0-alpha.4
+  -   05f404ba jobs: do not use AtomicU64 in PR #505 "jobs: do not use
+      AtomicU64"
+  -   46916895 melib/gpgme: s/NULL/NUL when referring to NUL byte
+  -   81ace71b terminal/embedded: lift error checking earlier
+  -   24114811 manage: parse scroll_{left,right} actions
+  -   d2559e42 imap: return all mailboxes, not just subscribed ones in PR
+      #509 "compose: fix add-attachment-file-picker"
+  -   320fddad melib/gpgme: disable layout tests on non-x86_64 hosts in PR
+      #511 "melib/gpgme: disable layout tests on non-x86_64 hosts"
+  -   bcbcb012
+      melib/email/compose: ensure boundary always prefixed with CRLF
+  -   d21c686d melib/attachments: Make AttachmentBuilder::set_raw generic
+  -   d5d34579 melib/email/compose/tests: normalise test fn names
+  -   e9ec6761 melib: make base64 dep mandatory
+  -   30405216 melib: make notmuch feature depend on maildir feature
+  -   35fa8e94 melib/imap: gracefully retry without DEFLATE on BYE in PR
+      #517 "Fix some unrelated bugs I found while debugging build failure
+      on armhf"
+
+  Refactoring
+  ===========
+
+  -   20d73292 melib: replace async-stream dep with async-fn-stream
+  -   201081b6 meli/command: move tests to tests.rs
+  -   84cfa358 conf: remove need for global send_mail setting
+  -   7be8912c Cargo.tomls: make formatting more consistent
+  -   e6877e89 melib/jmap: refactor some parser imports
+  -   f7ec6d6b melib/jmap: implement mailbox rename
+  -   15d24ab0 meli/jobs: refactor spawn_{blocking,specialized} to spawn()
+  -   6ee148c0 Fix 1.80.0 clippy lints
+  -   de72bc6a melib/error.rs: move network stuff to submodule
+  -   a214a35c conf: refactor into submodules
+  -   978cefbb Replace Escape ascii char with hex literal
+  -   4b959f5c Remove pcre feature/dependency
+  -   036586a2 Update serde dependency to 1.0.205
+  -   191725b5
+      Fix some borrow checker error/warnings from upcoming 2024 edition
+  -   11798be8 Replace Envelope::message_id_display() with Display impls
+  -   394236ba email/address: Refactor References struct
+  -   a7c73fc8 gpgme: refactor Rust interface, add tests
+  -   41e1fdd5 Fix cargo-derivefmt lints
+  -   a44486d9 imap: fix minor clippy lint
+  -   0c0f8210 Add a "move to Trash" shortcut
+  -   d20a9d0a Fix new clippy lints
+  -   e9a72072 Remove unused/obsolete plugins code and mentions
+  -   2ddd28ee main.rs: always send a JobFinished event to all components
+  -   571ae390 pager.rs: don't set self dirty after filter selector in PR
+      #488 "view: fix nested filter jobs never being completed"
+  -   6bc0caf4 melib: remove redundant get_path_hash macro
+  -   fc3308e4 melib: Add Mail::as_mbox() method
+  -   b1f24cbe view/filters: forward events on child filters
+  -   1b201bf6 Remove GlobMatch trait, replace usage with Fnmatch
+  -   8af003ab Rename addressbook stuff to "contacts"
+  -   2069b4da errors: impl From<xdg::BaseDirectoriesError>
+  -   7dee32ae contacts: refactor Card to its own module
+  -   6d0d9680 jmap: move EmailObject state to Store
+  -   0c590bbc contact-editor: remove empty space in PR #495 "Add version
+      migration support"
+  -   b2200ec3 Remove unused smtp tests in PR #501 "Apply patches from
+      upstream debian package"
+  -   ae294945 remove unused module file
+  -   3558db51 Move jobs and mailbox management Components together
+  -   3a931035 command: move Composer actions under TabActions
+  -   441fda56 terminal: move TextPresentation trait to melib
+  -   ee897942 lints: deny clippy::or_fun_call
+  -   0d088962 lints: Address clippy::too_long_first_doc_paragraph
+  -   ecc9b482 Small repo cleanups
+
+  Documentation
+  =============
+
+  -   a83b4176 meli.1: small fixes
+  -   72dea6f3 Manpage fixes
+  -   a55f65e1
+      meli.conf.5: Fix wrong default value type in default_header_values
+  -   57b45a9c docs/historical-manpages: add DEP5 copyright file
+  -   00236b86 docs: add meli.conf.examples(5) WIP
+  -   b88dc441 Comment out svgfeature; no need to ship it in PR #482
+      "milestone/0.8.8"
+  -   b048c95a BUILD.md: add instructions for Android build
+  -   593ed22b pgp: perform gpgme's sign+encrypt manually in PR #494 "pgp:
+      perform gpgme's sign+encrypt manually"
+  -   50922d97 melib/README.md: update and fix feature table
+  -   b912aabc docs: add examples of file picker usage in PR #516 "docs:
+      add examples of file picker usage"
+
+  Packaging
+  =========
+
+  -   b55edd47 debian: update meli.docs and add meli.manpages
+
+  Miscellaneous Tasks
+  ===================
+
+  -   1232e16a scripts/make_html_manual_page.py: don't prettify
+  -   6d520605 Vendor vobject crate
+  -   b33433e4
+      Don't create backends as Box<dyn MailBackend>, but as Box<Self>
+  -   2001b4dd Make subscribed_mailboxes conf val optional
+  -   6cfe4da0 Enable rusqlite feature "modern_sqlite" always
+  -   707a129e Coalesce repeating TUI notification messages
+  -   f036f95e scripts: add generate_release_changelog_entry.sh
+
+  Continuous Integration
+  ======================
+
+  -   4684b601 CI: remove env vars from action names in PR #458 "Minor QoL
+      fixes"
+  -   7419b465 CI: unpin rust version after updating time dependency in PR
+      #460 "Update time dep to fix 1.80.0 breakage"
+  -   77da86eb CI: Update cargo-derivefmt version
+  -   1b3f2732 CI: Move build.yaml actions to Makefile.build
+  -   598a70f9 CI: move lints.yaml actions to Makefile.lint
+  -   7e800a8f
+      CI: move manifest_lints.yaml actions to Makefile.manifest-lints
+  -   98652110 CI: prepend printf commands with @
+  -   ad79bf84 .gitea/Makefile.lint: attempt cargo-fmt with +nightly
+
+ -- Manos Pitsidianakis <manos@pitsidianak.is>  Tue, 19 Nov 2024 14:09:13 +0200
 meli (0.8.7-1) bookworm; urgency=low
 
   Contributors in alphabetical order:

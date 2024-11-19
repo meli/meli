@@ -1,6 +1,6 @@
 [package]
 name = "melib"
-version = "0.8.7"
+version = "0.8.8"
 authors = ["Manos Pitsidianakis <manos@pitsidianak.is>"]
 homepage = "https://meli-email.org"
 repository = "https://git.meli-email.org/meli/meli.git"

@@ -1,6 +1,6 @@
 Description: Fix PREFIX env var in Makefile for use in Debian
-Author: Manos Pitsidianakis <epilys@nessuent.xyz>
-Last-Update: 2023-03-06
+Author: Manos Pitsidianakis <manos@pitsidianak.is>
+Last-Update: 2024-11-19
 Index: meli/Makefile
 ===================================================================
 --- meli.orig/Makefile
