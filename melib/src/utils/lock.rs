@@ -46,16 +46,26 @@ impl FileLockOptions {
 #[derive(Debug)]
 pub struct FileLock<T: AsRawFd>(T);
 
-// F_OFD_SETLKW
-#[cfg(any(target_os = "linux", target_os = "android"))]
-const F_SETLKW: libc::c_int = 38;
-// F_OFD_SETLK
-#[cfg(any(target_os = "linux", target_os = "android"))]
-const F_SETLK: libc::c_int = 37;
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
-const F_SETLKW: libc::c_int = libc::F_SETLKW;
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
-const F_SETLK: libc::c_int = libc::F_SETLK;
+// OFD: fuchsia, hermit, netbsd, openbsd and solaris don't have it,
+cfg_if::cfg_if! {
+    if #[cfg(any(
+            target_os = "android",
+            target_os = "freebsd",
+            target_os = "illumos",
+            target_os = "ios",
+            target_os = "linux",
+            target_os = "macos"
+            ))] {
+        const F_SETLKW: libc::c_int = libc::F_OFD_SETLKW;
+        const F_SETLK: libc::c_int = libc::F_OFD_SETLK;
+    } else if #[cfg(target_os = "freebsd")] {
+        const F_SETLKW: libc::c_int = libc::F_OSETLKW;
+        const F_SETLK: libc::c_int = libc::F_OSETLK;
+    } else {
+        const F_SETLKW: libc::c_int = libc::F_SETLKW;
+        const F_SETLK: libc::c_int = libc::F_SETLK;
+    }
+}
 
 impl<T> Drop for FileLock<T>
 where
@@ -89,9 +99,10 @@ where
     // # man fcntl
     fn lock(self, options: FileLockOptions, path: &Path) -> Result<FileLock<T>> {
         let fd: libc::c_int = self.as_raw_fd();
+        #[allow(clippy::as_underscore)]
         let mut flock: libc::flock = libc::flock {
-            l_type: libc::F_WRLCK as libc::c_short,
-            l_whence: libc::SEEK_SET as libc::c_short,
+            l_type: libc::F_WRLCK as _,
+            l_whence: libc::SEEK_SET as _,
             l_start: 0,
             l_len: 0, /* Specifying 0 for l_len has the special meaning: lock all bytes starting
                        * at the location specified by l_whence and l_start through to the end of

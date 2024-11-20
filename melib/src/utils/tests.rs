@@ -30,8 +30,6 @@ use std::{
 use sealed_test::prelude::*;
 use tempfile::TempDir;
 
-use crate::error::{Errno, ErrorKind};
-
 #[sealed_test]
 #[ignore]
 #[test]
@@ -265,9 +263,21 @@ fn test_shellexpandtrait_impls() {
     _ = tmp_dir.close();
 }
 
+// Only test on platforms that support OFD locking.
+#[cfg(any(
+    target_os = "android",
+    target_os = "freebsd",
+    target_os = "illumos",
+    target_os = "ios",
+    target_os = "linux",
+    target_os = "macos",
+))]
 #[test]
 fn test_fd_locks() {
-    use crate::utils::lock::*;
+    use crate::{
+        error::{Errno, ErrorKind},
+        utils::lock::*,
+    };
 
     fn create_file_util(path: &Path) -> File {
         use super::shellexpand::ShellExpandTrait;
@@ -323,6 +333,77 @@ fn test_fd_locks() {
             .kind,
         ErrorKind::OSError(Errno::EAGAIN)
     );
+    drop(f);
+    open()
+        .lock(
+            FileLockOptions::Nonblocking {
+                max_tries: 0,
+                try_wait: None,
+            },
+            &file_path,
+        )
+        .unwrap();
+}
+
+// Test that locking is a no-op on platforms that don't support OFD locking.
+#[cfg(not(any(
+    target_os = "android",
+    target_os = "freebsd",
+    target_os = "illumos",
+    target_os = "ios",
+    target_os = "linux",
+    target_os = "macos",
+)))]
+#[test]
+fn test_fd_locks() {
+    use crate::utils::lock::*;
+
+    fn create_file_util(path: &Path) -> File {
+        use super::shellexpand::ShellExpandTrait;
+
+        let path = Path::new(path).expand();
+        let mut f = File::create(&path).unwrap();
+        let mut permissions = f.metadata().unwrap().permissions();
+        permissions.set_mode(0o600); // Read/write for owner only.
+        f.set_permissions(permissions).unwrap();
+        f.write_all(b"\n").unwrap();
+        f.flush().unwrap();
+        assert!(path.exists());
+        f
+    }
+
+    let tmp_dir = TempDir::new().unwrap();
+
+    let file_path = tmp_dir.path().join("test.txt");
+
+    let f = create_file_util(&file_path)
+        .lock(FileLockOptions::Blocking, &file_path)
+        .unwrap();
+    let open = || {
+        OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&file_path)
+            .unwrap()
+    };
+    let f2 = open();
+    f2.lock(
+        FileLockOptions::Nonblocking {
+            max_tries: 0,
+            try_wait: None,
+        },
+        &file_path,
+    )
+    .unwrap();
+    open()
+        .lock(
+            FileLockOptions::Nonblocking {
+                max_tries: 1,
+                try_wait: None,
+            },
+            &file_path,
+        )
+        .unwrap();
     drop(f);
     open()
         .lock(
