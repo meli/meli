@@ -309,3 +309,71 @@ fn test_conf_theme_key_values() {
         }
     }
 }
+
+#[test]
+fn test_conf_progress_spinner_sequence() {
+    use crate::{conf::terminal::ProgressSpinnerSequence, utilities::ProgressSpinner};
+
+    let int_0 = ProgressSpinnerSequence::Integer(5);
+    assert_eq!(
+        toml::Value::try_from(&int_0).unwrap(),
+        toml::Value::try_from(5).unwrap()
+    );
+
+    let frames = ProgressSpinnerSequence::Custom {
+        frames: vec![
+            "⠁".to_string(),
+            "⠂".to_string(),
+            "⠄".to_string(),
+            "⡀".to_string(),
+            "⢀".to_string(),
+            "⠠".to_string(),
+            "⠐".to_string(),
+            "⠈".to_string(),
+        ],
+        interval_ms: ProgressSpinner::INTERVAL_MS,
+    };
+    assert_eq!(frames.interval_ms(), ProgressSpinner::INTERVAL_MS);
+    assert_eq!(
+        toml::Value::try_from(&frames).unwrap(),
+        toml::Value::try_from(["⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠈"]).unwrap()
+    );
+    let frames = ProgressSpinnerSequence::Custom {
+        frames: vec![
+            "⠁".to_string(),
+            "⠂".to_string(),
+            "⠄".to_string(),
+            "⡀".to_string(),
+            "⢀".to_string(),
+            "⠠".to_string(),
+            "⠐".to_string(),
+            "⠈".to_string(),
+        ],
+        interval_ms: ProgressSpinner::INTERVAL_MS + 1,
+    };
+    assert_eq!(
+        toml::Value::try_from(&frames).unwrap(),
+        toml::Value::try_from(indexmap::indexmap! {
+            "frames" => toml::Value::try_from(["⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠈"]).unwrap(),
+            "interval_ms" => toml::Value::try_from(ProgressSpinner::INTERVAL_MS + 1).unwrap()
+        })
+        .unwrap()
+    );
+    assert_eq!(
+        toml::from_str::<ProgressSpinnerSequence>(
+            r#"frames = ["⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠈"]
+interval_ms = 51"#
+        )
+        .unwrap(),
+        frames
+    );
+    assert_eq!(
+        toml::from_str::<indexmap::IndexMap<String, ProgressSpinnerSequence>>(
+            r#"sequence = { frames = ["⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠈"], interval_ms = 51 }"#
+        )
+        .unwrap(),
+        indexmap::indexmap! {
+            "sequence".to_string() => frames,
+        },
+    );
+}

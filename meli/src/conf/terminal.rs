@@ -120,19 +120,96 @@ impl DotAddressable for TerminalSettings {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(untagged)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ProgressSpinnerSequence {
     Integer(usize),
     Custom {
         frames: Vec<String>,
-        #[serde(default = "interval_ms_val")]
         interval_ms: u64,
     },
 }
+
+impl ProgressSpinnerSequence {
+    pub const fn interval_ms(&self) -> u64 {
+        match self {
+            Self::Integer(_) => interval_ms_val(),
+            Self::Custom {
+                frames: _,
+                interval_ms,
+            } => *interval_ms,
+        }
+    }
+}
+
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 const fn interval_ms_val() -> u64 {
     crate::utilities::ProgressSpinner::INTERVAL_MS
 }
 
 impl DotAddressable for ProgressSpinnerSequence {}
+
+impl<'de> Deserialize<'de> for ProgressSpinnerSequence {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Clone, Debug, Deserialize, Serialize)]
+        #[serde(untagged)]
+        enum Inner {
+            Integer(usize),
+            Frames(Vec<String>),
+            Custom {
+                frames: Vec<String>,
+                #[serde(default = "interval_ms_val")]
+                interval_ms: u64,
+            },
+        }
+        let s = <Inner>::deserialize(deserializer)?;
+        match s {
+            Inner::Integer(i) => Ok(Self::Integer(i)),
+            Inner::Frames(frames) => Ok(Self::Custom {
+                frames,
+                interval_ms: interval_ms_val(),
+            }),
+            Inner::Custom {
+                frames,
+                interval_ms,
+            } => Ok(Self::Custom {
+                frames,
+                interval_ms,
+            }),
+        }
+    }
+}
+
+impl Serialize for ProgressSpinnerSequence {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Self::Integer(i) => serializer.serialize_i64(*i as i64),
+            Self::Custom {
+                frames,
+                interval_ms,
+            } => {
+                if *interval_ms == interval_ms_val() {
+                    use serde::ser::SerializeSeq;
+                    let mut seq = serializer.serialize_seq(Some(frames.len()))?;
+                    for element in frames {
+                        seq.serialize_element(element)?;
+                    }
+                    seq.end()
+                } else {
+                    use serde::ser::SerializeMap;
+
+                    let mut map = serializer.serialize_map(Some(2))?;
+                    map.serialize_entry("frames", frames)?;
+                    map.serialize_entry("interval_ms", interval_ms)?;
+                    map.end()
+                }
+            }
+        }
+    }
+}
