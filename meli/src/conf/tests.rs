@@ -109,7 +109,7 @@ server_password_command = "false"
     "#;
 
 #[test]
-fn test_config_parse() {
+fn test_conf_config_parse() {
     let tempdir = tempfile::tempdir().unwrap();
     let new_file = ConfigFile::new(TEST_CONFIG, &tempdir).unwrap();
     let err = FileSettings::validate(new_file.path.clone(), true).unwrap_err();
@@ -159,7 +159,7 @@ fn test_config_parse() {
 }
 
 #[test]
-fn test_theme_parsing() {
+fn test_conf_theme_parsing() {
     /* MUST SUCCEED: default themes should be valid */
     let def = Themes::default();
     def.validate().unwrap();
@@ -272,7 +272,7 @@ color_aliases= { "Jebediah" = "$JebediahJr", "JebediahJr" = "mail.listing.tag_de
 }
 
 #[test]
-fn test_theme_key_values() {
+fn test_conf_theme_key_values() {
     use std::{collections::VecDeque, fs::File, io::Read, path::PathBuf};
     let mut rust_files: VecDeque<PathBuf> = VecDeque::new();
     let mut dirs_queue: VecDeque<PathBuf> = VecDeque::new();
