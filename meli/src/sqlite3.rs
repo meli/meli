@@ -38,6 +38,9 @@ use melib::{
     Error, Result, ResultIntoError, SortField, SortOrder,
 };
 
+#[cfg(test)]
+mod tests;
+
 const DB: DatabaseDescription = DatabaseDescription {
     name: "index.db",
     identifier: None,
@@ -182,7 +185,7 @@ impl AccountCache {
                 conn.transaction_with_behavior(melib::rusqlite::TransactionBehavior::Immediate)?;
             if let Err(err) = tx.execute(
                 "INSERT OR IGNORE INTO accounts (name) VALUES (?1)",
-                params![acc_name,],
+                params![acc_name],
             ) {
                 log::error!("Failed to insert envelope {}: {err}", envelope.message_id());
                 return Err(Error::new(format!(
@@ -566,30 +569,4 @@ pub fn query_to_sql(q: &Query) -> String {
     let mut ret = String::new();
     rec(q, &mut ret);
     ret
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_query_to_sql() {
-        use melib::{search::query, utils::parsec::Parser};
-        assert_eq!(
-            "(subject LIKE \"%test%\" ) AND (body_text LIKE \"%i%\" ) ",
-            &query_to_sql(&query().parse_complete("subject:test and i").unwrap().1)
-        );
-        assert_eq!(
-            "(subject LIKE \"%github%\" ) OR ((_from LIKE \"%epilys%\" ) AND ((subject LIKE \
-             \"%lib%\" ) OR (subject LIKE \"%meli%\" ) ) ) ",
-            &query_to_sql(
-                &query()
-                    .parse_complete(
-                        "subject:github or (from:epilys and (subject:lib or subject:meli))"
-                    )
-                    .unwrap()
-                    .1
-            )
-        );
-    }
 }

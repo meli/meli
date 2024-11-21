@@ -137,7 +137,8 @@ impl Configuration {
 /// The maildir backend instance type.
 #[derive(Debug)]
 pub struct MaildirType {
-    pub name: String,
+    pub account_name: String,
+    pub account_hash: AccountHash,
     pub mailboxes: HashMap<MailboxHash, MaildirMailbox>,
     pub mailbox_index: Arc<Mutex<HashMap<EnvelopeHash, MailboxHash>>>,
     pub hash_indexes: HashIndexes,
@@ -210,7 +211,7 @@ impl MailBackend for MaildirType {
     }
 
     fn refresh(&mut self, mailbox_hash: MailboxHash) -> ResultFuture<()> {
-        let account_hash = AccountHash::from_bytes(self.name.as_bytes());
+        let account_hash = self.account_hash;
         let sender = self.event_consumer.clone();
 
         let mailbox: &MaildirMailbox = &self.mailboxes[&mailbox_hash];
@@ -317,7 +318,7 @@ impl MailBackend for MaildirType {
             .collect::<HashMap<MailboxHash, (Arc<Mutex<usize>>, Arc<Mutex<usize>>)>>();
         let watch_state = watch::MaildirWatch {
             watcher,
-            account_hash: AccountHash::from_bytes(self.name.as_bytes()),
+            account_hash: AccountHash::from_bytes(self.account_name.as_bytes()),
             event_consumer: self.event_consumer.clone(),
             root_mailbox,
             rx,
@@ -744,7 +745,8 @@ impl MaildirType {
             );
         }
         Ok(Box::new(Self {
-            name: settings.name.to_string(),
+            account_name: settings.name.to_string(),
+            account_hash: AccountHash::from_bytes(settings.name.as_bytes()),
             mailboxes,
             is_subscribed,
             hash_indexes: Arc::new(Mutex::new(hash_indexes)),
