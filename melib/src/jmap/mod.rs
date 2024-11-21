@@ -626,7 +626,7 @@ impl MailBackend for JmapType {
         &self,
         q: crate::search::Query,
         mailbox_hash: Option<MailboxHash>,
-    ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
+    ) -> ResultFuture<Vec<EnvelopeHash>> {
         let store = self.store.clone();
         let connection = self.connection.clone();
         let filter = if let Some(mailbox_hash) = mailbox_hash {

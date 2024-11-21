@@ -574,7 +574,7 @@ impl MailBackend for NntpType {
         &self,
         _query: crate::search::Query,
         _mailbox_hash: Option<MailboxHash>,
-    ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
+    ) -> ResultFuture<Vec<EnvelopeHash>> {
         Err(Error::new("Searching is not supported for nntp backend.")
             .set_kind(ErrorKind::NotSupported))
     }

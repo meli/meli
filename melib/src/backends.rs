@@ -508,7 +508,7 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         &self,
         query: crate::search::Query,
         mailbox_hash: Option<MailboxHash>,
-    ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>>;
+    ) -> ResultFuture<Vec<EnvelopeHash>>;
 
     fn submit(
         &self,

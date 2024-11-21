@@ -118,7 +118,7 @@ pub struct ConversationsListing {
     error: std::result::Result<(), String>,
 
     #[allow(clippy::type_complexity)]
-    search_job: Option<(String, JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>)>,
+    search_job: Option<(String, JoinHandle<Result<Vec<EnvelopeHash>>>)>,
     filter_term: String,
     filtered_selection: Vec<ThreadHash>,
     filtered_order: HashMap<ThreadHash, usize>,
@@ -521,12 +521,7 @@ impl ListingTrait for ConversationsListing {
         context.dirty_areas.push_back(area);
     }
 
-    fn filter(
-        &mut self,
-        filter_term: String,
-        results: SmallVec<[EnvelopeHash; 512]>,
-        context: &Context,
-    ) {
+    fn filter(&mut self, filter_term: String, results: Vec<EnvelopeHash>, context: &Context) {
         if filter_term.is_empty() {
             return;
         }

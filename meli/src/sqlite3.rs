@@ -37,7 +37,6 @@ use melib::{
     utils::sqlite3::{rusqlite::params, DatabaseDescription},
     Error, Result, ResultIntoError, SortField, SortOrder,
 };
-use smallvec::SmallVec;
 
 const DB: DatabaseDescription = DatabaseDescription {
     name: "index.db",
@@ -401,7 +400,7 @@ impl AccountCache {
         acc_name: Arc<str>,
         query: Query,
         (sort_field, sort_order): (SortField, SortOrder),
-    ) -> Result<SmallVec<[EnvelopeHash; 512]>> {
+    ) -> Result<Vec<EnvelopeHash>> {
         let db_desc = DatabaseDescription {
             identifier: Some(acc_name.to_string().into()),
             ..DB.clone()
@@ -443,7 +442,7 @@ impl AccountCache {
                 .query_map([], |row| row.get::<_, EnvelopeHash>(0))
                 .map_err(Error::from)?
                 .map(|item| item.map_err(Error::from))
-                .collect::<Result<SmallVec<[EnvelopeHash; 512]>>>();
+                .collect::<Result<Vec<EnvelopeHash>>>();
             x
         })
         .await

@@ -1307,7 +1307,7 @@ impl MailBackend for ImapType {
         &self,
         query: crate::search::Query,
         mailbox_hash: Option<MailboxHash>,
-    ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
+    ) -> ResultFuture<Vec<EnvelopeHash>> {
         if mailbox_hash.is_none() {
             return Err(Error::new(
                 "Cannot search without specifying mailbox on IMAP",
@@ -1340,7 +1340,7 @@ impl MailBackend for ImapType {
             for l in response.split_rn() {
                 if l.starts_with(b"* SEARCH") {
                     let uid_index = uid_store.uid_index.lock()?;
-                    return Ok(SmallVec::from_iter(
+                    return Ok(Vec::from_iter(
                         String::from_utf8_lossy(l[b"* SEARCH".len()..].trim())
                             .split_whitespace()
                             .map(UID::from_str)

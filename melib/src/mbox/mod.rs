@@ -1243,7 +1243,7 @@ impl MailBackend for MboxType {
         &self,
         _query: crate::search::Query,
         _mailbox_hash: Option<MailboxHash>,
-    ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
+    ) -> ResultFuture<Vec<EnvelopeHash>> {
         Err(Error::new("Search is unimplemented for the mbox backend.")
             .set_kind(ErrorKind::NotImplemented))
     }

@@ -46,7 +46,6 @@ use melib::{
     utils::{fnmatch::Fnmatch, futures::sleep, random, shellexpand::ShellExpandTrait},
     Contacts, SortField, SortOrder,
 };
-use smallvec::SmallVec;
 
 #[cfg(feature = "sqlite3")]
 use crate::command::actions::AccountAction;
@@ -1286,7 +1285,7 @@ impl Account {
         search_term: &str,
         _sort: (SortField, SortOrder),
         mailbox_hash: MailboxHash,
-    ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
+    ) -> ResultFuture<Vec<EnvelopeHash>> {
         let query = melib::search::Query::try_from(search_term)?;
         match self.settings.conf.search_backend {
             #[cfg(feature = "sqlite3")]
@@ -1303,7 +1302,7 @@ impl Account {
                         .search(query, Some(mailbox_hash))
                 } else {
                     use melib::search::QueryTrait;
-                    let mut ret = SmallVec::new();
+                    let mut ret = Vec::with_capacity(512);
                     let envelopes = self.collection.envelopes.read().unwrap();
                     for &env_hash in self.collection.get_mailbox(mailbox_hash).iter() {
                         if let Some(envelope) = envelopes.get(&env_hash) {

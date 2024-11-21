@@ -954,7 +954,7 @@ impl MailBackend for NotmuchDb {
         &self,
         melib_query: crate::search::Query,
         mailbox_hash: Option<MailboxHash>,
-    ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
+    ) -> ResultFuture<Vec<EnvelopeHash>> {
         let database = Self::new_connection(
             self.path.as_path(),
             self.revision_uuid.clone(),
@@ -963,7 +963,6 @@ impl MailBackend for NotmuchDb {
         )?;
         let mailboxes = self.mailboxes.clone();
         Ok(Box::pin(async move {
-            let mut ret = SmallVec::new();
             let mut query_s = if let Some(mailbox_hash) = mailbox_hash {
                 if let Some(m) = mailboxes.read().unwrap().get(&mailbox_hash) {
                     let mut s = m.query_str.clone();
@@ -981,12 +980,7 @@ impl MailBackend for NotmuchDb {
             };
             melib_query.query_to_string(&mut query_s)?;
             let query: Query = Query::new(&database, &query_s)?;
-            let iter = query.search()?;
-            for message in iter {
-                ret.push(message.env_hash());
-            }
-
-            Ok(ret)
+            Ok(query.search()?.map(|message| message.env_hash()).collect())
         }))
     }
 

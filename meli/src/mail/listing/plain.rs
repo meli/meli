@@ -140,9 +140,9 @@ pub struct PlainListing {
     data_columns: DataColumns<5>,
 
     #[allow(clippy::type_complexity)]
-    search_job: Option<(String, JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>)>,
+    search_job: Option<(String, JoinHandle<Result<Vec<EnvelopeHash>>>)>,
     #[allow(clippy::type_complexity)]
-    select_job: Option<(String, JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>)>,
+    select_job: Option<(String, JoinHandle<Result<Vec<EnvelopeHash>>>)>,
     filter_term: String,
     filtered_selection: Vec<EnvelopeHash>,
     filtered_order: HashMap<EnvelopeHash, usize>,
@@ -502,12 +502,7 @@ impl ListingTrait for PlainListing {
         context.dirty_areas.push_back(area);
     }
 
-    fn filter(
-        &mut self,
-        filter_term: String,
-        results: SmallVec<[EnvelopeHash; 512]>,
-        context: &Context,
-    ) {
+    fn filter(&mut self, filter_term: String, results: Vec<EnvelopeHash>, context: &Context) {
         if filter_term.is_empty() {
             return;
         }
@@ -1286,7 +1281,7 @@ impl PlainListing {
     fn select(
         &mut self,
         search_term: &str,
-        results: Result<SmallVec<[EnvelopeHash; 512]>>,
+        results: Result<Vec<EnvelopeHash>>,
         context: &mut Context,
     ) {
         let account = &context.accounts[&self.cursor_pos.0];

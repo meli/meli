@@ -139,9 +139,9 @@ pub struct ThreadListing {
     color_cache: ColorCache,
 
     #[allow(clippy::type_complexity)]
-    search_job: Option<(String, JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>)>,
+    search_job: Option<(String, JoinHandle<Result<Vec<EnvelopeHash>>>)>,
     #[allow(clippy::type_complexity)]
-    select_job: Option<(String, JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>)>,
+    select_job: Option<(String, JoinHandle<Result<Vec<EnvelopeHash>>>)>,
     filter_term: String,
     filtered_selection: Vec<ThreadHash>,
     filtered_order: HashMap<ThreadHash, usize>,
@@ -671,12 +671,7 @@ impl ListingTrait for ThreadListing {
         }
     }
 
-    fn filter(
-        &mut self,
-        filter_term: String,
-        results: SmallVec<[EnvelopeHash; 512]>,
-        context: &Context,
-    ) {
+    fn filter(&mut self, filter_term: String, results: Vec<EnvelopeHash>, context: &Context) {
         if filter_term.is_empty() {
             return;
         }
@@ -1224,7 +1219,7 @@ impl ThreadListing {
     fn select(
         &mut self,
         search_term: &str,
-        results: Result<SmallVec<[EnvelopeHash; 512]>>,
+        results: Result<Vec<EnvelopeHash>>,
         context: &mut Context,
     ) {
         let account = &context.accounts[&self.cursor_pos.0];
