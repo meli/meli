@@ -185,7 +185,7 @@ impl Account {
                         if !err.is_recoverable() {
                             self.main_loop_handler.send(ThreadEvent::UIEvent(
                                 UIEvent::Notification {
-                                    title: Some(self.name.clone().into()),
+                                    title: Some(self.name.to_string().into()),
                                     source: Some(err.clone()),
                                     body: err.to_string().into(),
                                     kind: Some(NotificationType::Error(err.kind)),

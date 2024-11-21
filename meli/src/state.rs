@@ -811,10 +811,8 @@ impl State {
                     return;
                 }
                 let account = &self.context.accounts[account_index];
-                let (acc_name, backend_mutex): (Arc<String>, Arc<_>) = (
-                    Arc::new(account.name().to_string()),
-                    account.backend.clone(),
-                );
+                let (acc_name, backend_mutex): (Arc<str>, Arc<_>) =
+                    (Arc::clone(&account.name), account.backend.clone());
                 let job = crate::sqlite3::AccountCache::index(
                     acc_name,
                     account.collection.clone(),

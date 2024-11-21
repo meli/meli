@@ -150,10 +150,10 @@ impl AccountCache {
     pub async fn insert(
         envelope: Envelope,
         backend: Arc<RwLock<Box<dyn MailBackend>>>,
-        acc_name: String,
+        acc_name: Arc<str>,
     ) -> Result<()> {
         let db_desc = DatabaseDescription {
-            identifier: Some(acc_name.clone().into()),
+            identifier: Some(acc_name.to_string().into()),
             ..DB.clone()
         };
 
@@ -243,9 +243,9 @@ impl AccountCache {
         Ok(())
     }
 
-    pub async fn remove(acc_name: String, env_hash: EnvelopeHash) -> Result<()> {
+    pub async fn remove(acc_name: Arc<str>, env_hash: EnvelopeHash) -> Result<()> {
         let db_desc = DatabaseDescription {
-            identifier: Some(acc_name.clone().into()),
+            identifier: Some(acc_name.to_string().into()),
             ..DB.clone()
         };
         let db_path = db_desc.db_path()?;
@@ -277,7 +277,7 @@ impl AccountCache {
     }
 
     pub async fn index(
-        acc_name: Arc<String>,
+        acc_name: Arc<str>,
         collection: melib::Collection,
         backend_mutex: Arc<RwLock<Box<dyn MailBackend>>>,
     ) -> Result<()> {
@@ -303,7 +303,7 @@ impl AccountCache {
                     .transaction_with_behavior(melib::rusqlite::TransactionBehavior::Immediate)?;
                 tx.execute(
                     "INSERT OR REPLACE INTO accounts (name) VALUES (?1)",
-                    params![acc_name.as_str(),],
+                    params![acc_name.as_ref()],
                 )
                 .chain_err_summary(|| "Failed to update index:")?;
                 let account_id = {
@@ -311,7 +311,7 @@ impl AccountCache {
                         .prepare("SELECT id FROM accounts WHERE name = ?")
                         .unwrap();
                     let x = stmt
-                        .query_map(params![acc_name.as_str()], |row| row.get(0))
+                        .query_map(params![acc_name.as_ref()], |row| row.get(0))
                         .unwrap()
                         .next()
                         .unwrap()
@@ -398,12 +398,12 @@ impl AccountCache {
     }
 
     pub async fn search(
-        acc_name: String,
+        acc_name: Arc<str>,
         query: Query,
         (sort_field, sort_order): (SortField, SortOrder),
     ) -> Result<SmallVec<[EnvelopeHash; 512]>> {
         let db_desc = DatabaseDescription {
-            identifier: Some(acc_name.clone().into()),
+            identifier: Some(acc_name.to_string().into()),
             ..DB.clone()
         };
 
@@ -449,7 +449,7 @@ impl AccountCache {
         .await
     }
 
-    pub fn db_path(acc_name: &str) -> Result<Option<PathBuf>> {
+    pub fn db_path(acc_name: &Arc<str>) -> Result<Option<PathBuf>> {
         let db_desc = DatabaseDescription {
             identifier: Some(acc_name.to_string().into()),
             ..DB.clone()

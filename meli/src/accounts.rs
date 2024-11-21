@@ -123,7 +123,7 @@ impl IsOnline {
 
 #[derive(Debug)]
 pub struct Account {
-    pub name: String,
+    pub name: Arc<str>,
     pub hash: AccountHash,
     pub is_online: IsOnline,
     pub mailbox_entries: IndexMap<MailboxHash, MailboxEntry>,
@@ -143,7 +143,7 @@ pub struct Account {
 
 impl Drop for Account {
     fn drop(&mut self) {
-        if let Ok(data_dir) = xdg::BaseDirectories::with_profile("meli", &self.name) {
+        if let Ok(data_dir) = xdg::BaseDirectories::with_profile("meli", self.name.as_ref()) {
             if let Ok(data) = data_dir.place_data_file("contacts") {
                 /* place result in cache directory */
                 let f = match fs::File::create(data) {
@@ -201,6 +201,7 @@ impl Account {
         main_loop_handler: MainLoopHandler,
         event_consumer: BackendEventConsumer,
     ) -> Result<Self> {
+        let name: Arc<str> = name.into();
         let s = settings.clone();
         let backend = map.get(&settings.account().format)(
             settings.account(),
@@ -219,7 +220,7 @@ impl Account {
             event_consumer,
         )?;
 
-        let data_dir = xdg::BaseDirectories::with_profile("meli", &name)?;
+        let data_dir = xdg::BaseDirectories::with_profile("meli", name.as_ref())?;
         let mut contacts = Contacts::with_account(settings.account());
 
         if let Ok(data) = data_dir.place_data_file("contacts") {
@@ -700,7 +701,7 @@ impl Account {
                             body: format!(
                                 "{}\n{} | {}",
                                 from,
-                                self.name,
+                                &self.name,
                                 self.mailbox_entries[&mailbox_hash].name()
                             )
                             .into(),
@@ -1009,10 +1010,7 @@ impl Account {
         flags: Option<Flag>,
     ) -> Result<()> {
         if self.settings.account.read_only {
-            return Err(Error::new(format!(
-                "Account {} is read-only.",
-                self.name.as_str()
-            )));
+            return Err(Error::new(format!("Account {} is read-only.", &self.name)));
         }
         let job = self
             .backend
@@ -1803,7 +1801,7 @@ impl Account {
     }
 
     pub fn signature_file(&self) -> Option<PathBuf> {
-        xdg::BaseDirectories::with_profile("meli", &self.name)
+        xdg::BaseDirectories::with_profile("meli", self.name.as_ref())
             .ok()
             .and_then(|d| {
                 d.place_config_file("signature")

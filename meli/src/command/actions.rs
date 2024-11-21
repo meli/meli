@@ -21,7 +21,7 @@
 
 //! User actions that need to be handled by the UI
 
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use melib::{email::mailto::Mailto, Flag, SortField, SortOrder};
 
@@ -168,7 +168,7 @@ type MailboxPath = String;
 type NewMailboxPath = String;
 
 macro_rules! impl_into_action {
-    ($({$t:ty => $var:tt}),*) => {
+    ($({$t:ty => $var:tt}),*$(,)?) => {
         $(
             impl From<$t> for Action {
                 fn from(v: $t) -> Self {
@@ -179,11 +179,11 @@ macro_rules! impl_into_action {
     };
 }
 macro_rules! impl_tuple_into_action {
-    ($({$a:ty,$b:ty => $var:tt}),*) => {
+    ($({$a:ty,$b:ty => $var:tt}),*$(,)?) => {
         $(
             impl From<($a,$b)> for Action {
                 fn from((a, b): ($a,$b)) -> Self {
-                    Self::$var(a, b)
+                    Self::$var(a.to_string(), b)
                 }
             }
         )*
@@ -199,5 +199,7 @@ impl_into_action!(
 );
 impl_tuple_into_action!(
     { AccountName, MailboxOperation => Mailbox },
-    { AccountName, AccountAction => AccountAction }
+    { AccountName, AccountAction => AccountAction },
+    { Arc<str>, MailboxOperation => Mailbox },
+    { Arc<str>, AccountAction => AccountAction },
 );
