@@ -365,6 +365,10 @@ impl Collection {
 
     pub fn insert(&self, envelope: Envelope, mailbox_hash: MailboxHash) -> bool {
         let hash = envelope.hash();
+
+        // Ensure mailbox exists in collection.
+        self.new_mailbox(mailbox_hash);
+
         self.mailboxes
             .write()
             .unwrap()
