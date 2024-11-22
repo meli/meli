@@ -27,7 +27,7 @@ use std::{
     ptr::NonNull,
 };
 
-use super::*;
+use super::{bindings::gpgme_io_event_done_data, *};
 
 #[derive(Debug)]
 #[repr(C)]
@@ -142,14 +142,14 @@ pub unsafe extern "C" fn gpgme_event_io_cb(
     r#type: gpgme_event_io_t,
     type_data: *mut c_void,
 ) {
-    if r#type == gpgme_event_io_t_GPGME_EVENT_START {
+    if r#type == gpgme_event_io_t::GPGME_EVENT_START {
         return;
     }
 
     // SAFETY: This is the iostate reference that was leaked in `Context::new`.
     let io_state: IoStateWrapper = unsafe { IoStateWrapper::from_raw(data) };
 
-    if r#type == gpgme_event_io_t_GPGME_EVENT_DONE {
+    if r#type == gpgme_event_io_t::GPGME_EVENT_DONE {
         let Some(status) = NonNull::new(type_data.cast::<gpgme_io_event_done_data>()) else {
             log::error!("gpgme_event_io_cb DONE event with NULL type_data. This is a gpgme bug.",);
             return;
@@ -166,7 +166,7 @@ pub unsafe extern "C" fn gpgme_event_io_cb(
         return;
     }
 
-    if r#type == gpgme_event_io_t_GPGME_EVENT_NEXT_KEY {
+    if r#type == gpgme_event_io_t::GPGME_EVENT_NEXT_KEY {
         let Some(ptr) = NonNull::new(type_data.cast::<_gpgme_key>()) else {
             log::error!(
                 "gpgme_event_io_cb NEXT_KEY event with NULL type_data. This is a gpgme bug.",
@@ -181,7 +181,7 @@ pub unsafe extern "C" fn gpgme_event_io_cb(
 
     log::error!(
         "gpgme_event_io_cb called with unexpected event type: {}",
-        r#type
+        r#type as u32
     );
 }
 
@@ -190,7 +190,12 @@ impl Read for Data {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let result = unsafe {
             let (buf, len) = (buf.as_mut_ptr() as *mut _, buf.len());
-            call!(self.lib, gpgme_data_read)(self.inner.as_ptr(), buf, len)
+            call!(self.lib, gpgme_data_read)(
+                self.inner.as_ptr(),
+                buf,
+                len.try_into()
+                    .map_err(|_| io::Error::from_raw_os_error(libc::EOVERFLOW))?,
+            )
         };
         if result >= 0 {
             Ok(result as usize)
@@ -205,7 +210,12 @@ impl Write for Data {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let result = unsafe {
             let (buf, len) = (buf.as_ptr() as *const _, buf.len());
-            call!(self.lib, gpgme_data_write)(self.inner.as_ptr(), buf, len)
+            call!(self.lib, gpgme_data_write)(
+                self.inner.as_ptr(),
+                buf,
+                len.try_into()
+                    .map_err(|_| io::Error::from_raw_os_error(libc::EOVERFLOW))?,
+            )
         };
         if result >= 0 {
             Ok(result as usize)
@@ -233,10 +243,13 @@ impl Seek for Data {
             io::SeekFrom::Current(off) => (off, libc::SEEK_CUR),
         };
         let result = unsafe {
+            // Allow .into() for both 32bit and 64bit targets
+            #[allow(clippy::useless_conversion)]
             call!(self.lib, gpgme_data_seek)(
                 self.inner.as_ptr(),
                 libc::off_t::try_from(off)
-                    .map_err(|_| io::Error::from_raw_os_error(libc::EOVERFLOW))?,
+                    .map_err(|_| io::Error::from_raw_os_error(libc::EOVERFLOW))?
+                    .into(),
                 whence,
             )
         };

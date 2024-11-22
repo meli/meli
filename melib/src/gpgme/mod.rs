@@ -69,6 +69,14 @@ macro_rules! call {
     }};
 }
 
+#[allow(
+    non_camel_case_types,
+    non_upper_case_globals,
+    non_snake_case,
+    clippy::useless_transmute,
+    clippy::too_many_arguments,
+    clippy::use_self
+)]
 pub mod bindings;
 #[cfg(test)]
 mod tests;
@@ -249,11 +257,10 @@ impl Context {
                 }
             },
         );
-        if unsafe { call!(&lib, gpgme_check_version)(GPGME_VERSION.as_bytes().as_ptr()) }.is_null()
-        {
+        if unsafe { call!(&lib, gpgme_check_version)(GPGME_VERSION.as_ptr()) }.is_null() {
             return Err(Error::new(format!(
                 "Could not use libgpgme: requested version compatible with {} but got {}",
-                GPGME_VERSION,
+                GPGME_VERSION.to_string_lossy(),
                 unsafe {
                     CStr::from_ptr(call!(&lib, gpgme_check_version)(std::ptr::null_mut()))
                         .to_string_lossy()
@@ -437,7 +444,10 @@ impl Context {
                 call!(&self.inner.lib, gpgme_data_new_from_mem)(
                     &mut ptr,
                     bytes.as_ptr() as *const ::std::os::raw::c_char,
-                    bytes.len(),
+                    bytes
+                        .len()
+                        .try_into()
+                        .map_err(|_| std::io::Error::from_raw_os_error(libc::EOVERFLOW))?,
                     1,
                 ),
             )?;
@@ -465,7 +475,7 @@ impl Context {
         let bytes = Pin::new(os_str.as_bytes().to_vec());
         let mut ptr = std::ptr::null_mut();
         unsafe {
-            let ret: GpgmeError = call!(&self.inner.lib, gpgme_data_new_from_file)(
+            let ret: gpgme_error_t = call!(&self.inner.lib, gpgme_data_new_from_file)(
                 &mut ptr,
                 bytes.as_ptr() as *const ::std::os::raw::c_char,
                 1,
@@ -719,7 +729,7 @@ impl Context {
                     self.inner.ptr.as_ptr(),
                     text.inner.as_mut(),
                     sig,
-                    gpgme_sig_mode_t_GPGME_SIG_MODE_DETACH,
+                    gpgme_sig_mode_t::GPGME_SIG_MODE_DETACH,
                 ),
             )?;
         }
@@ -988,9 +998,9 @@ impl Context {
                 call!(&self.inner.lib, gpgme_op_encrypt_start)(
                     self.inner.ptr.as_ptr(),
                     raw_keys.as_mut_slice().as_mut_ptr(),
-                    gpgme_encrypt_flags_t_GPGME_ENCRYPT_NO_ENCRYPT_TO
-                        | gpgme_encrypt_flags_t_GPGME_ENCRYPT_NO_COMPRESS
-                        | gpgme_encrypt_flags_t_GPGME_ENCRYPT_ALWAYS_TRUST,
+                    gpgme_encrypt_flags_t::GPGME_ENCRYPT_NO_ENCRYPT_TO
+                        | gpgme_encrypt_flags_t::GPGME_ENCRYPT_NO_COMPRESS
+                        | gpgme_encrypt_flags_t::GPGME_ENCRYPT_ALWAYS_TRUST,
                     plain.inner.as_mut(),
                     cipher,
                 ),
@@ -1152,7 +1162,7 @@ impl Context {
                 &self.inner.lib,
                 call!(&self.inner.lib, gpgme_ctx_set_engine_info)(
                     self.inner.ptr.as_ptr(),
-                    protocol as u32,
+                    protocol.into(),
                     file_name
                         .as_ref()
                         .map(|c| c.as_ptr())
@@ -1173,7 +1183,7 @@ impl Context {
                 &self.inner.lib,
                 call!(&self.inner.lib, gpgme_set_protocol)(
                     self.inner.ptr.as_ptr(),
-                    protocol as u32,
+                    protocol.into(),
                 ),
             )?;
         }
@@ -1216,9 +1226,9 @@ impl Context {
                 call!(&self.inner.lib, gpgme_set_pinentry_mode)(
                     self.inner.ptr.as_ptr(),
                     if cb.is_none() {
-                        gpgme_pinentry_mode_t_GPGME_PINENTRY_MODE_DEFAULT
+                        gpgme_pinentry_mode_t::GPGME_PINENTRY_MODE_DEFAULT
                     } else {
-                        gpgme_pinentry_mode_t_GPGME_PINENTRY_MODE_LOOPBACK
+                        gpgme_pinentry_mode_t::GPGME_PINENTRY_MODE_LOOPBACK
                     },
                 ),
             )?;
@@ -1260,22 +1270,54 @@ pub enum Protocol {
 impl From<u32> for Protocol {
     fn from(val: u32) -> Self {
         match val {
-            0 => Self::OpenPGP,
-            1 => Self::CMS,
-            2 => Self::GPGCONF,
-            3 => Self::ASSUAN,
-            4 => Self::G13,
-            5 => Self::UISERVER,
-            6 => Self::SPAWN,
-            254 => Self::DEFAULT,
+            val if val == gpgme_protocol_t::GPGME_PROTOCOL_OpenPGP as u32 => Self::OpenPGP,
+            val if val == gpgme_protocol_t::GPGME_PROTOCOL_CMS as u32 => Self::CMS,
+            val if val == gpgme_protocol_t::GPGME_PROTOCOL_GPGCONF as u32 => Self::GPGCONF,
+            val if val == gpgme_protocol_t::GPGME_PROTOCOL_ASSUAN as u32 => Self::ASSUAN,
+            val if val == gpgme_protocol_t::GPGME_PROTOCOL_G13 as u32 => Self::G13,
+            val if val == gpgme_protocol_t::GPGME_PROTOCOL_UISERVER as u32 => Self::UISERVER,
+            val if val == gpgme_protocol_t::GPGME_PROTOCOL_SPAWN as u32 => Self::SPAWN,
+            val if val == gpgme_protocol_t::GPGME_PROTOCOL_DEFAULT as u32 => Self::DEFAULT,
             _ => Self::UNKNOWN,
         }
     }
 }
 
-fn gpgme_error_to_string(lib: &libloading::Library, error_code: GpgmeError) -> String {
-    const ERR_MAX_LEN: usize = 256;
-    let mut buf: Vec<u8> = vec![0; ERR_MAX_LEN];
+impl From<gpgme_protocol_t> for Protocol {
+    fn from(val: gpgme_protocol_t) -> Self {
+        match val {
+            gpgme_protocol_t::GPGME_PROTOCOL_OpenPGP => Self::OpenPGP,
+            gpgme_protocol_t::GPGME_PROTOCOL_CMS => Self::CMS,
+            gpgme_protocol_t::GPGME_PROTOCOL_GPGCONF => Self::GPGCONF,
+            gpgme_protocol_t::GPGME_PROTOCOL_ASSUAN => Self::ASSUAN,
+            gpgme_protocol_t::GPGME_PROTOCOL_G13 => Self::G13,
+            gpgme_protocol_t::GPGME_PROTOCOL_UISERVER => Self::UISERVER,
+            gpgme_protocol_t::GPGME_PROTOCOL_SPAWN => Self::SPAWN,
+            gpgme_protocol_t::GPGME_PROTOCOL_DEFAULT => Self::DEFAULT,
+            gpgme_protocol_t::GPGME_PROTOCOL_UNKNOWN => Self::UNKNOWN,
+        }
+    }
+}
+
+impl From<Protocol> for gpgme_protocol_t {
+    fn from(val: Protocol) -> Self {
+        match val {
+            Protocol::OpenPGP => Self::GPGME_PROTOCOL_OpenPGP,
+            Protocol::CMS => Self::GPGME_PROTOCOL_CMS,
+            Protocol::GPGCONF => Self::GPGME_PROTOCOL_GPGCONF,
+            Protocol::ASSUAN => Self::GPGME_PROTOCOL_ASSUAN,
+            Protocol::G13 => Self::GPGME_PROTOCOL_G13,
+            Protocol::UISERVER => Self::GPGME_PROTOCOL_UISERVER,
+            Protocol::SPAWN => Self::GPGME_PROTOCOL_SPAWN,
+            Protocol::DEFAULT => Self::GPGME_PROTOCOL_DEFAULT,
+            Protocol::UNKNOWN => Self::GPGME_PROTOCOL_UNKNOWN,
+        }
+    }
+}
+
+fn gpgme_error_to_string(lib: &libloading::Library, error_code: gpgme_error_t) -> String {
+    const ERR_MAX_LEN: bindings::size_t = 256;
+    let mut buf: Vec<u8> = vec![0; ERR_MAX_LEN as usize];
     unsafe {
         call!(lib, gpgme_strerror_r)(
             error_code,
@@ -1290,7 +1332,7 @@ fn gpgme_error_to_string(lib: &libloading::Library, error_code: GpgmeError) -> S
         .unwrap_or_else(|err| String::from_utf8_lossy(&err.into_bytes()).to_string())
 }
 
-fn gpgme_error_try(lib: &libloading::Library, error_code: GpgmeError) -> Result<()> {
+fn gpgme_error_try(lib: &libloading::Library, error_code: gpgme_error_t) -> Result<()> {
     if error_code == 0 {
         return Ok(());
     }
@@ -1337,7 +1379,7 @@ impl Drop for Data {
 #[repr(C)]
 struct GpgmeFd {
     fd: Arc<ManuallyDrop<OwnedFd>>,
-    fnc: GpgmeIOCb,
+    fnc: gpgme_io_cb_t,
     fnc_data: *mut c_void,
     idx: usize,
     write: bool,
