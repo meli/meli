@@ -75,10 +75,20 @@ fn main() {
 
         cl("docs/meli.1", "meli.txt.gz", false);
         cl("docs/meli.conf.5", "meli.conf.txt.gz", false);
+        cl(
+            "docs/meli.conf.examples.5",
+            "meli.conf.examples.txt.gz",
+            false,
+        );
         cl("docs/meli-themes.5", "meli-themes.txt.gz", false);
         cl("docs/meli.7", "meli.7.txt.gz", false);
         cl("docs/meli.1", "meli.mdoc.gz", true);
         cl("docs/meli.conf.5", "meli.conf.mdoc.gz", true);
+        cl(
+            "docs/meli.conf.examples.5",
+            "meli.conf.examples.mdoc.gz",
+            true,
+        );
         cl("docs/meli-themes.5", "meli-themes.mdoc.gz", true);
         cl("docs/meli.7", "meli.7.mdoc.gz", true);
     }

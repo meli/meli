@@ -38,6 +38,8 @@ pub const POSSIBLE_VALUES: &[&str] = &[
     "conf",
     "meli.conf",
     "meli.conf.5",
+    "meli.conf.examples",
+    "meli.conf.examples.5",
     "themes",
     "meli-themes",
     "meli-themes.5",
@@ -51,6 +53,7 @@ pub fn parse_manpage(src: &str) -> Result<ManPages> {
         "meli.7" | "guide" => Ok(ManPages::Guide),
         "meli.conf" | "meli.conf.5" | "conf" | "config" | "configuration" => Ok(ManPages::Conf),
         "meli-themes" | "meli-themes.5" | "themes" | "theming" | "theme" => Ok(ManPages::Themes),
+        "meli.conf.examples" | "meli.conf.examples.5" => Ok(ManPages::ConfExamples),
         _ => Err(Error::new(format!("Invalid documentation page: {src}",))),
     }
 }
@@ -66,6 +69,8 @@ pub enum ManPages {
     Themes = 2,
     /// meli(7)
     Guide = 3,
+    /// meli.conf.examples(5)
+    ConfExamples = 4,
 }
 
 impl std::fmt::Display for ManPages {
@@ -76,6 +81,7 @@ impl std::fmt::Display for ManPages {
             match self {
                 Self::Main => "meli.1",
                 Self::Conf => "meli.conf.5",
+                Self::ConfExamples => "meli.conf.examples.5",
                 Self::Themes => "meli-themes.5",
                 Self::Guide => "meli.7",
             }
@@ -84,17 +90,19 @@ impl std::fmt::Display for ManPages {
 }
 
 impl ManPages {
-    const MANPAGES: [&'static [u8]; 4] = [
+    const MANPAGES: [&'static [u8]; 5] = [
         include_bytes!(concat!(env!("OUT_DIR"), "/meli.txt.gz")),
         include_bytes!(concat!(env!("OUT_DIR"), "/meli.conf.txt.gz")),
         include_bytes!(concat!(env!("OUT_DIR"), "/meli-themes.txt.gz")),
         include_bytes!(concat!(env!("OUT_DIR"), "/meli.7.txt.gz")),
+        include_bytes!(concat!(env!("OUT_DIR"), "/meli.conf.examples.txt.gz")),
     ];
-    const MANPAGES_MDOC: [&'static [u8]; 4] = [
+    const MANPAGES_MDOC: [&'static [u8]; 5] = [
         include_bytes!(concat!(env!("OUT_DIR"), "/meli.mdoc.gz")),
         include_bytes!(concat!(env!("OUT_DIR"), "/meli.conf.mdoc.gz")),
         include_bytes!(concat!(env!("OUT_DIR"), "/meli-themes.mdoc.gz")),
         include_bytes!(concat!(env!("OUT_DIR"), "/meli.7.mdoc.gz")),
+        include_bytes!(concat!(env!("OUT_DIR"), "/meli.conf.examples.mdoc.gz")),
     ];
 
     pub fn install(destination: Option<PathBuf>) -> Result<PathBuf> {
@@ -135,6 +143,7 @@ impl ManPages {
         for (p, dir) in [
             (Self::Main, "man1"),
             (Self::Conf, "man5"),
+            (Self::ConfExamples, "man5"),
             (Self::Themes, "man5"),
             (Self::Guide, "man7"),
         ] {

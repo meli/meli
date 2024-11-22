@@ -103,6 +103,7 @@ fn test_cli_subcommands() {
         for (man, dir) in [
             ("meli.1", "man1"),
             ("meli.conf.5", "man5"),
+            ("meli.conf.examples.5", "man5"),
             ("meli-themes.5", "man5"),
             ("meli.7", "man7"),
         ] {
@@ -150,6 +151,7 @@ server_password_command = "false"
         for (man, title) in [
             ("meli.1", "MELI(1)"),
             ("meli.conf.5", "MELI.CONF(5)"),
+            ("meli.conf.examples.5", "MELI.CONF.EXAMPLES(5)"),
             ("meli-themes.5", "MELI-THEMES(5)"),
             ("meli.7", "MELI(7)"),
         ] {
