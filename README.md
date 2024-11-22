@@ -2,14 +2,16 @@
 
 **BSD/Linux/macos terminal email client with support for multiple accounts and Maildir / mbox / notmuch / IMAP / JMAP / NNTP (Usenet).**
 
-Try an [old online interactive web demo](https://meli-email.org/wasm2.html "online interactive web demo") powered by WebAssembly!
+Try an [old, outdated but online and interactive web demo](https://meli-email.org/wasm2.html "online interactive web demo") powered by WebAssembly!
 
-* `#meli` on OFTC IRC | [mailing lists](https://lists.meli-email.org/)
-* Repository:
-  - Main <https://git.meli-email.org/meli/meli> Report bugs and/or feature requests in [meli's issue tracker](https://git.meli-email.org/meli/meli/issues "meli gitea issue tracker")
-  - Official mirror <https://codeberg.org/meli/meli>
-  - Official mirror <https://github.com/meli/meli>
-  - Official mirror <https://ayllu-forge.org/meli/meli>
+* `#meli` on OFTC IRC
+* [Mailing lists](https://lists.meli-email.org/)
+* Main repository <https://git.meli-email.org/meli/meli> Report bugs and/or feature requests in [meli's issue tracker](https://git.meli-email.org/meli/meli/issues "meli gitea issue tracker")<details><summary>Official git mirrors</summary>
+  - <https://codeberg.org/meli/meli>
+  - <https://github.com/meli/meli>
+  - <https://ayllu-forge.org/meli/meli>
+  - <https://gitlab.com/meli-project/meli>
+  </details>
 
 **Table of contents**:
 
@@ -24,23 +26,26 @@ Try an [old online interactive web demo](https://meli-email.org/wasm2.html "onli
 
 ## Install
 
-- `cargo install meli` or `cargo install --git https://git.meli-email.org/meli/meli.git meli`
-- [pkgsrc](https://pkgsrc.se/mail/meli)
-- [openbsd ports](https://openports.pl/path/mail/meli)
-- [Pre-built debian package, static binaries](https://github.com/meli/meli/releases/ "github releases for meli")
-- [Nix](https://search.nixos.org/packages?show=meli&query=meli&from=0&size=30&sort=relevance&channel=unstable#disabled "nixos package search results for 'meli'")
-- [MacPorts](https://ports.macports.org/port/meli/)
+<a href="https://repology.org/project/meli/versions">
+  <img src="https://repology.org/badge/vertical-allrepos/meli.svg" alt="Packaging status table by repology.org" align="right">
+</a>
+
+- `cargo install meli` or `cargo install --git https://git.meli-email.org/meli/meli.git meli` [crates.io link](https://crates.io/crates/meli)
+- Official Debian packages <https://packages.debian.org/trixie/meli>
+- AUR (archlinux) <https://aur.archlinux.org/packages/meli>
+- NetBSD with pkgsrc <https://pkgsrc.se/mail/meli>
+- OpenBSD ports <https://openports.pl/path/mail/meli>
+- macOS with MacPorts <https://ports.macports.org/port/meli/>
+- Nix with Nixpkgs <https://search.nixos.org/packages?query=meli>
+- [Pre-built debian package, static binaries](https://github.com/meli/meli/releases/ "github releases for meli") for <code>amd64</code>, <code>arm64</code> architectures
 
 ## Build
 
-Run `cargo build --release --bin meli` or `make`.
+Run `make` or `cargo build --release --bin meli`.
 
 For detailed building instructions, see [`BUILD.md`](./BUILD.md)
 
 ## Quick start
-
-<table>
-<tr><td>
 
 ```sh
 # Create configuration file in ${XDG_CONFIG_HOME}/meli/config.toml:
@@ -51,9 +56,11 @@ $ meli edit-config
 $ meli install-man
 # Ready to go.
 $ meli
+# You can read any manual page with the CLI subcommand `man`:
+$ meli man meli.7
+# See help output for all options and subcommands.
+$ meli --help
 ```
-
-</td><td>
 
 See a comprehensive tour of `meli` in the manual page [`meli(7)`](./meli/docs/meli.7).
 
@@ -61,6 +68,7 @@ See also the [Quickstart tutorial](https://meli-email.org/documentation.html#qui
 
 After installing `meli`, see `meli(1)`, `meli.conf(5)`, `meli(7)` and `meli-themes(5)` for documentation.
 Sample configuration and theme files can be found in the `meli/docs/samples/` subdirectory.
+Examples for configuration file settings can be found in `meli.conf.examples(5)`
 Manual pages are also [hosted online](https://meli-email.org/documentation.html "meli documentation").
 `meli` by default looks for a configuration file in this location: `${XDG_CONFIG_HOME}/meli/config.toml`.
 
@@ -70,26 +78,22 @@ You can run meli with arbitrary configuration files by setting the `${MELI_CONFI
 MELI_CONFIG=./test_config cargo run
 ```
 
-</td></tr>
-</table>
-
 See [`meli(7)`](./meli/docs/meli.7) for an extensive tutorial and [`meli.conf(5)`](./meli/docs/meli.conf.5) for all configuration values.
 
-| | | |
-:---:|:---:|:---:
-![Main view screenshot](./meli/docs/screenshots/main.webp "mail meli view screenshot")  |  ![Compact main view screenshot](./meli/docs/screenshots/compact.webp "compact main view screenshot") | ![Compose with embed terminal editor screenshot](./meli/docs/screenshots/compose.webp "composing view screenshot")
-Main view             |  Compact main view | Compose with embed terminal editor
+| Main view | Compact main view | Compose with embed terminal editor |
+|-----------|-------------------|------------------------------------|
+| ![Main view screenshot](./meli/docs/screenshots/main.webp "mail meli view screenshot") | ![Compact main view screenshot](./meli/docs/screenshots/compact.webp "compact main view screenshot") | ![Compose with embed terminal editor screenshot](./meli/docs/screenshots/compose.webp "composing view screenshot") |
 
 ### Supported E-mail backends
 
-| Protocol     | Support         |
-|:------------:|:----------------|
-| IMAP         | full            |
-| Maildir      | full            |
-| notmuch      | full[^0]        |
-| mbox         | read-only       |
-| JMAP         | functional      |
-| NNTP / Usenet| functional      |
+| Protocol      | Support    |
+|---------------|------------|
+| IMAP          | full       |
+| Maildir       | full       |
+| notmuch       | full[^0]   |
+| mbox          | read-only  |
+| JMAP          | functional |
+| NNTP / Usenet | functional |
 
 [^0]: there's no support for searching through all email directly, you'd have to
       create a mailbox with a notmuch query that returns everything and search

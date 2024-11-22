@@ -49,9 +49,16 @@
     ],
     "programmingLanguage": "Rust",
     "relatedLink": [
+        "https://lists.meli-email.org/",
         "https://codeberg.org/meli/meli",
         "https://github.com/meli/meli",
-        "https://lists.meli-email.org/"
+        "https://gitlab.com/meli-project/meli",
+        "https://crates.io/crates/meli",
+        "https://packages.debian.org/trixie/meli",
+        "https://pkgsrc.se/mail/meli",
+        "https://openports.pl/path/mail/meli",
+        "https://ports.macports.org/port/meli/",
+        "https://search.nixos.org/packages?query=meli"
     ],
     "version": "0.8.8",
     "contIntegration": "https://git.meli-email.org/meli/meli/actions",
