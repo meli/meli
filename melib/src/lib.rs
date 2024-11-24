@@ -183,7 +183,6 @@ extern crate serde_derive;
 pub extern crate log;
 /* parser */
 extern crate data_encoding;
-extern crate encoding;
 pub extern crate nom;
 
 #[macro_use]
