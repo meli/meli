@@ -1266,6 +1266,7 @@ dependencies = [
 name = "meli"
 version = "0.8.8"
 dependencies = [
+ "aho-corasick",
  "assert_cmd",
  "async-task",
  "bitflags 2.6.0",

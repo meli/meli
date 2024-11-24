@@ -1331,7 +1331,53 @@ impl Account {
         {
             Ok(*mailbox_hash)
         } else {
-            Err(Error::new("Mailbox with that path not found."))
+            use aho_corasick::AhoCorasick;
+
+            let nodes = self
+                .list_mailboxes()
+                .into_iter()
+                .map(|n| (n.hash, n.depth))
+                .collect::<BTreeMap<MailboxHash, usize>>();
+            let mut entries = self
+                .mailbox_entries
+                .iter()
+                .map(|(h, f)| (h, f.ref_mailbox.path()))
+                .collect::<Vec<_>>();
+            entries.sort_by_cached_key(|(h, _)| nodes.get(h).cloned().unwrap_or(usize::MAX));
+            let patterns = &[path.trim_matches('/')];
+            let mut potential_matches = IndexSet::new();
+            for (_, haystack) in entries {
+                let ac = AhoCorasick::builder()
+                    .ascii_case_insensitive(true)
+                    .build(patterns)
+                    .unwrap();
+                if ac.find_iter(haystack).next().is_some() {
+                    potential_matches.insert(haystack.to_string());
+                }
+            }
+            const MANAGE_MAILBOXES_TIP: &str = "You can inspect the list of mailbox paths of an \
+                                                account with the manage-mailboxes command.";
+            let details_msg = if potential_matches.is_empty() {
+                Cow::Borrowed(MANAGE_MAILBOXES_TIP)
+            } else {
+                let mut potential_matches = potential_matches.into_iter().collect::<Vec<_>>();
+                let matches_length = potential_matches.len();
+                potential_matches.truncate(5);
+                Cow::Owned(format!(
+                    "Some matching paths that were found: {matches:?}{others}. {tip}",
+                    matches = potential_matches,
+                    tip = MANAGE_MAILBOXES_TIP,
+                    others = if matches_length > 5 {
+                        format!(" and {} others", matches_length - 5)
+                    } else {
+                        String::with_capacity(0)
+                    }
+                ))
+            };
+
+            Err(Error::new("Mailbox with that path not found.")
+                .set_details(details_msg)
+                .set_kind(ErrorKind::NotFound))
         }
     }
 
