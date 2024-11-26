@@ -352,12 +352,8 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> FormWidget<T> 
         &mut self.fields
     }
 
-    pub fn collect(self) -> Option<HashMap<Cow<'static, str>, Field>> {
-        if self.buttons.result.is_some() {
-            Some(self.fields)
-        } else {
-            None
-        }
+    pub fn collect(self) -> HashMap<Cow<'static, str>, Field> {
+        self.fields
     }
 
     pub fn buttons_result(&mut self) -> Option<T> {

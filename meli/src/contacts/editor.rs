@@ -209,7 +209,7 @@ impl Component for ContactManager {
                     match self.form.buttons_result() {
                         None => {}
                         Some(FormButtonAction::Accept) => {
-                            let fields = std::mem::take(&mut self.form).collect().unwrap();
+                            let fields = std::mem::take(&mut self.form).collect();
                             let fields: IndexMap<String, String> = fields
                                 .into_iter()
                                 .map(|(s, v)| {
@@ -237,7 +237,7 @@ impl Component for ContactManager {
                         }
                         Some(FormButtonAction::Other("Export")) => {
                             let card = if self.has_changes {
-                                let fields = self.form.clone().collect().unwrap();
+                                let fields = self.form.clone().collect();
                                 let fields: IndexMap<String, String> = fields
                                     .into_iter()
                                     .map(|(s, v)| {
