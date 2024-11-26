@@ -135,24 +135,29 @@ fn test_conf_config_parse() {
 
     /* Test sample config */
 
-    let example_config = FileSettings::EXAMPLE_CONFIG.replace("\n#", "\n");
-    let re = regex::Regex::new(r#"root_mailbox\s*=\s*"[^"]*""#).unwrap();
-    let example_config = re.replace_all(
-        &example_config,
-        &format!(r#"root_mailbox = "{}""#, tempdir.path().to_str().unwrap()),
-    );
+    // Sample config contains `crate::conf::composing::SendMail::Smtp` variant which only exists if
+    // meli is build with `smtp` feature.
+    if cfg!(feature = "smtp") {
+        let example_config = FileSettings::EXAMPLE_CONFIG.replace("\n#", "\n");
+        let re = regex::Regex::new(r#"root_mailbox\s*=\s*"[^"]*""#).unwrap();
+        let example_config = re.replace_all(
+            &example_config,
+            &format!(r#"root_mailbox = "{}""#, tempdir.path().to_str().unwrap()),
+        );
 
-    let new_file = ConfigFile::new(&example_config, &tempdir).unwrap();
-    let config = FileSettings::validate(new_file.path.clone(), true)
-        .expect("Could not parse example config!");
-    for (accname, acc) in config.accounts.iter() {
-        if !acc.extra.is_empty() {
-            panic!(
-                "In example config, account `{}` has unrecognised configuration entries: {:?}",
-                accname, acc.extra
-            );
+        let new_file = ConfigFile::new(&example_config, &tempdir).unwrap();
+        let config = FileSettings::validate(new_file.path.clone(), true)
+            .expect("Could not parse example config!");
+        for (accname, acc) in config.accounts.iter() {
+            if !acc.extra.is_empty() {
+                panic!(
+                    "In example config, account `{}` has unrecognised configuration entries: {:?}",
+                    accname, acc.extra
+                );
+            }
         }
     }
+
     if let Err(err) = tempdir.close() {
         eprintln!("Could not cleanup tempdir: {}", err);
     }

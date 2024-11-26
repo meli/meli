@@ -1050,36 +1050,38 @@ pub fn manage_jobs(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>>
     Ok((input, Ok(Tab(ManageJobs))))
 }
 
-#[cfg(feature = "cli-docs")]
 pub fn view_manpage(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     let mut check = arg_init! { min_arg:1, max_arg: 1, view_manpage };
     let (input, _) = tag("man")(input.trim())?;
     arg_chk!(start check, input);
     let (input, _) = is_a(" ")(input)?;
     arg_chk!(inc check, input);
+    #[allow(unused_variables)]
     let (input, manpage) = map_res(not_line_ending, std::str::from_utf8)(input.trim())?;
     let (input, _) = eof(input)?;
     arg_chk!(finish check, input);
-    match crate::manpages::parse_manpage(manpage) {
-        Ok(m) => Ok((input, Ok(Tab(Man(m))))),
-        Err(err) => Ok((
-            input,
-            Err(CommandError::BadValue {
-                inner: err.to_string().into(),
-                suggestions: Some(crate::manpages::POSSIBLE_VALUES),
-            }),
-        )),
+    #[cfg(feature = "cli-docs")]
+    {
+        match crate::manpages::parse_manpage(manpage) {
+            Ok(m) => Ok((input, Ok(Tab(Man(m))))),
+            Err(err) => Ok((
+                input,
+                Err(CommandError::BadValue {
+                    inner: err.to_string().into(),
+                    suggestions: Some(crate::manpages::POSSIBLE_VALUES),
+                }),
+            )),
+        }
     }
-}
-
-#[cfg(not(feature = "cli-docs"))]
-pub fn view_manpage(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
-    Ok((
-        input,
-        Err(CommandError::Other {
-            inner: "this meli binary has not been compiled with the cli-docs feature".into(),
-        }),
-    ))
+    #[cfg(not(feature = "cli-docs"))]
+    {
+        Ok((
+            input,
+            Err(CommandError::Other {
+                inner: "this meli binary has not been compiled with the cli-docs feature".into(),
+            }),
+        ))
+    }
 }
 
 pub fn quit(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
