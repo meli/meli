@@ -301,7 +301,7 @@ impl AccountCache {
                 let tx = conn
                     .transaction_with_behavior(melib::rusqlite::TransactionBehavior::Immediate)?;
                 tx.execute(
-                    "INSERT OR REPLACE INTO accounts (name) VALUES (?1)",
+                    "INSERT OR IGNORE INTO accounts (name) VALUES (?1)",
                     params![acc_name.as_ref()],
                 )
                 .chain_err_summary(|| "Failed to update index:")?;
