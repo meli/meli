@@ -10,6 +10,7 @@ CARGO_REGISTRIES_CRATES_IO_PROTOCOL ?= sparse
 RUSTFLAGS ?= -D warnings -W unreachable-pub -W rust-2021-compatibility -C debuginfo=0
 RUSTUP_MAX_RETRIES ?= 10
 RUST_BACKTRACE ?= short
+NIGHTLY_EXISTS=`((cargo +nightly 2> /dev/null 1> /dev/null) && echo 0)|| echo 1)`
 
 .PHONY: all
 all: rustfmt clippy cargo-derivefmt-melib cargo-derivefmt-meli cargo-derivefmt-tools
@@ -18,7 +19,8 @@ all: rustfmt clippy cargo-derivefmt-melib cargo-derivefmt-meli cargo-derivefmt-t
 .PHONY: rustfmt
 rustfmt:
 	@printf "rustfmt\n"
-	cargo +nightly fmt --check --all || cargo fmt --check --all
+	@((if [ "${NIGHTLY_EXISTS}" -eq 0 ]; then printf "running rustfmt with nightly toolchain\n"; else printf "running rustfmt with active toolchain\n"; fi))
+	@((if [ "${NIGHTLY_EXISTS}" -eq 0 ]; then cargo +nightly fmt --check --all; else cargo fmt --check --all; fi))
 .PHONY: clippy
 clippy:
 	@printf "clippy\n"
