@@ -21,6 +21,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- ### Miscellaneous Tasks -->
 
+## [v0.8.9](https://git.meli-email.org/meli/meli/releases/tag/v0.8.9) - 2024-11-27
+
+This is mostly a fixups release.
+
+### Added
+
+- [**`cf16bf65`**](https://git.meli-email.org/meli/meli/commit/cf16bf65f7d031084c73f070ee40efbfd40720e6) `meli/sqlite3: add tests for reindexing`
+- [**`a389772d`**](https://git.meli-email.org/meli/meli/commit/a389772d96d845a1a009e54f1157460d640c1104) `accounts: suggest tips on mailbox_by_path error`
+
+### Bug Fixes
+
+- [**`25f0a3f8`**](https://git.meli-email.org/meli/meli/commit/25f0a3f814ff40b8e218fca7ba099a84399a2a1b) `conf/terminal: fix serde of ProgressSpinnerSequence`
+- [**`c375b48e`**](https://git.meli-email.org/meli/meli/commit/c375b48ebf25065c495e0740f85a74db9dd6facd) `terminal: fix Synchronized Output response parsed as input` in PR [`#523` "terminal: fix Synchronized Output response parsed as input"](https://git.meli-email.org/meli/meli/pulls/523)
+- [**`b7e215f9`**](https://git.meli-email.org/meli/meli/commit/b7e215f9c238f8364e2a1f0d10ac668d0cfe91ad) `melib/utils: fix test_fd_locks() on platforms without OFD support` in PR [`#524` "melib/utils: fix test_fd_locks() on platforms without OFD support"](https://git.meli-email.org/meli/meli/pulls/524)
+- [**`25c32a6b`**](https://git.meli-email.org/meli/meli/commit/25c32a6b95dce00f6715115796e27bff0fcee413) `meli/docs/meli.conf.examples.5: fix .Dt macro arguments`
+- [**`18ae5848`**](https://git.meli-email.org/meli/meli/commit/18ae58483694119985d9ce7b8f384798114a8d1e) `meli: fix reindex of previously indexed account with sqlite3 backend`
+- [**`13e917d9`**](https://git.meli-email.org/meli/meli/commit/13e917d97b2c8ff8da403dc415eb1dffa8491a9b) `Fix some compilation errors with cfg feature attrs` in PR [`#531` "accounts: suggest tips on mailbox_by_path error"](https://git.meli-email.org/meli/meli/pulls/531)
+- [**`8c176d38`**](https://git.meli-email.org/meli/meli/commit/8c176d38408a822d9b127f282f9c43fb1bada8d7) `contacts/editor: fix crash on saving contact` in PR [`#532` "contacts/editor: fix crash on saving contact"](https://git.meli-email.org/meli/meli/pulls/532)
+- [**`fb5a88c2`**](https://git.meli-email.org/meli/meli/commit/fb5a88c22c7c7107f1a124d721d493be324ea25e) `melib/collection: ensure mailbox exists when inserting new envelopes` in PR [`#529` "Small account stuff fixes"](https://git.meli-email.org/meli/meli/pulls/529)
+
+### Changes
+
+- [**`7f8f1cf6`**](https://git.meli-email.org/meli/meli/commit/7f8f1cf65f644090ea450ecf9423585cc89b4a65) `melib/gpgme bindings renewal` in PR [`#533` "melib/gpgme bindings renewal"](https://git.meli-email.org/meli/meli/pulls/533)
+- [**`9b7825bc`**](https://git.meli-email.org/meli/meli/commit/9b7825bc59fb9c86dda4f86c1116517ae3e88514) `Update futures-util dep, remove stderrlog dep`
+- [**`4be69360`**](https://git.meli-email.org/meli/meli/commit/4be6936026bdf87563b3e6832d01fd9b112a414e) `Remove obsolete "encoding" dependency` in PR [`#530` "Remove/update obsolete dependencies"](https://git.meli-email.org/meli/meli/pulls/530)
+
+### Refactoring
+
+- [**`5af6e059`**](https://git.meli-email.org/meli/meli/commit/5af6e059b78ca67594ce773d935169c26ce31a70) `meli/accounts: use Arc<str> for account name`
+- [**`567270e1`**](https://git.meli-email.org/meli/meli/commit/567270e177253cfbf8cee2df9e9a8f981ca9ab97) `melib: use Vec instead of SmallVec for search results`
+- [**`2bd8d7ba`**](https://git.meli-email.org/meli/meli/commit/2bd8d7ba01df4eaf01488c2f01fd95905916c0b9) `conf/tests.rs: Rename test functions to follow path convention`
+
+### Documentation
+
+- [**`97242482`**](https://git.meli-email.org/meli/meli/commit/972424829c29d9cfb6d45d589e17fb30a9ff52c6) `meli/docs: add meli.conf.examples to CLI and tests`
+- [**`0f096338`**](https://git.meli-email.org/meli/meli/commit/0f0963389913736b8a8a73b3928abeb1d59a5898) `README.md: Update ways to install, add gitlab mirror link` in PR [`#528` "Integrate `meli.conf.examples.5` into CLI and build, also update README with installation instructions"](https://git.meli-email.org/meli/meli/pulls/528)
+
+### Continuous Integration
+
+- [**`630df308`**](https://git.meli-email.org/meli/meli/commit/630df3083f794a6551b1006ac57b9ce20b92a329) `CI: Add arm64 runners in job matrices` in PR [`#527` "CI: Add arm64 runners in job matrices"](https://git.meli-email.org/meli/meli/pulls/527)
+- [**`49ecbb56`**](https://git.meli-email.org/meli/meli/commit/49ecbb56f7a5a6c5d9b9659215348132e1c71ac4) `CI: .gitea/Makefile.lint: check if nightly exists`
+
 ## [v0.8.8](https://git.meli-email.org/meli/meli/releases/tag/v0.8.8) - 2024-11-19
 
 *WARNING*: This release contains a breaking change in the configuration file: a
@@ -1291,3 +1333,4 @@ Notable changes:
 [v0.8.6]: https://git.meli-email.org/meli/meli/releases/tag/v0.8.6
 [v0.8.7]: https://git.meli-email.org/meli/meli/releases/tag/v0.8.7
 [v0.8.8]: https://git.meli-email.org/meli/meli/releases/tag/v0.8.8
+[v0.8.9]: https://git.meli-email.org/meli/meli/releases/tag/v0.8.9

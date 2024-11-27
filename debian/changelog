@@ -1,3 +1,69 @@
+meli (0.8.9-1) bookworm; urgency=low
+
+  This is mostly a fixups release.
+
+  Added
+  =====
+
+  - cf16bf65 meli/sqlite3: add tests for reindexing
+  - a389772d accounts: suggest tips on mailbox_by_path error
+
+  Bug Fixes
+  =========
+
+  - 25f0a3f8 conf/terminal: fix serde of ProgressSpinnerSequence
+  - c375b48e terminal: fix Synchronized Output response parsed as input
+    in PR #523 "terminal: fix Synchronized Output response parsed as
+    input"
+  - b7e215f9
+    melib/utils: fix test_fd_locks() on platforms without OFD support in
+    PR #524 "melib/utils: fix test_fd_locks() on platforms without OFD
+    support"
+  - 25c32a6b meli/docs/meli.conf.examples.5: fix .Dt macro arguments
+  - 18ae5848 meli: fix reindex of previously indexed account with sqlite3
+    backend
+  - 13e917d9 Fix some compilation errors with cfg feature attrs in PR #531
+    "accounts: suggest tips on mailbox_by_path error"
+  - 8c176d38 contacts/editor: fix crash on saving contact in PR #532
+    "contacts/editor: fix crash on saving contact"
+  - fb5a88c2
+    melib/collection: ensure mailbox exists when inserting new envelopes
+    in PR #529 "Small account stuff fixes"
+
+  Changes
+  =======
+
+  - 7f8f1cf6 melib/gpgme bindings renewal in PR #533 "melib/gpgme
+    bindings renewal"
+  - 9b7825bc Update futures-util dep, remove stderrlog dep
+  - 4be69360 Remove obsolete "encoding" dependency in PR #530
+    "Remove/update obsolete dependencies"
+
+  Refactoring
+  ===========
+
+  - 5af6e059 meli/accounts: use Arc<str> for account name
+  - 567270e1 melib: use Vec instead of SmallVec for search results
+  - 2bd8d7ba
+    conf/tests.rs: Rename test functions to follow path convention
+
+  Documentation
+  =============
+
+  - 97242482 meli/docs: add meli.conf.examples to CLI and tests
+  - 0f096338 README.md: Update ways to install, add gitlab mirror link
+    in PR #528 "Integrate meli.conf.examples.5 into CLI and build, also
+    update README with installation instructions"
+
+  Continuous Integration
+  ======================
+
+  - 630df308 CI: Add arm64 runners in job matrices in PR #527 "CI: Add
+    arm64 runners in job matrices"
+  - 49ecbb56 CI: .gitea/Makefile.lint: check if nightly exists
+
+ -- Manos Pitsidianakis <manos@pitsidianak.is>  Wed, 27 Nov 2024 16:16:06 +0200
+
 meli (0.8.8-1) bookworm; urgency=low
 
   WARNING: This release contains a breaking change in the configuration

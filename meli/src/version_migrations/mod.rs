@@ -152,6 +152,9 @@ macro_rules! decl_version_map {
                     if const_str_cmp(current_version, latest_version.as_str()) as i8 != std::cmp::Ordering::Equal as i8 {
                         panic!("Current version does not match latest version from version migrations map declaration, please fix it.");
                     }
+                    if const_str_cmp(current_version, LATEST.as_str()) as i8 != std::cmp::Ordering::Equal as i8 {
+                        panic!("Current version does not match latest version const `LATEST` in meli::version_migrations, please fix it.");
+                    }
                 }
             }
             const _LATEST_ASSERTION: () = __assert_latest();
