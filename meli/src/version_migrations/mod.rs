@@ -25,23 +25,173 @@
 #[cfg(test)]
 mod tests;
 
-mod v0_8_8;
-use v0_8_8::V0_8_8;
-mod v0_8_9;
-use v0_8_9::V0_8_9;
+pub type VersionMap = IndexMap<VersionIdentifier, Box<dyn Version + Send + Sync + 'static>>;
 
-type VersionMap = IndexMap<VersionIdentifier, Box<dyn Version + Send + Sync + 'static>>;
+/// Utility macro to define version module imports and a function `versions() ->
+/// &'static VersionMap`.
+///
+/// Version arguments must be given in sorted, ascending order:
+///
+/// ```rust
+/// # use meli::{decl_version_map, version_migrations::*};
+/// decl_version_map! {
+///    v0_8_8::V0_8_8_ID => v0_8_8::V0_8_8,
+///    v0_8_9::V0_8_9_ID => v0_8_9::V0_8_9
+/// }
+/// ```
+///
+/// Otherwise compilation will fail:
+///
+/// ```compile_fail
+/// # use meli::{decl_version_map, version_migrations::*};
+/// mod v0_0_0 {
+///     use meli::version_migrations::*;
+///
+///     pub const V0_0_0_ID: VersionIdentifier = VersionIdentifier::NULL;
+///
+///     #[derive(Clone, Copy, Debug)]
+///     pub struct V0_0_0;
+///
+///     impl Version for V0_0_0 {
+///         fn version(&self) -> &VersionIdentifier {
+///             &V0_0_0_ID
+///         }
+///
+///         fn migrations(&self) -> Vec<Box<dyn Migration + Send + Sync + 'static>> {
+///             vec![]
+///         }
+///     }
+/// }
+/// decl_version_map! {
+///    v0_8_8::V0_8_8_ID => v0_8_8::V0_8_8,
+///    v0_0_0::V0_0_0_ID => v0_0_0::V0_0_0,
+///    v0_8_9::V0_8_9_ID => v0_8_9::V0_8_9
+/// }
+/// ```
+///
+/// ```compile_fail
+/// # use meli::{decl_version_map, version_migrations::*};
+/// decl_version_map! {
+///    v0_8_9::V0_8_9_ID => v0_8_9::V0_8_9,
+///    v0_8_8::V0_8_8_ID => v0_8_8::V0_8_8
+/// }
+/// ```
+#[macro_export]
+macro_rules! decl_version_map {
+    ($($version_id:path => $m:ident::$v:ident),*$(,)?) => {
+        fn versions() -> &'static VersionMap {
+            use std::sync::OnceLock;
+            #[allow(dead_code)]
+            const fn const_bytes_cmp(lhs: &[u8], rhs: &[u8]) -> std::cmp::Ordering {
+                if lhs.len() < rhs.len() {
+                    return std::cmp::Ordering::Less;
+                } else if lhs.len() > rhs.len() {
+                    return std::cmp::Ordering::Greater;
+                };
+                let mut i = 0;
+                while i < lhs.len() {
+                    if lhs[i] < rhs[i] {
+                        return std::cmp::Ordering::Less;
+                    } else if lhs[i] > rhs[i] {
+                        return std::cmp::Ordering::Greater;
+                    }
+                    i += 1;
+                }
+                std::cmp::Ordering::Equal
+            }
 
-fn versions() -> &'static VersionMap {
-    use std::sync::OnceLock;
+            #[allow(dead_code)]
+            const fn const_str_cmp(lhs: &str, rhs: &str) -> std::cmp::Ordering {
+                const_bytes_cmp(lhs.as_bytes(), rhs.as_bytes())
+            }
 
-    static VERSIONS: OnceLock<VersionMap> = OnceLock::new();
-    VERSIONS.get_or_init(|| {
-        indexmap::indexmap! {
-            v0_8_8::V0_8_8_ID => Box::new(V0_8_8) as Box<dyn Version + Send + Sync + 'static>,
-            v0_8_9::V0_8_9_ID => Box::new(V0_8_9) as Box<dyn Version + Send + Sync + 'static>,
+            macro_rules! v_ids_cmp {
+                ($v2:expr, $v1:expr) => {{
+
+                    $v2.major() >= $v1.major()
+                     && ($v2.minor() >= $v1.minor())
+                     && ($v2.patch() >= $v1.patch())
+                     && ((const_str_cmp($v2.pre(), $v1.pre()) as i8 == std::cmp::Ordering::Greater as i8) || (const_str_cmp($v2.pre(), $v1.pre()) as i8 == std::cmp::Ordering::Equal as i8))
+                     && !($v2.major() == $v1.major()
+                     && ($v2.minor() == $v1.minor())
+                     && ($v2.patch() == $v1.patch()))
+                }}
+            }
+            macro_rules! is_version_ids_sorted {
+                () => {
+                    true
+                };
+                ($v0:expr) => {
+                    $v0 > VersionIdentifier::NULL && true
+                };
+                ($v1:expr, $v2:expr) => {{
+                    v_ids_cmp!($v2, $v1)
+                }};
+                ($v1:expr, $v2:expr, $tail_v:tt) => {{
+                    v_ids_cmp!($v2, $v1) && is_version_ids_sorted! { $v1, $tail_v }
+                }};
+            }
+            const fn __assert_sorted() -> () {
+                assert!(is_version_ids_sorted! { $($version_id),* }, "Version ids in decl_version_mods are not sorted! Please fix it.");
+            }
+            const _SORT_ASSERTION: () = __assert_sorted();
+            const fn __assert_latest() -> () {
+                macro_rules! latest_version_id {
+                    ($v0:expr) => {
+                        $v0
+                    };
+                    ($v1:expr, $v2:expr) => {{
+                        $v2
+                    }};
+                    ($v1:expr, $v2:expr, $tail_v:tt) => {{
+                        latest_version_id! { $tail_v }
+                    }};
+                }
+                if let Some(current_version) = option_env!("CARGO_PKG_VERSION") {
+                    let latest_version = latest_version_id!{ $($version_id),* };
+                    if const_str_cmp(current_version, latest_version.as_str()) as i8 != std::cmp::Ordering::Equal as i8 {
+                        panic!("Current version does not match latest version from version migrations map declaration, please fix it.");
+                    }
+                }
+            }
+            const _LATEST_ASSERTION: () = __assert_latest();
+
+
+            static VERSIONS: OnceLock<VersionMap> = OnceLock::new();
+            VERSIONS.get_or_init(|| {
+                let val = indexmap::indexmap! {
+                    $(
+                        $version_id => Box::new($m::$v) as Box<dyn Version + Send + Sync + 'static>
+                    ),*
+                };
+                {
+                    let version_ids = val.keys().collect::<Vec<_>>();
+                    let mut version_ids_sorted = version_ids.clone();
+                    version_ids_sorted.sort();
+                    assert_eq!(version_ids, version_ids_sorted, "Version map returned by versions() is not sorted! Check out decl_version_mods! invocation. Version ids were: {:?}", version_ids);
+                }
+                val
+            })
         }
-    })
+    };
+}
+
+macro_rules! decl_version_mods {
+    ($($version_id:path => $m:ident::$v:ident),*$(,)?) => {
+        $(
+            pub mod $m;
+            pub use $m::$v;
+        )*
+
+        decl_version_map! {
+            $($version_id => $m::$v),*
+        }
+    };
+}
+
+decl_version_mods! {
+    v0_8_8::V0_8_8_ID => v0_8_8::V0_8_8,
+    v0_8_9::V0_8_9_ID => v0_8_9::V0_8_9
 }
 
 use std::{cmp::Ordering, path::Path};
@@ -60,10 +210,18 @@ pub struct VersionIdentifier {
     major: u8,
     minor: u8,
     patch: u8,
-    pre: Option<&'static str>,
+    pre: &'static str,
 }
 
 impl VersionIdentifier {
+    pub const NULL: Self = Self {
+        string: "0.0.0",
+        major: 0,
+        minor: 0,
+        patch: 0,
+        pre: "",
+    };
+
     /// The identifier as a string.
     pub const fn as_str(&self) -> &'static str {
         self.string
@@ -85,7 +243,7 @@ impl VersionIdentifier {
     }
 
     /// The pre-release part of the version (`MAJOR.MINOR.PATCH[-PRE]`).
-    pub const fn pre(&self) -> Option<&'static str> {
+    pub const fn pre(&self) -> &'static str {
         self.pre
     }
 }

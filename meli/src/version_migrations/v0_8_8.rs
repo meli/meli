@@ -22,16 +22,16 @@
 
 use crate::version_migrations::*;
 
-pub(super) const V0_8_8_ID: VersionIdentifier = VersionIdentifier {
+pub const V0_8_8_ID: VersionIdentifier = VersionIdentifier {
     string: "0.8.8",
     major: 0,
     minor: 8,
     patch: 8,
-    pre: None,
+    pre: "",
 };
 
 #[derive(Clone, Copy, Debug)]
-pub(super) struct V0_8_8;
+pub struct V0_8_8;
 
 impl Version for V0_8_8 {
     fn version(&self) -> &VersionIdentifier {
