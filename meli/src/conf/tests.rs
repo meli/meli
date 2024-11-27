@@ -135,8 +135,8 @@ fn test_conf_config_parse() {
 
     /* Test sample config */
 
-    // Sample config contains `crate::conf::composing::SendMail::Smtp` variant which only exists if
-    // meli is build with `smtp` feature.
+    // Sample config contains `crate::conf::composing::SendMail::Smtp` variant which
+    // only exists if meli is build with `smtp` feature.
     if cfg!(feature = "smtp") {
         let example_config = FileSettings::EXAMPLE_CONFIG.replace("\n#", "\n");
         let re = regex::Regex::new(r#"root_mailbox\s*=\s*"[^"]*""#).unwrap();
