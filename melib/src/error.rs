@@ -464,7 +464,7 @@ impl From<io::Error> for Error {
     }
 }
 
-impl<'a> From<Cow<'a, str>> for Error {
+impl From<Cow<'_, str>> for Error {
     #[inline]
     fn from(err: Cow<'_, str>) -> Self {
         Self::new(err.to_string())

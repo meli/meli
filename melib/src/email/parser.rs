@@ -400,7 +400,7 @@ pub trait BytesIterExt {
     fn join(&mut self, sep: u8) -> Vec<u8>;
 }
 
-impl<'a, P: for<'r> FnMut(&'r u8) -> bool> BytesIterExt for std::slice::Split<'a, u8, P> {
+impl<P: for<'r> FnMut(&'r u8) -> bool> BytesIterExt for std::slice::Split<'_, u8, P> {
     fn join(&mut self, sep: u8) -> Vec<u8> {
         self.fold(vec![], |mut acc, el| {
             if !acc.is_empty() {
@@ -451,22 +451,22 @@ pub mod dates {
     /// In the obsolete time zone, "UT" and "GMT" are indications of
     /// "Universal Time" and "Greenwich Mean Time", respectively, and are
     /// both semantically identical to "+0000".
-
+    ///
     /// The remaining three character zones are the US time zones.  The first
     /// letter, "E", "C", "M", or "P" stands for "Eastern", "Central",
     /// "Mountain", and "Pacific".  The second letter is either "S" for
     /// "Standard" time, or "D" for "Daylight Savings" (or summer) time.
     /// Their interpretations are as follows:
-
-    ///   EDT is semantically equivalent to -0400
-    ///   EST is semantically equivalent to -0500
-    ///   CDT is semantically equivalent to -0500
-    ///   CST is semantically equivalent to -0600
-    ///   MDT is semantically equivalent to -0600
-    ///   MST is semantically equivalent to -0700
-    ///   PDT is semantically equivalent to -0700
-    ///   PST is semantically equivalent to -0800
-
+    ///
+    /// - EDT is semantically equivalent to `-0400`
+    /// - EST is semantically equivalent to `-0500`
+    /// - CDT is semantically equivalent to `-0500`
+    /// - CST is semantically equivalent to `-0600`
+    /// - MDT is semantically equivalent to `-0600`
+    /// - MST is semantically equivalent to `-0700`
+    /// - PDT is semantically equivalent to `-0700`
+    /// - PST is semantically equivalent to `-0800`
+    ///
     /// The 1 character military time zones were defined in a non-standard
     /// way in RFC0822 and are therefore unpredictable in their meaning.
     /// The original definitions of the military zones "A" through "I" are
@@ -477,7 +477,7 @@ pub mod dates {
     /// the error in RFC0822, they SHOULD all be considered equivalent to
     /// "-0000" unless there is out-of-band information confirming their
     /// meaning.
-
+    ///
     /// Other multi-character (usually between 3 and 5) alphabetic time zones
     /// have been used in Internet messages.  Any such time zone whose
     /// meaning is not known SHOULD be considered equivalent to "-0000"

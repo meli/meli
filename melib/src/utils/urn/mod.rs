@@ -227,7 +227,7 @@ pub struct UrnSlice<'a> {
     q_component_len: Option<NonZeroU32>,
 }
 
-impl<'a> UrnSlice<'a> {
+impl UrnSlice<'_> {
     const fn nid_range(&self) -> Range<usize> {
         // urn:<nid>
         let start = URN_PREFIX.len();
@@ -482,7 +482,7 @@ impl<'a> UrnSlice<'a> {
     }
 }
 
-impl<'a> ToOwned for UrnSlice<'a> {
+impl ToOwned for UrnSlice<'_> {
     type Owned = Urn;
     fn to_owned(&self) -> Self::Owned {
         Urn::from(self)

@@ -46,7 +46,7 @@ pub struct ThreadsIterator<'a> {
     pub(super) thread_nodes: &'a HashMap<ThreadNodeHash, ThreadNode>,
 }
 
-impl<'a> Iterator for ThreadsIterator<'a> {
+impl Iterator for ThreadsIterator<'_> {
     type Item = (usize, ThreadNodeHash, bool);
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -99,7 +99,7 @@ pub struct ThreadIterator<'a> {
     pub(super) thread_nodes: &'a HashMap<ThreadNodeHash, ThreadNode>,
 }
 
-impl<'a> Iterator for ThreadIterator<'a> {
+impl Iterator for ThreadIterator<'_> {
     type Item = (usize, ThreadNodeHash);
     fn next(&mut self) -> Option<(usize, ThreadNodeHash)> {
         loop {

@@ -604,7 +604,7 @@ impl StrBuild for MessageID {
 
 struct MessageIDBracket<'a>(&'a MessageID);
 
-impl<'a> std::fmt::Display for MessageIDBracket<'a> {
+impl std::fmt::Display for MessageIDBracket<'_> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(fmt, "<")?;
         write!(fmt, "{}", self.0)?;

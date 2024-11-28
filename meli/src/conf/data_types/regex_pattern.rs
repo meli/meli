@@ -185,7 +185,7 @@ pub struct FindIter<'r, 's> {
     char_offset: usize,
 }
 
-impl<'r, 's> Iterator for FindIter<'r, 's> {
+impl Iterator for FindIter<'_, '_> {
     type Item = (usize, usize);
 
     fn next(&mut self) -> Option<Self::Item> {

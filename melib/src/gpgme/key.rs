@@ -171,7 +171,7 @@ pub(super) struct InvalidKeysIter<'a> {
     _ph: std::marker::PhantomData<&'a _gpgme_invalid_key>,
 }
 
-impl<'a> InvalidKeysIter<'a> {
+impl InvalidKeysIter<'_> {
     pub(super) fn new(ptr: gpgme_invalid_key_t, lib: Arc<libloading::Library>) -> Self {
         Self {
             lib,
@@ -181,7 +181,7 @@ impl<'a> InvalidKeysIter<'a> {
     }
 }
 
-impl<'a> Iterator for InvalidKeysIter<'a> {
+impl Iterator for InvalidKeysIter<'_> {
     type Item = InvalidKeyError;
 
     fn next(&mut self) -> Option<Self::Item> {

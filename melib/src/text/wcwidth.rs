@@ -63,7 +63,7 @@ pub struct CodePointsIterator<'a> {
  * ```
  *
  */
-impl<'a> Iterator for CodePointsIterator<'a> {
+impl Iterator for CodePointsIterator<'_> {
     type Item = WChar;
 
     fn next(&mut self) -> Option<WChar> {

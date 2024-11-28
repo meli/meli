@@ -160,7 +160,7 @@ impl EvenAfterSpaces for str {
 ///         .as_slice()
 /// );
 /// ```
-impl<'a> Iterator for LineBreakCandidateIter<'a> {
+impl Iterator for LineBreakCandidateIter<'_> {
     type Item = (usize, LineBreakCandidate);
     fn next(&mut self) -> Option<Self::Item> {
         loop {

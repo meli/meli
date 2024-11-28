@@ -83,7 +83,7 @@ where
 
 impl<'a, F, Output> Parser<'a, Output> for F
 where
-    F: Fn(&'a str) -> Result<Output>,
+    F: Fn(&'a str) -> Result<'a, Output>,
 {
     fn parse(&self, input: &'a str) -> Result<'a, Output> {
         self(input)

@@ -119,13 +119,10 @@ pub struct Hyperlink<
 }
 
 impl<
-        'a,
-        'b,
-        'i,
         T: std::fmt::Display + ?Sized,
         U: std::fmt::Display + ?Sized,
         I: std::fmt::Display + ?Sized,
-    > std::fmt::Display for Hyperlink<'a, 'b, 'i, T, U, I>
+    > std::fmt::Display for Hyperlink<'_, '_, '_, T, U, I>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let id: &dyn std::fmt::Display = if let Some(ref id) = self.id { id } else { &"" };

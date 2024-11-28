@@ -774,7 +774,7 @@ impl<'de> ::serde::de::Deserialize<'de> for RequestUrlTemplate {
 
         struct _Visitor;
 
-        impl<'de> Visitor<'de> for _Visitor {
+        impl Visitor<'_> for _Visitor {
             type Value = RequestUrlTemplate;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {

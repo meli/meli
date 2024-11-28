@@ -33,7 +33,7 @@ pub struct NntpLineIterator<'a> {
     slice: &'a str,
 }
 
-impl<'a> std::iter::DoubleEndedIterator for NntpLineIterator<'a> {
+impl std::iter::DoubleEndedIterator for NntpLineIterator<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.slice.is_empty() {
             None

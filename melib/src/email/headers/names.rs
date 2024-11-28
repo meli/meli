@@ -340,7 +340,7 @@ impl<'a> PartialEq<&'a Self> for HeaderName {
     }
 }
 
-impl<'a> PartialEq<HeaderName> for &'a HeaderName {
+impl PartialEq<HeaderName> for &HeaderName {
     #[inline]
     fn eq(&self, other: &HeaderName) -> bool {
         *other == *self
@@ -400,7 +400,7 @@ impl<'a> PartialEq<&'a str> for HeaderName {
     }
 }
 
-impl<'a> PartialEq<HeaderName> for &'a str {
+impl PartialEq<HeaderName> for &str {
     /// Performs a case-insensitive comparison of the string against the header
     /// name
     #[inline]
@@ -491,7 +491,7 @@ struct AsciiIgnoreCaseCmp<'a, 'b> {
     b: &'b [u8],
 }
 
-impl<'a, 'b> Iterator for AsciiIgnoreCaseCmp<'a, 'b> {
+impl Iterator for AsciiIgnoreCaseCmp<'_, '_> {
     type Item = ();
 
     fn next(&mut self) -> Option<()> {

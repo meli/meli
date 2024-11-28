@@ -313,7 +313,7 @@ impl<'a> Iterator for PercentEncode<'a> {
     }
 }
 
-impl<'a> std::fmt::Display for PercentEncode<'a> {
+impl std::fmt::Display for PercentEncode<'_> {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for c in (*self).clone() {
             formatter.write_str(c)?
@@ -395,7 +395,7 @@ fn after_percent_sign(iter: &mut slice::Iter<'_, u8>) -> Option<u8> {
     Some(h as u8 * 0x10 + l as u8)
 }
 
-impl<'a> Iterator for PercentDecode<'a> {
+impl Iterator for PercentDecode<'_> {
     type Item = u8;
 
     fn next(&mut self) -> Option<u8> {

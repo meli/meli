@@ -473,7 +473,7 @@ impl<'de> Deserialize<'de> for Key {
     {
         struct KeyVisitor;
 
-        impl<'de> Visitor<'de> for KeyVisitor {
+        impl Visitor<'_> for KeyVisitor {
             type Value = Key;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {

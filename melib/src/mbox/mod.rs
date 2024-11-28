@@ -738,7 +738,7 @@ pub struct MessageIterator<'a> {
     pub format: Option<MboxFormat>,
 }
 
-impl<'a> Iterator for MessageIterator<'a> {
+impl Iterator for MessageIterator<'_> {
     type Item = Result<Envelope>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.input.is_empty() {

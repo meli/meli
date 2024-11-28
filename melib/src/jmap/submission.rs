@@ -360,7 +360,7 @@ pub struct EnvelopeObject {
     /// submission, plus any parameters to pass with the MAIL FROM
     /// address.  The JMAP server **MAY** allow the address to be the empty
     /// string.
-
+    ///
     /// When a JMAP server performs an SMTP message submission, it MAY
     /// use the same id string for the ENVID parameter `[RFC3461]` and
     /// the [`EmailSubmission`](`EmailSubmissionObject`) object id.  Servers
