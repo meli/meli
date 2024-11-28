@@ -41,7 +41,7 @@ use regex::Regex;
 use super::{watch, MaildirMailbox, MaildirOp, MaildirPathTrait};
 use crate::{
     backends::{prelude::*, RefreshEventKind::*},
-    error::{Error, ErrorKind, IntoError, Result},
+    error::{Error, ErrorKind, IntoError, Result, ResultIntoError},
     utils::shellexpand::ShellExpandTrait,
 };
 
@@ -106,9 +106,15 @@ impl DerefMut for HashIndex {
 
 pub type HashIndexes = Arc<Mutex<HashMap<MailboxHash, HashIndex>>>;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Configuration {
     pub rename_regex: Option<Regex>,
+    pub path: PathBuf,
+    pub root_mailbox_name: String,
+    /// Is `root_mailbox` a valid maildir folder or just a folder containing
+    /// valid maildir folders?
+    pub is_root_a_mailbox: bool,
+    pub settings: AccountSettings,
 }
 
 impl Configuration {
@@ -130,7 +136,11 @@ impl Configuration {
             None
         };
 
-        Ok(Self { rename_regex })
+        Ok(Self {
+            rename_regex,
+            settings: settings.clone(),
+            ..Self::default()
+        })
     }
 }
 
@@ -145,7 +155,6 @@ pub struct MaildirType {
     pub event_consumer: BackendEventConsumer,
     pub is_subscribed: IsSubscribedFn,
     pub collection: Collection,
-    pub path: PathBuf,
     pub config: Arc<Configuration>,
 }
 
@@ -294,7 +303,7 @@ impl MailBackend for MaildirType {
     }
 
     fn watch(&self) -> ResultFuture<()> {
-        let root_mailbox = self.path.to_path_buf();
+        let root_mailbox = self.config.path.to_path_buf();
         let (tx, rx) = channel();
         let watcher = RecommendedWatcher::new(
             tx,
@@ -318,7 +327,7 @@ impl MailBackend for MaildirType {
             .collect::<HashMap<MailboxHash, (Arc<Mutex<usize>>, Arc<Mutex<usize>>)>>();
         let watch_state = watch::MaildirWatch {
             watcher,
-            account_hash: AccountHash::from_bytes(self.account_name.as_bytes()),
+            account_hash: self.account_hash,
             event_consumer: self.event_consumer.clone(),
             root_mailbox,
             rx,
@@ -488,52 +497,13 @@ impl MailBackend for MaildirType {
 
     fn create_mailbox(
         &mut self,
-        new_path: String,
+        name: String,
     ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
-        let mut path = self.path.clone();
-        path.push(&new_path);
-        if !path.starts_with(&self.path) {
-            return Err(Error::new(format!(
-                "Path given (`{}`) is absolute. Please provide a path relative to the account's \
-                 root mailbox.",
-                &new_path
-            )));
-        }
-
-        std::fs::create_dir(&path)?;
-        /* create_dir does not create intermediate directories (like `mkdir -p`), so
-         * the parent must be a valid mailbox at this point. */
-
-        let parent = path.parent().and_then(|p| {
-            self.mailboxes
-                .iter()
-                .find(|(_, f)| f.fs_path == p)
-                .map(|item| *item.0)
-        });
-
-        let mailbox_hash: MailboxHash = path.to_mailbox_hash();
-        if let Some(parent) = parent {
-            self.mailboxes
-                .entry(parent)
-                .and_modify(|entry| entry.children.push(mailbox_hash));
-        }
-        let new_mailbox = MaildirMailbox {
-            hash: mailbox_hash,
-            path: PathBuf::from(&new_path),
-            name: new_path,
-            fs_path: path,
-            parent,
-            children: vec![],
-            usage: Default::default(),
-            is_subscribed: true,
-            permissions: Default::default(),
-            unseen: Default::default(),
-            total: Default::default(),
-        };
-
-        self.mailboxes.insert(mailbox_hash, new_mailbox);
-        let ret = self.mailboxes()?;
-        Ok(Box::pin(async move { Ok((mailbox_hash, ret.await?)) }))
+        let mailbox_hash = self.create_mailbox_sync(name);
+        let mailboxes_fut = self.mailboxes();
+        Ok(Box::pin(async move {
+            Ok((mailbox_hash?, mailboxes_fut?.await?))
+        }))
     }
 
     fn delete_mailbox(
@@ -601,12 +571,10 @@ impl MaildirType {
         is_subscribed: IsSubscribedFn,
         event_consumer: BackendEventConsumer,
     ) -> Result<Box<Self>> {
-        let config = Arc::new(Configuration::new(settings)?);
-
         let mut mailboxes: HashMap<MailboxHash, MaildirMailbox> = Default::default();
         fn recurse_mailboxes<P: AsRef<Path>>(
             mailboxes: &mut HashMap<MailboxHash, MaildirMailbox>,
-            settings: &AccountSettings,
+            config: &Configuration,
             p: P,
         ) -> Result<Vec<MailboxHash>> {
             if !p.as_ref().try_exists().unwrap_or(false) || !p.as_ref().is_dir() {
@@ -635,9 +603,9 @@ impl MaildirType {
                                 None,
                                 Vec::new(),
                                 false,
-                                settings,
+                                config,
                             ) {
-                                f.children = recurse_mailboxes(mailboxes, settings, &path)?;
+                                f.children = recurse_mailboxes(mailboxes, config, &path)?;
                                 for c in &f.children {
                                     if let Some(f) = mailboxes.get_mut(c) {
                                         f.parent = Some(f.hash);
@@ -651,7 +619,7 @@ impl MaildirType {
                                  * it contains subdirs of any depth that are
                                  * valid maildir paths
                                  */
-                                let subdirs = recurse_mailboxes(mailboxes, settings, &path)?;
+                                let subdirs = recurse_mailboxes(mailboxes, config, &path)?;
                                 if !subdirs.is_empty() {
                                     if let Ok(f) = MaildirMailbox::new(
                                         path.to_str().unwrap().to_string(),
@@ -659,7 +627,7 @@ impl MaildirType {
                                         None,
                                         subdirs,
                                         true,
-                                        settings,
+                                        config,
                                     ) {
                                         for c in &f.children {
                                             if let Some(f) = mailboxes.get_mut(c) {
@@ -692,7 +660,7 @@ impl MaildirType {
             )));
         }
 
-        if let Ok(f) = MaildirMailbox::new(
+        let (is_root_a_mailbox, root_mailbox_name) = if let Ok(f) = MaildirMailbox::new_root_mailbox(
             root_mailbox.to_str().unwrap().to_string(),
             root_mailbox
                 .file_name()
@@ -705,11 +673,30 @@ impl MaildirType {
             false,
             settings,
         ) {
+            let name = f.name.clone();
             mailboxes.insert(f.hash, f);
-        }
+            (true, name)
+        } else {
+            (
+                false,
+                root_mailbox
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_str()
+                    .unwrap_or_default()
+                    .to_string(),
+            )
+        };
+
+        let config = Arc::new(Configuration {
+            path: root_mailbox.clone(),
+            root_mailbox_name,
+            is_root_a_mailbox,
+            ..Configuration::new(settings)?
+        });
 
         if mailboxes.is_empty() {
-            let children = recurse_mailboxes(&mut mailboxes, settings, &root_mailbox)?;
+            let children = recurse_mailboxes(&mut mailboxes, &config, &root_mailbox)?;
             for c in &children {
                 if let Some(f) = mailboxes.get_mut(c) {
                     f.parent = None;
@@ -717,7 +704,7 @@ impl MaildirType {
             }
         } else {
             let root_hash = *mailboxes.keys().next().unwrap();
-            let children = recurse_mailboxes(&mut mailboxes, settings, &root_mailbox)?;
+            let children = recurse_mailboxes(&mut mailboxes, &config, &root_mailbox)?;
             for c in &children {
                 if let Some(f) = mailboxes.get_mut(c) {
                     f.parent = Some(root_hash);
@@ -744,6 +731,7 @@ impl MaildirType {
                 },
             );
         }
+
         Ok(Box::new(Self {
             account_name: settings.name.to_string(),
             account_hash: AccountHash::from_bytes(settings.name.as_bytes()),
@@ -753,7 +741,6 @@ impl MaildirType {
             mailbox_index: Default::default(),
             event_consumer,
             collection: Default::default(),
-            path: root_mailbox,
             config,
         }))
     }
@@ -867,5 +854,95 @@ impl MaildirType {
             files.push(e.path());
         }
         Ok(files)
+    }
+
+    pub fn create_mailbox_sync(&mut self, name: String) -> Result<MailboxHash> {
+        let (fs_path, suffix) = {
+            let mut fs_path = self.config.path.clone();
+            let mut suffix = name.clone();
+            let root_mailbox_path_str = PathBuf::from(&self.config.settings.root_mailbox)
+                .expand()
+                .display()
+                .to_string();
+            if suffix.starts_with(&root_mailbox_path_str)
+                && suffix.get(root_mailbox_path_str.len()..).is_some()
+                && suffix[root_mailbox_path_str.len()..].starts_with("/")
+            {
+                suffix.replace_range(0..=root_mailbox_path_str.len(), "");
+            }
+            if suffix.starts_with(&self.config.root_mailbox_name)
+                && suffix.get(self.config.root_mailbox_name.len()..).is_some()
+                && suffix[self.config.root_mailbox_name.len()..].starts_with("/")
+            {
+                suffix.replace_range(0..=self.config.root_mailbox_name.len(), "");
+            }
+            fs_path.push(&suffix);
+            let not_in_root = self
+                .config
+                .path
+                .parent()
+                .map(|p| fs_path.starts_with(p) && !fs_path.starts_with(&self.config.path))
+                .unwrap_or(false);
+            if not_in_root {
+                return Err(Error::new(format!(
+                    "Path given, `{}`, is not included in the root mailbox path `{}`. A maildir \
+                     backend cannot contain mailboxes outside of its root path.",
+                    &name,
+                    self.config.path.display()
+                )));
+            }
+            if !fs_path.starts_with(&self.config.path) {
+                return Err(Error::new(format!(
+                    "Path given (`{}`) is absolute. Please provide a path relative to the \
+                     account's root mailbox.",
+                    &name
+                )));
+            }
+            (fs_path, suffix)
+        };
+
+        std::fs::create_dir(&fs_path)
+            .chain_err_summary(|| "Could not create new mailbox")
+            .chain_err_related_path(&fs_path)?;
+
+        // std::fs::create_dir does not create intermediate directories (like `mkdir
+        // -p`), so the parent must be a valid mailbox at this point.
+        let parent = fs_path.parent().and_then(|p| {
+            self.mailboxes
+                .iter()
+                .find(|(_, f)| f.fs_path == p)
+                .map(|item| *item.0)
+        });
+
+        let mailbox_hash: MailboxHash = fs_path.to_mailbox_hash();
+        if let Some(parent) = parent {
+            self.mailboxes
+                .entry(parent)
+                .and_modify(|entry| entry.children.push(mailbox_hash));
+        }
+        let path = if self.config.is_root_a_mailbox {
+            let mut path = PathBuf::from(&self.config.root_mailbox_name);
+            path.push(suffix);
+            path
+        } else {
+            PathBuf::from(&suffix)
+        };
+        let name = fs_path.file_name().unwrap().to_str().unwrap().to_string();
+        let new_mailbox = MaildirMailbox {
+            hash: mailbox_hash,
+            path,
+            name,
+            fs_path,
+            parent,
+            children: vec![],
+            usage: Default::default(),
+            is_subscribed: true,
+            permissions: Default::default(),
+            unseen: Default::default(),
+            total: Default::default(),
+        };
+
+        self.mailboxes.insert(mailbox_hash, new_mailbox);
+        Ok(mailbox_hash)
     }
 }

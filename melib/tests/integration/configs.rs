@@ -30,6 +30,7 @@ fn test_maildir_config() {
 
     let config = Configuration {
         rename_regex: Some(Regex::new(r",U=\d\d*").unwrap()),
+        ..Configuration::default()
     };
 
     let mut s: melib::AccountSettings = toml::from_str(&format!(

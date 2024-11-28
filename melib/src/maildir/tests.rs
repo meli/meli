@@ -44,7 +44,7 @@ fn set_flags(config: &Configuration, path: &Path, flag_ops: &[FlagOp]) -> Result
 
 #[test]
 fn test_maildir_move_to_cur_rename() {
-    let config = Configuration { rename_regex: None };
+    let config = Configuration::default();
     assert_eq!(
         move_to_cur(&config, Path::new("/path/to/new/1423819205.29514_1:2,FRS")).unwrap(),
         Path::new("/path/to/cur/1423819205.29514_1:2,FRS")
@@ -67,6 +67,7 @@ fn test_maildir_move_to_cur_rename() {
 fn test_maildir_move_to_cur_rename_regexp() {
     let config = Configuration {
         rename_regex: Some(Regex::new(r",U=\d\d*").unwrap()),
+        ..Configuration::default()
     };
     assert_eq!(
         move_to_cur(
@@ -104,7 +105,7 @@ fn test_maildir_move_to_cur_rename_regexp() {
 
 #[test]
 fn test_maildir_set_flags() {
-    let config = Configuration { rename_regex: None };
+    let config = Configuration::default();
 
     assert_eq!(
         set_flags(
@@ -139,6 +140,7 @@ fn test_maildir_set_flags() {
 fn test_maildir_set_flags_regexp() {
     let config = Configuration {
         rename_regex: Some(Regex::new(r",U=\d\d*").unwrap()),
+        ..Configuration::default()
     };
 
     assert_eq!(
@@ -172,7 +174,7 @@ fn test_maildir_set_flags_regexp() {
 
 #[test]
 fn test_maildir_place_in_dir() {
-    let config = Configuration { rename_regex: None };
+    let config = Configuration::default();
 
     assert_eq!(
         Path::new("/path/to/new/1423819205.29514_1:2,")
@@ -203,6 +205,7 @@ fn test_maildir_place_in_dir() {
 fn test_maildir_place_in_dir_regexp() {
     let config = Configuration {
         rename_regex: Some(Regex::new(r",U=\d\d*").unwrap()),
+        ..Configuration::default()
     };
 
     assert_eq!(

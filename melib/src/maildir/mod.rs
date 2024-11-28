@@ -142,39 +142,128 @@ pub struct MaildirMailbox {
 
 impl MaildirMailbox {
     pub fn new(
-        path: String,
+        given_path: String,
         file_name: String,
         parent: Option<MailboxHash>,
         children: Vec<MailboxHash>,
         accept_invalid: bool,
-        settings: &AccountSettings,
+        config: &Configuration,
     ) -> Result<Self> {
-        let pathbuf = PathBuf::from(&path).expand();
-        let mut h = DefaultHasher::new();
-        pathbuf.hash(&mut h);
+        let (fs_path, suffix) = {
+            let mut fs_path = config.path.clone();
+            let mut suffix = given_path.clone();
+            let root_mailbox_path_str = PathBuf::from(&config.settings.root_mailbox)
+                .expand()
+                .display()
+                .to_string();
+            if suffix.starts_with(&root_mailbox_path_str)
+                && suffix.get(root_mailbox_path_str.len()..).is_some()
+                && suffix[root_mailbox_path_str.len()..].starts_with("/")
+            {
+                suffix.replace_range(0..=root_mailbox_path_str.len(), "");
+            }
+            if suffix.starts_with(&config.root_mailbox_name)
+                && suffix.get(config.root_mailbox_name.len()..).is_some()
+                && suffix[config.root_mailbox_name.len()..].starts_with("/")
+            {
+                suffix.replace_range(0..=config.root_mailbox_name.len(), "");
+            }
+            fs_path.push(&suffix);
+            if !fs_path.starts_with(&config.path) && fs_path != config.path {
+                return Err(Error::new(format!(
+                    "Path given, `{}`, is is not included in the root mailbox path `{}`.",
+                    &given_path,
+                    config.path.display()
+                )));
+            }
+            (fs_path, suffix)
+        };
 
-        /* Check if mailbox path (Eg `INBOX/Lists/luddites`) is included in the
-         * subscribed mailboxes in user configuration */
-        let fname = pathbuf
-            .strip_prefix(
-                PathBuf::from(&settings.root_mailbox)
-                    .expand()
-                    .parent()
-                    .unwrap_or_else(|| Path::new("/")),
-            )
-            .ok();
+        let hash = {
+            let mut h = DefaultHasher::new();
+            fs_path.hash(&mut h);
+            MailboxHash(h.finish())
+        };
 
-        let read_only = if let Ok(metadata) = std::fs::metadata(&pathbuf) {
+        let path = if config.is_root_a_mailbox {
+            let mut path = PathBuf::from(&config.root_mailbox_name);
+            path.push(suffix);
+            path
+        } else {
+            PathBuf::from(&suffix)
+        };
+
+        let read_only = if let Ok(metadata) = std::fs::metadata(&fs_path) {
             metadata.permissions().readonly()
         } else {
             true
         };
 
         let ret = Self {
-            hash: MailboxHash(h.finish()),
+            hash,
             name: file_name,
-            path: fname.unwrap().to_path_buf(),
-            fs_path: pathbuf,
+            path,
+            fs_path,
+            parent,
+            children,
+            usage: Arc::new(RwLock::new(SpecialUsageMailbox::Normal)),
+            is_subscribed: false,
+            permissions: MailboxPermissions {
+                create_messages: !read_only,
+                remove_messages: !read_only,
+                set_flags: !read_only,
+                create_child: !read_only,
+                rename_messages: !read_only,
+                delete_messages: !read_only,
+                delete_mailbox: !read_only,
+                change_permissions: false,
+            },
+            unseen: Arc::new(Mutex::new(0)),
+            total: Arc::new(Mutex::new(0)),
+        };
+        if !accept_invalid {
+            ret.is_valid()?;
+        }
+        Ok(ret)
+    }
+
+    pub fn new_root_mailbox(
+        given_path: String,
+        file_name: String,
+        parent: Option<MailboxHash>,
+        children: Vec<MailboxHash>,
+        accept_invalid: bool,
+        settings: &AccountSettings,
+    ) -> Result<Self> {
+        let fs_path = PathBuf::from(&given_path).expand();
+        let hash = {
+            let mut h = DefaultHasher::new();
+            fs_path.hash(&mut h);
+            MailboxHash(h.finish())
+        };
+
+        let path = fs_path
+            .strip_prefix(
+                PathBuf::from(&settings.root_mailbox)
+                    .expand()
+                    .parent()
+                    .unwrap_or_else(|| Path::new("/")),
+            )
+            .ok()
+            .unwrap()
+            .to_path_buf();
+
+        let read_only = if let Ok(metadata) = std::fs::metadata(&fs_path) {
+            metadata.permissions().readonly()
+        } else {
+            true
+        };
+
+        let ret = Self {
+            hash,
+            name: file_name,
+            path,
+            fs_path,
             parent,
             children,
             usage: Arc::new(RwLock::new(SpecialUsageMailbox::Normal)),
