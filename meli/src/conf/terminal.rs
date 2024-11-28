@@ -79,7 +79,7 @@ impl TerminalSettings {
         // Don't use color if
         // - Either NO_COLOR is set and user hasn't explicitly set use_colors or
         // - User has explicitly set use_colors to false
-        !((std::env::var("NO_COLOR").is_ok()
+        !((std::env::var_os("NO_COLOR").is_some()
             && (self.use_color.is_false() || self.use_color.is_internal()))
             || (self.use_color.is_false() && !self.use_color.is_internal()))
     }
