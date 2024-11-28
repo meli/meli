@@ -1337,16 +1337,23 @@ impl Account {
                 .list_mailboxes()
                 .into_iter()
                 .map(|n| (n.hash, n.depth))
-                .collect::<BTreeMap<MailboxHash, usize>>();
+                .collect::<IndexMap<MailboxHash, usize>>();
             let mut entries = self
                 .mailbox_entries
                 .iter()
-                .map(|(h, f)| (h, f.ref_mailbox.path()))
+                .map(|(h, f)| (h, f.ref_mailbox.name(), f.ref_mailbox.path()))
                 .collect::<Vec<_>>();
-            entries.sort_by_cached_key(|(h, _)| nodes.get(h).cloned().unwrap_or(usize::MAX));
+            entries.sort_by_cached_key(|(h, n, p)| {
+                (
+                    n.len(),
+                    nodes.get(*h).cloned().unwrap_or(usize::MAX),
+                    *p,
+                    *n,
+                )
+            });
             let patterns = &[path.trim_matches('/')];
             let mut potential_matches = IndexSet::new();
-            for (_, haystack) in entries {
+            for (_, _, haystack) in &entries {
                 let ac = AhoCorasick::builder()
                     .ascii_case_insensitive(true)
                     .build(patterns)

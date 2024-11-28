@@ -26,7 +26,7 @@ use super::*;
 use crate::command::actions::MailboxOperation;
 
 impl Account {
-    pub fn mailbox_operation(&mut self, op: MailboxOperation) -> Result<()> {
+    pub fn mailbox_operation(&mut self, op: MailboxOperation) -> Result<JobId> {
         if self.settings.account.read_only {
             return Err(Error::new("Account is read-only."));
         }
@@ -42,11 +42,12 @@ impl Account {
                     job,
                     self.is_async(),
                 );
+                let job_id = handle.job_id;
                 self.insert_job(
                     handle.job_id,
                     JobRequest::Mailbox(MailboxJobRequest::CreateMailbox { path, handle }),
                 );
-                Ok(())
+                Ok(job_id)
             }
             MailboxOperation::Delete(path) => {
                 if self.mailbox_entries.len() == 1 {
@@ -60,6 +61,7 @@ impl Account {
                     job,
                     self.is_async(),
                 );
+                let job_id = handle.job_id;
                 self.insert_job(
                     handle.job_id,
                     JobRequest::Mailbox(MailboxJobRequest::DeleteMailbox {
@@ -67,7 +69,7 @@ impl Account {
                         handle,
                     }),
                 );
-                Ok(())
+                Ok(job_id)
             }
             MailboxOperation::Subscribe(path) => {
                 let mailbox_hash = self.mailbox_by_path(&path)?;
@@ -81,6 +83,7 @@ impl Account {
                     job,
                     self.is_async(),
                 );
+                let job_id = handle.job_id;
                 self.insert_job(
                     handle.job_id,
                     JobRequest::Mailbox(MailboxJobRequest::SetMailboxSubscription {
@@ -89,7 +92,7 @@ impl Account {
                         handle,
                     }),
                 );
-                Ok(())
+                Ok(job_id)
             }
             MailboxOperation::Unsubscribe(path) => {
                 let mailbox_hash = self.mailbox_by_path(&path)?;
@@ -103,15 +106,16 @@ impl Account {
                     job,
                     self.is_async(),
                 );
+                let job_id = handle.job_id;
                 self.insert_job(
-                    handle.job_id,
+                    job_id,
                     JobRequest::Mailbox(MailboxJobRequest::SetMailboxSubscription {
                         mailbox_hash,
                         new_value: false,
                         handle,
                     }),
                 );
-                Ok(())
+                Ok(job_id)
             }
             MailboxOperation::Rename(path, new_path) => {
                 let mailbox_hash = self.mailbox_by_path(&path)?;
@@ -125,15 +129,16 @@ impl Account {
                     job,
                     self.is_async(),
                 );
+                let job_id = handle.job_id;
                 self.insert_job(
-                    handle.job_id,
+                    job_id,
                     JobRequest::Mailbox(MailboxJobRequest::RenameMailbox {
                         handle,
                         mailbox_hash,
                         new_path,
                     }),
                 );
-                Ok(())
+                Ok(job_id)
             }
             MailboxOperation::SetPermissions(_) => Err(Error::new("Not implemented.")),
         }
