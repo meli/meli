@@ -45,7 +45,7 @@ mod tables;
 pub use self::tables::*;
 
 #[cfg(test)]
-mod tests;
+pub mod tests;
 
 pub type AutoCompleteFn = Box<dyn Fn(&Context, &str) -> Vec<AutoCompleteEntry> + Send + Sync>;
 

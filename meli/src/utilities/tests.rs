@@ -176,3 +176,69 @@ fn test_utilities_text_input_field() {
     assert_eq!(field.as_str(), EMOJIGRAM);
     _ = tmpdir.close();
 }
+
+/// Returns a closure that prints the string " OK\n" to `stderr`.
+///
+/// If `stderr` is a TTY, the output will contain escape code sequences to
+/// change the foreground color of the text with the second indexed color
+/// (usually green).
+pub fn eprintln_ok_fn() -> Box<dyn Fn()> {
+    if crate::terminal::is_tty() && std::env::var_os("NO_COLOR").is_none() {
+        struct SetAf2(String);
+        struct Sgr0(String);
+        fn get_tput_sequences() -> Option<(SetAf2, Sgr0)> {
+            use std::process::{Command, Stdio};
+
+            let setaf_2 = SetAf2(
+                String::from_utf8(
+                    Command::new("tput")
+                        .args(["setaf", "2"])
+                        .stdout(Stdio::piped())
+                        .stdin(Stdio::null())
+                        .stderr(Stdio::inherit())
+                        .output()
+                        .ok()?
+                        .stdout,
+                )
+                .ok()?,
+            );
+
+            let sgr0 = Sgr0(
+                String::from_utf8(
+                    Command::new("tput")
+                        .arg("sgr0")
+                        .stdout(Stdio::piped())
+                        .stdin(Stdio::null())
+                        .stderr(Stdio::inherit())
+                        .output()
+                        .ok()?
+                        .stdout,
+                )
+                .ok()?,
+            );
+            Some((setaf_2, sgr0))
+        }
+
+        if let Some((SetAf2(setaf_2), Sgr0(sgr0))) = get_tput_sequences() {
+            return Box::new(move || {
+                eprintln!(" {setaf_2}OK{sgr0}");
+            });
+        }
+    }
+
+    Box::new(|| {
+        eprintln!(" OK");
+    })
+}
+
+/// Returns a closure that prints a formatted message, without a trailing
+/// newline, and prefixed with an increasing counter.
+pub fn eprint_step_fn() -> Box<dyn FnMut(std::fmt::Arguments) -> usize> {
+    let mut counter = 1;
+    Box::new(move |args: std::fmt::Arguments| {
+        let step = counter;
+        eprint!("{step}. {}", args);
+        counter += 1;
+        step
+    })
+}
