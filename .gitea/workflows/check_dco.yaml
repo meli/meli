@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: EUPL-1.2
+name: Verify DCO
+
+on:
+  pull_request:
+
+jobs:
+  test:
+    name: Verify DCO signoff on commit messages
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [linux-amd64, ]
+        include:
+          - build: linux-amd64
+            os: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: check-dco
+        shell: sh
+        name: Check that commit messages end with a Signed-off-by git trailer
+        run: |
+          env GITHUB_BASE_REF="origin/${{env.GITHUB_BASE_REF}}" GITHUB_HEAD_REF="origin/${{env.GITHUB_HEAD_REF}}" sh ./.gitea/check_dco.sh
