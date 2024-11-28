@@ -256,6 +256,14 @@ impl AccountConf {
     }
 }
 
+impl From<melib::AccountSettings> for AccountConf {
+    fn from(account: melib::AccountSettings) -> Self {
+        Self {
+            account,
+            ..Self::default()
+        }
+    }
+}
 impl From<FileAccount> for AccountConf {
     fn from(x: FileAccount) -> Self {
         let format = x.format.to_lowercase();
@@ -269,7 +277,7 @@ impl From<FileAccount> for AccountConf {
             .map(|(k, v)| (k.clone(), v.mailbox_conf.clone()))
             .collect();
 
-        let acc = melib::AccountSettings {
+        let account = melib::AccountSettings {
             name: String::new(),
             root_mailbox,
             format,
@@ -286,13 +294,13 @@ impl From<FileAccount> for AccountConf {
 
         let mailbox_confs = x.mailboxes.clone();
         Self {
-            account: acc,
             send_mail: x.send_mail.clone(),
             default_mailbox: None,
             sent_mailbox: None,
             conf_override: x.conf_override.clone(),
             conf: x,
             mailbox_confs,
+            ..Self::from(account)
         }
     }
 }
