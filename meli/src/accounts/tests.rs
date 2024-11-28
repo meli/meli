@@ -81,6 +81,14 @@ fn test_mailbox_utf7() {
         fn count(&self) -> Result<(usize, usize)> {
             unimplemented!()
         }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+
+        fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+            self
+        }
     }
     for (n, d) in [
         ("~peter/mail/&U,BTFw-/&ZeVnLIqe-", "~peter/mail/台北/日本語"),

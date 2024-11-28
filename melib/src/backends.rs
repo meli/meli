@@ -650,7 +650,7 @@ impl SpecialUsageMailbox {
     }
 }
 
-pub trait BackendMailbox: std::fmt::Debug {
+pub trait BackendMailbox: std::fmt::Debug + std::any::Any {
     fn hash(&self) -> MailboxHash;
     /// Final component of `path`.
     fn name(&self) -> &str;
@@ -665,6 +665,8 @@ pub trait BackendMailbox: std::fmt::Debug {
     fn special_usage(&self) -> SpecialUsageMailbox;
     fn permissions(&self) -> MailboxPermissions;
     fn count(&self) -> Result<(usize, usize)>;
+    fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 crate::declare_u64_hash!(AccountHash);

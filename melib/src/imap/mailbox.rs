@@ -122,4 +122,12 @@ impl BackendMailbox for ImapMailbox {
     fn count(&self) -> Result<(usize, usize)> {
         Ok((self.unseen.lock()?.len(), self.exists.lock()?.len()))
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
 }
