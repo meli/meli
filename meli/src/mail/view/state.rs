@@ -96,17 +96,12 @@ impl MailViewState {
             return;
         };
         let account = &mut context.accounts[&coordinates.0];
-        if account
+        // Ensure all envelope headers are populated, because the email backend might
+        // have not populated them all.
+        _ = account
             .collection
-            .get_env(coordinates.2)
-            .other_headers()
-            .is_empty()
-        {
-            let _ = account
-                .collection
-                .get_env_mut(coordinates.2)
-                .populate_headers(&bytes);
-        }
+            .get_env_mut(coordinates.2)
+            .populate_headers(&bytes);
         let env = Box::new(account.collection.get_env(coordinates.2).clone());
         let env_view = Box::new(EnvelopeView::new(
             Mail {
