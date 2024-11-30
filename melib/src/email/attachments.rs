@@ -813,6 +813,9 @@ impl Attachment {
                         ret.push_str(&boundary_start);
                         into_raw_helper(p, ret);
                     }
+                    if !ret.ends_with("\r\n") {
+                        ret.push_str("\r\n");
+                    }
                     ret.push_str(&format!("--{}--\r\n\r\n", boundary));
                 }
                 ContentType::MessageRfc822 => {
