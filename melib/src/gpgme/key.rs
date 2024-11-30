@@ -128,6 +128,67 @@ impl Key {
     }
 }
 
+impl std::fmt::Display for Key {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(fmt, "{} ", self.fingerprint())?;
+        if let Some(uid) = self.primary_uid() {
+            write!(fmt, "{}", uid)?;
+        } else {
+            write!(fmt, "(missing primary uid)")?;
+        }
+        // Write some properties as a list inside square brackets
+        write!(fmt, " [")?;
+        {
+            let revoked = self.revoked();
+            let expired = self.expired();
+            let disabled = self.disabled();
+            let invalid = self.invalid();
+            let can_encrypt = self.can_encrypt();
+            let can_sign = self.can_sign();
+            let secret = self.secret();
+            let mut empty = true;
+            macro_rules! write_property {
+                ($cond:ident, $lit:literal, $else:literal$(,)?) => {{
+                    if !empty {
+                        write!(fmt, ",")?;
+                    }
+                    if $cond {
+                        write!(fmt, $lit)?;
+                    } else {
+                        write!(fmt, $else)?;
+                    }
+                    empty = false;
+                }};
+                ($cond:ident, $lit:literal$(,)?) => {{
+                    if $cond {
+                        if !empty {
+                            write!(fmt, ",")?;
+                        }
+                        write!(fmt, $lit)?;
+                        empty = false;
+                    }
+                }};
+            }
+            macro_rules! write_properties {
+                ($(($cond:ident, $lit:literal $(, $else:literal)?)),*$(,)?) => {{
+                    $(write_property!($cond, $lit $(, $else)*);)*
+                }};
+            }
+            write_properties! {
+                (revoked, "revoked"),
+                (expired, "expired"),
+                (disabled, "disabled"),
+                (invalid, "invalid"),
+                (can_encrypt, "can encrypt"),
+                (can_sign, "can sign"),
+                (secret, "secret", "public"),
+            }
+            _ = empty;
+        }
+        write!(fmt, "]")
+    }
+}
+
 impl std::fmt::Debug for Key {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         fmt.debug_struct(crate::identify!(Key))

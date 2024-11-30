@@ -736,7 +736,7 @@ To: {}
                 .gpg_state
                 .sign_keys
                 .iter()
-                .map(|k| k.fingerprint())
+                .map(|k| k.to_string())
                 .collect::<Vec<_>>()
                 .join(", ");
 
@@ -786,7 +786,7 @@ To: {}
                 .gpg_state
                 .encrypt_keys
                 .iter()
-                .map(|k| k.fingerprint())
+                .map(|k| k.to_string())
                 .collect::<Vec<_>>()
                 .join(", ");
 
