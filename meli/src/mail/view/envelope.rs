@@ -1521,6 +1521,68 @@ impl Component for EnvelopeView {
                 }
                 return true;
             }
+            UIEvent::Action(View(ViewAction::PipeAttachment(a_i, ref bin, ref args))) => {
+                use std::borrow::Cow;
+
+                let bytes =
+                    if let Some(u) = self.open_attachment(a_i, context) {
+                        Cow::Owned(u.decode(Default::default()))
+                    } else if a_i == 0 {
+                        Cow::Borrowed(&self.mail.bytes)
+                    } else {
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(format!("Attachment `{}` not found.", a_i)),
+                        ));
+                        return true;
+                    };
+                // Kill input thread so that spawned command can be sole receiver of stdin
+                {
+                    context.input_kill();
+                }
+                let pipe_command = format!("{} {}", bin, args.as_slice().join(" "));
+                log::trace!("Executing: {}", &pipe_command);
+                match Command::new(bin)
+                    .args(args)
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::inherit())
+                    .stderr(Stdio::inherit())
+                    .spawn()
+                    .map_err(Error::from)
+                    .and_then(|mut child| {
+                        let Some(mut stdin) = child.stdin.take() else {
+                            let _ = child.wait();
+                            return Err(Error::new(format!(
+                                "Could not open standard input of {bin}"
+                            ))
+                            .set_kind(ErrorKind::External));
+                        };
+                        stdin.write_all(&bytes).chain_err_summary(|| {
+                            format!("Could not write to standard input of {bin}")
+                        })?;
+
+                        Ok(child)
+                    }) {
+                    Ok(mut child) => {
+                        let _ = child.wait();
+                    }
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some(
+                                format!("Failed to execute {}: {}", pipe_command, err).into(),
+                            ),
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
+                        });
+                        context.replies.push_back(UIEvent::Fork(ForkType::Finished));
+                        context.restore_input();
+                        self.set_dirty(true);
+                        return true;
+                    }
+                }
+                context.replies.push_back(UIEvent::Fork(ForkType::Finished));
+                return true;
+            }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["open_attachment"])
                     && !self.cmd_buf.is_empty() =>

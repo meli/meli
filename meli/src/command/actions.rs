@@ -102,6 +102,7 @@ pub enum ViewAction {
     Pipe(String, Vec<String>),
     Filter(Option<String>),
     SaveAttachment(usize, String),
+    PipeAttachment(usize, String, Vec<String>),
     ExportMail(String),
     AddAddressesToContacts,
 }

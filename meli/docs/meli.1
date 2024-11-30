@@ -214,14 +214,30 @@ See
 for the location of the mailcap files and
 .Xr mailcap 5
 for their syntax.
-You can save individual attachments with the
-.Command save-attachment Ar INDEX Ar path-to-file
-command.
+You can save individual attachments with the following command:
+.Command save\-attachment Ar INDEX Ar path\-to\-file
 .Ar INDEX
 is the attachment's index in the listing.
-If the path provided is a directory, the attachment is saved with its filename set to the filename in the attachment, if any.
-If the 0th index is provided, the entire message is saved.
-If the path provided is a directory, the message is saved as an eml file with its filename set to the messages message-id.
+.Bl -tag -compact -width 8n
+.It If the path provided is a directory, the attachment is saved with its filename set to the filename in the attachment, if any.
+.It If the 0th index is provided, the entire message is saved.
+.It If the path provided is a directory, the message is saved as an eml file with its filename set to the messages message\-id.
+.El
+.Pp
+You can pipe individual attachments to binaries with the following command:
+.Command pipe\-attachment Ar INDEX Ar binary Ar ARGS
+Example usage with the
+.Xr less 1
+pager:
+.D1 pipe\-attachment 0 less
+If the binary does not wait for your input before exiting, you will probably
+not see its output since you will return back to the user interface
+immediately.
+You can write a wrapper script that pipes your binary's output to
+.Dl less
+or
+.Dl less \-r
+if you want to preserve the ANSI escape codes in the pager's output.
 .Sh SEARCH
 Each e\-mail storage backend has a default search method assigned.
 .Em IMAP
@@ -582,7 +598,7 @@ open list archive with
 .Bl -tag -width 36n
 .It Cm mailto Ar MAILTO_ADDRESS
 Opens a composer tab with initial values parsed from the
-.Li mailto:
+.Li mailto :
 address.
 .It Cm add-attachment Ar PATH
 in composer, add
@@ -603,7 +619,7 @@ Launch command
 \&.
 The command should print file paths in stdout, separated by NUL bytes.
 Example usage with
-.Xr fzf Ns
+.Xr fzf 1 Ns
 :
 .D1 add-attachment-file-picker < fzf --print0
 .It Cm remove-attachment Ar INDEX
