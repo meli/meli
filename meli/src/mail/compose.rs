@@ -725,6 +725,12 @@ To: {}
         let attachments_no = self.draft.attachments().len();
         let theme_default = crate::conf::value(context, "theme_default");
         grid.clear_area(area, theme_default);
+        let our_map: ShortcutMap =
+            account_settings!(context[self.account_hash].shortcuts.composing).key_values();
+        let mut shortcuts: ShortcutMaps = Default::default();
+        shortcuts.insert(Shortcuts::COMPOSING, our_map);
+        let toggle_shortcut = Key::Char('\n');
+        let edit_shortcut = &shortcuts[Shortcuts::COMPOSING]["edit"];
         #[cfg(feature = "gpgme")]
         if self
             .gpg_state
@@ -742,12 +748,14 @@ To: {}
 
             grid.write_string(
                 &format!(
-                    "☑ sign with {}",
+                    "☑ sign with [toggle: {}, edit: {}] {}",
+                    toggle_shortcut,
+                    edit_shortcut,
                     if self.gpg_state.sign_keys.is_empty() {
                         "default key"
                     } else {
                         key_list.as_str()
-                    }
+                    },
                 ),
                 theme_default.fg,
                 if self.cursor == Cursor::Sign {
@@ -762,7 +770,10 @@ To: {}
             );
         } else {
             grid.write_string(
-                "☐ don't sign",
+                &format!(
+                    "☐ don't sign [toggle: {}, edit: {}]",
+                    toggle_shortcut, edit_shortcut,
+                ),
                 theme_default.fg,
                 if self.cursor == Cursor::Sign {
                     crate::conf::value(context, "highlight").bg
@@ -792,12 +803,22 @@ To: {}
 
             grid.write_string(
                 &format!(
-                    "{}{}",
+                    "{}{}{}",
                     if self.gpg_state.encrypt_keys.is_empty() {
-                        "☐ no keys to encrypt with!"
+                        "☐ no keys selected to encrypt with"
                     } else {
-                        "☑ encrypt with "
+                        "☑ encrypt with"
                     },
+                    &format!(
+                        " [toggle: {}, edit: {}]{}",
+                        toggle_shortcut,
+                        edit_shortcut,
+                        if self.gpg_state.encrypt_keys.is_empty() {
+                            ""
+                        } else {
+                            " "
+                        }
+                    ),
                     if self.gpg_state.encrypt_keys.is_empty() {
                         ""
                     } else {
@@ -817,7 +838,10 @@ To: {}
             );
         } else {
             grid.write_string(
-                "☐ don't encrypt",
+                &format!(
+                    "☐ don't encrypt [toggle: {}, edit: {}]",
+                    toggle_shortcut, edit_shortcut,
+                ),
                 theme_default.fg,
                 if self.cursor == Cursor::Encrypt {
                     crate::conf::value(context, "highlight").bg
@@ -832,7 +856,7 @@ To: {}
         }
         if attachments_no == 0 {
             grid.write_string(
-                "no attachments",
+                &format!("no attachments [edit: {}]", edit_shortcut),
                 theme_default.fg,
                 if self.cursor == Cursor::Attachments {
                     crate::conf::value(context, "highlight").bg
@@ -846,7 +870,7 @@ To: {}
             );
         } else {
             grid.write_string(
-                &format!("{} attachments ", attachments_no),
+                &format!("{} attachments [edit: {}]", attachments_no, edit_shortcut),
                 theme_default.fg,
                 if self.cursor == Cursor::Attachments {
                     crate::conf::value(context, "highlight").bg
@@ -911,6 +935,36 @@ To: {}
                 false
             }
         }
+    }
+
+    #[cfg(feature = "gpgme")]
+    fn create_key_selection_widget(
+        &self,
+        secret: bool,
+        header: &HeaderName,
+        context: &Context,
+    ) -> Result<gpg::KeySelectionLoading> {
+        let (_, mut list) = melib::email::parser::address::rfc2822address_list(
+            self.form.values()[header.as_str()].as_str().as_bytes(),
+        )
+        .map_err(|_err| -> Error { format!("No valid address in `{header}:`").into() })?;
+        if list.is_empty() {
+            return Err(format!("No valid address in `{header}:`").into());
+        }
+        let first = list.remove(0);
+        let patterns = (
+            first.get_email(),
+            list.into_iter()
+                .map(|addr| addr.get_email())
+                .collect::<Vec<String>>(),
+        );
+        gpg::KeySelectionLoading::new(
+            secret,
+            account_settings!(context[self.account_hash].pgp.allow_remote_lookup).is_true(),
+            patterns,
+            *account_settings!(context[self.account_hash].pgp.allow_remote_lookup),
+            context,
+        )
     }
 }
 
@@ -978,12 +1032,27 @@ impl Component for Composer {
 
         if self.dirty {
             grid.clear_area(area.nth_row(0), crate::conf::value(context, "highlight"));
+            let our_map: ShortcutMap =
+                account_settings!(context[self.account_hash].shortcuts.composing).key_values();
+            let mut shortcuts: ShortcutMaps = Default::default();
+            shortcuts.insert(Shortcuts::COMPOSING, our_map);
+            let scroll_down_shortcut = &shortcuts[Shortcuts::COMPOSING]["scroll_down"];
+            let scroll_up_shortcut = &shortcuts[Shortcuts::COMPOSING]["scroll_up"];
+            let field_shortcut = Key::Char('\n');
+            let edit_shortcut = &shortcuts[Shortcuts::COMPOSING]["edit"];
             grid.write_string(
-                if self.reply_context.is_some() {
-                    "COMPOSING REPLY"
-                } else {
-                    "COMPOSING MESSAGE"
-                },
+                &format!(
+                    "COMPOSING {} [scroll down: {}, scroll up: {}, edit fields: {}, edit body: {}]",
+                    if self.reply_context.is_some() {
+                        "REPLY"
+                    } else {
+                        "MESSAGE"
+                    },
+                    scroll_down_shortcut,
+                    scroll_up_shortcut,
+                    field_shortcut,
+                    edit_shortcut
+                ),
                 crate::conf::value(context, "highlight").fg,
                 crate::conf::value(context, "highlight").bg,
                 crate::conf::value(context, "highlight").attrs,
@@ -1049,11 +1118,11 @@ impl Component for Composer {
                     let stopped_message: String =
                         format!("Process with PID {} has stopped.", guard.child_pid);
                     let stopped_message_2: String = format!(
-                        "-press '{}' (edit shortcut) to re-activate.",
+                        "- re-activate '{}' (edit shortcut)",
                         shortcuts[Shortcuts::COMPOSING]["edit"]
                     );
                     const STOPPED_MESSAGE_3: &str =
-                        "-press Ctrl-C to forcefully kill it and return to editor.";
+                        "- press Ctrl-C to forcefully kill it and return to editor";
                     let max_len = std::cmp::max(
                         stopped_message.len(),
                         std::cmp::max(stopped_message_2.len(), STOPPED_MESSAGE_3.len()),
@@ -1473,13 +1542,13 @@ impl Component for Composer {
                 ViewMode::SelectKey(is_encrypt, ref mut selector),
                 UIEvent::FinishedUIDialog(id, result),
             ) if *id == selector.id() => {
-                if let Some(Some(key)) = result.downcast_mut::<Option<melib::gpgme::Key>>() {
+                if let Some(Some(keys)) = result.downcast_mut::<Option<Vec<melib::gpgme::Key>>>() {
                     if *is_encrypt {
                         self.gpg_state.encrypt_keys.clear();
-                        self.gpg_state.encrypt_keys.push(key.clone());
+                        self.gpg_state.encrypt_keys = std::mem::take(keys);
                     } else {
                         self.gpg_state.sign_keys.clear();
-                        self.gpg_state.sign_keys.push(key.clone());
+                        self.gpg_state.sign_keys = std::mem::take(keys);
                     }
                 }
                 self.mode = ViewMode::Edit;
@@ -1756,39 +1825,28 @@ impl Component for Composer {
                     && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit"]) =>
             {
                 #[cfg(feature = "gpgme")]
-                match melib::email::parser::address::rfc2822address_list(
-                    self.form.values()["From"].as_str().as_bytes(),
-                )
-                .map_err(|_err| -> Error { "No valid sender address in `From:`".into() })
-                .and_then(|(_, list)| {
-                    list.first()
-                        .cloned()
-                        .ok_or_else(|| "No valid sender address in `From:`".into())
-                })
-                .and_then(|addr| {
-                    gpg::KeySelection::new(
-                        false,
-                        account_settings!(context[self.account_hash].pgp.allow_remote_lookup)
-                            .is_true(),
-                        addr.get_email(),
-                        *account_settings!(context[self.account_hash].pgp.allow_remote_lookup),
-                        context,
-                    )
-                }) {
-                    Ok(widget) => {
-                        self.gpg_state.sign_mail = Some(ActionFlag::from(true));
-                        self.mode = ViewMode::SelectKey(false, widget);
+                {
+                    match self
+                        .create_key_selection_widget(false, &HeaderName::FROM, context)
+                        .map(Into::into)
+                    {
+                        Ok(widget) => {
+                            self.gpg_state.sign_mail = Some(ActionFlag::from(true));
+                            self.mode = ViewMode::SelectKey(false, widget);
+                        }
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::Notification {
+                                title: Some("Could not list keys.".into()),
+                                source: None,
+                                body: format!("libgpgme error: {err}").into(),
+                                kind: Some(NotificationType::Error(
+                                    melib::error::ErrorKind::External,
+                                )),
+                            });
+                        }
                     }
-                    Err(err) => {
-                        context.replies.push_back(UIEvent::Notification {
-                            title: Some("Could not list keys.".into()),
-                            source: None,
-                            body: format!("libgpgme error: {err}").into(),
-                            kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
-                        });
-                    }
+                    self.set_dirty(true);
                 }
-                self.set_dirty(true);
                 return true;
             }
             UIEvent::Input(ref key)
@@ -1797,39 +1855,63 @@ impl Component for Composer {
                     && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit"]) =>
             {
                 #[cfg(feature = "gpgme")]
-                match melib::email::parser::address::rfc2822address_list(
-                    self.form.values()["To"].as_str().as_bytes(),
-                )
-                .map_err(|_err| -> Error { "No valid recipient addresses in `To:`".into() })
-                .and_then(|(_, list)| {
-                    list.first()
-                        .cloned()
-                        .ok_or_else(|| "No valid recipient addresses in `To:`".into())
-                })
-                .and_then(|addr| {
-                    gpg::KeySelection::new(
-                        false,
-                        account_settings!(context[self.account_hash].pgp.allow_remote_lookup)
-                            .is_true(),
-                        addr.get_email(),
-                        *account_settings!(context[self.account_hash].pgp.allow_remote_lookup),
-                        context,
-                    )
-                }) {
-                    Ok(widget) => {
-                        self.gpg_state.encrypt_mail = Some(ActionFlag::from(true));
-                        self.mode = ViewMode::SelectKey(true, widget);
-                    }
-                    Err(err) => {
-                        context.replies.push_back(UIEvent::Notification {
-                            title: Some("Could not list keys.".into()),
-                            source: None,
-                            body: format!("libgpgme error: {err}").into(),
-                            kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
+                {
+                    let mut result =
+                        self.create_key_selection_widget(false, &HeaderName::TO, context);
+                    if !self.form.values()[HeaderName::CC.as_str()]
+                        .as_str()
+                        .is_empty()
+                    {
+                        result = result.and_then(|mut to_result| {
+                            let cc_result =
+                                self.create_key_selection_widget(false, &HeaderName::CC, context)?;
+                            to_result.merge(cc_result);
+                            Ok(to_result)
                         });
                     }
+                    if !self.form.values()[HeaderName::BCC.as_str()]
+                        .as_str()
+                        .is_empty()
+                    {
+                        result = result.and_then(|mut to_result| {
+                            let bcc_result =
+                                self.create_key_selection_widget(false, &HeaderName::BCC, context)?;
+                            to_result.merge(bcc_result);
+                            Ok(to_result)
+                        });
+                    }
+                    if !self.form.values()[HeaderName::FROM.as_str()]
+                        .as_str()
+                        .is_empty()
+                    {
+                        result = result.and_then(|mut to_result| {
+                            let from_result = self.create_key_selection_widget(
+                                false,
+                                &HeaderName::FROM,
+                                context,
+                            )?;
+                            to_result.merge(from_result);
+                            Ok(to_result)
+                        });
+                    }
+                    match result.map(Into::into) {
+                        Ok(widget) => {
+                            self.gpg_state.encrypt_mail = Some(ActionFlag::from(true));
+                            self.mode = ViewMode::SelectKey(true, widget);
+                        }
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::Notification {
+                                title: Some("Could not list keys.".into()),
+                                source: None,
+                                body: format!("libgpgme error: {err}").into(),
+                                kind: Some(NotificationType::Error(
+                                    melib::error::ErrorKind::External,
+                                )),
+                            });
+                        }
+                    }
+                    self.set_dirty(true);
                 }
-                self.set_dirty(true);
                 return true;
             }
             UIEvent::Input(ref key)
@@ -2658,7 +2740,7 @@ pub fn send_draft_async(
             gpg_state.encrypt_for_self.then_some(()).map_or_else(
                 || Ok(None),
                 |()| {
-                    draft.headers().get(HeaderName::TO).map_or_else(
+                    draft.headers().get(HeaderName::FROM).map_or_else(
                         || Ok(None),
                         |s| Some(melib::Address::try_from(s)).transpose(),
                     )

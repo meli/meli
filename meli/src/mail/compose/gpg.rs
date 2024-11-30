@@ -21,15 +21,94 @@
 
 use super::*;
 
+type KeylistJoinHandle = JoinHandle<Result<Vec<melib::gpgme::Key>>>;
+
 #[derive(Debug)]
-pub enum KeySelection {
-    LoadingKeys {
-        handle: JoinHandle<Result<Vec<melib::gpgme::Key>>>,
-        progress_spinner: ProgressSpinner,
+pub struct KeySelectionLoading {
+    handles: (KeylistJoinHandle, Vec<KeylistJoinHandle>),
+    progress_spinner: ProgressSpinner,
+    secret: bool,
+    local: bool,
+    patterns: (String, Vec<String>),
+    allow_remote_lookup: ActionFlag,
+}
+
+impl KeySelectionLoading {
+    pub fn new(
         secret: bool,
         local: bool,
-        pattern: String,
+        patterns: (String, Vec<String>),
         allow_remote_lookup: ActionFlag,
+        context: &Context,
+    ) -> Result<Self> {
+        use melib::gpgme::{self, *};
+        let mut ctx = gpgme::Context::new()?;
+        if local {
+            ctx.set_auto_key_locate(LocateKey::LOCAL)?;
+        } else {
+            ctx.set_auto_key_locate(LocateKey::WKD | LocateKey::LOCAL)?;
+        }
+        let (pattern, other_patterns) = patterns;
+        let main_job = ctx.keylist(secret, Some(pattern.clone()))?;
+        let main_handle = context.main_loop_handler.job_executor.spawn(
+            "gpg::keylist".into(),
+            main_job,
+            IsAsync::Blocking,
+        );
+        let other_handles = other_patterns
+            .iter()
+            .map(|pattern| {
+                let job = ctx.keylist(secret, Some(pattern.clone()))?;
+                Ok(context.main_loop_handler.job_executor.spawn(
+                    "gpg::keylist".into(),
+                    job,
+                    IsAsync::Blocking,
+                ))
+            })
+            .collect::<Result<Vec<KeylistJoinHandle>>>()?;
+        let mut progress_spinner = ProgressSpinner::new(8, context);
+        progress_spinner.start();
+        Ok(Self {
+            handles: (main_handle, other_handles),
+            secret,
+            local,
+            patterns: (pattern, other_patterns),
+            allow_remote_lookup,
+            progress_spinner,
+        })
+    }
+
+    pub fn merge(&mut self, rhs: Self) {
+        let Self {
+            handles: (_, ref mut other_handles),
+            secret: _,
+            local: _,
+            patterns: (_, ref mut other_patterns),
+            allow_remote_lookup: _,
+            progress_spinner: _,
+        } = self;
+        let Self {
+            handles: (rhs_handle, rhs_other_handles),
+            patterns: (rhs_pattern, rhs_other_patterns),
+            secret: _,
+            local: _,
+            allow_remote_lookup: _,
+            progress_spinner: _,
+        } = rhs;
+        other_handles.push(rhs_handle);
+        other_handles.extend(rhs_other_handles);
+        other_patterns.push(rhs_pattern);
+        other_patterns.extend(rhs_other_patterns);
+    }
+}
+
+#[derive(Debug)]
+pub enum KeySelection {
+    Loading {
+        inner: KeySelectionLoading,
+        /// Accumulate results from intermediate results (i.e. not the main
+        /// pattern)
+        keys_accumulator: Vec<melib::gpgme::Key>,
     },
     Error {
         id: ComponentId,
@@ -41,52 +120,31 @@ pub enum KeySelection {
     },
 }
 
+impl From<KeySelectionLoading> for KeySelection {
+    fn from(inner: KeySelectionLoading) -> Self {
+        Self::Loading {
+            inner,
+            keys_accumulator: vec![],
+        }
+    }
+}
+
 impl std::fmt::Display for KeySelection {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "select pgp keys")
     }
 }
 
-impl KeySelection {
-    pub fn new(
-        secret: bool,
-        local: bool,
-        pattern: String,
-        allow_remote_lookup: ActionFlag,
-        context: &Context,
-    ) -> Result<Self> {
-        use melib::gpgme::{self, *};
-        let mut ctx = gpgme::Context::new()?;
-        if local {
-            ctx.set_auto_key_locate(LocateKey::LOCAL)?;
-        } else {
-            ctx.set_auto_key_locate(LocateKey::WKD | LocateKey::LOCAL)?;
-        }
-        let job = ctx.keylist(secret, Some(pattern.clone()))?;
-        let handle = context.main_loop_handler.job_executor.spawn(
-            "gpg::keylist".into(),
-            job,
-            IsAsync::Blocking,
-        );
-        let mut progress_spinner = ProgressSpinner::new(8, context);
-        progress_spinner.start();
-        Ok(Self::LoadingKeys {
-            handle,
-            secret,
-            local,
-            pattern,
-            allow_remote_lookup,
-            progress_spinner,
-        })
-    }
-}
-
 impl Component for KeySelection {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         match self {
-            Self::LoadingKeys {
-                ref mut progress_spinner,
-                ..
+            Self::Loading {
+                inner:
+                    KeySelectionLoading {
+                        ref mut progress_spinner,
+                        ..
+                    },
+                keys_accumulator: _,
             } => progress_spinner.draw(grid, area.center_inside((2, 2)), context),
             Self::Error { ref err, .. } => {
                 let theme_default = crate::conf::value(context, "theme_default");
@@ -106,16 +164,30 @@ impl Component for KeySelection {
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         match self {
-            Self::LoadingKeys {
-                ref mut progress_spinner,
-                ref mut handle,
-                secret,
-                local,
-                ref mut pattern,
-                allow_remote_lookup,
-                ..
+            Self::Loading {
+                inner:
+                    KeySelectionLoading {
+                        ref mut progress_spinner,
+                        handles: (ref mut main_handle, ref mut other_handles),
+                        secret,
+                        local,
+                        patterns: (ref mut pattern, ref mut other_patterns),
+                        allow_remote_lookup,
+                        ..
+                    },
+                ref mut keys_accumulator,
             } => match event {
-                UIEvent::StatusEvent(StatusEvent::JobFinished(ref id)) if *id == handle.job_id => {
+                UIEvent::StatusEvent(StatusEvent::JobFinished(ref id))
+                    if *id == main_handle.job_id
+                        || other_handles.iter().any(|h| h.job_id == *id) =>
+                {
+                    let mut main_handle_ref = &mut (*main_handle);
+                    let is_main = *id == main_handle_ref.job_id;
+                    let handle = if is_main {
+                        &mut main_handle_ref
+                    } else {
+                        &mut other_handles.iter_mut().find(|h| h.job_id == *id).unwrap()
+                    };
                     match handle.chan.try_recv() {
                         Err(_) => { /* Job was canceled */ }
                         Ok(None) => { /* something happened, perhaps a worker thread panicked */ }
@@ -123,15 +195,19 @@ impl Component for KeySelection {
                             if keys.is_empty() {
                                 let id = progress_spinner.id();
                                 if allow_remote_lookup.is_true() {
-                                    match Self::new(
+                                    match KeySelectionLoading::new(
                                         *secret,
                                         *local,
-                                        std::mem::take(pattern),
+                                        (std::mem::take(pattern), std::mem::take(other_patterns)),
                                         *allow_remote_lookup,
                                         context,
                                     ) {
-                                        Ok(w) => {
-                                            *self = w;
+                                        Ok(inner) => {
+                                            let keys_accumulator = std::mem::take(keys_accumulator);
+                                            *self = Self::Loading {
+                                                inner,
+                                                keys_accumulator,
+                                            };
                                         }
                                         Err(err) => *self = Self::Error { err, id },
                                     }
@@ -157,42 +233,74 @@ impl Component for KeySelection {
                                     context.replies.push_back(UIEvent::StatusEvent(
                                         StatusEvent::DisplayMessage(err.to_string()),
                                     ));
-                                    let res: Option<melib::gpgme::Key> = None;
+                                    // Even in case of error, we should send a FinishedUIDialog
+                                    // event so that the component parent knows we're done.
+                                    let res: Option<Vec<melib::gpgme::Key>> = None;
                                     context
                                         .replies
                                         .push_back(UIEvent::FinishedUIDialog(id, Box::new(res)));
                                 }
                                 return false;
                             }
-                            let mut widget = Box::new(UIDialog::new(
-                                "select key",
-                                keys.iter()
-                                    .map(|k| {
-                                        (
-                                            k.clone(),
-                                            if let Some(primary_uid) = k.primary_uid() {
-                                                format!("{} {}", k.fingerprint(), primary_uid)
-                                            } else {
-                                                k.fingerprint().to_string()
-                                            },
-                                        )
-                                    })
-                                    .collect::<Vec<(melib::gpgme::Key, String)>>(),
-                                true,
-                                Some(Box::new(
-                                    move |id: ComponentId, results: &[melib::gpgme::Key]| {
-                                        Some(UIEvent::FinishedUIDialog(
-                                            id,
-                                            Box::new(results.first().cloned()),
-                                        ))
-                                    },
-                                )),
-                                context,
-                            ));
-                            widget.set_dirty(true);
-                            *self = Self::Loaded { widget, keys };
+                            keys_accumulator.extend(keys);
+                            if !is_main {
+                                other_handles.retain(|h| h.job_id != *id);
+                                return false;
+                            }
+                            if other_handles.is_empty() {
+                                // We are done with all Futures, so finally transition into the
+                                // "show the user the list of keys to select" state.
+                                let mut widget = Box::new(UIDialog::new(
+                                    "select key",
+                                    keys_accumulator
+                                        .iter()
+                                        .map(|k| {
+                                            (
+                                                k.clone(),
+                                                if let Some(primary_uid) = k.primary_uid() {
+                                                    format!("{} {}", k.fingerprint(), primary_uid)
+                                                } else {
+                                                    k.fingerprint().to_string()
+                                                },
+                                            )
+                                        })
+                                        .collect::<Vec<(melib::gpgme::Key, String)>>(),
+                                    false,
+                                    Some(Box::new(
+                                        move |id: ComponentId, results: &[melib::gpgme::Key]| {
+                                            Some(UIEvent::FinishedUIDialog(
+                                                id,
+                                                Box::new(if results.is_empty() {
+                                                    None
+                                                } else {
+                                                    Some(results.to_vec())
+                                                }),
+                                            ))
+                                        },
+                                    )),
+                                    context,
+                                ));
+                                widget.set_dirty(true);
+                                *self = Self::Loaded {
+                                    widget,
+                                    keys: std::mem::take(keys_accumulator),
+                                };
+                            } else {
+                                // Main handle has finished, replace it with some other one from
+                                // other_handles.
+                                *main_handle = other_handles.remove(0);
+                            }
                         }
                         Ok(Some(Err(err))) => {
+                            context.replies.push_back(UIEvent::StatusEvent(
+                                StatusEvent::DisplayMessage(err.to_string()),
+                            ));
+                            // Even in case of error, we should send a FinishedUIDialog
+                            // event so that the component parent knows we're done.
+                            let res: Option<Vec<melib::gpgme::Key>> = None;
+                            context
+                                .replies
+                                .push_back(UIEvent::FinishedUIDialog(self.id(), Box::new(res)));
                             *self = Self::Error {
                                 err,
                                 id: ComponentId::default(),
@@ -210,9 +318,13 @@ impl Component for KeySelection {
 
     fn is_dirty(&self) -> bool {
         match self {
-            Self::LoadingKeys {
-                ref progress_spinner,
-                ..
+            Self::Loading {
+                inner:
+                    KeySelectionLoading {
+                        ref progress_spinner,
+                        ..
+                    },
+                keys_accumulator: _,
             } => progress_spinner.is_dirty(),
             Self::Error { .. } => true,
             Self::Loaded { ref widget, .. } => widget.is_dirty(),
@@ -221,9 +333,13 @@ impl Component for KeySelection {
 
     fn set_dirty(&mut self, value: bool) {
         match self {
-            Self::LoadingKeys {
-                ref mut progress_spinner,
-                ..
+            Self::Loading {
+                inner:
+                    KeySelectionLoading {
+                        ref mut progress_spinner,
+                        ..
+                    },
+                keys_accumulator: _,
             } => progress_spinner.set_dirty(value),
             Self::Error { .. } => {}
             Self::Loaded { ref mut widget, .. } => widget.set_dirty(value),
@@ -234,16 +350,20 @@ impl Component for KeySelection {
 
     fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         match self {
-            Self::LoadingKeys { .. } | Self::Error { .. } => ShortcutMaps::default(),
+            Self::Loading { .. } | Self::Error { .. } => ShortcutMaps::default(),
             Self::Loaded { ref widget, .. } => widget.shortcuts(context),
         }
     }
 
     fn id(&self) -> ComponentId {
         match self {
-            Self::LoadingKeys {
-                ref progress_spinner,
-                ..
+            Self::Loading {
+                inner:
+                    KeySelectionLoading {
+                        ref progress_spinner,
+                        ..
+                    },
+                keys_accumulator: _,
             } => progress_spinner.id(),
             Self::Error { ref id, .. } => *id,
             Self::Loaded { ref widget, .. } => widget.id(),
@@ -303,13 +423,16 @@ mod tests {
             );
             let mut progress_spinner = ProgressSpinner::new(8, context);
             progress_spinner.start();
-            Ok(Self::LoadingKeys {
-                handle,
-                secret,
-                local,
-                pattern,
-                allow_remote_lookup,
-                progress_spinner,
+            Ok(Self::Loading {
+                inner: KeySelectionLoading {
+                    handles: (handle, vec![]),
+                    secret,
+                    local,
+                    patterns: (pattern, vec![]),
+                    allow_remote_lookup,
+                    progress_spinner,
+                },
+                keys_accumulator: vec![],
             })
         }
     }
