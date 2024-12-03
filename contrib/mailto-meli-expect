@@ -1,0 +1,18 @@
+#!/usr/bin/env -S expect -f
+# Copyright 2024 Manos Pitsidianakis
+#
+# SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
+
+# Trap window resize signal
+trap {
+  set rows [stty rows]
+  set cols [stty columns]
+  stty rows $rows columns $cols < $spawn_out(slave,name)
+} WINCH
+# send the input with human-like delay:
+set send_human {.001 .003 0.01 .005 .005}
+spawn meli
+send -h ":mailto "
+send -h [lindex $argv 0]
+send -h "\n"
+interact

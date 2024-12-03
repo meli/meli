@@ -1,0 +1,21 @@
+#!/usr/bin/env sh
+#
+# mailto-meli -- wrapper to use meli as mailto handler
+# To use meli as mailto: handler point your browser to use this as application for opening 
+# mailto: links.
+# Note: This assumes that x-terminal-emulator supports the "-e" flag for passing along arguments.
+
+# Copyright: 2024 Matthias Geiger <werdahias@debian.org>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Check if mailto-meli and expect are present
+if ! command -v mailto-meli > /dev/null 2>&1
+then echo "mailto-meli not found" && exit 1
+else 
+	if ! command -v expect > /dev/null 2>&1
+	then echo "expect not found" && exit 1
+	fi
+fi
+
+exec x-terminal-emulator -e mailto-meli-expect "$@"
+
