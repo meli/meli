@@ -1199,6 +1199,7 @@ dependencies = [
  "encoding_rs",
  "flate2",
  "futures",
+ "http",
  "imap-codec",
  "imap-types",
  "indexmap",
@@ -1211,6 +1212,7 @@ dependencies = [
  "nom",
  "notify",
  "polling 3.7.4",
+ "quick-xml",
  "regex",
  "rusqlite",
  "rusty-fork",
@@ -1664,6 +1666,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1004a344b30a54e2ee58d66a71b32d2db2feb0a31f9a2d302bf0536f15de2a33"
 dependencies = [
  "memchr",
+ "serde",
 ]
 
 [[package]]

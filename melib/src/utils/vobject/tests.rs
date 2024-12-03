@@ -35,7 +35,7 @@ macro_rules! s(
     ($i:expr) => ($i.to_owned());
 );
 
-const VCARD_BASIC: &str = concat!(
+pub const VCARD_BASIC: &str = concat!(
     "BEGIN:VCARD\r\n",
     "VERSION:2.1\r\n",
     "N:Mustermann;Erika\r\n",

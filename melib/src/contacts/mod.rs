@@ -31,6 +31,8 @@ use uuid::Uuid;
 
 pub mod backend;
 mod card;
+#[cfg(feature = "webdav")]
+pub mod carddav;
 pub mod jscontact;
 pub mod mutt;
 pub mod notmuchcontact;

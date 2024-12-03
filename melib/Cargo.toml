@@ -17,10 +17,10 @@ name = "melib"
 path = "src/lib.rs"
 
 [features]
-default = ["imap", "nntp", "maildir", "mbox-notify", "smtp"]
+default = ["imap", "nntp", "maildir", "mbox-notify", "smtp", "webdav"]
 
 gpgme = []
-http = ["isahc", "url/serde"]
+http = ["isahc", "dep:http", "url/serde", "dep:http"]
 http-static = ["isahc", "isahc/static-curl"]
 imap = ["imap-codec", "imap-types", "tls"]
 jmap = ["http"]
@@ -33,6 +33,7 @@ sqlite3 = ["sqlite3-static"]
 sqlite3-static = ["rusqlite", "rusqlite/bundled-full"]
 tls = ["native-tls"]
 tls-static = ["tls", "native-tls/vendored"]
+webdav = ["http", "dep:quick-xml", "dep:http", "dep:url"]
 
 [dependencies]
 async-fn-stream = { version = "0.3" }
@@ -45,6 +46,7 @@ data-encoding = { version = "2.9" }
 encoding_rs = { version = "^0.8" }
 flate2 = { workspace = true }
 futures = { workspace = true }
+http = { version = "0.2.12", optional = true }
 imap-codec = { version = "=2.0.0-alpha.6", features = ["ext_condstore_qresync", "ext_id"], optional = true }
 imap-types = { version = "=2.0.0-alpha.6", features = ["ext_condstore_qresync", "ext_id"], optional = true }
 indexmap = { workspace = true }
@@ -57,6 +59,7 @@ nix = { workspace = true, default-features = false, features = ["fs", "socket", 
 nom = { version = "7" }
 notify = { version = "8", optional = true }
 polling = { version = "3" }
+quick-xml = { version = "0.31.0", optional = true, features = ["serialize"] }
 regex = { workspace = true }
 rusqlite = { version = "^0.37", default-features = false, features = ["array", "modern_sqlite"], optional = true }
 serde = { workspace = true, features = ["rc"] }

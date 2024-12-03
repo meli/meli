@@ -30,6 +30,8 @@ pub mod parser;
 pub mod property;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+pub use tests::VCARD_BASIC;
 pub mod vcard;
 
 pub use component::{parse_component, read_component, write_component, Component};

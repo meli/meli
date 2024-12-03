@@ -690,3 +690,11 @@ impl From<xdg::BaseDirectoriesError> for Error {
             .set_kind(ErrorKind::NotSupported)
     }
 }
+
+#[cfg(feature = "webdav")]
+impl From<quick_xml::de::DeError> for Error {
+    #[inline]
+    fn from(err: quick_xml::de::DeError) -> Self {
+        Self::from_inner(Arc::new(err)).set_kind(ErrorKind::LinkedLibrary("quickxml"))
+    }
+}
