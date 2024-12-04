@@ -17,25 +17,26 @@ default = ["imap", "nntp", "maildir", "mbox-notify", "smtp"]
 
 A list of all the features and a description for each follows:
 
-| Feature flag                                    | Dependencies                                     | Notes                                                |
-|-------------------------------------------------|--------------------------------------------------|------------------------------------------------------|
-| <a name="maildir-feature">`maildir`</a>         | `notify` crate                                   | Provides the *maildir* backend                       |
-| <a name="mbox-notify-feature">`mbox-notify`</a> | `notify` crate                                   | Provides notification support for the *mbox* backend |
-| <a name="notmuch-feature">`notmuch`</a>         | `maildir` feature                                | Provides the *notmuch* backend                       |
-| <a name="imap-feature">`imap`</a>               | `imap-codec` crate, `tls` feature                | Provides the *IMAP* backend                          |
-| <a name="jmap-feature">`jmap`</a>               | `http` feature, `url` crate with `serde` feature | Provides the *JMAP* backend                          |
-| <a name="nntp-feature">`nntp`</a>               | `tls` feature                                    | Provides the *NNTP* (Usenet) backend                 |
-| <a name="smtp-feature">`smtp`</a>               | `tls` feature                                    | Integrated async *SMTP* client                       |
-| <a name="sqlite3-feature">`sqlite3`</a>         | `rusqlite` crate with `bundled-full` feature     | Used in caches                                       |
-| <a name="gpgme-feature">`gpgme`</a>             |                                                  | *GPG* use by dynamically loading `libgpgme.so`       |
-| <a name="http-feature">`http`</a>               | `isahc` crate                                    | Used for *HTTP* client needs, notably JMAP`          |
-| <a name="tls-feature">`tls`</a>                 | `native-tls` crate                               |                                                      |
-| <a name="http-static-feature">`http-static`</a> | `isahc` crate with `static-curl` feature         | Links with `curl` statically                         |
-| <a name="tls-static-feature">`tls-static`</a>   | `native-tls` crate with `vendored` feature       | Links with `OpenSSL` statically where it's used      |
-| <a name="imap-trace-feature">`imap-trace`</a>   | `imap` feature                                   | Connection trace logs on the `trace` logging level   |
-| <a name="jmap-trace-feature">`jmap-trace`</a>   | `jmap` feature                                   | Connection trace logs on the `trace` logging level   |
-| <a name="nntp-trace-feature">`nntp-trace`</a>   | `nntp` feature                                   | Connection trace logs on the `trace` logging level   |
-| <a name="smtp-trace-feature">`smtp-trace`</a>   | `smtp` feature                                   | Connection trace logs on the `trace` logging level   |
+| Feature flag                                          | Dependencies                                     | Notes                                                |
+|-------------------------------------------------------|--------------------------------------------------|------------------------------------------------------|
+| <a name="maildir-feature">`maildir`</a>               | `notify` crate                                   | Provides the *maildir* backend                       |
+| <a name="mbox-notify-feature">`mbox-notify`</a>       | `notify` crate                                   | Provides notification support for the *mbox* backend |
+| <a name="notmuch-feature">`notmuch`</a>               | `maildir` feature                                | Provides the *notmuch* backend                       |
+| <a name="imap-feature">`imap`</a>                     | `imap-codec` crate, `tls` feature                | Provides the *IMAP* backend                          |
+| <a name="jmap-feature">`jmap`</a>                     | `http` feature, `url` crate with `serde` feature | Provides the *JMAP* backend                          |
+| <a name="nntp-feature">`nntp`</a>                     | `tls` feature                                    | Provides the *NNTP* (Usenet) backend                 |
+| <a name="smtp-feature">`smtp`</a>                     | `tls` feature                                    | Integrated async *SMTP* client                       |
+| <a name="sqlite3-feature">`sqlite3`</a>               | `rusqlite` crate with `bundled-full` feature     | Used in caches                                       |
+| <a name="sqlite3-static-feature">`sqlite3-static`</a> | `rusqlite` crate with `bundled-full` feature     | Same as `sqlite3` feature but provided for consistency and in case `sqlite3` feature stops bundling libsqlite3 statically in the future.
+| <a name="gpgme-feature">`gpgme`</a>                   |                                                  | *GPG* use by dynamically loading `libgpgme.so`       |
+| <a name="http-feature">`http`</a>                     | `isahc` crate                                    | Used for *HTTP* client needs, notably JMAP`          |
+| <a name="tls-feature">`tls`</a>                       | `native-tls` crate                               |                                                      |
+| <a name="http-static-feature">`http-static`</a>       | `isahc` crate with `static-curl` feature         | Links with `curl` statically                         |
+| <a name="tls-static-feature">`tls-static`</a>         | `native-tls` crate with `vendored` feature       | Links with `OpenSSL` statically where it's used      |
+| <a name="imap-trace-feature">`imap-trace`</a>         | `imap` feature                                   | Connection trace logs on the `trace` logging level   |
+| <a name="jmap-trace-feature">`jmap-trace`</a>         | `jmap` feature                                   | Connection trace logs on the `trace` logging level   |
+| <a name="nntp-trace-feature">`nntp-trace`</a>         | `nntp` feature                                   | Connection trace logs on the `trace` logging level   |
+| <a name="smtp-trace-feature">`smtp-trace`</a>         | `smtp` feature                                   | Connection trace logs on the `trace` logging level   |
 
 Though not a feature, the presence of the environment variable `UNICODE_REGENERATE_TABLES` at compile-time of the `melib` crate will force the regeneration of Unicode tables from the crate's `build.rs` script.
 Otherwise the tables are already included with the source code, and there's no real reason to regenerate them unless you intend to modify the code or update to a new Unicode version.
