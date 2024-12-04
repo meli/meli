@@ -78,7 +78,10 @@
  * - [tag:VERIFY] Verify whether this is the correct way to do something
  * - [tag:DEBT] Technical debt
  */
-
+#![doc = include_str!("../README.md")]
+//!
+//! ## Description
+//!
 //! A crate that performs mail client operations such as
 //! - Hold an [`Envelope`] with methods convenient for mail client use. (see
 //!   module [`email`])

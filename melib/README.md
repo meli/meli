@@ -1,30 +1,41 @@
+<!-- SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later -->
 # melib
 
 [![GitHub license](https://img.shields.io/github/license/meli/meli)](https://github.com/meli/meli/blob/master/COPYING) [![Crates.io](https://img.shields.io/crates/v/melib)](https://crates.io/crates/melib) [![docs.rs](https://docs.rs/melib/badge.svg)](https://docs.rs/melib)
 
 Library for handling email for email clients.
 
-## Optional Features
+## Cargo Compile-time Features
 
-| Feature flag  | Dependencies                                     | Notes                                                |
-|---------------|--------------------------------------------------|------------------------------------------------------|
-| `maildir`     | `notify` crate                                   | Provides the *maildir* backend                       |
-| `mbox-notify` | `notify` crate                                   | Provides notification support for the *mbox* backend |
-| `notmuch`     | `maildir` feature                                | Provides the *notmuch* backend                       |
-| `imap`        | `imap-codec` crate, `tls` feature                | Provides the *IMAP* backend                          |
-| `jmap`        | `http` feature, `url` crate with `serde` feature | Provides the *JMAP* backend                          |
-| `nntp`        | `tls` feature                                    | Provides the *NNTP* (Usenet) backend                 |
-| `smtp`        | `tls` feature                                    | Integrated async *SMTP* client                       |
-| `sqlite3`     | `rusqlite` crate with `bundled-full` feature     | Used in caches                                       |
-| `gpgme`       |                                                  | *GPG* use by dynamically loading `libgpgme.so`       |
-| `http`        | `isahc` crate                                    | Used for *HTTP* client needs, notably JMAP`          |
-| `tls`         | `native-tls` crate                               |                                                      |
-| `http-static` | `isahc` crate with `static-curl` feature         | Links with `curl` statically                         |
-| `tls-static`  | `native-tls` crate with `vendored` feature       | Links with `OpenSSL` statically where it's used      |
-| `imap-trace`  | `imap` feature                                   | Connection trace logs on the `trace` logging level   |
-| `jmap-trace`  | `jmap` feature                                   | Connection trace logs on the `trace` logging level   |
-| `nntp-trace`  | `nntp` feature                                   | Connection trace logs on the `trace` logging level   |
-| `smtp-trace`  | `smtp` feature                                   | Connection trace logs on the `trace` logging level   |
+`melib` supports opting in and out of features at compile time with cargo features.
+
+The contents of the `default` feature are:
+
+```toml
+default = ["imap", "nntp", "maildir", "mbox-notify", "smtp"]
+```
+
+A list of all the features and a description for each follows:
+
+| Feature flag                                    | Dependencies                                     | Notes                                                |
+|-------------------------------------------------|--------------------------------------------------|------------------------------------------------------|
+| <a name="maildir-feature">`maildir`</a>         | `notify` crate                                   | Provides the *maildir* backend                       |
+| <a name="mbox-notify-feature">`mbox-notify`</a> | `notify` crate                                   | Provides notification support for the *mbox* backend |
+| <a name="notmuch-feature">`notmuch`</a>         | `maildir` feature                                | Provides the *notmuch* backend                       |
+| <a name="imap-feature">`imap`</a>               | `imap-codec` crate, `tls` feature                | Provides the *IMAP* backend                          |
+| <a name="jmap-feature">`jmap`</a>               | `http` feature, `url` crate with `serde` feature | Provides the *JMAP* backend                          |
+| <a name="nntp-feature">`nntp`</a>               | `tls` feature                                    | Provides the *NNTP* (Usenet) backend                 |
+| <a name="smtp-feature">`smtp`</a>               | `tls` feature                                    | Integrated async *SMTP* client                       |
+| <a name="sqlite3-feature">`sqlite3`</a>         | `rusqlite` crate with `bundled-full` feature     | Used in caches                                       |
+| <a name="gpgme-feature">`gpgme`</a>             |                                                  | *GPG* use by dynamically loading `libgpgme.so`       |
+| <a name="http-feature">`http`</a>               | `isahc` crate                                    | Used for *HTTP* client needs, notably JMAP`          |
+| <a name="tls-feature">`tls`</a>                 | `native-tls` crate                               |                                                      |
+| <a name="http-static-feature">`http-static`</a> | `isahc` crate with `static-curl` feature         | Links with `curl` statically                         |
+| <a name="tls-static-feature">`tls-static`</a>   | `native-tls` crate with `vendored` feature       | Links with `OpenSSL` statically where it's used      |
+| <a name="imap-trace-feature">`imap-trace`</a>   | `imap` feature                                   | Connection trace logs on the `trace` logging level   |
+| <a name="jmap-trace-feature">`jmap-trace`</a>   | `jmap` feature                                   | Connection trace logs on the `trace` logging level   |
+| <a name="nntp-trace-feature">`nntp-trace`</a>   | `nntp` feature                                   | Connection trace logs on the `trace` logging level   |
+| <a name="smtp-trace-feature">`smtp-trace`</a>   | `smtp` feature                                   | Connection trace logs on the `trace` logging level   |
 
 ## Example: Parsing bytes into an `Envelope`
 
@@ -33,7 +44,7 @@ and body structure. Addresses in `To`, `From` fields etc are parsed into
 `Address` types.
 
 ```rust
-use melib::{Attachment, Envelope};
+use melib::{email::attachment_types::Text, Attachment, Envelope};
 
 let raw_mail = r#"From: "some name" <some@example.com>
 To: "me" <myself@example.com>
@@ -80,15 +91,19 @@ ouiijDaaCCGQRgrpH3q4QYYXWDihxBE+7KCDDjnUIEVAADs=
 
 let envelope = Envelope::from_bytes(raw_mail.as_bytes(), None).expect("Could not parse mail");
 assert_eq!(envelope.subject().as_ref(), "gratuitously encoded subject");
-assert_eq!(&envelope.message_id().display_bracket().to_string(), "<h2g7f.z0gy2pgaen5m@example.com>");
+assert_eq!(envelope.message_id(), "h2g7f.z0gy2pgaen5m@example.com");
+assert_eq!(&envelope.message_id().display_brackets().to_string(), "<h2g7f.z0gy2pgaen5m@example.com>");
 
 let body = envelope.body_bytes(raw_mail.as_bytes());
 assert_eq!(body.content_type().to_string().as_str(), "multipart/mixed");
 
-let body_text = body.text();
+let body_text = body.text(Text::Plain);
 assert_eq!(body_text.as_str(), "hello world.");
 
 let subattachments: Vec<Attachment> = body.attachments();
 assert_eq!(subattachments.len(), 3);
-assert_eq!(subattachments[2].content_type().name().unwrap(), "test_image.gif");
+assert_eq!(
+    subattachments[2].content_type().name().unwrap(),
+    "test_image.gif"
+);
 ```
