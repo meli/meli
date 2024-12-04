@@ -37,6 +37,9 @@ A list of all the features and a description for each follows:
 | <a name="nntp-trace-feature">`nntp-trace`</a>   | `nntp` feature                                   | Connection trace logs on the `trace` logging level   |
 | <a name="smtp-trace-feature">`smtp-trace`</a>   | `smtp` feature                                   | Connection trace logs on the `trace` logging level   |
 
+Though not a feature, the presence of the environment variable `UNICODE_REGENERATE_TABLES` at compile-time of the `melib` crate will force the regeneration of Unicode tables from the crate's `build.rs` script.
+Otherwise the tables are already included with the source code, and there's no real reason to regenerate them unless you intend to modify the code or update to a new Unicode version.
+
 ## Example: Parsing bytes into an `Envelope`
 
 An `Envelope` represents the information you can get from an email's headers

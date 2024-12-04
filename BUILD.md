@@ -20,7 +20,11 @@ You can build and run `meli` with one command: `cargo run --release`.
 
 ## Build features
 
-Some functionality is held behind "feature gates", or compile-time flags. The following list explains each feature's purpose:
+Some functionality is held behind "feature gates", or compile-time flags.
+
+Cargo features for `melib` are documented in its [`README.md`](./melib/README.md) file.
+
+The following list explains each feature's purpose:
 
 - `gpgme` enables GPG support via `libgpgme` (on by default)
 - `dbus-notifications` enables showing notifications using `dbus` (on by default)
@@ -29,9 +33,6 @@ Some functionality is held behind "feature gates", or compile-time flags. The fo
 - `sqlite3` provides support for builting fast search indexes in local sqlite3 databases (on by default)
 - `cli-docs` includes the manpage documentation compiled by either `mandoc` or `man` binary to plain text in `meli`'s command line. Embedded documentation can be viewed with the subcommand `meli man [PAGE]` (on by default).
 - `static` and `*-static` bundle C libraries in dependencies so that you don't need them installed in your system (on by default).
-
-Though not a feature, the presence of the environment variable `UNICODE_REGENERATE_TABLES` in compile-time of the `melib` crate will force the regeneration of unicode tables.
-Otherwise the tables are included with the source code, and there's no real reason to regenerate them unless you intend to modify the code or update to a new Unicode version.
 
 ## Build Debian package (*deb*)
 
