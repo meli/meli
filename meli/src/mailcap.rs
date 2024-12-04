@@ -167,14 +167,14 @@ impl MailcapEntry {
                     .map(|arg| match *arg {
                         "%s" => {
                             needs_stdin = false;
-                            let _f = File::create_temp_file(
+                            let file = File::create_temp_file(
                                 &a.decode(Default::default()),
                                 None,
                                 None,
                                 None,
-                                true,
+                                false,
                             )?;
-                            let p = _f.path().display().to_string();
+                            let p = file.path().display().to_string();
                             Ok(p)
                         }
                         "%t" => Ok(a.content_type().to_string()),
