@@ -21,6 +21,7 @@
 
 pub mod jscontact;
 pub mod mutt;
+pub mod notmuchcontact;
 pub mod vcard;
 
 mod card;
@@ -140,6 +141,29 @@ impl Contacts {
                             expanded_path.display()
                         );
                     }
+                }
+            }
+        }
+        use std::process::Command;
+        if let Some(notmuch_addressbook_query) = s.notmuch_address_book_query() {
+            let notmuch_addresses = Command::new("notmuch")
+                .arg("address")
+                .args(notmuch_addressbook_query.split_whitespace())
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .output()
+                .unwrap();
+
+            if notmuch_addresses.status.success() {
+                for card in notmuchcontact::parse_notmuch_contacts(
+                    std::str::from_utf8(&notmuch_addresses.stdout)
+                        .expect("utf8 conversion failure"),
+                )
+                .expect("notmuch addr book parsing failed")
+                .iter()
+                {
+                    ret.add_card(card.clone());
                 }
             }
         }

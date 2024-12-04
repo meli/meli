@@ -97,6 +97,12 @@ impl AccountSettings {
         self.extra.get("vcard_folder").map(String::as_str)
     }
 
+    pub fn notmuch_address_book_query(&self) -> Option<&str> {
+        self.extra
+            .get("notmuch_address_book_query")
+            .map(String::as_str)
+    }
+
     /// Get the server password, either directly from the `server_password`
     /// settings value, or by running the `server_password_command` and reading
     /// the output.
@@ -152,6 +158,7 @@ impl AccountSettings {
                     .set_kind(ErrorKind::Configuration));
                 }
             }
+            _ = self.extra.swap_remove("notmuch_address_book_query");
         }
 
         Ok(())
