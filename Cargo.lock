@@ -706,12 +706,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fs_extra"
-version = "1.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
-
-[[package]]
 name = "fsevent-sys"
 version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1199,7 +1193,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "regex",
- "sealed_test",
+ "rusty-fork",
  "serde",
  "serde_derive",
  "serde_json",
@@ -1241,7 +1235,7 @@ dependencies = [
  "polling 3.7.3",
  "regex",
  "rusqlite",
- "sealed_test",
+ "rusty-fork",
  "serde",
  "serde_derive",
  "serde_json",
@@ -1775,10 +1769,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "rusty-forkfork"
-version = "0.4.0"
+name = "rusty-fork"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ce85af4dfa2fb0c0143121ab5e424c71ea693867357c9159b8777b59984c218"
+checksum = "cb3dcc6e454c328bb824492db107ab7c0ae8fcffe4ad210136ef014458c1bc4f"
 dependencies = [
  "fnv",
  "quick-error",
@@ -1808,28 +1802,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fbc91545643bcf3a0bbb6569265615222618bdf33ce4ffbbd13c4bbd4c093534"
 dependencies = [
  "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "sealed_test"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a1867f8f005bd7fb73c367e2e45dd628417906a2ca27597fe59cbf04279a222"
-dependencies = [
- "fs_extra",
- "rusty-forkfork",
- "sealed_test_derive",
- "tempfile",
-]
-
-[[package]]
-name = "sealed_test_derive"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77253fb2d4451418d07025826028bcb96ee42d3e58859689a70ce62908009db6"
-dependencies = [
- "quote",
- "syn 2.0.76",
 ]
 
 [[package]]

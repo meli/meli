@@ -80,6 +80,6 @@ tls-static = ["tls", "native-tls/vendored"]
 flate2 = { version = "1.0.16" }
 
 [dev-dependencies]
-sealed_test = { version = "1.1.0" }
+rusty-fork = { version = "0.3.0" }
 tempfile = { version = "3.3" }
 toml = { version = "0.8", default-features = false, features = ["display","preserve_order","parse"] }

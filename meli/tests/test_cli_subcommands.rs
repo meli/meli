@@ -24,10 +24,11 @@ use std::{io::Write, path::Path};
 
 use assert_cmd::{assert::OutputAssertExt, Command};
 use predicates::prelude::*;
-use sealed_test::prelude::*;
+use rusty_fork::rusty_fork_test;
 use tempfile::TempDir;
 
-#[sealed_test]
+rusty_fork_test! {
+#[test]
 fn test_cli_subcommands() {
     for var in [
         "PAGER",
@@ -279,4 +280,5 @@ server_password_command = "false"
     test_subcommand_succeeds("print-log-path");
 
     tmp_dir.close().unwrap();
+}
 }

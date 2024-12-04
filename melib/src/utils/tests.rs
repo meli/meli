@@ -27,12 +27,12 @@ use std::{
     path::Path,
 };
 
-use sealed_test::prelude::*;
+use rusty_fork::rusty_fork_test;
 use tempfile::TempDir;
 
-#[sealed_test]
-#[ignore]
+rusty_fork_test! {
 #[test]
+#[ignore]
 fn test_shellexpandtrait() {
     use super::shellexpand::*;
 
@@ -150,11 +150,12 @@ fn test_shellexpandtrait() {
         Completions::Entries(entries) if !entries.is_empty()));
     _ = tmp_dir.close();
 }
+}
 
 #[cfg(target_os = "linux")]
-#[sealed_test]
-#[ignore]
+rusty_fork_test! {
 #[test]
+#[ignore]
 fn test_shellexpandtrait_impls() {
     use super::shellexpand::*;
 
@@ -261,6 +262,7 @@ fn test_shellexpandtrait_impls() {
         Completions::IsDirectory
     );
     _ = tmp_dir.close();
+}
 }
 
 // Only test on platforms that support OFD locking.

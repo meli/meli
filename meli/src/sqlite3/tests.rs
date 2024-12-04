@@ -28,7 +28,7 @@ use std::{
 };
 
 use melib::{backends::prelude::*, maildir::MaildirType};
-use sealed_test::prelude::*;
+use rusty_fork::rusty_fork_test;
 use tempfile::TempDir;
 
 use super::*;
@@ -97,7 +97,8 @@ fn new_maildir_backend(
     MaildirType::new(&account_conf, Default::default(), event_consumer)
 }
 
-#[sealed_test]
+rusty_fork_test! {
+#[test]
 fn test_sqlite3_reindex() {
     use futures::stream::TryStreamExt;
 
@@ -425,4 +426,5 @@ fn test_sqlite3_reindex() {
             .collect::<HashSet<EnvelopeHash>>()
     );
     eprintln_ok();
+}
 }
