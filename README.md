@@ -45,6 +45,35 @@ Run `make` or `cargo build --release --bin meli`.
 
 For detailed building instructions, see [`BUILD.md`](./BUILD.md)
 
+### Cargo Compile-time Features
+
+`meli` supports opting in and out of features at compile time with cargo features.
+
+The contents of the `default` feature are:
+
+```toml
+default = ["sqlite3", "notmuch", "smtp", "dbus-notifications", "gpgme", "cli-docs", "jmap", "static"]
+```
+
+A list of all the features and a description for each follows:
+
+| Feature flag                                                  | Dependencies                                                                                 | Notes                                                                                                                                                                                             |
+|---------------------------------------------------------------|----------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| <a name="notmuch-feature">`notmuch`</a>                       | `maildir` feature                                                                            | Provides the *notmuch* backend                                                                                                                                                                    |
+| <a name="jmap-feature">`jmap`</a>                             | `http` feature, `url` crate with `serde` feature                                             | Provides the *JMAP* backend                                                                                                                                                                       |
+| <a name="smtp-feature">`smtp`</a>                             | `tls` feature                                                                                | Integrated async *SMTP* client                                                                                                                                                                    |
+| <a name="sqlite3-feature">`sqlite3`</a>                       | `rusqlite` crate with `bundled-full` feature                                                 | Used in caches                                                                                                                                                                                    |
+| <a name="sqlite3-static-feature">`sqlite3-static`</a>         | `rusqlite` crate with `bundled-full` feature                                                 | Same as `sqlite3` feature but provided for consistency and in case `sqlite3` feature stops bundling libsqlite3 statically in the future.                                                          |
+| <a name="smtp-trace-feature">`smtp-trace`</a>                 | `smtp` feature                                                                               | Connection trace logs on the `trace` logging level                                                                                                                                                |
+| <a name="gpgme-feature">`gpgme`</a>                           |                                                                                              | *GPG* use by dynamically loading `libgpgme.so`                                                                                                                                                    |
+| <a name="tls-static-feature">`tls-static`</a>                 | `native-tls` crate with `vendored` feature                                                   | Links with `OpenSSL` statically where it's used                                                                                                                                                   |
+| <a name="http-static-feature">`http-static`</a>               | `isahc` crate with `static-curl` feature                                                     | Links with `curl` statically                                                                                                                                                                      |
+| <a name="dbus-notifications-feature">`dbus-notifications`</a> | `notify-rust` dependency                                                                     | Uses DBus notifications                                                                                                                                                                           |
+| <a name="dbus-static-feature">`dbus-static`</a>               | `notify-rust` dependency and enableds its `d_vendored` feature                               | Includes the dbus library statically.                                                                                                                                                             |
+| <a name="cli-docs-feature">`cli-docs`</a>                     | `flate2` dependency                                                                          | Includes the manpage documentation compiled by either `mandoc` or `man` binary to plain text in `meli`'s command line. Embedded documentation can be viewed with the subcommand `meli man [PAGE]` |
+| <a name="libz-static-feature">`libz-static`</a>               | `libz-sys` dependency and enables its `static` feature                                       | Allows for the transitive dependency libz (from `curl`) to be linked statically.                                                                                                                  |
+| <a name="static-feature">`static`</a>                         | enables `tls-static`, `http-static`, `sqlite3-static`, `dbus-static`, `libz-static` features |                                                                                                                                                                                                   |
+
 ## Quick start
 
 ```sh

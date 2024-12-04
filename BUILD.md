@@ -22,6 +22,8 @@ You can build and run `meli` with one command: `cargo run --release`.
 
 Some functionality is held behind "feature gates", or compile-time flags.
 
+Cargo features for `meli` are documented in its [`README.md`](./meli/README.md) file.
+
 Cargo features for `melib` are documented in its [`README.md`](./melib/README.md) file.
 
 The following list explains each feature's purpose:
