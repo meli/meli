@@ -21,6 +21,7 @@
 
 pub mod jscontact;
 pub mod mutt;
+pub mod notmuchcontact;
 pub mod vcard;
 
 mod card;
@@ -141,6 +142,60 @@ impl Contacts {
                         );
                     }
                 }
+            }
+        }
+        use std::process::Command;
+        if let Some(notmuch_addressbook_query) = s.notmuch_address_book_query() {
+            match Command::new("sh")
+                .args([
+                    "-c",
+                    &format!(
+                        "notmuch address --format=json {}",
+                        notmuch_addressbook_query
+                    ),
+                ])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .output()
+            {
+                Ok(notmuch_addresses) => {
+                    if notmuch_addresses.status.success() {
+                        match std::str::from_utf8(&notmuch_addresses.stdout) {
+                            Ok(notmuch_address_out) => {
+                                match notmuchcontact::parse_notmuch_contacts(notmuch_address_out) {
+                                    Ok(contacts) => {
+                                        for c in contacts {
+                                            ret.add_card(c.clone());
+                                        }
+                                    }
+                                    Err(err) => {
+                                        log::warn!(
+                                                "Unable to parse notmuch contact result into cards: {} {}",
+                                                notmuch_address_out,
+                                                err
+                                            );
+                                    }
+                                }
+                            }
+                            Err(err) => {
+                                log::warn!(
+                                    "Unable to read from notmuch address query: {} {}",
+                                    notmuch_addressbook_query,
+                                    err
+                                );
+                            }
+                        }
+                    } else {
+                        log::warn!(
+                            "Error ({}) running notmuch address: {} {}",
+                            notmuch_addresses.status,
+                            String::from_utf8_lossy(&notmuch_addresses.stdout),
+                            String::from_utf8_lossy(&notmuch_addresses.stderr)
+                        );
+                    }
+                }
+                Err(e) => log::warn!("Unable to run notmuch address command: {}", e),
             }
         }
         ret
