@@ -153,6 +153,28 @@ impl AccountSettings {
                 }
             }
         }
+        {
+            if let Some(mutt_alias_file) = self.extra.swap_remove("mutt_alias_file") {
+                let path = Path::new(&mutt_alias_file).expand();
+
+                if !matches!(path.try_exists(), Ok(true)) {
+                    return Err(Error::new(format!(
+                        "`mutt_alias_file` path {} does not exist",
+                        path.display()
+                    ))
+                    .set_details("`mutt_alias_file` must be an existing path of a mutt alias file")
+                    .set_kind(ErrorKind::Configuration));
+                }
+                if !path.is_file() {
+                    return Err(Error::new(format!(
+                        "`mutt_alias_file` path {} is not a file",
+                        path.display()
+                    ))
+                    .set_details("`mutt_alias_file` must be a path of a mutt alias file")
+                    .set_kind(ErrorKind::Configuration));
+                }
+            }
+        }
 
         Ok(())
     }
