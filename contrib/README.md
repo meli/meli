@@ -20,14 +20,31 @@ on our issue tracker!
 
 ## Using `meli` for `mailto:` links
 
-To use `meli` to open `mailto:` links from your browser place the `mailto-meli` and `mailto-meli-expect` into `/usr/bin`
-(or `.local/bin`, and adjust the path in the script accordingly). Then set `mailto-meli` as program to open `mailto` links
-in your browser.
+To use `meli` to open `mailto:` links from your browser place the [`mailto-meli`](./mailto-meli) and [`mailto-meli-expect`](./mailto-meli-expect) scripts into `/usr/bin`
+(or `.local/bin`, and adjust the path in the script accordingly).
 
-E.g. in Firefox this can be done under
+Ensure all scripts are executable by your user account, if not set the permissions accordingly:
 
-```text
-Settings -> Applications -> Content-Type: mailto.
+```sh
+chmod u+x /path/to/mailto-meli
 ```
 
-Note that you need to have the [`expect`](https://en.wikipedia.org/wiki/Expect) binary installed for this to work.
+and
+
+```sh
+chmod u+x /path/to/mailto-meli-expect
+```
+
+Then set `mailto-meli` as program to open `mailto` links
+in your browser.
+
+E.g. in Firefox this can be done under "Settings" (`about:preferences`) which you can access from the menu button or `Edit -> Settings`.
+
+```text
+General -> Applications -> Content-Type: mailto.
+```
+
+You can test that it works by clicking the system menu entry `File -> Email link...`.
+
+_NOTE_: that you need to have the [`expect`](https://en.wikipedia.org/wiki/Expect) binary installed for this to work.
+`expect` is a scripting language used for interactive with interactive terminal applications like `meli`.
