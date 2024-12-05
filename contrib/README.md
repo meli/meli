@@ -8,6 +8,16 @@ If you believe something in this directory needs updates to work with the
 current version of `meli` or there are bugs that need fixing, please file an
 issue on our issue tracker!
 
+## Connecting to a Gmail account with OAUTH2
+
+The script [`./oauth2.py`](./oauth2.py) is a helper script to authenticate to a Gmail account using IMAP OAUTH2 tokens.
+
+See [`meli.conf(5)`](../meli/docs/meli.conf.5) for documentation.
+
+If the script does not work and you're certain it's because it needs changes to
+work with Google's servers and not a user error on your part, please file a bug
+on our issue tracker!
+
 ## Using `meli` for `mailto:` links
 
 To use `meli` to open `mailto:` links from your browser place the `mailto-meli` and `mailto-meli-expect` into `/usr/bin`
