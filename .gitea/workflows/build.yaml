@@ -47,7 +47,21 @@ jobs:
         run: |
           apt-get update
           apt-get install -y libdbus-1-dev pkg-config mandoc libssl-dev make
+      - name: Cache rustup
+        id: cache-rustup
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.rustup/
+            ~/.cargo/env
+            ~/.cargo/config.toml
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: build-workflow-${{ matrix.build }}-rustup
       - id: rustup-setup
+        if: steps.cache-rustup.outputs.cache-hit != 'true'
         name: Install rustup and toolchains
         shell: bash
         run: |
@@ -58,7 +72,14 @@ jobs:
             echo "CARGO_HOME=${CARGO_HOME:-$HOME/.cargo}" >> $GITHUB_ENV
             rustup toolchain install --profile minimal ${{ matrix.rust }} --target ${{ matrix.target }}
           fi
+      - name: Source .cargo/env
+        shell: bash
+        run: |
+          source "${HOME}/.cargo/env"
+          echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> $GITHUB_PATH
+          echo "CARGO_HOME=${CARGO_HOME:-$HOME/.cargo}" >> $GITHUB_ENV
       - name: Setup Rust target
+        if: steps.cache-rustup.outputs.cache-hit != 'true'
         run: |
           mkdir -p "${{ env.CARGO_HOME }}"
           cat << EOF > "${{ env.CARGO_HOME }}"/config.toml
@@ -66,11 +87,25 @@ jobs:
           target = "${{ matrix.target }}"
           EOF
       - name: Add test dependencies
+        if: steps.cache-rustup.outputs.cache-hit != 'true'
         run: |
           cargo install --quiet --version 0.9.54 --target "${{ matrix.target }}" cargo-nextest
+      - name: Restore build artifacts cache in target dir
+        id: cache-deps
+        uses: actions/cache/restore@v4
+        with:
+          path: target/
+          key: workflow-${{ matrix.build }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: cargo-check
         run: |
           make -f ./.gitea/Makefile.build cargo-check
+      - if: steps.cache-deps.outputs.cache-hit != 'true'
+        name: Save build artifacts in target dir
+        id: save-cache-deps
+        uses: actions/cache/save@v4
+        with:
+          path: target/
+          key: workflow-${{ matrix.build }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: cargo-test-compiles
         if: success() || failure()
         run: |
