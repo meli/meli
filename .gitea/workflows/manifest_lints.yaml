@@ -42,8 +42,6 @@ jobs:
         run: |
           apt-get update
           apt-get install -y mandoc
-      - name: Find meli MSRV from meli/Cargo.toml.
-        run: echo MELI_MSRV=$(grep -m1 rust-version meli/Cargo.toml | head -n1 | cut -d'"' -f 2 | head -n1) >> $GITHUB_ENV
       - id: rustup-setup
         name: Install Rustup and toolchains
         shell: bash
@@ -53,8 +51,6 @@ jobs:
             source "${HOME}/.cargo/env"
             echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> $GITHUB_PATH
             echo "CARGO_HOME=${CARGO_HOME:-$HOME/.cargo}" >> $GITHUB_ENV
-            rustup toolchain install --profile minimal --component "rustfmt" --target "${{ matrix.target }}" -- "${{ env.MELI_MSRV }}"
-            rustup component add rustfmt --toolchain ${{ env.MELI_MSRV }}-${{ matrix.target }}
             rustup toolchain install --profile minimal --component "rustfmt" --target "${{ matrix.target }}" -- "${{ matrix.rust }}"
             rustup component add rustfmt --toolchain ${{ matrix.rust }}-${{ matrix.target }}
             rustup default ${{ matrix.rust }}
@@ -66,17 +62,10 @@ jobs:
           [build]
           target = "${{ matrix.target }}"
           EOF
-      - if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }} && matrix.target
-        name: Add manifest lint dependencies
+      - name: Add manifest lint dependencies
         run: |
           source "${HOME}/.cargo/env"
           cargo install --quiet --version 1.0.9 --target "${{ matrix.target }}" cargo-sort
-          cargo install --quiet --version 0.15.1 --target "${{ matrix.target }}" cargo-msrv
-      - name: cargo-msrv verify melib MSRV
-        if: success() || failure()
-        run: |
-          source "${HOME}/.cargo/env"
-          make -f ./.gitea/Makefile.manifest-lint cargo-msrv
       - name: cargo-sort
         if: success() || failure()
         run: |

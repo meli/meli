@@ -22,7 +22,7 @@ on:
       - 'Cargo.lock'
 
 jobs:
-  test:
+  lints:
     name: Run lints
     runs-on: ${{ matrix.os }}
     strategy:
@@ -41,13 +41,10 @@ jobs:
         run: |
           apt-get update
           apt-get install -y libdbus-1-dev pkg-config mandoc libssl-dev
-          #- id: cache-rustup
-          #  name: Cache Rust toolchain
-          #  uses: https://github.com/actions/cache@v3
-          #  with:
-          #    path: ~/.rustup
-          #    key: toolchain-${{ matrix.os }}-${{ matrix.rust }}
-          #- if: ${{ steps.cache-rustup.outputs.cache-hit != 'true' }}
+      - name: Find meli MSRV from meli/Cargo.toml.
+        run: |
+          echo MELI_MSRV=$(grep -m1 rust-version meli/Cargo.toml | head -n1 | cut -d'"' -f 2 | head -n1) >> $GITHUB_ENV
+          printf "Rust MSRV is %s\n" $(grep -m1 rust-version meli/Cargo.toml | head -n1 | cut -d'"' -f 2 | head -n1)
       - id: rustup-setup
         name: Install Rustup and toolchains
         shell: bash
@@ -56,23 +53,13 @@ jobs:
             curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused --location --silent --show-error --fail "https://sh.rustup.rs" | sh -s -- --default-toolchain none -y
             source "${HOME}/.cargo/env"
             echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> $GITHUB_PATH
-            rustup toolchain install --profile minimal --component clippy,rustfmt --target ${{ matrix.target }} -- "${{ matrix.rust }}"
+            echo "CARGO_HOME=${CARGO_HOME:-$HOME/.cargo}" >> $GITHUB_ENV
+            rustup toolchain install --profile minimal --component "rustfmt" --target "${{ matrix.target }}" -- "${{ env.MELI_MSRV }}"
+            rustup component add rustfmt --toolchain ${{ env.MELI_MSRV }}-${{ matrix.target }}
+            rustup toolchain install --profile minimal --component clippy,rustfmt --target "${{ matrix.target }}" -- "${{ matrix.rust }}"
+            rustup component add rustfmt --toolchain ${{ matrix.rust }}-${{ matrix.target }}
             rustup default ${{ matrix.rust }}
           fi
-      - name: Configure cargo data directory
-        # After this point, all cargo registry and crate data is stored in
-        # $GITHUB_WORKSPACE/.cargo_home. This allows us to cache only the files
-        # that are needed during the build process. Additionally, this works
-        # around a bug in the 'cache' action that causes directories outside of
-        # the workspace dir to be saved/restored incorrectly.
-        run: echo "CARGO_HOME=$(pwd)/.cargo_home" >> $GITHUB_ENV
-          #- id: cache-cargo
-          #  name: Cache cargo configuration and installations
-          #  uses: https://github.com/actions/cache@v3
-          #  with:
-          #    path: ${{ env.CARGO_HOME }}
-          #    key: cargo-${{ matrix.os }}-${{ matrix.rust }}
-          #- if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }} && matrix.target
       - name: Setup Rust target
         run: |
           mkdir -p "${{ env.CARGO_HOME }}"
@@ -80,29 +67,39 @@ jobs:
           [build]
           target = "${{ matrix.target }}"
           EOF
-      - if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }} && matrix.target
-        name: Add lint dependencies
+      - name: Add lint dependencies
+        shell: bash
         run: |
-          cargo install --quiet --version 1.0.9 --target "${{ matrix.target }}" cargo-sort
+          cargo install --version 0.15.1 --target "${{ matrix.target }}" cargo-msrv
           # "This package is currently implemented using rust-analyzer internals, so cannot be published on crates.io."
           RUSTFLAGS="" cargo install --locked --target "${{ matrix.target }}" --git https://github.com/dcchut/cargo-derivefmt --rev 95da8eee343de4adb25850893873b979258aed7f --bin cargo-derivefmt
+      - name: cargo-msrv verify melib MSRV
+        if: success() || failure()
+        run: |
+          source "${HOME}/.cargo/env"
+          make -f ./.gitea/Makefile.lint cargo-msrv
       - name: rustfmt
         if: success() || failure()
         run: |
+          source "${HOME}/.cargo/env"
           make -f .gitea/Makefile.lint rustfmt
       - name: clippy
         if: success() || failure()
         run: |
+          source "${HOME}/.cargo/env"
           make -f .gitea/Makefile.lint clippy
       - name: cargo-derivefmt melib
         if: success() || failure()
         run: |
+          source "${HOME}/.cargo/env"
           make -f .gitea/Makefile.lint cargo-derivefmt-melib
       - name: cargo-derivefmt meli
         if: success() || failure()
         run: |
+          source "${HOME}/.cargo/env"
           make -f .gitea/Makefile.lint cargo-derivefmt-meli
       - name: cargo-derivefmt tools
         if: success() || failure()
         run: |
+          source "${HOME}/.cargo/env"
           make -f .gitea/Makefile.lint cargo-derivefmt-tools

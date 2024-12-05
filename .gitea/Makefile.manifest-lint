@@ -12,20 +12,16 @@ RUSTUP_MAX_RETRIES ?= 10
 RUST_BACKTRACE ?= short
 
 .PHONY: all
-all: cargo-msrv cargo-sort check-debian-changelog
-	@printf "All completed.\n"
+all: cargo-sort check-debian-changelog
+	@printf "All checks completed.\n"
 
-.PHONY: cargo-msrv
-cargo-msrv:
-	@printf "cargo-msrv\n"
-	cargo-msrv --output-format json --log-level trace --log-target stdout --path meli verify -- cargo check --all-targets
-	cargo-msrv --output-format json --log-level trace --log-target stdout --path melib verify -- cargo check --all-targets
 .PHONY: cargo-sort
 cargo-sort:
 	@printf "cargo-sort\n"
 	cargo-sort --check --check-format --grouped --order package,bin,lib,dependencies,features,build-dependencies,dev-dependencies,workspace fuzz
 	cargo-sort --check --check-format --grouped --order package,bin,lib,dependencies,features,build-dependencies,dev-dependencies,workspace tools
 	cargo-sort --check --check-format --grouped --order package,bin,lib,dependencies,features,build-dependencies,dev-dependencies,workspace --workspace
+
 .PHONY: check-debian-changelog
 check-debian-changelog:
 	@printf "Check debian/changelog is up-to-date.\n"

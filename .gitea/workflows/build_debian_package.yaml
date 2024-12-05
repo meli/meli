@@ -16,7 +16,7 @@ on:
       - v*
 
 jobs:
-  build:
+  build-debian:
     name: Create debian package
     runs-on: ${{ matrix.os }}
     strategy:
