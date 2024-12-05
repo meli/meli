@@ -11,35 +11,43 @@ RUSTFLAGS ?= -D warnings -W unreachable-pub -W rust-2021-compatibility -C debugi
 RUSTUP_MAX_RETRIES ?= 10
 RUST_BACKTRACE ?= short
 NIGHTLY_EXISTS=`((cargo +nightly 2> /dev/null 1> /dev/null) && echo 0)|| echo 1)`
+GIT=env GIT_CONFIG_GLOBAL="" GIT_CONFIG_SYSTEM="" GIT_CONFIG_NOSYSTEM=1 git
 
 .PHONY: all
 all: rustfmt clippy cargo-derivefmt-melib cargo-derivefmt-meli cargo-derivefmt-tools
-	@printf "All completed.\n"
+	@printf "All checks completed.\n"
 
 .PHONY: rustfmt
 rustfmt:
 	@printf "rustfmt\n"
 	@((if [ "${NIGHTLY_EXISTS}" -eq 0 ]; then printf "running rustfmt with nightly toolchain\n"; else printf "running rustfmt with active toolchain\n"; fi))
 	@((if [ "${NIGHTLY_EXISTS}" -eq 0 ]; then cargo +nightly fmt --check --all; else cargo fmt --check --all; fi))
+
 .PHONY: clippy
 clippy:
 	@printf "clippy\n"
 	cargo clippy --no-deps --all-features --all --tests --examples --benches --bins
+
 .PHONY: cargo-derivefmt-melib
 cargo-derivefmt-melib:
 	@printf "cargo-derivefmt-melib\n"
+	@printf "Checking that derives are sorted alphabetically...\n"
 	cargo derivefmt --manifest-path ./melib/Cargo.toml
-	git checkout meli/src/conf/overrides.rs
-	git add --update ./melib/ && git diff --quiet && git diff --cached --quiet
+	@$(GIT) checkout --quiet meli/src/conf/overrides.rs
+	@($(GIT) diff --quiet ./melib && $(GIT) diff --cached --quiet ./melib && printf "All ./melib derives are sorted alphabetically.\n") || (printf "Some derives in the ./melib crate are not sorted alphabetically, see diff:\n"; $(GIT) diff HEAD)
+
 .PHONY: cargo-derivefmt-meli
 cargo-derivefmt-meli:
 	@printf "cargo-derivefmt-meli\n"
+	@printf "Checking that derives are sorted alphabetically...\n"
 	cargo derivefmt --manifest-path ./meli/Cargo.toml
-	git checkout meli/src/conf/overrides.rs
-	git add --update ./meli/ && git diff --quiet && git diff --cached --quiet
+	@$(GIT) checkout --quiet meli/src/conf/overrides.rs
+	@($(GIT) diff --quiet ./meli && $(GIT) diff --cached --quiet ./meli && printf "All ./meli derives are sorted alphabetically.\n") || (printf "Some derives in the ./meli crate are not sorted alphabetically, see diff:\n"; $(GIT) diff HEAD)
+
 .PHONY: cargo-derivefmt-tools
 cargo-derivefmt-tools:
 	@printf "cargo-derivefmt-tools\n"
+	@printf "Checking that derives are sorted alphabetically...\n"
 	cargo derivefmt --manifest-path ./tools/Cargo.toml
-	git checkout meli/src/conf/overrides.rs
-	git add --update ./tools/ && git diff --quiet && git diff --cached --quiet
+	@$(GIT) checkout --quiet meli/src/conf/overrides.rs
+	@($(GIT) diff --quiet ./tools && $(GIT) diff --cached --quiet ./tools && printf "All ./tools derives are sorted alphabetically.\n") || (printf "Some derives in the ./tools crate are not sorted alphabetically, see diff:\n"; $(GIT) diff HEAD)
