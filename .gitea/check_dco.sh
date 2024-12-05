@@ -15,6 +15,7 @@
 
 export GIT_CONFIG_GLOBAL=""
 export GIT_CONFIG_SYSTEM=""
+export GIT_CONFIG_NOSYSTEM=1
 
 ensure_env_var() {
   set | grep -q "^${1}=" || (printf "Environment variable %s missing from process environment, exiting.\n" "${1}"; exit "${2}")
@@ -32,7 +33,12 @@ contains_signoff() {
 }
 
 get_commit_sha() {
-  git rev-parse "${1}"
+  if OUT=$(git rev-parse "${1}"); then
+    printf "%s" "${OUT}"
+    return
+  fi
+  printf "Could not git-rev-parse %s, falling back to HEAD...\n" "${1}" 1>&2
+  git rev-parse HEAD
 }
 
 echo "Debug workflow info:"
@@ -43,10 +49,14 @@ HEAD_REF=$(get_commit_sha "${GITHUB_HEAD_REF}")
 echo "Processed base ref BASE_REF=${BASE_REF}"
 echo "Processed head ref HEAD_REF=${HEAD_REF}"
 
-RANGE="${BASE_REF}^..${HEAD_REF}"
+RANGE="${BASE_REF}..${HEAD_REF}"
 echo "Range to examine is RANGE=${RANGE}"
 
-SHA_LIST=$(git rev-list "${RANGE}")
+if ! SHA_LIST=$(git rev-list "${RANGE}"); then
+  printf "Could not get commit range %s with git rev-list, bailing out...\n" "${RANGE}"
+  exit 0
+fi
+
 echo "SHA list to examine is SHA_LIST="
 echo "---------------------------------------------------------------------"
 echo "${SHA_LIST}"
