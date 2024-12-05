@@ -20,6 +20,8 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
+use rusty_fork::rusty_fork_test;
+
 use super::*;
 
 #[test]
@@ -60,4 +62,84 @@ fn test_version_migrations_returns_correct_migration() {
         !migrations.is_empty(),
         "Calculated migrations between no version and 0.8.8 are empty",
     );
+}
+
+rusty_fork_test! {
+#[test]
+fn test_version_migrations_ignores_newer_version() {
+    const MAX: VersionIdentifier = VersionIdentifier {
+        string: "255.255.255",
+        major: u8::MAX,
+        minor: u8::MAX,
+        patch: u8::MAX,
+        pre: "",
+    };
+    let tempdir = tempfile::tempdir().unwrap();
+    for var in [
+        "MELI_CONFIG",
+        "HOME",
+        "XDG_CACHE_HOME",
+        "XDG_STATE_HOME",
+        "XDG_CONFIG_DIRS",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_DIRS",
+        "XDG_DATA_HOME",
+    ] {
+        std::env::remove_var(var);
+    }
+    std::env::set_var("HOME", tempdir.path());
+    std::env::set_var("XDG_DATA_HOME", tempdir.path());
+    let version_file = version_file().unwrap();
+    std::fs::write(&version_file, MAX.as_str()).unwrap();
+    let config_path = tempdir.path().join("meli.toml");
+    std::env::set_var("MELI_CONFIG", config_path.as_path());
+    std::fs::write(&config_path,
+br#"
+[accounts.imap]
+root_mailbox = "INBOX"
+format = "imap"
+send_mail = 'false'
+identity="username@example.com"
+server_username = "null"
+server_hostname = "example.com"
+server_password_command = "false"
+"#).unwrap();
+
+    {
+        let mut stdout = vec![];
+        let mut stdin = &b"y\n"[..];
+        let mut stdin_buf_reader = std::io::BufReader::new(&mut stdin);
+        version_setup(&config_path, &mut stdout, &mut stdin_buf_reader).unwrap();
+        let expected_output = format!("This version of meli, {latest}, appears to be older than the previously used one stored in the file {version_file}: {max_version}.\nCertain configuration options might not be compatible with this version, refer to release changelogs if you need to troubleshoot configuration options problems.\nUpdate .version file to make this warning go away? (CAUTION: current configuration and stored data might not be compatible with this version!!) [y/N] ", latest = LATEST.as_str(), version_file = version_file.display(), max_version = MAX.as_str());
+        assert_eq!(String::from_utf8_lossy(&stdout).as_ref(), &expected_output);
+        assert_eq!(stdin_buf_reader.buffer(), b"");
+        let updated_version =
+            std::fs::read_to_string(&version_file).unwrap();
+        assert_eq!(updated_version.trim(), LATEST.as_str());
+    }
+    {
+        use std::io::BufRead;
+
+        let mut stdout = vec![];
+        let mut stdin = &b"N\n"[..];
+        let mut stdin_buf_reader = std::io::BufReader::new(&mut stdin);
+
+        version_setup(&config_path, &mut stdout, &mut stdin_buf_reader).unwrap();
+        assert_eq!(String::from_utf8_lossy(&stdout).as_ref(), "");
+        assert_eq!(stdin_buf_reader.fill_buf().unwrap(), b"N\n");
+    }
+    {
+        std::fs::write(&version_file, MAX.as_str()).unwrap();
+        let mut stdout = vec![];
+        let mut stdin = &b"n\n"[..];
+        let mut stdin_buf_reader = std::io::BufReader::new(&mut stdin);
+        version_setup(&config_path, &mut stdout, &mut stdin_buf_reader).unwrap();
+        let expected_output = format!("This version of meli, {latest}, appears to be older than the previously used one stored in the file {version_file}: {max_version}.\nCertain configuration options might not be compatible with this version, refer to release changelogs if you need to troubleshoot configuration options problems.\nUpdate .version file to make this warning go away? (CAUTION: current configuration and stored data might not be compatible with this version!!) [y/N] ", latest = LATEST.as_str(), version_file = version_file.display(), max_version = MAX.as_str());
+        assert_eq!(String::from_utf8_lossy(&stdout).as_ref(), &expected_output);
+        assert_eq!(stdin_buf_reader.buffer(), b"");
+        let stored_version =
+            std::fs::read_to_string(&version_file).unwrap();
+        assert_eq!(stored_version.trim(), MAX.as_str());
+    }
+}
 }

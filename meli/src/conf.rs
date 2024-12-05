@@ -338,7 +338,11 @@ impl FileSettings {
                 path_string
             ));
             #[cfg(not(test))]
-            if ask.run() {
+            let mut stdout = std::io::stdout();
+            #[cfg(not(test))]
+            let stdin = std::io::stdin();
+            #[cfg(not(test))]
+            if ask.run(&mut stdout, &mut stdin.lock()) {
                 create_config_file(&config_path)?;
                 return Err(
                     Error::new("Edit the sample configuration and relaunch meli.")
@@ -353,7 +357,9 @@ impl FileSettings {
             );
         }
 
-        crate::version_migrations::version_setup(&config_path)?;
+        let mut stdout = std::io::stdout();
+        let stdin = std::io::stdin();
+        crate::version_migrations::version_setup(&config_path, &mut stdout, &mut stdin.lock())?;
         Self::validate(config_path, false)
     }
 

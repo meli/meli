@@ -197,7 +197,10 @@ decl_version_mods! {
     v0_8_9::V0_8_9_ID => v0_8_9::V0_8_9
 }
 
-use std::{cmp::Ordering, path::Path};
+use std::{
+    cmp::Ordering,
+    path::{Path, PathBuf},
+};
 
 use indexmap::{self, IndexMap};
 use melib::{error::*, log};
@@ -344,139 +347,188 @@ impl std::fmt::Debug for dyn Migration + Send + Sync {
     }
 }
 
+/// Return the path to the `.version` file, a plain text file that contains the
+/// version of meli that "owns" the configuration and data files.
+pub fn version_file() -> Result<PathBuf> {
+    let xdg_dirs = xdg::BaseDirectories::with_prefix("meli")?;
+    Ok(xdg_dirs.place_data_file(".version")?)
+}
+
 /// Inspect current/previous version setup, perform migrations if necessary,
 /// etc.
-pub fn version_setup(config: &Path) -> Result<()> {
-    if let Ok(xdg_dirs) = xdg::BaseDirectories::with_prefix("meli") {
-        let version_file = match xdg_dirs.place_data_file(".version") {
-            Ok(v) => v,
-            Err(err) => {
-                log::debug!(
-                    "Could not place file with version metadata, .version, in your \
-                     ${{XDG_DATA_HOME}}: {}",
-                    err
-                );
-                return Ok(());
-            }
-        };
-        let stored_version = if !version_file.try_exists().unwrap_or(false) {
-            None
-        } else {
-            let mut stored_version =
-                std::fs::read_to_string(&version_file).chain_err_related_path(&version_file)?;
-            while stored_version.ends_with(['\r', '\n', ' ', '\t']) {
-                stored_version.pop();
-            }
-            if LATEST.as_str() == stored_version {
-                return Ok(());
-            }
-            Some(stored_version)
-        };
-        let version_map = versions();
-        let migrations = calculate_migrations(stored_version.as_deref(), version_map);
-        if !migrations.is_empty() {
-            if let Some(prev) = stored_version {
-                println!(
+pub fn version_setup(
+    config: &Path,
+    writer: &mut impl std::io::Write,
+    reader: &mut impl std::io::BufRead,
+) -> Result<()> {
+    let version_file = match version_file() {
+        Ok(v) => v,
+        Err(err) => {
+            log::debug!(
+                "Could not place file with version metadata, .version, in your \
+                 ${{XDG_DATA_HOME}}: {}",
+                err
+            );
+            return Ok(());
+        }
+    };
+    let stored_version = if !version_file.try_exists().unwrap_or(false) {
+        None
+    } else {
+        let mut stored_version =
+            std::fs::read_to_string(&version_file).chain_err_related_path(&version_file)?;
+        while stored_version.ends_with(['\r', '\n', ' ', '\t']) {
+            stored_version.pop();
+        }
+        if LATEST.as_str() == stored_version {
+            return Ok(());
+        }
+        Some(stored_version)
+    };
+    let version_map = versions();
+    let migrations = calculate_migrations(stored_version.as_deref(), version_map);
+    if !migrations.is_empty() {
+        if let Some(prev) = stored_version {
+            if prev.as_str() < LATEST.as_str() {
+                writeln!(
+                    writer,
                     "meli appears updated; file {} contains the value {:?} and the latest version \
                      is {}",
                     version_file.display(),
                     prev,
                     LATEST
-                );
+                )?;
+                writer.flush()?;
             } else {
-                // Check if any migrations are applicable; they might not be any (for example if
-                // user runs meli for the first time).
-                if !migrations.iter().any(|(_, migrs)| {
-                    migrs
-                        .iter()
-                        .any(|migr| migr.is_applicable(config) != Some(false))
-                }) {
-                    log::info!(
-                        "Creating version info file {} with value {}",
-                        version_file.display(),
-                        LATEST
-                    );
-                    std::fs::write(&version_file, LATEST.as_str())
-                        .chain_err_related_path(&version_file)?;
-                    return Ok(());
-                }
-                println!(
-                    "meli appears updated; version file {} was not found and there are potential \
-                     migrations to be made.",
-                    version_file.display()
-                );
-            }
-            println!(
-                "You might need to migrate your configuration data for the new version to \
-                 work.\nYou can skip any changes you don't want to happen and you can quit at any \
-                 time."
-            );
-            println!(
-                "{} migration{} {} about to be performed:",
-                migrations.len(),
-                if migrations.len() == 1 { "" } else { "s" },
-                if migrations.len() == 1 { "is" } else { "are" }
-            );
-            for (vers, migrs) in &migrations {
-                for m in migrs {
-                    println!("v{}/{}: {}", vers, m.id(), m.description());
-                }
-            }
-            let ask = Ask::new(format!(
-                "Perform {} migration{}?",
-                migrations.len(),
-                if migrations.len() == 1 { "" } else { "s" }
-            ));
-            if !ask.run() {
-                let ask = Ask::new("Update .version file despite not attempting migrations?")
-                    .yes_by_default(false);
-                if ask.run() {
+                writeln!(
+                    writer,
+                    "This version of meli, {}, appears to be older than the previously used one \
+                     stored in the file {}: {}.",
+                    LATEST,
+                    version_file.display(),
+                    prev,
+                )?;
+                writeln!(
+                    writer,
+                    "Certain configuration options might not be compatible with this version, \
+                     refer to release changelogs if you need to troubleshoot configuration \
+                     options problems."
+                )?;
+                writer.flush()?;
+                let ask = Ask::new(
+                    "Update .version file to make this warning go away? (CAUTION: current \
+                     configuration and stored data might not be compatible with this version!!)",
+                )
+                .yes_by_default(false);
+                if ask.run(writer, reader) {
                     std::fs::write(&version_file, LATEST.as_str())
                         .chain_err_related_path(&version_file)?;
                     return Ok(());
                 }
                 return Ok(());
             }
-            let mut perform_history: Vec<Box<dyn Migration + 'static>> = vec![];
-            for (vers, migrs) in migrations {
-                println!("Updating to {}...", vers);
-                'migrations: for m in migrs {
-                    let ask = Ask::new(m.question());
-                    if ask.run() {
-                        if let Err(err) = m.perform(config, false, true) {
-                            println!("\nCould not perform migration: {}", err);
-                            let ask = Ask::new("Continue?");
-                            if ask.run() {
-                                continue 'migrations;
-                            }
-                            if !perform_history.is_empty() {
-                                let ask =
-                                    Ask::new("Undo already performed migrations before exiting?")
-                                        .without_default();
-                                if ask.run() {
-                                    while let Some(m) = perform_history.pop() {
-                                        print!("Undoing {}...", m.id());
-                                        if let Err(err) = m.revert(config, false, true) {
-                                            println!(
-                                                " [ERROR] could not revert migration: {}",
-                                                err
-                                            );
-                                        } else {
-                                            println!(" [OK]");
-                                        }
+        } else {
+            // Check if any migrations are applicable; they might not be any (for example if
+            // user runs meli for the first time).
+            if !migrations.iter().any(|(_, migrs)| {
+                migrs
+                    .iter()
+                    .any(|migr| migr.is_applicable(config) != Some(false))
+            }) {
+                log::info!(
+                    "Creating version info file {} with value {}",
+                    version_file.display(),
+                    LATEST
+                );
+                std::fs::write(&version_file, LATEST.as_str())
+                    .chain_err_related_path(&version_file)?;
+                return Ok(());
+            }
+            writeln!(
+                writer,
+                "meli appears updated; version file {} was not found and there are potential \
+                 migrations to be made.",
+                version_file.display()
+            )?;
+            writer.flush()?;
+        }
+        writeln!(
+            writer,
+            "You might need to migrate your configuration data for the new version to work.\nYou \
+             can skip any changes you don't want to happen and you can quit at any time."
+        )?;
+        writeln!(
+            writer,
+            "{} migration{} {} about to be performed:",
+            migrations.len(),
+            if migrations.len() == 1 { "" } else { "s" },
+            if migrations.len() == 1 { "is" } else { "are" }
+        )?;
+        for (vers, migrs) in &migrations {
+            for m in migrs {
+                writeln!(writer, "v{}/{}: {}", vers, m.id(), m.description())?;
+            }
+        }
+        writer.flush()?;
+        let ask = Ask::new(format!(
+            "Perform {} migration{}?",
+            migrations.len(),
+            if migrations.len() == 1 { "" } else { "s" }
+        ));
+        if !ask.run(writer, reader) {
+            let ask = Ask::new("Update .version file despite not attempting migrations?")
+                .yes_by_default(false);
+            if ask.run(writer, reader) {
+                std::fs::write(&version_file, LATEST.as_str())
+                    .chain_err_related_path(&version_file)?;
+                return Ok(());
+            }
+            return Ok(());
+        }
+        let mut perform_history: Vec<Box<dyn Migration + 'static>> = vec![];
+        for (vers, migrs) in migrations {
+            writeln!(writer, "Updating to {}...", vers)?;
+            writer.flush()?;
+            'migrations: for m in migrs {
+                let ask = Ask::new(m.question());
+                if ask.run(writer, reader) {
+                    if let Err(err) = m.perform(config, false, true) {
+                        writeln!(writer, "\nCould not perform migration: {}", err)?;
+                        writer.flush()?;
+                        let ask = Ask::new("Continue?");
+                        if ask.run(writer, reader) {
+                            continue 'migrations;
+                        }
+                        if !perform_history.is_empty() {
+                            let ask = Ask::new("Undo already performed migrations before exiting?")
+                                .without_default();
+                            if ask.run(writer, reader) {
+                                while let Some(m) = perform_history.pop() {
+                                    write!(writer, "Undoing {}...", m.id())?;
+                                    writer.flush()?;
+                                    if let Err(err) = m.revert(config, false, true) {
+                                        writeln!(
+                                            writer,
+                                            " [ERROR] could not revert migration: {}",
+                                            err
+                                        )?;
+                                    } else {
+                                        writeln!(writer, " [OK]")?;
                                     }
+                                    writer.flush()?;
                                 }
                             }
-                            return Ok(());
                         }
-                        println!("v{}/{} [OK]", vers, m.id());
-                        perform_history.push(m);
+                        return Ok(());
                     }
+                    writeln!(writer, "v{}/{} [OK]", vers, m.id())?;
+                    writer.flush()?;
+                    perform_history.push(m);
                 }
             }
         }
-        std::fs::write(&version_file, LATEST.as_str()).chain_err_related_path(&version_file)?;
     }
+    std::fs::write(&version_file, LATEST.as_str()).chain_err_related_path(&version_file)?;
 
     Ok(())
 }

@@ -36,10 +36,7 @@ pub mod embedded;
 mod tests;
 pub mod text_editing;
 
-use std::{
-    borrow::Cow,
-    io::{BufRead, Write},
-};
+use std::borrow::Cow;
 
 pub use braille::BraillePixelIter;
 pub use screen::{Area, Screen, ScreenGeneration, StateStdout, Tty, Virtual};
@@ -450,10 +447,8 @@ impl<'m> Ask<'m> {
         }
     }
 
-    pub fn run(self) -> bool {
+    pub fn run(self, writer: &mut impl std::io::Write, reader: &mut impl std::io::BufRead) -> bool {
         let mut buffer = String::new();
-        let stdin = std::io::stdin();
-        let mut handle = stdin.lock();
 
         let default = match self.default {
             None => "y/n",
@@ -461,11 +456,11 @@ impl<'m> Ask<'m> {
             Some(false) => "y/N",
         };
 
-        print!("{} [{default}] ", self.message.as_ref());
-        let _ = std::io::stdout().flush();
+        _ = write!(writer, "{} [{default}] ", self.message.as_ref());
+        _ = writer.flush();
         loop {
             buffer.clear();
-            handle
+            reader
                 .read_line(&mut buffer)
                 .expect("Could not read from stdin.");
 
@@ -478,8 +473,8 @@ impl<'m> Ask<'m> {
                     return false;
                 }
                 _ => {
-                    print!("\n{} [{default}] ", self.message.as_ref());
-                    let _ = std::io::stdout().flush();
+                    _ = write!(writer, "\n{} [{default}] ", self.message.as_ref());
+                    _ = writer.flush();
                 }
             }
         }
