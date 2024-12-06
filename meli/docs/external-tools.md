@@ -119,3 +119,32 @@ The HTML of the e-mail is piped into `html_filter`'s standard input.
 If your account's syncing is handled by an external tool, you can use the 
 refresh shortcuts within `meli` to call this tool with 
 `accounts.refresh_command`.
+
+## Viewing binary attachments such as images inside your terminal
+
+If you have a specific terminal tool that lets you pipe binary data to it and
+it outputs command suitable for the terminal, you can use the `pipe-attachment`
+command to view/preview attachments without leaving `meli` or opening a GUI app.
+
+This requires the output to be interactive otherwise `meli` will run the tool
+and immediately return, probably too quickly for you to notice the output in
+your terminal. A general solution is to pipe the output to an interactive pager
+like `less` which requires the user to exit it interactively.
+
+The [`chafa`] tool can be used for images in this example:
+
+Write a wrapper script that outputs the tool's output into a pager, for example
+`less`. If the output contains ANSI escape codes (i.e. colors, or bold/italic
+text) make sure to use `less -r` to preserve those codes.
+
+```sh
+#!/bin/sh
+
+/bin/chafa "$@" | less -r
+```
+
+Save it somewhere as a file with executable permissions and you can use
+`pipe-attachment 1 /path/to/your/chafa/wrapper` to view the first attachment as
+an image with [`chafa`].
+
+[`chafa`]: https://hpjansson.org/chafa/

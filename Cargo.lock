@@ -1172,7 +1172,7 @@ dependencies = [
 
 [[package]]
 name = "meli"
-version = "0.8.9"
+version = "0.8.10"
 dependencies = [
  "aho-corasick",
  "assert_cmd",
@@ -1210,7 +1210,7 @@ dependencies = [
 
 [[package]]
 name = "melib"
-version = "0.8.9"
+version = "0.8.10"
 dependencies = [
  "async-fn-stream",
  "async-io",

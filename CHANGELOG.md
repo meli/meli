@@ -21,6 +21,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- ### Miscellaneous Tasks -->
 
+## [v0.8.10] - 2024-12-06
+
+Highlights:
+
+- added `pipe-attachment` command
+- added sample scripts for using `meli` as a `mailto` scheme handler in `contrib/`
+- fixed GPG encryption with libgpgme
+
+Contributors in alphabetical order:
+
+- Manos Pitsidianakis
+- Matthias Geiger
+
+### Added
+
+- [**`5e77821f`**](https://git.meli-email.org/meli/meli/commit/5e77821f781b9f80f62df0a74f33f899a7cd8d92) `mail/view: add pipe-attachment command` in PR [`#540` "mail/view: add pipe-attachment command"](https://git.meli-email.org/meli/meli/pulls/540)
+- [**`fa896f6b`**](https://git.meli-email.org/meli/meli/commit/fa896f6bb9dccd83952e2db57f78abdf0b514ffe) `contrib: add mailto: scheme handler scripts`
+- [**`00ce9660`**](https://git.meli-email.org/meli/meli/commit/00ce9660ef783289fb35d0c7b23bd164f8f6efda) `melib/backends: add as_any/as_any_mut methods to BackendMailbox`
+- [**`fd243fa5`**](https://git.meli-email.org/meli/meli/commit/fd243fa5abfbee704f480caef0831269a65f2762) `maildir: add mailbox creation tests`
+- [**`de65eec3`**](https://git.meli-email.org/meli/meli/commit/de65eec3a9b42e4a82542dc4744f8222bbd5e23b) `meli/accounts: add mailbox_by_path() tests` in PR [`#535` "Rework maildir mailbox path logic, add tests"](https://git.meli-email.org/meli/meli/pulls/535)
+- [**`6b363601`**](https://git.meli-email.org/meli/meli/commit/6b3636013c1e827491f776b0086d28c072cbd518) `melib/gpgme: impl Display for gpgme::Key`
+
+### Bug Fixes
+
+- [**`60c90d75`**](https://git.meli-email.org/meli/meli/commit/60c90d75497be47c3c7d5e6b06fcfc49577f9eaf) `melib/attachments: ensure MIME boundary prefixed with CRLF`
+- [**`3433c5c3`**](https://git.meli-email.org/meli/meli/commit/3433c5c3d5924bfd4d980abce6e9dc0fbac8df87) `compose/pgp: rewrite key selection logic` in PR [`#541` "More gpgme/PGP fixes again"](https://git.meli-email.org/meli/meli/pulls/541)
+- [**`12de82e7`**](https://git.meli-email.org/meli/meli/commit/12de82e7b40b24ebdb53a67e044b3cb9b2150134) `melib/conf: fix mutt_alias_file not being validated` in PR [`#550` "Remove sealed_test dependency"](https://git.meli-email.org/meli/meli/pulls/550)
+- [**`c8e055a7`**](https://git.meli-email.org/meli/meli/commit/c8e055a718703004505ed690f7a3e36fa18d8ada) `Fix version migrations being triggered backwards` in PR [`#557` "Fix version migrations being triggered backwards"](https://git.meli-email.org/meli/meli/pulls/557)
+- [**`efab99fd`**](https://git.meli-email.org/meli/meli/commit/efab99fda24e8b6b22804c3029d757579a3008a6) `terminal: check for NO_COLOR env var without unicode validation`
+- [**`36a63e88`**](https://git.meli-email.org/meli/meli/commit/36a63e8878d9bfdba7994fb193294faa1462fafc) `melib/maildir: rewrite create_mailbox()`
+- [**`fcab855f`**](https://git.meli-email.org/meli/meli/commit/fcab855fdad4af20f52f9f318551c1377fe5fbb6) `view: ensure envelope headers are always populated` in PR [`#538` "view: ensure envelope headers are always populated"](https://git.meli-email.org/meli/meli/pulls/538)
+- [**`84564f44`**](https://git.meli-email.org/meli/meli/commit/84564f44a3c5823e11f1d6097c772667f1c62df2) `mailcap: don't drop File before opening it` in PR [`#552` "mailcap: don't drop File before opening it"](https://git.meli-email.org/meli/meli/pulls/552)
+
+### Changes
+
+- [**`ed85da51`**](https://git.meli-email.org/meli/meli/commit/ed85da51dff4a1de5622bae234381bbbf6603271) `Remove sealed_test dependency`
+
+### Refactoring
+
+- [**`03df2ac1`**](https://git.meli-email.org/meli/meli/commit/03df2ac12894ef11dfb51af1a634ef87a36daa9b) `meli/utilities: add print utilities for tests`
+- [**`18e9d5c1`**](https://git.meli-email.org/meli/meli/commit/18e9d5c148f2126647a8e17713af37d456cce9f8) `conf.rs: impl From<melib::AccountSettings> for AccountConf`
+- [**`1f2fec19`**](https://git.meli-email.org/meli/meli/commit/1f2fec198fb5127fcfc7bd3e1004b496b3be7de8) `Fix 1.83.0 lints` in PR [`#536` "CI: Add action to check for DCO signoffs in PRs"](https://git.meli-email.org/meli/meli/pulls/536)
+- [**`192ecea2`**](https://git.meli-email.org/meli/meli/commit/192ecea2a43363fe2ffc0decefe22a703d8c53ca) `compose/gpg.rs: Fix msrv regression`
+
+### Documentation
+
+- [**`4a61a4b8`**](https://git.meli-email.org/meli/meli/commit/4a61a4b8577c1e33cdcd46cb74a18ddafcf037fb) `melib: include README.md as preamble of crate rustdocs`
+- [**`80e53471`**](https://git.meli-email.org/meli/meli/commit/80e53471786a6986b71d7c8922472cfa5bf5f571) `BUILD.md: move melib specific stuff to melib/README.md`
+- [**`91a17ece`**](https://git.meli-email.org/meli/meli/commit/91a17ece5c7f9651e57929487021fa2ed553d2c6) `melib/README.md: mention sqlite3-static feature`
+- [**`b77a691b`**](https://git.meli-email.org/meli/meli/commit/b77a691b7d6f6373620847f492791fe0c694fa2a) `meli/README.md: Add cargo features section` in PR [`#549` "Document cargo features in READMEs"](https://git.meli-email.org/meli/meli/pulls/549)
+- [**`91dc271d`**](https://git.meli-email.org/meli/meli/commit/91dc271d74e946790aa8a0818cc8c0db9f8fc0bb) `contrib: add a README.md file`
+- [**`2e900be6`**](https://git.meli-email.org/meli/meli/commit/2e900be69898c9d734e24ed8e49635d2b1c7a97e) `contrib/README.md: add section about oauth2.py`
+- [**`07812d2c`**](https://git.meli-email.org/meli/meli/commit/07812d2c8581b2292c3755ce5e76d0a521376f08) `contrib/README.md: elaborate a bit about mailto` in PR [`#545` "Add external mailto: handler support via scripts in contrib"](https://git.meli-email.org/meli/meli/pulls/545)
+- [**`e784e8d2`**](https://git.meli-email.org/meli/meli/commit/e784e8d239f948c279200d1b28b2fd0326dfa96f) `scripts: add markdown_doc_lints.py`
+
+### Miscellaneous Tasks
+
+
+### Continuous Integration
+
+- [**`77629851`**](https://git.meli-email.org/meli/meli/commit/776298511bd9c9a868ceecf6eaee93f9df4821fa) `CI: Add action to check for DCO signoffs in PRs`
+- [**`f944ebed`**](https://git.meli-email.org/meli/meli/commit/f944ebed813aaa36c11506a783f951f031e50c25) `CI: Add error msg when cargo-derivefmt check fails`
+- [**`d49344f9`**](https://git.meli-email.org/meli/meli/commit/d49344f9d855fb2d0fa1d74ee7bc74ca1ad974fe) `CI: Move MSRV checks from manifest to lints` in PR [`#553` "ci-workflow-fixes"](https://git.meli-email.org/meli/meli/pulls/553)
+- [**`ece6bfc2`**](https://git.meli-email.org/meli/meli/commit/ece6bfc2ce4daf8a6d7de70bed4a1e7dfbec3ff6) `CI: non-zero exit if cargo-derivefmt-* targets fail`
+- [**`2257b91b`**](https://git.meli-email.org/meli/meli/commit/2257b91b403003a91a9658e139b784d93d7ffe70) `CI: add actions/cache steps` in PR [`#554` "CI: add actions/cache steps"](https://git.meli-email.org/meli/meli/pulls/554)
+- [**`a1c9524f`**](https://git.meli-email.org/meli/meli/commit/a1c9524f7405321f5e8d5ab2490719a327a0789b) `CI: fix check_dco.sh not working with other repos` in PR [`#555` "CI: fix check_dco.sh not working with other repos"](https://git.meli-email.org/meli/meli/pulls/555)
+
 ## [v0.8.9](https://git.meli-email.org/meli/meli/releases/tag/v0.8.9) - 2024-11-27
 
 This is mostly a fixups release.
@@ -1334,3 +1401,4 @@ Notable changes:
 [v0.8.7]: https://git.meli-email.org/meli/meli/releases/tag/v0.8.7
 [v0.8.8]: https://git.meli-email.org/meli/meli/releases/tag/v0.8.8
 [v0.8.9]: https://git.meli-email.org/meli/meli/releases/tag/v0.8.9
+[v0.8.10]: https://git.meli-email.org/meli/meli/releases/tag/v0.8.10

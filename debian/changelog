@@ -1,3 +1,93 @@
+meli (0.8.10-1) bookworm; urgency=low
+
+  Highlights:
+  ===========
+
+  - added pipe-attachment command
+  - added sample scripts for using meli as a mailto scheme handler in
+    contrib/
+  - fixed GPG encryption with libgpgme
+
+  Contributors in alphabetical order:
+  ===================================
+
+  - Manos Pitsidianakis
+  - Matthias Geiger
+
+  Added
+  =====
+
+  - 5e77821f mail/view: add pipe-attachment command in PR #540
+    "mail/view: add pipe-attachment command"
+  - fa896f6b contrib: add mailto: scheme handler scripts
+  - 00ce9660
+    melib/backends: add as_any/as_any_mut methods to BackendMailbox
+  - fd243fa5 maildir: add mailbox creation tests
+  - de65eec3 meli/accounts: add mailbox_by_path() tests in PR #535
+    "Rework maildir mailbox path logic, add tests"
+  - 6b363601 melib/gpgme: impl Display for gpgme::Key
+
+  Bug Fixes
+  =========
+
+  - 60c90d75 melib/attachments: ensure MIME boundary prefixed with CRLF
+  - 3433c5c3 compose/pgp: rewrite key selection logic in PR #541 "More
+    gpgme/PGP fixes again"
+  - 12de82e7 melib/conf: fix mutt_alias_file not being validated in PR
+    #550 "Remove sealed_test dependency"
+  - c8e055a7 Fix version migrations being triggered backwards in PR #557
+    "Fix version migrations being triggered backwards"
+  - efab99fd
+    terminal: check for NO_COLOR env var without unicode validation
+  - 36a63e88 melib/maildir: rewrite create_mailbox()
+  - fcab855f view: ensure envelope headers are always populated in PR
+    #538 "view: ensure envelope headers are always populated"
+  - 84564f44 mailcap: don't drop File before opening it in PR #552
+    "mailcap: don't drop File before opening it"
+
+  Changes
+  =======
+
+  - ed85da51 Remove sealed_test dependency
+
+  Refactoring
+  ===========
+
+  - 03df2ac1 meli/utilities: add print utilities for tests
+  - 18e9d5c1 conf.rs: impl From<melib::AccountSettings> for AccountConf
+  - 1f2fec19 Fix 1.83.0 lints in PR #536 "CI: Add action to check for
+    DCO signoffs in PRs"
+  - 192ecea2 compose/gpg.rs: Fix msrv regression
+
+  Documentation
+  =============
+
+  - 4a61a4b8 melib: include README.md as preamble of crate rustdocs
+  - 80e53471 BUILD.md: move melib specific stuff to melib/README.md
+  - 91a17ece melib/README.md: mention sqlite3-static feature
+  - b77a691b meli/README.md: Add cargo features section in PR #549
+    "Document cargo features in READMEs"
+  - 91dc271d contrib: add a README.md file
+  - 2e900be6 contrib/README.md: add section about oauth2.py
+  - 07812d2c contrib/README.md: elaborate a bit about mailto in PR #545
+    "Add external mailto: handler support via scripts in contrib"
+  - e784e8d2 scripts: add markdown_doc_lints.py
+
+  Continuous Integration
+  ======================
+
+  - 77629851 CI: Add action to check for DCO signoffs in PRs
+  - f944ebed CI: Add error msg when cargo-derivefmt check fails
+  - d49344f9 CI: Move MSRV checks from manifest to lints in PR #553
+    "ci-workflow-fixes"
+  - ece6bfc2 CI: non-zero exit if cargo-derivefmt-* targets fail
+  - 2257b91b CI: add actions/cache steps in PR #554 "CI: add
+    actions/cache steps"
+  - a1c9524f CI: fix check_dco.sh not working with other repos in PR
+    #555 "CI: fix check_dco.sh not working with other repos"
+
+ -- Manos Pitsidianakis <manos@pitsidianak.is>  Fri, 06 Dec 2024 07:03:58 +0200
+
 meli (0.8.9-1) bookworm; urgency=low
 
   This is mostly a fixups release.

@@ -36,7 +36,8 @@ pub type VersionMap = IndexMap<VersionIdentifier, Box<dyn Version + Send + Sync 
 /// # use meli::{decl_version_map, version_migrations::*};
 /// decl_version_map! {
 ///    v0_8_8::V0_8_8_ID => v0_8_8::V0_8_8,
-///    v0_8_9::V0_8_9_ID => v0_8_9::V0_8_9
+///    v0_8_9::V0_8_9_ID => v0_8_9::V0_8_9,
+///    v0_8_10::V0_8_10_ID => v0_8_10::V0_8_10,
 /// }
 /// ```
 ///
@@ -194,7 +195,8 @@ macro_rules! decl_version_mods {
 
 decl_version_mods! {
     v0_8_8::V0_8_8_ID => v0_8_8::V0_8_8,
-    v0_8_9::V0_8_9_ID => v0_8_9::V0_8_9
+    v0_8_9::V0_8_9_ID => v0_8_9::V0_8_9,
+    v0_8_10::V0_8_10_ID => v0_8_10::V0_8_10
 }
 
 use std::{
@@ -207,7 +209,7 @@ use melib::{error::*, log};
 
 use crate::{conf::FileSettings, terminal::Ask};
 
-pub const LATEST: VersionIdentifier = v0_8_9::V0_8_9_ID;
+pub const LATEST: VersionIdentifier = v0_8_10::V0_8_10_ID;
 
 /// An application version identifier.
 #[derive(Clone, Copy, Debug, Eq)]
