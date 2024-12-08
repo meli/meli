@@ -909,17 +909,41 @@ impl AutoComplete {
     }
 }
 
+/// A widget that draws a scrollbar.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// # use meli::{Area, Component, CellBuffer, Context, utilities::ScrollBar};
+/// // Mock `Component::draw` impl
+/// fn draw(grid: &mut CellBuffer, area: Area, context: &mut Context) {
+///     let position = 0;
+///     let visible_rows = area.height();
+///     let scrollbar_area = area.nth_col(area.width());
+///     let total_rows = 100;
+///     ScrollBar::default().set_show_arrows(true).draw(
+///         grid,
+///         scrollbar_area,
+///         context,
+///         position,
+///         visible_rows,
+///         total_rows,
+///     );
+/// }
+/// ```
 #[derive(Clone, Copy, Default)]
 pub struct ScrollBar {
     pub show_arrows: bool,
 }
 
 impl ScrollBar {
+    /// Update `self.show_arrows` field.
     pub fn set_show_arrows(&mut self, new_val: bool) -> &mut Self {
         self.show_arrows = new_val;
         self
     }
 
+    /// Draw `self` vertically.
     pub fn draw(
         &self,
         grid: &mut CellBuffer,
@@ -976,6 +1000,7 @@ impl ScrollBar {
         }
     }
 
+    /// Draw `self` horizontally.
     pub fn draw_horizontal(
         &self,
         grid: &mut CellBuffer,
@@ -1033,6 +1058,82 @@ impl ScrollBar {
     }
 }
 
+/// A widget that displays a customizable progress spinner.
+///
+/// It uses a [`Timer`](crate::jobs::Timer) and each time its timer fires, it
+/// cycles to the next stage of its `kind` sequence.
+///
+/// `kind` is an array of strings/string slices and an
+/// [`Duration` interval](std::time::Duration), and each item represents a stage
+/// or frame of the progress spinner. For example, a
+/// `(Duration::from_millis(130), &["-", "\\", "|", "/"])` value would cycle
+/// through the sequence `-`, `\`, `|`, `/`, `-`, `\`, `|` and so on roughly
+/// every 130 milliseconds.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use std::collections::HashSet;
+///
+/// use meli::{jobs::JobId, utilities::ProgressSpinner, Component, Context, StatusEvent, UIEvent};
+///
+/// struct JobMonitoringWidget {
+///     progress_spinner: ProgressSpinner,
+///     in_progress_jobs: HashSet<JobId>,
+/// }
+///
+/// impl JobMonitoringWidget {
+///     fn new(context: &Context, container: Box<dyn Component>) -> Self {
+///         let mut progress_spinner = ProgressSpinner::new(20, context);
+///         match context.settings.terminal.progress_spinner_sequence.as_ref() {
+///             Some(meli::conf::terminal::ProgressSpinnerSequence::Integer(k)) => {
+///                 progress_spinner.set_kind(*k);
+///             }
+///             Some(meli::conf::terminal::ProgressSpinnerSequence::Custom {
+///                 ref frames,
+///                 ref interval_ms,
+///             }) => {
+///                 progress_spinner.set_custom_kind(frames.clone(), *interval_ms);
+///             }
+///             None => {}
+///         }
+///         Self {
+///             progress_spinner,
+///             in_progress_jobs: Default::default(),
+///         }
+///     }
+///
+///     // Mock `Component::process_event` impl.
+///     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+///         match event {
+///             UIEvent::StatusEvent(StatusEvent::JobCanceled(ref job_id))
+///             | UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id)) => {
+///                 self.in_progress_jobs.remove(job_id);
+///                 if self.in_progress_jobs.is_empty() {
+///                     self.progress_spinner.stop();
+///                 }
+///                 self.progress_spinner.set_dirty(true);
+///                 false
+///             }
+///             UIEvent::StatusEvent(StatusEvent::NewJob(ref job_id)) => {
+///                 if self.in_progress_jobs.is_empty() {
+///                     self.progress_spinner.start();
+///                 }
+///                 self.progress_spinner.set_dirty(true);
+///                 self.in_progress_jobs.insert(*job_id);
+///                 false
+///             }
+///             UIEvent::Timer(_) => {
+///                 if self.progress_spinner.process_event(event, context) {
+///                     return true;
+///                 }
+///                 false
+///             }
+///             _ => false,
+///         }
+///     }
+/// }
+/// ```
 #[derive(Debug)]
 pub struct ProgressSpinner {
     timer: crate::jobs::Timer,
@@ -1120,6 +1221,7 @@ impl ProgressSpinner {
     pub const INTERVAL_MS: u64 = 50;
     const INTERVAL: std::time::Duration = std::time::Duration::from_millis(Self::INTERVAL_MS);
 
+    /// See source code of [`Self::KINDS`].
     pub fn new(kind: usize, context: &Context) -> Self {
         let kind = kind % Self::KINDS.len();
         let width = Self::KINDS[kind]
@@ -1151,10 +1253,12 @@ impl ProgressSpinner {
         }
     }
 
+    #[inline]
     pub fn is_active(&self) -> bool {
         self.active
     }
 
+    /// See source code of [`Self::KINDS`].
     pub fn set_kind(&mut self, kind: usize) {
         self.stage = 0;
         self.width = Self::KINDS[kind % Self::KINDS.len()]
@@ -1197,11 +1301,12 @@ impl ProgressSpinner {
 
 impl std::fmt::Display for ProgressSpinner {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "progress bar")
+        write!(f, "progress spinner")
     }
 }
 
 impl Component for ProgressSpinner {
+    /// Draw current stage, if `self` is dirty.
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.dirty {
             grid.clear_area(area, self.theme_attr);
@@ -1224,6 +1329,7 @@ impl Component for ProgressSpinner {
         }
     }
 
+    /// If the `event` is our timer firing, proceed to next stage.
     fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
         match event {
             UIEvent::Timer(id) if *id == self.timer.id() => {
