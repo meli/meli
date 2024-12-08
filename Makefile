@@ -25,7 +25,7 @@ CARGO_ARGS ?=
 RUSTFLAGS ?= -D warnings -W unreachable-pub -W rust-2021-compatibility
 CARGO_SORT_BIN = cargo-sort
 CARGO_HACK_BIN = cargo-hack
-PRINTF = /usr/bin/printf
+PRINTF := `command -v printf`
 
 # Options
 PREFIX ?= /usr/local
@@ -55,7 +55,8 @@ YELLOW ?= `[ -z $${NO_COLOR+x} ] && ([ -z $${TERM} ] && echo "" || tput setaf 3)
 
 .PHONY: meli
 meli: check-deps
-	${CARGO_BIN} build ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" ${FEATURES} --release --bin meli
+	@echo ${CARGO_BIN} build ${CARGO_ARGS} ${CARGO_COLOR}--target-dir=\""${CARGO_TARGET_DIR}"\" ${FEATURES} --release --bin meli
+	@${CARGO_BIN} build ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" ${FEATURES} --release --bin meli
 
 .PHONY: help
 help:
@@ -75,7 +76,8 @@ help:
 	@echo " - ${BOLD}deb-dist${ANSI_RESET} (builds debian package in the parent directory)"
 	@echo " - ${BOLD}distclean${ANSI_RESET} (cleans distribution build artifacts)"
 	@echo " - ${BOLD}build-rustdoc${ANSI_RESET} (builds rustdoc documentation for all packages in \$$CARGO_TARGET_DIR)"
-	@echo "\nENVIRONMENT variables of interest:"
+	@echo ""
+	@echo "ENVIRONMENT variables of interest:"
 	@$(PRINTF) "* MELI_FEATURES "
 	@[ -z $${MELI_FEATURES+x} ] && echo "unset" || echo "= ${UNDERLINE}"$${MELI_FEATURES}${ANSI_RESET}
 	@$(PRINTF) "* PREFIX "
@@ -89,20 +91,26 @@ help:
 	@$(PRINTF) "* NO_MAN "
 	@[ $${NO_MAN+x} ] && echo "set" || echo "unset"
 	@$(PRINTF) "* NO_COLOR "
-	@[ $${NO_COLOR+x} ] && echo "set" || echo "unset"
+	@([ $${NO_COLOR+x} ] && [ "$${NO_COLOR}" != "" ] && echo "set") || echo "unset"
 	@echo "* CARGO_BIN = ${UNDERLINE}${CARGO_BIN}${ANSI_RESET}"
 	@$(PRINTF) "* CARGO_ARGS "
-	@[ -z $${CARGO_ARGS+x} ] && echo "unset" || echo "= ${UNDERLINE}"$${CARGO_ARGS}${ANSI_RESET}
+	@([ -z "${CARGO_ARGS}" ] && echo "unset") || echo = ${UNDERLINE}${CARGO_ARGS}${ANSI_RESET}
+	@$(PRINTF) "* RUSTFLAGS = "
+	@([ -z "${RUSTFLAGS}" ] && echo "unset") || echo = ${UNDERLINE}${RUSTFLAGS}${ANSI_RESET}
 	@$(PRINTF) "* AUTHOR (for deb-dist) "
 	@[ -z $${AUTHOR+x} ] && echo "unset" || echo "= ${UNDERLINE}"$${AUTHOR}${ANSI_RESET}
 	@echo "* MIN_RUSTC = ${UNDERLINE}${MIN_RUSTC}${ANSI_RESET}"
 	@echo "* VERSION = ${UNDERLINE}${VERSION}${ANSI_RESET}"
 	@echo "* GIT_COMMIT = ${UNDERLINE}${GIT_COMMIT}${ANSI_RESET}"
-	@#@echo "* CARGO_COLOR = ${CARGO_COLOR}"
+	@echo "* CARGO_TARGET_DIR = ${CARGO_TARGET_DIR}"
+	@echo ""
+	@echo "Built-in/binary utilities"
+	@echo "* PRINTF = ${UNDERLINE}${PRINTF}${ANSI_RESET}"
 
 .PHONY: check
 check: check-tagrefs
-	RUSTFLAGS='${RUSTFLAGS}' ${CARGO_BIN} check ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" ${FEATURES} --all --tests --examples --benches --bins
+	@echo RUSTFLAGS=\"'${RUSTFLAGS}'\" ${CARGO_BIN} check ${CARGO_ARGS} ${CARGO_COLOR}--target-dir=\""${CARGO_TARGET_DIR}"\" ${FEATURES} --all --tests --examples --benches --bins
+	@RUSTFLAGS='${RUSTFLAGS}' ${CARGO_BIN} check ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" ${FEATURES} --all --tests --examples --benches --bins
 
 .PHONY: fmt
 fmt:
@@ -111,15 +119,18 @@ fmt:
 
 .PHONY: lint
 lint:
-	RUSTFLAGS='${RUSTFLAGS}' $(CARGO_BIN) clippy --no-deps ${FEATURES} --all --tests --examples --benches --bins
+	@echo RUSTFLAGS=\"'${RUSTFLAGS}'\" $(CARGO_BIN) clippy --no-deps ${FEATURES} --all --tests --examples --benches --bins
+	@RUSTFLAGS='${RUSTFLAGS}' $(CARGO_BIN) clippy --no-deps ${FEATURES} --all --tests --examples --benches --bins
 
 .PHONY: test
 test: test-docs
-	RUSTFLAGS='${RUSTFLAGS}' ${CARGO_BIN} test ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" ${FEATURES} --all --tests --examples --benches --bins
+	@echo RUSTFLAGS=\"'${RUSTFLAGS}'\" ${CARGO_BIN} test ${CARGO_ARGS} ${CARGO_COLOR}--target-dir=\""${CARGO_TARGET_DIR}"\" ${FEATURES} --all --tests --examples --benches --bins
+	@RUSTFLAGS='${RUSTFLAGS}' ${CARGO_BIN} test ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" ${FEATURES} --all --tests --examples --benches --bins
 
 .PHONY: test-docs
 test-docs:
-	RUSTFLAGS='${RUSTFLAGS}' ${CARGO_BIN} test ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" ${FEATURES} --all --doc
+	@echo RUSTFLAGS=\"'${RUSTFLAGS}'\" ${CARGO_BIN} test ${CARGO_ARGS} ${CARGO_COLOR}--target-dir=\""${CARGO_TARGET_DIR}"\" ${FEATURES} --all --doc
+	@RUSTFLAGS='${RUSTFLAGS}' ${CARGO_BIN} test ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" ${FEATURES} --all --doc
 
 .PHONY: test-feature-permutations
 test-feature-permutations:
@@ -204,7 +215,8 @@ deb-dist:
 
 .PHONY: build-rustdoc
 build-rustdoc:
-	RUSTDOCFLAGS="--crate-version ${VERSION}_${GIT_COMMIT}_${DATE}" ${CARGO_BIN} doc ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" --all-features --no-deps --workspace --document-private-items --open
+	@echo RUSTDOCFLAGS=\""--crate-version ${VERSION}_${GIT_COMMIT}_${DATE}"\" ${CARGO_BIN} doc ${CARGO_ARGS} ${CARGO_COLOR}--target-dir=\""${CARGO_TARGET_DIR}"\" --all-features --no-deps --workspace --document-private-items --open
+	@RUSTDOCFLAGS="--crate-version ${VERSION}_${GIT_COMMIT}_${DATE}" ${CARGO_BIN} doc ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" --all-features --no-deps --workspace --document-private-items --open
 
 .PHONY: check-tagrefs
 check-tagrefs:
