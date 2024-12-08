@@ -20,8 +20,11 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
+//! <https://release.meli-email.org/v0.8.10>
+
 use crate::version_migrations::*;
 
+/// <https://release.meli-email.org/v0.8.10>
 pub const V0_8_10_ID: VersionIdentifier = VersionIdentifier {
     string: "0.8.10",
     major: 0,
@@ -30,6 +33,7 @@ pub const V0_8_10_ID: VersionIdentifier = VersionIdentifier {
     pre: "",
 };
 
+/// <https://release.meli-email.org/v0.8.10>
 #[derive(Clone, Copy, Debug)]
 pub struct V0_8_10;
 

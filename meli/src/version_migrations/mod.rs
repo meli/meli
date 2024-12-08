@@ -21,10 +21,70 @@
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
 //! Helping users move to newer `meli` versions.
+//!
+//! # How version information is stored in the filesystem and examined
+//!
+//! On start-up, `meli` checks the contents of `${XDG_DATA_HOME}/meli/.version`
+//! (the "version file") to determine if there has been a version upgrade since
+//! the last time it was launched, if any. Regardless of the version file
+//! existence or its contents, it will write the latest version string as
+//! recorded in the module `const` global [`LATEST`] **unless** the version
+//! file's content match `LATEST`.
+//!
+//! [`LATEST`] is verified to contain the actual version at compile-time using
+//! Cargo's environment variable `CARGO_PKG_VERSION`.
+//!
+//! If the version file does not exist, no migrations need to be performed.
+//!
+//! If the version file is determined to be a previous version,
+//! [`calculate_migrations`] is called which examines every migration in the
+//! version range starting from the previous version up to the latest. If any
+//! migration is applicable, it asks the user interactively whether to perform
+//! them. This happens in [`version_setup`].
+//!
+//! # How `meli` encodes version information statically with types and modules
+//!
+//! Every release **MUST** have a module associated with it. The module
+//! contains:
+//!
+//! - a public [`VersionIdentifier`] `const` item
+//! - a `struct` that represents the version, named by convention `VX_Y_Z[..]`.
+//!   The `struct` definition can be empty (e.g. `pub struct V0_0_1;`). The
+//!   `struct` **MUST** implement the [`Version`] trait, which can be used to
+//!   retrieve the version identifier and the migrations.
+//! - Any number of structs representing migrations, which implement the
+//!   [`Migration`] trait, and which are returned by the [`Version::migrations`]
+//!   method.
+//!
+//! All versions must be stored in an `IndexMap` (type alias [`VersionMap`])
+//! which is retrieved by the function [`versions`].
+//!
+//! # How migrations work
+//!
+//! Migrations are **not** guaranteed to be lossless; stored metadata
+//! information in the filesystem may be lost.
+//!
+//! Migrations can optionally claim they are not applicable, which means they
+//! will be skipped entirely if migrations are to be applied. The check is done
+//! in the [`Migration::is_applicable`] trait method which can opt-in to make
+//! checks in the configuration file.
+//!
+//! Migrations can be performed using the [`Migration::perform`] method, which
+//! can optionally attempt to make a "dry run" application, which can check for
+//! errors but not make any actual changes in the filesystem.
+//!
+//! If a migration can be reverted, it can implement the revert logic in
+//! [`Migration::revert`] which follows the same logic as [`Migration::perform`]
+//! but in reverse. It is not always possible a migration can be reverted, since
+//! migrations are not necessarily lossless.
 
 #[cfg(test)]
 mod tests;
 
+/// A container for [`Version`]s indexed by their [`VersionIdentifier`].
+///
+/// Internally it is returned by the [`versions`] function in this
+/// module.
 pub type VersionMap = IndexMap<VersionIdentifier, Box<dyn Version + Send + Sync + 'static>>;
 
 /// Utility macro to define version module imports and a function `versions() ->
@@ -80,7 +140,10 @@ pub type VersionMap = IndexMap<VersionIdentifier, Box<dyn Version + Send + Sync 
 #[macro_export]
 macro_rules! decl_version_map {
     ($($version_id:path => $m:ident::$v:ident),*$(,)?) => {
-        fn versions() -> &'static VersionMap {
+        /// Return all versions in a [`VersionMap`] container.
+        ///
+        /// The value is lazily initialized on first access.
+        pub fn versions() -> &'static VersionMap {
             use std::sync::OnceLock;
             #[allow(dead_code)]
             const fn const_bytes_cmp(lhs: &[u8], rhs: &[u8]) -> std::cmp::Ordering {
@@ -180,6 +243,8 @@ macro_rules! decl_version_map {
     };
 }
 
+/// Wrapper macro over [`decl_version_map`] that also defines the arguments as
+/// modules.
 macro_rules! decl_version_mods {
     ($($version_id:path => $m:ident::$v:ident),*$(,)?) => {
         $(
@@ -209,9 +274,20 @@ use melib::{error::*, log};
 
 use crate::{conf::FileSettings, terminal::Ask};
 
+/// The latest version as defined in the Cargo manifest file of `meli`.
+///
+/// On compile-time if the `CARGO_PKG_VERSION` environment variable is
+/// available, the macro [`decl_version_map`] asserts that it matches the actual
+/// latest version string.
 pub const LATEST: VersionIdentifier = v0_8_10::V0_8_10_ID;
 
-/// An application version identifier.
+/// An application version identifier with [Semantic Versioning v2.0.0]
+/// semantics.
+///
+/// There's no support for "Build metadata" of the specification since we're not
+/// using those.
+///
+/// [Semantic Versioning v2.0.0]: https://semver.org/spec/v2.0.0.html
 #[derive(Clone, Copy, Debug, Eq)]
 pub struct VersionIdentifier {
     string: &'static str,
@@ -222,6 +298,8 @@ pub struct VersionIdentifier {
 }
 
 impl VersionIdentifier {
+    /// An invalid non-existent release, `v0.0.0`, used for comparison with
+    /// other identifiers.
     pub const NULL: Self = Self {
         string: "0.0.0",
         major: 0,
@@ -262,6 +340,8 @@ impl std::fmt::Display for VersionIdentifier {
     }
 }
 
+/// Compare `(self.major, self.minor, self.patch, self.pre)` fields with another
+/// [`VersionIdentifier`].
 impl Ord for VersionIdentifier {
     fn cmp(&self, other: &Self) -> Ordering {
         (self.major, self.minor, self.patch, self.pre).cmp(&(
@@ -273,6 +353,8 @@ impl Ord for VersionIdentifier {
     }
 }
 
+/// Compare `(self.major, self.minor, self.patch, self.pre)` fields with another
+/// [`VersionIdentifier`].
 impl PartialOrd for VersionIdentifier {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
@@ -351,6 +433,8 @@ impl std::fmt::Debug for dyn Migration + Send + Sync {
 
 /// Return the path to the `.version` file, a plain text file that contains the
 /// version of meli that "owns" the configuration and data files.
+///
+/// The actual path examined is `${XDG_DATA_HOME}/meli/.version`.
 pub fn version_file() -> Result<PathBuf> {
     let xdg_dirs = xdg::BaseDirectories::with_prefix("meli")?;
     Ok(xdg_dirs.place_data_file(".version")?)
@@ -358,6 +442,10 @@ pub fn version_file() -> Result<PathBuf> {
 
 /// Inspect current/previous version setup, perform migrations if necessary,
 /// etc.
+///
+/// This function requires an interactive user session, if stdout is not an
+/// interactive TTY, the process caller must ensure `stdin` contains the
+/// necessary input (`y`, `n`, newline) otherwise this function _blocks_.
 pub fn version_setup(
     config: &Path,
     writer: &mut impl std::io::Write,

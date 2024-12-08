@@ -20,8 +20,11 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
+//! <https://release.meli-email.org/v0.8.8>
+
 use crate::version_migrations::*;
 
+/// <https://release.meli-email.org/v0.8.8>
 pub const V0_8_8_ID: VersionIdentifier = VersionIdentifier {
     string: "0.8.8",
     major: 0,
@@ -30,6 +33,7 @@ pub const V0_8_8_ID: VersionIdentifier = VersionIdentifier {
     pre: "",
 };
 
+/// <https://release.meli-email.org/v0.8.8>
 #[derive(Clone, Copy, Debug)]
 pub struct V0_8_8;
 
@@ -43,6 +47,9 @@ impl Version for V0_8_8 {
     }
 }
 
+/// Rename `addressbook` to `contacts`.
+///
+/// "The storage file for contacts, stored in the application's data folder, was renamed from `addressbook` to `contacts` to better reflect its purpose."
 #[derive(Clone, Copy, Debug)]
 struct AddressbookRename;
 
