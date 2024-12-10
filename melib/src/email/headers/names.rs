@@ -20,6 +20,8 @@
  */
 
 //! E-mail header names. Also referred to as `Fields` in `RFC5322`.
+//!
+//! See [`HeaderName`] for more information.
 #![allow(non_upper_case_globals)]
 
 use std::{
@@ -37,29 +39,20 @@ use smallvec::SmallVec;
 use super::standards::StandardHeader;
 use crate::email::parser::BytesExt;
 
-bitflags! {
-    #[derive(Default, Serialize, Deserialize)]
-    pub struct Protocol: u32 {
-        const None    =  0b00000001;
-        const Mail    =  Self::None.bits() << 1;
-        const NNTP    =  Self::Mail.bits() << 1;
-        const MIME    =  Self::NNTP.bits() << 1;
-        const Mbox    =  Self::MIME.bits() << 1;
-    }
-}
-
 /// Case insensitive owned wrapper for a header name.
-/// As of `RFC5322` it's guaranteed to be ASCII.
+///
+/// Because it is implementing [RFC5322], it's guaranteed to be ASCII.
+/// It also guarantees it does not follow any bytes not allowed in header names
+/// by [RFC5322]. See [`HEADER_CHARS`] for more information.
+///
+/// Internally, it only allocates if the header name value is not one statically
+/// encoded in the [`StandardHeader`] struct. See its definition for possible
+/// standard header name values.
+///
+/// [RFC5322]: https://datatracker.ietf.org/doc/html/rfc5322
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct HeaderName {
     pub(super) inner: Repr<Custom>,
-}
-
-impl Custom {
-    fn as_str(&self) -> &str {
-        // SAFETY: it's always a valid ASCII string when created.
-        unsafe { std::str::from_utf8_unchecked(&self.0) }
-    }
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -77,11 +70,19 @@ impl<T: std::fmt::Display> std::fmt::Display for Repr<T> {
     }
 }
 
-// Used to hijack the Hash impl
+/// Wrapper type used to hijack the Hash impl
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) struct Custom(pub(super) SmallVec<[u8; 32]>);
+pub(super) struct Custom(SmallVec<[u8; 32]>);
 
-/// A possible error when converting a `HeaderName` from another type.
+impl Custom {
+    #[inline]
+    fn as_str(&self) -> &str {
+        // SAFETY: it's always a valid ASCII string when created.
+        unsafe { std::str::from_utf8_unchecked(&self.0) }
+    }
+}
+
+/// A possible error when converting into a [`HeaderName`] from another type.
 pub struct InvalidHeaderName;
 
 impl Error for InvalidHeaderName {}
@@ -100,7 +101,11 @@ impl std::fmt::Display for InvalidHeaderName {
 
 /// Valid header name ASCII bytes
 ///
+/// The index of an ASCII byte corresponds to the byte value itself, or the
+/// `NUL` byte -zero- if it's not a valid header name character.
+///
 /// Source: [RFC5322 3.6.8.](https://datatracker.ietf.org/doc/html/rfc5322#autoid-35)
+///
 /// ```text
 /// field-name      =   1*ftext
 ///
@@ -108,7 +113,7 @@ impl std::fmt::Display for InvalidHeaderName {
 ///                     %d59-126           ;  characters not including
 ///                                        ;  ":".
 /// ```
-const HEADER_CHARS: [u8; 128] = [
+pub const HEADER_CHARS: [u8; 128] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //   x
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //  1x
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //  2x
@@ -157,6 +162,17 @@ impl HeaderName {
         self.to_string().into_bytes()
     }
 
+    /// Checks `src` byte slice for invalid header bytes, according to
+    /// [RFC5322].
+    ///
+    /// As an optimization, if `src` corresponds to a *standard* e-mail header
+    /// we know about, as encoded in the [`StandardHeader`] type, the parsed
+    /// return value does not allocate.
+    ///
+    /// For information over which header bytes are invalid, see documentation
+    /// module constant [`HEADER_CHARS`] and its source code.
+    ///
+    /// [RFC5322]: https://datatracker.ietf.org/doc/html/rfc5322#autoid-35
     pub fn from_bytes(src: &[u8]) -> Result<Self, InvalidHeaderName> {
         if let Some(std) = StandardHeader::from_bytes(src.trim()) {
             Ok(Self {
@@ -165,11 +181,10 @@ impl HeaderName {
         } else {
             let mut buf = SmallVec::<[u8; 32]>::new();
             for b in src {
-                if let Some(b) = HEADER_CHARS.get(*b as usize).filter(|b| **b != 0) {
-                    buf.push(*b);
-                } else {
+                let Some(b) = HEADER_CHARS.get(*b as usize).filter(|b| **b != 0) else {
                     return Err(InvalidHeaderName::new());
-                }
+                };
+                buf.push(*b);
             }
 
             Ok(Self {
@@ -178,6 +193,7 @@ impl HeaderName {
         }
     }
 
+    #[inline]
     pub const fn is_standard(&self) -> bool {
         matches!(
             self,
@@ -188,38 +204,48 @@ impl HeaderName {
     }
 }
 
+/// Turn a [`&str`] to a [`HeaderName`], if it does not contain any invalid
+/// bytes.
+///
+/// It uses [`HeaderName::from_bytes`] internally.
 impl FromStr for HeaderName {
     type Err = InvalidHeaderName;
 
+    #[inline]
     fn from_str(s: &str) -> Result<Self, InvalidHeaderName> {
         Self::from_bytes(s.as_bytes()).map_err(|_| InvalidHeaderName::new())
     }
 }
 
 impl AsRef<str> for HeaderName {
+    #[inline]
     fn as_ref(&self) -> &str {
         self.as_str()
     }
 }
 
 impl AsRef<[u8]> for HeaderName {
+    #[inline]
     fn as_ref(&self) -> &[u8] {
         self.as_str().as_bytes()
     }
 }
 
 impl Borrow<str> for HeaderName {
+    #[inline]
     fn borrow(&self) -> &str {
         self.as_str()
     }
 }
 
 impl std::fmt::Display for HeaderName {
+    #[inline]
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(fmt, "{}", &self.inner)
     }
 }
 
+/// Implement [`Deserialize`] from either a string value or a byte sequence.
 impl<'de> Deserialize<'de> for HeaderName {
     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
@@ -243,6 +269,7 @@ impl<'de> Deserialize<'de> for HeaderName {
     }
 }
 
+/// Serialize [`HeaderName`] to a string value.
 impl Serialize for HeaderName {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
@@ -258,12 +285,15 @@ impl InvalidHeaderName {
     }
 }
 
+/// Convert a [`HeaderName`] reference to an owned one by cloning.
 impl<'a> From<&'a Self> for HeaderName {
     fn from(src: &'a Self) -> Self {
         src.clone()
     }
 }
 
+/// Convert a [`HeaderName`] reference to a `'static` [`std::borrow::Cow`]
+/// string slice.
 impl From<&HeaderName> for Cow<'static, str> {
     fn from(src: &HeaderName) -> Self {
         match src.inner {
@@ -273,6 +303,10 @@ impl From<&HeaderName> for Cow<'static, str> {
     }
 }
 
+/// Turn a [`&str`] to a [`HeaderName`], if it does not contain any invalid
+/// bytes.
+///
+/// It uses [`HeaderName::from_bytes`] internally.
 impl<'a> TryFrom<&'a str> for HeaderName {
     type Error = InvalidHeaderName;
     #[inline]
@@ -281,6 +315,10 @@ impl<'a> TryFrom<&'a str> for HeaderName {
     }
 }
 
+/// Turn a &String to a [`HeaderName`], if it does not contain any invalid
+/// bytes.
+///
+/// It uses [`HeaderName::from_bytes`] internally.
 impl<'a> TryFrom<&'a String> for HeaderName {
     type Error = InvalidHeaderName;
     #[inline]
@@ -289,6 +327,10 @@ impl<'a> TryFrom<&'a String> for HeaderName {
     }
 }
 
+/// Turn a [`&[u8]`] to a [`HeaderName`], if it does not contain any invalid
+/// bytes.
+///
+/// It uses [`HeaderName::from_bytes`] internally.
 impl<'a> TryFrom<&'a [u8]> for HeaderName {
     type Error = InvalidHeaderName;
     #[inline]
@@ -297,6 +339,10 @@ impl<'a> TryFrom<&'a [u8]> for HeaderName {
     }
 }
 
+/// Turn a [`String`] to a [`HeaderName`], if it does not contain any invalid
+/// bytes.
+///
+/// It uses [`HeaderName::from_bytes`] internally.
 impl TryFrom<String> for HeaderName {
     type Error = InvalidHeaderName;
 
@@ -306,6 +352,10 @@ impl TryFrom<String> for HeaderName {
     }
 }
 
+/// Turn a [`Vec<u8>`] to a [`HeaderName`], if it does not contain any invalid
+/// bytes.
+///
+/// It uses [`HeaderName::from_bytes`] internally.
 impl TryFrom<Vec<u8>> for HeaderName {
     type Error = InvalidHeaderName;
 
@@ -333,6 +383,7 @@ impl From<Custom> for HeaderName {
     }
 }
 
+/// Performs a case-insensitive comparison.
 impl<'a> PartialEq<&'a Self> for HeaderName {
     #[inline]
     fn eq(&self, other: &&'a Self) -> bool {
@@ -340,6 +391,7 @@ impl<'a> PartialEq<&'a Self> for HeaderName {
     }
 }
 
+/// Performs a case-insensitive comparison.
 impl PartialEq<HeaderName> for &HeaderName {
     #[inline]
     fn eq(&self, other: &HeaderName) -> bool {
@@ -347,6 +399,7 @@ impl PartialEq<HeaderName> for &HeaderName {
     }
 }
 
+/// Performs a case-insensitive comparison.
 impl PartialEq<str> for HeaderName {
     /// Performs a case-insensitive comparison of the string against the header
     /// name
@@ -366,6 +419,7 @@ impl PartialEq<str> for HeaderName {
     }
 }
 
+/// Performs a case-insensitive comparison.
 impl PartialEq<HeaderName> for str {
     /// Performs a case-insensitive comparison of the string against the header
     /// name
@@ -391,18 +445,16 @@ impl PartialEq<HeaderName> for str {
     }
 }
 
+/// Performs a case-insensitive comparison.
 impl<'a> PartialEq<&'a str> for HeaderName {
-    /// Performs a case-insensitive comparison of the string against the header
-    /// name
     #[inline]
     fn eq(&self, other: &&'a str) -> bool {
         *self == **other
     }
 }
 
+/// Performs a case-insensitive comparison.
 impl PartialEq<HeaderName> for &str {
-    /// Performs a case-insensitive comparison of the string against the header
-    /// name
     #[inline]
     fn eq(&self, other: &HeaderName) -> bool {
         *other == *self
@@ -417,6 +469,7 @@ impl Hash for Custom {
         }
     }
 }
+
 const UPPERCASE_TOKENS: &[&str] = &[
     "ARC", "DKIM", "DL", "EDIINT", "ID", "IPMS", "MD5", "MIME", "MT", "MTS", "NNTP", "PICS", "RSS",
     "SIO", "SPF", "TLS", "VBR",

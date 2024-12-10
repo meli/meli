@@ -19,7 +19,20 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-//! Wrapper type [`HeaderName`] for case-insensitive comparisons.
+//! Wrapper type [`HeaderName`] and [`HeaderMap`] for case-insensitive
+//! comparisons.
+//!
+//! # Synopsis
+//!
+//! This module provides a container type for headers and their values
+//! ([`HeaderMap`]) and a type to represent header names [`HeaderName`].
+//!
+//! [`HeaderMap`] is a wrapper over [`IndexMap`] makes sure that all key lookups
+//! are case-insensitive by using the [`HeaderName`] type as hash key.
+//!
+//! [`HeaderName`] is a container of bytes that guarantees its contents are a
+//! valid header name as specified by the relevant standards. See its
+//! documentation for more information.
 
 pub mod names;
 pub mod standards;
@@ -27,59 +40,20 @@ pub mod standards;
 mod tests;
 
 use std::{
-    borrow::Borrow,
     cmp::{Eq, PartialEq},
     convert::{TryFrom, TryInto},
-    hash::{Hash, Hasher},
     ops::{Deref, DerefMut},
 };
 
 use indexmap::IndexMap;
-pub use names::{HeaderName, InvalidHeaderName, Protocol};
-pub use standards::{Standard, StandardHeader, Status};
-
-trait HeaderKey {
-    fn to_key(&self) -> &[u8];
-}
-
-impl Hash for dyn HeaderKey + '_ {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        for b in self.to_key().iter() {
-            b.to_ascii_lowercase().hash(state);
-        }
-    }
-}
-
-impl PartialEq for dyn HeaderKey + '_ {
-    #[inline]
-    fn eq(&self, other: &Self) -> bool {
-        self.to_key().eq_ignore_ascii_case(other.to_key())
-    }
-}
-
-impl Eq for dyn HeaderKey + '_ {}
-
-impl HeaderKey for HeaderName {
-    #[inline]
-    fn to_key(&self) -> &[u8] {
-        self.as_lowercase_bytes()
-    }
-}
-
-//Implement Borrow for all the lookup types as returning our trait object:
-
-impl<'a> Borrow<dyn HeaderKey + 'a> for HeaderName {
-    #[inline]
-    fn borrow(&self) -> &(dyn HeaderKey + 'a) {
-        self
-    }
-}
+pub use names::{HeaderName, InvalidHeaderName};
+pub use standards::{Protocol, Standard, StandardHeader, Status};
 
 /// Map of mail headers and values.
 ///
 /// Can be indexed by:
 ///
-/// - `usize`
+/// - `usize` which is the order of insertion.
 /// - `&[u8]`, which panics if it's not a valid header value.
 /// - `&str`, which also panics if it's not a valid header value.
 /// - [`HeaderName`], which is guaranteed to be valid.
@@ -88,6 +62,9 @@ impl<'a> Borrow<dyn HeaderKey + 'a> for HeaderName {
 ///
 /// Except for the above, indexing will also panic if index is out of range or
 /// header key is not present in the map.
+///
+/// For a non-panicking version see [`HeaderMap::get`] and
+/// [`HeaderMap::get_mut`] methods.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct HeaderMap(indexmap::IndexMap<HeaderName, String>);
 
@@ -148,6 +125,11 @@ impl HeaderMap {
     }
 
     #[inline]
+    fn get_mut_inner(&mut self, key: &HeaderName) -> Option<&mut String> {
+        (self.0).get_mut(key)
+    }
+
+    #[inline]
     pub fn get_mut<T: TryInto<HeaderName> + std::fmt::Debug>(
         &mut self,
         key: T,
@@ -156,7 +138,12 @@ impl HeaderMap {
         <T as TryInto<HeaderName>>::Error: std::fmt::Debug,
     {
         let k = key.try_into().ok()?;
-        (self.0).get_mut(&k)
+        self.get_mut_inner(&k)
+    }
+
+    #[inline]
+    fn get_inner(&self, key: &HeaderName) -> Option<&str> {
+        (self.0).get(key).map(|x| x.as_str())
     }
 
     #[inline]
@@ -165,7 +152,12 @@ impl HeaderMap {
         <T as TryInto<HeaderName>>::Error: std::fmt::Debug,
     {
         let k = key.try_into().ok()?;
-        (self.0).get(&k).map(|x| x.as_str())
+        self.get_inner(&k)
+    }
+
+    #[inline]
+    fn contains_key_inner(&self, key: &HeaderName) -> bool {
+        (self.0).contains_key(key)
     }
 
     #[inline]
@@ -175,8 +167,13 @@ impl HeaderMap {
     {
         key.try_into()
             .ok()
-            .map(|k| (self.0).contains_key(&k))
+            .map(|k| self.contains_key_inner(&k))
             .unwrap_or(false)
+    }
+
+    #[inline]
+    fn remove_inner(&mut self, key: &HeaderName) -> Option<String> {
+        (self.0).shift_remove(key)
     }
 
     #[inline]
@@ -184,7 +181,7 @@ impl HeaderMap {
     where
         <T as TryInto<HeaderName>>::Error: std::fmt::Debug,
     {
-        key.try_into().ok().and_then(|k| (self.0).shift_remove(&k))
+        key.try_into().ok().and_then(|k| self.remove_inner(&k))
     }
 
     #[inline]

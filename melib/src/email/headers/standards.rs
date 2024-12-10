@@ -19,7 +19,24 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+//! Standard header names, associated with standards which define them.
+//!
+//! This module exposes the types [`Protocol`], [`Standard`] and
+//! [`StandardHeader`].
+
 use super::names::*;
+
+bitflags! {
+    /// A protocol associated with a standard e-mail header.
+    #[derive(Default, Serialize, Deserialize)]
+    pub struct Protocol: u32 {
+        const None    =  0b00000001;
+        const Mail    =  Self::None.bits() << 1;
+        const NNTP    =  Self::Mail.bits() << 1;
+        const MIME    =  Self::NNTP.bits() << 1;
+        const Mbox    =  Self::MIME.bits() << 1;
+    }
+}
 
 macro_rules! standard_headers {
     (
@@ -28,6 +45,10 @@ macro_rules! standard_headers {
             ($konst:ident, $upcase:ident, $name:literal, $template:expr, $(Protocol::$var:tt)|+,$status:expr,$standards:expr);
         )+
     ) => {
+        /// An enumerator type over statically encoded header names.
+        ///
+        /// Each variant value corresponds to an associated constant exposing it as a
+        /// [`HeaderName`] under both [`StandardHeader`] and [`HeaderName`] types.
         #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
         pub enum StandardHeader {
             $(
@@ -67,6 +88,7 @@ macro_rules! standard_headers {
                 }
             }
 
+            /// Returns the deprecation status of this header.
             #[inline]
             pub const fn status(&self) -> Status {
                 match *self {
@@ -76,6 +98,7 @@ macro_rules! standard_headers {
                 }
             }
 
+            /// Returns which standards the definition of this header was lifted from.
             #[inline]
             pub const fn standards(&self) -> &[Standard] {
                 match *self {
@@ -113,6 +136,9 @@ macro_rules! standards {
             ($konst:ident, $name:literal );
         )+
     ) => {
+        /// An enumerator type over known e-mail standards.
+        ///
+        /// Each variant value also corresponds to an associated constant.
         #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
         pub enum Standard {
             $(
@@ -135,6 +161,10 @@ macro_rules! standards {
                 }
             }
 
+            /// Returns the associated standard URL on the IETF data-tracker website.
+            ///
+            /// It's value is of the form `https://datatracker.ietf.org/doc/html/rfcN.html` where
+            /// `N` is the Request for Comments publication number.
             #[inline]
             pub const fn url(&self) -> &str {
                 match *self {
@@ -209,7 +239,7 @@ standards! {
     (RFC9228, "9228");
 }
 
-/// Status of field at the moment of writing.
+/// Status of header name field at the moment of writing.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Status {
     /// Deprecated,
