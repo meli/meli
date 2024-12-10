@@ -1208,12 +1208,7 @@ impl Account {
         self.collection.contains_key(&h)
     }
     pub fn operation(&self, h: EnvelopeHash) -> Result<Box<dyn BackendOp>> {
-        let operation = self.backend.read().unwrap().operation(h)?;
-        Ok(if self.settings.account.read_only {
-            ReadOnlyOp::new(operation)
-        } else {
-            operation
-        })
+        self.backend.read().unwrap().operation(h)
     }
 
     pub fn special_use_mailbox(&self, special_use: SpecialUsageMailbox) -> Option<MailboxHash> {

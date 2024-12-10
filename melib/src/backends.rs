@@ -50,7 +50,7 @@ pub mod prelude {
         AccountHash, BackendEvent, BackendEventConsumer, BackendMailbox, BackendOp,
         EnvelopeHashBatch, FlagOp, IsSubscribedFn, LazyCountSet, MailBackend,
         MailBackendCapabilities, MailBackendExtensionStatus, Mailbox, MailboxHash,
-        MailboxPermissions, ReadOnlyOp, RefreshEvent, RefreshEventKind, TagHash,
+        MailboxPermissions, RefreshEvent, RefreshEventKind, TagHash,
     };
     pub use crate::{
         conf::AccountSettings,
@@ -573,28 +573,6 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
 /// ```
 pub trait BackendOp: ::std::fmt::Debug + ::std::marker::Send + ::std::marker::Sync {
     fn as_bytes(&self) -> ResultFuture<Vec<u8>>;
-}
-
-/// Wrapper for [`BackendOp`] that are to be set read-only.
-///
-/// Warning: Backend implementations may still cause side-effects (for example
-/// IMAP can set the Seen flag when fetching an envelope)
-#[derive(Debug)]
-pub struct ReadOnlyOp {
-    op: Box<dyn BackendOp>,
-}
-
-impl ReadOnlyOp {
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new(op: Box<dyn BackendOp>) -> Box<dyn BackendOp> {
-        Box::new(Self { op })
-    }
-}
-
-impl BackendOp for ReadOnlyOp {
-    fn as_bytes(&self) -> ResultFuture<Vec<u8>> {
-        self.op.as_bytes()
-    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
