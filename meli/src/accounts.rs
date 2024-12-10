@@ -1204,9 +1204,12 @@ impl Account {
         }
     }
 
+    #[inline]
     pub fn contains_key(&self, h: EnvelopeHash) -> bool {
         self.collection.contains_key(&h)
     }
+
+    #[inline]
     pub fn operation(&self, h: EnvelopeHash) -> Result<Box<dyn BackendOp>> {
         self.backend.read().unwrap().operation(h)
     }
