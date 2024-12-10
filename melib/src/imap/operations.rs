@@ -26,7 +26,7 @@ use imap_codec::imap_types::fetch::MessageDataItemName;
 use super::*;
 use crate::{backends::*, error::Error};
 
-/// `BackendOp` implementor for Imap
+/// Fetch a [`UID`] as bytes.
 #[derive(Clone, Debug)]
 pub struct ImapOp {
     uid: UID,
@@ -49,10 +49,8 @@ impl ImapOp {
             uid_store,
         }
     }
-}
 
-impl ImapOp {
-    async fn fetch(self) -> Result<Vec<u8>> {
+    pub async fn fetch(self) -> Result<Vec<u8>> {
         let mut response = Vec::with_capacity(8 * 1024);
         let mut use_body = false;
         let (_uid, _flags, body) = loop {
@@ -142,34 +140,19 @@ impl ImapOp {
         cache.bytes = Some(body.to_vec());
         Ok(body.to_vec())
     }
-}
 
-impl BackendOp for ImapOp {
-    fn as_bytes(&self) -> ResultFuture<Vec<u8>> {
-        let connection = self.connection.clone();
-        let mailbox_hash = self.mailbox_hash;
-        let uid = self.uid;
-        let uid_store = self.uid_store.clone();
-        Ok(Box::pin(async move {
-            let exists_in_cache = {
-                let mut bytes_cache = uid_store.byte_cache.lock()?;
-                let cache = bytes_cache.entry(uid).or_default();
-                cache.bytes.is_some()
-            };
-            if !exists_in_cache {
-                return Self {
-                    connection,
-                    mailbox_hash,
-                    uid,
-                    uid_store,
-                }
-                .fetch()
-                .await;
-            }
-            let mut bytes_cache = uid_store.byte_cache.lock()?;
-            let cache = bytes_cache.entry(uid).or_default();
-            let ret = cache.bytes.clone().unwrap();
-            Ok(ret)
-        }))
+    pub async fn as_bytes(&self) -> Result<Vec<u8>> {
+        let exists_in_cache = {
+            let mut bytes_cache = self.uid_store.byte_cache.lock()?;
+            let cache = bytes_cache.entry(self.uid).or_default();
+            cache.bytes.is_some()
+        };
+        if !exists_in_cache {
+            return self.clone().fetch().await;
+        }
+        let mut bytes_cache = self.uid_store.byte_cache.lock()?;
+        let cache = bytes_cache.entry(self.uid).or_default();
+        let ret = cache.bytes.clone().unwrap();
+        Ok(ret)
     }
 }

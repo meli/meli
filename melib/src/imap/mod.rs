@@ -429,13 +429,13 @@ impl MailBackend for ImapType {
         let main_conn = self.connection.clone();
         let uid_store = self.uid_store.clone();
         Ok(Box::pin(async move {
-            let inbox = timeout(uid_store.timeout, uid_store.mailboxes.lock())
+            let mailbox = timeout(uid_store.timeout, uid_store.mailboxes.lock())
                 .await?
                 .get(&mailbox_hash)
                 .cloned()
                 .unwrap();
             let mut conn = timeout(uid_store.timeout, main_conn.lock()).await?;
-            watch::examine_updates(inbox, &mut conn, &uid_store).await?;
+            watch::examine_updates(mailbox, &mut conn, &uid_store).await?;
             Ok(())
         }))
     }
@@ -592,7 +592,7 @@ impl MailBackend for ImapType {
         }))
     }
 
-    fn operation(&self, hash: EnvelopeHash) -> Result<Box<dyn BackendOp>> {
+    fn envelope_bytes_by_hash(&self, hash: EnvelopeHash) -> ResultFuture<Vec<u8>> {
         let (uid, mailbox_hash) =
             if let Some(v) = self.uid_store.hash_index.lock().unwrap().get(&hash) {
                 *v
@@ -602,12 +602,13 @@ impl MailBackend for ImapType {
                      requested it.",
                 ));
             };
-        Ok(Box::new(ImapOp::new(
+        let op = ImapOp::new(
             uid,
             mailbox_hash,
             self.connection.clone(),
             self.uid_store.clone(),
-        )))
+        );
+        Ok(Box::pin(async move { op.as_bytes().await }))
     }
 
     fn save(

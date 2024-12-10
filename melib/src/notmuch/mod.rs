@@ -771,8 +771,8 @@ impl MailBackend for NotmuchDb {
         Ok(Box::pin(async { ret }))
     }
 
-    fn operation(&self, hash: EnvelopeHash) -> Result<Box<dyn BackendOp>> {
-        Ok(Box::new(NotmuchOp {
+    fn envelope_bytes_by_hash(&self, hash: EnvelopeHash) -> ResultFuture<Vec<u8>> {
+        let op = NotmuchOp {
             database: Arc::new(Self::new_connection(
                 self.path.as_path(),
                 self.revision_uuid.clone(),
@@ -782,7 +782,9 @@ impl MailBackend for NotmuchDb {
             lib: self.lib.clone(),
             hash,
             index: self.index.clone(),
-        }))
+        };
+
+        Ok(Box::pin(async move { op.as_bytes().await }))
     }
 
     fn save(
@@ -1059,19 +1061,17 @@ struct NotmuchOp {
     lib: Arc<NotmuchLibrary>,
 }
 
-impl BackendOp for NotmuchOp {
-    fn as_bytes(&self) -> ResultFuture<Vec<u8>> {
+impl NotmuchOp {
+    async fn as_bytes(&self) -> Result<Vec<u8>> {
         let _self = self.clone();
-        Ok(Box::pin(async move {
-            smol::unblock(move || {
-                let index_lck = _self.index.write().unwrap();
-                let message = Message::find_message(&_self.database, &index_lck[&_self.hash])?;
-                let mut f = std::fs::File::open(message.get_filename())?;
-                let mut response = Vec::new();
-                f.read_to_end(&mut response)?;
-                Ok(response)
-            })
-            .await
-        }))
+        smol::unblock(move || {
+            let index_lck = _self.index.write().unwrap();
+            let message = Message::find_message(&_self.database, &index_lck[&_self.hash])?;
+            let mut f = std::fs::File::open(message.get_filename())?;
+            let mut response = Vec::new();
+            f.read_to_end(&mut response)?;
+            Ok(response)
+        })
+        .await
     }
 }

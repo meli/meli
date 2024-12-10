@@ -509,12 +509,9 @@ impl MailBackend for JmapType {
         }))
     }
 
-    fn operation(&self, hash: EnvelopeHash) -> Result<Box<dyn BackendOp>> {
-        Ok(Box::new(JmapOp::new(
-            hash,
-            self.connection.clone(),
-            self.store.clone(),
-        )))
+    fn envelope_bytes_by_hash(&self, hash: EnvelopeHash) -> ResultFuture<Vec<u8>> {
+        let op = JmapOp::new(hash, self.connection.clone(), self.store.clone());
+        Ok(Box::pin(async move { op.as_bytes().await }))
     }
 
     fn save(

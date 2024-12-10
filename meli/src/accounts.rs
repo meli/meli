@@ -1210,8 +1210,8 @@ impl Account {
     }
 
     #[inline]
-    pub fn operation(&self, h: EnvelopeHash) -> Result<Box<dyn BackendOp>> {
-        self.backend.read().unwrap().operation(h)
+    pub fn envelope_bytes_by_hash(&self, h: EnvelopeHash) -> ResultFuture<Vec<u8>> {
+        self.backend.read().unwrap().envelope_bytes_by_hash(h)
     }
 
     pub fn special_use_mailbox(&self, special_use: SpecialUsageMailbox) -> Option<MailboxHash> {

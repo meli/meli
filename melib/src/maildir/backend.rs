@@ -340,12 +340,14 @@ impl MailBackend for MaildirType {
         Ok(Box::pin(async move { watch_state.watch().await }))
     }
 
-    fn operation(&self, hash: EnvelopeHash) -> Result<Box<dyn BackendOp>> {
-        Ok(Box::new(MaildirOp::new(
+    fn envelope_bytes_by_hash(&self, hash: EnvelopeHash) -> ResultFuture<Vec<u8>> {
+        let op = MaildirOp::new(
             hash,
             self.hash_indexes.clone(),
             self.mailbox_index.lock().unwrap()[&hash],
-        )))
+        );
+
+        Ok(Box::pin(async move { op.as_bytes().await }))
     }
 
     fn save(

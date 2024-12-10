@@ -832,7 +832,7 @@ pub trait MailListingTrait: ListingTrait {
                 ListingAction::ExportMbox(format, ref path) => {
                     let futures: Result<Vec<_>> = envs_to_set
                         .iter()
-                        .map(|&env_hash| account.operation(env_hash).and_then(|op| op.as_bytes()))
+                        .map(|&env_hash| account.envelope_bytes_by_hash(env_hash))
                         .collect::<Result<Vec<_>>>();
                     let mut path = path.to_path_buf();
                     if path.is_relative() {

@@ -403,9 +403,9 @@ impl MailBackend for NntpType {
         )
     }
 
-    fn operation(&self, env_hash: EnvelopeHash) -> Result<Box<dyn BackendOp>> {
+    fn envelope_bytes_by_hash(&self, hash: EnvelopeHash) -> ResultFuture<Vec<u8>> {
         let (uid, mailbox_hash) =
-            if let Some(v) = self.uid_store.hash_index.lock().unwrap().get(&env_hash) {
+            if let Some(v) = self.uid_store.hash_index.lock().unwrap().get(&hash) {
                 *v
             } else {
                 return Err(Error::new(
@@ -413,12 +413,14 @@ impl MailBackend for NntpType {
                      requested it.",
                 ));
             };
-        Ok(Box::new(NntpOp::new(
+        let op = NntpOp::new(
             uid,
             mailbox_hash,
             self.connection.clone(),
             self.uid_store.clone(),
-        )))
+        );
+
+        Ok(Box::pin(async move { op.as_bytes().await }))
     }
 
     fn save(

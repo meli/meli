@@ -168,8 +168,7 @@ impl AccountCache {
         let op = backend
             .read()
             .unwrap()
-            .operation(envelope.hash())?
-            .as_bytes()?;
+            .envelope_bytes_by_hash(envelope.hash())?;
 
         let body = match op.await.map(|bytes| envelope.body_bytes(&bytes)) {
             Ok(body) => body.text(Text::Plain),
@@ -336,9 +335,11 @@ impl AccountCache {
             ctr += chunk.len();
             let mut chunk_bytes = Vec::with_capacity(chunk.len());
             for &env_hash in chunk {
-                let op = backend_mutex.read().unwrap().operation(env_hash)?;
+                let op = backend_mutex
+                    .read()
+                    .unwrap()
+                    .envelope_bytes_by_hash(env_hash)?;
                 let bytes = op
-                    .as_bytes()?
                     .await
                     .chain_err_summary(|| format!("Failed to open envelope {}", env_hash))?;
                 chunk_bytes.push((env_hash, bytes));

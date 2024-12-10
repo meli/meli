@@ -45,7 +45,7 @@ use crate::{
     utils::shellexpand::ShellExpandTrait,
 };
 
-/// `BackendOp` implementor for Maildir
+/// Read a maildir entry into bytes.
 #[derive(Debug)]
 pub struct MaildirOp {
     hash_index: HashIndexes,
@@ -99,29 +99,26 @@ impl MaildirOp {
             }
         }
     }
-}
 
-impl BackendOp for MaildirOp {
-    fn as_bytes(&self) -> ResultFuture<Vec<u8>> {
+    pub async fn as_bytes(&self) -> Result<Vec<u8>> {
         let _self = self.clone();
-        Ok(Box::pin(async move {
-            smol::unblock(move || {
-                let Some(path) = _self.path() else {
-                    return Err(Error::new("Not found")
-                        .set_summary(format!("Message with hash {} was not found.", _self.hash))
-                        .set_kind(ErrorKind::NotFound));
-                };
-                let file = std::fs::OpenOptions::new()
-                    .read(true)
-                    .write(false)
-                    .open(path)?;
-                let mut buf_reader = BufReader::new(file);
-                let mut contents = Vec::new();
-                buf_reader.read_to_end(&mut contents)?;
-                Ok(contents)
-            })
-            .await
-        }))
+
+        smol::unblock(move || {
+            let Some(path) = _self.path() else {
+                return Err(Error::new("Not found")
+                    .set_summary(format!("Message with hash {} was not found.", _self.hash))
+                    .set_kind(ErrorKind::NotFound));
+            };
+            let file = std::fs::OpenOptions::new()
+                .read(true)
+                .write(false)
+                .open(path)?;
+            let mut buf_reader = BufReader::new(file);
+            let mut contents = Vec::new();
+            buf_reader.read_to_end(&mut contents)?;
+            Ok(contents)
+        })
+        .await
     }
 }
 

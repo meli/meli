@@ -250,7 +250,7 @@ impl BackendMailbox for MboxMailbox {
     }
 }
 
-/// `BackendOp` implementor for Mbox
+/// Fetch an e-mail by offseet and length inside an `mbox` file as bytes.
 #[derive(Clone, Debug)]
 pub struct MboxOp {
     pub _hash: EnvelopeHash,
@@ -268,31 +268,27 @@ impl MboxOp {
             length,
         }
     }
-}
 
-impl BackendOp for MboxOp {
-    fn as_bytes(&self) -> ResultFuture<Vec<u8>> {
+    pub async fn as_bytes(&self) -> Result<Vec<u8>> {
         use std::io::Seek;
         let _self = self.clone();
 
-        Ok(Box::pin(async move {
-            smol::unblock(move || {
-                let file = std::fs::OpenOptions::new()
-                    .read(true)
-                    .write(true)
-                    .open(&_self.path)?;
-                let file = file.lock(FileLockOptions::try_thrice(), &_self.path)?;
-                let mut buf_reader = BufReader::new(file);
-                buf_reader.seek(std::io::SeekFrom::Start(_self.offset.try_into().unwrap()))?;
-                let mut ret = Vec::new();
-                buf_reader
-                    .take(_self.length.try_into().unwrap())
-                    .read_to_end(&mut ret)?;
+        smol::unblock(move || {
+            let file = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&_self.path)?;
+            let file = file.lock(FileLockOptions::try_thrice(), &_self.path)?;
+            let mut buf_reader = BufReader::new(file);
+            buf_reader.seek(std::io::SeekFrom::Start(_self.offset.try_into().unwrap()))?;
+            let mut ret = Vec::new();
+            buf_reader
+                .take(_self.length.try_into().unwrap())
+                .read_to_end(&mut ret)?;
 
-                Ok(ret)
-            })
-            .await
-        }))
+            Ok(ret)
+        })
+        .await
     }
 }
 
@@ -1128,20 +1124,17 @@ impl MailBackend for MboxType {
         Ok(Box::pin(async { ret }))
     }
 
-    fn operation(&self, env_hash: EnvelopeHash) -> Result<Box<dyn BackendOp>> {
-        let mailbox_hash = self.mailbox_index.lock().unwrap()[&env_hash];
+    fn envelope_bytes_by_hash(&self, hash: EnvelopeHash) -> ResultFuture<Vec<u8>> {
+        let mailbox_hash = self.mailbox_index.lock().unwrap()[&hash];
         let mailboxes_lck = self.mailboxes.lock().unwrap();
         let (offset, length) = {
             let index = mailboxes_lck[&mailbox_hash].index.lock().unwrap();
-            index[&env_hash]
+            index[&hash]
         };
         let mailbox_path = mailboxes_lck[&mailbox_hash].fs_path.clone();
-        Ok(Box::new(MboxOp::new(
-            env_hash,
-            mailbox_path.as_path(),
-            offset,
-            length,
-        )))
+        let op = MboxOp::new(hash, mailbox_path.as_path(), offset, length);
+
+        Ok(Box::pin(async move { op.as_bytes().await }))
     }
 
     fn copy_messages(

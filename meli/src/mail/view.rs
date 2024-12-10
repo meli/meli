@@ -123,10 +123,7 @@ impl MailView {
         let account = &mut context.accounts[&coordinates.0];
         if account.contains_key(coordinates.2) {
             {
-                match account
-                    .operation(coordinates.2)
-                    .and_then(|op| op.as_bytes())
-                {
+                match account.envelope_bytes_by_hash(coordinates.2) {
                     Ok(fut) => {
                         let mut handle = account.main_loop_handler.job_executor.spawn(
                             "fetch-envelope".into(),
@@ -551,9 +548,9 @@ impl Component for MailView {
                 let account_hash = coordinates.0;
                 let env_hash = coordinates.2;
                 let (sender, mut receiver) = crate::jobs::oneshot::channel();
-                let operation = context.accounts[&account_hash].operation(env_hash);
+                let fut = context.accounts[&account_hash].envelope_bytes_by_hash(env_hash);
                 let bytes_job = async move {
-                    let _ = sender.send(operation?.as_bytes()?.await);
+                    let _ = sender.send(fut?.await);
                     Ok(())
                 };
                 let handle = context.main_loop_handler.job_executor.spawn(

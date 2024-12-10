@@ -25,12 +25,12 @@ use futures::lock::Mutex as FutureMutex;
 use isahc::AsyncReadResponseExt;
 
 use crate::{
-    backends::prelude::{BackendOp, ResultFuture},
+    error::Result,
     jmap::{connection::JmapConnection, methods::download_request_format, Store},
     EnvelopeHash,
 };
 
-/// `BackendOp` implementor for JMAP
+/// Fetch an envelope by hash as bytes.
 #[derive(Clone, Debug)]
 pub struct JmapOp {
     hash: EnvelopeHash,
@@ -50,40 +50,39 @@ impl JmapOp {
             store,
         }
     }
-}
 
-impl BackendOp for JmapOp {
-    fn as_bytes(&self) -> ResultFuture<Vec<u8>> {
-        let store = self.store.clone();
-        let hash = self.hash;
-        let connection = self.connection.clone();
-        Ok(Box::pin(async move {
-            {
-                let byte_lck = store.byte_cache.lock().await;
-                if let Some(Some(ret)) = byte_lck.get(&hash).map(|c| c.bytes.clone()) {
-                    return Ok(ret.into_bytes());
-                }
+    pub async fn as_bytes(&self) -> Result<Vec<u8>> {
+        {
+            let byte_lck = self.store.byte_cache.lock().await;
+            if let Some(Some(ret)) = byte_lck.get(&self.hash).map(|c| c.bytes.clone()) {
+                return Ok(ret.into_bytes());
             }
-            let blob_id = store.blob_id_store.lock().await[&hash].clone();
-            let mut conn = connection.lock().await;
-            conn.connect().await?;
-            let (download_url, mail_account_id) = {
-                let g = store.online_status.session_guard().await?;
-                (g.download_url.clone(), g.mail_account_id())
-            };
-            let res_text = conn
-                .get_async(&download_request_format(
-                    &download_url,
-                    &mail_account_id,
-                    &blob_id,
-                    None,
-                )?)
-                .await?
-                .text()
-                .await?;
+        }
+        let blob_id = self.store.blob_id_store.lock().await[&self.hash].clone();
+        let mut conn = self.connection.lock().await;
+        conn.connect().await?;
+        let (download_url, mail_account_id) = {
+            let g = self.store.online_status.session_guard().await?;
+            (g.download_url.clone(), g.mail_account_id())
+        };
+        let res_text = conn
+            .get_async(&download_request_format(
+                &download_url,
+                &mail_account_id,
+                &blob_id,
+                None,
+            )?)
+            .await?
+            .text()
+            .await?;
 
-            store.byte_cache.lock().await.entry(hash).or_default().bytes = Some(res_text.clone());
-            Ok(res_text.into_bytes())
-        }))
+        self.store
+            .byte_cache
+            .lock()
+            .await
+            .entry(self.hash)
+            .or_default()
+            .bytes = Some(res_text.clone());
+        Ok(res_text.into_bytes())
     }
 }
