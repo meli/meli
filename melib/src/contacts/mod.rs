@@ -171,10 +171,11 @@ impl Contacts {
                                     }
                                     Err(err) => {
                                         log::warn!(
-                                                "Unable to parse notmuch contact result into cards: {} {}",
-                                                notmuch_address_out,
-                                                err
-                                            );
+                                            "Unable to parse notmuch contact result into cards: \
+                                             {} {}",
+                                            notmuch_address_out,
+                                            err
+                                        );
                                     }
                                 }
                             }
