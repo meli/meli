@@ -74,10 +74,12 @@ impl Collection {
         }
     }
 
+    #[inline]
     pub fn len(&self) -> usize {
         self.envelopes.read().unwrap().len()
     }
 
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.envelopes.read().unwrap().is_empty()
     }
@@ -403,21 +405,25 @@ impl Collection {
         }
     }
 
+    #[inline]
     pub fn get_env(&'_ self, hash: EnvelopeHash) -> EnvelopeRef<'_> {
         let guard: RwLockReadGuard<'_, _> = self.envelopes.read().unwrap();
         EnvelopeRef { guard, hash }
     }
 
+    #[inline]
     pub fn get_env_mut(&'_ self, hash: EnvelopeHash) -> EnvelopeRefMut<'_> {
         let guard = self.envelopes.write().unwrap();
         EnvelopeRefMut { guard, hash }
     }
 
+    #[inline]
     pub fn get_threads(&'_ self, hash: MailboxHash) -> RwRef<'_, MailboxHash, Threads> {
         let guard = self.threads.read().unwrap();
         RwRef { guard, hash }
     }
 
+    #[inline]
     pub fn get_mailbox(
         &'_ self,
         hash: MailboxHash,
@@ -426,6 +432,7 @@ impl Collection {
         RwRef { guard, hash }
     }
 
+    #[inline]
     pub fn contains_key(&self, env_hash: &EnvelopeHash) -> bool {
         self.envelopes.read().unwrap().contains_key(env_hash)
     }
@@ -456,6 +463,7 @@ impl<K: std::cmp::Eq + std::hash::Hash, V> Deref for RwRef<'_, K, V> {
 }
 
 impl<K: std::cmp::Eq + std::hash::Hash, V> AsRef<V> for RwRef<'_, K, V> {
+    #[inline]
     fn as_ref(&self) -> &V {
         self.guard.get(&self.hash).expect("Hash was not found")
     }
@@ -467,6 +475,7 @@ pub struct RwRefMut<'g, K: std::cmp::Eq + std::hash::Hash, V> {
 }
 
 impl<K: std::cmp::Eq + std::hash::Hash, V> DerefMut for RwRefMut<'_, K, V> {
+    #[inline]
     fn deref_mut(&mut self) -> &mut V {
         self.guard.get_mut(&self.hash).expect("Hash was not found")
     }
@@ -475,18 +484,21 @@ impl<K: std::cmp::Eq + std::hash::Hash, V> DerefMut for RwRefMut<'_, K, V> {
 impl<K: std::cmp::Eq + std::hash::Hash, V> Deref for RwRefMut<'_, K, V> {
     type Target = V;
 
+    #[inline]
     fn deref(&self) -> &V {
         self.guard.get(&self.hash).expect("Hash was not found")
     }
 }
 
 impl<K: std::cmp::Eq + std::hash::Hash, V> AsRef<V> for RwRefMut<'_, K, V> {
+    #[inline]
     fn as_ref(&self) -> &V {
         self.guard.get(&self.hash).expect("Hash was not found")
     }
 }
 
 impl<K: std::cmp::Eq + std::hash::Hash, V> AsMut<V> for RwRefMut<'_, K, V> {
+    #[inline]
     fn as_mut(&mut self) -> &mut V {
         self.guard.get_mut(&self.hash).expect("Hash was not found")
     }
