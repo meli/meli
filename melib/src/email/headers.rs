@@ -51,6 +51,7 @@ impl Hash for dyn HeaderKey + '_ {
 }
 
 impl PartialEq for dyn HeaderKey + '_ {
+    #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.to_key().eq_ignore_ascii_case(other.to_key())
     }
@@ -59,6 +60,7 @@ impl PartialEq for dyn HeaderKey + '_ {
 impl Eq for dyn HeaderKey + '_ {}
 
 impl HeaderKey for HeaderName {
+    #[inline]
     fn to_key(&self) -> &[u8] {
         self.as_lowercase_bytes()
     }
@@ -67,6 +69,7 @@ impl HeaderKey for HeaderName {
 //Implement Borrow for all the lookup types as returning our trait object:
 
 impl<'a> Borrow<dyn HeaderKey + 'a> for HeaderName {
+    #[inline]
     fn borrow(&self) -> &(dyn HeaderKey + 'a) {
         self
     }
@@ -90,6 +93,8 @@ pub struct HeaderMap(indexmap::IndexMap<HeaderName, String>);
 
 impl std::ops::Index<usize> for HeaderMap {
     type Output = str;
+
+    #[inline]
     fn index(&self, k: usize) -> &Self::Output {
         (self.0)[k].as_str()
     }
@@ -97,6 +102,8 @@ impl std::ops::Index<usize> for HeaderMap {
 
 impl std::ops::Index<&[u8]> for HeaderMap {
     type Output = str;
+
+    #[inline]
     fn index(&self, k: &[u8]) -> &Self::Output {
         (self.0)[&HeaderName::try_from(k).expect("Invalid bytes in header name.")].as_str()
     }
@@ -104,6 +111,8 @@ impl std::ops::Index<&[u8]> for HeaderMap {
 
 impl std::ops::Index<&str> for HeaderMap {
     type Output = str;
+
+    #[inline]
     fn index(&self, k: &str) -> &Self::Output {
         (self.0)[&HeaderName::try_from(k).expect("Invalid bytes in header name.")].as_str()
     }
@@ -111,6 +120,8 @@ impl std::ops::Index<&str> for HeaderMap {
 
 impl std::ops::Index<&HeaderName> for HeaderMap {
     type Output = str;
+
+    #[inline]
     fn index(&self, k: &HeaderName) -> &Self::Output {
         (self.0)[k].as_str()
     }
@@ -118,20 +129,25 @@ impl std::ops::Index<&HeaderName> for HeaderMap {
 
 impl std::ops::Index<HeaderName> for HeaderMap {
     type Output = str;
+
+    #[inline]
     fn index(&self, k: HeaderName) -> &Self::Output {
         (self.0)[&k].as_str()
     }
 }
 
 impl HeaderMap {
+    #[inline]
     pub fn empty() -> Self {
         Self::default()
     }
 
+    #[inline]
     pub fn new() -> Self {
         Self::default()
     }
 
+    #[inline]
     pub fn get_mut<T: TryInto<HeaderName> + std::fmt::Debug>(
         &mut self,
         key: T,
@@ -143,6 +159,7 @@ impl HeaderMap {
         (self.0).get_mut(&k)
     }
 
+    #[inline]
     pub fn get<T: TryInto<HeaderName> + std::fmt::Debug>(&self, key: T) -> Option<&str>
     where
         <T as TryInto<HeaderName>>::Error: std::fmt::Debug,
@@ -151,6 +168,7 @@ impl HeaderMap {
         (self.0).get(&k).map(|x| x.as_str())
     }
 
+    #[inline]
     pub fn contains_key<T: TryInto<HeaderName> + std::fmt::Debug>(&self, key: T) -> bool
     where
         <T as TryInto<HeaderName>>::Error: std::fmt::Debug,
@@ -161,6 +179,7 @@ impl HeaderMap {
             .unwrap_or(false)
     }
 
+    #[inline]
     pub fn remove<T: TryInto<HeaderName> + std::fmt::Debug>(&mut self, key: T) -> Option<String>
     where
         <T as TryInto<HeaderName>>::Error: std::fmt::Debug,
@@ -168,6 +187,7 @@ impl HeaderMap {
         key.try_into().ok().and_then(|k| (self.0).shift_remove(&k))
     }
 
+    #[inline]
     pub fn into_inner(self) -> indexmap::IndexMap<HeaderName, String> {
         self.0
     }
@@ -176,12 +196,14 @@ impl HeaderMap {
 impl Deref for HeaderMap {
     type Target = IndexMap<HeaderName, String>;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
 impl DerefMut for HeaderMap {
+    #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
