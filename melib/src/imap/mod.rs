@@ -60,7 +60,7 @@ use fetch::{FetchStage, FetchState};
 pub extern crate imap_codec;
 use imap_codec::imap_types::{
     command::CommandBody,
-    core::{Atom, Literal},
+    core::Atom,
     flag::{Flag as ImapCodecFlag, StoreResponse, StoreType},
     mailbox::Mailbox as ImapTypesMailbox,
     sequence::{SequenceSet, ONE},
@@ -71,7 +71,7 @@ use crate::{
     backends::{prelude::*, RefreshEventKind::*},
     collection::Collection,
     conf::AccountSettings,
-    email::{parser::BytesExt, *},
+    email::*,
     error::{Error, ErrorKind, Result, ResultIntoError},
     imap::{protocol_parser::id_ext::IDResponse, sync::cache::ImapCache},
     utils::futures::timeout,
@@ -241,7 +241,7 @@ impl UIDStore {
 #[derive(Debug)]
 pub struct ImapType {
     pub _is_subscribed: IsSubscribedFn,
-    pub connection: Arc<FutureMutex<ImapConnection>>,
+    pub connection: Arc<ConnectionMutex>,
     pub server_conf: ImapServerConf,
     pub uid_store: Arc<UIDStore>,
 }
@@ -388,7 +388,7 @@ impl MailBackend for ImapType {
         };
 
         Ok(Box::pin(try_fn_stream(|emitter| async move {
-            let id = state.connection.lock().await.id.clone();
+            let id = state.connection.lock().await?.id.clone();
             {
                 let f = &state.uid_store.mailboxes.lock().await[&mailbox_hash];
                 f.set_warm(true);
@@ -427,16 +427,9 @@ impl MailBackend for ImapType {
 
     fn refresh(&mut self, mailbox_hash: MailboxHash) -> ResultFuture<()> {
         let main_conn = self.connection.clone();
-        let uid_store = self.uid_store.clone();
         Ok(Box::pin(async move {
-            let mailbox = timeout(uid_store.timeout, uid_store.mailboxes.lock())
-                .await?
-                .get(&mailbox_hash)
-                .cloned()
-                .unwrap();
-            let mut conn = timeout(uid_store.timeout, main_conn.lock()).await?;
-            watch::examine_updates(mailbox, &mut conn, &uid_store).await?;
-            Ok(())
+            let mut conn = main_conn.lock().await?;
+            conn.refresh(mailbox_hash).await
         }))
     }
 
@@ -490,21 +483,9 @@ impl MailBackend for ImapType {
 
     fn is_online(&self) -> ResultFuture<()> {
         let connection = self.connection.clone();
-        let timeout_dur = self.server_conf.timeout;
         Ok(Box::pin(async move {
-            match timeout(timeout_dur, connection.lock()).await {
-                Ok(mut conn) => {
-                    imap_log!(trace, conn, "is_online");
-                    match timeout(timeout_dur, conn.connect()).await {
-                        Ok(Ok(())) => Ok(()),
-                        Err(err) | Ok(Err(err)) => {
-                            conn.stream = Err(err.clone());
-                            conn.connect().await
-                        }
-                    }
-                }
-                Err(err) => Err(err),
-            }
+            let mut conn = connection.lock().await?;
+            conn.is_online().await
         }))
     }
 
@@ -549,7 +530,7 @@ impl MailBackend for ImapType {
                 })
                 .await
             } {
-                let mut main_conn_lck = timeout(uid_store.timeout, main_conn.lock()).await?;
+                let mut main_conn_lck = main_conn.lock().await?;
                 if err.kind.is_network() {
                     uid_store.is_online.lock().unwrap().1 = Err(err.clone());
                 } else {
@@ -617,51 +598,10 @@ impl MailBackend for ImapType {
         mailbox_hash: MailboxHash,
         flags: Option<Flag>,
     ) -> ResultFuture<()> {
-        let uid_store = self.uid_store.clone();
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
-            let mut response = Vec::with_capacity(8 * 1024);
-            let mut conn = connection.lock().await;
-            conn.select_mailbox(mailbox_hash, &mut response, true)
-                .await?;
-            let path = {
-                let mailboxes = uid_store.mailboxes.lock().await;
-
-                let mailbox = mailboxes.get(&mailbox_hash).ok_or_else(|| {
-                    Error::new(format!("Mailbox with hash {} not found.", mailbox_hash))
-                })?;
-                if !mailbox.permissions.lock().unwrap().create_messages {
-                    return Err(Error::new(format!(
-                        "You are not allowed to create messages in mailbox {}",
-                        mailbox.path()
-                    )));
-                }
-
-                mailbox.imap_path().to_string()
-            };
-            let flags = flags.unwrap_or_else(Flag::empty);
-            let has_literal_plus: bool = uid_store
-                .capabilities
-                .lock()
-                .unwrap()
-                .iter()
-                .any(|cap| cap.eq_ignore_ascii_case(b"LITERAL+"));
-            let data = if has_literal_plus {
-                Literal::try_from(bytes)?.into_non_sync()
-            } else {
-                Literal::try_from(bytes)?
-            };
-            conn.send_command(CommandBody::append(
-                path,
-                flags.derive_imap_codec_flags(),
-                None,
-                data,
-            )?)
-            .await?;
-            // [ref:TODO]: check for APPENDUID [RFC4315 - UIDPLUS]
-            conn.read_response(&mut response, RequiredResponses::empty())
-                .await?;
-            Ok(())
+            let mut conn = connection.lock().await?;
+            conn.save(bytes, mailbox_hash, flags).await
         }))
     }
 
@@ -672,38 +612,36 @@ impl MailBackend for ImapType {
         destination_mailbox_hash: MailboxHash,
         move_: bool,
     ) -> ResultFuture<()> {
-        let uid_store = self.uid_store.clone();
         let connection = self.connection.clone();
         let has_move: bool = move_
-            && uid_store
+            && self
+                .uid_store
                 .capabilities
                 .lock()
                 .unwrap()
                 .iter()
                 .any(|cap| cap.eq_ignore_ascii_case(b"MOVE"));
-        Ok(Box::pin(async move {
-            let uids: SmallVec<[UID; 64]> = {
-                let hash_index_lck = uid_store.hash_index.lock().unwrap();
-                env_hashes
-                    .iter()
-                    .filter_map(|env_hash| {
-                        hash_index_lck.get(&env_hash).cloned().map(|(uid, _)| uid)
-                    })
-                    .collect()
-            };
+        let uids: SmallVec<[UID; 64]> = {
+            let hash_index_lck = self.uid_store.hash_index.lock().unwrap();
+            env_hashes
+                .iter()
+                .filter_map(|env_hash| hash_index_lck.get(&env_hash).cloned().map(|(uid, _)| uid))
+                .collect()
+        };
 
-            if uids.is_empty() {
-                return Ok(());
-            }
+        if uids.is_empty() {
+            return Ok(Box::pin(async move { Ok(()) }));
+        }
+        Ok(Box::pin(async move {
+            let mut conn = connection.lock().await?;
             let dest_path = {
-                let mailboxes = uid_store.mailboxes.lock().await;
+                let mailboxes = conn.uid_store.mailboxes.lock().await;
                 let mailbox = mailboxes
                     .get(&destination_mailbox_hash)
                     .ok_or_else(|| Error::new("Destination mailbox not found"))?;
                 mailbox.imap_path().to_string()
             };
             let mut response = Vec::with_capacity(8 * 1024);
-            let mut conn = connection.lock().await;
             conn.select_mailbox(source_mailbox_hash, &mut response, false)
                 .await?;
             if has_move {
@@ -741,53 +679,50 @@ impl MailBackend for ImapType {
         flags: SmallVec<[FlagOp; 8]>,
     ) -> ResultFuture<()> {
         let connection = self.connection.clone();
-        let mut uid_store = self.uid_store.clone();
-        Ok(Box::pin(async move {
-            let uids: SmallVec<[UID; 64]> = {
-                let hash_index_lck = uid_store.hash_index.lock().unwrap();
-                env_hashes
-                    .iter()
-                    .filter_map(|env_hash| {
-                        hash_index_lck.get(&env_hash).cloned().map(|(uid, _)| uid)
-                    })
-                    .collect()
-            };
+        let uids: SmallVec<[UID; 64]> = {
+            let hash_index_lck = self.uid_store.hash_index.lock().unwrap();
+            env_hashes
+                .iter()
+                .filter_map(|env_hash| hash_index_lck.get(&env_hash).cloned().map(|(uid, _)| uid))
+                .collect()
+        };
 
-            if uids.is_empty() {
-                return Ok(());
+        if uids.is_empty() {
+            return Ok(Box::pin(async move { Ok(()) }));
+        }
+
+        // Conversion from UID (usize) to UID (NonZeroU32).
+        // TODO: Directly use NonZeroU32 for UID everywhere?
+        let sequence_set = {
+            let mut tmp = Vec::new();
+
+            for uid in uids.iter() {
+                if let Ok(uid) = u32::try_from(*uid) {
+                    if let Ok(uid) = NonZeroU32::try_from(uid) {
+                        tmp.push(uid);
+                    } else {
+                        return Err(Error::new("Application error: UID was 0"));
+                    }
+                } else {
+                    return Err(Error::new("Application error: UID exceeded u32"));
+                }
             }
 
-            // Conversion from UID (usize) to UID (NonZeroU32).
-            // TODO: Directly use NonZeroU32 for UID everywhere?
-            let sequence_set = {
-                let mut tmp = Vec::new();
+            // Safety: We know this can't fail due to the `is_empty` check above.
+            // TODO: This could be too easy to overlook.
+            SequenceSet::try_from(tmp).unwrap()
+        };
 
-                for uid in uids.iter() {
-                    if let Ok(uid) = u32::try_from(*uid) {
-                        if let Ok(uid) = NonZeroU32::try_from(uid) {
-                            tmp.push(uid);
-                        } else {
-                            return Err(Error::new("Application error: UID was 0"));
-                        }
-                    } else {
-                        return Err(Error::new("Application error: UID exceeded u32"));
-                    }
-                }
-
-                // Safety: We know this can't fail due to the `is_empty` check above.
-                // TODO: This could be too easy to overlook.
-                SequenceSet::try_from(tmp).unwrap()
-            };
-
+        Ok(Box::pin(async move {
             let mut response = Vec::with_capacity(8 * 1024);
-            let mut conn = connection.lock().await;
+            let mut conn = connection.lock().await?;
             conn.select_mailbox(mailbox_hash, &mut response, false)
                 .await?;
             if flags.iter().any(<bool>::from) {
                 /* Set flags/tags to true */
                 let mut set_seen = false;
                 let command = {
-                    let mut tag_lck = uid_store.collection.tag_index.write().unwrap();
+                    let mut tag_lck = conn.uid_store.collection.tag_index.write().unwrap();
                     let flags = {
                         let mut tmp = Vec::new();
 
@@ -846,7 +781,7 @@ impl MailBackend for ImapType {
                 conn.read_response(&mut response, RequiredResponses::empty())
                     .await?;
                 if set_seen {
-                    for f in uid_store.mailboxes.lock().await.values() {
+                    for f in conn.uid_store.mailboxes.lock().await.values() {
                         if let Ok(mut unseen) = f.unseen.lock() {
                             for env_hash in env_hashes.iter() {
                                 unseen.remove(env_hash);
@@ -914,7 +849,7 @@ impl MailBackend for ImapType {
                 conn.read_response(&mut response, RequiredResponses::empty())
                     .await?;
                 if set_unseen {
-                    for f in uid_store.mailboxes.lock().await.values() {
+                    for f in conn.uid_store.mailboxes.lock().await.values() {
                         if let (Ok(mut unseen), Ok(exists)) = (f.unseen.lock(), f.exists.lock()) {
                             for env_hash in env_hashes.iter().filter(|h| exists.contains(h)) {
                                 unseen.insert_new(env_hash);
@@ -923,7 +858,8 @@ impl MailBackend for ImapType {
                     }
                 }
             }
-            if let Err(err) = uid_store
+            if let Err(err) = conn
+                .uid_store
                 .update_flags(env_hashes, mailbox_hash, flags)
                 .or_else(sync::cache::ignore_not_found)
             {
@@ -948,7 +884,7 @@ impl MailBackend for ImapType {
         Ok(Box::pin(async move {
             flag_future.await?;
             let mut response = Vec::with_capacity(8 * 1024);
-            let mut conn = connection.lock().await;
+            let mut conn = connection.lock().await?;
             let has_uid_plus = conn
                 .uid_store
                 .capabilities
@@ -1080,7 +1016,7 @@ impl MailBackend for ImapType {
 
             let mut response = Vec::with_capacity(8 * 1024);
             {
-                let mut conn_lck = connection.lock().await;
+                let mut conn_lck = connection.lock().await?;
                 conn_lck.unselect().await?;
 
                 conn_lck
@@ -1140,7 +1076,7 @@ impl MailBackend for ImapType {
             }
             let mut response = Vec::with_capacity(8 * 1024);
             {
-                let mut conn_lck = connection.lock().await;
+                let mut conn_lck = connection.lock().await?;
                 /* make sure mailbox is not selected before it gets deleted, otherwise
                  * connection gets dropped by server */
                 conn_lck.unselect().await?;
@@ -1193,7 +1129,7 @@ impl MailBackend for ImapType {
 
             let mut response = Vec::with_capacity(8 * 1024);
             {
-                let mut conn_lck = connection.lock().await;
+                let mut conn_lck = connection.lock().await?;
                 if new_val {
                     conn_lck
                         .send_command(CommandBody::subscribe(imap_path.as_str())?)
@@ -1257,7 +1193,7 @@ impl MailBackend for ImapType {
                 command = CommandBody::Rename { from, to };
             }
             {
-                let mut conn_lck = connection.lock().await;
+                let mut conn_lck = connection.lock().await?;
                 conn_lck.send_command(command).await?;
                 conn_lck
                     .read_response(&mut response, RequiredResponses::empty())
@@ -1306,7 +1242,7 @@ impl MailBackend for ImapType {
 
     fn search(
         &self,
-        query: crate::search::Query,
+        query: Query,
         mailbox_hash: Option<MailboxHash>,
     ) -> ResultFuture<Vec<EnvelopeHash>> {
         if mailbox_hash.is_none() {
@@ -1314,44 +1250,11 @@ impl MailBackend for ImapType {
                 "Cannot search without specifying mailbox on IMAP",
             ));
         }
-        let mailbox_hash = mailbox_hash.unwrap();
-        let query_str = query.to_imap_search();
         let connection = self.connection.clone();
-        let uid_store = self.uid_store.clone();
 
         Ok(Box::pin(async move {
-            let mut response = Vec::with_capacity(8 * 1024);
-            let mut conn = connection.lock().await;
-            conn.examine_mailbox(mailbox_hash, &mut response, false)
-                .await?;
-            conn.send_command_raw(
-                format!("UID SEARCH CHARSET UTF-8 {}", query_str.trim()).as_bytes(),
-            )
-            .await?;
-            conn.read_response(&mut response, RequiredResponses::SEARCH)
-                .await?;
-            imap_log!(
-                trace,
-                conn,
-                "searching for {} returned: {}",
-                query_str,
-                String::from_utf8_lossy(&response)
-            );
-
-            for l in response.split_rn() {
-                if l.starts_with(b"* SEARCH") {
-                    let uid_index = uid_store.uid_index.lock()?;
-                    return Ok(Vec::from_iter(
-                        String::from_utf8_lossy(l[b"* SEARCH".len()..].trim())
-                            .split_whitespace()
-                            .map(UID::from_str)
-                            .filter_map(std::result::Result::ok)
-                            .filter_map(|uid| uid_index.get(&(mailbox_hash, uid)))
-                            .copied(),
-                    ));
-                }
-            }
-            Err(Error::new(String::from_utf8_lossy(&response).to_string()))
+            let mut conn = connection.lock().await?;
+            conn.search(query, mailbox_hash).await
         }))
     }
 }
@@ -1440,7 +1343,10 @@ impl ImapType {
         Ok(Box::new(Self {
             server_conf,
             _is_subscribed: is_subscribed,
-            connection: Arc::new(FutureMutex::new(connection)),
+            connection: Arc::new(ConnectionMutex {
+                inner: FutureMutex::new(connection),
+                timeout: uid_store.timeout,
+            }),
             uid_store,
         }))
     }
@@ -1508,11 +1414,11 @@ impl ImapType {
     }
 
     pub async fn imap_mailboxes(
-        connection: &Arc<FutureMutex<ImapConnection>>,
+        connection: &Arc<ConnectionMutex>,
     ) -> Result<HashMap<MailboxHash, ImapMailbox>> {
         let mut mailboxes: HashMap<MailboxHash, ImapMailbox> = Default::default();
         let mut res = Vec::with_capacity(8 * 1024);
-        let mut conn = connection.lock().await;
+        let mut conn = connection.lock().await?;
         let has_list_status: bool = conn
             .uid_store
             .capabilities

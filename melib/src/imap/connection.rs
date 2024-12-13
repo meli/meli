@@ -24,17 +24,21 @@ use std::{
     convert::TryFrom,
     future::Future,
     pin::Pin,
+    str::FromStr,
     sync::Arc,
     time::{Duration, Instant, SystemTime},
 };
 
-use futures::io::{AsyncReadExt, AsyncWriteExt};
+use futures::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    lock::{Mutex as FutureMutex, MutexGuard as FutureMutexGuard},
+};
 use imap_codec::{
     encode::{Encoder, Fragment},
     imap_types::{
         auth::AuthMechanism,
         command::{Command, CommandBody},
-        core::{AString, LiteralMode, Tag, Vec1},
+        core::{AString, Literal, LiteralMode, Tag, Vec1},
         extensions::{compress::CompressionAlgorithm, enable::CapabilityEnable},
         mailbox::Mailbox,
         search::SearchKey,
@@ -49,7 +53,10 @@ use native_tls::TlsConnector;
 pub use smol::Async as AsyncWrapper;
 
 use crate::{
-    backends::{BackendEvent, MailboxHash, RefreshEvent},
+    backends::{
+        prelude::{EnvelopeHash, Flag, Query},
+        BackendEvent, BackendMailbox, MailboxHash, RefreshEvent,
+    },
     email::parser::BytesExt,
     error::*,
     imap::{
@@ -57,7 +64,8 @@ use crate::{
             self, id_ext::id_ext_response, ImapLineSplit, ImapResponse, RequiredResponses,
             ResponseCode, SelectResponse,
         },
-        Capabilities, ImapServerConf, UIDStore,
+        search::ToImapSearch,
+        Capabilities, ImapServerConf, UIDStore, UID,
     },
     text::Truncate,
     utils::{
@@ -182,6 +190,19 @@ impl MailboxSelection {
 #[inline]
 async fn try_await(cl: impl Future<Output = Result<()>> + Send) -> Result<()> {
     cl.await
+}
+
+#[derive(Debug)]
+pub struct ConnectionMutex {
+    pub inner: FutureMutex<ImapConnection>,
+    pub timeout: Option<Duration>,
+}
+
+impl ConnectionMutex {
+    #[inline]
+    pub async fn lock(&self) -> Result<FutureMutexGuard<'_, ImapConnection>> {
+        timeout(self.timeout, self.inner.lock()).await
+    }
 }
 
 #[derive(Debug)]
@@ -1419,4 +1440,124 @@ async fn read(
         }
     }
     None
+}
+
+/// Async methods counterparts of the [`MailBackend`](crate::MailBackend) crate.
+/// Direct use should minimise cloning, locks and delay compared to using
+/// `MailBackend` methods.
+impl ImapConnection {
+    pub async fn refresh(&mut self, mailbox_hash: MailboxHash) -> Result<()> {
+        let mailbox = timeout(self.uid_store.timeout, self.uid_store.mailboxes.lock())
+            .await?
+            .get(&mailbox_hash)
+            .cloned()
+            .unwrap();
+        crate::imap::watch::examine_updates(mailbox, self).await?;
+        Ok(())
+    }
+
+    pub async fn is_online(&mut self) -> Result<()> {
+        imap_log!(trace, self, "is_online");
+        let timeout_dur = self.uid_store.timeout;
+        match timeout(timeout_dur, self.connect()).await {
+            Ok(Ok(())) => Ok(()),
+            Err(err) | Ok(Err(err)) => {
+                self.stream = Err(err.clone());
+                self.connect().await
+            }
+        }
+    }
+
+    pub async fn save(
+        &mut self,
+        bytes: Vec<u8>,
+        mailbox_hash: MailboxHash,
+        flags: Option<Flag>,
+    ) -> Result<()> {
+        let mut response = Vec::with_capacity(8 * 1024);
+        self.select_mailbox(mailbox_hash, &mut response, true)
+            .await?;
+        let path = {
+            let mailboxes = self.uid_store.mailboxes.lock().await;
+
+            let mailbox = mailboxes.get(&mailbox_hash).ok_or_else(|| {
+                Error::new(format!("Mailbox with hash {} not found.", mailbox_hash))
+            })?;
+            if !mailbox.permissions.lock().unwrap().create_messages {
+                return Err(Error::new(format!(
+                    "You are not allowed to create messages in mailbox {}",
+                    mailbox.path()
+                )));
+            }
+
+            mailbox.imap_path().to_string()
+        };
+        let flags = flags.unwrap_or_else(Flag::empty);
+        let has_literal_plus: bool = self
+            .uid_store
+            .capabilities
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|cap| cap.eq_ignore_ascii_case(b"LITERAL+"));
+        let data = if has_literal_plus {
+            Literal::try_from(bytes)?.into_non_sync()
+        } else {
+            Literal::try_from(bytes)?
+        };
+        self.send_command(CommandBody::append(
+            path,
+            flags.derive_imap_codec_flags(),
+            None,
+            data,
+        )?)
+        .await?;
+        // [ref:TODO]: check for APPENDUID [RFC4315 - UIDPLUS]
+        self.read_response(&mut response, RequiredResponses::empty())
+            .await?;
+        Ok(())
+    }
+
+    pub async fn search(
+        &mut self,
+        query: Query,
+        mailbox_hash: Option<MailboxHash>,
+    ) -> Result<Vec<EnvelopeHash>> {
+        let Some(mailbox_hash) = mailbox_hash else {
+            return Err(Error::new(
+                "Cannot search without specifying mailbox on IMAP",
+            ));
+        };
+        let query_str = query.to_imap_search();
+
+        let mut response = Vec::with_capacity(8 * 1024);
+        self.examine_mailbox(mailbox_hash, &mut response, false)
+            .await?;
+        self.send_command_raw(format!("UID SEARCH CHARSET UTF-8 {}", query_str.trim()).as_bytes())
+            .await?;
+        self.read_response(&mut response, RequiredResponses::SEARCH)
+            .await?;
+        imap_log!(
+            trace,
+            self,
+            "searching for {} returned: {}",
+            query_str,
+            String::from_utf8_lossy(&response)
+        );
+
+        for l in response.split_rn() {
+            if l.starts_with(b"* SEARCH") {
+                let uid_index = self.uid_store.uid_index.lock()?;
+                return Ok(Vec::from_iter(
+                    String::from_utf8_lossy(l[b"* SEARCH".len()..].trim())
+                        .split_whitespace()
+                        .map(UID::from_str)
+                        .filter_map(std::result::Result::ok)
+                        .filter_map(|uid| uid_index.get(&(mailbox_hash, uid)))
+                        .copied(),
+                ));
+            }
+        }
+        Err(Error::new(String::from_utf8_lossy(&response).to_string()))
+    }
 }

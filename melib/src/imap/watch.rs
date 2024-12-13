@@ -31,7 +31,7 @@ use crate::{backends::SpecialUsageMailbox, imap::sync::cache::ignore_not_found};
 /// Arguments for IMAP watching functions
 pub struct ImapWatchKit {
     pub conn: ImapConnection,
-    pub main_conn: Arc<FutureMutex<ImapConnection>>,
+    pub main_conn: Arc<ConnectionMutex>,
     pub uid_store: Arc<UIDStore>,
 }
 
@@ -49,7 +49,7 @@ pub async fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
     };
     loop {
         for (_, mailbox) in mailboxes.clone() {
-            examine_updates(mailbox, &mut conn, &uid_store).await?;
+            examine_updates(mailbox, &mut conn).await?;
         }
         //[ref:FIXME]: make sleep duration configurable
         smol::Timer::after(Duration::from_secs(3 * 60)).await;
@@ -119,7 +119,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
             Ok(None) => {
                 log::trace!("IDLE connection dropped: {:?}", &blockn.err());
                 blockn.conn.connect().await?;
-                let mut main_conn_lck = timeout(uid_store.timeout, main_conn.lock()).await?;
+                let mut main_conn_lck = main_conn.lock().await?;
                 main_conn_lck.connect().await?;
                 continue;
             }
@@ -131,7 +131,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                     .read_response(&mut response, RequiredResponses::empty())
                     .await?;
                 blockn.conn.send_command(CommandBody::Idle).await?;
-                let mut main_conn_lck = timeout(uid_store.timeout, main_conn.lock()).await?;
+                let mut main_conn_lck = main_conn.lock().await?;
                 main_conn_lck.connect().await?;
                 continue;
             }
@@ -139,9 +139,9 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
         let now = Instant::now();
         if now.duration_since(watch) >= _5_MINS {
             /* Time to poll all inboxes */
-            let mut conn = timeout(uid_store.timeout, main_conn.lock()).await?;
+            let mut main_conn_lck = main_conn.lock().await?;
             for (_h, mailbox) in mailboxes.clone() {
-                examine_updates(mailbox, &mut conn, &uid_store).await?;
+                examine_updates(mailbox, &mut main_conn_lck).await?;
             }
             watch = now;
         }
@@ -182,11 +182,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
     }
 }
 
-pub async fn examine_updates(
-    mailbox: ImapMailbox,
-    conn: &mut ImapConnection,
-    uid_store: &Arc<UIDStore>,
-) -> Result<()> {
+pub async fn examine_updates(mailbox: ImapMailbox, conn: &mut ImapConnection) -> Result<()> {
     if mailbox.no_select {
         return Ok(());
     }
@@ -196,7 +192,7 @@ pub async fn examine_updates(
         for env in new_envelopes {
             conn.add_refresh_event(RefreshEvent {
                 mailbox_hash,
-                account_hash: uid_store.account_hash,
+                account_hash: conn.uid_store.account_hash,
                 kind: RefreshEventKind::Create(Box::new(env)),
             });
         }
@@ -206,12 +202,12 @@ pub async fn examine_updates(
             .examine_mailbox(mailbox_hash, &mut response, true)
             .await?;
         {
-            let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
+            let mut uidvalidities = conn.uid_store.uidvalidity.lock().unwrap();
 
             if let Some(v) = uidvalidities.get(&mailbox_hash) {
                 if *v != select_response.uidvalidity {
                     conn.add_refresh_event(RefreshEvent {
-                        account_hash: uid_store.account_hash,
+                        account_hash: conn.uid_store.account_hash,
                         mailbox_hash,
                         kind: RefreshEventKind::Rescan,
                     });
@@ -341,7 +337,7 @@ pub async fn examine_updates(
             if let Some(value) = references {
                 env.set_references(value);
             }
-            let mut tag_lck = uid_store.collection.tag_index.write().unwrap();
+            let mut tag_lck = conn.uid_store.collection.tag_index.write().unwrap();
             if let Some((flags, keywords)) = flags {
                 env.set_flags(*flags);
                 if !env.is_seen() {
@@ -356,8 +352,7 @@ pub async fn examine_updates(
             }
         }
         {
-            let mut uid_store = Arc::clone(uid_store);
-            uid_store
+            conn.uid_store
                 .insert_envelopes(mailbox_hash, &v)
                 .or_else(ignore_not_found)
                 .chain_err_summary(|| {
@@ -379,7 +374,8 @@ pub async fn examine_updates(
                 continue;
             }
             let uid = uid.unwrap();
-            if uid_store
+            if conn
+                .uid_store
                 .uid_index
                 .lock()
                 .unwrap()
@@ -394,25 +390,25 @@ pub async fn examine_updates(
                 env.subject(),
                 mailbox.path(),
             );
-            uid_store
+            conn.uid_store
                 .msn_index
                 .lock()
                 .unwrap()
                 .entry(mailbox_hash)
                 .or_default()
                 .insert(message_sequence_number, uid);
-            uid_store
+            conn.uid_store
                 .hash_index
                 .lock()
                 .unwrap()
                 .insert(env.hash(), (uid, mailbox_hash));
-            uid_store
+            conn.uid_store
                 .uid_index
                 .lock()
                 .unwrap()
                 .insert((mailbox_hash, uid), env.hash());
             conn.add_refresh_event(RefreshEvent {
-                account_hash: uid_store.account_hash,
+                account_hash: conn.uid_store.account_hash,
                 mailbox_hash,
                 kind: Create(Box::new(env)),
             });

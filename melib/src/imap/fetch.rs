@@ -39,7 +39,7 @@ pub enum FetchStage {
 #[derive(Debug)]
 pub struct FetchState {
     pub stage: FetchStage,
-    pub connection: Arc<FutureMutex<ImapConnection>>,
+    pub connection: Arc<ConnectionMutex>,
     pub mailbox_hash: MailboxHash,
     pub uid_store: Arc<UIDStore>,
     pub batch_size: usize,
@@ -55,7 +55,7 @@ impl FetchState {
                     let select_response = self
                         .connection
                         .lock()
-                        .await
+                        .await?
                         .init_mailbox(self.mailbox_hash)
                         .await?;
                     _ = self
@@ -75,7 +75,7 @@ impl FetchState {
                     let select_response = self
                         .connection
                         .lock()
-                        .await
+                        .await?
                         .init_mailbox(self.mailbox_hash)
                         .await?;
                     if let Err(err) = self
@@ -98,7 +98,7 @@ impl FetchState {
                         Err(err) => {
                             imap_log!(
                                 error,
-                                self.connection.lock().await,
+                                self.connection.lock().await?,
                                 "IMAP cache error: could not fetch cache for {}. Reason: {}",
                                 self.uid_store.account_name,
                                 err
@@ -107,7 +107,7 @@ impl FetchState {
                             if let Err(err) = self.uid_store.reset() {
                                 imap_log!(
                                     error,
-                                    self.connection.lock().await,
+                                    self.connection.lock().await?,
                                     "IMAP cache error: could not reset cache for {}. Reason: {}",
                                     self.uid_store.account_name,
                                     err
@@ -157,7 +157,7 @@ impl FetchState {
                         Err(err) => {
                             imap_log!(
                                 error,
-                                self.connection.lock().await,
+                                self.connection.lock().await?,
                                 "IMAP cache error: could not fetch cache for {}. Reason: {}",
                                 self.uid_store.account_name,
                                 err
@@ -166,7 +166,7 @@ impl FetchState {
                             if let Err(err) = self.uid_store.reset() {
                                 imap_log!(
                                     error,
-                                    self.connection.lock().await,
+                                    self.connection.lock().await?,
                                     "IMAP cache error: could not reset cache for {}. Reason: {}",
                                     self.uid_store.account_name,
                                     err
@@ -182,7 +182,7 @@ impl FetchState {
                     }
                 }
                 FetchStage::ResyncCache => {
-                    let mut conn = self.connection.lock().await;
+                    let mut conn = self.connection.lock().await?;
                     let select_response = conn.init_mailbox(self.mailbox_hash).await?;
                     match self
                         .uid_store
@@ -240,7 +240,7 @@ impl FetchState {
                         self.stage = FetchStage::Finished;
                         return Ok(Vec::new());
                     }
-                    let mut conn = connection.lock().await;
+                    let mut conn = connection.lock().await?;
                     let mut response = Vec::with_capacity(8 * 1024);
                     let max_uid_left = max_uid;
 
@@ -429,7 +429,7 @@ impl FetchState {
             return Ok(None);
         }
         {
-            let mut conn = connection.lock().await;
+            let mut conn = connection.lock().await?;
             let select_response = conn.init_mailbox(mailbox_hash).await?;
             match Self::load_cache(
                 &conn,

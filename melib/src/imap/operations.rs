@@ -31,7 +31,7 @@ use crate::{backends::*, error::Error};
 pub struct ImapOp {
     uid: UID,
     mailbox_hash: MailboxHash,
-    connection: Arc<FutureMutex<ImapConnection>>,
+    connection: Arc<ConnectionMutex>,
     uid_store: Arc<UIDStore>,
 }
 
@@ -39,7 +39,7 @@ impl ImapOp {
     pub fn new(
         uid: UID,
         mailbox_hash: MailboxHash,
-        connection: Arc<FutureMutex<ImapConnection>>,
+        connection: Arc<ConnectionMutex>,
         uid_store: Arc<UIDStore>,
     ) -> Self {
         Self {
@@ -55,7 +55,7 @@ impl ImapOp {
         let mut use_body = false;
         let (_uid, _flags, body) = loop {
             {
-                let mut conn = timeout(self.uid_store.timeout, self.connection.lock()).await?;
+                let mut conn = self.connection.lock().await?;
                 conn.connect().await?;
                 conn.examine_mailbox(self.mailbox_hash, &mut response, false)
                     .await?;
