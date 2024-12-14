@@ -272,6 +272,7 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
                 &imap.server_conf,
                 "ImapType::shell".into(),
                 imap.uid_store.clone(),
+                true,
             );
 
             futures::executor::block_on(timeout(imap.server_conf.timeout, conn.connect()))

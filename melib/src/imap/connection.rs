@@ -31,7 +31,10 @@ use std::{
 
 use futures::{
     io::{AsyncReadExt, AsyncWriteExt},
-    lock::{Mutex as FutureMutex, MutexGuard as FutureMutexGuard},
+    lock::{
+        MappedMutexGuard as FutureMappedMutexGuard, Mutex as FutureMutex,
+        MutexGuard as FutureMutexGuard,
+    },
 };
 use imap_codec::{
     encode::{Encoder, Fragment},
@@ -192,16 +195,152 @@ async fn try_await(cl: impl Future<Output = Result<()>> + Send) -> Result<()> {
     cl.await
 }
 
+const POOL_LIMIT: usize = 5;
+
 #[derive(Debug)]
 pub struct ConnectionMutex {
     pub inner: FutureMutex<ImapConnection>,
-    pub timeout: Option<Duration>,
+    pub pool: [FutureMutex<Option<ImapConnection>>; POOL_LIMIT],
+    pub server_conf: ImapServerConf,
+    pub uid_store: Arc<UIDStore>,
+}
+
+#[derive(Debug)]
+pub enum ConnectionMutexGuard<'a> {
+    Main(FutureMutexGuard<'a, ImapConnection>),
+    Pool(FutureMappedMutexGuard<'a, Option<ImapConnection>, ImapConnection>),
+}
+
+impl std::ops::Deref for ConnectionMutexGuard<'_> {
+    type Target = ImapConnection;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Main(inner) => std::ops::Deref::deref(inner),
+            Self::Pool(inner) => std::ops::Deref::deref(inner),
+        }
+    }
+}
+
+impl std::ops::DerefMut for ConnectionMutexGuard<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            Self::Main(inner) => std::ops::DerefMut::deref_mut(inner),
+            Self::Pool(inner) => std::ops::DerefMut::deref_mut(inner),
+        }
+    }
 }
 
 impl ConnectionMutex {
     #[inline]
-    pub async fn lock(&self) -> Result<FutureMutexGuard<'_, ImapConnection>> {
-        timeout(self.timeout, self.inner.lock()).await
+    pub fn new(
+        inner: ImapConnection,
+        server_conf: ImapServerConf,
+        uid_store: Arc<UIDStore>,
+    ) -> Self {
+        let inner = inner.into();
+
+        Self {
+            inner,
+            pool: [
+                None.into(),
+                None.into(),
+                None.into(),
+                None.into(),
+                None.into(),
+            ],
+            server_conf,
+            uid_store,
+        }
+    }
+
+    #[inline]
+    pub async fn lock(&self) -> Result<ConnectionMutexGuard<'_>> {
+        let timeout_dur = self.uid_store.timeout;
+        // Fast check if main connection is available.
+        if let Some(guard) = self.inner.try_lock() {
+            return Ok(ConnectionMutexGuard::Main(guard));
+        }
+
+        async fn initialize_pool_conn_fn(
+            i: usize,
+            mutex: &ConnectionMutex,
+        ) -> Result<ConnectionMutexGuard<'_>> {
+            if let Some(dur) = mutex.uid_store.timeout {
+                // Only begin potentially initializing a new connection if the main connection
+                // has not been immediately available.
+                smol::Timer::after(dur / 4).await;
+            }
+            let mut guard = timeout(mutex.uid_store.timeout, mutex.pool[i].lock()).await?;
+            if guard.is_none() {
+                let mut new_pool_entry = ImapConnection::new_connection(
+                    &mutex.server_conf,
+                    format!("imap-connection-pool-{}", i).into(),
+                    mutex.uid_store.clone(),
+                    false,
+                );
+                if let Err(err) = timeout(mutex.uid_store.timeout, new_pool_entry.connect()).await?
+                {
+                    log::trace!(
+                        "{} Creation of new connection for connection pool failed: {}",
+                        mutex.uid_store.account_name,
+                        err
+                    );
+                    return Err(err);
+                }
+                *guard = Some(new_pool_entry);
+                log::trace!(
+                    "{} Created new pool connection #{}",
+                    mutex.uid_store.account_name,
+                    i,
+                );
+            }
+            // At this point, `guard` points to a `Some(_)` value.
+            Ok(ConnectionMutexGuard::Pool(FutureMutexGuard::map(
+                guard,
+                |o: &mut Option<ImapConnection>| {
+                    // SAFETY: we checked if `guard` is None above and initialized it if it
+                    // was.
+                    unsafe { o.as_mut().unwrap_unchecked() }
+                },
+            )))
+        }
+
+        let main_fut = async {
+            timeout(timeout_dur, self.inner.lock())
+                .await
+                .map(ConnectionMutexGuard::Main)
+        };
+
+        let (f0, f1, f2, f3, f4) = (
+            initialize_pool_conn_fn(0, self),
+            initialize_pool_conn_fn(1, self),
+            initialize_pool_conn_fn(2, self),
+            initialize_pool_conn_fn(3, self),
+            initialize_pool_conn_fn(4, self),
+        );
+        futures::pin_mut!(main_fut);
+        futures::pin_mut!(f0);
+        futures::pin_mut!(f1);
+        futures::pin_mut!(f2);
+        futures::pin_mut!(f3);
+        futures::pin_mut!(f4);
+        match futures::future::select(futures::future::select_ok([f0, f1, f2, f3, f4]), main_fut)
+            .await
+        {
+            // The main connection was the first available
+            futures::future::Either::Right((Ok(main), _)) => Ok(main),
+            // The main connection timed out, so fallback to waiting for a pool connection
+            futures::future::Either::Right((Err(_), pool_fut)) => {
+                let (res, _) = pool_fut.await?;
+                Ok(res)
+            }
+            // A pool conn was the first available
+            futures::future::Either::Left((Ok((res, _)), _main)) => Ok(res),
+            // All pool connections were unavailable, so fallback to waiting for the main
+            // connection
+            futures::future::Either::Left((Err(_), main_fut)) => main_fut.await,
+        }
     }
 }
 
@@ -212,6 +351,7 @@ pub struct ImapConnection {
     pub server_conf: ImapServerConf,
     pub sync_policy: SyncPolicy,
     pub uid_store: Arc<UIDStore>,
+    pub send_state_changes: bool,
 }
 
 impl ImapStream {
@@ -219,16 +359,19 @@ impl ImapStream {
         server_conf: &ImapServerConf,
         id: Cow<'static, str>,
         uid_store: &UIDStore,
+        send_state_changes: bool,
     ) -> Result<(Capabilities, Self)> {
         let path = &server_conf.server_hostname;
 
         let stream = if server_conf.use_tls {
-            (uid_store.event_consumer)(
-                uid_store.account_hash,
-                BackendEvent::AccountStateChange {
-                    message: "Establishing TLS connection.".into(),
-                },
-            );
+            if send_state_changes {
+                (uid_store.event_consumer)(
+                    uid_store.account_hash,
+                    BackendEvent::AccountStateChange {
+                        message: "Establishing TLS connection.".into(),
+                    },
+                );
+            }
             let mut connector = TlsConnector::builder();
             if server_conf.danger_accept_invalid_certs {
                 connector.danger_accept_invalid_certs(true);
@@ -397,12 +540,14 @@ impl ImapStream {
             return Ok((Default::default(), ret));
         }
 
-        (uid_store.event_consumer)(
-            uid_store.account_hash,
-            BackendEvent::AccountStateChange {
-                message: "Negotiating server capabilities.".into(),
-            },
-        );
+        if send_state_changes {
+            (uid_store.event_consumer)(
+                uid_store.account_hash,
+                BackendEvent::AccountStateChange {
+                    message: "Negotiating server capabilities.".into(),
+                },
+            );
+        }
         ret.send_command(CommandBody::Capability).await?;
         ret.read_response(&mut res).await?;
 
@@ -459,12 +604,14 @@ impl ImapStream {
             .set_kind(ErrorKind::ProtocolNotSupported));
         }
 
-        (uid_store.event_consumer)(
-            uid_store.account_hash,
-            BackendEvent::AccountStateChange {
-                message: "Attempting authentication.".into(),
-            },
-        );
+        if send_state_changes {
+            (uid_store.event_consumer)(
+                uid_store.account_hash,
+                BackendEvent::AccountStateChange {
+                    message: "Attempting authentication.".into(),
+                },
+            );
+        }
         match server_conf.protocol {
             ImapProtocol::IMAP {
                 extension_use: ImapExtensionUse { oauth2, .. },
@@ -795,6 +942,7 @@ impl ImapConnection {
         server_conf: &ImapServerConf,
         id: Cow<'static, str>,
         uid_store: Arc<UIDStore>,
+        send_state_changes: bool,
     ) -> Self {
         Self {
             stream: Err(Error::new("Offline".to_string())),
@@ -809,6 +957,7 @@ impl ImapConnection {
                 SyncPolicy::None
             },
             uid_store,
+            send_state_changes,
         }
     }
 
@@ -852,9 +1001,13 @@ impl ImapConnection {
                     return Ok(());
                 }
             }
-            let new_stream =
-                ImapStream::new_connection(&self.server_conf, self.id.clone(), &self.uid_store)
-                    .await;
+            let new_stream = ImapStream::new_connection(
+                &self.server_conf,
+                self.id.clone(),
+                &self.uid_store,
+                self.send_state_changes,
+            )
+            .await;
             if let Err(err) = new_stream.as_ref() {
                 self.uid_store.is_online.lock().unwrap().1 = Err(err.clone());
             } else {

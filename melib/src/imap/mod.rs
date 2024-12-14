@@ -74,6 +74,7 @@ use crate::{
     email::*,
     error::{Error, ErrorKind, Result, ResultIntoError},
     imap::{protocol_parser::id_ext::IDResponse, sync::cache::ImapCache},
+    text::Truncate,
     utils::futures::timeout,
 };
 
@@ -511,8 +512,13 @@ impl MailBackend for ImapType {
                 idle(ImapWatchKit {
                     conn: ImapConnection::new_connection(
                         &server_conf,
-                        "watch()::idle".into(),
+                        format!(
+                            "{}-watch-IDLE",
+                            uid_store.account_name.as_ref().trim_at_boundary(25)
+                        )
+                        .into(),
                         uid_store.clone(),
+                        false,
                     ),
                     main_conn: main_conn.clone(),
                     uid_store: uid_store.clone(),
@@ -522,8 +528,13 @@ impl MailBackend for ImapType {
                 poll_with_examine(ImapWatchKit {
                     conn: ImapConnection::new_connection(
                         &server_conf,
-                        "watch()::poll_with_examine".into(),
+                        format!(
+                            "{}-watch-poll_with_EXAMINE",
+                            uid_store.account_name.as_ref().trim_at_boundary(25)
+                        )
+                        .into(),
                         uid_store.clone(),
+                        false,
                     ),
                     main_conn: main_conn.clone(),
                     uid_store: uid_store.clone(),
@@ -1337,16 +1348,25 @@ impl ImapType {
                 keep_offline_cache,
             )
         });
-        let connection =
-            ImapConnection::new_connection(&server_conf, "ImapType::new".into(), uid_store.clone());
+        let connection = ImapConnection::new_connection(
+            &server_conf,
+            format!(
+                "{}-main-conn",
+                uid_store.account_name.as_ref().trim_at_boundary(25),
+            )
+            .into(),
+            uid_store.clone(),
+            true,
+        );
 
         Ok(Box::new(Self {
-            server_conf,
             _is_subscribed: is_subscribed,
-            connection: Arc::new(ConnectionMutex {
-                inner: FutureMutex::new(connection),
-                timeout: uid_store.timeout,
-            }),
+            connection: Arc::new(ConnectionMutex::new(
+                connection,
+                server_conf.clone(),
+                uid_store.clone(),
+            )),
+            server_conf,
             uid_store,
         }))
     }
@@ -1354,8 +1374,13 @@ impl ImapType {
     pub fn shell(&self) {
         let mut conn = ImapConnection::new_connection(
             &self.server_conf,
-            "ImapType::shell".into(),
+            format!(
+                "{}-shell-conn",
+                self.uid_store.account_name.as_ref().trim_at_boundary(25),
+            )
+            .into(),
             self.uid_store.clone(),
+            true,
         );
 
         futures::executor::block_on(timeout(self.server_conf.timeout, conn.connect()))

@@ -32,6 +32,7 @@ use crate::{
     error::{Error, Result},
     get_conf_val,
     imap::RequiredResponses,
+    text::Truncate,
 };
 
 pub struct ManageSieveConnection {
@@ -96,8 +97,13 @@ impl ManageSieveConnection {
         Ok(Self {
             inner: ImapConnection::new_connection(
                 &server_conf,
-                "ManageSieveConnection::new()".into(),
+                format!(
+                    "{}-ManageSieveConnection",
+                    uid_store.account_name.as_ref().trim_at_boundary(25)
+                )
+                .into(),
                 uid_store,
+                true,
             ),
         })
     }
