@@ -201,7 +201,6 @@ impl ImapStream {
     ) -> Result<(Capabilities, Self)> {
         let path = &server_conf.server_hostname;
 
-        let cmd_id = 1;
         let stream = if server_conf.use_tls {
             (uid_store.event_consumer)(
                 uid_store.account_hash,
@@ -244,7 +243,7 @@ impl ImapStream {
                 let mut buf = vec![0; Connection::IO_BUF_SIZE];
                 match server_conf.protocol {
                     ImapProtocol::IMAP { .. } => socket
-                        .write_all(format!("M{} STARTTLS\r\n", cmd_id).as_bytes())
+                        .write_all(b"M1 STARTTLS\r\n")
                         .await
                         .chain_err_summary(err_fn)?,
                     ImapProtocol::ManageSieve => {
@@ -355,7 +354,7 @@ impl ImapStream {
         }
         let mut res = Vec::with_capacity(8 * 1024);
         let mut ret = Self {
-            cmd_id,
+            cmd_id: 1,
             id,
             stream,
             protocol: server_conf.protocol,
