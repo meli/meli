@@ -55,8 +55,8 @@ use edit_attachments::*;
 
 pub mod hooks;
 
-#[derive(Debug, Eq, PartialEq)]
-enum Cursor {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Focus {
     Headers,
     Body,
     Sign,
@@ -105,7 +105,9 @@ pub struct Composer {
     reply_context: Option<(MailboxHash, EnvelopeHash)>,
     account_hash: AccountHash,
 
-    cursor: Cursor,
+    /// Which part the cursor is focused in, e.g. `{Headers, Body, Sign,
+    /// Encrypt, Attachments}`.
+    focus: Focus,
 
     pager: Pager,
     draft: Draft,
@@ -180,7 +182,7 @@ impl Composer {
         Self {
             reply_context: None,
             account_hash: AccountHash::default(),
-            cursor: Cursor::Headers,
+            focus: Focus::Headers,
             pager,
             draft: Draft::default(),
             hooks: vec![
@@ -758,7 +760,7 @@ To: {}
                     },
                 ),
                 theme_default.fg,
-                if self.cursor == Cursor::Sign {
+                if self.focus == Focus::Sign {
                     crate::conf::value(context, "highlight").bg
                 } else {
                     theme_default.bg
@@ -775,7 +777,7 @@ To: {}
                     toggle_shortcut, edit_shortcut,
                 ),
                 theme_default.fg,
-                if self.cursor == Cursor::Sign {
+                if self.focus == Focus::Sign {
                     crate::conf::value(context, "highlight").bg
                 } else {
                     theme_default.bg
@@ -826,7 +828,7 @@ To: {}
                     }
                 ),
                 theme_default.fg,
-                if self.cursor == Cursor::Encrypt {
+                if self.focus == Focus::Encrypt {
                     crate::conf::value(context, "highlight").bg
                 } else {
                     theme_default.bg
@@ -843,7 +845,7 @@ To: {}
                     toggle_shortcut, edit_shortcut,
                 ),
                 theme_default.fg,
-                if self.cursor == Cursor::Encrypt {
+                if self.focus == Focus::Encrypt {
                     crate::conf::value(context, "highlight").bg
                 } else {
                     theme_default.bg
@@ -858,7 +860,7 @@ To: {}
             grid.write_string(
                 &format!("no attachments [edit: {}]", edit_shortcut),
                 theme_default.fg,
-                if self.cursor == Cursor::Attachments {
+                if self.focus == Focus::Attachments {
                     crate::conf::value(context, "highlight").bg
                 } else {
                     theme_default.bg
@@ -877,7 +879,7 @@ To: {}
                     edit_shortcut
                 ),
                 theme_default.fg,
-                if self.cursor == Cursor::Attachments {
+                if self.focus == Focus::Attachments {
                     crate::conf::value(context, "highlight").bg
                 } else {
                     theme_default.bg
@@ -1070,11 +1072,11 @@ impl Component for Composer {
         /* Regardless of view mode, do the following */
 
         if self.dirty {
-            match self.cursor {
-                Cursor::Headers => {
+            match self.focus {
+                Focus::Headers => {
                     grid.change_theme(header_area, theme_default);
                 }
-                Cursor::Body => {
+                Focus::Body => {
                     grid.change_theme(
                         body_area,
                         ThemeAttribute {
@@ -1088,7 +1090,7 @@ impl Component for Composer {
                         },
                     );
                 }
-                Cursor::Sign | Cursor::Encrypt | Cursor::Attachments => {}
+                Focus::Sign | Focus::Encrypt | Focus::Attachments => {}
             }
         }
 
@@ -1256,19 +1258,19 @@ impl Component for Composer {
                     && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["scroll_up"]) =>
             {
                 self.set_dirty(true);
-                self.cursor = match self.cursor {
+                self.focus = match self.focus {
                     // match order is evaluation order, so it matters here because of the if guard
                     // process_event side effects
-                    Cursor::Attachments => Cursor::Encrypt,
-                    Cursor::Encrypt => Cursor::Sign,
-                    Cursor::Sign => Cursor::Body,
-                    Cursor::Body if !self.pager.process_event(event, context) => {
+                    Focus::Attachments => Focus::Encrypt,
+                    Focus::Encrypt => Focus::Sign,
+                    Focus::Sign => Focus::Body,
+                    Focus::Body if !self.pager.process_event(event, context) => {
                         self.form.process_event(event, context);
-                        Cursor::Headers
+                        Focus::Headers
                     }
-                    Cursor::Body => Cursor::Body,
-                    Cursor::Headers if self.form.process_event(event, context) => Cursor::Headers,
-                    Cursor::Headers => Cursor::Headers,
+                    Focus::Body => Focus::Body,
+                    Focus::Headers if self.form.process_event(event, context) => Focus::Headers,
+                    Focus::Headers => Focus::Headers,
                 };
                 return true;
             }
@@ -1277,20 +1279,20 @@ impl Component for Composer {
                     && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["scroll_down"]) =>
             {
                 self.set_dirty(true);
-                self.cursor = match self.cursor {
-                    Cursor::Headers if self.form.process_event(event, context) => Cursor::Headers,
-                    Cursor::Headers => Cursor::Body,
-                    Cursor::Body if self.pager.process_event(event, context) => Cursor::Body,
-                    Cursor::Body => Cursor::Sign,
-                    Cursor::Sign => Cursor::Encrypt,
-                    Cursor::Encrypt => Cursor::Attachments,
-                    Cursor::Attachments => Cursor::Attachments,
+                self.focus = match self.focus {
+                    Focus::Headers if self.form.process_event(event, context) => Focus::Headers,
+                    Focus::Headers => Focus::Body,
+                    Focus::Body if self.pager.process_event(event, context) => Focus::Body,
+                    Focus::Body => Focus::Sign,
+                    Focus::Sign => Focus::Encrypt,
+                    Focus::Encrypt => Focus::Attachments,
+                    Focus::Attachments => Focus::Attachments,
                 };
                 return true;
             }
             _ => {}
         }
-        if self.cursor == Cursor::Headers
+        if self.focus == Focus::Headers
             && self.mode.is_edit()
             && self.form.process_event(event, context)
         {
@@ -1582,15 +1584,15 @@ impl Component for Composer {
                     && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["scroll_up"]) =>
             {
                 self.set_dirty(true);
-                self.cursor = match self.cursor {
-                    Cursor::Headers => return true,
-                    Cursor::Body => {
+                self.focus = match self.focus {
+                    Focus::Headers => return true,
+                    Focus::Body => {
                         self.form.process_event(event, context);
-                        Cursor::Headers
+                        Focus::Headers
                     }
-                    Cursor::Sign => Cursor::Body,
-                    Cursor::Encrypt => Cursor::Sign,
-                    Cursor::Attachments => Cursor::Encrypt,
+                    Focus::Sign => Focus::Body,
+                    Focus::Encrypt => Focus::Sign,
+                    Focus::Attachments => Focus::Encrypt,
                 };
             }
             UIEvent::Input(ref key)
@@ -1598,21 +1600,21 @@ impl Component for Composer {
                     && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["scroll_down"]) =>
             {
                 self.set_dirty(true);
-                self.cursor = match self.cursor {
-                    Cursor::Headers => Cursor::Body,
-                    Cursor::Body => Cursor::Sign,
-                    Cursor::Sign => Cursor::Encrypt,
-                    Cursor::Encrypt => Cursor::Attachments,
-                    Cursor::Attachments => return true,
+                self.focus = match self.focus {
+                    Focus::Headers => Focus::Body,
+                    Focus::Body => Focus::Sign,
+                    Focus::Sign => Focus::Encrypt,
+                    Focus::Encrypt => Focus::Attachments,
+                    Focus::Attachments => return true,
                 };
             }
             UIEvent::Input(Key::Char('\n'))
                 if self.mode.is_edit()
-                    && (self.cursor == Cursor::Sign || self.cursor == Cursor::Encrypt) =>
+                    && (self.focus == Focus::Sign || self.focus == Focus::Encrypt) =>
             {
                 #[cfg(feature = "gpgme")]
-                match self.cursor {
-                    Cursor::Sign => {
+                match self.focus {
+                    Focus::Sign => {
                         let is_true = self
                             .gpg_state
                             .sign_mail
@@ -1620,7 +1622,7 @@ impl Component for Composer {
                             .is_true();
                         self.gpg_state.sign_mail = Some(ActionFlag::from(!is_true));
                     }
-                    Cursor::Encrypt => {
+                    Focus::Encrypt => {
                         let is_true = self
                             .gpg_state
                             .encrypt_mail
@@ -1826,7 +1828,7 @@ impl Component for Composer {
             }
             UIEvent::Input(ref key)
                 if self.mode.is_edit()
-                    && self.cursor == Cursor::Sign
+                    && self.focus == Focus::Sign
                     && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit"]) =>
             {
                 #[cfg(feature = "gpgme")]
@@ -1856,7 +1858,7 @@ impl Component for Composer {
             }
             UIEvent::Input(ref key)
                 if self.mode.is_edit()
-                    && self.cursor == Cursor::Encrypt
+                    && self.focus == Focus::Encrypt
                     && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit"]) =>
             {
                 #[cfg(feature = "gpgme")]
@@ -1921,7 +1923,7 @@ impl Component for Composer {
             }
             UIEvent::Input(ref key)
                 if self.mode.is_edit()
-                    && self.cursor == Cursor::Attachments
+                    && self.focus == Focus::Attachments
                     && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit"]) =>
             {
                 self.mode = ViewMode::EditAttachments {
