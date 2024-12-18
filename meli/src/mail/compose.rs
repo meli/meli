@@ -870,7 +870,12 @@ To: {}
             );
         } else {
             grid.write_string(
-                &format!("{} attachments [edit: {}]", attachments_no, edit_shortcut),
+                &format!(
+                    "{} attachment{} [edit: {}]",
+                    attachments_no,
+                    if attachments_no != 1 { "s" } else { "" },
+                    edit_shortcut
+                ),
                 theme_default.fg,
                 if self.cursor == Cursor::Attachments {
                     crate::conf::value(context, "highlight").bg

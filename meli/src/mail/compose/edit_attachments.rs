@@ -126,7 +126,7 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
             grid.clear_area(area, theme_default);
             if attachments_no == 0 {
                 grid.write_string(
-                    "no attachments",
+                    "No attachments",
                     theme_default.fg,
                     theme_default.bg,
                     theme_default.attrs,
@@ -136,7 +136,11 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
                 );
             } else {
                 grid.write_string(
-                    &format!("{} attachments ", attachments_no),
+                    &format!(
+                        "{} attachment{} ",
+                        attachments_no,
+                        if attachments_no == 1 { "" } else { "s" }
+                    ),
                     theme_default.fg,
                     theme_default.bg,
                     theme_default.attrs,
