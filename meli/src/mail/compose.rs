@@ -1191,15 +1191,11 @@ impl Component for Composer {
         match self.mode {
             ViewMode::Edit | ViewMode::EmbeddedPty => {}
             ViewMode::EditAttachments { ref mut widget } => {
-                let inner_area = area.center_inside((
-                    area.width().saturating_sub(2),
-                    area.height().saturating_sub(2),
-                ));
                 (EditAttachmentsRefMut {
                     inner: widget,
                     draft: &mut self.draft,
                 })
-                .draw(grid, inner_area, context);
+                .draw(grid, area, context);
             }
             ViewMode::Send(ref mut s) => {
                 let inner_area = area.center_inside((
