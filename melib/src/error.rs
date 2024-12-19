@@ -455,6 +455,11 @@ impl From<io::Error> for Error {
         let s = err.to_string();
         let kind = if s.contains("failed to lookup address information") {
             ErrorKind::Network(NetworkErrorKind::HostLookupFailed)
+        } else if s.contains("the SSL session has been shut down") || s.contains("OpenSSL error") {
+            // FIXME: This is an OS-specific error from the `openssl` crate, make the check
+            // more intelligent than a hardcoded string `contains`.
+            // <https://github.com/sfackler/rust-openssl/blob/538a5cb737e8d83085553cac01643820dc7ff205/openssl/src/ssl/error.rs#L100-L123>
+            ErrorKind::Network(NetworkErrorKind::InvalidTLSConnection)
         } else if let Some(errno) = err.raw_os_error() {
             ErrorKind::OSError(Errno::from_raw(errno))
         } else {
