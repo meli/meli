@@ -401,14 +401,14 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for 
                     theme_attr.fg,
                     theme_attr.bg,
                     theme_attr.attrs,
-                    area.nth_row(i).skip_cols(1),
+                    area.nth_row(i),
                     None,
                     None,
                 );
                 /* draw field */
                 v.draw(
                     grid,
-                    area.nth_row(i).skip_cols(self.field_name_max_length + 3),
+                    area.nth_row(i).skip_cols(self.field_name_max_length + 2),
                     context,
                 );
                 grid.change_theme(area.nth_row(i), theme_attr);
@@ -417,9 +417,9 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for 
                 if i == self.cursor && self.focus == FormFocus::TextInput {
                     v.draw_cursor(
                         grid,
-                        area.nth_row(i).skip_cols(self.field_name_max_length + 3),
+                        area.nth_row(i).skip_cols(self.field_name_max_length + 2),
                         area.nth_row(i + 1)
-                            .skip_cols(self.field_name_max_length + 3),
+                            .skip_cols(self.field_name_max_length + 2),
                         context,
                     );
                 }
@@ -428,8 +428,7 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for 
             let length = self.layout.len();
 
             if !self.hide_buttons {
-                self.buttons
-                    .draw(grid, area.skip_rows(length + 3).skip_cols(1), context);
+                self.buttons.draw(grid, area.skip_rows(length + 3), context);
             }
             if length + 4 < area.height() {
                 grid.clear_area(area.skip_rows(length + 3 + 1), theme_default);
