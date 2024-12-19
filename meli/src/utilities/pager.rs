@@ -587,7 +587,7 @@ impl Component for Pager {
         if self.show_scrollbar && rows < height {
             ScrollBar::default().set_show_arrows(true).draw(
                 grid,
-                area.nth_col(area.width()),
+                area.nth_col(area.width().saturating_sub(1)),
                 context,
                 /* position */
                 self.cursor.1,
@@ -600,7 +600,7 @@ impl Component for Pager {
         if self.show_scrollbar && cols < width {
             ScrollBar::default().set_show_arrows(true).draw_horizontal(
                 grid,
-                area.nth_row(area.height()),
+                area.nth_row(area.height().saturating_sub(1)),
                 context,
                 self.cursor.0,
                 cols,
