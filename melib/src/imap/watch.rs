@@ -60,6 +60,10 @@ pub async fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
 }
 
 pub async fn idle(kit: ImapWatchKit) -> Result<()> {
+    // duration interval to send heartbeat
+    const _10_MINS: Duration = Duration::from_secs(10 * 60);
+    // duration interval to check other mailboxes for changes
+    const _5_MINS: Duration = Duration::from_secs(5 * 60);
     log::trace!("IDLE");
     /* IDLE only watches the connection's selected mailbox. We will IDLE on INBOX
      * and every ~5 minutes wake up and poll the others */
@@ -69,20 +73,33 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
         uid_store,
     } = kit;
     conn.connect().await?;
-    let mailbox: ImapMailbox = match uid_store
-        .mailboxes
-        .lock()
-        .await
-        .values()
-        .find(|f| f.parent.is_none() && (f.special_usage() == SpecialUsageMailbox::Inbox))
-        .cloned()
-    {
-        Some(mailbox) => mailbox,
-        None => {
-            return Err(Error::new(
-                "INBOX mailbox not found in local mailbox index. meli may have not parsed the \
-                 IMAP mailboxes correctly",
-            ));
+    let mailbox: ImapMailbox = {
+        let mut retries = 0;
+        loop {
+            let inbox = uid_store
+                .mailboxes
+                .lock()
+                .await
+                .values()
+                .find(|f| f.parent.is_none() && (f.special_usage() == SpecialUsageMailbox::Inbox))
+                .cloned();
+            match inbox {
+                Some(mailbox) => break mailbox,
+                None if retries >= 10 => {
+                    return Err(Error::new(
+                        "INBOX mailbox not found in local mailbox index. the connection might \
+                         have not parsed the IMAP mailboxes correctly",
+                    )
+                    .set_kind(ErrorKind::TimedOut));
+                }
+                None => {
+                    smol::Timer::after(Duration::from_millis(
+                        retries * (4 * crate::utils::random::random_u8() as u64),
+                    ))
+                    .await;
+                    retries += 1;
+                }
+            }
         }
     };
     let mailbox_hash = mailbox.hash();
@@ -112,10 +129,6 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
     conn.send_command(CommandBody::Idle).await?;
     let mut blockn = ImapBlockingConnection::from(conn);
     let mut watch = Instant::now();
-    /* duration interval to send heartbeat */
-    const _10_MINS: Duration = Duration::from_secs(10 * 60);
-    /* duration interval to check other mailboxes for changes */
-    const _5_MINS: Duration = Duration::from_secs(5 * 60);
     loop {
         let line = match timeout(Some(_10_MINS), blockn.as_stream()).await {
             Ok(Some(line)) => line,
