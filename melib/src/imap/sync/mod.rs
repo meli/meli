@@ -108,7 +108,7 @@ impl ImapConnection {
         // 2. tag1 UID FETCH <lastseenuid+1>:* <descriptors>
         self.send_command(CommandBody::fetch(
             max_uid + 1..,
-            common_attributes(),
+            crate::imap::email::common_attributes(),
             true,
         )?)
         .await?;

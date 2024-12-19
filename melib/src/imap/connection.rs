@@ -1658,13 +1658,8 @@ impl ImapConnection {
         } else {
             Literal::try_from(bytes)?
         };
-        self.send_command(CommandBody::append(
-            path,
-            flags.derive_imap_codec_flags(),
-            None,
-            data,
-        )?)
-        .await?;
+        self.send_command(CommandBody::append(path, flags.into(), None, data)?)
+            .await?;
         // [ref:TODO]: check for APPENDUID [RFC4315 - UIDPLUS]
         self.read_response(&mut response, RequiredResponses::empty())
             .await?;

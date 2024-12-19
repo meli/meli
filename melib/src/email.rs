@@ -107,12 +107,6 @@ pub use address::{Address, MessageID, References, StrBuild, StrBuilder};
 pub use attachments::{Attachment, AttachmentBuilder};
 pub use compose::{attachment_from_file, Draft};
 pub use headers::*;
-#[cfg(feature = "imap")]
-use imap_codec::imap_types::{
-    core::{AString, Atom, Vec1},
-    fetch::{MacroOrMessageDataItemNames, MessageDataItemName, Section},
-    flag::Flag as ImapCodecFlag,
-};
 use indexmap::IndexSet;
 use smallvec::SmallVec;
 
@@ -122,25 +116,6 @@ use crate::{
     thread::ThreadNodeHash,
     TagHash, UnixTimestamp,
 };
-
-#[cfg(feature = "imap")]
-// [ref:TODO]: (#222) Make this `const` as soon as it is possible.
-pub(crate) fn common_attributes() -> MacroOrMessageDataItemNames<'static> {
-    MacroOrMessageDataItemNames::MessageDataItemNames(vec![
-        MessageDataItemName::Uid,
-        MessageDataItemName::Flags,
-        MessageDataItemName::Envelope,
-        MessageDataItemName::BodyExt {
-            section: Some(Section::HeaderFields(
-                None,
-                Vec1::from(AString::from(Atom::unvalidated("REFERENCES"))),
-            )),
-            partial: None,
-            peek: true,
-        },
-        MessageDataItemName::BodyStructure,
-    ])
-}
 
 bitflags! {
     #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -183,37 +158,6 @@ impl Flag {
     flag_impl!(fn is_trashed, Self::TRASHED);
     flag_impl!(fn is_draft, Self::DRAFT);
     flag_impl!(fn is_flagged, Self::FLAGGED);
-
-    #[cfg(feature = "imap")]
-    pub(crate) fn derive_imap_codec_flags(&self) -> Vec<ImapCodecFlag> {
-        let mut flags = Vec::new();
-
-        if self.is_passed() {
-            // This is from http://cr.yp.to/proto/maildir.html and not meaningful in IMAP.
-        }
-
-        if self.is_replied() {
-            flags.push(ImapCodecFlag::Answered);
-        }
-
-        if self.is_seen() {
-            flags.push(ImapCodecFlag::Seen);
-        }
-
-        if self.is_trashed() {
-            flags.push(ImapCodecFlag::Deleted);
-        }
-
-        if self.is_draft() {
-            flags.push(ImapCodecFlag::Draft);
-        }
-
-        if self.is_flagged() {
-            flags.push(ImapCodecFlag::Flagged);
-        }
-
-        flags
-    }
 }
 
 /// Container type for both envelope and bytes data.

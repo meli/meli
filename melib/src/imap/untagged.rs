@@ -29,9 +29,9 @@ use crate::{
         RefreshEventKind::{self, *},
         TagHash,
     },
-    email::common_attributes,
     error::*,
     imap::{
+        email::common_attributes,
         protocol_parser::{
             generate_envelope_hash, FetchResponse, ImapLineSplit, RequiredResponses,
             UntaggedResponse,

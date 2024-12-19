@@ -37,6 +37,7 @@ mod watch;
 pub use watch::*;
 mod search;
 pub use search::*;
+pub mod email;
 pub mod error;
 pub mod fetch;
 pub mod managesieve;

@@ -258,7 +258,7 @@ impl FetchState {
                         };
                         conn.send_command(CommandBody::Fetch {
                             sequence_set,
-                            macro_or_item_names: common_attributes(),
+                            macro_or_item_names: crate::imap::email::common_attributes(),
                             uid: true,
                         })
                         .await?;
