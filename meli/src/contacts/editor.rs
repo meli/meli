@@ -121,9 +121,14 @@ impl ContactManager {
             } else {
                 ("Save".into(), FormButtonAction::Accept)
             },
-            /* cursor_up_shortcut */ context.settings.shortcuts.general.scroll_up.clone(),
-            /* cursor_down_shortcut */
+            // cursor_up_shortcut
+            context.settings.shortcuts.general.scroll_up.clone(),
+            // cursor_down_shortcut
             context.settings.shortcuts.general.scroll_down.clone(),
+            // cursor_right_shortcut
+            context.settings.shortcuts.general.scroll_right.clone(),
+            // cursor_left_shortcut
+            context.settings.shortcuts.general.scroll_left.clone(),
         );
         if !self.card.external_resource() {
             self.form

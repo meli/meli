@@ -49,9 +49,15 @@ pub struct EditAttachments {
 }
 
 impl EditAttachments {
-    pub fn new(account_hash: AccountHash) -> Self {
+    pub fn new(account_hash: AccountHash, context: &Context) -> Self {
         //ButtonWidget::new(("Add".into(), FormButtonAction::Other("add")));
-        let mut buttons = ButtonWidget::new(("Go Back".into(), FormButtonAction::Cancel));
+        let mut buttons = ButtonWidget::new(
+            ("Go Back".into(), FormButtonAction::Cancel),
+            // cursor_right_shortcut
+            context.settings.shortcuts.general.scroll_right.clone(),
+            // cursor_left_shortcut
+            context.settings.shortcuts.general.scroll_left.clone(),
+        );
         buttons.set_focus(true);
         buttons.set_cursor(1);
         Self {
@@ -90,16 +96,26 @@ impl EditAttachmentsRefMut<'_, '_> {
 
         let mut ret = FormWidget::new(
             ("Save".into(), FormButtonAction::Accept),
-            /* cursor_up_shortcut */
+            // cursor_up_shortcut
             shortcuts
                 .get(Shortcuts::COMPOSING)
                 .and_then(|c| c.get("scroll_up").cloned())
                 .unwrap_or_else(|| context.settings.shortcuts.composing.scroll_up.clone()),
-            /* cursor_down_shortcut */
+            // cursor_down_shortcut
             shortcuts
                 .get(Shortcuts::COMPOSING)
                 .and_then(|c| c.get("scroll_down").cloned())
                 .unwrap_or_else(|| context.settings.shortcuts.composing.scroll_down.clone()),
+            // cursor_right_shortcut
+            shortcuts
+                .get(Shortcuts::GENERAL)
+                .and_then(|c| c.get("scroll_right").cloned())
+                .unwrap_or_else(|| context.settings.shortcuts.general.scroll_right.clone()),
+            // cursor_left_shortcut
+            shortcuts
+                .get(Shortcuts::GENERAL)
+                .and_then(|c| c.get("scroll_left").cloned())
+                .unwrap_or_else(|| context.settings.shortcuts.general.scroll_left.clone()),
         );
 
         ret.add_button(("Reset".into(), FormButtonAction::Reset));

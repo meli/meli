@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{borrow::Cow, collections::HashMap, time::Duration};
+use std::{borrow::Cow, time::Duration};
 
 use super::*;
 use crate::melib::text::TextProcessing;
@@ -210,7 +210,7 @@ pub struct FormWidget<T>
 where
     T: 'static + std::fmt::Debug + Copy + Default + Send + Sync,
 {
-    fields: HashMap<Cow<'static, str>, Field>,
+    fields: IndexMap<Cow<'static, str>, Field>,
     layout: Vec<Cow<'static, str>>,
     buttons: ButtonWidget<T>,
 
@@ -221,6 +221,8 @@ where
     dirty: bool,
     cursor_up_shortcut: Key,
     cursor_down_shortcut: Key,
+    cursor_right_shortcut: Key,
+    cursor_left_shortcut: Key,
     id: ComponentId,
 }
 
@@ -237,6 +239,8 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Clone + Send + Sync> Clone 
             dirty: true,
             cursor_up_shortcut: self.cursor_up_shortcut.clone(),
             cursor_down_shortcut: self.cursor_down_shortcut.clone(),
+            cursor_right_shortcut: self.cursor_right_shortcut.clone(),
+            cursor_left_shortcut: self.cursor_left_shortcut.clone(),
             id: ComponentId::default(),
         }
     }
@@ -253,8 +257,10 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Default for Fo
             field_name_max_length: 10,
             cursor: 0,
             dirty: true,
-            cursor_up_shortcut: Key::Up,
-            cursor_down_shortcut: Key::Down,
+            cursor_up_shortcut: Key::Char('k'),
+            cursor_down_shortcut: Key::Char('j'),
+            cursor_right_shortcut: Key::Char('l'),
+            cursor_left_shortcut: Key::Char('h'),
             id: ComponentId::default(),
         }
     }
@@ -273,13 +279,21 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> FormWidget<T> 
         action: (Cow<'static, str>, T),
         cursor_up_shortcut: Key,
         cursor_down_shortcut: Key,
+        cursor_right_shortcut: Key,
+        cursor_left_shortcut: Key,
     ) -> Self {
         Self {
-            buttons: ButtonWidget::new(action),
+            buttons: ButtonWidget::new(
+                action,
+                cursor_right_shortcut.clone(),
+                cursor_left_shortcut.clone(),
+            ),
             focus: FormFocus::Fields,
             hide_buttons: false,
             cursor_up_shortcut,
             cursor_down_shortcut,
+            cursor_right_shortcut,
+            cursor_left_shortcut,
             id: ComponentId::default(),
             dirty: true,
             ..Default::default()
@@ -344,15 +358,15 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> FormWidget<T> 
         self.fields.insert(value.0, value.1);
     }
 
-    pub fn values(&self) -> &HashMap<Cow<'static, str>, Field> {
+    pub fn values(&self) -> &IndexMap<Cow<'static, str>, Field> {
         &self.fields
     }
 
-    pub fn values_mut(&mut self) -> &mut HashMap<Cow<'static, str>, Field> {
+    pub fn values_mut(&mut self) -> &mut IndexMap<Cow<'static, str>, Field> {
         &mut self.fields
     }
 
-    pub fn collect(self) -> HashMap<Cow<'static, str>, Field> {
+    pub fn collect(self) -> IndexMap<Cow<'static, str>, Field> {
         self.fields
     }
 
@@ -539,17 +553,32 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for 
         self.buttons.set_dirty(value);
     }
 
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
+        let mut map = if !self.hide_buttons && self.focus == FormFocus::Buttons {
+            self.buttons.shortcuts(context)
+        } else {
+            Default::default()
+        };
+        let mut our_map: ShortcutMap = Default::default();
+        our_map.insert("up", self.cursor_up_shortcut.clone());
+        our_map.insert("down", self.cursor_down_shortcut.clone());
+        our_map.insert("toggle field editing", Key::Char('\n'));
+        map.insert("fields input", our_map);
+
+        map
+    }
+
     fn id(&self) -> ComponentId {
         self.id
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ButtonWidget<T>
 where
     T: 'static + std::fmt::Debug + Copy + Default + Send + Sync,
 {
-    buttons: HashMap<Cow<'static, str>, T>,
+    buttons: IndexMap<Cow<'static, str>, T>,
     layout: Vec<Cow<'static, str>>,
 
     result: Option<T>,
@@ -557,7 +586,25 @@ where
     /// Is the button widget focused, i.e do we need to draw the highlighting?
     focus: bool,
     dirty: bool,
+    cursor_right_shortcut: Key,
+    cursor_left_shortcut: Key,
     id: ComponentId,
+}
+
+impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Default for ButtonWidget<T> {
+    fn default() -> Self {
+        Self {
+            buttons: Default::default(),
+            layout: Default::default(),
+            result: None,
+            cursor: 0,
+            focus: false,
+            dirty: true,
+            cursor_right_shortcut: Key::Char('l'),
+            cursor_left_shortcut: Key::Char('h'),
+            id: ComponentId::default(),
+        }
+    }
 }
 
 impl<T> std::fmt::Display for ButtonWidget<T>
@@ -579,6 +626,8 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Clone + Send + Sync> Clone
             result: self.result,
             cursor: self.cursor,
             focus: self.focus,
+            cursor_right_shortcut: self.cursor_right_shortcut.clone(),
+            cursor_left_shortcut: self.cursor_left_shortcut.clone(),
             dirty: true,
             id: ComponentId::default(),
         }
@@ -589,7 +638,11 @@ impl<T> ButtonWidget<T>
 where
     T: 'static + std::fmt::Debug + Copy + Default + Send + Sync,
 {
-    pub fn new(init_val: (Cow<'static, str>, T)) -> Self {
+    pub fn new(
+        init_val: (Cow<'static, str>, T),
+        cursor_right_shortcut: Key,
+        cursor_left_shortcut: Key,
+    ) -> Self {
         Self {
             layout: vec![init_val.0.clone()],
             buttons: vec![init_val].into_iter().collect(),
@@ -597,6 +650,8 @@ where
             cursor: 0,
             focus: false,
             dirty: true,
+            cursor_right_shortcut,
+            cursor_left_shortcut,
             id: ComponentId::default(),
         }
     }
@@ -662,18 +717,22 @@ where
             UIEvent::Input(Key::Char('\n')) => {
                 self.result = Some(
                     self.buttons
-                        .remove(&self.layout[self.cursor])
+                        .get(&self.layout[self.cursor])
+                        .cloned()
                         .unwrap_or_default(),
                 );
                 self.set_dirty(true);
                 return true;
             }
-            UIEvent::Input(Key::Left) => {
+            UIEvent::Input(ref k) if *k == self.cursor_left_shortcut => {
                 self.cursor = self.cursor.saturating_sub(1);
                 self.set_dirty(true);
                 return true;
             }
-            UIEvent::Input(Key::Right) if self.cursor < self.layout.len().saturating_sub(1) => {
+            UIEvent::Input(ref k)
+                if *k == self.cursor_right_shortcut
+                    && self.cursor < self.layout.len().saturating_sub(1) =>
+            {
                 self.cursor += 1;
                 self.set_dirty(true);
                 return true;
@@ -689,6 +748,18 @@ where
 
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
+    }
+
+    fn shortcuts(&self, _: &Context) -> ShortcutMaps {
+        let mut map = ShortcutMaps::default();
+
+        let mut our_map: ShortcutMap = Default::default();
+        our_map.insert("right", self.cursor_right_shortcut.clone());
+        our_map.insert("left", self.cursor_left_shortcut.clone());
+        our_map.insert("select", Key::Char('\n'));
+        map.insert("buttons", our_map);
+
+        map
     }
 
     fn id(&self) -> ComponentId {

@@ -622,16 +622,26 @@ To: {}
         let shortcuts = self.shortcuts(context);
         self.form = FormWidget::new(
             ("Save".into(), true),
-            /* cursor_up_shortcut */
+            // cursor_up_shortcut
             shortcuts
                 .get(Shortcuts::COMPOSING)
                 .and_then(|c| c.get("scroll_up").cloned())
                 .unwrap_or_else(|| context.settings.shortcuts.composing.scroll_up.clone()),
-            /* cursor_down_shortcut */
+            // cursor_down_shortcut
             shortcuts
                 .get(Shortcuts::COMPOSING)
                 .and_then(|c| c.get("scroll_down").cloned())
                 .unwrap_or_else(|| context.settings.shortcuts.composing.scroll_down.clone()),
+            // cursor_right_shortcut
+            shortcuts
+                .get(Shortcuts::GENERAL)
+                .and_then(|c| c.get("scroll_right").cloned())
+                .unwrap_or_else(|| context.settings.shortcuts.general.scroll_right.clone()),
+            // cursor_left_shortcut
+            shortcuts
+                .get(Shortcuts::GENERAL)
+                .and_then(|c| c.get("scroll_left").cloned())
+                .unwrap_or_else(|| context.settings.shortcuts.general.scroll_left.clone()),
         );
         self.form.hide_buttons();
         self.form.set_cursor(old_cursor);
@@ -1927,7 +1937,7 @@ impl Component for Composer {
                     && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit"]) =>
             {
                 self.mode = ViewMode::EditAttachments {
-                    widget: Box::new(EditAttachments::new(self.account_hash)),
+                    widget: Box::new(EditAttachments::new(self.account_hash, context)),
                 };
                 self.set_dirty(true);
 
