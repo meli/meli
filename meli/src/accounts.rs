@@ -912,16 +912,6 @@ impl Account {
             }
             MailboxStatus::None => {
                 if force && !self.active_jobs.values().any(|j| j.is_fetch(mailbox_hash)) {
-                    for ev in self.active_jobs.values().filter_map(|j| {
-                        if j.is_any_fetch() && !j.is_fetch(mailbox_hash) {
-                            j.cancel()
-                        } else {
-                            None
-                        }
-                    }) {
-                        self.main_loop_handler
-                            .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(ev)));
-                    }
                     self.mailbox_entries
                         .entry(mailbox_hash)
                         .and_modify(|entry| {
