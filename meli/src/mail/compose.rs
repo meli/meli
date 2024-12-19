@@ -130,7 +130,7 @@ pub struct Composer {
 enum ViewMode {
     Discard(ComponentId, UIDialog<char>),
     EditAttachments {
-        widget: EditAttachments,
+        widget: Box<EditAttachments>,
     },
     Edit,
     EmbeddedPty,
@@ -1927,7 +1927,7 @@ impl Component for Composer {
                     && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit"]) =>
             {
                 self.mode = ViewMode::EditAttachments {
-                    widget: EditAttachments::new(Some(self.account_hash)),
+                    widget: Box::new(EditAttachments::new(self.account_hash)),
                 };
                 self.set_dirty(true);
 
@@ -2528,6 +2528,8 @@ impl Component for Composer {
     fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = if self.mode.is_edit() {
             self.pager.shortcuts(context)
+        } else if let ViewMode::EditAttachments { ref widget } = self.mode {
+            widget.shortcuts(context)
         } else {
             Default::default()
         };

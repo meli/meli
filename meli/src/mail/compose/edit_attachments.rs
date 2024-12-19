@@ -40,7 +40,7 @@ pub enum EditAttachmentMode {
 #[derive(Debug)]
 pub struct EditAttachments {
     /// For shortcut setting retrieval.
-    pub account_hash: Option<AccountHash>,
+    pub account_hash: AccountHash,
     pub mode: EditAttachmentMode,
     pub buttons: ButtonWidget<FormButtonAction>,
     pub cursor: EditAttachmentCursor,
@@ -49,7 +49,7 @@ pub struct EditAttachments {
 }
 
 impl EditAttachments {
-    pub fn new(account_hash: Option<AccountHash>) -> Self {
+    pub fn new(account_hash: AccountHash) -> Self {
         //ButtonWidget::new(("Add".into(), FormButtonAction::Other("add")));
         let mut buttons = ButtonWidget::new(("Go Back".into(), FormButtonAction::Cancel));
         buttons.set_focus(true);
@@ -62,6 +62,16 @@ impl EditAttachments {
             dirty: true,
             id: ComponentId::default(),
         }
+    }
+
+    pub fn shortcuts(&self, context: &Context) -> ShortcutMaps {
+        let mut map = self.buttons.shortcuts(context);
+
+        let our_map: ShortcutMap =
+            account_settings!(context[self.account_hash].shortcuts.composing).key_values();
+        map.insert(Shortcuts::COMPOSING, our_map);
+
+        map
     }
 }
 
@@ -319,16 +329,7 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
     fn kill(&mut self, _uuid: ComponentId, _context: &mut Context) {}
 
     fn shortcuts(&self, context: &Context) -> ShortcutMaps {
-        let mut map = ShortcutMaps::default();
-
-        let our_map: ShortcutMap = self
-            .inner
-            .account_hash
-            .map(|acc| account_settings!(context[acc].shortcuts.composing).key_values())
-            .unwrap_or_else(|| context.settings.shortcuts.composing.key_values());
-        map.insert(Shortcuts::COMPOSING, our_map);
-
-        map
+        self.inner.shortcuts(context)
     }
 
     fn id(&self) -> ComponentId {
