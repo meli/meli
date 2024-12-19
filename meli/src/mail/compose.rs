@@ -55,13 +55,20 @@ use edit_attachments::*;
 
 pub mod hooks;
 
+const TOGGLE_CHECKED_UNICODE: &str = "☑";
+const TOGGLE_UNCHECKED_UNICODE: &str = "☐";
+const TOGGLE_CHECKED_ASCII: &str = "[x]";
+const TOGGLE_UNCHECKED_ASCII: &str = "[ ]";
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Focus {
     Headers,
-    Body,
+    #[cfg(feature = "gpgme")]
     Sign,
+    #[cfg(feature = "gpgme")]
     Encrypt,
     Attachments,
+    Body,
 }
 
 #[derive(Debug)]
@@ -145,11 +152,6 @@ impl ViewMode {
     #[inline]
     fn is_edit(&self) -> bool {
         matches!(self, Self::Edit)
-    }
-
-    #[inline]
-    fn is_edit_attachments(&self) -> bool {
-        matches!(self, Self::EditAttachments { .. })
     }
 }
 
@@ -733,9 +735,10 @@ To: {}
         }
     }
 
-    fn draw_attachments(&self, grid: &mut CellBuffer, area: Area, context: &Context) {
+    fn draw_attachments(&self, grid: &mut CellBuffer, mut area: Area, context: &Context) {
         let attachments_no = self.draft.attachments().len();
         let theme_default = crate::conf::value(context, "theme_default");
+        let highlight_attr = crate::conf::value(context, "highlight");
         grid.clear_area(area, theme_default);
         let our_map: ShortcutMap =
             account_settings!(context[self.account_hash].shortcuts.composing).key_values();
@@ -743,24 +746,96 @@ To: {}
         shortcuts.insert(Shortcuts::COMPOSING, our_map);
         let toggle_shortcut = Key::Char('\n');
         let edit_shortcut = &shortcuts[Shortcuts::COMPOSING]["edit"];
-        #[cfg(feature = "gpgme")]
-        if self
-            .gpg_state
-            .sign_mail
-            .unwrap_or(ActionFlag::False)
-            .is_true()
+        let (toggle_checked, toggle_unchecked) = if !grid.ascii_drawing {
+            (TOGGLE_CHECKED_UNICODE, TOGGLE_UNCHECKED_UNICODE)
+        } else {
+            (TOGGLE_CHECKED_ASCII, TOGGLE_UNCHECKED_ASCII)
+        };
         {
-            let key_list = self
+            let theme_attr = if self.focus == Focus::Attachments {
+                highlight_attr
+            } else {
+                theme_default
+            };
+            if attachments_no == 0 {
+                grid.write_string(
+                    &format!("No attachments [edit: {}]", edit_shortcut),
+                    theme_attr.fg,
+                    theme_attr.bg,
+                    theme_attr.attrs,
+                    area,
+                    None,
+                    None,
+                );
+                area = area.skip_rows(1);
+            } else {
+                grid.write_string(
+                    &format!(
+                        "{} attachment{} [edit: {}]",
+                        attachments_no,
+                        if attachments_no != 1 { "s" } else { "" },
+                        edit_shortcut
+                    ),
+                    theme_attr.fg,
+                    theme_attr.bg,
+                    theme_attr.attrs,
+                    area,
+                    None,
+                    None,
+                );
+                area = area.skip_rows(1);
+                for (i, a) in self.draft.attachments().iter().enumerate() {
+                    grid.write_string(
+                        &if let Some(name) = a.content_type().name() {
+                            format!(
+                                "[{}] \"{}\", {} {}",
+                                i,
+                                name,
+                                a.content_type(),
+                                melib::BytesDisplay(a.raw.len())
+                            )
+                        } else {
+                            format!(
+                                "[{}] {} {}",
+                                i,
+                                a.content_type(),
+                                melib::BytesDisplay(a.raw.len())
+                            )
+                        },
+                        theme_default.fg,
+                        theme_default.bg,
+                        theme_default.attrs,
+                        area,
+                        None,
+                        None,
+                    );
+                    area = area.skip_rows(1);
+                }
+            }
+        }
+        #[cfg(feature = "gpgme")]
+        {
+            let theme_attr = if self.focus == Focus::Sign {
+                highlight_attr
+            } else {
+                theme_default
+            };
+            let sign = if self
                 .gpg_state
-                .sign_keys
-                .iter()
-                .map(|k| k.to_string())
-                .collect::<Vec<_>>()
-                .join(", ");
+                .sign_mail
+                .unwrap_or(ActionFlag::False)
+                .is_true()
+            {
+                let key_list = self
+                    .gpg_state
+                    .sign_keys
+                    .iter()
+                    .map(|k| k.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
 
-            grid.write_string(
-                &format!(
-                    "☑ sign with [toggle: {}, edit: {}] {}",
+                format!(
+                    "{toggle_checked} Sign with [toggle: {}, edit: {}] {}",
                     toggle_shortcut,
                     edit_shortcut,
                     if self.gpg_state.sign_keys.is_empty() {
@@ -768,58 +843,54 @@ To: {}
                     } else {
                         key_list.as_str()
                     },
-                ),
-                theme_default.fg,
-                if self.focus == Focus::Sign {
-                    crate::conf::value(context, "highlight").bg
-                } else {
-                    theme_default.bg
-                },
-                theme_default.attrs,
-                area.skip_rows(1),
-                None,
-                None,
-            );
-        } else {
-            grid.write_string(
-                &format!(
-                    "☐ don't sign [toggle: {}, edit: {}]",
+                )
+            } else {
+                format!(
+                    "{toggle_unchecked} Don't sign [toggle: {}, edit: {}]",
                     toggle_shortcut, edit_shortcut,
-                ),
-                theme_default.fg,
-                if self.focus == Focus::Sign {
-                    crate::conf::value(context, "highlight").bg
-                } else {
-                    theme_default.bg
-                },
-                theme_default.attrs,
-                area.skip_rows(1),
+                )
+            };
+            grid.write_string(
+                &sign,
+                theme_attr.fg,
+                theme_attr.bg,
+                theme_attr.attrs,
+                area,
                 None,
                 None,
             );
-        }
-        #[cfg(feature = "gpgme")]
-        if self
-            .gpg_state
-            .encrypt_mail
-            .unwrap_or(ActionFlag::False)
-            .is_true()
-        {
-            let key_list = self
-                .gpg_state
-                .encrypt_keys
-                .iter()
-                .map(|k| k.to_string())
-                .collect::<Vec<_>>()
-                .join(", ");
+            area = area.skip_rows(1);
 
-            grid.write_string(
-                &format!(
-                    "{}{}{}",
+            let theme_attr = if self.focus == Focus::Encrypt {
+                highlight_attr
+            } else {
+                theme_default
+            };
+            let encrypt = if self
+                .gpg_state
+                .encrypt_mail
+                .unwrap_or(ActionFlag::False)
+                .is_true()
+            {
+                let key_list = self
+                    .gpg_state
+                    .encrypt_keys
+                    .iter()
+                    .map(|k| k.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                format!(
+                    "{}{}{}{}",
                     if self.gpg_state.encrypt_keys.is_empty() {
-                        "☐ no keys selected to encrypt with"
+                        toggle_unchecked
                     } else {
-                        "☑ encrypt with"
+                        toggle_checked
+                    },
+                    if self.gpg_state.encrypt_keys.is_empty() {
+                        " No keys selected to encrypt with"
+                    } else {
+                        " Encrypt with"
                     },
                     &format!(
                         " [toggle: {}, edit: {}]{}",
@@ -836,95 +907,22 @@ To: {}
                     } else {
                         key_list.as_str()
                     }
-                ),
-                theme_default.fg,
-                if self.focus == Focus::Encrypt {
-                    crate::conf::value(context, "highlight").bg
-                } else {
-                    theme_default.bg
-                },
-                theme_default.attrs,
-                area.skip_rows(2),
-                None,
-                None,
-            );
-        } else {
-            grid.write_string(
-                &format!(
-                    "☐ don't encrypt [toggle: {}, edit: {}]",
+                )
+            } else {
+                format!(
+                    "{toggle_unchecked} Don't encrypt [toggle: {}, edit: {}]",
                     toggle_shortcut, edit_shortcut,
-                ),
-                theme_default.fg,
-                if self.focus == Focus::Encrypt {
-                    crate::conf::value(context, "highlight").bg
-                } else {
-                    theme_default.bg
-                },
-                theme_default.attrs,
-                area.skip_rows(2),
-                None,
-                None,
-            );
-        }
-        if attachments_no == 0 {
+                )
+            };
             grid.write_string(
-                &format!("no attachments [edit: {}]", edit_shortcut),
-                theme_default.fg,
-                if self.focus == Focus::Attachments {
-                    crate::conf::value(context, "highlight").bg
-                } else {
-                    theme_default.bg
-                },
-                theme_default.attrs,
-                area.skip_rows(3),
+                &encrypt,
+                theme_attr.fg,
+                theme_attr.bg,
+                theme_attr.attrs,
+                area,
                 None,
                 None,
             );
-        } else {
-            grid.write_string(
-                &format!(
-                    "{} attachment{} [edit: {}]",
-                    attachments_no,
-                    if attachments_no != 1 { "s" } else { "" },
-                    edit_shortcut
-                ),
-                theme_default.fg,
-                if self.focus == Focus::Attachments {
-                    crate::conf::value(context, "highlight").bg
-                } else {
-                    theme_default.bg
-                },
-                theme_default.attrs,
-                area.skip_rows(3),
-                None,
-                None,
-            );
-            for (i, a) in self.draft.attachments().iter().enumerate() {
-                grid.write_string(
-                    &if let Some(name) = a.content_type().name() {
-                        format!(
-                            "[{}] \"{}\", {} {}",
-                            i,
-                            name,
-                            a.content_type(),
-                            melib::BytesDisplay(a.raw.len())
-                        )
-                    } else {
-                        format!(
-                            "[{}] {} {}",
-                            i,
-                            a.content_type(),
-                            melib::BytesDisplay(a.raw.len())
-                        )
-                    },
-                    theme_default.fg,
-                    theme_default.bg,
-                    theme_default.attrs,
-                    area.skip_rows(4 + i),
-                    None,
-                    None,
-                );
-            }
         }
     }
 
@@ -1020,35 +1018,10 @@ impl Component for Composer {
         }
 
         let theme_default = crate::conf::value(context, "theme_default");
+        let highlight_attr = crate::conf::value(context, "highlight");
         if self.dirty {
-            grid.clear_area(area, theme_default);
-        }
-
-        let header_height = self.form.len();
-
-        let header_area = area
-            .skip_rows(1)
-            .take_rows(header_height)
-            .skip_cols(1)
-            .skip_cols_from_end(1);
-        let attachments_no = self.draft.attachments().len();
-        let attachment_area = area
-            .skip_rows(header_height + 1)
-            .skip_rows(
-                area.height()
-                    .saturating_sub(header_area.height() + 4 + attachments_no),
-            )
-            .skip_cols(1)
-            .skip_cols_from_end(1);
-
-        let body_area = area
-            .skip_rows(header_height + 2)
-            .skip_rows_from_end(attachment_area.height())
-            .skip_cols(1)
-            .skip_cols_from_end(1);
-
-        if self.dirty {
-            grid.clear_area(area.nth_row(0), crate::conf::value(context, "highlight"));
+            grid.clear_area(area.skip_rows(1), theme_default);
+            grid.clear_area(area.nth_row(0), highlight_attr);
             let our_map: ShortcutMap =
                 account_settings!(context[self.account_hash].shortcuts.composing).key_values();
             let mut shortcuts: ShortcutMaps = Default::default();
@@ -1070,41 +1043,14 @@ impl Component for Composer {
                     field_shortcut,
                     edit_shortcut
                 ),
-                crate::conf::value(context, "highlight").fg,
-                crate::conf::value(context, "highlight").bg,
-                crate::conf::value(context, "highlight").attrs,
+                highlight_attr.fg,
+                highlight_attr.bg,
+                highlight_attr.attrs,
                 area.nth_row(0),
                 None,
                 None,
             );
         }
-
-        /* Regardless of view mode, do the following */
-
-        if self.dirty {
-            match self.focus {
-                Focus::Headers => {
-                    grid.change_theme(header_area, theme_default);
-                }
-                Focus::Body => {
-                    grid.change_theme(
-                        body_area,
-                        ThemeAttribute {
-                            fg: theme_default.fg,
-                            bg: crate::conf::value(context, "highlight").bg,
-                            attrs: if grid.use_color {
-                                crate::conf::value(context, "highlight").attrs
-                            } else {
-                                crate::conf::value(context, "highlight").attrs | Attr::REVERSE
-                            },
-                        },
-                    );
-                }
-                Focus::Sign | Focus::Encrypt | Focus::Attachments => {}
-            }
-        }
-
-        self.form.draw(grid, header_area, context);
 
         if let Some(ref mut embedded_pty) = self.embedded_pty {
             let embedded_area = area;
@@ -1170,10 +1116,31 @@ impl Component for Composer {
                 }
             }
             return;
-        } else {
-            self.embedded_dimensions = (area.width(), area.height());
         }
 
+        self.embedded_dimensions = area.size();
+
+        let header_height = self.form.len();
+
+        let header_area = area.skip_rows(1).take_rows(header_height);
+        let attachments_no = self.draft.attachments().len();
+        #[cfg(feature = "gpgme")]
+        let attachment_area = area
+            .skip_rows(header_height + 2)
+            .take_rows(4 + attachments_no);
+        #[cfg(not(feature = "gpgme"))]
+        let attachment_area = area
+            .skip_rows(header_height + 2)
+            .take_rows(2 + attachments_no);
+
+        let body_area = area
+            .skip_rows(header_height + 1 + attachment_area.height())
+            .skip_cols(1);
+
+        // Draw headers.
+        self.form.draw(grid, header_area, context);
+
+        self.draw_attachments(grid, attachment_area, context);
         if self.pager.size().0 > body_area.width() {
             self.pager.set_initialised(false);
         }
@@ -1185,9 +1152,18 @@ impl Component for Composer {
         }
         self.pager.draw(grid, body_area, context);
 
-        if !self.mode.is_edit_attachments() {
-            self.draw_attachments(grid, attachment_area, context);
+        if self.dirty && matches!(self.focus, Focus::Body) {
+            grid.change_theme(
+                area.skip_rows(header_height + 1 + attachment_area.height())
+                    .take_cols(1),
+                if grid.use_color {
+                    highlight_attr
+                } else {
+                    highlight_attr | Attr::REVERSE
+                },
+            );
         }
+
         match self.mode {
             ViewMode::Edit | ViewMode::EmbeddedPty => {}
             ViewMode::EditAttachments { ref mut widget } => {
@@ -1261,38 +1237,57 @@ impl Component for Composer {
         match &event {
             UIEvent::Input(ref key)
                 if self.mode.is_edit()
-                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["scroll_up"]) =>
+                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["scroll_down"]) =>
             {
-                self.set_dirty(true);
+                if !matches!(self.focus, Focus::Body) || self.pager.process_event(event, context) {
+                    self.set_dirty(true);
+                }
                 self.focus = match self.focus {
-                    // match order is evaluation order, so it matters here because of the if guard
-                    // process_event side effects
-                    Focus::Attachments => Focus::Encrypt,
-                    Focus::Encrypt => Focus::Sign,
-                    Focus::Sign => Focus::Body,
-                    Focus::Body if !self.pager.process_event(event, context) => {
-                        self.form.process_event(event, context);
-                        Focus::Headers
+                    Focus::Headers => {
+                        if self.form.process_event(event, context) {
+                            Focus::Headers
+                        } else {
+                            Focus::Attachments
+                        }
                     }
+                    #[cfg(not(feature = "gpgme"))]
+                    Focus::Attachments => Focus::Body,
+                    #[cfg(feature = "gpgme")]
+                    Focus::Attachments => Focus::Sign,
+                    #[cfg(feature = "gpgme")]
+                    Focus::Sign => Focus::Encrypt,
+                    #[cfg(feature = "gpgme")]
+                    Focus::Encrypt => Focus::Body,
                     Focus::Body => Focus::Body,
-                    Focus::Headers if self.form.process_event(event, context) => Focus::Headers,
-                    Focus::Headers => Focus::Headers,
                 };
                 return true;
             }
             UIEvent::Input(ref key)
                 if self.mode.is_edit()
-                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["scroll_down"]) =>
+                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["scroll_up"]) =>
             {
-                self.set_dirty(true);
+                if !matches!(self.focus, Focus::Headers) || self.form.process_event(event, context)
+                {
+                    self.set_dirty(true);
+                }
                 self.focus = match self.focus {
-                    Focus::Headers if self.form.process_event(event, context) => Focus::Headers,
-                    Focus::Headers => Focus::Body,
-                    Focus::Body if self.pager.process_event(event, context) => Focus::Body,
-                    Focus::Body => Focus::Sign,
-                    Focus::Sign => Focus::Encrypt,
-                    Focus::Encrypt => Focus::Attachments,
-                    Focus::Attachments => Focus::Attachments,
+                    Focus::Headers => Focus::Headers,
+                    Focus::Attachments => {
+                        self.form.process_event(event, context);
+                        Focus::Headers
+                    }
+                    #[cfg(feature = "gpgme")]
+                    Focus::Encrypt => Focus::Sign,
+                    #[cfg(feature = "gpgme")]
+                    Focus::Sign => Focus::Attachments,
+                    Focus::Body if !self.pager.process_event(event, context) => {
+                        if cfg!(feature = "gpgme") {
+                            Focus::Encrypt
+                        } else {
+                            Focus::Attachments
+                        }
+                    }
+                    Focus::Body => Focus::Body,
                 };
                 return true;
             }
@@ -1302,7 +1297,7 @@ impl Component for Composer {
             && self.mode.is_edit()
             && self.form.process_event(event, context)
         {
-            if let UIEvent::InsertInput(_) = event {
+            if matches!(event, UIEvent::InsertInput(_)) {
                 self.update_draft();
                 self.has_changes = true;
             }
@@ -1585,40 +1580,11 @@ impl Component for Composer {
             UIEvent::Resize => {
                 self.set_dirty(true);
             }
-            UIEvent::Input(ref key)
-                if self.mode.is_edit()
-                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["scroll_up"]) =>
-            {
-                self.set_dirty(true);
-                self.focus = match self.focus {
-                    Focus::Headers => return true,
-                    Focus::Body => {
-                        self.form.process_event(event, context);
-                        Focus::Headers
-                    }
-                    Focus::Sign => Focus::Body,
-                    Focus::Encrypt => Focus::Sign,
-                    Focus::Attachments => Focus::Encrypt,
-                };
-            }
-            UIEvent::Input(ref key)
-                if self.mode.is_edit()
-                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["scroll_down"]) =>
-            {
-                self.set_dirty(true);
-                self.focus = match self.focus {
-                    Focus::Headers => Focus::Body,
-                    Focus::Body => Focus::Sign,
-                    Focus::Sign => Focus::Encrypt,
-                    Focus::Encrypt => Focus::Attachments,
-                    Focus::Attachments => return true,
-                };
-            }
+            #[cfg(feature = "gpgme")]
             UIEvent::Input(Key::Char('\n'))
                 if self.mode.is_edit()
                     && (self.focus == Focus::Sign || self.focus == Focus::Encrypt) =>
             {
-                #[cfg(feature = "gpgme")]
                 match self.focus {
                     Focus::Sign => {
                         let is_true = self
@@ -1832,99 +1798,87 @@ impl Component for Composer {
                 self.set_dirty(true);
                 return true;
             }
+            #[cfg(feature = "gpgme")]
             UIEvent::Input(ref key)
                 if self.mode.is_edit()
                     && self.focus == Focus::Sign
                     && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit"]) =>
             {
-                #[cfg(feature = "gpgme")]
+                match self
+                    .create_key_selection_widget(false, &HeaderName::FROM, context)
+                    .map(Into::into)
                 {
-                    match self
-                        .create_key_selection_widget(false, &HeaderName::FROM, context)
-                        .map(Into::into)
-                    {
-                        Ok(widget) => {
-                            self.gpg_state.sign_mail = Some(ActionFlag::from(true));
-                            self.mode = ViewMode::SelectKey(false, widget);
-                        }
-                        Err(err) => {
-                            context.replies.push_back(UIEvent::Notification {
-                                title: Some("Could not list keys.".into()),
-                                source: None,
-                                body: format!("libgpgme error: {err}").into(),
-                                kind: Some(NotificationType::Error(
-                                    melib::error::ErrorKind::External,
-                                )),
-                            });
-                        }
+                    Ok(widget) => {
+                        self.gpg_state.sign_mail = Some(ActionFlag::from(true));
+                        self.mode = ViewMode::SelectKey(false, widget);
                     }
-                    self.set_dirty(true);
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some("Could not list keys.".into()),
+                            source: None,
+                            body: format!("libgpgme error: {err}").into(),
+                            kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
+                        });
+                    }
                 }
+                self.set_dirty(true);
                 return true;
             }
+            #[cfg(feature = "gpgme")]
             UIEvent::Input(ref key)
                 if self.mode.is_edit()
                     && self.focus == Focus::Encrypt
                     && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit"]) =>
             {
-                #[cfg(feature = "gpgme")]
+                let mut result = self.create_key_selection_widget(false, &HeaderName::TO, context);
+                if !self.form.values()[HeaderName::CC.as_str()]
+                    .as_str()
+                    .is_empty()
                 {
-                    let mut result =
-                        self.create_key_selection_widget(false, &HeaderName::TO, context);
-                    if !self.form.values()[HeaderName::CC.as_str()]
-                        .as_str()
-                        .is_empty()
-                    {
-                        result = result.and_then(|mut to_result| {
-                            let cc_result =
-                                self.create_key_selection_widget(false, &HeaderName::CC, context)?;
-                            to_result.merge(cc_result);
-                            Ok(to_result)
-                        });
-                    }
-                    if !self.form.values()[HeaderName::BCC.as_str()]
-                        .as_str()
-                        .is_empty()
-                    {
-                        result = result.and_then(|mut to_result| {
-                            let bcc_result =
-                                self.create_key_selection_widget(false, &HeaderName::BCC, context)?;
-                            to_result.merge(bcc_result);
-                            Ok(to_result)
-                        });
-                    }
-                    if !self.form.values()[HeaderName::FROM.as_str()]
-                        .as_str()
-                        .is_empty()
-                    {
-                        result = result.and_then(|mut to_result| {
-                            let from_result = self.create_key_selection_widget(
-                                false,
-                                &HeaderName::FROM,
-                                context,
-                            )?;
-                            to_result.merge(from_result);
-                            Ok(to_result)
-                        });
-                    }
-                    match result.map(Into::into) {
-                        Ok(widget) => {
-                            self.gpg_state.encrypt_mail = Some(ActionFlag::from(true));
-                            self.mode = ViewMode::SelectKey(true, widget);
-                        }
-                        Err(err) => {
-                            context.replies.push_back(UIEvent::Notification {
-                                title: Some("Could not list keys.".into()),
-                                source: None,
-                                body: format!("libgpgme error: {err}").into(),
-                                kind: Some(NotificationType::Error(
-                                    melib::error::ErrorKind::External,
-                                )),
-                            });
-                        }
-                    }
-                    self.set_dirty(true);
+                    result = result.and_then(|mut to_result| {
+                        let cc_result =
+                            self.create_key_selection_widget(false, &HeaderName::CC, context)?;
+                        to_result.merge(cc_result);
+                        Ok(to_result)
+                    });
                 }
+                if !self.form.values()[HeaderName::BCC.as_str()]
+                    .as_str()
+                    .is_empty()
+                {
+                    result = result.and_then(|mut to_result| {
+                        let bcc_result =
+                            self.create_key_selection_widget(false, &HeaderName::BCC, context)?;
+                        to_result.merge(bcc_result);
+                        Ok(to_result)
+                    });
+                }
+                if !self.form.values()[HeaderName::FROM.as_str()]
+                    .as_str()
+                    .is_empty()
+                {
+                    result = result.and_then(|mut to_result| {
+                        let from_result =
+                            self.create_key_selection_widget(false, &HeaderName::FROM, context)?;
+                        to_result.merge(from_result);
+                        Ok(to_result)
+                    });
+                }
+                match result.map(Into::into) {
+                    Ok(widget) => {
+                        self.gpg_state.encrypt_mail = Some(ActionFlag::from(true));
+                        self.mode = ViewMode::SelectKey(true, widget);
+                    }
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some("Could not list keys.".into()),
+                            source: None,
+                            body: format!("libgpgme error: {err}").into(),
+                            kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
+                        });
+                    }
+                }
+                self.set_dirty(true);
                 return true;
             }
             UIEvent::Input(ref key)
