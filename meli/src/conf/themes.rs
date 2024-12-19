@@ -345,6 +345,18 @@ pub struct ThemeAttribute {
     pub attrs: Attr,
 }
 
+/// Apply `BitOr` operation to the [`ThemeAttribute::attrs`] field.
+impl std::ops::BitOr<Attr> for ThemeAttribute {
+    type Output = Self;
+
+    fn bitor(self, rhs: Attr) -> Self::Output {
+        Self {
+            attrs: self.attrs | rhs,
+            ..self
+        }
+    }
+}
+
 /// Holds {fore,back}ground color and terminal attribute values.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
