@@ -60,7 +60,7 @@ fn run_app(mut opt: Opt) -> Result<()> {
     /* Create a channel to communicate with other threads. The main process is
      * the sole receiver.
      */
-    let (sender, receiver) = crossbeam::channel::bounded(32 * ::std::mem::size_of::<ThreadEvent>());
+    let (sender, receiver) = crossbeam::channel::unbounded();
     /* Catch SIGWINCH to handle terminal resizing */
     let signals = &[
         /* Catch SIGWINCH to handle terminal resizing */
