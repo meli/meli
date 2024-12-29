@@ -45,7 +45,6 @@ impl std::fmt::Display for AccountStatus {
 impl AccountStatus {
     pub fn new(account_pos: usize, theme_default: ThemeAttribute) -> Self {
         let mut content = Screen::<Virtual>::new(theme_default);
-        content.grid_mut().set_growable(true);
         _ = content.resize(80, 20);
 
         Self {
@@ -58,7 +57,39 @@ impl AccountStatus {
         }
     }
 
+    fn calculate_content_height(&self, context: &Context) -> usize {
+        let mut line = 5;
+
+        let a = &context.accounts[self.account_pos];
+        let mut total = a.active_jobs.len();
+        if a.active_jobs
+            .iter()
+            .any(|(_, req)| matches!(req, JobRequest::Watch { .. }))
+        {
+            total -= 1;
+            line += 1;
+        }
+
+        if a.active_jobs.is_empty() || total != 0 {
+            line += 1;
+        }
+
+        line += 3;
+        line += a
+            .mailbox_entries
+            .values()
+            .map(|entry| &entry.ref_mailbox)
+            .filter(|f| f.special_usage() != SpecialUsageMailbox::Normal)
+            .count();
+        line += 2;
+        if let Some(ref extensions) = a.backend_capabilities.extensions {
+            line += extensions.len() + 1;
+        }
+        line
+    }
+
     fn update_content(&mut self, (width, height): (usize, usize), context: &Context) {
+        let height = height.max(self.calculate_content_height(context));
         if !self.content.resize_with_context(width, height, context) {
             return;
         }
@@ -381,8 +412,7 @@ impl Component for AccountStatus {
         self.dirty = false;
         self.update_content(area.size(), context);
 
-        /* self.content may have been resized with write_string() calls above
-         * since it has growable set */
+        // self.content may have been resized in Self::update_content
         let (width, height) = self.content.area().size();
         let (cols, rows) = area.size();
         self.cursor = (
@@ -399,6 +429,29 @@ impl Component for AccountStatus {
                 .skip(self.cursor.0, self.cursor.1)
                 .take(cols, rows),
         );
+        if rows < height {
+            ScrollBar::default().set_show_arrows(true).draw(
+                grid,
+                area.nth_col(area.width().saturating_sub(1)),
+                context,
+                // position
+                self.cursor.1,
+                // visible_rows
+                rows,
+                // length
+                height,
+            );
+        }
+        if cols < width {
+            ScrollBar::default().set_show_arrows(true).draw_horizontal(
+                grid,
+                area.nth_row(area.height().saturating_sub(1)),
+                context,
+                self.cursor.0,
+                cols,
+                width,
+            );
+        }
         context.dirty_areas.push_back(area);
     }
 
@@ -413,10 +466,9 @@ impl Component for AccountStatus {
                 self.dirty = true;
             }
             UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_left"])
-                    && self.cursor.0 != 0 =>
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_left"]) =>
             {
-                self.cursor.0 -= 1;
+                self.cursor.0 = self.cursor.0.saturating_sub(1);
                 self.dirty = true;
                 return true;
             }
