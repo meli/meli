@@ -515,6 +515,11 @@ impl Screen<Virtual> {
 
     #[must_use]
     pub fn resize(&mut self, cols: usize, rows: usize) -> bool {
+        if (cols, rows) == (self.grid.cols, self.grid.rows)
+            && (cols, rows) == (self.overlay_grid.cols, self.overlay_grid.rows)
+        {
+            return true;
+        }
         if self.grid.resize(cols, rows, None) && self.overlay_grid.resize(cols, rows, None) {
             self.generation = self.generation.next();
             self.cols = cols;
@@ -529,6 +534,12 @@ impl Screen<Virtual> {
 
     #[must_use]
     pub fn resize_with_context(&mut self, cols: usize, rows: usize, context: &Context) -> bool {
+        if (cols, rows) == (self.grid.cols, self.grid.rows)
+            && (cols, rows) == (self.overlay_grid.cols, self.overlay_grid.rows)
+        {
+            return true;
+        }
+
         if self.grid.resize_with_context(cols, rows, context)
             && self.overlay_grid.resize_with_context(cols, rows, context)
         {
