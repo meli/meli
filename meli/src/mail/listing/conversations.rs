@@ -404,7 +404,9 @@ impl ListingTrait for ConversationsListing {
     }
 
     fn set_coordinates(&mut self, coordinates: (AccountHash, MailboxHash)) {
-        self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
+        if self.coordinates() != (coordinates.0, coordinates.1) {
+            self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
+        }
         self.focus = Focus::None;
         self.filtered_selection.clear();
         self.filtered_order.clear();

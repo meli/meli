@@ -511,7 +511,9 @@ impl ListingTrait for ThreadListing {
     }
 
     fn set_coordinates(&mut self, coordinates: (AccountHash, MailboxHash)) {
-        self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
+        if self.coordinates() != (coordinates.0, coordinates.1) {
+            self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
+        }
         self.focus = Focus::None;
         self.initialized = false;
         self.filtered_selection.clear();
