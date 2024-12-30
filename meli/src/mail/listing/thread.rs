@@ -196,9 +196,9 @@ impl MailListingTrait for ThreadListing {
     fn refresh_mailbox(&mut self, context: &mut Context, _force: bool) {
         self.set_dirty(true);
         self.initialized = true;
-        if !(self.cursor_pos.0 == self.new_cursor_pos.0
-            && self.cursor_pos.1 == self.new_cursor_pos.1)
-        {
+        let same_mailbox = self.cursor_pos.0 == self.new_cursor_pos.0
+            && self.cursor_pos.1 == self.new_cursor_pos.1;
+        if !same_mailbox {
             self.cursor_pos.2 = 0;
             self.new_cursor_pos.2 = 0;
         }
@@ -239,10 +239,12 @@ impl MailListingTrait for ThreadListing {
             &context.accounts[&self.cursor_pos.0].collection.envelopes,
         );
 
+        let previous_selection = self.rows.clear(same_mailbox);
         self.redraw_threads_list(
             context,
             Box::new(roots.into_iter()) as Box<dyn Iterator<Item = ThreadHash>>,
         );
+        self.rows.restore_selection(previous_selection);
     }
 
     fn redraw_threads_list(
@@ -253,7 +255,6 @@ impl MailListingTrait for ThreadListing {
         let account = &context.accounts[&self.new_cursor_pos.0];
         let threads = account.collection.get_threads(self.new_cursor_pos.1);
         self.length = 0;
-        self.rows.clear();
         if threads.len() == 0 {
             let message: String = account[&self.new_cursor_pos.1].status();
             _ = self.data_columns.columns[0].resize_with_context(message.len(), 1, context);
@@ -512,12 +513,12 @@ impl ListingTrait for ThreadListing {
     fn set_coordinates(&mut self, coordinates: (AccountHash, MailboxHash)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
         self.focus = Focus::None;
-        self.rows.clear();
         self.initialized = false;
         self.filtered_selection.clear();
         self.filtered_order.clear();
         self.filter_term.clear();
         self.data_columns.clear();
+        self.rows.row_updates.clear();
     }
 
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
@@ -715,11 +716,13 @@ impl ListingTrait for ThreadListing {
         } else {
             _ = self.data_columns.columns[0].resize_with_context(0, 0, context);
         }
+        let previous_selection = self.rows.clear(true);
         self.redraw_threads_list(
             context,
             Box::new(self.filtered_selection.clone().into_iter())
                 as Box<dyn Iterator<Item = ThreadHash>>,
         );
+        self.rows.restore_selection(previous_selection);
     }
 
     fn view_area(&self) -> Option<Area> {

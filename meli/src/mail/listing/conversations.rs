@@ -189,9 +189,9 @@ impl MailListingTrait for ConversationsListing {
         self.set_dirty(true);
         let old_mailbox_hash = self.cursor_pos.1;
         let old_cursor_pos = self.cursor_pos;
-        if !(self.cursor_pos.0 == self.new_cursor_pos.0
-            && self.cursor_pos.1 == self.new_cursor_pos.1)
-        {
+        let same_mailbox = self.cursor_pos.0 == self.new_cursor_pos.0
+            && self.cursor_pos.1 == self.new_cursor_pos.1;
+        if !same_mailbox {
             self.cursor_pos.2 = 0;
             self.new_cursor_pos.2 = 0;
         }
@@ -223,10 +223,12 @@ impl MailListingTrait for ConversationsListing {
         );
         drop(threads);
 
+        let previous_selection = self.rows.clear(same_mailbox);
         self.redraw_threads_list(
             context,
             Box::new(roots.into_iter()) as Box<dyn Iterator<Item = ThreadHash>>,
         );
+        self.rows.restore_selection(previous_selection);
 
         if !force && old_cursor_pos == self.new_cursor_pos && old_mailbox_hash == self.cursor_pos.1
         {
@@ -258,7 +260,6 @@ impl MailListingTrait for ConversationsListing {
         let threads = account.collection.get_threads(self.cursor_pos.1);
         let tags_lck = account.collection.tag_index.read().unwrap();
 
-        self.rows.clear();
         self.length = 0;
         if self.error.is_err() {
             self.error = Ok(());
@@ -408,7 +409,7 @@ impl ListingTrait for ConversationsListing {
         self.filtered_selection.clear();
         self.filtered_order.clear();
         self.filter_term.clear();
-        self.rows.clear();
+        self.rows.row_updates.clear();
     }
 
     fn next_entry(&mut self, context: &mut Context) {
@@ -562,11 +563,13 @@ impl ListingTrait for ConversationsListing {
                 self.cursor_pos.2,
             );
         }
+        let previous_selection = self.rows.clear(true);
         self.redraw_threads_list(
             context,
             Box::new(self.filtered_selection.clone().into_iter())
                 as Box<dyn Iterator<Item = ThreadHash>>,
         );
+        self.rows.restore_selection(previous_selection);
     }
 
     fn view_area(&self) -> Option<Area> {

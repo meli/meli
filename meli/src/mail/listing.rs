@@ -68,8 +68,8 @@ pub struct RowsState<T> {
 
 impl<T> RowsState<T> {
     #[inline(always)]
-    pub fn clear(&mut self) {
-        self.selection.clear();
+    #[must_use]
+    pub fn clear(&mut self, take_selection: bool) -> Option<HashMap<EnvelopeHash, bool>> {
         self.row_updates.clear();
         self.thread_to_env.clear();
         self.env_to_thread.clear();
@@ -79,6 +79,25 @@ impl<T> RowsState<T> {
         self.all_threads.clear();
         self.all_envelopes.clear();
         self.row_attr_cache.clear();
+        if take_selection {
+            Some(std::mem::take(&mut self.selection))
+        } else {
+            self.selection.clear();
+            None
+        }
+    }
+
+    #[inline(always)]
+    pub fn restore_selection(&mut self, previous_selection: Option<HashMap<EnvelopeHash, bool>>) {
+        if let Some(prev) = previous_selection {
+            for (h, b) in prev {
+                if !b || !self.selection.contains_key(&h) {
+                    continue;
+                }
+                self.row_update_add_envelope(h);
+                self.selection.insert(h, true);
+            }
+        }
     }
 
     #[inline(always)]

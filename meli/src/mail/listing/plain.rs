@@ -202,9 +202,9 @@ impl MailListingTrait for PlainListing {
         self.set_dirty(true);
         self.force_draw = true;
         let old_cursor_pos = self.cursor_pos;
-        if !(self.cursor_pos.0 == self.new_cursor_pos.0
-            && self.cursor_pos.1 == self.new_cursor_pos.1)
-        {
+        let same_mailbox = self.cursor_pos.0 == self.new_cursor_pos.0
+            && self.cursor_pos.1 == self.new_cursor_pos.1;
+        if !same_mailbox {
             self.cursor_pos.2 = 0;
             self.new_cursor_pos.2 = 0;
         }
@@ -273,7 +273,9 @@ impl MailListingTrait for PlainListing {
         let items = Box::new(self.local_collection.clone().into_iter())
             as Box<dyn Iterator<Item = EnvelopeHash>>;
 
+        let previous_selection = self.rows.clear(same_mailbox);
         self.redraw_list(context, items);
+        self.rows.restore_selection(previous_selection);
         drop(env_lck);
 
         if self.get_env_under_cursor(self.new_cursor_pos.2).is_some() {
@@ -535,11 +537,13 @@ impl ListingTrait for PlainListing {
         } else {
             _ = self.data_columns.columns[0].resize_with_context(0, 0, context);
         }
+        let previous_selection = self.rows.clear(true);
         self.redraw_list(
             context,
             Box::new(self.filtered_selection.clone().into_iter())
                 as Box<dyn Iterator<Item = EnvelopeHash>>,
         );
+        self.rows.restore_selection(previous_selection);
     }
 
     fn view_area(&self) -> Option<Area> {
@@ -721,7 +725,6 @@ impl PlainListing {
         let account = &context.accounts[&self.cursor_pos.0];
         let threads = account.collection.get_threads(self.cursor_pos.1);
 
-        self.rows.clear();
         self.length = 0;
         let mut min_width = (0, 0, 0, 0, 0);
         #[allow(clippy::type_complexity)]

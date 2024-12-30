@@ -214,11 +214,10 @@ impl MailListingTrait for CompactListing {
     /// account mailbox the user has chosen.
     fn refresh_mailbox(&mut self, context: &mut Context, force: bool) {
         self.set_dirty(true);
-        self.rows.clear();
         let old_cursor_pos = self.cursor_pos;
-        if !(self.cursor_pos.0 == self.new_cursor_pos.0
-            && self.cursor_pos.1 == self.new_cursor_pos.1)
-        {
+        let same_mailbox = self.cursor_pos.0 == self.new_cursor_pos.0
+            && self.cursor_pos.1 == self.new_cursor_pos.1;
+        if !same_mailbox {
             self.cursor_pos.2 = 0;
             self.new_cursor_pos.2 = 0;
         }
@@ -262,10 +261,12 @@ impl MailListingTrait for CompactListing {
         );
         drop(threads);
 
+        let previous_selection = self.rows.clear(same_mailbox);
         self.redraw_threads_list(
             context,
             Box::new(roots.into_iter()) as Box<dyn Iterator<Item = ThreadHash>>,
         );
+        self.rows.restore_selection(previous_selection);
 
         if self
             .get_thread_under_cursor(self.cursor_pos.2)
@@ -295,7 +296,6 @@ impl MailListingTrait for CompactListing {
         let account = &context.accounts[&self.cursor_pos.0];
         let threads = account.collection.get_threads(self.cursor_pos.1);
 
-        self.rows.clear();
         self.length = 0;
         // Use account settings only if no sortcmd has been used
         if !self.sortcmd {
@@ -808,11 +808,13 @@ impl ListingTrait for CompactListing {
         } else {
             _ = self.data_columns.columns[0].resize_with_context(0, 0, context);
         }
+        let previous_selection = self.rows.clear(true);
         self.redraw_threads_list(
             context,
             Box::new(self.filtered_selection.clone().into_iter())
                 as Box<dyn Iterator<Item = ThreadHash>>,
         );
+        self.rows.restore_selection(previous_selection);
     }
 
     fn view_area(&self) -> Option<Area> {
