@@ -295,6 +295,37 @@ impl Log for StderrLogger {
             if print_module_names {
                 write!(writer, "{}: ", record.metadata().target()).ok()?;
             }
+            #[cfg(any(feature = "http", feature = "http-static"))]
+            if matches!(record.metadata(), m if (m.target().starts_with("isahc::handler") || m.target().starts_with("isahc::wire")) && m.level() >= Level::Debug)
+                && matches!(record.args().to_string(), s if s.contains("Bearer") || s.contains("Basic"))
+            {
+                fn redact_http_auth(writer: &mut impl Write, record: &Record) -> Option<()> {
+                    use std::borrow::Cow;
+
+                    use regex::Regex;
+
+                    let log_string = record.args().to_string();
+                    match Regex::new(r"(?m)((?:[bB]earer)|(?:[bB]asic)) (?:[^]\\]+)")
+                        .unwrap()
+                        .replace_all(&log_string, "$1 <REDACTED>")
+                    {
+                        Cow::Borrowed(_) => {
+                            if log_string.contains("Bearer") {
+                                writeln!(writer, "Bearer <REDACTED>").ok()?;
+                            } else if log_string.contains("Basic") {
+                                writeln!(writer, "Basic <REDACTED>").ok()?;
+                            } else {
+                                writeln!(writer, "<REDACTED>").ok()?;
+                            }
+                        }
+                        Cow::Owned(s) => writeln!(writer, "{}", s).ok()?,
+                    }
+                    writer.flush().ok()?;
+                    Some(())
+                }
+                return redact_http_auth(writer, record);
+            }
+
             write!(writer, "{}", record.args()).ok()?;
             writer.write_all(b"\n").ok()?;
             writer.flush().ok()?;
