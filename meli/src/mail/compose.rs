@@ -1675,6 +1675,23 @@ impl Component for Composer {
                     let mut embedded_guard = embedded.lock().unwrap();
                     if embedded_guard.write_all(b).is_err() {
                         match embedded_guard.is_active() {
+                            Err(Errno::ECHILD) => {
+                                drop(embedded_guard);
+                                if let Some(EmbeddedPty {
+                                    running: true,
+                                    file,
+                                    ..
+                                }) = self.embedded_pty.take()
+                                {
+                                    self.update_from_file(file, context);
+                                }
+                                self.initialized = false;
+                                self.mode = ViewMode::Edit;
+                                self.set_dirty(true);
+                                context
+                                    .replies
+                                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
+                            }
                             Ok(WaitStatus::Exited(_, exit_code)) => {
                                 drop(embedded_guard);
                                 let embedded_pty = self.embedded_pty.take();

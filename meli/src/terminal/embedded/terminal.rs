@@ -38,10 +38,7 @@
 //!
 //! To create a [`Terminal`], see [`create_pty`].
 
-use melib::{
-    error::{Error, Result},
-    text::wcwidth,
-};
+use melib::text::wcwidth;
 use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
 
 use super::*;
@@ -149,8 +146,8 @@ impl Terminal {
         let _ = waitpid(self.child_pid, Some(WaitPidFlag::WNOHANG));
     }
 
-    pub fn is_active(&self) -> Result<WaitStatus> {
-        waitpid(self.child_pid, Some(WaitPidFlag::WNOHANG)).map_err(|e| Error::new(e.to_string()))
+    pub fn is_active(&self) -> std::result::Result<WaitStatus, nix::errno::Errno> {
+        waitpid(self.child_pid, Some(WaitPidFlag::WNOHANG))
     }
 
     pub fn process_byte(&mut self, byte: u8) {

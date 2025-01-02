@@ -297,10 +297,10 @@ pub struct State {
 
 impl Drop for State {
     fn drop(&mut self) {
-        if let Some(Err(err)) = self.kill_child() {
+        if let Some(Err(err)) = self.kill_main_child() {
             log::debug!("Failed to kill subprocess: {}", err);
         }
-        if let (Some(false), Some(child)) = (self.try_wait_on_child(), self.child.as_ref()) {
+        if let (Some(false), Some(child)) = (self.try_wait_on_main_child(), self.child.as_ref()) {
             log::error!("Main subprocess {:?} is still running on exit!", child);
         }
         let mut other_children = std::mem::take(&mut self.context.children);
@@ -1250,7 +1250,7 @@ impl State {
     /// - `None` if there's no child to wait for.
     /// - `Some(true)` if the child has exited.
     /// - `Some(false)` if the child is still running.
-    pub fn try_wait_on_child(&mut self) -> Option<bool> {
+    pub fn try_wait_on_main_child(&mut self) -> Option<bool> {
         let child = self.child.as_mut()?;
         // // The check on whether the embedded process is alive is done on input, so
         // // forward an input of '\0' to get the embedded terminal to notice its
@@ -1276,6 +1276,42 @@ impl State {
         }
     }
 
+    /// Try waiting on `self.child` or `self.context`'s children.
+    pub fn try_wait_on_children(&mut self) {
+        if !matches!(self.try_wait_on_main_child(), Some(true)) {
+            for (id, children) in self.context.children.iter_mut() {
+                let mut i = 0;
+                while i < children.len() {
+                    match children[i].try_wait() {
+                        Ok(false) => {
+                            i += 1;
+                        }
+                        ws @ Ok(true) | ws @ Err(_) => {
+                            if let Err(err) = ws {
+                                log::error!(
+                                    "Child {}:{:?} could not be waited for: {}",
+                                    id,
+                                    children[i],
+                                    err
+                                );
+                            }
+                            log::trace!("Child {}:{:?} has exited.", id, children[i]);
+                            children.remove(i);
+                        }
+                    }
+                }
+            }
+            let mut i = 0;
+            while i < self.context.children.len() {
+                if self.context.children[i].is_empty() {
+                    self.context.children.swap_remove_index(i);
+                } else {
+                    i += 1;
+                }
+            }
+        }
+    }
+
     /// Force kill `self.child`, if it exists.
     ///
     /// Return value is:
@@ -1283,7 +1319,7 @@ impl State {
     /// - `None` if there's no child to kill.
     /// - `Some(Ok(()))` if the child is no longer running.
     /// - `Some(Err(_))` if an error occured.
-    pub fn kill_child(&mut self) -> Option<Result<()>> {
+    pub fn kill_main_child(&mut self) -> Option<Result<()>> {
         Some(self.child.as_mut()?.kill())
     }
 

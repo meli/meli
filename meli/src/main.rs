@@ -248,7 +248,7 @@ fn run_app(mut opt: Opt) -> Result<()> {
                             }
                         },
                         signal_hook::consts::SIGCHLD => {
-                            state.try_wait_on_child();
+                            state.try_wait_on_children();
                             state.redraw();
 
                         }
@@ -261,7 +261,7 @@ fn run_app(mut opt: Opt) -> Result<()> {
         } // end of 'inner
 
         'reap: loop {
-            match state.try_wait_on_child() {
+            match state.try_wait_on_main_child() {
                 Some(true) => {
                     state.restore_input();
                     state.switch_to_alternate_screen();
