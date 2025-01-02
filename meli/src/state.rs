@@ -1020,7 +1020,7 @@ impl State {
                 }
                 return;
             }
-            UIEvent::Fork(ForkedProcess::Finished) => {
+            UIEvent::RestoreStandardIO => {
                 /*
                  * Fork has finished in the past.
                  * We're back in the AlternateScreen, but the cursor is reset to Shown, so fix
@@ -1241,7 +1241,10 @@ impl State {
             }) => {
                 let w = child.try_wait();
                 match w {
-                    Ok(Some(_)) => true,
+                    Ok(Some(_)) => {
+                        self.child = None;
+                        true
+                    }
                     Ok(None) => false,
                     Err(err) => {
                         log::error!(
@@ -1258,11 +1261,6 @@ impl State {
                         return None;
                     }
                 }
-            }
-            Some(ForkedProcess::Finished) => {
-                // Fork has already finished
-                self.child = None;
-                return None;
             }
             _ => {
                 return None;

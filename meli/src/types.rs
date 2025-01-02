@@ -130,8 +130,6 @@ impl From<UIEvent> for ThreadEvent {
 
 #[derive(Debug)]
 pub enum ForkedProcess {
-    /// Already finished fork, we only want to restore input/output
-    Finished,
     /// Embedded pty
     Embedded {
         id: Cow<'static, str>,
@@ -175,6 +173,9 @@ pub enum UIEvent {
     EmbeddedInput((Key, Vec<u8>)),
     Resize,
     Fork(ForkedProcess),
+    /// Restore input/output, useful after forking to something that captures
+    /// stdin/stdout.
+    RestoreStandardIO,
     ChangeMailbox(usize),
     ChangeMode(UIMode),
     Command(String),

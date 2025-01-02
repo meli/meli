@@ -2089,17 +2089,13 @@ impl Component for Composer {
                             body: err.to_string().into(),
                             kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
                         });
-                        context
-                            .replies
-                            .push_back(UIEvent::Fork(ForkedProcess::Finished));
+                        context.replies.push_back(UIEvent::RestoreStandardIO);
                         context.restore_input();
                         self.set_dirty(true);
                         return true;
                     }
                 }
-                context
-                    .replies
-                    .push_back(UIEvent::Fork(ForkedProcess::Finished));
+                context.replies.push_back(UIEvent::RestoreStandardIO);
                 match f.read_to_string().and_then(|res| {
                     self.draft.update(res.as_str()).map_err(|err| {
                         self.draft.set_body(res);
@@ -2296,9 +2292,7 @@ impl Component for Composer {
                             return true;
                         }
                     }
-                    context
-                        .replies
-                        .push_back(UIEvent::Fork(ForkedProcess::Finished));
+                    context.replies.push_back(UIEvent::RestoreStandardIO);
                     self.set_dirty(true);
                     return true;
                 }

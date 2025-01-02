@@ -34,7 +34,7 @@ use melib::{email::Attachment, log, utils::fnmatch::Fnmatch, Error, Result};
 
 use crate::{
     state::Context,
-    types::{File, ForkedProcess, UIEvent},
+    types::{File, UIEvent},
 };
 
 macro_rules! split_command {
@@ -257,9 +257,7 @@ impl MailcapEntry {
                     let _output = child.wait_with_output()?;
                     log::trace!("stdout = {}", String::from_utf8_lossy(&_output.stdout));
                 }
-                context
-                    .replies
-                    .push_back(UIEvent::Fork(ForkedProcess::Finished));
+                context.replies.push_back(UIEvent::RestoreStandardIO);
                 Ok(())
             }
         }

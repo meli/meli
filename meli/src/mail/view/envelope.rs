@@ -1574,17 +1574,13 @@ impl Component for EnvelopeView {
                             body: err.to_string().into(),
                             kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
                         });
-                        context
-                            .replies
-                            .push_back(UIEvent::Fork(ForkedProcess::Finished));
+                        context.replies.push_back(UIEvent::RestoreStandardIO);
                         context.restore_input();
                         self.set_dirty(true);
                         return true;
                     }
                 }
-                context
-                    .replies
-                    .push_back(UIEvent::Fork(ForkedProcess::Finished));
+                context.replies.push_back(UIEvent::RestoreStandardIO);
                 return true;
             }
             UIEvent::Input(ref key)
