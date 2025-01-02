@@ -1233,88 +1233,27 @@ impl State {
     /// - `Some(true)` if the child has exited.
     /// - `Some(false)` if the child is still running.
     pub fn try_wait_on_child(&mut self) -> Option<bool> {
-        match self.child.as_mut()? {
-            ForkedProcess::Generic {
-                ref id,
-                ref command,
-                ref mut child,
-            } => {
-                let w = child.try_wait();
-                match w {
-                    Ok(Some(exit_status)) => {
-                        log::debug!(
-                            "child process {} {} ({}) exit_status = {:?}",
-                            id,
-                            command
-                                .as_deref()
-                                .map(Cow::Borrowed)
-                                .unwrap_or(Cow::Borrowed("<command unknown>")),
-                            child.id(),
-                            exit_status
-                        );
-                        self.child = None;
-                        Some(true)
-                    }
-                    Err(err) => {
-                        log::error!(
-                            "Failed to wait on child process {} {} ({}): {}",
-                            id,
-                            command
-                                .as_deref()
-                                .map(Cow::Borrowed)
-                                .unwrap_or(Cow::Borrowed("<command unknown>")),
-                            child.id(),
-                            err
-                        );
-                        self.child = None;
-                        Some(true)
-                    }
-                    Ok(None) => Some(false),
+        let child = self.child.as_mut()?;
+        // // The check on whether the embedded process is alive is done on input, so
+        // // forward an input of '\0' to get the embedded terminal to notice its
+        // // child is dead.
+        // // [ref:TODO]: replace with a "PidExited" event or similar.
+        // self.rcv_event(UIEvent::EmbeddedInput((Key::Null, vec![0])));
+        match child.try_wait() {
+            Ok(false) => Some(false),
+            ws @ Ok(true) | ws @ Err(_) => {
+                if let Err(err) = ws {
+                    log::error!("{}", err);
                 }
-            }
-            ForkedProcess::Embedded {
-                ref id,
-                ref command,
-                ref pid,
-            } => {
-                use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
-                match waitpid(*pid, Some(WaitPidFlag::WNOHANG)) {
-                    Err(Errno::EAGAIN) => Some(false),
-                    ws @ Err(_)
-                    | ws @ Ok(WaitStatus::Exited(_, _) | WaitStatus::Signaled(_, _, _)) => {
-                        if let Err(err) = ws {
-                            log::error!(
-                                "Failed to wait on child process {} {} ({}): {}",
-                                id,
-                                command
-                                    .as_deref()
-                                    .map(Cow::Borrowed)
-                                    .unwrap_or(Cow::Borrowed("<command unknown>")),
-                                pid,
-                                err,
-                            );
-                        } else {
-                            log::debug!(
-                                "embedded child process {} {} ({}) wait status: {:?}",
-                                id,
-                                command
-                                    .as_deref()
-                                    .map(Cow::Borrowed)
-                                    .unwrap_or(Cow::Borrowed("<command unknown>")),
-                                pid,
-                                ws,
-                            );
-                        }
-                        self.child = None;
-                        // The check on whether the embedded process is alive is done on input, so
-                        // forward an input of '\0' to get the embedded terminal to notice its
-                        // child is dead.
-                        // [ref:TODO]: replace with a "PidExited" event or similar.
-                        self.rcv_event(UIEvent::EmbeddedInput((Key::Null, vec![0])));
-                        Some(true)
-                    }
-                    Ok(_) => Some(false),
+                if matches!(child, ForkedProcess::Embedded { .. }) {
+                    // The check on whether the embedded process is alive is done on input, so
+                    // forward an input of '\0' to get the embedded terminal to notice its
+                    // child is dead.
+                    // [ref:TODO]: replace with a "PidExited" event or similar.
+                    self.rcv_event(UIEvent::EmbeddedInput((Key::Null, vec![0])));
                 }
+                self.child = None;
+                Some(true)
             }
         }
     }

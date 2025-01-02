@@ -217,6 +217,85 @@ impl ForkedProcess {
             }
         }
     }
+
+    /// Try wait on child process without blocking.
+    ///
+    /// Return value is:
+    ///
+    /// - `Ok(true)` if the child has exited.
+    /// - `Ok(false)` if the child is still running.
+    /// - an error value, otherwise.
+    pub fn try_wait(&mut self) -> Result<bool> {
+        match self {
+            Self::Generic {
+                ref id,
+                ref command,
+                ref mut child,
+            } => match child.try_wait() {
+                Ok(Some(exit_status)) => {
+                    log::debug!(
+                        "child process {} {} ({}) exit_status = {:?}",
+                        id,
+                        command
+                            .as_deref()
+                            .map(Cow::Borrowed)
+                            .unwrap_or(Cow::Borrowed("<command unknown>")),
+                        child.id(),
+                        exit_status
+                    );
+                    Ok(true)
+                }
+                Ok(None) => Ok(false),
+                Err(err) => Err(err).chain_err_details(|| {
+                    format!(
+                        "Failed to wait on child process {} {} ({})",
+                        id,
+                        command
+                            .as_deref()
+                            .map(Cow::Borrowed)
+                            .unwrap_or(Cow::Borrowed("<command unknown>")),
+                        child.id(),
+                    )
+                }),
+            },
+            Self::Embedded {
+                ref id,
+                ref command,
+                ref pid,
+            } => {
+                use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
+                match waitpid(*pid, Some(WaitPidFlag::WNOHANG)) {
+                    Err(Errno::ECHILD) => Ok(true),
+                    Err(Errno::EAGAIN) => Ok(false),
+                    Err(err) => Err(err).chain_err_details(|| {
+                        format!(
+                            "Failed to wait on child process {} {} ({})",
+                            id,
+                            command
+                                .as_deref()
+                                .map(Cow::Borrowed)
+                                .unwrap_or(Cow::Borrowed("<command unknown>")),
+                            pid,
+                        )
+                    }),
+                    Ok(ws @ WaitStatus::Exited(_, _)) | Ok(ws @ WaitStatus::Signaled(_, _, _)) => {
+                        log::debug!(
+                            "embedded child process {} {} ({}) wait status: {:?}",
+                            id,
+                            command
+                                .as_deref()
+                                .map(Cow::Borrowed)
+                                .unwrap_or(Cow::Borrowed("<command unknown>")),
+                            pid,
+                            ws,
+                        );
+                        Ok(true)
+                    }
+                    Ok(_) => Ok(false),
+                }
+            }
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
