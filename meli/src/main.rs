@@ -248,7 +248,7 @@ fn run_app(mut opt: Opt) -> Result<()> {
                             }
                         },
                         signal_hook::consts::SIGCHLD => {
-                            state.rcv_event(UIEvent::EmbeddedInput((Key::Null, vec![0])));
+                            state.try_wait_on_child();
                             state.redraw();
 
                         }
