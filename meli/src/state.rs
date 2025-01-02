@@ -297,26 +297,44 @@ pub struct State {
 
 impl Drop for State {
     fn drop(&mut self) {
-        use nix::sys::wait::{waitpid, WaitPidFlag};
-
         if let Some(Err(err)) = self.kill_child() {
             log::debug!("Failed to kill subprocess: {}", err);
         }
-        _ = self.try_wait_on_child();
-        for (id, child, err) in self
-            .context
-            .children
+        if let (Some(false), Some(child)) = (self.try_wait_on_child(), self.child.as_ref()) {
+            log::error!("Main subprocess {:?} is still running on exit!", child);
+        }
+        let mut other_children = std::mem::take(&mut self.context.children);
+        for (id, child, err) in other_children
             .iter_mut()
-            .flat_map(|(i, v)| v.drain(..).map(move |v| (i, v)))
+            .flat_map(|(i, v)| v.iter_mut().map(move |v| (i, v)))
             .filter_map(|(id, child)| {
-                if let Err(err) = waitpid(child.pid(), Some(WaitPidFlag::WNOHANG)) {
+                if let Err(err) = child.kill() {
                     Some((id, child, err))
                 } else {
                     None
                 }
             })
         {
-            log::trace!("Failed to wait on subprocess {} ({:?}): {}", id, child, err);
+            log::error!("Failed to kill subprocess {} ({:?}): {}", id, child, err);
+        }
+        for (id, child, err) in other_children
+            .into_iter()
+            .map(|(i, v)| (std::rc::Rc::new(i), v))
+            .flat_map(|(i, v)| v.into_iter().map(move |v| (i.clone(), v)))
+            .filter_map(|(id, mut child)| {
+                if let Err(err) = child.try_wait() {
+                    Some((id, child, err))
+                } else {
+                    None
+                }
+            })
+        {
+            log::error!(
+                "Failed to wait for subprocess {} ({:?}): {}",
+                id,
+                child,
+                err
+            );
         }
         // When done, restore the defaults to avoid messing with the terminal.
         self.screen.switch_to_main_screen();
