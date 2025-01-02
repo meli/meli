@@ -38,10 +38,10 @@ use std::{borrow::Cow, sync::Arc};
 use indexmap::IndexMap;
 use melib::{
     backends::{AccountHash, BackendEvent, MailboxHash},
-    error::Error,
-    EnvelopeHash, RefreshEvent, RefreshEventKind, ThreadHash,
+    error::{Error, Result, ResultIntoError},
+    log, EnvelopeHash, RefreshEvent, RefreshEventKind, ThreadHash,
 };
-use nix::unistd::Pid;
+use nix::{errno::Errno, unistd::Pid};
 
 use super::{
     command::Action,
@@ -156,6 +156,65 @@ impl ForkedProcess {
         match self {
             Self::Embedded { pid, .. } => *pid,
             Self::Generic { child, .. } => nix::unistd::Pid::from_raw(child.id() as libc::pid_t),
+        }
+    }
+
+    /// Attempt to kill process.
+    pub fn kill(&mut self) -> Result<()> {
+        match self {
+            Self::Generic {
+                ref id,
+                ref command,
+                ref mut child,
+            } => {
+                let w = child.kill();
+                match w {
+                    Ok(()) => {
+                        log::debug!(
+                            "child process {} {} ({}) was killed successfully",
+                            id,
+                            command
+                                .as_deref()
+                                .map(Cow::Borrowed)
+                                .unwrap_or(Cow::Borrowed("<command unknown>")),
+                            child.id(),
+                        );
+                        Ok(())
+                    }
+                    err @ Err(_) => err.chain_err_details(|| {
+                        format!(
+                            "Failed to kill child process {} {} ({})",
+                            id,
+                            command
+                                .as_deref()
+                                .map(Cow::Borrowed)
+                                .unwrap_or(Cow::Borrowed("<command unknown>")),
+                            child.id(),
+                        )
+                    }),
+                }
+            }
+            Self::Embedded {
+                ref id,
+                ref command,
+                ref pid,
+            } => {
+                use nix::sys::signal::{kill, Signal};
+                match kill(*pid, Some(Signal::SIGTERM)) {
+                    Ok(()) | Err(Errno::ESRCH) => Ok(()),
+                    err @ Err(_) => err.chain_err_details(|| {
+                        format!(
+                            "Failed to SIGTERM embedded child process {} {} ({})",
+                            id,
+                            command
+                                .as_deref()
+                                .map(Cow::Borrowed)
+                                .unwrap_or(Cow::Borrowed("<command unknown>")),
+                            pid,
+                        )
+                    }),
+                }
+            }
         }
     }
 }

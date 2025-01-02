@@ -1327,61 +1327,7 @@ impl State {
     /// - `Some(Ok(()))` if the child is no longer running.
     /// - `Some(Err(_))` if an error occured.
     pub fn kill_child(&mut self) -> Option<Result<()>> {
-        match self.child.as_mut()? {
-            ForkedProcess::Generic {
-                ref id,
-                ref command,
-                ref mut child,
-            } => {
-                let w = child.kill();
-                match w {
-                    Ok(()) => {
-                        log::debug!(
-                            "child process {} {} ({}) was killed successfully",
-                            id,
-                            command
-                                .as_deref()
-                                .map(Cow::Borrowed)
-                                .unwrap_or(Cow::Borrowed("<command unknown>")),
-                            child.id(),
-                        );
-                        Some(Ok(()))
-                    }
-                    err @ Err(_) => Some(err.chain_err_details(|| {
-                        format!(
-                            "Failed to kill child process {} {} ({})",
-                            id,
-                            command
-                                .as_deref()
-                                .map(Cow::Borrowed)
-                                .unwrap_or(Cow::Borrowed("<command unknown>")),
-                            child.id(),
-                        )
-                    })),
-                }
-            }
-            ForkedProcess::Embedded {
-                ref id,
-                ref command,
-                ref pid,
-            } => {
-                use nix::sys::signal::{kill, Signal};
-                match kill(*pid, Some(Signal::SIGTERM)) {
-                    Ok(()) | Err(Errno::ESRCH) => Some(Ok(())),
-                    err @ Err(_) => Some(err.chain_err_details(|| {
-                        format!(
-                            "Failed to SIGTERM embedded child process {} {} ({})",
-                            id,
-                            command
-                                .as_deref()
-                                .map(Cow::Borrowed)
-                                .unwrap_or(Cow::Borrowed("<command unknown>")),
-                            pid,
-                        )
-                    })),
-                }
-            }
-        }
+        Some(self.child.as_mut()?.kill())
     }
 
     /// Switch back to the terminal's main screen (The command line the user
