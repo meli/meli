@@ -720,18 +720,14 @@ impl Component for MailView {
                                         )
                                         .as_ref()
                                         .map(|s| s.as_str())
-                                        .unwrap_or(
-                                            #[cfg(target_os = "macos")]
-                                            {
-                                                "open"
-                                            },
-                                            #[cfg(not(target_os = "macos"))]
-                                            {
-                                                "xdg-open"
-                                            },
-                                        );
+                                        .unwrap_or(if cfg!(target_os = "macos") {
+                                            "open"
+                                        } else {
+                                            "xdg-open"
+                                        });
+                                        let url_arg = String::from_utf8_lossy(url).into_owned();
                                         match Command::new(url_launcher)
-                                            .arg(String::from_utf8_lossy(url).into_owned())
+                                            .arg(&url_arg)
                                             .stdin(Stdio::piped())
                                             .stdout(Stdio::piped())
                                             .spawn()
@@ -741,7 +737,14 @@ impl Component for MailView {
                                                     .children
                                                     .entry(url_launcher.to_string().into())
                                                     .or_default()
-                                                    .push(child);
+                                                    .push(ForkedProcess::Generic {
+                                                        id: url_launcher.to_string().into(),
+                                                        command: Some(
+                                                            format!("{url_launcher} {url_arg}")
+                                                                .into(),
+                                                        ),
+                                                        child,
+                                                    });
                                             }
                                             Err(err) => {
                                                 context.replies.push_back(UIEvent::StatusEvent(
@@ -765,18 +768,14 @@ impl Component for MailView {
                             )
                             .as_ref()
                             .map(|s| s.as_str())
-                            .unwrap_or(
-                                #[cfg(target_os = "macos")]
-                                {
-                                    "open"
-                                },
-                                #[cfg(not(target_os = "macos"))]
-                                {
-                                    "xdg-open"
-                                },
-                            );
+                            .unwrap_or(if cfg!(target_os = "macos") {
+                                "open"
+                            } else {
+                                "xdg-open"
+                            });
+                            let url_arg = actions.archive.unwrap();
                             match Command::new(url_launcher)
-                                .arg(actions.archive.unwrap())
+                                .arg(url_arg)
                                 .stdin(Stdio::piped())
                                 .stdout(Stdio::piped())
                                 .spawn()
@@ -785,7 +784,11 @@ impl Component for MailView {
                                     .children
                                     .entry(url_launcher.to_string().into())
                                     .or_default()
-                                    .push(child),
+                                    .push(ForkedProcess::Generic {
+                                        id: url_launcher.to_string().into(),
+                                        command: Some(format!("{url_launcher} {url_arg}").into()),
+                                        child,
+                                    }),
                                 Err(err) => {
                                     context.replies.push_back(UIEvent::StatusEvent(
                                         StatusEvent::DisplayMessage(format!(

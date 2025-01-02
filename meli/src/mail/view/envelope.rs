@@ -1642,23 +1642,25 @@ impl Component for EnvelopeView {
                                         p.path().display().to_string(),
                                         false,
                                     );
-                                    Ok((
-                                        p,
-                                        Command::new("sh")
-                                            .args(["-c", &exec_cmd])
-                                            .stdin(Stdio::piped())
-                                            .stdout(Stdio::piped())
-                                            .spawn()?,
-                                    ))
+                                    let child = Command::new("sh")
+                                        .args(["-c", &exec_cmd])
+                                        .stdin(Stdio::piped())
+                                        .stdout(Stdio::piped())
+                                        .spawn()?;
+                                    Ok((p, exec_cmd, child))
                                 });
                                 match res {
-                                    Ok((p, child)) => {
+                                    Ok((p, exec_cmd, child)) => {
                                         context.temp_files.push(p);
                                         context
                                             .children
-                                            .entry(command.into())
+                                            .entry(command.clone().into())
                                             .or_default()
-                                            .push(child);
+                                            .push(ForkedProcess::Generic {
+                                                id: command.into(),
+                                                command: Some(exec_cmd.into()),
+                                                child,
+                                            });
                                     }
                                     Err(err) => {
                                         context.replies.push_back(UIEvent::StatusEvent(
@@ -1736,12 +1738,9 @@ impl Component for EnvelopeView {
                 };
 
                 let url_launcher = self.view_settings.url_launcher.as_deref().unwrap_or(
-                    #[cfg(target_os = "macos")]
-                    {
+                    if cfg!(target_os = "macos") {
                         "open"
-                    },
-                    #[cfg(not(target_os = "macos"))]
-                    {
+                    } else {
                         "xdg-open"
                     },
                 );
@@ -1756,7 +1755,11 @@ impl Component for EnvelopeView {
                             .children
                             .entry(url_launcher.to_string().into())
                             .or_default()
-                            .push(child);
+                            .push(ForkedProcess::Generic {
+                                id: url_launcher.to_string().into(),
+                                command: Some(format!("{url_launcher} {url}").into()),
+                                child,
+                            });
                     }
                     Err(err) => {
                         context.replies.push_back(UIEvent::Notification {

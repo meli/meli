@@ -147,7 +147,7 @@ pub struct Context {
     input_thread: InputHandler,
     current_dir: PathBuf,
     /// Children processes
-    pub children: IndexMap<Cow<'static, str>, Vec<std::process::Child>>,
+    pub children: IndexMap<Cow<'static, str>, Vec<ForkedProcess>>,
     pub temp_files: Vec<File>,
 }
 
@@ -297,43 +297,29 @@ pub struct State {
 
 impl Drop for State {
     fn drop(&mut self) {
-        // When done, restore the defaults to avoid messing with the terminal.
-        self.screen.switch_to_main_screen();
         use nix::sys::wait::{waitpid, WaitPidFlag};
-        for (id, pid, err) in self
+
+        if let Some(Err(err)) = self.kill_child() {
+            log::debug!("Failed to kill subprocess: {}", err);
+        }
+        _ = self.try_wait_on_child();
+        for (id, child, err) in self
             .context
             .children
             .iter_mut()
             .flat_map(|(i, v)| v.drain(..).map(move |v| (i, v)))
             .filter_map(|(id, child)| {
-                if let Err(err) = waitpid(
-                    nix::unistd::Pid::from_raw(child.id() as i32),
-                    Some(WaitPidFlag::WNOHANG),
-                ) {
-                    Some((id, child.id(), err))
+                if let Err(err) = waitpid(child.pid(), Some(WaitPidFlag::WNOHANG)) {
+                    Some((id, child, err))
                 } else {
                     None
                 }
             })
         {
-            log::trace!("Failed to wait on subprocess {} ({}): {}", id, pid, err);
+            log::trace!("Failed to wait on subprocess {} ({:?}): {}", id, child, err);
         }
-        if let Some(ForkedProcess::Embedded { id, command, pid }) = self.child.take() {
-            /* Try wait, we don't want to block */
-            if let Err(err) = waitpid(pid, Some(WaitPidFlag::WNOHANG)) {
-                log::trace!(
-                    "Failed to wait on embedded process {} {} ({}): {}",
-                    id,
-                    if let Some(v) = command.as_ref() {
-                        v.as_ref()
-                    } else {
-                        ""
-                    },
-                    pid,
-                    err
-                );
-            }
-        }
+        // When done, restore the defaults to avoid messing with the terminal.
+        self.screen.switch_to_main_screen();
     }
 }
 
@@ -1033,12 +1019,19 @@ impl State {
                 self.context.restore_input();
                 return;
             }
-            UIEvent::Fork(ForkedProcess::Generic {
-                id,
-                command: _,
-                child,
-            }) => {
-                self.context.children.entry(id).or_default().push(child);
+            UIEvent::Fork(
+                child @ ForkedProcess::Generic {
+                    id: _,
+                    command: _,
+                    child: _,
+                },
+            ) => {
+                let id = child.id().to_string();
+                self.context
+                    .children
+                    .entry(id.into())
+                    .or_default()
+                    .push(child);
                 return;
             }
             UIEvent::Fork(child) => {
@@ -1321,6 +1314,71 @@ impl State {
                         Some(true)
                     }
                     Ok(_) => Some(false),
+                }
+            }
+        }
+    }
+
+    /// Force kill `self.child`, if it exists.
+    ///
+    /// Return value is:
+    ///
+    /// - `None` if there's no child to kill.
+    /// - `Some(Ok(()))` if the child is no longer running.
+    /// - `Some(Err(_))` if an error occured.
+    pub fn kill_child(&mut self) -> Option<Result<()>> {
+        match self.child.as_mut()? {
+            ForkedProcess::Generic {
+                ref id,
+                ref command,
+                ref mut child,
+            } => {
+                let w = child.kill();
+                match w {
+                    Ok(()) => {
+                        log::debug!(
+                            "child process {} {} ({}) was killed successfully",
+                            id,
+                            command
+                                .as_deref()
+                                .map(Cow::Borrowed)
+                                .unwrap_or(Cow::Borrowed("<command unknown>")),
+                            child.id(),
+                        );
+                        Some(Ok(()))
+                    }
+                    err @ Err(_) => Some(err.chain_err_details(|| {
+                        format!(
+                            "Failed to kill child process {} {} ({})",
+                            id,
+                            command
+                                .as_deref()
+                                .map(Cow::Borrowed)
+                                .unwrap_or(Cow::Borrowed("<command unknown>")),
+                            child.id(),
+                        )
+                    })),
+                }
+            }
+            ForkedProcess::Embedded {
+                ref id,
+                ref command,
+                ref pid,
+            } => {
+                use nix::sys::signal::{kill, Signal};
+                match kill(*pid, Some(Signal::SIGTERM)) {
+                    Ok(()) | Err(Errno::ESRCH) => Some(Ok(())),
+                    err @ Err(_) => Some(err.chain_err_details(|| {
+                        format!(
+                            "Failed to SIGTERM embedded child process {} {} ({})",
+                            id,
+                            command
+                                .as_deref()
+                                .map(Cow::Borrowed)
+                                .unwrap_or(Cow::Borrowed("<command unknown>")),
+                            pid,
+                        )
+                    })),
                 }
             }
         }

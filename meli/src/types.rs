@@ -143,6 +143,23 @@ pub enum ForkedProcess {
     },
 }
 
+impl ForkedProcess {
+    /// Return the process's string identifier.
+    #[inline]
+    pub fn id(&self) -> &str {
+        let (Self::Embedded { id, .. } | Self::Generic { id, .. }) = self;
+        id.as_ref()
+    }
+
+    /// Return the process's ID.
+    pub fn pid(&self) -> Pid {
+        match self {
+            Self::Embedded { pid, .. } => *pid,
+            Self::Generic { child, .. } => nix::unistd::Pid::from_raw(child.id() as libc::pid_t),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NotificationType {
     Info,

@@ -45,7 +45,9 @@ use crate::{
     jobs::{IsAsync, JobId, JoinHandle},
     mail::view::ViewSettings,
     terminal::{Area, CellBuffer},
-    try_recv_timeout, Context, ErrorKind, File, StatusEvent, UIEvent,
+    try_recv_timeout,
+    types::ForkedProcess,
+    Context, ErrorKind, File, StatusEvent, UIEvent,
 };
 
 type FilterResult = std::result::Result<(Attachment, Vec<u8>), (Error, Vec<u8>)>;
@@ -692,12 +694,12 @@ impl ViewFilter {
                 .pager
                 .html_open
                 .as_ref()
-                .map(|s| s.to_string())
-                .or_else(|| query_default_app("text/html").ok());
+                .map(|s| Cow::Owned(s.to_string()))
+                .or_else(|| query_default_app("text/html").ok().map(Cow::Owned));
             let command = if cfg!(target_os = "macos") {
-                command.or_else(|| Some("open".into()))
+                command.or(Some(Cow::Borrowed("open")))
             } else if cfg!(target_os = "linux") {
-                command.or_else(|| Some("xdg-open".into()))
+                command.or(Some(Cow::Borrowed("xdg-open")))
             } else {
                 command
             };
@@ -722,14 +724,16 @@ impl ViewFilter {
                 match res {
                     Ok((p, child)) => {
                         context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::UpdateSubStatus(command.clone()),
+                            StatusEvent::UpdateSubStatus(command.to_string()),
                         ));
                         context.temp_files.push(p);
-                        context
-                            .children
-                            .entry(command.into())
-                            .or_default()
-                            .push(child);
+                        context.children.entry(command.clone()).or_default().push(
+                            ForkedProcess::Generic {
+                                id: command.clone(),
+                                command: Some(command),
+                                child,
+                            },
+                        );
                     }
                     Err(err) => {
                         context.replies.push_back(UIEvent::StatusEvent(

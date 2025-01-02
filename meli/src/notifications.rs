@@ -234,7 +234,20 @@ impl Component for NotificationCommand {
                                 .children
                                 .entry(melib::identify!(NotificationCommand).into())
                                 .or_default()
-                                .push(child);
+                                .push(ForkedProcess::Generic {
+                                    id: melib::identify!(NotificationCommand).into(),
+                                    command: Some(
+                                        format!(
+                                            "{bin} {kind} {title} {body}",
+                                            kind = kind.map(|k| k.to_string()).unwrap_or_default(),
+                                            title =
+                                                title.as_ref().map(<_>::as_ref).unwrap_or("meli"),
+                                            body = body.as_ref()
+                                        )
+                                        .into(),
+                                    ),
+                                    child,
+                                });
                         }
                         Err(err) => {
                             log::error!("Could not run notification script: {err}.");
@@ -269,7 +282,13 @@ impl Component for NotificationCommand {
                                     .children
                                     .entry(melib::identify!(NotificationCommand).into())
                                     .or_default()
-                                    .push(child);
+                                    .push(ForkedProcess::Generic {
+                                        id: melib::identify!(NotificationCommand).into(),
+                                        command: Some(
+                                            format!("osascript -e {applescript}",).into(),
+                                        ),
+                                        child,
+                                    });
                                 return false;
                             }
                             Err(err) => {
