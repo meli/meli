@@ -176,14 +176,16 @@ impl Component for EmbeddedContainer {
                     context
                         .replies
                         .push_back(UIEvent::ChangeMode(UIMode::Embedded));
-                    context.replies.push_back(UIEvent::Fork(ForkType::Embedded(
-                        self.embedded_pty
-                            .as_ref()
-                            .unwrap()
-                            .lock()
-                            .unwrap()
-                            .child_pid,
-                    )));
+                    context
+                        .replies
+                        .push_back(UIEvent::Fork(ForkedProcess::Embedded(
+                            self.embedded_pty
+                                .as_ref()
+                                .unwrap()
+                                .lock()
+                                .unwrap()
+                                .child_pid,
+                        )));
                 }
                 Err(err) => {
                     context.replies.push_back(UIEvent::Notification {

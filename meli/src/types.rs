@@ -129,7 +129,7 @@ impl From<UIEvent> for ThreadEvent {
 }
 
 #[derive(Debug)]
-pub enum ForkType {
+pub enum ForkedProcess {
     /// Already finished fork, we only want to restore input/output
     Finished,
     /// Embedded pty
@@ -174,7 +174,7 @@ pub enum UIEvent {
     InsertInput(Key),
     EmbeddedInput((Key, Vec<u8>)),
     Resize,
-    Fork(ForkType),
+    Fork(ForkedProcess),
     ChangeMailbox(usize),
     ChangeMode(UIMode),
     Command(String),

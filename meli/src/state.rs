@@ -285,7 +285,7 @@ impl Context {
 pub struct State {
     screen: Box<Screen<Tty>>,
     draw_rate_limit: RateLimit,
-    child: Option<ForkType>,
+    child: Option<ForkedProcess>,
     pub mode: UIMode,
     overlay: IndexMap<ComponentId, Box<dyn Component>>,
     components: IndexMap<ComponentId, Box<dyn Component>>,
@@ -318,7 +318,7 @@ impl Drop for State {
         {
             log::trace!("Failed to wait on subprocess {} ({}): {}", id, pid, err);
         }
-        if let Some(ForkType::Embedded { id, command, pid }) = self.child.take() {
+        if let Some(ForkedProcess::Embedded { id, command, pid }) = self.child.take() {
             /* Try wait, we don't want to block */
             if let Err(err) = waitpid(pid, Some(WaitPidFlag::WNOHANG)) {
                 log::trace!(
@@ -1020,7 +1020,7 @@ impl State {
                 }
                 return;
             }
-            UIEvent::Fork(ForkType::Finished) => {
+            UIEvent::Fork(ForkedProcess::Finished) => {
                 /*
                  * Fork has finished in the past.
                  * We're back in the AlternateScreen, but the cursor is reset to Shown, so fix
@@ -1033,7 +1033,7 @@ impl State {
                 self.context.restore_input();
                 return;
             }
-            UIEvent::Fork(ForkType::Generic {
+            UIEvent::Fork(ForkedProcess::Generic {
                 id,
                 command: _,
                 child,
@@ -1234,7 +1234,7 @@ impl State {
 
     pub fn try_wait_on_child(&mut self) -> Option<bool> {
         let should_return_flag = match self.child {
-            Some(ForkType::Generic {
+            Some(ForkedProcess::Generic {
                 ref id,
                 ref command,
                 ref mut child,
@@ -1259,8 +1259,8 @@ impl State {
                     }
                 }
             }
-            Some(ForkType::Finished) => {
-                /* Fork has already finished */
+            Some(ForkedProcess::Finished) => {
+                // Fork has already finished
                 self.child = None;
                 return None;
             }

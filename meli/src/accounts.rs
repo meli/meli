@@ -52,7 +52,7 @@ use crate::command::actions::AccountAction;
 use crate::{
     conf::{data_types::SearchBackend, AccountConf, FileMailboxConf},
     jobs::{IsAsync, JobId, JoinHandle},
-    types::{ForkType, NotificationType, UIEvent},
+    types::{ForkedProcess, NotificationType, UIEvent},
     MainLoopHandler, StatusEvent, ThreadEvent,
 };
 
@@ -792,11 +792,13 @@ impl Account {
                     StatusEvent::DisplayMessage(format!("Running command {}", refresh_command)),
                 )));
             self.main_loop_handler
-                .send(ThreadEvent::UIEvent(UIEvent::Fork(ForkType::Generic {
-                    id: refresh_command.to_string().into(),
-                    command: Some(refresh_command.clone().into()),
-                    child,
-                })));
+                .send(ThreadEvent::UIEvent(UIEvent::Fork(
+                    ForkedProcess::Generic {
+                        id: refresh_command.to_string().into(),
+                        command: Some(refresh_command.clone().into()),
+                        child,
+                    },
+                )));
             return Ok(());
         }
         let refresh_job = self.backend.write().unwrap().refresh(mailbox_hash);
