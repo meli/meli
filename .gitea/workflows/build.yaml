@@ -15,8 +15,10 @@ on:
     paths:
       - '.gitea/**'
       - 'melib/src/**'
+      - 'melib/tests/**'
       - 'melib/Cargo.toml'
       - 'meli/src/**'
+      - 'meli/tests/**'
       - 'meli/Cargo.toml'
       - 'Cargo.toml'
       - 'Cargo.lock'
