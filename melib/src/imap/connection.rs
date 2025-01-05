@@ -106,6 +106,14 @@ pub enum ImapProtocol {
     ManageSieve,
 }
 
+impl Default for ImapProtocol {
+    fn default() -> Self {
+        Self::IMAP {
+            extension_use: ImapExtensionUse::default(),
+        }
+    }
+}
+
 impl ImapProtocol {
     /// If `self` variant supports the `DEFLATE` extension, set a new value for
     /// whether it will be used or not, otherwise silently ignore the new
