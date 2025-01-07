@@ -971,12 +971,11 @@ impl MailBackend for MboxType {
     }
 
     #[cfg(feature = "mbox-notify")]
-    fn watch(&self) -> ResultFuture<()> {
+    fn watch(&self) -> ResultStream<BackendEvent> {
         use std::sync::mpsc::channel;
 
         use crate::error::IntoError;
 
-        let sender = self.event_consumer.clone();
         let (tx, rx) = channel();
         let watcher = RecommendedWatcher::new(
             tx,
@@ -997,10 +996,12 @@ impl MailBackend for MboxType {
         let mailboxes = self.mailboxes.clone();
         let mailbox_index = self.mailbox_index.clone();
         let prefer_mbox_type = self.prefer_mbox_type;
-        Ok(Box::pin(async move {
+        Ok(Box::pin(try_fn_stream(|emitter| async move {
+            // Move watcher to prevent it being Dropped.
             let _watcher = watcher;
             loop {
-                match rx.recv() {
+                let r = rx.recv();
+                match r {
                     Ok(Ok(event)) => match event.kind {
                         /* Update */
                         NotifyEvent::Modify(
@@ -1022,54 +1023,55 @@ impl MailBackend for MboxType {
                                     }
                                 };
                                 let file = file.lock(FileLockOptions::try_thrice(), &pathbuf)?;
-                                let mut mailbox_lock = mailboxes.lock().unwrap();
-                                let mut buf_reader = BufReader::new(file);
-                                let mut contents = Vec::new();
-                                if let Err(e) = buf_reader.read_to_end(&mut contents) {
-                                    debug!(e);
-                                    continue;
-                                };
-                                if contents
-                                    .starts_with(mailbox_lock[&mailbox_hash].content.as_slice())
+                                let mut events = vec![];
                                 {
-                                    let is_crlf: bool = contents.find(b"\r\n").is_some();
-                                    if let Ok((_, envelopes)) = mbox_parse(
-                                        mailbox_lock[&mailbox_hash].index.clone(),
-                                        &contents,
-                                        mailbox_lock[&mailbox_hash].content.len(),
-                                        prefer_mbox_type,
-                                        is_crlf,
-                                    ) {
-                                        let mut mailbox_index_lck = mailbox_index.lock().unwrap();
-                                        *mailbox_lock[&mailbox_hash].unseen.lock().unwrap() +=
-                                            envelopes.iter().filter(|env| !env.is_seen()).count();
-                                        *mailbox_lock[&mailbox_hash].total.lock().unwrap() +=
-                                            envelopes.len();
-                                        for env in envelopes {
-                                            mailbox_index_lck.insert(env.hash(), mailbox_hash);
-                                            (sender)(
-                                                account_hash,
-                                                BackendEvent::Refresh(RefreshEvent {
+                                    let mut mailbox_lock = mailboxes.lock().unwrap();
+                                    let mut buf_reader = BufReader::new(file);
+                                    let mut contents = Vec::new();
+                                    buf_reader.read_to_end(&mut contents)?;
+                                    if contents
+                                        .starts_with(mailbox_lock[&mailbox_hash].content.as_slice())
+                                    {
+                                        let is_crlf: bool = contents.find(b"\r\n").is_some();
+                                        if let Ok((_, envelopes)) = mbox_parse(
+                                            mailbox_lock[&mailbox_hash].index.clone(),
+                                            &contents,
+                                            mailbox_lock[&mailbox_hash].content.len(),
+                                            prefer_mbox_type,
+                                            is_crlf,
+                                        ) {
+                                            let mut mailbox_index_lck =
+                                                mailbox_index.lock().unwrap();
+                                            *mailbox_lock[&mailbox_hash].unseen.lock().unwrap() +=
+                                                envelopes
+                                                    .iter()
+                                                    .filter(|env| !env.is_seen())
+                                                    .count();
+                                            *mailbox_lock[&mailbox_hash].total.lock().unwrap() +=
+                                                envelopes.len();
+                                            for env in envelopes {
+                                                mailbox_index_lck.insert(env.hash(), mailbox_hash);
+                                                events.push(BackendEvent::Refresh(RefreshEvent {
                                                     account_hash,
                                                     mailbox_hash,
                                                     kind: RefreshEventKind::Create(Box::new(env)),
-                                                }),
-                                            );
+                                                }));
+                                            }
                                         }
-                                    }
-                                } else {
-                                    (sender)(
-                                        account_hash,
-                                        BackendEvent::Refresh(RefreshEvent {
+                                    } else {
+                                        events.push(BackendEvent::Refresh(RefreshEvent {
                                             account_hash,
                                             mailbox_hash,
                                             kind: RefreshEventKind::Rescan,
-                                        }),
-                                    );
+                                        }));
+                                    }
+                                    mailbox_lock
+                                        .entry(mailbox_hash)
+                                        .and_modify(|f| f.content = contents);
                                 }
-                                mailbox_lock
-                                    .entry(mailbox_hash)
-                                    .and_modify(|f| f.content = contents);
+                                for ev in events {
+                                    emitter.emit(ev).await;
+                                }
                             }
                         }
                         NotifyEvent::Remove(_) => {
@@ -1082,17 +1084,16 @@ impl MailBackend for MboxType {
                                 {
                                     let mailbox_hash =
                                         MailboxHash::from_bytes(pathbuf.as_os_str().as_bytes());
-                                    (sender)(
-                                        account_hash,
-                                        BackendEvent::Refresh(RefreshEvent {
+                                    emitter
+                                        .emit(BackendEvent::Refresh(RefreshEvent {
                                             account_hash,
                                             mailbox_hash,
                                             kind: RefreshEventKind::Failure(Error::new(format!(
                                                 "mbox mailbox {} was removed.",
                                                 pathbuf.display()
                                             ))),
-                                        }),
-                                    );
+                                        }))
+                                        .await;
                                     return Ok(());
                                 }
                             }
@@ -1111,9 +1112,8 @@ impl MailBackend for MboxType {
                             {
                                 let mailbox_hash =
                                     MailboxHash::from_bytes(src.as_os_str().as_bytes());
-                                (sender)(
-                                    account_hash,
-                                    BackendEvent::Refresh(RefreshEvent {
+                                emitter
+                                    .emit(BackendEvent::Refresh(RefreshEvent {
                                         account_hash,
                                         mailbox_hash,
                                         kind: RefreshEventKind::Failure(Error::new(format!(
@@ -1121,24 +1121,29 @@ impl MailBackend for MboxType {
                                             src.display(),
                                             dest.display()
                                         ))),
-                                    }),
-                                );
+                                    }))
+                                    .await;
                                 return Ok(());
                             }
                         }
                         _ => {
                             log::debug!("Received unexpected fs watcher notify event: {:?}", event);
                             /* Trigger rescan of mailboxes */
-                            let mailboxes_lck = mailboxes.lock().unwrap();
-                            for &mailbox_hash in mailboxes_lck.keys() {
-                                (sender)(
-                                    account_hash,
-                                    BackendEvent::Refresh(RefreshEvent {
-                                        account_hash,
-                                        mailbox_hash,
-                                        kind: RefreshEventKind::Rescan,
-                                    }),
-                                );
+                            let events = {
+                                let mailboxes_lck = mailboxes.lock().unwrap();
+                                mailboxes_lck
+                                    .keys()
+                                    .map(|&mailbox_hash| {
+                                        BackendEvent::Refresh(RefreshEvent {
+                                            account_hash,
+                                            mailbox_hash,
+                                            kind: RefreshEventKind::Rescan,
+                                        })
+                                    })
+                                    .collect::<Vec<_>>()
+                            };
+                            for ev in events {
+                                emitter.emit(ev).await;
                             }
                             return Ok(());
                         }
@@ -1152,11 +1157,11 @@ impl MailBackend for MboxType {
                     }
                 }
             }
-        }))
+        })))
     }
 
     #[cfg(not(feature = "mbox-notify"))]
-    fn watch(&self) -> ResultFuture<()> {
+    fn watch(&self) -> ResultStream<BackendEvent> {
         Err(Error::new(
             "Notifications for mbox backend require the `mbox-notify` build-time feature.",
         )

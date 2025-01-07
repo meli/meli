@@ -127,9 +127,8 @@ impl DbConnection {
         mailbox_index: Arc<RwLock<HashMap<EnvelopeHash, SmallVec<[MailboxHash; 16]>>>>,
         tag_index: Arc<RwLock<BTreeMap<TagHash, String>>>,
         account_hash: AccountHash,
-        event_consumer: BackendEventConsumer,
         new_revision_uuid: u64,
-    ) -> Result<()> {
+    ) -> Result<Option<BackendEvent>> {
         use RefreshEventKind::*;
         let query_str = format!(
             "lastmod:{}..{}",
@@ -140,6 +139,7 @@ impl DbConnection {
         let iter = query.search()?;
         let mailbox_index_lck = mailbox_index.write().unwrap();
         let mailboxes_lck = mailboxes.read().unwrap();
+        let mut events = vec![];
         for message in iter {
             let env_hash = message.env_hash();
             if let Some(mailbox_hashes) = mailbox_index_lck.get(&env_hash) {
@@ -150,14 +150,11 @@ impl DbConnection {
                     tag_lock.entry(num).or_insert_with(|| tag.clone());
                 }
                 for &mailbox_hash in mailbox_hashes {
-                    (event_consumer)(
+                    events.push(RefreshEvent {
                         account_hash,
-                        BackendEvent::Refresh(RefreshEvent {
-                            account_hash,
-                            mailbox_hash,
-                            kind: NewFlags(env_hash, tags.clone()),
-                        }),
-                    );
+                        mailbox_hash,
+                        kind: NewFlags(env_hash, tags.clone()),
+                    });
                 }
             } else {
                 let message_id = message.msg_id_cstr().to_string_lossy().to_string();
@@ -172,14 +169,11 @@ impl DbConnection {
                         if !env.is_seen() {
                             *unseen_lck += 1;
                         }
-                        (event_consumer)(
+                        events.push(RefreshEvent {
                             account_hash,
-                            BackendEvent::Refresh(RefreshEvent {
-                                account_hash,
-                                mailbox_hash,
-                                kind: Create(Box::new(env.clone())),
-                            }),
-                        );
+                            mailbox_hash,
+                            kind: Create(Box::new(env.clone())),
+                        });
                     }
                 }
             }
@@ -192,21 +186,18 @@ impl DbConnection {
                         let m = &mailboxes_lck[&mailbox_hash];
                         let mut total_lck = m.total.lock().unwrap();
                         *total_lck = total_lck.saturating_sub(1);
-                        (event_consumer)(
+                        events.push(RefreshEvent {
                             account_hash,
-                            BackendEvent::Refresh(RefreshEvent {
-                                account_hash,
-                                mailbox_hash,
-                                kind: Remove(env_hash),
-                            }),
-                        );
+                            mailbox_hash,
+                            kind: Remove(env_hash),
+                        });
                     }
                 }
                 return false;
             }
             true
         });
-        Ok(())
+        Ok(events.try_into().ok())
     }
 }
 
@@ -698,22 +689,23 @@ impl MailBackend for NotmuchDb {
         Ok(Box::pin(async move {
             let new_revision_uuid = database.get_revision_uuid();
             if new_revision_uuid > *database.revision_uuid.read().unwrap() {
-                database.refresh(
+                if let Some(ev) = database.refresh(
                     mailboxes,
                     index,
                     mailbox_index,
                     tag_index,
                     account_hash,
-                    event_consumer,
                     new_revision_uuid,
-                )?;
+                )? {
+                    (event_consumer)(account_hash, ev);
+                }
                 *database.revision_uuid.write().unwrap() = new_revision_uuid;
             }
             Ok(())
         }))
     }
 
-    fn watch(&self) -> ResultFuture<()> {
+    fn watch(&self) -> ResultStream<BackendEvent> {
         let account_hash = self.account_hash;
         let tag_index = self.collection.tag_index.clone();
         let lib = self.lib.clone();
@@ -722,7 +714,6 @@ impl MailBackend for NotmuchDb {
         let mailboxes = self.mailboxes.clone();
         let index = self.index.clone();
         let mailbox_index = self.mailbox_index.clone();
-        let event_consumer = self.event_consumer.clone();
 
         let (tx, rx) = std::sync::mpsc::channel();
         let watcher = RecommendedWatcher::new(
@@ -734,7 +725,8 @@ impl MailBackend for NotmuchDb {
             Ok(watcher)
         })
         .map_err(|err| err.set_err_details("Failed to create file change monitor."))?;
-        Ok(Box::pin(async move {
+        Ok(Box::pin(try_fn_stream(|emitter| async move {
+            // Move watcher to prevent it being Dropped.
             let _watcher = watcher;
             let rx = rx;
             loop {
@@ -748,20 +740,21 @@ impl MailBackend for NotmuchDb {
                     )?;
                     let new_revision_uuid = database.get_revision_uuid();
                     if new_revision_uuid > *database.revision_uuid.read().unwrap() {
-                        database.refresh(
+                        if let Some(evn) = database.refresh(
                             mailboxes.clone(),
                             index.clone(),
                             mailbox_index.clone(),
                             tag_index.clone(),
                             account_hash,
-                            event_consumer.clone(),
                             new_revision_uuid,
-                        )?;
+                        )? {
+                            emitter.emit(evn).await;
+                        }
                         *revision_uuid.write().unwrap() = new_revision_uuid;
                     }
                 }
             }
-        }))
+        })))
     }
 
     fn mailboxes(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {

@@ -38,6 +38,7 @@ pub mod prelude {
         borrow::Cow,
         cell::RefCell,
         collections::{BTreeSet, HashMap},
+        convert::TryFrom,
         ops::Deref,
         pin::Pin,
         sync::Arc,
@@ -447,7 +448,7 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     }
     fn fetch(&mut self, mailbox_hash: MailboxHash) -> ResultStream<Vec<Envelope>>;
     fn refresh(&mut self, mailbox_hash: MailboxHash) -> ResultFuture<()>;
-    fn watch(&self) -> ResultFuture<()>;
+    fn watch(&self) -> ResultStream<BackendEvent>;
     fn mailboxes(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>>;
     fn envelope_bytes_by_hash(&self, hash: EnvelopeHash) -> ResultFuture<Vec<u8>>;
 

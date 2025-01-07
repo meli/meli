@@ -494,11 +494,13 @@ impl MailBackend for ImapType {
         }))
     }
 
-    fn watch(&self) -> ResultFuture<()> {
+    fn watch(&self) -> ResultStream<BackendEvent> {
         let server_conf = self.server_conf.clone();
         let main_conn = self.connection.clone();
         let uid_store = self.uid_store.clone();
-        Ok(Box::pin(async move {
+        Ok(Box::pin(try_fn_stream(|emitter| async move {
+            use futures::stream::StreamExt;
+
             let has_idle: bool = match server_conf.protocol {
                 ImapProtocol::IMAP {
                     extension_use: ImapExtensionUse { idle, .. },
@@ -512,8 +514,12 @@ impl MailBackend for ImapType {
                 }
                 _ => false,
             };
-            while let Err(err) = if has_idle {
-                idle(ImapWatchKit {
+            enum WatchKit {
+                Idle(BoxStream<'static, Result<BackendEvent>>),
+                Poll(BoxStream<'static, Result<BackendEvent>>),
+            }
+            let mut watch_kit = if has_idle {
+                WatchKit::Idle(Box::pin(idle(ImapWatchKit {
                     conn: ImapConnection::new_connection(
                         &server_conf,
                         format!(
@@ -526,10 +532,9 @@ impl MailBackend for ImapType {
                     ),
                     main_conn: main_conn.clone(),
                     uid_store: uid_store.clone(),
-                })
-                .await
+                })))
             } else {
-                poll_with_examine(ImapWatchKit {
+                WatchKit::Poll(Box::pin(poll_with_examine(ImapWatchKit {
                     conn: ImapConnection::new_connection(
                         &server_conf,
                         format!(
@@ -542,50 +547,65 @@ impl MailBackend for ImapType {
                     ),
                     main_conn: main_conn.clone(),
                     uid_store: uid_store.clone(),
-                })
-                .await
+                })))
+            };
+            while let Some(ev) = {
+                match watch_kit {
+                    WatchKit::Idle(ref mut idle) => idle.next().await,
+                    WatchKit::Poll(ref mut poll) => poll.next().await,
+                }
             } {
-                let mut main_conn_lck = main_conn.lock().await?;
-                if err.kind.is_network() {
-                    uid_store.is_online.lock().unwrap().1 = Err(err.clone());
-                } else {
-                    return Err(err);
-                }
-                log::trace!(
-                    "{} Watch failure: {}",
-                    uid_store.account_name,
-                    err.to_string()
-                );
-                match timeout(uid_store.timeout, main_conn_lck.connect())
-                    .await
-                    .and_then(|res| res)
-                {
-                    Err(err2) => {
+                match ev {
+                    Ok(ok) => emitter.emit(ok).await,
+                    Err(err) => {
+                        let mut main_conn_lck = main_conn.lock().await?;
+                        if err.kind.is_network() {
+                            uid_store.is_online.lock().unwrap().1 = Err(err.clone());
+                        } else {
+                            return Err(err);
+                        }
                         log::trace!(
-                            "{} Watch reconnect attempt failed: {}",
+                            "{} Watch failure: {}",
                             uid_store.account_name,
-                            err2.to_string()
+                            err.to_string()
                         );
-                    }
-                    Ok(()) => {
-                        log::trace!(
-                            "{} Watch reconnect attempt successful",
-                            uid_store.account_name
-                        );
-                        continue;
+                        match timeout(uid_store.timeout, main_conn_lck.connect())
+                            .await
+                            .and_then(|res| res)
+                        {
+                            Err(err2) => {
+                                log::trace!(
+                                    "{} Watch reconnect attempt failed: {}",
+                                    uid_store.account_name,
+                                    err2.to_string()
+                                );
+                            }
+                            Ok(()) => {
+                                log::trace!(
+                                    "{} Watch reconnect attempt successful",
+                                    uid_store.account_name
+                                );
+                                continue;
+                            }
+                        }
+                        let account_hash = uid_store.account_hash;
+                        emitter
+                            .emit(
+                                RefreshEvent {
+                                    account_hash,
+                                    mailbox_hash: MailboxHash::default(),
+                                    kind: RefreshEventKind::Failure(err.clone()),
+                                }
+                                .into(),
+                            )
+                            .await;
+                        return Err(err);
                     }
                 }
-                let account_hash = uid_store.account_hash;
-                main_conn_lck.add_refresh_event(RefreshEvent {
-                    account_hash,
-                    mailbox_hash: MailboxHash::default(),
-                    kind: RefreshEventKind::Failure(err.clone()),
-                });
-                return Err(err);
             }
             log::trace!("{} watch future returning", uid_store.account_name);
             Ok(())
-        }))
+        })))
     }
 
     fn envelope_bytes_by_hash(&self, hash: EnvelopeHash) -> ResultFuture<Vec<u8>> {

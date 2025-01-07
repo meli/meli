@@ -20,10 +20,9 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
-use std::{borrow::Cow, collections::HashMap, pin::Pin};
+use std::{borrow::Cow, collections::HashMap};
 
-use futures::stream::Stream;
-use melib::{backends::*, email::*, error::Result, LogLevel};
+use melib::{backends::prelude::*, error::Result, LogLevel};
 use smallvec::SmallVec;
 
 use crate::{is_variant, jobs::JoinHandle, StatusEvent};
@@ -113,7 +112,7 @@ pub enum JobRequest {
         #[allow(clippy::type_complexity)]
         handle: JoinHandle<(
             Option<Result<Vec<Envelope>>>,
-            Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>,
+            BoxStream<'static, Result<Vec<Envelope>>>,
         )>,
     },
     Generic {
@@ -149,7 +148,11 @@ pub enum JobRequest {
         handle: JoinHandle<Result<()>>,
     },
     Watch {
-        handle: JoinHandle<Result<()>>,
+        #[allow(clippy::type_complexity)]
+        handle: JoinHandle<(
+            Option<Result<BackendEvent>>,
+            BoxStream<'static, Result<BackendEvent>>,
+        )>,
     },
     Mailbox(MailboxJobRequest),
 }

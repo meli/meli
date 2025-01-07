@@ -1619,7 +1619,9 @@ impl ImapConnection {
             .get(&mailbox_hash)
             .cloned()
             .unwrap();
-        crate::imap::watch::examine_updates(mailbox, self).await?;
+        if let Some(ev) = crate::imap::watch::examine_updates(mailbox, self).await? {
+            self.add_backend_event(ev);
+        }
         Ok(())
     }
 

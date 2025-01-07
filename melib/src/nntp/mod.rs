@@ -396,7 +396,7 @@ impl MailBackend for NntpType {
         }))
     }
 
-    fn watch(&self) -> ResultFuture<()> {
+    fn watch(&self) -> ResultStream<BackendEvent> {
         Err(
             Error::new("Watching is currently uniplemented for nntp backend")
                 .set_kind(ErrorKind::NotImplemented),

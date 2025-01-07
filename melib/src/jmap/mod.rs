@@ -486,15 +486,17 @@ impl MailBackend for JmapType {
         Ok(Box::pin(async move {
             let mut conn = connection.lock().await;
             conn.connect().await?;
-            conn.email_changes(mailbox_hash).await?;
+            if let Some(ev) = conn.email_changes(mailbox_hash).await? {
+                conn.add_backend_event(ev);
+            }
             Ok(())
         }))
     }
 
-    fn watch(&self) -> ResultFuture<()> {
+    fn watch(&self) -> ResultStream<BackendEvent> {
         let connection = self.connection.clone();
         let store = self.store.clone();
-        Ok(Box::pin(async move {
+        Ok(Box::pin(try_fn_stream(|emitter| async move {
             {
                 let mut conn = connection.lock().await;
                 conn.connect().await?;
@@ -512,12 +514,14 @@ impl MailBackend for JmapType {
                     };
                     let conn = connection.lock().await;
                     for mailbox_hash in mailbox_hashes {
-                        conn.email_changes(mailbox_hash).await?;
+                        if let Some(ev) = conn.email_changes(mailbox_hash).await? {
+                            emitter.emit(ev).await;
+                        }
                     }
                 }
                 sleep(Duration::from_secs(60)).await;
             }
-        }))
+        })))
     }
 
     fn mailboxes(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
@@ -874,11 +878,14 @@ impl MailBackend for JmapType {
                     )));
                 }
             }
-            conn.add_refresh_event(RefreshEvent {
-                account_hash: store.account_hash,
-                mailbox_hash,
-                kind: RefreshEventKind::MailboxDelete(mailbox_hash),
-            });
+            conn.add_backend_event(
+                RefreshEvent {
+                    account_hash: store.account_hash,
+                    mailbox_hash,
+                    kind: RefreshEventKind::MailboxDelete(mailbox_hash),
+                }
+                .into(),
+            );
             let new_mailboxes = protocol::get_mailboxes(&mut conn, None).await?;
             *store.mailboxes.write().unwrap() = new_mailboxes;
 

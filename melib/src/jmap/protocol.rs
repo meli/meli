@@ -277,7 +277,9 @@ impl EmailFetcher {
                 debug!("{:?}: inserting state {}", EmailObject::NAME, &state);
                 *conn.store.email_state.lock().await = Some(state);
             } else if !is_equal {
-                conn.email_changes(mailbox_hash).await?;
+                if let Some(ev) = conn.email_changes(mailbox_hash).await? {
+                    conn.add_backend_event(ev);
+                }
             }
             Ok(is_empty || !is_equal)
         }

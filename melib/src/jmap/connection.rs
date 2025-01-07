@@ -439,22 +439,19 @@ impl JmapConnection {
     }
 
     #[inline]
-    pub fn add_refresh_event(&self, ev: RefreshEvent) {
-        self.add_backend_event(BackendEvent::Refresh(ev));
-    }
-
     pub fn add_backend_event(&self, ev: BackendEvent) {
         (self.store.event_consumer)(self.store.account_hash, ev);
     }
 
-    pub async fn email_changes(&self, mailbox_hash: MailboxHash) -> Result<()> {
+    pub async fn email_changes(&self, mailbox_hash: MailboxHash) -> Result<Option<BackendEvent>> {
         let mut current_state: State<EmailObject> =
             if let Some(s) = self.store.email_state.lock().await.clone() {
                 s
             } else {
-                return Ok(());
+                return Ok(None);
             };
         let mail_account_id = self.session_guard().await?.mail_account_id();
+        let mut events = vec![];
         loop {
             let email_changes_call: EmailChanges = EmailChanges::new(
                 Changes::<EmailObject>::new()
@@ -515,7 +512,7 @@ impl JmapConnection {
                 );
                 req.add_call(&email_get_call).await;
             } else {
-                return Ok(());
+                return Ok(None);
             }
             let res_text = self
                 .post_async(None, serde_json::to_string(&req)?)
@@ -538,7 +535,7 @@ impl JmapConnection {
             let mut changes_response =
                 ChangesResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
             if changes_response.new_state == current_state {
-                return Ok(());
+                return Ok(None);
             }
             for destroyed_id in std::mem::take(&mut changes_response.destroyed) {
                 if let Some((env_hash, mailbox_hashes)) =
@@ -557,7 +554,6 @@ impl JmapConnection {
             let get_response = GetResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
 
             {
-                /* process get response */
                 let GetResponse::<EmailObject> { list, .. } = get_response;
 
                 let mut mailbox_hashes: Vec<SmallVec<[MailboxHash; 8]>> =
@@ -584,7 +580,7 @@ impl JmapConnection {
                             }
                             mbox.total_emails.lock().unwrap().insert_new(env.hash());
                         });
-                        self.add_refresh_event(RefreshEvent {
+                        events.push(RefreshEvent {
                             account_hash: self.store.account_hash,
                             mailbox_hash,
                             kind: RefreshEventKind::Create(Box::new(env.clone())),
@@ -598,7 +594,7 @@ impl JmapConnection {
                             }
                             mbox.total_emails.lock().unwrap().insert_new(env.hash());
                         });
-                        self.add_refresh_event(RefreshEvent {
+                        events.push(RefreshEvent {
                             account_hash: self.store.account_hash,
                             mailbox_hash,
                             kind: RefreshEventKind::Create(Box::new(env)),
@@ -644,7 +640,7 @@ impl JmapConnection {
                                 mbox.unread_emails.lock().unwrap().remove(*env_hash);
                                 mbox.total_emails.lock().unwrap().insert_new(*env_hash);
                             });
-                            self.add_refresh_event(RefreshEvent {
+                            events.push(RefreshEvent {
                                 account_hash: self.store.account_hash,
                                 mailbox_hash,
                                 kind: RefreshEventKind::Remove(*env_hash),
@@ -689,7 +685,7 @@ impl JmapConnection {
                                 mbox.unread_emails.lock().unwrap().insert_new(*env_hash);
                             }
                         });
-                        self.add_refresh_event(RefreshEvent {
+                        events.push(RefreshEvent {
                             account_hash: self.store.account_hash,
                             mailbox_hash,
                             kind: RefreshEventKind::NewFlags(*env_hash, new_flags),
@@ -706,7 +702,7 @@ impl JmapConnection {
             }
         }
 
-        Ok(())
+        Ok(events.try_into().ok())
     }
 
     pub async fn send_request(&self, request: String) -> Result<String> {

@@ -833,7 +833,7 @@ impl Account {
                         if let Some(wait) = wait {
                             sleep(wait).await;
                         }
-                        fut.await
+                        fut.into_future().await
                     };
                     let handle = self.main_loop_handler.job_executor.spawn(
                         "watch".into(),
@@ -1732,30 +1732,59 @@ impl Account {
                     }
                 }
                 JobRequest::Watch { ref mut handle } => {
-                    log::trace!("JobRequest::Watch finished??? ");
-                    if let Ok(Some(Err(err))) = handle.chan.try_recv() {
-                        if err.kind.is_timeout()
-                            || matches!(
-                                err.kind,
-                                ErrorKind::Network(NetworkErrorKind::HostLookupFailed)
-                            )
-                        {
-                            self.watch(Some(Duration::from_secs(3)));
-                        } else {
-                            self.main_loop_handler
-                                .job_executor
-                                .set_job_success(job_id, false);
-                            // [ref:TODO]: relaunch watch job with ratelimit for failure
-                            self.main_loop_handler.send(ThreadEvent::UIEvent(
-                                UIEvent::Notification {
-                                    title: Some(
-                                        format!("{}: watch thread failed", &self.name).into(),
-                                    ),
-                                    source: None,
-                                    body: err.to_string().into(),
-                                    kind: Some(NotificationType::Error(err.kind)),
-                                },
-                            ));
+                    log::trace!("JobRequest::Watch event");
+                    is_canceled! { handle };
+                    match handle.chan.try_recv() {
+                        Err(_) => { /* canceled */ }
+                        Ok(Some((None, _))) => {
+                            log::trace!("JobRequest::Watch stream returned None");
+                            self.watch(None);
+                        }
+                        Ok(None) => {
+                            self.watch(None);
+                        }
+                        Ok(Some((Some(ev), rest))) => {
+                            let handle = self.main_loop_handler.job_executor.spawn(
+                                "watch".into(),
+                                rest.into_future(),
+                                self.is_async(),
+                            );
+                            self.active_jobs
+                                .insert(handle.job_id, JobRequest::Watch { handle });
+                            match ev {
+                                Err(err) => {
+                                    log::trace!("JobRequest::Watch error {}", err);
+                                    if err.kind.is_timeout()
+                                        || matches!(
+                                            err.kind,
+                                            ErrorKind::Network(NetworkErrorKind::HostLookupFailed)
+                                        )
+                                    {
+                                        self.watch(Some(Duration::from_secs(3)));
+                                    } else {
+                                        self.main_loop_handler
+                                            .job_executor
+                                            .set_job_success(job_id, false);
+                                        // [ref:TODO]: relaunch watch job with ratelimit for failure
+                                        self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                            UIEvent::Notification {
+                                                title: Some(
+                                                    format!("{}: watch thread failed", &self.name)
+                                                        .into(),
+                                                ),
+                                                source: None,
+                                                body: err.to_string().into(),
+                                                kind: Some(NotificationType::Error(err.kind)),
+                                            },
+                                        ));
+                                    }
+                                }
+                                Ok(ev) => {
+                                    self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                        UIEvent::BackendEvent(self.hash, ev),
+                                    ));
+                                }
+                            }
                         }
                     }
                 }

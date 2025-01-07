@@ -302,7 +302,7 @@ impl MailBackend for MaildirType {
         }))
     }
 
-    fn watch(&self) -> ResultFuture<()> {
+    fn watch(&self) -> ResultStream<BackendEvent> {
         let root_mailbox = self.config.path.to_path_buf();
         let (tx, rx) = channel();
         let watcher = RecommendedWatcher::new(
@@ -328,7 +328,6 @@ impl MailBackend for MaildirType {
         let watch_state = watch::MaildirWatch {
             watcher,
             account_hash: self.account_hash,
-            event_consumer: self.event_consumer.clone(),
             root_mailbox,
             rx,
             hash_indexes: self.hash_indexes.clone(),
@@ -337,7 +336,8 @@ impl MailBackend for MaildirType {
             mailbox_counts,
             config: self.config.clone(),
         };
-        Ok(Box::pin(async move { watch_state.watch().await }))
+        let stream = watch_state.watch();
+        Ok(Box::pin(stream))
     }
 
     fn envelope_bytes_by_hash(&self, hash: EnvelopeHash) -> ResultFuture<Vec<u8>> {

@@ -28,6 +28,7 @@ use imap_codec::imap_types::search::SearchKey;
 use super::*;
 use crate::{
     backends::SpecialUsageMailbox,
+    error::Result,
     imap::{email::common_attributes, sync::cache::ignore_not_found},
 };
 
@@ -38,180 +39,203 @@ pub struct ImapWatchKit {
     pub uid_store: Arc<UIDStore>,
 }
 
-pub async fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
-    log::trace!("poll with examine");
-    let ImapWatchKit {
-        mut conn,
-        main_conn: _,
-        uid_store,
-    } = kit;
-    conn.connect().await?;
-    let mailboxes: HashMap<MailboxHash, ImapMailbox> = {
-        let mailboxes_lck = timeout(uid_store.timeout, uid_store.mailboxes.lock()).await?;
-        mailboxes_lck.clone()
-    };
-    loop {
-        for (_, mailbox) in mailboxes.clone() {
-            examine_updates(mailbox, &mut conn).await?;
+pub fn poll_with_examine(
+    kit: ImapWatchKit,
+) -> impl futures::stream::Stream<Item = Result<BackendEvent>> {
+    try_fn_stream(|emitter| async move {
+        log::trace!("poll with examine");
+        let ImapWatchKit {
+            mut conn,
+            main_conn: _,
+            uid_store,
+        } = kit;
+        conn.connect().await?;
+        let mailboxes: HashMap<MailboxHash, ImapMailbox> = {
+            let mailboxes_lck = timeout(uid_store.timeout, uid_store.mailboxes.lock()).await?;
+            mailboxes_lck.clone()
+        };
+        loop {
+            for (_, mailbox) in mailboxes.clone() {
+                if let Some(ev) = examine_updates(mailbox, &mut conn).await? {
+                    emitter.emit(ev).await;
+                }
+            }
+            //[ref:FIXME]: make sleep duration configurable
+            smol::Timer::after(Duration::from_secs(3 * 60)).await;
         }
-        //[ref:FIXME]: make sleep duration configurable
-        smol::Timer::after(Duration::from_secs(3 * 60)).await;
-    }
+    })
 }
 
-pub async fn idle(kit: ImapWatchKit) -> Result<()> {
+pub fn idle(kit: ImapWatchKit) -> impl futures::stream::Stream<Item = Result<BackendEvent>> {
     // duration interval to send heartbeat
     const _10_MINS: Duration = Duration::from_secs(10 * 60);
     // duration interval to check other mailboxes for changes
     const _5_MINS: Duration = Duration::from_secs(5 * 60);
-    log::trace!("IDLE");
-    /* IDLE only watches the connection's selected mailbox. We will IDLE on INBOX
-     * and every ~5 minutes wake up and poll the others */
-    let ImapWatchKit {
-        mut conn,
-        main_conn,
-        uid_store,
-    } = kit;
-    conn.connect().await?;
-    let mailbox: ImapMailbox = {
-        let mut retries = 0;
-        loop {
-            let inbox = uid_store
-                .mailboxes
-                .lock()
-                .await
-                .values()
-                .find(|f| f.parent.is_none() && (f.special_usage() == SpecialUsageMailbox::Inbox))
-                .cloned();
-            match inbox {
-                Some(mailbox) => break mailbox,
-                None if retries >= 10 => {
-                    return Err(Error::new(
-                        "INBOX mailbox not found in local mailbox index. the connection might \
-                         have not parsed the IMAP mailboxes correctly",
-                    )
-                    .set_kind(ErrorKind::TimedOut));
-                }
-                None => {
-                    smol::Timer::after(Duration::from_millis(
-                        retries * (4 * crate::utils::random::random_u8() as u64),
-                    ))
-                    .await;
-                    retries += 1;
+    try_fn_stream(|emitter| async move {
+        log::trace!("IDLE");
+        /* IDLE only watches the connection's selected mailbox. We will IDLE on INBOX
+         * and every ~5 minutes wake up and poll the others */
+        let ImapWatchKit {
+            mut conn,
+            main_conn,
+            uid_store,
+        } = kit;
+        conn.connect().await?;
+        let mailbox: ImapMailbox = {
+            let mut retries = 0;
+            loop {
+                let inbox = uid_store
+                    .mailboxes
+                    .lock()
+                    .await
+                    .values()
+                    .find(|f| {
+                        f.parent.is_none() && (f.special_usage() == SpecialUsageMailbox::Inbox)
+                    })
+                    .cloned();
+                match inbox {
+                    Some(mailbox) => break mailbox,
+                    None if retries >= 10 => {
+                        return Err(Error::new(
+                            "INBOX mailbox not found in local mailbox index. the connection might \
+                             have not parsed the IMAP mailboxes correctly",
+                        )
+                        .set_kind(ErrorKind::TimedOut));
+                    }
+                    None => {
+                        smol::Timer::after(Duration::from_millis(
+                            retries * (4 * crate::utils::random::random_u8() as u64),
+                        ))
+                        .await;
+                        retries += 1;
+                    }
                 }
             }
-        }
-    };
-    let mailbox_hash = mailbox.hash();
-    let mut response = Vec::with_capacity(8 * 1024);
-    let select_response = conn
-        .examine_mailbox(mailbox_hash, &mut response, true)
-        .await?;
-    {
-        let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
+        };
+        let mailbox_hash = mailbox.hash();
+        let mut response = Vec::with_capacity(8 * 1024);
+        let select_response = conn
+            .examine_mailbox(mailbox_hash, &mut response, true)
+            .await?;
+        {
+            let mut mismatch = false;
+            {
+                let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
 
-        if let Some(v) = uidvalidities.get(&mailbox_hash) {
-            if *v != select_response.uidvalidity {
-                conn.add_refresh_event(RefreshEvent {
-                    account_hash: uid_store.account_hash,
-                    mailbox_hash,
-                    kind: RefreshEventKind::Rescan,
-                });
+                if let Some(v) = uidvalidities.get(&mailbox_hash) {
+                    mismatch = *v != select_response.uidvalidity;
+                }
+                uidvalidities.insert(mailbox_hash, select_response.uidvalidity);
             }
-        } else {
-            uidvalidities.insert(mailbox_hash, select_response.uidvalidity);
+            if mismatch {
+                emitter
+                    .emit(
+                        RefreshEvent {
+                            account_hash: uid_store.account_hash,
+                            mailbox_hash,
+                            kind: RefreshEventKind::Rescan,
+                        }
+                        .into(),
+                    )
+                    .await;
+            }
         }
-    }
-    let mailboxes: HashMap<MailboxHash, ImapMailbox> = {
-        let mailboxes_lck = timeout(uid_store.timeout, uid_store.mailboxes.lock()).await?;
-        mailboxes_lck.clone()
-    };
-    conn.send_command(CommandBody::Idle).await?;
-    let mut blockn = ImapBlockingConnection::from(conn);
-    let mut watch = Instant::now();
-    loop {
-        let line = match timeout(Some(_10_MINS), blockn.as_stream()).await {
-            Ok(Some(line)) => line,
-            Ok(None) => {
-                log::trace!("IDLE connection dropped: {:?}", &blockn.err());
-                blockn.conn.connect().await?;
+        let mailboxes: HashMap<MailboxHash, ImapMailbox> = {
+            let mailboxes_lck = timeout(uid_store.timeout, uid_store.mailboxes.lock()).await?;
+            mailboxes_lck.clone()
+        };
+        conn.send_command(CommandBody::Idle).await?;
+        let mut blockn = ImapBlockingConnection::from(conn);
+        let mut watch = Instant::now();
+        loop {
+            let line = match timeout(Some(_10_MINS), blockn.as_stream()).await {
+                Ok(Some(line)) => line,
+                Ok(None) => {
+                    log::trace!("IDLE connection dropped: {:?}", &blockn.err());
+                    return Ok(());
+                }
+                Err(_) => {
+                    /* Timeout */
+                    blockn.conn.send_raw(b"DONE").await?;
+                    blockn
+                        .conn
+                        .read_response(&mut response, RequiredResponses::empty())
+                        .await?;
+                    blockn.conn.send_command(CommandBody::Idle).await?;
+                    let mut main_conn_lck = main_conn.lock().await?;
+                    main_conn_lck.connect().await?;
+                    continue;
+                }
+            };
+            let now = Instant::now();
+            if now.duration_since(watch) >= _5_MINS {
+                /* Time to poll all inboxes */
                 let mut main_conn_lck = main_conn.lock().await?;
-                main_conn_lck.connect().await?;
+                for (_h, mailbox) in mailboxes.clone() {
+                    if let Some(ev) = examine_updates(mailbox, &mut main_conn_lck).await? {
+                        emitter.emit(ev).await;
+                    }
+                }
+                watch = now;
+            }
+            if line
+                .split_rn()
+                .filter(|l| {
+                    !l.starts_with(b"+ ")
+                        && !l.starts_with(b"* ok")
+                        && !l.starts_with(b"* ok")
+                        && !l.starts_with(b"* Ok")
+                        && !l.starts_with(b"* OK")
+                })
+                .count()
+                == 0
+            {
                 continue;
             }
-            Err(_) => {
-                /* Timeout */
+            {
                 blockn.conn.send_raw(b"DONE").await?;
                 blockn
                     .conn
                     .read_response(&mut response, RequiredResponses::empty())
                     .await?;
-                blockn.conn.send_command(CommandBody::Idle).await?;
-                let mut main_conn_lck = main_conn.lock().await?;
-                main_conn_lck.connect().await?;
-                continue;
-            }
-        };
-        let now = Instant::now();
-        if now.duration_since(watch) >= _5_MINS {
-            /* Time to poll all inboxes */
-            let mut main_conn_lck = main_conn.lock().await?;
-            for (_h, mailbox) in mailboxes.clone() {
-                examine_updates(mailbox, &mut main_conn_lck).await?;
-            }
-            watch = now;
-        }
-        if line
-            .split_rn()
-            .filter(|l| {
-                !l.starts_with(b"+ ")
-                    && !l.starts_with(b"* ok")
-                    && !l.starts_with(b"* ok")
-                    && !l.starts_with(b"* Ok")
-                    && !l.starts_with(b"* OK")
-            })
-            .count()
-            == 0
-        {
-            continue;
-        }
-        {
-            blockn.conn.send_raw(b"DONE").await?;
-            blockn
-                .conn
-                .read_response(&mut response, RequiredResponses::empty())
-                .await?;
-            for l in line.split_rn().chain(response.split_rn()) {
-                log::trace!("process_untagged {:?}", &l);
-                if l.starts_with(b"+ ")
-                    || l.starts_with(b"* ok")
-                    || l.starts_with(b"* ok")
-                    || l.starts_with(b"* Ok")
-                    || l.starts_with(b"* OK")
-                {
-                    continue;
+                for l in line.split_rn().chain(response.split_rn()) {
+                    log::trace!("process_untagged {:?}", &l);
+                    if l.starts_with(b"+ ")
+                        || l.starts_with(b"* ok")
+                        || l.starts_with(b"* ok")
+                        || l.starts_with(b"* Ok")
+                        || l.starts_with(b"* OK")
+                    {
+                        continue;
+                    }
+                    blockn.conn.process_untagged(l).await?;
                 }
-                blockn.conn.process_untagged(l).await?;
+                blockn.conn.send_command(CommandBody::Idle).await?;
             }
-            blockn.conn.send_command(CommandBody::Idle).await?;
         }
-    }
+    })
 }
 
-pub async fn examine_updates(mailbox: ImapMailbox, conn: &mut ImapConnection) -> Result<()> {
+pub async fn examine_updates(
+    mailbox: ImapMailbox,
+    conn: &mut ImapConnection,
+) -> Result<Option<BackendEvent>> {
     if mailbox.no_select {
-        return Ok(());
+        return Ok(None);
     }
     let mailbox_hash = mailbox.hash();
     log::trace!("examining mailbox {} {}", mailbox_hash, mailbox.path());
     if let Some(new_envelopes) = conn.resync(mailbox_hash).await? {
-        for env in new_envelopes {
-            conn.add_refresh_event(RefreshEvent {
+        Ok(new_envelopes
+            .into_iter()
+            .map(|env| RefreshEvent {
                 mailbox_hash,
                 account_hash: conn.uid_store.account_hash,
                 kind: RefreshEventKind::Create(Box::new(env)),
-            });
-        }
+            })
+            .collect::<Vec<_>>()
+            .try_into()
+            .ok())
     } else {
         let mut response = Vec::with_capacity(8 * 1024);
         let select_response = conn
@@ -222,12 +246,14 @@ pub async fn examine_updates(mailbox: ImapMailbox, conn: &mut ImapConnection) ->
 
             if let Some(v) = uidvalidities.get(&mailbox_hash) {
                 if *v != select_response.uidvalidity {
-                    conn.add_refresh_event(RefreshEvent {
-                        account_hash: conn.uid_store.account_hash,
-                        mailbox_hash,
-                        kind: RefreshEventKind::Rescan,
-                    });
-                    return Ok(());
+                    return Ok(Some(
+                        RefreshEvent {
+                            account_hash: conn.uid_store.account_hash,
+                            mailbox_hash,
+                            kind: RefreshEventKind::Rescan,
+                        }
+                        .into(),
+                    ));
                 }
             } else {
                 uidvalidities.insert(mailbox_hash, select_response.uidvalidity);
@@ -301,7 +327,7 @@ pub async fn examine_updates(mailbox: ImapMailbox, conn: &mut ImapConnection) ->
                 }
             }
             mailbox.set_warm(true);
-            return Ok(());
+            return Ok(None);
         }
 
         if select_response.recent > 0 {
@@ -316,7 +342,7 @@ pub async fn examine_updates(mailbox: ImapMailbox, conn: &mut ImapConnection) ->
                     "search response was empty: {}",
                     String::from_utf8_lossy(&response)
                 );
-                return Ok(());
+                return Ok(None);
             }
             let (required_responses, attributes) = common_attributes();
             conn.send_command(CommandBody::fetch(v.as_slice(), attributes, true)?)
@@ -332,7 +358,7 @@ pub async fn examine_updates(mailbox: ImapMailbox, conn: &mut ImapConnection) ->
             conn.read_response(&mut response, required_responses)
                 .await?;
         } else {
-            return Ok(());
+            return Ok(None);
         }
         log::trace!(
             "fetch response is {} bytes and {} lines",
@@ -341,6 +367,9 @@ pub async fn examine_updates(mailbox: ImapMailbox, conn: &mut ImapConnection) ->
         );
         let (_, mut v, _) = protocol_parser::fetch_responses(&response)?;
         log::trace!("responses len is {}", v.len());
+        if v.is_empty() {
+            return Ok(None);
+        }
         for FetchResponse {
             ref uid,
             ref mut envelope,
@@ -380,6 +409,8 @@ pub async fn examine_updates(mailbox: ImapMailbox, conn: &mut ImapConnection) ->
                     )
                 })?;
         }
+
+        let mut events = Vec::with_capacity(v.len());
 
         for FetchResponse {
             uid,
@@ -425,12 +456,12 @@ pub async fn examine_updates(mailbox: ImapMailbox, conn: &mut ImapConnection) ->
                 .lock()
                 .unwrap()
                 .insert((mailbox_hash, uid), env.hash());
-            conn.add_refresh_event(RefreshEvent {
+            events.push(RefreshEvent {
                 account_hash: conn.uid_store.account_hash,
                 mailbox_hash,
                 kind: Create(Box::new(env)),
             });
         }
+        Ok(events.try_into().ok())
     }
-    Ok(())
 }
