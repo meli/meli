@@ -1625,6 +1625,8 @@ impl Component for Listing {
                 }
             }
         }
+        // Forward events to self.component if it's focused, otherwise forward any
+        // unhandled events to self.component at the end of this function.
         if (self.focus == ListingFocus::Mailbox && self.status.is_none())
             && ((self.component.unfocused()
                 && self
@@ -2812,6 +2814,12 @@ impl Component for Listing {
                 return true;
             }
             _ => {}
+        }
+        // Forward unhandled events to self.component if that hasn't happened already.
+        if !((self.focus == ListingFocus::Mailbox && self.status.is_none())
+            && self.component.unfocused())
+        {
+            self.component.process_event(event, context);
         }
         false
     }
