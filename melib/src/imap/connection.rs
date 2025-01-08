@@ -1212,13 +1212,16 @@ impl ImapConnection {
                         }
                         _ => {}
                     }
-                    /* imap_log!(trace, self,
-                        "check every line for required_responses: {:#?}",
-                        &required_responses
-                    );*/
                     for l in response.split_rn() {
-                        /* imap_log!(trace, self, "check line: {}", &l); */
-                        if required_responses.check(l) || !self.process_untagged(l).await? {
+                        if required_responses.check(l) {
+                            ret.extend_from_slice(l);
+                        } else if let Ok(Some(untagged_response)) =
+                            super::protocol_parser::untagged_responses(l).map(|(_, v, _)| v)
+                        {
+                            if let Some(ev) = self.process_untagged(untagged_response).await? {
+                                self.add_backend_event(ev);
+                            }
+                        } else {
                             ret.extend_from_slice(l);
                         }
                     }

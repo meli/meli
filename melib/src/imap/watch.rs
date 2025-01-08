@@ -199,7 +199,7 @@ pub fn idle(kit: ImapWatchKit) -> impl futures::stream::Stream<Item = Result<Bac
                     .read_response(&mut response, RequiredResponses::empty())
                     .await?;
                 for l in line.split_rn().chain(response.split_rn()) {
-                    log::trace!("process_untagged {:?}", &l);
+                    log::trace!("process_untagged {:?}", String::from_utf8_lossy(l));
                     if l.starts_with(b"+ ")
                         || l.starts_with(b"* ok")
                         || l.starts_with(b"* ok")
@@ -208,7 +208,13 @@ pub fn idle(kit: ImapWatchKit) -> impl futures::stream::Stream<Item = Result<Bac
                     {
                         continue;
                     }
-                    blockn.conn.process_untagged(l).await?;
+                    if let Ok(Some(untagged_response)) =
+                        super::protocol_parser::untagged_responses(l).map(|(_, v, _)| v)
+                    {
+                        if let Some(ev) = blockn.conn.process_untagged(untagged_response).await? {
+                            emitter.emit(ev).await;
+                        }
+                    }
                 }
                 blockn.conn.send_command(CommandBody::Idle).await?;
             }

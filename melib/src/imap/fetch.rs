@@ -298,7 +298,16 @@ impl FetchState {
                                     "response was: {}",
                                     String::from_utf8_lossy(&response)
                                 );
-                                conn.process_untagged(raw_fetch_value).await?;
+                                if let Ok(Some(untagged_response)) =
+                                    super::protocol_parser::untagged_responses(raw_fetch_value)
+                                        .map(|(_, v, _)| v)
+                                {
+                                    if let Some(ev) =
+                                        conn.process_untagged(untagged_response).await?
+                                    {
+                                        conn.add_backend_event(ev);
+                                    }
+                                }
                                 continue;
                             }
                             let uid = uid.unwrap();

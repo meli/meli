@@ -24,11 +24,7 @@ use std::convert::{TryFrom, TryInto};
 use imap_codec::imap_types::{command::CommandBody, search::SearchKey, sequence::SequenceSet};
 
 use crate::{
-    backends::{
-        BackendMailbox, RefreshEvent,
-        RefreshEventKind::{self, *},
-        TagHash,
-    },
+    backends::{BackendEvent, BackendMailbox, RefreshEvent, RefreshEventKind::*, TagHash},
     error::*,
     imap::{
         email::common_attributes,
@@ -42,18 +38,16 @@ use crate::{
 };
 
 impl ImapConnection {
-    pub async fn process_untagged(&mut self, line: &[u8]) -> Result<bool> {
+    pub async fn process_untagged(
+        &mut self,
+        untagged_response: UntaggedResponse<'_>,
+    ) -> Result<Option<BackendEvent>> {
         macro_rules! try_fail {
             ($mailbox_hash: expr, $($result:expr $(,)*)+) => {
                 $(if let Err(err) = $result {
                     self.uid_store.is_online.lock().unwrap().1 = Err(err.clone());
                     imap_log!(trace, self, "failure: {}", err.to_string());
                     log::debug!("failure: {}", err.to_string());
-                    self.add_refresh_event(RefreshEvent {
-                        account_hash: self.uid_store.account_hash,
-                        mailbox_hash: $mailbox_hash,
-                        kind: RefreshEventKind::Failure(err.clone()),
-                    });
                     Err(err)
                 } else { Ok(()) }?;)+
             };
@@ -65,22 +59,16 @@ impl ImapConnection {
             | MailboxSelection::Examine {
                 mailbox_hash: h, ..
             } => h,
-            MailboxSelection::None => return Ok(false),
+            MailboxSelection::None => return Ok(None),
         };
         let mailbox =
             std::clone::Clone::clone(&self.uid_store.mailboxes.lock().await[&mailbox_hash]);
 
         let mut response = Vec::with_capacity(8 * 1024);
-        let untagged_response =
-            match super::protocol_parser::untagged_responses(line).map(|(_, v, _)| v) {
-                Ok(None) | Err(_) => {
-                    return Ok(false);
-                }
-                Ok(Some(r)) => r,
-            };
         match untagged_response {
             UntaggedResponse::Bye { reason } => {
                 self.uid_store.is_online.lock().unwrap().1 = Err(reason.into());
+                Err(reason.into())
             }
             UntaggedResponse::Expunge(n) => {
                 if self
@@ -120,7 +108,7 @@ impl ImapConnection {
                                 .enumerate(),
                         );
                     }
-                    let mut events = vec![];
+                    let mut uid_events = vec![];
                     {
                         let mut mboxes = self.uid_store.mailboxes.lock().await;
                         let deleted_uids_hashes = self
@@ -149,7 +137,7 @@ impl ImapConnection {
                                 .lock()
                                 .unwrap()
                                 .remove(&deleted_hash);
-                            events.push((
+                            uid_events.push((
                                 deleted_uid,
                                 RefreshEvent {
                                     account_hash: self.uid_store.account_hash,
@@ -161,22 +149,23 @@ impl ImapConnection {
                     }
                     if let Err(err) = self
                         .uid_store
-                        .update(mailbox_hash, &events)
+                        .update(mailbox_hash, &uid_events)
                         .or_else(ignore_not_found)
                     {
                         log::error!(
                             "Could not update cache for mailbox_hash = {:?} uid, events = {:?}: \
                              err = {}",
                             mailbox_hash,
-                            events,
+                            uid_events,
                             err
                         );
                     }
-                    for (_, event) in events {
-                        self.add_refresh_event(event);
-                    }
-
-                    return Ok(true);
+                    return Ok(uid_events
+                        .into_iter()
+                        .map(|(_, ev)| ev)
+                        .collect::<Vec<_>>()
+                        .try_into()
+                        .ok());
                 }
                 let Some(deleted_uid) = self
                     .uid_store
@@ -187,7 +176,7 @@ impl ImapConnection {
                     .or_default()
                     .remove(&TryInto::<usize>::try_into(n).unwrap().saturating_sub(1))
                 else {
-                    return Ok(true);
+                    return Ok(None);
                 };
                 imap_log!(trace, self, "expunge {}, UID = {}", n, deleted_uid);
                 let Some(deleted_hash) = self
@@ -197,7 +186,7 @@ impl ImapConnection {
                     .unwrap()
                     .remove(&(mailbox_hash, deleted_uid))
                 else {
-                    return Ok(true);
+                    return Ok(None);
                 };
                 {
                     let mut mboxes = self.uid_store.mailboxes.lock().await;
@@ -235,7 +224,7 @@ impl ImapConnection {
                     );
                 }
                 let [(_, event)] = pair;
-                self.add_refresh_event(event);
+                Ok(Some(event.into()))
             }
             UntaggedResponse::Exists(n) => {
                 imap_log!(trace, self, "exists {}", n);
@@ -254,7 +243,7 @@ impl ImapConnection {
                             "Error when parsing FETCH response after untagged exists {:?}",
                             err
                         );
-                        return Ok(true);
+                        return Ok(None);
                     }
                 };
                 imap_log!(trace, self, "responses len is {}", v.len());
@@ -338,19 +327,21 @@ impl ImapConnection {
                         imap_log!(info, self, "{}", err);
                     }
                 }
+                let mut events = vec![];
                 for response in v {
                     if let FetchResponse {
                         envelope: Some(envelope),
                         ..
                     } = response
                     {
-                        self.add_refresh_event(RefreshEvent {
+                        events.push(RefreshEvent {
                             account_hash: self.uid_store.account_hash,
                             mailbox_hash,
                             kind: Create(Box::new(envelope)),
                         });
                     }
                 }
+                Ok(events.try_into().ok())
             }
             UntaggedResponse::Recent(_) => {
                 try_fail!(
@@ -364,6 +355,7 @@ impl ImapConnection {
                 {
                     Ok(&[]) => {
                         imap_log!(trace, self, "UID SEARCH RECENT returned no results");
+                        Ok(None)
                     }
                     Ok(v) => {
                         // [ref:FIXME]: use imap_codec types instead of a raw command
@@ -403,7 +395,7 @@ impl ImapConnection {
                                     "Error when parsing FETCH response after untagged recent {:?}",
                                     err
                                 );
-                                return Ok(true);
+                                return Ok(None);
                             }
                         };
                         imap_log!(trace, self, "responses len is {}", v.len());
@@ -453,6 +445,7 @@ impl ImapConnection {
                                 log::info!("{err}");
                             }
                         }
+                        let mut events = vec![];
                         for response in v {
                             if let FetchResponse {
                                 envelope: Some(envelope),
@@ -492,20 +485,22 @@ impl ImapConnection {
                                     envelope.subject(),
                                     mailbox.path(),
                                 );
-                                self.add_refresh_event(RefreshEvent {
+                                events.push(RefreshEvent {
                                     account_hash: self.uid_store.account_hash,
                                     mailbox_hash,
                                     kind: Create(Box::new(envelope)),
                                 });
                             }
                         }
+                        Ok(events.try_into().ok())
                     }
-                    Err(e) => {
+                    Err(err) => {
                         debug!(
                             "UID SEARCH RECENT err: {}\nresp: {}",
-                            e.to_string(),
+                            err,
                             to_str!(&response)
                         );
+                        Ok(None)
                     }
                 }
             }
@@ -542,12 +537,12 @@ impl ImapConnection {
                         {
                             Ok(mut v) if v.len() == 1 => v.pop().unwrap(),
                             Ok(_) => {
-                                return Ok(false);
+                                return Ok(None);
                             }
                             Err(e) => {
                                 debug!("SEARCH error failed: {}", e);
                                 debug!(to_str!(&response));
-                                return Ok(false);
+                                return Ok(None);
                             }
                         }
                     };
@@ -581,7 +576,7 @@ impl ImapConnection {
                                 .unwrap()
                                 .insert(env_hash, modseq);
                         }
-                        let mut event: [(UID, RefreshEvent); 1] = [(
+                        let event: [(UID, RefreshEvent); 1] = [(
                             uid,
                             RefreshEvent {
                                 account_hash: self.uid_store.account_hash,
@@ -592,18 +587,15 @@ impl ImapConnection {
                         {
                             self.uid_store.update(mailbox_hash, &event)?;
                         }
-                        self.add_refresh_event(std::mem::replace(
-                            &mut event[0].1,
-                            RefreshEvent {
-                                account_hash: self.uid_store.account_hash,
-                                mailbox_hash,
-                                kind: Rescan,
-                            },
-                        ));
-                    };
+                        let [(_, ev)] = event;
+                        Ok(Some(ev.into()))
+                    } else {
+                        Ok(None)
+                    }
+                } else {
+                    Ok(None)
                 }
             }
         }
-        Ok(true)
     }
 }
