@@ -599,6 +599,56 @@ impl AccountMenuEntry {
             }
         })
     }
+
+    /// Visual height / rows of account entry in the sidebar menu.
+    fn height(&self) -> usize {
+        let mut ctr = 1;
+        let mut is_collapsed = false;
+        let mut collapsed_depth = 0;
+        for e in &self.entries {
+            match (is_collapsed, e.collapsed) {
+                (true, _) if e.depth > collapsed_depth => continue,
+                (true, _) => {
+                    is_collapsed = false;
+                }
+                (false, true) => {
+                    is_collapsed = true;
+                    collapsed_depth = e.depth;
+                }
+                (false, false) => {}
+            }
+            ctr += 1;
+        }
+        ctr
+    }
+
+    /// Visual offset of cursor taking into account collapsed mailboxes.
+    fn cursor_y_offset(&self, cursor: usize) -> usize {
+        if cursor == 0 {
+            return cursor;
+        }
+        let mut ctr = 1;
+        let mut is_collapsed = false;
+        let mut collapsed_depth = 0;
+        for (i, e) in self.entries.iter().enumerate() {
+            if cursor == i {
+                return ctr;
+            }
+            match (is_collapsed, e.collapsed) {
+                (true, _) if e.depth > collapsed_depth => continue,
+                (true, _) => {
+                    is_collapsed = false;
+                }
+                (false, true) => {
+                    is_collapsed = true;
+                    collapsed_depth = e.depth;
+                }
+                (false, false) => {}
+            }
+            ctr += 1;
+        }
+        ctr
+    }
 }
 
 pub trait MailListingTrait: ListingTrait {
@@ -3049,7 +3099,7 @@ impl Listing {
             + self
                 .accounts
                 .iter()
-                .map(|entry| entry.entries.len() + 1)
+                .map(|entry| entry.height())
                 .sum::<usize>();
         let min_width: usize = area.width();
         let (width, height) = self.menu.grid().size();
@@ -3074,12 +3124,18 @@ impl Listing {
                 .accounts
                 .iter()
                 .take(cursor.account)
-                .map(|entry| entry.entries.len() + 1)
+                .map(|entry| entry.height())
                 .sum::<usize>()
-            + match cursor.menu {
-                MenuEntryCursor::Status => 0,
-                MenuEntryCursor::Mailbox(idx) => idx + 1,
-            }
+            + self
+                .accounts
+                .get(cursor.account)
+                .map(|acc| {
+                    acc.cursor_y_offset(match cursor.menu {
+                        MenuEntryCursor::Status => 0,
+                        MenuEntryCursor::Mailbox(idx) => idx + 1,
+                    })
+                })
+                .unwrap_or_default()
             + SCROLLING_CONTEXT;
         let skip_offset = if y_offset <= rows {
             0
