@@ -38,6 +38,8 @@ pub enum NetworkErrorKind {
     ClientInitialization,
     /// Connection failed
     ConnectionFailed,
+    /// TLS Connection failed
+    TLSConnectionFailed,
     /// Invalid content encoding
     InvalidContentEncoding,
     /// Invalid credentials
@@ -189,6 +191,7 @@ impl NetworkErrorKind {
             BadServerCertificate => "Bad server certificate",
             ClientInitialization => "Client initialization",
             ConnectionFailed => "Connection failed",
+            TLSConnectionFailed => "TLS Connection failed",
             InvalidContentEncoding => "Invalid content encoding",
             InvalidCredentials => "Invalid credentials",
             InvalidRequest => "Invalid request",
@@ -250,6 +253,7 @@ impl NetworkErrorKind {
                 | GatewayTimeout
                 | NetworkAuthenticationRequired
                 | ConnectionFailed
+                | TLSConnectionFailed
         )
     }
 }
