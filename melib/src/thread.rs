@@ -367,7 +367,7 @@ impl SubjectPrefix for &[u8] {
                 let len = slice.len();
                 for prefix in list.iter() {
                     if slice
-                        .get(0..prefix.as_bytes().len())
+                        .get(0..prefix.len())
                         .map(|p| p.eq_ignore_ascii_case(prefix.as_bytes()))
                         .unwrap_or(false)
                     {
@@ -442,7 +442,7 @@ impl SubjectPrefix for &str {
                 let len = slice.len();
                 for prefix in list.iter() {
                     if slice
-                        .get(0..prefix.as_bytes().len())
+                        .get(0..prefix.len())
                         .map(|p| p.eq_ignore_ascii_case(prefix))
                         .unwrap_or(false)
                     {
