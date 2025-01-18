@@ -32,7 +32,10 @@ use crate::{
     backends::prelude::*,
     email::Flag,
     error::Result,
-    maildir::{move_to_cur, Configuration, MaildirMailbox, MaildirPathTrait, MaildirType},
+    maildir::{
+        utilities::{move_to_cur, MaildirMailbox, MaildirPathTrait},
+        Configuration, MaildirType,
+    },
 };
 
 fn set_flags(config: &Configuration, path: &Path, flag_ops: &[FlagOp]) -> Result<PathBuf> {

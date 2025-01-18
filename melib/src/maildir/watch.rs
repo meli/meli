@@ -33,7 +33,10 @@ use notify::{self, event::EventKind as NotifyEvent};
 use crate::{
     backends::{prelude::*, RefreshEventKind::*},
     error,
-    maildir::{move_to_cur, Configuration, HashIndexes, MaildirPathTrait, PathMod},
+    maildir::{
+        utilities::{move_to_cur, HashIndexes, MaildirPathTrait, PathMod},
+        Configuration,
+    },
 };
 
 pub struct MaildirWatch {
