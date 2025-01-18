@@ -37,7 +37,6 @@ use std::{
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use regex::Regex;
 
-pub mod stream;
 pub mod utilities;
 pub mod watch;
 
@@ -136,18 +135,92 @@ impl MailBackend for MaildirType {
         let mailbox: &MaildirMailbox = &self.mailboxes[&mailbox_hash];
         let unseen = mailbox.unseen.clone();
         let total = mailbox.total.clone();
-        let path: PathBuf = mailbox.fs_path().into();
+        let mut path: PathBuf = mailbox.fs_path().into();
         let map = self.hash_indexes.clone();
         let mailbox_index = self.mailbox_index.clone();
-        stream::MaildirStream::new(
-            mailbox_hash,
-            unseen,
-            total,
-            path,
-            map,
-            mailbox_index,
-            self.config.clone(),
-        )
+        let chunk_size = 2048;
+        path.push("new");
+        for p in path.read_dir()?.flatten() {
+            utilities::move_to_cur(&self.config, &p.path()).ok().take();
+        }
+        path.pop();
+        path.push("cur");
+        let files: Vec<PathBuf> = path
+            .read_dir()?
+            .flatten()
+            .map(|e| e.path())
+            .collect::<Vec<_>>();
+        async fn fetch(
+            chunk: Vec<std::path::PathBuf>,
+            mailbox_hash: MailboxHash,
+            unseen: Arc<Mutex<usize>>,
+            total: Arc<Mutex<usize>>,
+            map: HashIndexes,
+            mailbox_index: Arc<Mutex<HashMap<EnvelopeHash, MailboxHash>>>,
+        ) -> Result<Option<Vec<Envelope>>> {
+            let mut local_r: Vec<Envelope> = Vec::with_capacity(chunk.len());
+            let mut unseen_total: usize = 0;
+            let mut buf = Vec::with_capacity(4096);
+            for file in chunk {
+                let env_hash = file.to_envelope_hash();
+                {
+                    map.lock()
+                        .unwrap()
+                        .entry(mailbox_hash)
+                        .or_default()
+                        .insert(env_hash, PathBuf::from(&file).into());
+                }
+                let mut reader = io::BufReader::new(fs::File::open(&file)?);
+                buf.clear();
+                reader.read_to_end(&mut buf)?;
+                match Envelope::from_bytes(buf.as_slice(), Some(file.flags())) {
+                    Ok(mut env) => {
+                        env.set_hash(env_hash);
+                        mailbox_index.lock().unwrap().insert(env_hash, mailbox_hash);
+                        if !env.is_seen() {
+                            unseen_total += 1;
+                        }
+                        local_r.push(env);
+                    }
+                    Err(err) => {
+                        debug!(
+                            "DEBUG: hash {}, path: {} couldn't be parsed, {}",
+                            env_hash,
+                            file.as_path().display(),
+                            err,
+                        );
+                        continue;
+                    }
+                }
+            }
+            *total.lock().unwrap() += local_r.len();
+            *unseen.lock().unwrap() += unseen_total;
+            if local_r.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(local_r))
+            }
+        }
+        Ok(Box::pin(try_fn_stream(|emitter| async move {
+            for chunk in files.chunks(chunk_size) {
+                if let Some(res) = fetch(
+                    chunk.to_vec(),
+                    mailbox_hash,
+                    unseen.clone(),
+                    total.clone(),
+                    map.clone(),
+                    mailbox_index.clone(),
+                )
+                .await
+                .map_err(|err| {
+                    log::debug!("fetch err {:?}", &err);
+                    err
+                })? {
+                    emitter.emit(res).await;
+                }
+            }
+            Ok(())
+        })))
     }
 
     fn refresh(&mut self, mailbox_hash: MailboxHash) -> ResultFuture<()> {
