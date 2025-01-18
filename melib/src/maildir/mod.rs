@@ -318,12 +318,6 @@ impl MailBackend for MaildirType {
             Ok(Box::new(watcher))
         })
         .map_err(|err| err.set_err_details("Failed to create file change monitor."))?;
-        let root_mailbox_hash: MailboxHash = self
-            .mailboxes
-            .values()
-            .find(|m| m.parent.is_none())
-            .map(|m| m.hash())
-            .unwrap();
         let mailbox_counts = self
             .mailboxes
             .iter()
@@ -332,11 +326,9 @@ impl MailBackend for MaildirType {
         let watch_state = watch::MaildirWatch {
             watcher,
             account_hash: self.account_hash,
-            root_mailbox,
             rx,
             hash_indexes: self.hash_indexes.clone(),
             mailbox_index: self.mailbox_index.clone(),
-            root_mailbox_hash,
             mailbox_counts,
             config: self.config.clone(),
         };

@@ -24,7 +24,7 @@ use std::{
     collections::HashMap,
     fs,
     io::{self, Read},
-    path::{Path, PathBuf},
+    path::Path,
     sync::{mpsc, Arc, Mutex},
 };
 
@@ -42,11 +42,9 @@ use crate::{
 pub struct MaildirWatch {
     pub watcher: Box<dyn notify::Watcher + Send>,
     pub account_hash: AccountHash,
-    pub root_mailbox: PathBuf,
     pub rx: mpsc::Receiver<std::result::Result<notify::Event, notify::Error>>,
     pub hash_indexes: HashIndexes,
     pub mailbox_index: Arc<Mutex<HashMap<EnvelopeHash, MailboxHash>>>,
-    pub root_mailbox_hash: MailboxHash,
     pub config: Arc<Configuration>,
     #[allow(clippy::type_complexity)]
     pub mailbox_counts: HashMap<MailboxHash, (Arc<Mutex<usize>>, Arc<Mutex<usize>>)>,
@@ -57,11 +55,9 @@ impl MaildirWatch {
         let Self {
             watcher,
             account_hash,
-            root_mailbox: _root_mailbox,
             rx,
             hash_indexes,
             mailbox_index,
-            root_mailbox_hash,
             mailbox_counts,
             config,
         } = self;
@@ -78,6 +74,12 @@ impl MaildirWatch {
                 }
                 match rx.recv() {
                     Ok(Ok(event)) => match event.kind {
+                        NotifyEvent::Any => {
+                            log::trace!("Any event: {:?}", event);
+                        }
+                        NotifyEvent::Access(_) => {
+                            // We don't care about access events.
+                        }
                         NotifyEvent::Create(_) => {
                             log::trace!("Create events: (path = {:?})", event.paths);
                             for mut pathbuf in event.paths {
@@ -438,16 +440,11 @@ impl MaildirWatch {
                                 }
                             }
                         }
-                        _ => {
-                            log::debug!("Received unexpected fs watcher notify event: {:?}", event);
-                            // Trigger rescan of mailbox.
-                            emitter
-                                .emit(BackendEvent::Refresh(RefreshEvent {
-                                    account_hash,
-                                    mailbox_hash: root_mailbox_hash,
-                                    kind: Rescan,
-                                }))
-                                .await;
+                        NotifyEvent::Modify(_) => {
+                            log::trace!("Ignored Modify event: {:?}", event);
+                        }
+                        NotifyEvent::Other => {
+                            log::trace!("Ignored Other event: {:?}", event);
                         }
                     },
                     Ok(Err(e)) => log::debug!("watch error: {:?}", e),
