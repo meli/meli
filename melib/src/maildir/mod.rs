@@ -25,7 +25,7 @@
 //! specification. <https://cr.yp.to/proto/maildir.html>
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     fs,
     io::{self, Read, Write},
     os::unix::fs::PermissionsExt,
@@ -513,11 +513,63 @@ impl MailBackend for MaildirType {
         &mut self,
         name: String,
     ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
-        let mailbox_hash = self.create_mailbox_sync(name);
-        let mailboxes_fut = self.mailboxes();
-        Ok(Box::pin(async move {
-            Ok((mailbox_hash?, mailboxes_fut?.await?))
-        }))
+        let (mut fs_path, suffix) =
+            match Self::mailbox_path_to_fs_path_and_suffix(&self.config, &name) {
+                Ok(v) => v,
+                Err(err) => {
+                    return Ok(Box::pin(async move { Err(err) }));
+                }
+            };
+        if let Err(err) = std::fs::create_dir(&fs_path)
+            .chain_err_summary(|| "Could not create new mailbox")
+            .chain_err_related_path(&fs_path)
+        {
+            return Ok(Box::pin(async move { Err(err) }));
+        };
+        let mut undo_ops = VecDeque::new();
+        let mut push_undo_op = |fs_path: &Path| {
+            undo_ops.push_back(Box::new({
+                let fs_path = fs_path.to_path_buf();
+                move || -> Result<()> {
+                    std::fs::remove_dir(&fs_path)
+                        .chain_err_summary(|| "Could not cleanup filesystem folder")
+                        .chain_err_related_path(&fs_path)?;
+                    Ok(())
+                }
+            }));
+        };
+        push_undo_op(&fs_path);
+        for d in &["cur", "new", "tmp"] {
+            fs_path.push(d);
+            if let Err(err) = std::fs::create_dir(&fs_path)
+                .chain_err_summary(|| "Could not create new mailbox")
+                .chain_err_related_path(&fs_path)
+            {
+                while let Some(op) = undo_ops.pop_back() {
+                    if let Err(err) = op() {
+                        log::error!("{}", err);
+                    }
+                }
+                return Ok(Box::pin(async move { Err(err) }));
+            };
+            push_undo_op(&fs_path);
+            fs_path.pop();
+        }
+        let mailbox_hash = match self.mailbox_from_path(fs_path, suffix) {
+            Ok(v) => v,
+            Err(err) => {
+                while let Some(op) = undo_ops.pop_back() {
+                    if let Err(err) = op() {
+                        log::error!("{}", err);
+                    }
+                }
+                return Ok(Box::pin(async move { Err(err) }));
+            }
+        };
+        let mailboxes_fut = self.mailboxes()?;
+        Ok(Box::pin(
+            async move { Ok((mailbox_hash, mailboxes_fut.await?)) },
+        ))
     }
 
     fn delete_mailbox(
@@ -882,57 +934,68 @@ impl MaildirType {
         Ok(files)
     }
 
-    pub fn create_mailbox_sync(&mut self, name: String) -> Result<MailboxHash> {
-        let (fs_path, suffix) = {
-            let mut fs_path = self.config.path.clone();
-            let mut suffix = name.clone();
-            let root_mailbox_path_str = PathBuf::from(&self.config.settings.root_mailbox)
-                .expand()
-                .display()
-                .to_string();
-            if suffix.starts_with(&root_mailbox_path_str)
-                && suffix.get(root_mailbox_path_str.len()..).is_some()
-                && suffix[root_mailbox_path_str.len()..].starts_with("/")
-            {
-                suffix.replace_range(0..=root_mailbox_path_str.len(), "");
-            }
-            if suffix.starts_with(&self.config.root_mailbox_name)
-                && suffix.get(self.config.root_mailbox_name.len()..).is_some()
-                && suffix[self.config.root_mailbox_name.len()..].starts_with("/")
-            {
-                suffix.replace_range(0..=self.config.root_mailbox_name.len(), "");
-            }
-            fs_path.push(&suffix);
-            let not_in_root = self
-                .config
-                .path
-                .parent()
-                .map(|p| fs_path.starts_with(p) && !fs_path.starts_with(&self.config.path))
-                .unwrap_or(false);
-            if not_in_root {
+    fn mailbox_path_to_fs_path_and_suffix(
+        config: &Configuration,
+        name: &str,
+    ) -> Result<(PathBuf, String)> {
+        let mut fs_path = config.path.clone();
+        let mut suffix = name.to_string();
+        let root_mailbox_path_str = PathBuf::from(&config.settings.root_mailbox)
+            .expand()
+            .display()
+            .to_string();
+        if suffix.starts_with(&root_mailbox_path_str)
+            && suffix.get(root_mailbox_path_str.len()..).is_some()
+            && suffix[root_mailbox_path_str.len()..].starts_with("/")
+        {
+            suffix.replace_range(0..=root_mailbox_path_str.len(), "");
+        }
+        if suffix.starts_with(&config.root_mailbox_name)
+            && suffix.get(config.root_mailbox_name.len()..).is_some()
+            && suffix[config.root_mailbox_name.len()..].starts_with("/")
+        {
+            suffix.replace_range(0..=config.root_mailbox_name.len(), "");
+        }
+        fs_path.push(&suffix);
+        let not_in_root = config
+            .path
+            .parent()
+            .map(|p| fs_path.starts_with(p) && !fs_path.starts_with(&config.path))
+            .unwrap_or(false);
+        if not_in_root {
+            return Err(Error::new(format!(
+                "Path given, `{}`, is not included in the root mailbox path `{}`. A maildir \
+                 backend cannot contain mailboxes outside of its root path.",
+                name,
+                config.path.display()
+            )));
+        }
+        if !fs_path.starts_with(&config.path) {
+            return Err(Error::new(format!(
+                "Path given (`{}`) is absolute. Please provide a path relative to the account's \
+                 root mailbox.",
+                name
+            )));
+        }
+        Ok((fs_path, suffix))
+    }
+
+    /// Processes a path and inserts it into mailboxes if it's a valid maildir
+    /// mailbox.
+    pub fn mailbox_from_path(&mut self, fs_path: PathBuf, suffix: String) -> Result<MailboxHash> {
+        let mut fs_path = fs_path;
+        for d in &["cur", "new", "tmp"] {
+            fs_path.push(d);
+            if !fs_path.is_dir() {
+                fs_path.pop();
                 return Err(Error::new(format!(
-                    "Path given, `{}`, is not included in the root mailbox path `{}`. A maildir \
-                     backend cannot contain mailboxes outside of its root path.",
-                    &name,
-                    self.config.path.display()
+                    "{} is not a valid maildir mailbox",
+                    fs_path.display()
                 )));
             }
-            if !fs_path.starts_with(&self.config.path) {
-                return Err(Error::new(format!(
-                    "Path given (`{}`) is absolute. Please provide a path relative to the \
-                     account's root mailbox.",
-                    &name
-                )));
-            }
-            (fs_path, suffix)
-        };
-
-        std::fs::create_dir(&fs_path)
-            .chain_err_summary(|| "Could not create new mailbox")
-            .chain_err_related_path(&fs_path)?;
-
-        // std::fs::create_dir does not create intermediate directories (like `mkdir
-        // -p`), so the parent must be a valid mailbox at this point.
+            fs_path.pop();
+        }
+        let fs_path = fs_path;
         let parent = fs_path.parent().and_then(|p| {
             self.mailboxes
                 .iter()
