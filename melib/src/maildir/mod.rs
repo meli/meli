@@ -817,17 +817,7 @@ impl MaildirType {
     }
 
     pub fn save_to_mailbox(mut path: PathBuf, bytes: Vec<u8>, flags: Option<Flag>) -> Result<()> {
-        for d in &["cur", "new", "tmp"] {
-            path.push(d);
-            if !path.is_dir() {
-                path.pop();
-                return Err(Error::new(format!(
-                    "{} is not a valid maildir mailbox",
-                    path.display()
-                )));
-            }
-            path.pop();
-        }
+        path.validate_fs_subdirs()?;
         path.push("cur");
         {
             type BeBytes128 = [u8; 16];
@@ -923,17 +913,7 @@ impl MaildirType {
         mut path: PathBuf,
         read_only: bool,
     ) -> Result<Vec<PathBuf>> {
-        for d in &["cur", "new", "tmp"] {
-            path.push(d);
-            if !path.is_dir() {
-                path.pop();
-                return Err(Error::new(format!(
-                    "{} is not a valid maildir mailbox",
-                    path.display()
-                )));
-            }
-            path.pop();
-        }
+        path.validate_fs_subdirs()?;
         let mut files: Vec<PathBuf> = vec![];
         path.push("new");
         for p in path.read_dir().chain_err_related_path(&path)?.flatten() {
@@ -1000,19 +980,7 @@ impl MaildirType {
     /// Processes a path and inserts it into mailboxes if it's a valid maildir
     /// mailbox.
     pub fn mailbox_from_path(&mut self, fs_path: PathBuf, suffix: String) -> Result<MailboxHash> {
-        let mut fs_path = fs_path;
-        for d in &["cur", "new", "tmp"] {
-            fs_path.push(d);
-            if !fs_path.is_dir() {
-                fs_path.pop();
-                return Err(Error::new(format!(
-                    "{} is not a valid maildir mailbox",
-                    fs_path.display()
-                )));
-            }
-            fs_path.pop();
-        }
-        let fs_path = fs_path;
+        fs_path.validate_fs_subdirs()?;
         let parent = fs_path.parent().and_then(|p| {
             self.mailboxes
                 .iter()

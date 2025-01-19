@@ -279,19 +279,7 @@ impl MaildirMailbox {
     }
 
     fn is_valid(&self) -> Result<()> {
-        let path = self.fs_path();
-        let mut p = PathBuf::from(path);
-        for d in &["cur", "new", "tmp"] {
-            p.push(d);
-            if !p.is_dir() {
-                return Err(Error::new(format!(
-                    "{} is not a valid maildir mailbox",
-                    path.display()
-                )));
-            }
-            p.pop();
-        }
-        Ok(())
+        self.fs_path().validate_fs_subdirs()
     }
 }
 
@@ -491,6 +479,9 @@ pub trait MaildirMailboxPathExt {
     /// - If it's a directory and it's ending in `{cur, new, tmp}`, they are
     ///   popped first.
     fn to_mailbox_hash(&self) -> MailboxHash;
+    /// Validate that `self` refers to an existing directory and `{cur, new,
+    /// tmp}` subdirectories exist.
+    fn validate_fs_subdirs(&self) -> Result<()>;
 }
 
 impl MaildirMailboxPathExt for Path {
@@ -507,6 +498,35 @@ impl MaildirMailboxPathExt for Path {
         let mut hasher = DefaultHasher::new();
         path.hash(&mut hasher);
         MailboxHash(hasher.finish())
+    }
+
+    fn validate_fs_subdirs(&self) -> Result<()> {
+        let mut path = self.to_path_buf();
+        match path.try_exists() {
+            Err(err) => {
+                return Err(Error::new("Invalid maildir mailbox")
+                    .set_details("Could not access filesystem.")
+                    .set_source(Some(std::sync::Arc::new(Box::new(err))))
+                    .set_related_path(Some(path)));
+            }
+            Ok(false) => {
+                return Err(Error::new("Invalid maildir mailbox")
+                    .set_details("Path does not exist")
+                    .set_related_path(Some(path)));
+            }
+            Ok(true) => {}
+        }
+        for d in &["cur", "new", "tmp"] {
+            path.push(d);
+            if !path.is_dir() {
+                path.pop();
+                return Err(Error::new("Invalid maildir mailbox")
+                    .set_details(format!("{d} subdirectory does not exist"))
+                    .set_related_path(Some(path)));
+            }
+            path.pop();
+        }
+        Ok(())
     }
 }
 
