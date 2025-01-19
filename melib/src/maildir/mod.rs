@@ -30,11 +30,12 @@ use std::{
     io::{self, Read, Write},
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
-    sync::{mpsc::channel, Arc, Mutex},
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use futures::{channel::mpsc, SinkExt};
+use notify::Watcher;
 use regex::Regex;
 
 pub mod utilities;
@@ -311,16 +312,24 @@ impl MailBackend for MaildirType {
 
     fn watch(&self) -> ResultStream<BackendEvent> {
         let root_mailbox = self.config.path.to_path_buf();
-        let (tx, rx) = channel();
-        let watcher = RecommendedWatcher::new(
-            tx,
-            notify::Config::default().with_poll_interval(Duration::from_secs(2)),
-        )
-        .and_then(|mut watcher| {
-            watcher.watch(&root_mailbox, RecursiveMode::Recursive)?;
-            Ok(Box::new(watcher))
-        })
-        .map_err(|err| err.set_err_details("Failed to create file change monitor."))?;
+        let (mut tx, rx) = mpsc::channel(16);
+        let watcher = {
+            let watcher = notify::RecommendedWatcher::new(
+                move |res| {
+                    futures::executor::block_on(async {
+                        _ = tx.send(res).await;
+                    })
+                },
+                notify::Config::default().with_poll_interval(Duration::from_secs(2)),
+            );
+
+            watcher
+                .and_then(|mut watcher| {
+                    watcher.watch(&root_mailbox, notify::RecursiveMode::Recursive)?;
+                    Ok(Box::new(watcher))
+                })
+                .map_err(|err| err.set_err_details("Failed to create file change monitor."))?
+        };
         let mailbox_counts = self
             .mailboxes
             .iter()
