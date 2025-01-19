@@ -451,7 +451,31 @@ impl MaildirFilePathExt for Path {
     }
 
     fn to_envelope_hash(&self) -> EnvelopeHash {
-        debug_assert!(self.is_file());
+        #[cfg(debug_assertions)]
+        {
+            if !matches!(self.try_exists(), Ok(true)) {
+                log::debug!(
+                    "{}",
+                    Error::new("Path does not exist")
+                        .set_summary(format!(
+                            "Message with path {} does not exist.",
+                            self.display()
+                        ))
+                        .set_kind(ErrorKind::NotFound)
+                );
+            }
+            if !self.is_file() {
+                log::debug!(
+                    "{}",
+                    Error::new("Path is not a file")
+                        .set_summary(format!(
+                            "Message with path {} is not a file.",
+                            self.display()
+                        ))
+                        .set_kind(ErrorKind::ValueError)
+                );
+            }
+        }
         let mut hasher = DefaultHasher::default();
         self.hash(&mut hasher);
         EnvelopeHash(hasher.finish())
