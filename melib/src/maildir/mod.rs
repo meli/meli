@@ -44,7 +44,7 @@ pub mod watch;
 mod tests;
 
 use utilities::{
-    HashIndex, HashIndexes, MaildirMailbox, MaildirMailboxPathExt, MaildirOp, MaildirPathTrait,
+    HashIndex, HashIndexes, MaildirFilePathExt, MaildirMailbox, MaildirMailboxPathExt, MaildirOp,
     PathMod,
 };
 

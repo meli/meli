@@ -34,7 +34,7 @@ use crate::{
     backends::{prelude::*, RefreshEventKind::*},
     error,
     maildir::{
-        utilities::{move_to_cur, HashIndexes, MaildirMailboxPathExt, MaildirPathTrait, PathMod},
+        utilities::{move_to_cur, HashIndexes, MaildirFilePathExt, MaildirMailboxPathExt, PathMod},
         Configuration,
     },
 };

@@ -33,7 +33,7 @@ use crate::{
     email::Flag,
     error::Result,
     maildir::{
-        utilities::{move_to_cur, MaildirMailbox, MaildirPathTrait},
+        utilities::{move_to_cur, MaildirFilePathExt, MaildirMailbox},
         Configuration, MaildirType,
     },
 };

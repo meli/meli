@@ -353,15 +353,26 @@ impl BackendMailbox for MaildirMailbox {
     }
 }
 
-pub trait MaildirPathTrait {
+/// Extension trait for [`Path`] for various maildir file calculations.
+pub trait MaildirFilePathExt {
+    /// Parses the `,DFPRST` filename suffix of a path into a [`Flag`].
+    ///
+    /// If the filename does not contain `:2,` or ends with `:2,` an empty
+    /// [`Flag`] is returned.
     fn flags(&self) -> Flag;
+    /// Calculates a new path for `self` with the flags overwritten by the ones
+    /// specified in `flags` argument.
     fn set_flags(&self, flags: Flag, config: &Configuration) -> Result<PathBuf>;
+    /// Calculates new path for `self` if it was placed in `dest_dir` taking
+    /// into account [`Configuration::rename_regex`].
     fn place_in_dir(&self, dest_dir: &Path, config: &Configuration) -> Result<PathBuf>;
+    /// Hashes `self` into an [`EnvelopeHash`].
     fn to_envelope_hash(&self) -> EnvelopeHash;
+    /// Checks if file is placed in a `new` directory.
     fn is_in_new(&self) -> bool;
 }
 
-impl MaildirPathTrait for Path {
+impl MaildirFilePathExt for Path {
     fn flags(&self) -> Flag {
         let mut flag = Flag::default();
         let path = self.to_string_lossy();
@@ -380,7 +391,7 @@ impl MaildirPathTrait for Path {
                 'T' => flag |= Flag::TRASHED,
                 _ => {
                     debug!(
-                        "DEBUG: in MaildirPathTrait::flags(), encountered unknown flag marker \
+                        "DEBUG: in MaildirFilePathExt::flags(), encountered unknown flag marker \
                          {:?}, path is {}",
                         f, path
                     );
