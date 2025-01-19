@@ -357,7 +357,6 @@ pub trait MaildirPathTrait {
     fn flags(&self) -> Flag;
     fn set_flags(&self, flags: Flag, config: &Configuration) -> Result<PathBuf>;
     fn place_in_dir(&self, dest_dir: &Path, config: &Configuration) -> Result<PathBuf>;
-    fn to_mailbox_hash(&self) -> MailboxHash;
     fn to_envelope_hash(&self) -> EnvelopeHash;
     fn is_in_new(&self) -> bool;
 }
@@ -452,21 +451,6 @@ impl MaildirPathTrait for Path {
         Ok(new_path)
     }
 
-    fn to_mailbox_hash(&self) -> MailboxHash {
-        let mut path = self.to_path_buf();
-        if path.is_file() {
-            path.pop();
-        }
-        if path.is_dir() && (path.ends_with("cur") || path.ends_with("tmp") | path.ends_with("new"))
-        {
-            path.pop();
-        }
-
-        let mut hasher = DefaultHasher::new();
-        path.hash(&mut hasher);
-        MailboxHash(hasher.finish())
-    }
-
     fn to_envelope_hash(&self) -> EnvelopeHash {
         debug_assert!(self.is_file());
         let mut hasher = DefaultHasher::default();
@@ -484,6 +468,34 @@ impl MaildirPathTrait for Path {
             iter.next();
             iter.next() == Some(Component::Normal(OsStr::new("new")))
         }
+    }
+}
+
+/// Extension trait for [`Path`] for various maildir mailbox calculations.
+pub trait MaildirMailboxPathExt {
+    /// Calculate the mailbox hash this path would have.
+    ///
+    /// - If it's a file, the directory the file is in is used.
+    /// - If it's a directory:
+    /// - If it's a directory and it's ending in `{cur, new, tmp}`, they are
+    ///   popped first.
+    fn to_mailbox_hash(&self) -> MailboxHash;
+}
+
+impl MaildirMailboxPathExt for Path {
+    fn to_mailbox_hash(&self) -> MailboxHash {
+        let mut path = self.to_path_buf();
+        if path.is_file() {
+            path.pop();
+        }
+        if path.is_dir() && (path.ends_with("cur") || path.ends_with("tmp") | path.ends_with("new"))
+        {
+            path.pop();
+        }
+
+        let mut hasher = DefaultHasher::new();
+        path.hash(&mut hasher);
+        MailboxHash(hasher.finish())
     }
 }
 

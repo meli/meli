@@ -43,7 +43,10 @@ pub mod watch;
 #[cfg(test)]
 mod tests;
 
-use utilities::{HashIndex, HashIndexes, MaildirMailbox, MaildirOp, MaildirPathTrait, PathMod};
+use utilities::{
+    HashIndex, HashIndexes, MaildirMailbox, MaildirMailboxPathExt, MaildirOp, MaildirPathTrait,
+    PathMod,
+};
 
 use crate::{
     backends::{prelude::*, RefreshEventKind::*},
