@@ -576,9 +576,10 @@ impl MailBackend for MaildirType {
         &mut self,
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
-        Err(Error::new(
-            "Deleting mailboxes is currently unimplemented for maildir backend.",
-        ))
+        Err(
+            Error::new("Deleting mailboxes is currently unimplemented for maildir backend.")
+                .set_kind(ErrorKind::NotImplemented),
+        )
     }
 
     fn set_mailbox_subscription(
@@ -596,9 +597,10 @@ impl MailBackend for MaildirType {
         _mailbox_hash: MailboxHash,
         _new_path: String,
     ) -> ResultFuture<Mailbox> {
-        Err(Error::new(
-            "Renaming mailboxes is currently unimplemented for maildir backend.",
-        ))
+        Err(
+            Error::new("Renaming mailboxes is currently unimplemented for maildir backend.")
+                .set_kind(ErrorKind::NotImplemented),
+        )
     }
 
     fn set_mailbox_permissions(
