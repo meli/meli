@@ -477,11 +477,27 @@ impl MailBackend for MaildirType {
                     Some(PathMod::Path(dest_path.clone()));
                 if move_ {
                     log::trace!("renaming {:?} to {:?}", path_src, dest_path);
-                    fs::rename(&path_src, &dest_path)?;
+                    fs::rename(&path_src, &dest_path)
+                        .chain_err_summary(|| {
+                            format!(
+                                "Could not rename {} to {}",
+                                path_src.display(),
+                                dest_path.display()
+                            )
+                        })
+                        .chain_err_related_path(&path_src)?;
                     log::trace!("success in rename");
                 } else {
                     log::trace!("copying {:?} to {:?}", path_src, dest_path);
-                    fs::copy(&path_src, &dest_path)?;
+                    fs::copy(&path_src, &dest_path)
+                        .chain_err_summary(|| {
+                            format!(
+                                "Could not copy {} to {}",
+                                path_src.display(),
+                                dest_path.display()
+                            )
+                        })
+                        .chain_err_related_path(&path_src)?;
                     log::trace!("success in copy");
                 }
             }
@@ -799,15 +815,27 @@ impl MaildirType {
             path.push(filename);
         }
         log::trace!("saving at {}", path.display());
-        let file = fs::File::create(path).unwrap();
-        let metadata = file.metadata()?;
+        let file = fs::File::create(&path)
+            .chain_err_summary(|| format!("Could not create {}", path.display()))
+            .chain_err_related_path(&path)?;
+        let metadata = file
+            .metadata()
+            .chain_err_summary(|| format!("Could not retrieve file metadata of {}", path.display()))
+            .chain_err_related_path(&path)?;
         let mut permissions = metadata.permissions();
 
         permissions.set_mode(0o600); // Read/write for owner only.
-        file.set_permissions(permissions)?;
+        file.set_permissions(permissions)
+            .chain_err_summary(|| {
+                format!("Could not set new file permissions to {}", path.display())
+            })
+            .chain_err_related_path(&path)?;
 
         let mut writer = io::BufWriter::new(file);
-        writer.write_all(&bytes).unwrap();
+        writer
+            .write_all(&bytes)
+            .chain_err_summary(|| format!("Could not write bytes to new file {}", path.display()))
+            .chain_err_related_path(&path)?;
         Ok(())
     }
 
@@ -839,7 +867,7 @@ impl MaildirType {
     ) -> Result<Vec<PathBuf>> {
         let mut files: Vec<PathBuf> = vec![];
         path.push("new");
-        for p in path.read_dir()?.flatten() {
+        for p in path.read_dir().chain_err_related_path(&path)?.flatten() {
             if !read_only {
                 utilities::move_to_cur(config, &p.path()).ok().take();
             } else {
@@ -848,7 +876,7 @@ impl MaildirType {
         }
         path.pop();
         path.push("cur");
-        for e in path.read_dir()?.flatten() {
+        for e in path.read_dir().chain_err_related_path(&path)?.flatten() {
             files.push(e.path());
         }
         Ok(files)
