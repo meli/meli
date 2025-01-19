@@ -817,6 +817,7 @@ impl MaildirType {
         for d in &["cur", "new", "tmp"] {
             path.push(d);
             if !path.is_dir() {
+                path.pop();
                 return Err(Error::new(format!(
                     "{} is not a valid maildir mailbox",
                     path.display()
