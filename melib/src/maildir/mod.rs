@@ -920,6 +920,17 @@ impl MaildirType {
         mut path: PathBuf,
         read_only: bool,
     ) -> Result<Vec<PathBuf>> {
+        for d in &["cur", "new", "tmp"] {
+            path.push(d);
+            if !path.is_dir() {
+                path.pop();
+                return Err(Error::new(format!(
+                    "{} is not a valid maildir mailbox",
+                    path.display()
+                )));
+            }
+            path.pop();
+        }
         let mut files: Vec<PathBuf> = vec![];
         path.push("new");
         for p in path.read_dir().chain_err_related_path(&path)?.flatten() {
