@@ -366,10 +366,20 @@ impl<'a> Iterator for ImapLineIterator<'a> {
         loop {
             let cur_slice = &self.slice[i..];
             if let Some(pos) = cur_slice.find(CRLF) {
-                /* Skip literal continuation line */
-                if cur_slice.get(pos.saturating_sub(1)) == Some(&b'}') {
-                    i += pos + 2;
-                    continue;
+                // Skip literal continuation line
+                if let Some(literal_start) = cur_slice[..pos].find(b"{") {
+                    if let Ok((_, len)) =
+                        delimited::<_, _, _, _, (&[u8], nom::error::ErrorKind), _, _, _>(
+                            tag("{"),
+                            map_res(digit1, |s| {
+                                usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
+                            }),
+                            tag("}\r\n"),
+                        )(&cur_slice[literal_start..])
+                    {
+                        i += pos + 2 + len;
+                        continue;
+                    }
                 }
                 let ret = self.slice.get(..i + pos + 2).unwrap_or_default();
                 self.slice = self.slice.get(i + pos + 2..).unwrap_or_default();

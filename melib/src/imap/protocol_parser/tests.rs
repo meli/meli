@@ -109,6 +109,29 @@ fn test_imap_line_iterator() {
         }
         assert!(iter.next().is_none());
     }
+    {
+        let s = b"* 2700 FETCH (UID 3223 FLAGS (\\Seen) ENVELOPE (\"Wed, 28 Aug 2024 13:53:11 +0000\" \"=?utf-8?Q?Update:=20Let's=20Talk!?=\" ((\"Newsletter\" NIL \"no-reply\" \"example.com\")) ((\"Newsletter\" NIL \"no-reply\" \"example.com\")) ((\"Newsletter\" NIL \"no-reply\" \"example.com\")) ((NIL NIL \"user\" \"example.com\")) NIL NIL NIL \"<XXXXXXXX.YYYYYYYYYYYYYY.ZZZZZZZZZZZZZZ@HHHH.TLD>\") BODY[HEADER.FIELDS (REFERENCES)] {2}\r\n\r\n BODYSTRUCTURE ((\"text\" \"plain\" (\"charset\" \"utf-8\") NIL NIL \"7bit\" 824 25 NIL NIL NIL NIL)(\"text\" \"html\" (\"charset\" \"utf-8\") NIL NIL \"7bit\" 28037 418 NIL NIL NIL NIL) \"alternative\" (\"boundary\" \"__\") NIL NIL NIL)\r\n";
+        let mut iter = s.split_rn();
+        assert_eq!(to_str!(iter.next().unwrap()), to_str!(s));
+        assert!(iter.next().is_none());
+    }
+    {
+        let s = b"{6}\r\n\r\n\r\n\r\n rest\r\n";
+        let mut iter = s.split_rn();
+        assert_eq!(to_str!(iter.next().unwrap()), to_str!(s));
+        assert!(iter.next().is_none());
+    }
+    {
+        let s = b"{6}\r\n\r\n\r\n\r\n first\r\nsecond not a literal{ 5}\r\n";
+        let mut iter = s.split_rn();
+        for l in &[
+            &b"{6}\r\n\r\n\r\n\r\n first\r\n"[..],
+            &b"second not a literal{ 5}\r\n"[..],
+        ] {
+            assert_eq!(to_str!(iter.next().unwrap()), to_str!(l));
+        }
+        assert!(iter.next().is_none());
+    }
 }
 
 #[test]
