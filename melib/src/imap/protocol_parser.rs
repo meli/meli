@@ -56,90 +56,125 @@ const UNTAGGED_PREFIX: &[u8] = b"* ";
 bitflags! {
     #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct RequiredResponses: u64 {
-        const CAPABILITY          = 0b0000_0000_0000_0001;
-        const BYE                 = 0b0000_0000_0000_0010;
-        const FLAGS               = 0b0000_0000_0000_0100;
-        const EXISTS              = 0b0000_0000_0000_1000;
-        const RECENT              = 0b0000_0000_0001_0000;
-        const UNSEEN              = 0b0000_0000_0010_0000;
-        const PERMANENTFLAGS      = 0b0000_0000_0100_0000;
-        const UIDNEXT             = 0b0000_0000_1000_0000;
-        const UIDVALIDITY         = 0b0000_0001_0000_0000;
-        const LIST                = 0b0000_0010_0000_0000;
-        const LSUB                = 0b0000_0100_0000_0000;
-        const STATUS              = 0b0000_1000_0000_0000;
-        const EXPUNGE             = 0b0001_0000_0000_0000;
-        const SEARCH              = 0b0010_0000_0000_0000;
-        const FETCH               = 0b0100_0000_0000_0000;
-        const NO                  = 0b1000_0000_0000_0000;
-        const CAPABILITY_REQUIRED = Self::CAPABILITY.bits();
-        const LOGOUT_REQUIRED     = Self::BYE.bits();
+        /// Require a **tagged** `NO` response.
+        const NO                  = 0;
+        /// Require an *untagged* `CAPABILITY` response.
+        const CAPABILITY          = 0b0000_0000_0000_0000_0001;
+        /// Require an *untagged* `BYE` response.
+        const BYE                 = 0b0000_0000_0000_0000_0010;
+        /// Require an *untagged* `FLAGS` response as part of a `SELECT`/`EXAMINE` response.
+        const FLAGS               = 0b0000_0000_0000_0000_0100;
+        /// Require an *untagged* `EXISTS` response as part of a `SELECT`/`EXAMINE` response or when
+        /// the size of the mailbox changes.
+        const EXISTS              = 0b0000_0000_0000_0000_1000;
+        /// Require an *untagged* `RECENT` response as part of a `SELECT`/`EXAMINE` response.
+        const RECENT              = 0b0000_0000_0000_0001_0000;
+        /// Require an *untagged* `UNSEEN` response as part of a `SELECT`/`EXAMINE` response.
+        const UNSEEN              = 0b0000_0000_0000_0010_0000;
+        /// Require an *untagged* `PERMANENTFLAGS` response as part of a `SELECT`/`EXAMINE`
+        /// response.
+        const PERMANENTFLAGS      = 0b0000_0000_0000_0100_0000;
+        /// Require an *untagged* `UIDNEXT` response as part of a `SELECT`/`EXAMINE` response.
+        const UIDNEXT             = 0b0000_0000_0000_1000_0000;
+        /// Require an *untagged* `UIDVALIDITY` response as part of a `SELECT`/`EXAMINE` response.
+        const UIDVALIDITY         = 0b0000_0000_0001_0000_0000;
+        /// Require an *untagged* `LIST` response as part of a `LIST` response.
+        const LIST                = 0b0000_0000_0010_0000_0000;
+        /// Require an *untagged* `LSUB` response as part of a `LSUB` response.
+        const LSUB                = 0b0000_0000_0100_0000_0000;
+        /// Require an *untagged* `STATUS` response as part of a `STATUS` response.
+        const STATUS              = 0b0000_0000_1000_0000_0000;
+        /// Require an *untagged* `SEARCH` response as part of a `SEARCH` response.
+        const SEARCH              = 0b0000_0001_0000_0000_0000;
+        /// Require an *untagged* `FETCH` response with a `UID` item included.
+        const FETCH_UID           = 0b0000_0010_0000_0000_0000;
+        /// Require an *untagged* `FETCH` response with a `MODSEQ` item included.
+        const FETCH_MODSEQ        = 0b0000_0100_0000_0000_0000;
+        /// Require an *untagged* `FETCH` response with a `FLAGS` item included.
+        const FETCH_FLAGS         = 0b0000_1000_0000_0000_0000;
+        /// Require an *untagged* `FETCH` response with a `BODY`/`RFC822` item included.
+        const FETCH_BODY          = 0b0001_0000_0000_0000_0000;
+        /// Require an *untagged* `FETCH` response with a `BODY[HEADER.FIELDS (REFERENCES)]` item included.
+        const FETCH_REFERENCES    = 0b0010_0000_0000_0000_0000;
+        /// Require an *untagged* `FETCH` response with a `BODYSTRUCTURE` item included.
+        const FETCH_BODYSTRUCTURE = 0b0100_0000_0000_0000_0000;
+        /// Require an *untagged* `FETCH` response with a `ENVELOPE` item included.
+        const FETCH_ENVELOPE      = 0b1000_0000_0000_0000_0000;
+        /// Require any `SELECT` related reponse.
         const SELECT              = Self::FLAGS.bits() | Self::EXISTS.bits() | Self::RECENT.bits() | Self::UNSEEN.bits() | Self::PERMANENTFLAGS.bits() | Self::UIDNEXT.bits() | Self::UIDVALIDITY.bits();
+        /// Require any `EXAMINE` related reponse.
         const EXAMINE             = Self::FLAGS.bits() | Self::EXISTS.bits() | Self::RECENT.bits() | Self::UNSEEN.bits() | Self::PERMANENTFLAGS.bits() | Self::UIDNEXT.bits() | Self::UIDVALIDITY.bits();
-        const FETCH_REQUIRED      = Self::FETCH.bits();
     }
 }
 
 impl RequiredResponses {
     pub fn check(&self, line: &[u8]) -> bool {
-        if !line.starts_with(UNTAGGED_PREFIX) {
+        if *self == Self::NO {
+            return matches!(line.splitn(2, |b| *b == b' ').nth(1), Some(l) if l.starts_with(b"NO "));
+        }
+        let Some(stripped) = line.strip_prefix(UNTAGGED_PREFIX) else {
+            return false;
+        };
+        macro_rules! check {
+            ($($flag:expr => $cond:expr),*$(,)?) => {{
+                $(
+                    if self.intersects($flag) && $cond {
+                        return true;
+                    }
+                )*
+            }};
+        }
+        check! {
+            Self::CAPABILITY => stripped.starts_with(b"CAPABILITY"),
+            Self::BYE => stripped.starts_with(b"BYE"),
+            Self::FLAGS => stripped.starts_with(b"FLAGS ("),
+            Self::EXISTS => stripped.ends_with(b"EXISTS\r\n"),
+            Self::RECENT => stripped.ends_with(b"RECENT\r\n"),
+            Self::UNSEEN => stripped.starts_with(b"OK [UNSEEN "),
+            Self::PERMANENTFLAGS =>  stripped.starts_with(b"OK [PERMANENTFLAGS "),
+            Self::UIDNEXT => stripped.starts_with(b"OK [UIDNEXT "),
+            Self::UIDVALIDITY => stripped.starts_with(b"OK [UIDVALIDITY "),
+            Self::LIST => stripped.starts_with(b"LIST"),
+            Self::LSUB => stripped.starts_with(b"LSUB"),
+            Self::STATUS => stripped.starts_with(b"STATUS"),
+            Self::SEARCH => stripped.starts_with(b"SEARCH"),
+        };
+        if !self.intersects(
+            Self::FETCH_UID
+                | Self::FETCH_MODSEQ
+                | Self::FETCH_FLAGS
+                | Self::FETCH_BODY
+                | Self::FETCH_REFERENCES
+                | Self::FETCH_BODYSTRUCTURE
+                | Self::FETCH_ENVELOPE,
+        ) {
             return false;
         }
-        let line = &line[UNTAGGED_PREFIX.len()..];
-        let mut ret = false;
-        if self.intersects(Self::CAPABILITY) {
-            ret |= line.starts_with(b"CAPABILITY");
+        let Ok((_, response, _)) = fetch_response(line) else {
+            return false;
+        };
+        if self.intersects(Self::FETCH_UID) && response.uid.is_none() {
+            return false;
         }
-        if self.intersects(Self::BYE) {
-            ret |= line.starts_with(b"BYE");
+        if self.intersects(Self::FETCH_MODSEQ) && response.modseq.is_none() {
+            return false;
         }
-        if self.intersects(Self::FLAGS) {
-            ret |= line.starts_with(b"FLAGS");
+        if self.intersects(Self::FETCH_FLAGS) && response.flags.is_none() {
+            return false;
         }
-        if self.intersects(Self::EXISTS) {
-            ret |= line.ends_with(b"EXISTS\r\n");
+        if self.intersects(Self::FETCH_BODY) && response.body.is_none() {
+            return false;
         }
-        if self.intersects(Self::RECENT) {
-            ret |= line.ends_with(b"RECENT\r\n");
+        if self.intersects(Self::FETCH_REFERENCES) && response.references.is_none() {
+            return false;
         }
-        if self.intersects(Self::UNSEEN) {
-            ret |= line.starts_with(b"UNSEEN");
+        if self.intersects(Self::FETCH_BODYSTRUCTURE) && !response.bodystructure {
+            return false;
         }
-        if self.intersects(Self::PERMANENTFLAGS) {
-            ret |= line.starts_with(b"PERMANENTFLAGS");
+        if self.intersects(Self::FETCH_ENVELOPE) && response.envelope.is_none() {
+            return false;
         }
-        if self.intersects(Self::UIDNEXT) {
-            ret |= line.starts_with(b"UIDNEXT");
-        }
-        if self.intersects(Self::UIDVALIDITY) {
-            ret |= line.starts_with(b"UIDVALIDITY");
-        }
-        if self.intersects(Self::LIST) {
-            ret |= line.starts_with(b"LIST");
-        }
-        if self.intersects(Self::LSUB) {
-            ret |= line.starts_with(b"LSUB");
-        }
-        if self.intersects(Self::STATUS) {
-            ret |= line.starts_with(b"STATUS");
-        }
-        if self.intersects(Self::EXPUNGE) {
-            ret |= line.ends_with(b"EXPUNGE\r\n");
-        }
-        if self.intersects(Self::SEARCH) {
-            ret |= line.starts_with(b"SEARCH");
-        }
-        if self.intersects(Self::FETCH) {
-            let mut ptr = 0;
-            for (i, l) in line.iter().enumerate() {
-                if !l.is_ascii_digit() {
-                    ptr = i;
-                    break;
-                }
-            }
-            ret |= line[ptr..].trim_start().starts_with(b"FETCH");
-        }
-        ret
+        true
     }
 }
 
@@ -507,6 +542,7 @@ pub struct FetchResponse<'a> {
     pub body: Option<&'a [u8]>,
     pub references: Option<&'a [u8]>,
     pub envelope: Option<Envelope>,
+    pub bodystructure: bool,
     pub raw_fetch_value: &'a [u8],
 }
 
@@ -564,6 +600,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
         body: None,
         references: None,
         envelope: None,
+        bodystructure: false,
         raw_fetch_value: &[],
     };
 
@@ -691,6 +728,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
 
             let (rest, _has_attachments) = bodystructure_has_attachments(&input[i..])?;
             has_attachments = _has_attachments;
+            ret.bodystructure = true;
             i += input[i..].len() - rest.len();
         } else if input[i..].starts_with(b"BODY[HEADER.FIELDS (REFERENCES)] ") {
             i += b"BODY[HEADER.FIELDS (REFERENCES)] ".len();
@@ -700,6 +738,8 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                         references = v;
                     }
                     ret.references = Some(references);
+                } else {
+                    ret.references = Some(references.trim());
                 }
                 i += input.len() - i - rest.len();
             } else {
@@ -794,14 +834,14 @@ pub fn fetch_responses(mut input: &[u8]) -> ImapParseResult<Vec<FetchResponse<'_
         }
     }
 
-    if !input.is_empty() && ret.is_empty() {
-        if let Ok(ImapResponse::Ok(_)) = ImapResponse::try_from(input) {
-        } else {
-            return Err(Error::new(format!(
-                "310Unexpected input while parsing UID FETCH responses: `{:.40}`",
-                String::from_utf8_lossy(input)
-            )));
-        }
+    if !input.is_empty()
+        && ret.is_empty()
+        && !matches!(ImapResponse::try_from(input), Ok(ImapResponse::Ok(_)))
+    {
+        return Err(Error::new(format!(
+            "810Unexpected input while parsing UID FETCH responses: `{:.40}`",
+            String::from_utf8_lossy(input)
+        )));
     }
     Ok((input, ret, alert))
 }

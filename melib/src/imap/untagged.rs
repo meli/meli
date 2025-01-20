@@ -239,10 +239,11 @@ impl ImapConnection {
             }
             UntaggedResponse::Exists(n) => {
                 imap_log!(trace, self, "exists {}", n);
+                let (required_responses, attributes) = common_attributes();
                 try_fail!(
                     mailbox_hash,
-                    self.send_command(CommandBody::fetch(n, common_attributes(), false)?).await
-                    self.read_response(&mut response, RequiredResponses::FETCH_REQUIRED).await
+                    self.send_command(CommandBody::fetch(n, attributes, false)?).await
+                    self.read_response(&mut response, required_responses).await
                 );
                 let mut v = match super::protocol_parser::fetch_responses(&response) {
                     Ok((_, v, _)) => v,
@@ -382,8 +383,16 @@ impl ImapConnection {
                         };
                         try_fail!(
                             mailbox_hash,
-                            self.send_command_raw(command.as_bytes()).await
-                            self.read_response(&mut response, RequiredResponses::FETCH_REQUIRED).await
+                            self.send_command_raw(command.as_bytes()).await,
+                            self.read_response(
+                                &mut response,
+                                RequiredResponses::FETCH_UID
+                                    | RequiredResponses::FETCH_FLAGS
+                                    | RequiredResponses::FETCH_ENVELOPE
+                                    | RequiredResponses::FETCH_REFERENCES
+                                    | RequiredResponses::FETCH_BODYSTRUCTURE,
+                            )
+                            .await,
                         );
                         let mut v = match super::protocol_parser::fetch_responses(&response) {
                             Ok((_, v, _)) => v,
@@ -508,6 +517,7 @@ impl ImapConnection {
                 body: _,
                 references: _,
                 envelope: _,
+                bodystructure: _,
                 raw_fetch_value: _,
             }) => {
                 if let Some(flags) = flags {

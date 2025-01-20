@@ -29,22 +29,31 @@ use imap_codec::imap_types::{
     flag::Flag,
 };
 
+use crate::imap::protocol_parser::RequiredResponses;
+
 // [ref:TODO]: (#222) Make this `const` as soon as it is possible.
-pub fn common_attributes() -> MacroOrMessageDataItemNames<'static> {
-    MacroOrMessageDataItemNames::MessageDataItemNames(vec![
-        MessageDataItemName::Uid,
-        MessageDataItemName::Flags,
-        MessageDataItemName::Envelope,
-        MessageDataItemName::BodyExt {
-            section: Some(Section::HeaderFields(
-                None,
-                Vec1::from(AString::from(Atom::unvalidated("REFERENCES"))),
-            )),
-            partial: None,
-            peek: true,
-        },
-        MessageDataItemName::BodyStructure,
-    ])
+pub fn common_attributes() -> (RequiredResponses, MacroOrMessageDataItemNames<'static>) {
+    (
+        RequiredResponses::FETCH_UID
+            | RequiredResponses::FETCH_FLAGS
+            | RequiredResponses::FETCH_ENVELOPE
+            | RequiredResponses::FETCH_REFERENCES
+            | RequiredResponses::FETCH_BODYSTRUCTURE,
+        MacroOrMessageDataItemNames::MessageDataItemNames(vec![
+            MessageDataItemName::Uid,
+            MessageDataItemName::Flags,
+            MessageDataItemName::Envelope,
+            MessageDataItemName::BodyExt {
+                section: Some(Section::HeaderFields(
+                    None,
+                    Vec1::from(AString::from(Atom::unvalidated("REFERENCES"))),
+                )),
+                partial: None,
+                peek: true,
+            },
+            MessageDataItemName::BodyStructure,
+        ]),
+    )
 }
 
 /// Convert [`Flag`](crate::email::Flag) into a list of

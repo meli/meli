@@ -76,8 +76,11 @@ impl ImapOp {
                     true,
                 )?)
                 .await?;
-                conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
-                    .await?;
+                conn.read_response(
+                    &mut response,
+                    RequiredResponses::FETCH_FLAGS | RequiredResponses::FETCH_BODY,
+                )
+                .await?;
             }
             log::trace!(
                 "fetch response is {} bytes and {} lines",

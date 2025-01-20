@@ -106,13 +106,10 @@ impl ImapConnection {
             .update_mailbox(mailbox_hash, &select_response)?;
 
         // 2. tag1 UID FETCH <lastseenuid+1>:* <descriptors>
-        self.send_command(CommandBody::fetch(
-            max_uid + 1..,
-            crate::imap::email::common_attributes(),
-            true,
-        )?)
-        .await?;
-        self.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
+        let (required_responses, attributes) = crate::imap::email::common_attributes();
+        self.send_command(CommandBody::fetch(max_uid + 1.., attributes, true)?)
+            .await?;
+        self.read_response(&mut response, required_responses)
             .await?;
         let (_, mut v, _) = protocol_parser::fetch_responses(&response)?;
         for FetchResponse {
@@ -212,7 +209,7 @@ impl ImapConnection {
             uid: true,
         })
         .await?;
-        self.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
+        self.read_response(&mut response, RequiredResponses::FETCH_FLAGS)
             .await?;
         // 1) update cached flags for old messages;
         // 2) find out which old messages got expunged; and
@@ -404,8 +401,16 @@ impl ImapConnection {
                 .as_bytes(),
             )
             .await?;
-            self.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
-                .await?;
+            self.read_response(
+                &mut response,
+                RequiredResponses::FETCH_UID
+                    | RequiredResponses::FETCH_FLAGS
+                    | RequiredResponses::FETCH_ENVELOPE
+                    | RequiredResponses::FETCH_REFERENCES
+                    | RequiredResponses::FETCH_BODYSTRUCTURE
+                    | RequiredResponses::FETCH_MODSEQ,
+            )
+            .await?;
             debug!(
                 "fetch response is {} bytes and {} lines",
                 response.len(),
@@ -522,8 +527,11 @@ impl ImapConnection {
                 )
                 .await?;
             }
-            self.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
-                .await?;
+            self.read_response(
+                &mut response,
+                RequiredResponses::FETCH_FLAGS | RequiredResponses::FETCH_MODSEQ,
+            )
+            .await?;
             // 1) update cached flags for old messages;
             let mut env_lck = self.uid_store.envelopes.lock().unwrap();
             let (_, v, _) = protocol_parser::fetch_responses(&response)?;

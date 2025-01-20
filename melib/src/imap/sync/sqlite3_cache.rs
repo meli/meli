@@ -451,6 +451,7 @@ impl ImapCache for Sqlite3Cache {
                 references: _,
                 envelope: Some(envelope),
                 raw_fetch_value: _,
+                bodystructure: _,
             } = item
             {
                 max_uid = max_uid.max(*uid);

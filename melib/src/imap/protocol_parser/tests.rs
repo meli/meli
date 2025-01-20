@@ -44,20 +44,114 @@ fn test_imap_response() {
 
 #[test]
 fn test_imap_required_responses() {
-    let mut ret = Vec::new();
-    let required_responses = RequiredResponses::FETCH_REQUIRED;
-    let response =
-        &b"* 1040 FETCH (UID 1064 FLAGS ())\r\nM15 OK Fetch completed (0.001 + 0.299 secs).\r\n"[..];
-    for l in response.split_rn() {
-        if required_responses.check(l) {
-            ret.extend_from_slice(l);
+    assert!(RequiredResponses::NO.check(b"M12 NO [CANNOT] Invalid something\r\n"));
+    {
+        let mut ret = Vec::new();
+        let required_responses = RequiredResponses::FETCH_UID | RequiredResponses::FETCH_FLAGS;
+        let response =
+            &b"* 1040 FETCH (UID 1064 FLAGS ())\r\nM15 OK Fetch completed (0.001 + 0.299 secs).\r\n"[..];
+        for l in response.split_rn() {
+            if required_responses.check(l) {
+                ret.extend_from_slice(l);
+            }
         }
+        assert_eq!(ret.as_slice(), &b"* 1040 FETCH (UID 1064 FLAGS ())\r\n"[..]);
+        let v = protocol_parser::uid_fetch_flags_responses(response)
+            .unwrap()
+            .1;
+        assert_eq!(v.len(), 1);
     }
-    assert_eq!(ret.as_slice(), &b"* 1040 FETCH (UID 1064 FLAGS ())\r\n"[..]);
-    let v = protocol_parser::uid_fetch_flags_responses(response)
-        .unwrap()
-        .1;
-    assert_eq!(v.len(), 1);
+    assert!(RequiredResponses::CAPABILITY.check(b"* CAPABILITY IMAP4rev1\r\n"));
+    assert!(RequiredResponses::BYE.check(b"* BYE love\r\n"));
+    assert!(RequiredResponses::FLAGS
+        .check(b"* FLAGS (\\Answered \\Flagged \\Deleted \\Seen \\Draft)\r\n"));
+    assert!(RequiredResponses::EXISTS.check(b"* 172 EXISTS\r\n"));
+    assert!(RequiredResponses::RECENT.check(b"* 0 RECENT\r\n"));
+    assert!(RequiredResponses::UNSEEN.check(b"* OK [UNSEEN 12] Message 12 is first unseen\r\n"));
+    assert!(RequiredResponses::PERMANENTFLAGS
+        .check(b"* OK [PERMANENTFLAGS (\\Deleted \\Seen \\*)] Limited\r\n"));
+    assert!(RequiredResponses::UIDNEXT.check(b"* OK [UIDNEXT 4392] Predicted next UID\r\n"));
+    assert!(RequiredResponses::UIDVALIDITY.check(b"* OK [UIDVALIDITY 3857529045] UIDs valid\r\n"));
+    assert!(RequiredResponses::LIST.check(b"* LIST (\\HasChildren) \".\" INBOX\r\n"));
+    assert!(RequiredResponses::LSUB.check(b"* LSUB (\\HasChildren) \".\" INBOX\r\n"));
+    assert!(RequiredResponses::STATUS.check(b"* STATUS INBOX (MESSAGES 1057 UNSEEN 0)\r\n"));
+    assert!(RequiredResponses::SEARCH.check(b"* SEARCH 1\r\n"));
+    assert!(RequiredResponses::SEARCH.check(b"* SEARCH\r\n"));
+    {
+        let fetch =
+            b"* 1429 FETCH (UID 1505 FLAGS (\\Seen) RFC822 {26}\r\nReturn-Path: <blah blah...\r\n";
+        assert!(RequiredResponses::FETCH_UID.check(fetch));
+        assert!(RequiredResponses::FETCH_FLAGS.check(fetch));
+        assert!(RequiredResponses::FETCH_BODY.check(fetch));
+        assert!((RequiredResponses::FETCH_UID | RequiredResponses::FETCH_FLAGS).check(fetch));
+        assert!((RequiredResponses::FETCH_UID
+            | RequiredResponses::FETCH_FLAGS
+            | RequiredResponses::FETCH_BODY)
+            .check(fetch));
+        assert!((RequiredResponses::FETCH_UID | RequiredResponses::FETCH_BODY).check(fetch));
+        assert!(!RequiredResponses::FETCH_ENVELOPE.check(fetch));
+        assert!(!(RequiredResponses::FETCH_UID | RequiredResponses::FETCH_ENVELOPE).check(fetch));
+    }
+    {
+        let modseq_fetch = b"* 1079 FETCH (UID 1103 MODSEQ (1365) FLAGS (\\Seen))\r\n";
+        assert!(RequiredResponses::FETCH_MODSEQ.check(modseq_fetch));
+        assert!((RequiredResponses::FETCH_UID
+            | RequiredResponses::FETCH_MODSEQ
+            | RequiredResponses::FETCH_FLAGS)
+            .check(modseq_fetch));
+        assert!(!RequiredResponses::FETCH_ENVELOPE.check(modseq_fetch));
+        assert!(
+            !(RequiredResponses::FETCH_UID | RequiredResponses::FETCH_ENVELOPE).check(modseq_fetch)
+        );
+    }
+
+    {
+        let body_fetch =
+            b"* 1429 FETCH (UID 1505 FLAGS (\\Seen) RFC822 {26}\r\nReturn-Path: <blah blah...\r\n";
+        assert!(RequiredResponses::FETCH_UID.check(body_fetch));
+        assert!(RequiredResponses::FETCH_FLAGS.check(body_fetch));
+        assert!(RequiredResponses::FETCH_BODY.check(body_fetch));
+        assert!((RequiredResponses::FETCH_UID
+            | RequiredResponses::FETCH_FLAGS
+            | RequiredResponses::FETCH_BODY)
+            .check(body_fetch));
+        assert!(!RequiredResponses::FETCH_ENVELOPE.check(body_fetch));
+        assert!(
+            !(RequiredResponses::FETCH_UID | RequiredResponses::FETCH_ENVELOPE).check(body_fetch)
+        );
+    }
+    {
+        let full_fetch =
+                    b"* 198 FETCH (UID 7608 FLAGS (\\Seen) ENVELOPE (\"Fri, 24 Jun 2011 10:09:10 +0000\" \"xxxx/xxxx\" ((\"xx@xx.com\" NIL \"xx\" \"xx.com\")) NIL NIL ((\"xx@xx\" NIL \"xx\" \"xx.com\")) ((\"'xx, xx'\" NIL \"xx.xx\" \"xx.com\")(\"xx.xx@xx.com\" NIL \"xx.xx\" \"xx.com\")(\"'xx'\" NIL \"xx.xx\" \"xx.com\")(\"'xx xx'\" NIL \"xx.xx\" \"xx.com\")(\"xx.xx@xx.com\" NIL \"xx.xx\" \"xx.com\")) NIL NIL \"<xx@xx.com>\") BODY[HEADER.FIELDS (REFERENCES)] {2}\r\n\r\n BODYSTRUCTURE ((\"text\" \"html\" (\"charset\" \"us-ascii\") \"<xx@xx>\" NIL \"7BIT\" 17236 232 NIL NIL NIL NIL)(\"image\" \"jpeg\" (\"name\" \"image001.jpg\") \"<image001.jpg@xx.xx>\" \"image001.jpg\" \"base64\" 1918 NIL (\"inline\" (\"filename\" \"image001.jpg\" \"size\" \"1650\" \"creation-date\" \"Sun, 09 Aug 2015 20:56:04 GMT\" \"modification-date\" \"Sun, 14 Aug 2022 22:11:45 GMT\")) NIL NIL) \"related\" (\"boundary\" \"xx--xx\" \"type\" \"text/html\") NIL \"en-US\"))\r\n";
+        assert!(RequiredResponses::FETCH_REFERENCES.check(full_fetch));
+        assert!(RequiredResponses::FETCH_BODYSTRUCTURE.check(full_fetch));
+        assert!(RequiredResponses::FETCH_ENVELOPE.check(full_fetch));
+    }
+    {
+        let fetch = b"* 2700 FETCH (UID 3223 FLAGS (\\Seen) ENVELOPE (\"Wed, 28 Aug 2024 13:53:11 +0000\" \"=?utf-8?Q?Update:=20Let's=20Talk!?=\" ((\"Newsletter\" NIL \"no-reply\" \"example.com\")) ((\"Newsletter\" NIL \"no-reply\" \"example.com\")) ((\"Newsletter\" NIL \"no-reply\" \"example.com\")) ((NIL NIL \"user\" \"example.com\")) NIL NIL NIL \"<XXXXXXXX.YYYYYYYYYYYYYY.ZZZZZZZZZZZZZZ@HHHH.TLD>\") BODY[HEADER.FIELDS (REFERENCES)] {2}\r\n\r\n BODYSTRUCTURE ((\"text\" \"plain\" (\"charset\" \"utf-8\") NIL NIL \"7bit\" 824 25 NIL NIL NIL NIL)(\"text\" \"html\" (\"charset\" \"utf-8\") NIL NIL \"7bit\" 28037 418 NIL NIL NIL NIL) \"alternative\" (\"boundary\" \"__\") NIL NIL NIL)\r\n";
+        let required_responses = RequiredResponses::FETCH_UID
+            | RequiredResponses::FETCH_FLAGS
+            | RequiredResponses::FETCH_ENVELOPE
+            | RequiredResponses::FETCH_REFERENCES
+            | RequiredResponses::FETCH_BODYSTRUCTURE;
+        assert!(required_responses.check(fetch));
+        let lines = fetch.split_rn().collect::<Vec<_>>();
+        assert_eq!(
+            lines.len(),
+            1,
+            "Line was not split correctly by ImapLineIterator: {:?}",
+            lines.iter().map(|l| to_str!(l)).collect::<Vec<&str>>()
+        );
+        let mut ret = Vec::new();
+        for l in lines {
+            if required_responses.check(l) {
+                ret.extend_from_slice(l);
+            } else {
+                panic!("Unexpected response: {:?}", to_str!(l));
+            }
+        }
+        assert_eq!(to_str!(fetch), to_str!(&ret));
+    }
 }
 
 #[test]
@@ -157,6 +251,7 @@ fn test_imap_untagged_responses() {
             body: None,
             references: None,
             envelope: None,
+            bodystructure: false,
             raw_fetch_value: &b"* 1079 FETCH (UID 1103 MODSEQ (1365) FLAGS (\\Seen))\r\n"[..],
         })
     );
@@ -173,6 +268,7 @@ fn test_imap_untagged_responses() {
             body: None,
             references: None,
             envelope: None,
+            bodystructure: false,
             raw_fetch_value: &b"* 1 FETCH (FLAGS (\\Seen))\r\n"[..],
         })
     );
@@ -200,8 +296,9 @@ fn test_imap_fetch_response() {
                 flags: Some((Flag::SEEN, vec![])),
                 modseq: None,
                 body: None,
-                references: None,
+                references: Some(b""),
                 envelope: Some(env),
+                bodystructure: true,
                 raw_fetch_value: input,
             },
             None

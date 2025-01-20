@@ -318,16 +318,18 @@ pub async fn examine_updates(mailbox: ImapMailbox, conn: &mut ImapConnection) ->
                 );
                 return Ok(());
             }
-            conn.send_command(CommandBody::fetch(v.as_slice(), common_attributes(), true)?)
+            let (required_responses, attributes) = common_attributes();
+            conn.send_command(CommandBody::fetch(v.as_slice(), attributes, true)?)
                 .await?;
-            conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
+            conn.read_response(&mut response, required_responses)
                 .await?;
         } else if select_response.exists > current_exists {
             let min = current_exists.max(1);
 
-            conn.send_command(CommandBody::fetch(min.., common_attributes(), false)?)
+            let (required_responses, attributes) = common_attributes();
+            conn.send_command(CommandBody::fetch(min.., attributes, false)?)
                 .await?;
-            conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
+            conn.read_response(&mut response, required_responses)
                 .await?;
         } else {
             return Ok(());

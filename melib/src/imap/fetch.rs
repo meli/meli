@@ -256,13 +256,15 @@ impl FetchState {
 
                             SequenceSet::try_from(min..=max)?
                         };
+                        let (required_responses, macro_or_item_names) =
+                            crate::imap::email::common_attributes();
                         conn.send_command(CommandBody::Fetch {
                             sequence_set,
-                            macro_or_item_names: crate::imap::email::common_attributes(),
+                            macro_or_item_names,
                             uid: true,
                         })
                         .await?;
-                        conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
+                        conn.read_response(&mut response, required_responses)
                             .await
                             .chain_err_summary(|| {
                                 format!(

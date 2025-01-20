@@ -46,6 +46,7 @@ fn test_imap_sync_sqlite() {
         body: None,
         references: None,
         envelope: Some(Envelope::default()),
+        bodystructure: false,
         raw_fetch_value: &[],
     };
     let fetches = &[fetch];
