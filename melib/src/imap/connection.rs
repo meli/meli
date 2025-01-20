@@ -1334,8 +1334,7 @@ impl ImapConnection {
         }
         self.send_command(CommandBody::select(imap_path.as_str())?)
             .await?;
-        self.read_response(ret, RequiredResponses::SELECT_REQUIRED)
-            .await?;
+        self.read_response(ret, RequiredResponses::SELECT).await?;
         imap_log!(
             trace,
             self,
@@ -1412,8 +1411,7 @@ impl ImapConnection {
         }
         self.send_command(CommandBody::examine(imap_path.as_str())?)
             .await?;
-        self.read_response(ret, RequiredResponses::EXAMINE_REQUIRED)
-            .await?;
+        self.read_response(ret, RequiredResponses::EXAMINE).await?;
 
         imap_log!(
             trace,

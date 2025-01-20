@@ -74,8 +74,8 @@ bitflags! {
         const NO_REQUIRED         = 0b1000_0000_0000_0000;
         const CAPABILITY_REQUIRED = Self::CAPABILITY.bits();
         const LOGOUT_REQUIRED     = Self::BYE.bits();
-        const SELECT_REQUIRED     = Self::FLAGS.bits() | Self::EXISTS.bits() | Self::RECENT.bits() | Self::UNSEEN.bits() | Self::PERMANENTFLAGS.bits() | Self::UIDNEXT.bits() | Self::UIDVALIDITY.bits();
-        const EXAMINE_REQUIRED    = Self::FLAGS.bits() | Self::EXISTS.bits() | Self::RECENT.bits() | Self::UNSEEN.bits() | Self::PERMANENTFLAGS.bits() | Self::UIDNEXT.bits() | Self::UIDVALIDITY.bits();
+        const SELECT              = Self::FLAGS.bits() | Self::EXISTS.bits() | Self::RECENT.bits() | Self::UNSEEN.bits() | Self::PERMANENTFLAGS.bits() | Self::UIDNEXT.bits() | Self::UIDVALIDITY.bits();
+        const EXAMINE             = Self::FLAGS.bits() | Self::EXISTS.bits() | Self::RECENT.bits() | Self::UNSEEN.bits() | Self::PERMANENTFLAGS.bits() | Self::UIDNEXT.bits() | Self::UIDVALIDITY.bits();
         const FETCH_REQUIRED      = Self::FETCH.bits();
     }
 }
