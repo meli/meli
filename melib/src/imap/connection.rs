@@ -1154,7 +1154,7 @@ impl ImapConnection {
                             return r.into();
                         }
                         ImapResponse::No(ref _response_code)
-                            if required_responses.intersects(RequiredResponses::NO_REQUIRED) =>
+                            if required_responses.intersects(RequiredResponses::NO) =>
                         {
                             imap_log!(
                                 trace,
@@ -1469,7 +1469,7 @@ impl ImapConnection {
                         }
                     }
                     self.send_command(CommandBody::select(nonexistent)?).await?;
-                    self.read_response(&mut response, RequiredResponses::NO_REQUIRED)
+                    self.read_response(&mut response, RequiredResponses::NO)
                         .await?;
                 }
             }

@@ -71,7 +71,7 @@ bitflags! {
         const EXPUNGE             = 0b0001_0000_0000_0000;
         const SEARCH              = 0b0010_0000_0000_0000;
         const FETCH               = 0b0100_0000_0000_0000;
-        const NO_REQUIRED         = 0b1000_0000_0000_0000;
+        const NO                  = 0b1000_0000_0000_0000;
         const CAPABILITY_REQUIRED = Self::CAPABILITY.bits();
         const LOGOUT_REQUIRED     = Self::BYE.bits();
         const SELECT              = Self::FLAGS.bits() | Self::EXISTS.bits() | Self::RECENT.bits() | Self::UNSEEN.bits() | Self::PERMANENTFLAGS.bits() | Self::UIDNEXT.bits() | Self::UIDVALIDITY.bits();
