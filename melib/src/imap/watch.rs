@@ -256,7 +256,7 @@ pub async fn examine_updates(mailbox: ImapMailbox, conn: &mut ImapConnection) ->
                 .await?;
                 conn.read_response(
                     &mut response,
-                    RequiredResponses::LIST_REQUIRED | RequiredResponses::STATUS,
+                    RequiredResponses::LIST | RequiredResponses::STATUS,
                 )
                 .await?;
                 log::trace!(

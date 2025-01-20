@@ -76,8 +76,6 @@ bitflags! {
         const LOGOUT_REQUIRED     = Self::BYE.bits();
         const SELECT_REQUIRED     = Self::FLAGS.bits() | Self::EXISTS.bits() | Self::RECENT.bits() | Self::UNSEEN.bits() | Self::PERMANENTFLAGS.bits() | Self::UIDNEXT.bits() | Self::UIDVALIDITY.bits();
         const EXAMINE_REQUIRED    = Self::FLAGS.bits() | Self::EXISTS.bits() | Self::RECENT.bits() | Self::UNSEEN.bits() | Self::PERMANENTFLAGS.bits() | Self::UIDNEXT.bits() | Self::UIDVALIDITY.bits();
-        const LIST_REQUIRED       = Self::LIST.bits();
-        const LSUB_REQUIRED       = Self::LSUB.bits();
         const FETCH_REQUIRED      = Self::FETCH.bits();
     }
 }

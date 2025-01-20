@@ -1458,12 +1458,12 @@ impl ImapType {
                 .await?;
             conn.read_response(
                 &mut res,
-                RequiredResponses::LIST_REQUIRED | RequiredResponses::STATUS,
+                RequiredResponses::LIST | RequiredResponses::STATUS,
             )
             .await?;
         } else {
             conn.send_command(CommandBody::list("", "*")?).await?;
-            conn.read_response(&mut res, RequiredResponses::LIST_REQUIRED)
+            conn.read_response(&mut res, RequiredResponses::LIST)
                 .await?;
         }
         imap_log!(trace, conn, "LIST reply: {}", String::from_utf8_lossy(&res));
@@ -1513,7 +1513,7 @@ impl ImapType {
         }
         mailboxes.retain(|_, v| !v.hash.is_null());
         conn.send_command(CommandBody::lsub("", "*")?).await?;
-        conn.read_response(&mut res, RequiredResponses::LSUB_REQUIRED)
+        conn.read_response(&mut res, RequiredResponses::LSUB)
             .await?;
         imap_log!(trace, conn, "LSUB reply: {}", String::from_utf8_lossy(&res));
         for l in res.split_rn() {
