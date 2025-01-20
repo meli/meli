@@ -365,6 +365,7 @@ impl ImapConnection {
                         imap_log!(trace, self, "UID SEARCH RECENT returned no results");
                     }
                     Ok(v) => {
+                        // [ref:FIXME]: use imap_codec types instead of a raw command
                         let command = {
                             let mut iter = v.split(u8::is_ascii_whitespace);
                             let first = iter.next().unwrap_or(v);
