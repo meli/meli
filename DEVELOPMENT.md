@@ -2,6 +2,31 @@
 
 Code style follows the `rustfmt.toml` file.
 
+## Commit messages
+
+The `meli` project requires per-commit developer sign-offs just like the Linux
+project.
+
+Quoting <https://wiki.linuxfoundation.org/dco>:
+
+> The DCO is a per-commit sign-off made by a contributor stating that they agree
+> to the terms published at <https://developercertificate.org> for that
+> particular contribution.
+>
+> When creating a commit with the Git CLI, a sign-off can be added with the -s
+> option: <https://git-scm.com/docs/git-commit#git-commit--s>. The sign-off is
+> stored as part of the commit message itself, as a line of the format:
+>
+> ```text
+> Signed-off-by: Full Name <email>
+> ```
+
+The sign-off line must be the final line of your commit message, without any
+empty lines after.
+
+Always use `git commit -s` to have `git` add a proper sign-off trailer line in
+your commit message.
+
 ## CI
 
 All pull requests require CI checks to pass.
