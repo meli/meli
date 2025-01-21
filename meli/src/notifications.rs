@@ -187,6 +187,23 @@ impl NotificationCommand {
     pub fn new() -> Self {
         Self::default()
     }
+
+    /// Update an `xbiff` file at `path`.
+    ///
+    /// The ASCII byte `z` is appended to the file, unless the file size is
+    /// above 128 bytes in which case the file is truncated to 0 bytes.
+    pub fn update_xbiff(path: &str) -> Result<()> {
+        let mut file = std::fs::OpenOptions::new()
+            .append(true) /* writes will append to a file instead of overwriting previous contents */
+            .create(true) /* a new file will be created if the file does not yet already exist. */
+            .open(path)?;
+        if file.metadata()?.len() > 128 {
+            file.set_len(0)?;
+        } else {
+            std::io::Write::write_all(&mut file, b"z")?;
+        }
+        Ok(())
+    }
 }
 
 impl std::fmt::Display for NotificationCommand {
@@ -209,7 +226,7 @@ impl Component for NotificationCommand {
             if context.settings.notifications.enable {
                 if *kind == Some(NotificationType::NewMail) {
                     if let Some(ref path) = context.settings.notifications.xbiff_file_path {
-                        if let Err(err) = update_xbiff(path) {
+                        if let Err(err) = Self::update_xbiff(path) {
                             log::error!("Could not update xbiff file: {err}.");
                         }
                     }
@@ -324,19 +341,6 @@ impl Component for NotificationCommand {
     fn id(&self) -> ComponentId {
         self.id
     }
-}
-
-fn update_xbiff(path: &str) -> Result<()> {
-    let mut file = std::fs::OpenOptions::new()
-        .append(true) /* writes will append to a file instead of overwriting previous contents */
-        .create(true) /* a new file will be created if the file does not yet already exist. */
-        .open(path)?;
-    if file.metadata()?.len() > 128 {
-        file.set_len(0)?;
-    } else {
-        std::io::Write::write_all(&mut file, b"z")?;
-    }
-    Ok(())
 }
 
 #[derive(Debug)]
