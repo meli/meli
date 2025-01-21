@@ -1509,6 +1509,51 @@ Toggle between horizontal and vertical layout.
 .\"
 .\"
 .Sh NOTIFICATIONS
+.Ss System notifications
+.Xr meli 1
+can display notifications for asynchronous, out-of-band events that happen.
+These events can be any event of interest that is not a direct result of the user's interaction with the user interface, like for example receiving a new e-mail, or an
+.Em SMTP
+server accepting an e-mail for delivery, or a backend watch mechanism error.
+The used notification mechanism is
+.Em dbus
+if it is available on your system and if
+.Xr meli 1
+has been compiled with support for it
+.Po
+check output of
+.Cm compiled-with
+CLI subcommand
+.Pc Ns
+\&.
+Otherwise the fallback mechanism is calling a script to display a notification.
+If
+.Ic script
+is defined in your configuration, this mechanism will be preferred even if
+.Em dbus
+is available.
+
+On
+.Em macos Ns
+, without a script configured,
+.Xr meli 1
+calls the
+.Cm osascript
+binary to display notifications:
+.Bd -literal -offset indent -compact
+osascript -e 'display_notification "<MESSAGE>" with title "<TITLE>" subtitle "<SUBTITLE>"'
+.Ed
+You can override the
+.Ic script
+setting with variations of this command for customization.
+.Ss UI notifications
+Information that is in response to user interface actions should be instead
+shown within the user interface as floating message boxes.
+Even when UI notifications are not displayed, you can still browse through them manually using
+.Ic shortcuts.general.info_message_next
+and
+.Ic shortcuts.general.info_message_previous
+shortcuts.
 .Ss Notification configuration settings
 Default values are shown in parentheses.
 .Bl -tag -width 36n
