@@ -399,6 +399,19 @@ impl DisplayMessageBox {
         });
         true
     }
+
+    /// Trigger display of last message, if any.
+    #[inline]
+    pub fn arm(&mut self) {
+        if self.messages.is_empty() {
+            return;
+        }
+        self.active = true;
+        self.initialised = false;
+        self.set_dirty(true);
+        self.expiration_start = None;
+        self.pos = self.messages.len().saturating_sub(1);
+    }
 }
 
 impl std::fmt::Display for DisplayMessageBox {

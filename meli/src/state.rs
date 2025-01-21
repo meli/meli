@@ -1139,12 +1139,10 @@ impl State {
                     .message_box
                     .try_push(std::mem::take(msg), datetime::now())
                 {
-                    self.message_box.active = true;
-                    self.message_box.initialised = false;
-                    self.message_box.set_dirty(true);
-                    self.message_box.expiration_start = None;
-                    self.message_box.pos = self.message_box.len() - 1;
-                    self.redraw();
+                    self.message_box.arm();
+                    if self.message_box.is_dirty() {
+                        self.redraw();
+                    }
                 }
             }
             UIEvent::FinishedUIDialog(ref id, ref mut results) if self.overlay.contains_key(id) => {
