@@ -387,6 +387,15 @@ impl DisplayMessageBox {
         self.messages.len()
     }
 
+    /// Prevent box from being shown unless armed again.
+    #[inline]
+    pub fn deactivate(&mut self) {
+        self.active = false;
+        self.set_dirty(true);
+        self.initialised = false;
+        self.expiration_start = None;
+    }
+
     #[inline]
     pub fn try_push(&mut self, msg: String, timestamp: UnixTimestamp) -> bool {
         if let Some(ref mut last) = self.messages.last_mut().filter(|el| el.msg == msg) {

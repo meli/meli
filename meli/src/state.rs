@@ -575,10 +575,7 @@ impl State {
                 .map(|t| t + 5 < now)
                 .unwrap_or(false)
             {
-                self.message_box.active = false;
-                self.message_box.set_dirty(true);
-                self.message_box.initialised = false;
-                self.message_box.expiration_start = None;
+                self.message_box.deactivate();
                 areas.push(self.screen.area());
             }
         }
