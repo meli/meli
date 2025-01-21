@@ -178,10 +178,12 @@ mod dbus {
 /// Passes notifications to a user defined shell command
 #[derive(Debug, Default)]
 pub struct NotificationCommand {
+    /// Identifier of component.
     id: ComponentId,
 }
 
 impl NotificationCommand {
+    /// Create a new [`NotificationCommand`] component.
     pub fn new() -> Self {
         Self::default()
     }
