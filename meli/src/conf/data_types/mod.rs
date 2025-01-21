@@ -161,3 +161,46 @@ impl Serialize for ThreadLayout {
         }
     }
 }
+
+/// How to handle UI notifications.
+#[derive(Clone, Copy, Debug, Default)]
+pub enum UINotifications {
+    /// Always show (default).
+    #[default]
+    Show,
+    /// Hide from UI.
+    Hide,
+    /// Show them as system notifications.
+    System,
+}
+
+impl<'de> Deserialize<'de> for UINotifications {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = <String>::deserialize(deserializer)?;
+        match s.as_str() {
+            show if show.eq_ignore_ascii_case("show") => Ok(Self::Show),
+            hide if hide.eq_ignore_ascii_case("hide") => Ok(Self::Hide),
+            system if system.eq_ignore_ascii_case("system") => Ok(Self::System),
+            _ => Err(de::Error::custom(
+                "invalid `ui_notifications` value, expected one of: \"show\", \"hide\" or \
+                 \"system\".",
+            )),
+        }
+    }
+}
+
+impl Serialize for UINotifications {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Self::Show => serializer.serialize_str("show"),
+            Self::Hide => serializer.serialize_str("hide"),
+            Self::System => serializer.serialize_str("system"),
+        }
+    }
+}

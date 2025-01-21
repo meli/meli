@@ -22,6 +22,7 @@
 use melib::{Error, Result, ToggleFlag};
 
 use crate::conf::{
+    data_types::UINotifications,
     default_values::{internal_value_false, none, true_val},
     DotAddressable,
 };
@@ -56,6 +57,11 @@ pub struct NotificationsSettings {
 
     #[serde(default = "none", alias = "sound-file")]
     pub sound_file: Option<String>,
+
+    /// How to handle UI notifications.
+    /// Default: [`UINotifications::Show`]
+    #[serde(default, alias = "ui-notifications")]
+    pub ui_notifications: UINotifications,
 }
 
 impl Default for NotificationsSettings {
@@ -67,9 +73,11 @@ impl Default for NotificationsSettings {
             xbiff_file_path: None,
             play_sound: ToggleFlag::InternalVal(false),
             sound_file: None,
+            ui_notifications: UINotifications::default(),
         }
     }
 }
+
 impl DotAddressable for NotificationsSettings {
     fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
         match path.first() {
@@ -82,6 +90,9 @@ impl DotAddressable for NotificationsSettings {
                     "xbiff_file_path" => self.xbiff_file_path.lookup(field, tail),
                     "play_sound" => self.play_sound.lookup(field, tail),
                     "sound_file" => self.sound_file.lookup(field, tail),
+                    "ui-notifications" | "ui_notifications" => {
+                        self.ui_notifications.lookup(field, tail)
+                    }
                     other => Err(Error::new(format!(
                         "{} has no field named {}",
                         parent_field, other

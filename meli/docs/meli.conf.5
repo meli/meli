@@ -1549,6 +1549,14 @@ setting with variations of this command for customization.
 .Ss UI notifications
 Information that is in response to user interface actions should be instead
 shown within the user interface as floating message boxes.
+If you don't want UI notifications to be displayed, you can set the
+.It Ic ui_notifications
+option to
+.Li hide
+to hide them, or
+.Li system
+to display them as system notifications.
+
 Even when UI notifications are not displayed, you can still browse through them manually using
 .Ic shortcuts.general.info_message_next
 and
@@ -1582,6 +1590,19 @@ Play theme sound in notifications if possible.
 .Pq Em optional
 Play sound file in notifications if possible.
 .Pq Em none \" default value
+.It Ic ui_notifications Ar UINotifications
+.Pq Em optional
+How to handle UI notifications.
+.Pq Em show \" default value
+Valid values:
+.Bl -tag -width 6n
+.It Ic show
+Always show.
+.It Ic hide
+Hide from UI.
+.It Ic system
+Show them as system notifications.
+.El
 .El
 .\"
 .\"

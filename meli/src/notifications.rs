@@ -27,6 +27,7 @@ pub use dbus::*;
 use melib::{utils::datetime, UnixTimestamp};
 
 use super::*;
+use crate::conf::data_types::UINotifications;
 
 #[cfg(all(target_os = "linux", feature = "dbus-notifications"))]
 mod dbus {
@@ -402,15 +403,28 @@ impl DisplayMessageBox {
 
     /// Trigger display of last message, if any.
     #[inline]
-    pub fn arm(&mut self) {
+    pub fn arm(&mut self, context: &mut Context) {
         if self.messages.is_empty() {
             return;
         }
-        self.active = true;
-        self.initialised = false;
-        self.set_dirty(true);
-        self.expiration_start = None;
         self.pos = self.messages.len().saturating_sub(1);
+        match context.settings.notifications.ui_notifications {
+            UINotifications::Show => {
+                self.active = true;
+                self.initialised = false;
+                self.set_dirty(true);
+                self.expiration_start = None;
+            }
+            UINotifications::Hide => {}
+            UINotifications::System => {
+                context.replies.push_back(UIEvent::Notification {
+                    title: None,
+                    source: None,
+                    body: self.messages[self.pos].msg.clone().into(),
+                    kind: Some(NotificationType::Info),
+                });
+            }
+        }
     }
 }
 

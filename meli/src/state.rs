@@ -1139,7 +1139,7 @@ impl State {
                     .message_box
                     .try_push(std::mem::take(msg), datetime::now())
                 {
-                    self.message_box.arm();
+                    self.message_box.arm(&mut self.context);
                     if self.message_box.is_dirty() {
                         self.redraw();
                     }
