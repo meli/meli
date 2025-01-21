@@ -348,17 +348,27 @@ struct DisplayMessage {
 #[derive(Debug)]
 /// Show notifications on [`Screen`].
 pub struct DisplayMessageBox {
+    /// Stored messages.
     messages: Vec<DisplayMessage>,
+    /// Timestamp of the latest time the widget was set to be displayed, used to
+    /// calculate expiration (i.e. when to stop displaying it).
     pub expiration_start: Option<UnixTimestamp>,
+    /// Whether the widget is to be displayed.
     pub active: bool,
+    /// Whether the widget needs to be redrawn.
     dirty: bool,
+    /// Whether the widget has been drawn at least once.
     pub initialised: bool,
+    /// Position of message from `messages` field to show.
     pub pos: usize,
+    /// The last [`Area`] this widget used to be drawn.
     cached_area: Area,
+    /// Identifier of component.
     id: ComponentId,
 }
 
 impl DisplayMessageBox {
+    /// Create a new [`DisplayMessageBox`] for this specific [`Screen`].
     pub fn new(sc: &Screen<Tty>) -> Self {
         Self {
             messages: Vec::new(),
@@ -372,16 +382,19 @@ impl DisplayMessageBox {
         }
     }
 
+    /// Returns the last [`Area`] this widget used to be drawn.
     #[inline]
     pub fn cached_area(&self) -> Area {
         self.cached_area
     }
 
+    /// Returns `true` if there are no messages.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.messages.is_empty()
     }
 
+    /// Returns the amount of messages.
     #[inline]
     pub fn len(&self) -> usize {
         self.messages.len()
@@ -396,6 +409,8 @@ impl DisplayMessageBox {
         self.expiration_start = None;
     }
 
+    /// Append a message if its contents are not equal to the last existing
+    /// message.
     #[inline]
     pub fn try_push(&mut self, msg: String, timestamp: UnixTimestamp) -> bool {
         if let Some(ref mut last) = self.messages.last_mut().filter(|el| el.msg == msg) {
