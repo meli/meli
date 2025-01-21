@@ -2,6 +2,44 @@
 
 Code style follows the `rustfmt.toml` file.
 
+## CI
+
+All pull requests require CI checks to pass.
+You can run the same checks locally without a CI runner.
+
+The CI workflows are written to execute the following `Makefile`s:
+
+- [`.gitea/Makefile.build`](.gitea/Makefile.build)
+  Runs build checks with `cargo-check`, `cargo-test --no-run`, `make
+  build-rustdoc` and also runs cargo tests with `cargo-nextest` and `rustdoc`
+  tests with `make test-docs`.
+- [`.gitea/Makefile.lint`](.gitea/Makefile.lint)
+  Performs linter checks with `rustfmt`, `clippy`, `cargo-msrv` and `cargo-derivefmt`.
+- [`.gitea/Makefile.manifest-lint`](.gitea/Makefile.manifest-lint)
+  Performs linter checks for manifest files with `cargo-sort` and the
+  [`check_debian_changelog.sh`](./scripts/check_debian_changelog.sh) script.
+
+This means you don't have to run the CI with a pull request to see if the
+checks pass, you can do the equivalent checks locally with something like:
+
+```sh
+for m in .gitea/Makefile.*; do
+  make -f "${m}" || break
+done
+```
+
+Or run all checks in a specific `Makefile`:
+
+```sh
+make -f .gitea/Makefile.lint
+```
+
+Or run a specific check in a specific `Makefile`:
+
+```sh
+make -f .gitea/Makefile.lint clippy
+```
+
 ## Trace logs
 
 Enable trace logs to `stderr` with:
