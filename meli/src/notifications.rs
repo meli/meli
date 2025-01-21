@@ -435,6 +435,26 @@ impl DisplayMessageBox {
             }
         }
     }
+
+    /// Activate and set position to previous message, if any.
+    #[inline]
+    pub fn show_previous(&mut self) {
+        self.expiration_start = Some(datetime::now());
+        self.active = true;
+        self.initialised = false;
+        self.set_dirty(true);
+        self.pos = self.pos.saturating_sub(1);
+    }
+
+    /// Activate and set position to next message, if any.
+    #[inline]
+    pub fn show_next(&mut self) {
+        self.expiration_start = Some(datetime::now());
+        self.active = true;
+        self.initialised = false;
+        self.set_dirty(true);
+        self.pos = self.len().saturating_sub(1).min(self.pos + 1);
+    }
 }
 
 impl std::fmt::Display for DisplayMessageBox {

@@ -1111,24 +1111,13 @@ impl State {
                         .general
                         .info_message_previous =>
             {
-                self.message_box.expiration_start = Some(datetime::now());
-                self.message_box.active = true;
-                self.message_box.initialised = false;
-                self.message_box.set_dirty(true);
-                self.message_box.pos = self.message_box.pos.saturating_sub(1);
+                self.message_box.show_previous();
                 return;
             }
             UIEvent::Input(ref key)
                 if *key == self.context.settings.shortcuts.general.info_message_next =>
             {
-                self.message_box.expiration_start = Some(datetime::now());
-                self.message_box.active = true;
-                self.message_box.initialised = false;
-                self.message_box.set_dirty(true);
-                self.message_box.pos = std::cmp::min(
-                    self.message_box.len().saturating_sub(1),
-                    self.message_box.pos + 1,
-                );
+                self.message_box.show_next();
                 return;
             }
             UIEvent::StatusEvent(StatusEvent::DisplayMessage(ref mut msg)) => {
