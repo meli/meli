@@ -21,20 +21,24 @@
 
 use crate::utils::random::{clock, random_u64};
 
-fn base36(mut m: u64) -> String {
-    let mut stack = Vec::with_capacity(32);
+/// Convert an integer to a base 36 string using only ASCII letters and numbers.
+///
+/// More information: <https://en.wikipedia.org/wiki/Base36>
+pub fn base36(mut m: u64) -> String {
+    if m == 0 {
+        return "0".to_string();
+    }
+    let mut ret = String::new();
 
     while m >= 36 {
-        stack.push((m % 36) as u32);
+        ret.push(char::from_digit((m % 36) as u32, 36).unwrap());
         m /= 36;
     }
-
-    let mut ret = String::with_capacity(stack.len());
-
-    while let Some(d) = stack.pop() {
-        ret.push(char::from_digit(d, 36).unwrap());
+    if m != 0 {
+        ret.push(char::from_digit(m as u32, 36).unwrap());
     }
-    ret
+
+    ret.chars().rev().collect()
 }
 
 pub fn gen_message_id(fqdn: &str) -> String {

@@ -27,6 +27,22 @@ use super::*;
 const GREEK_FOOBAR: &str = "αδφαφσαφασ";
 
 #[test]
+fn test_email_compose_random() {
+    for integer in [0, 8851918182876417271_u64] {
+        assert_eq!(
+            u64::from_str_radix(&random::base36(integer), 36).unwrap(),
+            integer
+        );
+    }
+
+    let msg_id = random::gen_message_id("example.com");
+    assert!(msg_id.ends_with("@example.com>"), "{:?}", &msg_id);
+    let (bytes, parsed_msg_id) = crate::email::parser::address::msg_id(msg_id.as_bytes()).unwrap();
+    assert_eq!(bytes, b"");
+    assert_eq!(&parsed_msg_id.display_brackets().to_string(), &msg_id);
+}
+
+#[test]
 fn test_email_compose_new_draft() {
     let mut default = Draft::default();
     assert_eq!(Draft::from_str(&default.to_edit_string()).unwrap(), default);
