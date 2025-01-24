@@ -39,13 +39,11 @@ use crate::{
 
 macro_rules! call {
     ($lib:expr, $func:ty) => {{
-        #[cfg(debug_assertions)]
-        debug_assert!(
-            !stringify!($func).starts_with("ffi::"),
-            "{} must be a valid FFI symbol.",
-            stringify!($func)
-        );
-        let func: libloading::Symbol<$func> = $lib.inner.get(stringify!($func).as_bytes()).unwrap();
+        const S: &str = stringify!($func);
+        let func: libloading::Symbol<$func> = $lib
+            .inner
+            .get(S.split("::").last().unwrap_or(S).trim().as_bytes())
+            .unwrap();
         func
     }};
 }
@@ -56,7 +54,7 @@ macro_rules! try_call {
         if status == $crate::notmuch::ffi::NOTMUCH_STATUS_SUCCESS {
             Ok(())
         } else {
-            let c_str = call!($lib, notmuch_status_to_string)(status);
+            let c_str = call!($lib, $crate::notmuch::ffi::notmuch_status_to_string)(status);
             Err($crate::notmuch::NotmuchError(
                 std::ffi::CStr::from_ptr(c_str)
                     .to_string_lossy()
@@ -73,7 +71,7 @@ use mailbox::NotmuchMailbox;
 pub mod ffi;
 use ffi::{
     notmuch_database_close, notmuch_database_destroy, notmuch_database_get_revision,
-    notmuch_database_open, notmuch_status_to_string,
+    notmuch_database_open,
 };
 mod message;
 pub use message::*;

@@ -28,7 +28,6 @@ use crate::{
         ffi::{
             notmuch_messages_t, notmuch_query_count_messages, notmuch_query_create,
             notmuch_query_destroy, notmuch_query_search_messages, notmuch_query_t,
-            notmuch_status_to_string,
         },
         DbConnection, MessageIterator, NotmuchLibrary,
     },
