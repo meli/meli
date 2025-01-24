@@ -85,11 +85,19 @@ impl<'m> Message<'m> {
         }
     }
 
+    #[inline]
+    /// Return the `Message-ID` associated with this message as bytes.
+    ///
+    /// See also [`Message::msg_id_cstr`] and [`Message::msg_id_str`].
     pub fn msg_id(&self) -> &[u8] {
         let c_str = self.msg_id_cstr();
         c_str.to_bytes()
     }
 
+    #[inline]
+    /// Return the `Message-ID` associated with this message as a C string.
+    ///
+    /// See also [`Message::msg_id_cstr`] and [`Message::msg_id_str`].
     pub fn msg_id_cstr(&self) -> &CStr {
         let msg_id =
             unsafe { call!(self.lib, notmuch_message_get_message_id)(self.message.as_ptr()) };
