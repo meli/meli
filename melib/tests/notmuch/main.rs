@@ -32,6 +32,14 @@ rusty_fork_test! {
 }
 
 #[cfg(feature = "notmuch")]
+rusty_fork_test! {
+    #[test]
+    fn test_notmuch_refresh() {
+        tests::run_notmuch_refresh();
+    }
+}
+
+#[cfg(feature = "notmuch")]
 mod tests {
     use std::{
         collections::VecDeque,
@@ -296,6 +304,136 @@ hello world.
             assert_eq!(refresh_event.mailbox_hash, inbox_hash);
             env
         };
+        {
+            let BackendEvent::Refresh(refresh_event) = &backend_events[1] else {
+                panic!("Expected Refresh event, got: {:#?}", &backend_events[1]);
+            };
+            let RefreshEventKind::Remove(old_hash) = refresh_event.kind else {
+                panic!("Expected Remove event, got: {:#?}", refresh_event);
+            };
+            assert_eq!(
+                refresh_event.mailbox_hash, inbox_hash,
+                "Expected Remove event in Inbox folder, got: {:#?}",
+                refresh_event
+            );
+            assert_eq!(old_hash, env.hash());
+        }
+    }
+
+    /// Test that `NotmuchDb::refresh` returns the expected `Refresh` events
+    /// when altering the mail store in the filesystem.
+    pub(crate) fn run_notmuch_refresh() {
+        let mut _logger = StderrLogger::new(LogLevel::TRACE);
+        skip_test_if_notmuch_binary_is_missing!();
+        let temp_dir = TempDir::new().unwrap();
+        // Store all events in a vector, and compare them at the end with the expected
+        // ones.
+        let mut backend_events: Vec<BackendEvent> = vec![];
+        let backend_event_queue = Arc::new(Mutex::new(VecDeque::with_capacity(16)));
+
+        let backend_event_consumer = {
+            let backend_event_queue = Arc::clone(&backend_event_queue);
+
+            BackendEventConsumer::new(Arc::new(move |ah, be| {
+                eprintln!("BackendEventConsumer: ah {:?} be {:?}", ah, be);
+                backend_event_queue.lock().unwrap().push_back((ah, be));
+            }))
+        };
+
+        for var in [
+            "HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_CONFIG_DIRS",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_DIRS",
+            "XDG_DATA_HOME",
+            "NOTMUCH_CONFIG",
+        ] {
+            std::env::remove_var(var);
+        }
+        for (var, dir) in [
+            ("HOME", temp_dir.path().to_path_buf()),
+            ("XDG_CACHE_HOME", temp_dir.path().join(".cache")),
+            ("XDG_STATE_HOME", temp_dir.path().join(".local/state")),
+            ("XDG_CONFIG_HOME", temp_dir.path().join(".config")),
+            ("XDG_DATA_HOME", temp_dir.path().join(".local/share")),
+        ] {
+            std::fs::create_dir_all(&dir).unwrap_or_else(|err| {
+                panic!("Could not create {} path, {}: {}", var, dir.display(), err);
+            });
+            std::env::set_var(var, &dir);
+        }
+
+        let (root_mailbox, _settings, mut notmuch) =
+            new_notmuch_backend(&temp_dir, "notmuch", backend_event_consumer.clone(), true)
+                .unwrap();
+
+        let is_online_fut = notmuch.is_online().unwrap();
+        block_on(is_online_fut).unwrap();
+        let mut mailboxes_fut = notmuch.mailboxes().unwrap();
+        let mailboxes = block_on(mailboxes_fut.as_mut()).unwrap();
+        let inbox_hash = *mailboxes.keys().next().unwrap();
+
+        eprintln!(
+            "Create a new email using MaildirType::save_to_mailbox() and assert that the watch \
+             stream yields a RefreshEventKind::Create for this envelope."
+        );
+        let new_mail = Mail::new(
+            br#"From: "some name" <some@example.com>
+To: "me" <myself@example.com>
+Cc:
+Subject: RE: your e-mail
+Message-ID: <h2g7f.z0gy2pgaen5m@example.com>
+Content-Type: text/plain
+
+hello world.
+"#
+            .to_vec(),
+            None,
+        )
+        .unwrap();
+        let mail_path =
+            MaildirType::save_to_mailbox(root_mailbox.clone(), new_mail.bytes, None).unwrap();
+        notmuch_new(true);
+        block_on(notmuch.refresh(inbox_hash).unwrap()).unwrap();
+        backend_events.push(backend_event_queue.lock().unwrap().pop_back().unwrap().1);
+        eprintln!("Delete envelope from Inbox folder and assert we receive a Remove event");
+        std::fs::remove_file(&mail_path).unwrap();
+        notmuch_new(true);
+        block_on(notmuch.refresh(inbox_hash).unwrap()).unwrap();
+        backend_events.push(backend_event_queue.lock().unwrap().pop_back().unwrap().1);
+        notmuch_new(true);
+        block_on(notmuch.refresh(inbox_hash).unwrap()).unwrap();
+        // We don't expect more events, but if there are, drain them to show them in the
+        // failed assertion later.
+        backend_events.extend(
+            backend_event_queue
+                .lock()
+                .unwrap()
+                .drain(..)
+                .map(|(_, ev)| ev),
+        );
+        assert_eq!(
+            backend_events.len(),
+            2,
+            "Expected two events total; backend_events was: {:?}",
+            backend_events
+        );
+
+        let env = {
+            let BackendEvent::Refresh(refresh_event) = &backend_events[0] else {
+                panic!("Expected Refresh event, got: {:#?}", &backend_events[0]);
+            };
+            let RefreshEventKind::Create(ref env) = refresh_event.kind else {
+                panic!("Expected Create event, got: {:#?}", refresh_event);
+            };
+            assert_eq!(env.subject(), "RE: your e-mail");
+            assert_eq!(env.message_id(), "h2g7f.z0gy2pgaen5m@example.com");
+            assert_eq!(inbox_hash, refresh_event.mailbox_hash);
+            env
+        };
+
         {
             let BackendEvent::Refresh(refresh_event) = &backend_events[1] else {
                 panic!("Expected Refresh event, got: {:#?}", &backend_events[1]);
