@@ -36,6 +36,11 @@ const SECKEY: &[u8] = b"-----BEGIN PGP PRIVATE KEY BLOCK-----\r\nVersion: GnuPG 
 rusty_fork_test! {
 #[test]
 fn test_gpgme_verify_sig() {
+    run_gpgme_verify_sig();
+}
+}
+
+fn run_gpgme_verify_sig() {
     fn make_fut(
         secret: bool,
         local: bool,
@@ -52,9 +57,11 @@ fn test_gpgme_verify_sig() {
 
     let tempdir = tempfile::tempdir().unwrap();
 
+    #[allow(unused_unsafe)]
     unsafe {
         std::env::set_var("GNUPGHOME", tempdir.path());
     }
+    #[allow(unused_unsafe)]
     unsafe {
         std::env::set_var("GPG_AGENT_INFO", "");
     }
@@ -151,5 +158,4 @@ fn test_gpgme_verify_sig() {
     gpgme_ctx
         .import_key(gpgme_ctx.new_data_mem(SECKEY).unwrap())
         .unwrap_err();
-}
 }
