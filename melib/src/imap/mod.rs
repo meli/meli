@@ -219,7 +219,10 @@ impl UIDStore {
 
     fn init_cache(
         self: &Arc<Self>,
-        mutex: &mut std::sync::MutexGuard<'_, Option<Box<dyn ImapCache>>>,
+        #[allow(clippy::needless_pass_by_ref_mut)] mutex: &mut std::sync::MutexGuard<
+            '_,
+            Option<Box<dyn ImapCache>>,
+        >,
     ) -> Result<()> {
         if mutex.is_none() {
             #[cfg(feature = "sqlite3")]
