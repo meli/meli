@@ -20,7 +20,7 @@
  */
 
 use std::{
-    collections::{hash_map::HashMap, BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
     ffi::{CStr, CString, OsStr},
     io::Read,
     os::unix::ffi::OsStrExt,
@@ -29,6 +29,7 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
+use futures::{channel::mpsc, SinkExt, StreamExt};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
 use crate::{
@@ -69,20 +70,23 @@ use query::{MelibQueryToNotmuchQuery, Query};
 pub mod mailbox;
 use mailbox::NotmuchMailbox;
 pub mod ffi;
-use ffi::{
-    notmuch_database_close, notmuch_database_destroy, notmuch_database_get_revision,
-    notmuch_database_open,
-};
+use ffi::{notmuch_database_close, notmuch_database_destroy, notmuch_database_open};
+
+mod directory;
 mod message;
-pub use message::*;
+mod snapshot;
 mod tags;
-pub use tags::*;
 mod thread;
+
+pub use directory::*;
+pub use message::*;
+pub use snapshot::*;
+pub use tags::*;
 pub use thread::*;
 
 #[derive(Debug)]
 #[repr(transparent)]
-struct DbPointer(NonNull<ffi::notmuch_database_t>);
+pub struct DbPointer(pub NonNull<ffi::notmuch_database_t>);
 
 unsafe impl Send for DbPointer {}
 unsafe impl Sync for DbPointer {}
@@ -103,66 +107,169 @@ pub struct NotmuchLibrary {
 #[derive(Debug)]
 pub struct DbConnection {
     pub lib: Arc<NotmuchLibrary>,
-    inner: Arc<Mutex<DbPointer>>,
-    pub revision_uuid: Arc<RwLock<u64>>,
+    pub inner: Arc<Mutex<DbPointer>>,
 }
 
 impl DbConnection {
-    pub fn get_revision_uuid(&self) -> u64 {
-        let ret: ::std::os::raw::c_ulong = unsafe {
-            call!(self.lib, notmuch_database_get_revision)(
-                self.inner.lock().unwrap().as_mut(),
-                std::ptr::null_mut(),
+    pub fn new(path: &Path, lib: Arc<NotmuchLibrary>, write: bool) -> Result<Self> {
+        let path_c = CString::new(path.to_str().unwrap()).unwrap();
+        let path_ptr = path_c.as_ptr();
+        let mut database: *mut ffi::notmuch_database_t = std::ptr::null_mut();
+        let status = unsafe {
+            call!(lib, notmuch_database_open)(
+                path_ptr,
+                if write {
+                    ffi::NOTMUCH_DATABASE_MODE_READ_WRITE
+                } else {
+                    ffi::NOTMUCH_DATABASE_MODE_READ_ONLY
+                },
+                std::ptr::addr_of_mut!(database),
             )
         };
-        #[allow(clippy::useless_conversion)]
-        u64::from(ret)
+        if status != 0 {
+            return Err(Error::new(format!(
+                "Could not open notmuch database at path {}. notmuch_database_open returned {}.",
+                path.display(),
+                status
+            )));
+        }
+        #[cfg(debug_assertions)]
+        let database = DbPointer(
+            NonNull::new(database)
+                .expect("notmuch_database_open returned a NULL pointer and status = 0"),
+        );
+        #[cfg(not(debug_assertions))]
+        let database = NonNull::new(database).map(DbPointer).ok_or_else(|| {
+            Error::new("notmuch_database_open returned a NULL pointer and status = 0")
+                .set_kind(ErrorKind::LinkedLibrary("notmuch"))
+                .set_details(
+                    "libnotmuch exhibited an unexpected and unrecoverable error. Make sure your \
+                     libnotmuch version is compatible with this release.",
+                )
+        })?;
+        let ret = Self {
+            lib,
+            inner: Arc::new(Mutex::new(database)),
+        };
+        Ok(ret)
     }
 
-    #[allow(clippy::too_many_arguments)] // Don't judge me clippy.
+    pub fn reopen(&mut self, write: bool) -> Result<()> {
+        unsafe {
+            try_call!(
+                self.lib,
+                call!(self.lib, ffi::notmuch_database_reopen)(
+                    self.inner.lock().unwrap().as_mut(),
+                    if write {
+                        ffi::NOTMUCH_DATABASE_MODE_READ_WRITE
+                    } else {
+                        ffi::NOTMUCH_DATABASE_MODE_READ_ONLY
+                    },
+                )
+            )
+        }?;
+        Ok(())
+    }
+
     fn refresh(
         &self,
         mailboxes: Arc<RwLock<HashMap<MailboxHash, NotmuchMailbox>>>,
-        index: Arc<RwLock<HashMap<EnvelopeHash, CString>>>,
-        mailbox_index: Arc<RwLock<HashMap<EnvelopeHash, SmallVec<[MailboxHash; 16]>>>>,
-        tag_index: Arc<RwLock<BTreeMap<TagHash, String>>>,
+        snapshot: &mut Snapshot,
         account_hash: AccountHash,
-        new_revision_uuid: u64,
     ) -> Result<Option<BackendEvent>> {
-        use RefreshEventKind::*;
-        let query_str = format!(
-            "lastmod:{}..{}",
-            *self.revision_uuid.read().unwrap(),
-            new_revision_uuid
-        );
-        let query: Query = Query::new(self, &query_str)?;
-        let iter = query.search()?;
-        let mailbox_index_lck = mailbox_index.write().unwrap();
-        let mailboxes_lck = mailboxes.read().unwrap();
+        let mut stack: VecDeque<CString> = VecDeque::new();
         let mut events = vec![];
-        for message in iter {
-            let env_hash = message.env_hash();
-            if let Some(mailbox_hashes) = mailbox_index_lck.get(&env_hash) {
-                let tags: (Flag, Vec<String>) = message.tags().collect_flags_and_tags();
-                let mut tag_lock = tag_index.write().unwrap();
-                for tag in tags.1.iter() {
-                    let num = TagHash::from_bytes(tag.as_bytes());
-                    tag_lock.entry(num).or_insert_with(|| tag.clone());
-                }
-                for &mailbox_hash in mailbox_hashes {
-                    events.push(RefreshEvent {
-                        account_hash,
-                        mailbox_hash,
-                        kind: NewFlags(env_hash, tags.clone()),
-                    });
-                }
-            } else {
-                let message_id = message.msg_id_cstr().to_string_lossy().to_string();
-                let env = message.into_envelope(&index, &tag_index);
-                for (&mailbox_hash, m) in mailboxes_lck.iter() {
-                    let query_str = format!("{} id:{}", m.query_str.as_str(), &message_id);
+        stack.push_back(self.mail_root()?.into());
+        while let Some(path) = stack.pop_front() {
+            let mut directory_snapshot: Option<NotmuchDirectory> =
+                snapshot.connection.directory(&path)?;
+            let mut directory_current: Option<NotmuchDirectory> = self.directory(&path)?;
+            let mtime_current: libc::time_t =
+                directory_current.as_mut().map(|d| d.mtime()).unwrap_or(0);
+            let mtime_snapshot: libc::time_t =
+                directory_snapshot.as_mut().map(|d| d.mtime()).unwrap_or(0);
+            let (current_files, current_subdirs): (HashSet<CString>, HashSet<CString>) =
+                if let Some(directory) = directory_current.as_mut() {
+                    assert_eq!(&directory.path, &path);
+                    let current_files = directory.child_files_paths().collect();
+                    let current_subdirs = directory
+                        .child_directories_paths()
+                        .collect::<HashSet<CString>>();
+                    for subdir in &current_subdirs {
+                        stack.push_back(subdir.clone());
+                    }
+                    (current_files, current_subdirs)
+                } else {
+                    let mut current_files = HashSet::new();
+                    let mut current_subdirs = HashSet::new();
+                    for entry in std::fs::read_dir(OsStr::from_bytes(path.as_bytes()))? {
+                        let dir = entry?;
+                        let entry_path = CString::new(dir.path().as_os_str().as_bytes()).unwrap();
+                        if dir.file_type()?.is_dir() {
+                            // Pass 1: For each directory in current_subdirs, add to stack to visit
+                            // in the next loops
+                            current_subdirs.insert(entry_path.clone());
+                            stack.push_back(entry_path);
+                        } else {
+                            current_files.insert(entry_path);
+                        }
+                    }
+                    (current_files, current_subdirs)
+                };
+
+            // Compare mtime_snapshot to mtime_current. If they are equivalent, terminate
+            // the algorithm at this point, (this directory has not been updated
+            // in the filesystem since the last database scan of PASS 2).
+            //
+            // If the directory's modification time in the filesystem is the same as what we
+            // recorded in the database the last time we scanned it, then we can skip the
+            // second pass entirely.
+            //
+            // We test for strict equality here to avoid a bug that can happen if the system
+            // clock jumps backward, (preventing new mail from being discovered
+            // until the clock catches up and the directory is modified again).
+
+            if directory_snapshot.is_some()
+                && directory_current.is_some()
+                && mtime_snapshot == mtime_current
+                && mtime_snapshot != 0
+            {
+                continue;
+            }
+            // Ask the snapshot database for files and directories within 'path'
+            // (snapshot_files and snapshot_subdirs)
+            let (snapshot_files, snapshot_subdirs): (HashSet<CString>, HashSet<CString>) =
+                if let Some(directory) = directory_snapshot.as_mut() {
+                    (
+                        directory.child_files_paths().collect(),
+                        directory.child_directories_paths().collect(),
+                    )
+                } else {
+                    // If the database has never seen this directory before, we can
+                    // simply leave snapshot_files and snapshot_subdirs None.
+                    (HashSet::default(), HashSet::default())
+                };
+
+            // Pass 2: Walk current_files simultaneously with snapshot_files current_subdirs
+            // with snapshot_subdirs. Look for one of three interesting cases:
+
+            // 1. Regular file in current_files and not in snapshot_files This is a new file
+            //    to add_message into the database.
+            for new_message in current_files.difference(&snapshot_files) {
+                let Some(message) = Message::find_message_by_path(self, new_message)? else {
+                    // Path does not correspond to a message.
+                    continue;
+                };
+                for (&mailbox_hash, m) in mailboxes.read().unwrap().iter() {
+                    let query_str = format!("{} id:{}", m.query_str.as_str(), message.msg_id_str());
                     let query: Query = Query::new(self, &query_str)?;
                     if query.count().unwrap_or(0) > 0 {
+                        let env = snapshot.insert_envelope(&message);
+                        snapshot
+                            .env_to_mailbox_index
+                            .entry(env.hash())
+                            .or_default()
+                            .push(mailbox_hash);
                         let mut total_lck = m.total.lock().unwrap();
                         let mut unseen_lck = m.unseen.lock().unwrap();
                         *total_lck += 1;
@@ -172,32 +279,114 @@ impl DbConnection {
                         events.push(RefreshEvent {
                             account_hash,
                             mailbox_hash,
-                            kind: Create(Box::new(env.clone())),
+                            kind: RefreshEventKind::Create(Box::new(env)),
                         });
                     }
                 }
+            }
+
+            let mut removed_dir_stack = VecDeque::new();
+            let mut removed_files: HashSet<Cow<'_, CStr>> = HashSet::default();
+            // 2. Filename in snapshot_files not in current_files. This is a file that has
+            //    been removed from the mail store.
+            for removed_file in snapshot_files.difference(&current_files) {
+                removed_files.insert(Cow::Borrowed(removed_file));
+            }
+
+            // 3. Directory in snapshot_subdirs not in current_subdirs This is a directory
+            //    that has been removed from the mail store.
+            for removed_dir in snapshot_subdirs.difference(&current_subdirs) {
+                removed_dir_stack.push_back(Cow::Borrowed(removed_dir));
+            }
+            while let Some(removed_dir) = removed_dir_stack.pop_front() {
+                let mut directory_snapshot: Option<NotmuchDirectory> =
+                    snapshot.connection.directory(&removed_dir)?;
+                if let Some(directory) = directory_snapshot.as_mut() {
+                    removed_files.extend(directory.child_files_paths().map(Cow::Owned));
+                    removed_dir_stack.extend(directory.child_directories_paths().map(Cow::Owned));
+                }
+            }
+            for removed_file in removed_files {
+                let env_hash = {
+                    let Some(message) =
+                        Message::find_message_by_path(&snapshot.connection, &removed_file)?
+                    else {
+                        // Path does not correspond to a message.
+                        continue;
+                    };
+                    message.env_hash()
+                };
+                events.extend(snapshot.remove_envelope(env_hash));
             }
         }
-        drop(query);
-        index.write().unwrap().retain(|&env_hash, msg_id| {
-            if Message::find_message(self, msg_id).is_err() {
-                if let Some(mailbox_hashes) = mailbox_index_lck.get(&env_hash) {
-                    for &mailbox_hash in mailbox_hashes {
-                        let m = &mailboxes_lck[&mailbox_hash];
-                        let mut total_lck = m.total.lock().unwrap();
-                        *total_lck = total_lck.saturating_sub(1);
-                        events.push(RefreshEvent {
-                            account_hash,
-                            mailbox_hash,
-                            kind: Remove(env_hash),
-                        });
-                    }
-                }
-                return false;
-            }
-            true
-        });
+
         Ok(events.try_into().ok())
+    }
+
+    /// Return the mail root
+    /// ([`NOTMUCH_CONFIG_MAIL_ROOT`](ffi::notmuch_config_key_t::NOTMUCH_CONFIG_MAIL_ROOT))
+    /// of the given database's configuration.
+    pub fn mail_root(&self) -> Result<&CStr> {
+        let ptr = unsafe {
+            call!(self.lib, ffi::notmuch_config_get)(
+                self.inner.lock().unwrap().as_mut(),
+                ffi::notmuch_config_key_t::NOTMUCH_CONFIG_MAIL_ROOT,
+            )
+        };
+        // let ptr = unsafe {
+        //     call!(self.lib,
+        // ffi::notmuch_database_get_path)(self.inner.lock().unwrap().as_mut())
+        // };
+        Ok(unsafe { CStr::from_ptr(ptr) })
+    }
+
+    /// Return mail root path of database as a [`NotmuchDirectory`].
+    ///
+    /// This function might return `None` if the directory is not in the
+    /// database yet, for example if the database has no emails.
+    pub fn root_directory(&self) -> Result<Option<NotmuchDirectory>> {
+        let mut ptr = std::ptr::null_mut();
+        let path = self.mail_root()?;
+        unsafe {
+            try_call!(
+                self.lib,
+                call!(self.lib, ffi::notmuch_database_get_directory)(
+                    self.inner.lock().unwrap().as_mut(),
+                    path.as_ptr(),
+                    &mut ptr
+                )
+            )
+        }?;
+        Ok(NonNull::new(ptr).map(|inner| NotmuchDirectory {
+            lib: self.lib.clone(),
+            path: path.into(),
+            db: self.inner.clone(),
+            inner,
+        }))
+    }
+
+    /// Return path of database as a [`NotmuchDirectory`].
+    ///
+    /// This function might return `None` if the directory is not in the
+    /// database yet, for example if the directory has no emails.
+    pub fn directory(&self, path: &CStr) -> Result<Option<NotmuchDirectory>> {
+        let mut ptr = std::ptr::null_mut();
+        unsafe {
+            try_call!(
+                self.lib,
+                call!(self.lib, ffi::notmuch_database_get_directory)(
+                    self.inner.lock().unwrap().as_mut(),
+                    path.as_ptr(),
+                    &mut ptr
+                )
+            )
+        }?;
+        Ok(NonNull::new(ptr).map(|inner| NotmuchDirectory {
+            lib: self.lib.clone(),
+            path: path.into(),
+            db: self.inner.clone(),
+            inner,
+        }))
     }
 }
 
@@ -247,8 +436,8 @@ impl Drop for DbConnection {
 pub struct NotmuchDb {
     #[allow(dead_code)]
     lib: Arc<NotmuchLibrary>,
-    revision_uuid: Arc<RwLock<u64>>,
     mailboxes: Arc<RwLock<HashMap<MailboxHash, NotmuchMailbox>>>,
+    snapshot: Arc<RwLock<Snapshot>>,
     index: Arc<RwLock<HashMap<EnvelopeHash, CString>>>,
     mailbox_index: Arc<RwLock<HashMap<EnvelopeHash, SmallVec<[MailboxHash; 16]>>>>,
     collection: Collection,
@@ -393,14 +582,21 @@ impl NotmuchDb {
         }
 
         let account_hash = AccountHash::from_bytes(s.name.as_bytes());
+        let connection = DbConnection::new(path.as_path(), lib.clone(), false)?;
+        let collection = Collection::default();
         Ok(Box::new(Self {
             lib,
-            revision_uuid: Arc::new(RwLock::new(0)),
             path,
             index: Arc::new(RwLock::new(Default::default())),
             mailbox_index: Arc::new(RwLock::new(Default::default())),
-            collection: Collection::default(),
-
+            snapshot: Arc::new(RwLock::new(Snapshot {
+                connection,
+                message_id_index: Default::default(),
+                env_to_mailbox_index: Default::default(),
+                tag_index: collection.tag_index.clone(),
+                account_hash,
+            })),
+            collection,
             mailboxes: Arc::new(RwLock::new(mailboxes)),
             save_messages_to: None,
             _account_name: s.name.to_string().into(),
@@ -496,59 +692,6 @@ impl NotmuchDb {
         }
         Ok(())
     }
-
-    fn new_connection(
-        path: &Path,
-        revision_uuid: Arc<RwLock<u64>>,
-        lib: Arc<NotmuchLibrary>,
-        write: bool,
-    ) -> Result<DbConnection> {
-        let path_c = CString::new(path.to_str().unwrap()).unwrap();
-        let path_ptr = path_c.as_ptr();
-        let mut database: *mut ffi::notmuch_database_t = std::ptr::null_mut();
-        let status = unsafe {
-            call!(lib, notmuch_database_open)(
-                path_ptr,
-                if write {
-                    ffi::NOTMUCH_DATABASE_MODE_READ_WRITE
-                } else {
-                    ffi::NOTMUCH_DATABASE_MODE_READ_ONLY
-                },
-                std::ptr::addr_of_mut!(database),
-            )
-        };
-        if status != 0 {
-            return Err(Error::new(format!(
-                "Could not open notmuch database at path {}. notmuch_database_open returned {}.",
-                path.display(),
-                status
-            )));
-        }
-        #[cfg(debug_assertions)]
-        let database = DbPointer(
-            NonNull::new(database)
-                .expect("notmuch_database_open returned a NULL pointer and status = 0"),
-        );
-        #[cfg(not(debug_assertions))]
-        let database = NonNull::new(database).map(DbPointer).ok_or_else(|| {
-            Error::new("notmuch_database_open returned a NULL pointer and status = 0")
-                .set_kind(ErrorKind::LinkedLibrary("notmuch"))
-                .set_details(
-                    "libnotmuch exhibited an unexpected and unrecoverable error. Make sure your \
-                     libnotmuch version is compatible with this release.",
-                )
-        })?;
-        let ret = DbConnection {
-            lib,
-            revision_uuid,
-            inner: Arc::new(Mutex::new(database)),
-        };
-        if *ret.revision_uuid.read().unwrap() == 0 {
-            let new = ret.get_revision_uuid();
-            *ret.revision_uuid.write().unwrap() = new;
-        }
-        Ok(ret)
-    }
 }
 
 impl MailBackend for NotmuchDb {
@@ -622,9 +765,8 @@ impl MailBackend for NotmuchDb {
                 }
             }
         }
-        let database = Arc::new(Self::new_connection(
+        let database = Arc::new(DbConnection::new(
             self.path.as_path(),
-            self.revision_uuid.clone(),
             self.lib.clone(),
             false,
         )?);
@@ -675,31 +817,22 @@ impl MailBackend for NotmuchDb {
 
     fn refresh(&mut self, _mailbox_hash: MailboxHash) -> ResultFuture<()> {
         let account_hash = self.account_hash;
-        let database = Self::new_connection(
-            self.path.as_path(),
-            self.revision_uuid.clone(),
-            self.lib.clone(),
-            false,
-        )?;
+        let new_connection = DbConnection::new(self.path.as_path(), self.lib.clone(), false)?;
+        let snapshot = self.snapshot.clone();
         let mailboxes = self.mailboxes.clone();
-        let index = self.index.clone();
-        let mailbox_index = self.mailbox_index.clone();
-        let tag_index = self.collection.tag_index.clone();
         let event_consumer = self.event_consumer.clone();
         Ok(Box::pin(async move {
-            let new_revision_uuid = database.get_revision_uuid();
-            if new_revision_uuid > *database.revision_uuid.read().unwrap() {
-                if let Some(ev) = database.refresh(
-                    mailboxes,
-                    index,
-                    mailbox_index,
-                    tag_index,
-                    account_hash,
-                    new_revision_uuid,
-                )? {
-                    (event_consumer)(account_hash, ev);
+            let events = {
+                let mut snapshot_lck = snapshot.write().unwrap();
+                let events =
+                    new_connection.refresh(mailboxes.clone(), &mut snapshot_lck, account_hash)?;
+                if events.is_some() {
+                    snapshot_lck.connection = new_connection;
                 }
-                *database.revision_uuid.write().unwrap() = new_revision_uuid;
+                events
+            };
+            if let Some(evn) = events {
+                (event_consumer)(account_hash, evn);
             }
             Ok(())
         }))
@@ -707,17 +840,18 @@ impl MailBackend for NotmuchDb {
 
     fn watch(&self) -> ResultStream<BackendEvent> {
         let account_hash = self.account_hash;
-        let tag_index = self.collection.tag_index.clone();
-        let lib = self.lib.clone();
+        let snapshot = self.snapshot.clone();
         let path = self.path.clone();
-        let revision_uuid = self.revision_uuid.clone();
+        let lib = self.lib.clone();
         let mailboxes = self.mailboxes.clone();
-        let index = self.index.clone();
-        let mailbox_index = self.mailbox_index.clone();
 
-        let (tx, rx) = std::sync::mpsc::channel();
+        let (mut tx, mut rx) = mpsc::channel(16);
         let watcher = RecommendedWatcher::new(
-            tx,
+            move |res| {
+                futures::executor::block_on(async {
+                    _ = tx.send(res).await;
+                })
+            },
             notify::Config::default().with_poll_interval(std::time::Duration::from_secs(2)),
         )
         .and_then(|mut watcher| {
@@ -728,32 +862,47 @@ impl MailBackend for NotmuchDb {
         Ok(Box::pin(try_fn_stream(|emitter| async move {
             // Move watcher to prevent it being Dropped.
             let _watcher = watcher;
-            let rx = rx;
+            // Set to non-zero value whenever a filesystem event is received, and poll more
+            // frequently as long as it is non-zero. This allows us to be more sensitive
+            // about updates whenever notmuch-new is more likely to have been
+            // called.
+            let mut fs_event_counter: u32 = 10;
             loop {
-                let _ = rx.recv().map_err(|err| err.to_string())?;
-                {
-                    let database = Self::new_connection(
-                        path.as_path(),
-                        revision_uuid.clone(),
-                        lib.clone(),
-                        false,
-                    )?;
-                    let new_revision_uuid = database.get_revision_uuid();
-                    if new_revision_uuid > *database.revision_uuid.read().unwrap() {
-                        if let Some(evn) = database.refresh(
-                            mailboxes.clone(),
-                            index.clone(),
-                            mailbox_index.clone(),
-                            tag_index.clone(),
-                            account_hash,
-                            new_revision_uuid,
-                        )? {
-                            emitter.emit(evn).await;
-                        }
-                        *revision_uuid.write().unwrap() = new_revision_uuid;
+                let sleep_fut = crate::utils::futures::sleep(if fs_event_counter > 0 {
+                    std::time::Duration::from_secs(2)
+                } else {
+                    std::time::Duration::from_secs(30)
+                });
+                //sleep_fut.await;
+                match futures::future::select(rx.next(), std::pin::pin!(sleep_fut)).await {
+                    futures::future::Either::Left((None, _)) => {
+                        break;
                     }
+                    futures::future::Either::Left((Some(ev), _)) => {
+                        fs_event_counter = 10;
+                        ev?;
+                    }
+                    futures::future::Either::Right((_, _)) => {}
+                }
+
+                let events = {
+                    let new_connection = DbConnection::new(path.as_path(), lib.clone(), false)?;
+                    let mut snapshot_lck = snapshot.write().unwrap();
+                    let events = new_connection.refresh(
+                        mailboxes.clone(),
+                        &mut snapshot_lck,
+                        account_hash,
+                    )?;
+                    if events.is_some() {
+                        snapshot_lck.connection = new_connection;
+                    }
+                    events
+                };
+                if let Some(evn) = events {
+                    emitter.emit(evn).await;
                 }
             }
+            Ok(())
         })))
     }
 
@@ -770,9 +919,8 @@ impl MailBackend for NotmuchDb {
 
     fn envelope_bytes_by_hash(&self, hash: EnvelopeHash) -> ResultFuture<Vec<u8>> {
         let op = NotmuchOp {
-            database: Arc::new(Self::new_connection(
+            database: Arc::new(DbConnection::new(
                 self.path.as_path(),
-                self.revision_uuid.clone(),
                 self.lib.clone(),
                 true,
             )?),
@@ -819,12 +967,7 @@ impl MailBackend for NotmuchDb {
         mailbox_hash: MailboxHash,
         flags: SmallVec<[FlagOp; 8]>,
     ) -> ResultFuture<()> {
-        let database = Self::new_connection(
-            self.path.as_path(),
-            self.revision_uuid.clone(),
-            self.lib.clone(),
-            true,
-        )?;
+        let database = DbConnection::new(self.path.as_path(), self.lib.clone(), true)?;
         let tag_index = self.collection.clone().tag_index;
         let mailboxes = self.mailboxes.clone();
         let mailbox_index = self.mailbox_index.clone();
@@ -954,12 +1097,7 @@ impl MailBackend for NotmuchDb {
         melib_query: crate::search::Query,
         mailbox_hash: Option<MailboxHash>,
     ) -> ResultFuture<Vec<EnvelopeHash>> {
-        let database = Self::new_connection(
-            self.path.as_path(),
-            self.revision_uuid.clone(),
-            self.lib.clone(),
-            false,
-        )?;
+        let database = DbConnection::new(self.path.as_path(), self.lib.clone(), false)?;
         let mailboxes = self.mailboxes.clone();
         Ok(Box::pin(async move {
             let mut query_s = if let Some(mailbox_hash) = mailbox_hash {
