@@ -34,7 +34,6 @@ use crate::{
     thread::{ThreadHash, ThreadNode, ThreadNodeHash},
 };
 
-#[derive(Clone)]
 pub struct Message<'m> {
     pub lib: Arc<NotmuchLibrary>,
     pub message: NonNull<ffi::notmuch_message_t>,
