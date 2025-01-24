@@ -2091,3 +2091,43 @@ pub type notmuch_indexopts_destroy = unsafe extern "C" fn(options: *mut notmuch_
 /// ```
 pub type notmuch_built_with =
     unsafe extern "C" fn(name: *const ::std::os::raw::c_char) -> notmuch_bool_t;
+
+#[repr(u32)]
+/// Configuration keys known to libnotmuch
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum notmuch_config_key_t {
+    NOTMUCH_CONFIG_DATABASE_PATH = 0,
+    NOTMUCH_CONFIG_MAIL_ROOT = 1,
+    NOTMUCH_CONFIG_HOOK_DIR = 2,
+    NOTMUCH_CONFIG_BACKUP_DIR = 3,
+    NOTMUCH_CONFIG_EXCLUDE_TAGS = 4,
+    NOTMUCH_CONFIG_NEW_TAGS = 5,
+    NOTMUCH_CONFIG_NEW_IGNORE = 6,
+    NOTMUCH_CONFIG_SYNC_MAILDIR_FLAGS = 7,
+    NOTMUCH_CONFIG_PRIMARY_EMAIL = 8,
+    NOTMUCH_CONFIG_OTHER_EMAIL = 9,
+    NOTMUCH_CONFIG_USER_NAME = 10,
+    NOTMUCH_CONFIG_AUTOCOMMIT = 11,
+    NOTMUCH_CONFIG_EXTRA_HEADERS = 12,
+    NOTMUCH_CONFIG_INDEX_AS_TEXT = 13,
+}
+
+/// Get a configuration value from an open database.
+///
+/// This value reflects all configuration information given at the time
+/// the database was opened.
+///
+/// ```text
+/// @param[in] notmuch database
+/// @param[in] key configuration key
+///
+/// @since libnotmuch 5.4 (notmuch 0.32)
+///
+/// @retval NULL if 'key' unknown or if no value is known for
+/// 'key'.  Otherwise returns a string owned by notmuch which should
+/// not be modified nor freed by the caller.
+/// ```
+pub type notmuch_config_get = unsafe extern "C" fn(
+    notmuch: *mut notmuch_database_t,
+    key: notmuch_config_key_t,
+) -> *const ::std::os::raw::c_char;
