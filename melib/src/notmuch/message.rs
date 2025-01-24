@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{cell::Cell, marker::PhantomData, ptr::NonNull};
+use std::{borrow::Cow, cell::Cell, marker::PhantomData, ptr::NonNull};
 
 use super::*;
 use crate::{
@@ -102,6 +102,14 @@ impl<'m> Message<'m> {
         let msg_id =
             unsafe { call!(self.lib, notmuch_message_get_message_id)(self.message.as_ptr()) };
         unsafe { CStr::from_ptr(msg_id) }
+    }
+
+    #[inline]
+    /// Return the `Message-ID` associated with this message as a string slice.
+    ///
+    /// See also [`Message::msg_id_cstr`] and [`Message::msg_id_str`].
+    pub fn msg_id_str(&self) -> Cow<'_, str> {
+        String::from_utf8_lossy(self.msg_id())
     }
 
     pub fn date(&self) -> crate::UnixTimestamp {
