@@ -225,6 +225,12 @@ impl std::error::Error for NotmuchError {
     }
 }
 
+impl From<NotmuchError> for Error {
+    fn from(err: NotmuchError) -> Self {
+        Self::new(err.0)
+    }
+}
+
 impl Drop for DbConnection {
     fn drop(&mut self) {
         let mut inner = self.inner.lock().unwrap();
