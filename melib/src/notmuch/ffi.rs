@@ -2131,3 +2131,18 @@ pub type notmuch_config_get = unsafe extern "C" fn(
     notmuch: *mut notmuch_database_t,
     key: notmuch_config_key_t,
 ) -> *const ::std::os::raw::c_char;
+
+/// Reopen an open notmuch database.
+///
+/// ```text
+/// @param [in] db    open notmuch database
+/// @param [in] mode    mode (read only or read-write) for reopened database.
+///
+/// @retval #NOTMUCH_STATUS_SUCCESS
+/// @retval #NOTMUCH_STATUS_ILLEGAL_ARGUMENT    The passed database was not open.
+/// @retval #NOTMUCH_STATUS_XAPIAN_EXCEPTION    A Xapian exception occured
+/// ```
+pub type notmuch_database_reopen = unsafe extern "C" fn(
+    db: *mut notmuch_database_t,
+    mode: notmuch_database_mode_t,
+) -> notmuch_status_t;
