@@ -67,6 +67,26 @@ impl<'m> Message<'m> {
         })
     }
 
+    #[doc(alias = "find_message_by_filename")]
+    pub fn find_message_by_path(db: &'m DbConnection, path: &CStr) -> Result<Option<Self>> {
+        let mut message: *mut ffi::notmuch_message_t = std::ptr::null_mut();
+        let lib = db.lib.clone();
+        unsafe {
+            call!(lib, ffi::notmuch_database_find_message_by_filename)(
+                db.inner.lock().unwrap().as_mut(),
+                path.as_ptr(),
+                std::ptr::addr_of_mut!(message),
+            )
+        };
+        Ok(NonNull::new(message).map(|message| Self {
+            lib,
+            message,
+            is_from_thread: false,
+            freezes: 0.into(),
+            _ph: PhantomData,
+        }))
+    }
+
     pub fn env_hash(&self) -> EnvelopeHash {
         let msg_id =
             unsafe { call!(self.lib, notmuch_message_get_message_id)(self.message.as_ptr()) };
