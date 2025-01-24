@@ -22,8 +22,8 @@ all: cargo-msrv rustfmt clippy cargo-derivefmt-melib cargo-derivefmt-meli cargo-
 .PHONY: cargo-msrv
 cargo-msrv:
 	@printf "cargo-msrv\n"
-	cargo msrv --output-format json --log-level trace --log-target stdout --path meli verify -- cargo check --all-targets
-	cargo msrv --output-format json --log-level trace --log-target stdout --path melib verify -- cargo check --all-targets
+	cargo msrv --output-format json --log-level trace --log-target stdout --path meli verify -- cargo check --all-targets --all-features
+	cargo msrv --output-format json --log-level trace --log-target stdout --path melib verify -- cargo check --all-targets --all-features
 
 .PHONY: rustfmt
 rustfmt:
