@@ -20,6 +20,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
+#[cfg(feature = "maildir")]
 #[test]
 fn test_maildir_config() {
     use melib::maildir::Configuration;
