@@ -366,7 +366,8 @@ impl MailBackend for MaildirType {
     ) -> ResultFuture<()> {
         let path = self.mailboxes[&mailbox_hash].fs_path.clone();
         Ok(Box::pin(async move {
-            Self::save_to_mailbox(path, bytes, flags)
+            _ = Self::save_to_mailbox(path, bytes, flags)?;
+            Ok(())
         }))
     }
 
@@ -825,7 +826,11 @@ impl MaildirType {
         }))
     }
 
-    pub fn save_to_mailbox(mut path: PathBuf, bytes: Vec<u8>, flags: Option<Flag>) -> Result<()> {
+    pub fn save_to_mailbox(
+        mut path: PathBuf,
+        bytes: Vec<u8>,
+        flags: Option<Flag>,
+    ) -> Result<PathBuf> {
         path.validate_fs_subdirs()?;
         path.push("cur");
         {
@@ -893,7 +898,7 @@ impl MaildirType {
             .write_all(&bytes)
             .chain_err_summary(|| format!("Could not write bytes to new file {}", path.display()))
             .chain_err_related_path(&path)?;
-        Ok(())
+        Ok(path)
     }
 
     pub fn validate_config(s: &mut AccountSettings) -> Result<()> {
