@@ -498,30 +498,39 @@ impl MaildirFilePathExt for Path {
 pub trait MaildirMailboxPathExt {
     /// Calculate the mailbox hash this path would have.
     ///
+    /// - If the path does not exist in the filesystem, `None` is returned.
     /// - If it's a file, the directory the file is in is used.
-    /// - If it's a directory:
     /// - If it's a directory and it's ending in `{cur, new, tmp}`, they are
     ///   popped first.
-    fn to_mailbox_hash(&self) -> MailboxHash;
+    fn to_mailbox_hash(&self) -> Option<MailboxHash>;
     /// Validate that `self` refers to an existing directory and `{cur, new,
     /// tmp}` subdirectories exist.
     fn validate_fs_subdirs(&self) -> Result<()>;
 }
 
 impl MaildirMailboxPathExt for Path {
-    fn to_mailbox_hash(&self) -> MailboxHash {
-        let mut path = self.to_path_buf();
-        if path.is_file() {
-            path.pop();
+    fn to_mailbox_hash(&self) -> Option<MailboxHash> {
+        let is_file = self.is_file();
+        let is_dir = self.is_dir();
+        if !matches!(self.try_exists(), Ok(true)) {
+            return None;
         }
-        if path.is_dir() && (path.ends_with("cur") || path.ends_with("tmp") | path.ends_with("new"))
-        {
+        let mut path = self.to_path_buf();
+        if is_file {
+            path.pop();
+            if path.ends_with("cur") || path.ends_with("tmp") | path.ends_with("new") {
+                path.pop();
+            } else {
+                return None;
+            }
+        }
+        if is_dir && (path.ends_with("cur") || path.ends_with("tmp") | path.ends_with("new")) {
             path.pop();
         }
 
         let mut hasher = DefaultHasher::new();
         path.hash(&mut hasher);
-        MailboxHash(hasher.finish())
+        Some(MailboxHash(hasher.finish()))
     }
 
     fn validate_fs_subdirs(&self) -> Result<()> {
@@ -596,7 +605,8 @@ impl From<PathBuf> for MaildirPath {
 #[derive(Debug, Default)]
 pub struct HashIndex {
     pub index: HashMap<EnvelopeHash, MaildirPath>,
-    pub _hash: MailboxHash,
+    pub reverse_index: HashMap<PathBuf, EnvelopeHash>,
+    pub mailbox_hash: MailboxHash,
 }
 
 impl Deref for HashIndex {
@@ -610,6 +620,20 @@ impl Deref for HashIndex {
 impl DerefMut for HashIndex {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.index
+    }
+}
+
+impl HashIndex {
+    pub fn path_to_hash(&self, path: &Path) -> Option<EnvelopeHash> {
+        self.reverse_index.get(path).cloned()
+    }
+
+    pub fn remove_env_hash(&mut self, env_hash: &EnvelopeHash) -> bool {
+        let Some(path) = self.index.remove(env_hash) else {
+            return false;
+        };
+        self.reverse_index.remove(&path.buf);
+        true
     }
 }
 

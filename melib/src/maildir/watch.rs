@@ -35,7 +35,9 @@ use crate::{
     backends::{prelude::*, RefreshEventKind::*},
     error::Result,
     maildir::{
-        utilities::{move_to_cur, HashIndexes, MaildirFilePathExt, MaildirMailboxPathExt, PathMod},
+        utilities::{
+            move_to_cur, HashIndex, HashIndexes, MaildirFilePathExt, MaildirMailboxPathExt, PathMod,
+        },
         Configuration, MaildirType,
     },
 };
@@ -49,6 +51,32 @@ pub struct MaildirWatch {
     pub config: Arc<Configuration>,
     #[allow(clippy::type_complexity)]
     pub mailbox_counts: HashMap<MailboxHash, (Arc<Mutex<usize>>, Arc<Mutex<usize>>)>,
+}
+
+#[inline]
+fn path_to_mailbox_hash(
+    path: &Path,
+    hash_indexes: &HashMap<MailboxHash, HashIndex>,
+) -> Option<MailboxHash> {
+    path.to_mailbox_hash().or_else(|| {
+        hash_indexes.iter().find_map(|(k, v)| {
+            if v.path_to_hash(path).is_some() {
+                Some(*k)
+            } else {
+                None
+            }
+        })
+    })
+}
+
+#[inline]
+fn find_env_hash(
+    path: &Path,
+    hash_indexes: &HashMap<MailboxHash, HashIndex>,
+) -> Option<(MailboxHash, EnvelopeHash)> {
+    hash_indexes
+        .iter()
+        .find_map(|(k, v)| v.path_to_hash(path).map(|v| (*k, v)))
 }
 
 impl MaildirWatch {
@@ -111,7 +139,11 @@ impl MaildirWatch {
                                     pathbufs.push(pathbuf);
                                 }
                                 for pathbuf in pathbufs {
-                                    let mailbox_hash: MailboxHash = pathbuf.to_mailbox_hash();
+                                    let Some(mailbox_hash): Option<MailboxHash> =
+                                        pathbuf.to_mailbox_hash()
+                                    else {
+                                        continue;
+                                    };
                                     if let Ok(env) = add_path_to_index(
                                         &hash_indexes,
                                         mailbox_hash,
@@ -160,12 +192,16 @@ impl MaildirWatch {
                             ) => {
                                 log::trace!("Modify events: (path = {:?})", event.paths);
                                 for pathbuf in event.paths {
-                                    let mailbox_hash: MailboxHash = pathbuf.to_mailbox_hash();
                                     let mut hash_indexes_lock = hash_indexes.lock().unwrap();
-                                    let index_lock =
-                                        &mut hash_indexes_lock.entry(mailbox_hash).or_default();
+                                    let Some(mailbox_hash): Option<MailboxHash> =
+                                        path_to_mailbox_hash(&pathbuf, &hash_indexes_lock)
+                                    else {
+                                        continue;
+                                    };
                                     // Linear search in hash_index to find old hash
                                     let old_hash: EnvelopeHash = {
+                                        let index_lock =
+                                            hash_indexes_lock.entry(mailbox_hash).or_default();
                                         if let Some((k, v)) =
                                             index_lock.iter_mut().find(|(_, v)| *v.buf == pathbuf)
                                         {
@@ -191,33 +227,64 @@ impl MaildirWatch {
                                                     mailbox_hash,
                                                     kind: Create(Box::new(env)),
                                                 }));
-                                            } else {
+                                            } else if let Some((mailbox_hash, env_hash)) =
+                                                find_env_hash(
+                                                    &pathbuf,
+                                                    &hash_indexes.lock().unwrap(),
+                                                )
+                                            {
+                                                {
+                                                    let mut mi = mailbox_index.lock().unwrap();
+                                                    mi.remove(&env_hash);
+                                                }
+                                                {
+                                                    let mut hi = hash_indexes.lock().unwrap();
+                                                    hi.entry(mailbox_hash)
+                                                        .or_default()
+                                                        .remove_env_hash(&env_hash);
+                                                }
                                                 events.push(BackendEvent::Refresh(RefreshEvent {
                                                     account_hash,
                                                     mailbox_hash,
-                                                    kind: Remove(pathbuf.to_envelope_hash()),
+                                                    kind: Remove(env_hash),
                                                 }));
                                             }
                                             continue;
                                         }
                                     };
-                                    let new_hash: EnvelopeHash = pathbuf.to_envelope_hash();
-                                    let mut reader = io::BufReader::new(fs::File::open(&pathbuf)?);
-                                    buf.clear();
-                                    reader.read_to_end(&mut buf)?;
-                                    if index_lock.get_mut(&new_hash).is_none() {
-                                        if let Ok(mut env) = Envelope::from_bytes(
-                                            buf.as_slice(),
-                                            Some(pathbuf.flags()),
-                                        ) {
-                                            env.set_hash(new_hash);
-                                            index_lock.insert(new_hash, pathbuf.into());
-                                            events.push(BackendEvent::Refresh(RefreshEvent {
-                                                account_hash,
-                                                mailbox_hash,
-                                                kind: Update(old_hash, Box::new(env)),
-                                            }));
+                                    drop(hash_indexes_lock);
+                                    if let Ok(env) = add_path_to_index(
+                                        &hash_indexes,
+                                        mailbox_hash,
+                                        pathbuf.as_path(),
+                                        &mut buf,
+                                    ) {
+                                        {
+                                            let mut mi = mailbox_index.lock().unwrap();
+                                            mi.remove(&old_hash);
+                                            mi.insert(env.hash(), mailbox_hash);
                                         }
+                                        events.push(BackendEvent::Refresh(RefreshEvent {
+                                            account_hash,
+                                            mailbox_hash,
+                                            kind: Update(old_hash, Box::new(env)),
+                                        }));
+                                    } else {
+                                        {
+                                            let mut mi = mailbox_index.lock().unwrap();
+                                            mi.remove(&old_hash);
+                                        }
+                                        {
+                                            let mut hi = hash_indexes.lock().unwrap();
+                                            hi.entry(mailbox_hash)
+                                                .or_default()
+                                                .remove_env_hash(&old_hash);
+                                        }
+                                        events.push(BackendEvent::Refresh(RefreshEvent {
+                                            account_hash,
+                                            mailbox_hash,
+                                            kind: Remove(old_hash),
+                                        }));
                                     }
                                 }
                                 if !events.is_empty() {
@@ -227,8 +294,12 @@ impl MaildirWatch {
                             NotifyEvent::Remove(_) => {
                                 for pathbuf in event.paths {
                                     log::trace!("NotifyEvent::Remove(path = {:?}", pathbuf);
-                                    let mailbox_hash: MailboxHash = pathbuf.to_mailbox_hash();
                                     let mut hash_indexes_lock = hash_indexes.lock().unwrap();
+                                    let Some(mailbox_hash): Option<MailboxHash> =
+                                        path_to_mailbox_hash(&pathbuf, &hash_indexes_lock)
+                                    else {
+                                        continue;
+                                    };
                                     let index_lock =
                                         hash_indexes_lock.entry(mailbox_hash).or_default();
                                     let hash: EnvelopeHash = if let Some((k, _)) =
@@ -301,9 +372,18 @@ impl MaildirWatch {
                                     src,
                                     dest
                                 );
-                                let mailbox_hash: MailboxHash = src.to_mailbox_hash();
+                                let mut hash_indexes_lock = hash_indexes.lock().unwrap();
+                                let Some(mailbox_hash): Option<MailboxHash> =
+                                    path_to_mailbox_hash(src, &hash_indexes_lock)
+                                else {
+                                    continue;
+                                };
                                 let dest_mailbox = {
-                                    let dest_mailbox: MailboxHash = dest.to_mailbox_hash();
+                                    let Some(dest_mailbox): Option<MailboxHash> =
+                                        path_to_mailbox_hash(dest, &hash_indexes_lock)
+                                    else {
+                                        continue;
+                                    };
                                     if dest_mailbox == mailbox_hash {
                                         None
                                     } else {
@@ -313,7 +393,6 @@ impl MaildirWatch {
                                 let old_hash: EnvelopeHash = src.to_envelope_hash();
                                 let new_hash: EnvelopeHash = dest.to_envelope_hash();
 
-                                let mut hash_indexes_lock = hash_indexes.lock().unwrap();
                                 let index_lock = hash_indexes_lock.entry(mailbox_hash).or_default();
                                 let old_flags = src.flags();
                                 let new_flags = dest.flags();
@@ -567,17 +646,17 @@ fn add_path_to_index(
         path.file_name()
     );
     let env_hash = path.to_envelope_hash();
-    hash_index
-        .lock()
-        .unwrap()
-        .entry(mailbox_hash)
-        .or_default()
-        .insert(env_hash, path.to_path_buf().into());
     let mut reader = io::BufReader::new(fs::File::open(path)?);
     buf.clear();
     reader.read_to_end(buf)?;
     let mut env = Envelope::from_bytes(buf.as_slice(), Some(path.flags()))?;
     env.set_hash(env_hash);
+    {
+        let mut lck = hash_index.lock().unwrap();
+        let hi = lck.entry(mailbox_hash).or_default();
+        hi.index.insert(env_hash, path.to_path_buf().into());
+        hi.reverse_index.insert(path.to_path_buf(), env_hash);
+    }
     log::trace!("add_path_to_index gen {}\t{:?}", env_hash, path.file_name());
     Ok(env)
 }

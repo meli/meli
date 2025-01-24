@@ -140,7 +140,7 @@ impl MailBackend for MaildirType {
         let unseen = mailbox.unseen.clone();
         let total = mailbox.total.clone();
         let mut path: PathBuf = mailbox.fs_path().into();
-        let map = self.hash_indexes.clone();
+        let hash_indexes = self.hash_indexes.clone();
         let mailbox_index = self.mailbox_index.clone();
         let chunk_size = 2048;
         path.push("new");
@@ -159,7 +159,7 @@ impl MailBackend for MaildirType {
             mailbox_hash: MailboxHash,
             unseen: Arc<Mutex<usize>>,
             total: Arc<Mutex<usize>>,
-            map: HashIndexes,
+            hash_indexes: HashIndexes,
             mailbox_index: Arc<Mutex<HashMap<EnvelopeHash, MailboxHash>>>,
         ) -> Result<Option<Vec<Envelope>>> {
             let mut local_r: Vec<Envelope> = Vec::with_capacity(chunk.len());
@@ -168,11 +168,10 @@ impl MailBackend for MaildirType {
             for file in chunk {
                 let env_hash = file.to_envelope_hash();
                 {
-                    map.lock()
-                        .unwrap()
-                        .entry(mailbox_hash)
-                        .or_default()
-                        .insert(env_hash, PathBuf::from(&file).into());
+                    let mut hash_indexes = hash_indexes.lock().unwrap();
+                    let hi = hash_indexes.entry(mailbox_hash).or_default();
+                    hi.index.insert(env_hash, file.to_path_buf().into());
+                    hi.reverse_index.insert(file.to_path_buf(), env_hash);
                 }
                 let mut reader = io::BufReader::new(fs::File::open(&file)?);
                 buf.clear();
@@ -212,7 +211,7 @@ impl MailBackend for MaildirType {
                     mailbox_hash,
                     unseen.clone(),
                     total.clone(),
-                    map.clone(),
+                    hash_indexes.clone(),
                     mailbox_index.clone(),
                 )
                 .await
@@ -233,7 +232,7 @@ impl MailBackend for MaildirType {
 
         let mailbox: &MaildirMailbox = &self.mailboxes[&mailbox_hash];
         let path: PathBuf = mailbox.fs_path().into();
-        let map = self.hash_indexes.clone();
+        let hash_indexes = self.hash_indexes.clone();
         let mailbox_index = self.mailbox_index.clone();
         let config = self.config.clone();
 
@@ -242,28 +241,28 @@ impl MailBackend for MaildirType {
                 log::trace!("refreshing {:?}", mailbox_hash);
                 let mut buf = Vec::with_capacity(4096);
                 let files = Self::list_mail_in_maildir_fs(&config, path.clone(), false)?;
-                let mut current_hashes = {
-                    let mut map = map.lock().unwrap();
+                let mut removed_hashes = {
+                    let mut map = hash_indexes.lock().unwrap();
                     let map = map.entry(mailbox_hash).or_default();
-                    map.keys().cloned().collect::<HashSet<EnvelopeHash>>()
+                    map.index.keys().cloned().collect::<HashSet<EnvelopeHash>>()
                 };
                 for file in files {
-                    let hash = file.to_envelope_hash();
+                    let env_hash = file.to_envelope_hash();
                     {
-                        let mut map = map.lock().unwrap();
+                        let mut map = hash_indexes.lock().unwrap();
                         let map = map.entry(mailbox_hash).or_default();
-                        if map.contains_key(&hash) {
-                            map.remove(&hash);
-                            current_hashes.remove(&hash);
+                        if map.index.contains_key(&env_hash) {
+                            removed_hashes.remove(&env_hash);
                             continue;
                         }
-                        (*map).insert(hash, PathBuf::from(&file).into());
+                        map.index.insert(env_hash, file.to_path_buf().into());
+                        map.reverse_index.insert(file.to_path_buf(), env_hash);
                     }
                     let mut reader = io::BufReader::new(fs::File::open(&file)?);
                     buf.clear();
                     reader.read_to_end(&mut buf)?;
                     if let Ok(mut env) = Envelope::from_bytes(buf.as_slice(), Some(file.flags())) {
-                        env.set_hash(hash);
+                        env.set_hash(env_hash);
                         mailbox_index
                             .lock()
                             .unwrap()
@@ -279,13 +278,13 @@ impl MailBackend for MaildirType {
                     } else {
                         log::trace!(
                             "DEBUG: hash {}, path: {} couldn't be parsed",
-                            hash,
+                            env_hash,
                             file.as_path().display()
                         );
                         continue;
                     }
                 }
-                for ev in current_hashes.into_iter().map(|h| {
+                for ev in removed_hashes.into_iter().map(|h| {
                     BackendEvent::Refresh(RefreshEvent {
                         account_hash,
                         mailbox_hash,
@@ -807,8 +806,9 @@ impl MaildirType {
             hash_indexes.insert(
                 fh,
                 HashIndex {
-                    index: HashMap::with_capacity_and_hasher(0, Default::default()),
-                    _hash: fh,
+                    index: HashMap::new(),
+                    reverse_index: HashMap::new(),
+                    mailbox_hash: fh,
                 },
             );
         }
@@ -1002,7 +1002,13 @@ impl MaildirType {
                 .map(|item| *item.0)
         });
 
-        let mailbox_hash: MailboxHash = fs_path.to_mailbox_hash();
+        let Some(mailbox_hash): Option<MailboxHash> = fs_path.to_mailbox_hash() else {
+            return Err(Error::new(format!(
+                "Path (`{}`) does not exist or is not a valid mailbox.",
+                fs_path.display()
+            ))
+            .set_related_path(Some(fs_path)));
+        };
         if let Some(parent) = parent {
             self.mailboxes
                 .entry(parent)
