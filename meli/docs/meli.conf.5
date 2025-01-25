@@ -479,6 +479,13 @@ Use
 extension to retrieve server metadata, viewable at the account status page.
 Enabling this does not send any information to the server.
 .Pq Em false \" default value
+.It Ic use_connection_pool Ar boolean
+.Pq Em optional
+Use a connection pool of more than one server connections, to prevent time-outs when performing multiple operations.
+.Em IMAP
+connections are stateful and can only operate on one mailbox at a time, thus using a connection requires locking.
+Having a pool of alternative connections created on demand in case they can be made available faster than the main connection can be unlocked might alleviate lock contention.
+.Pq Em true \" default value
 .It Ic timeout Ar integer
 .Pq Em optional
 Timeout to use for server connections in seconds.

@@ -211,6 +211,7 @@ pub struct ConnectionMutex {
     pub pool: [FutureMutex<Option<ImapConnection>>; POOL_LIMIT],
     pub server_conf: ImapServerConf,
     pub uid_store: Arc<UIDStore>,
+    pub use_connection_pool: bool,
 }
 
 #[derive(Debug)]
@@ -245,6 +246,7 @@ impl ConnectionMutex {
         inner: ImapConnection,
         server_conf: ImapServerConf,
         uid_store: Arc<UIDStore>,
+        use_connection_pool: bool,
     ) -> Self {
         let inner = inner.into();
 
@@ -259,12 +261,18 @@ impl ConnectionMutex {
             ],
             server_conf,
             uid_store,
+            use_connection_pool,
         }
     }
 
     #[inline]
     pub async fn lock(&self) -> Result<ConnectionMutexGuard<'_>> {
         let timeout_dur = self.uid_store.timeout;
+        if !self.use_connection_pool {
+            return Ok(ConnectionMutexGuard::Main(
+                timeout(timeout_dur, self.inner.lock()).await?,
+            ));
+        }
         // Fast check if main connection is available.
         if let Some(guard) = self.inner.try_lock() {
             return Ok(ConnectionMutexGuard::Main(guard));

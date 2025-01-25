@@ -1320,6 +1320,7 @@ impl ImapType {
         } else {
             Some(Duration::from_secs(timeout))
         };
+        let use_connection_pool = get_conf_val!(s["use_connection_pool"], true)?;
         let server_conf = ImapServerConf {
             server_hostname: server_hostname.to_string(),
             server_username: server_username.to_string(),
@@ -1369,6 +1370,7 @@ impl ImapType {
                 connection,
                 server_conf.clone(),
                 uid_store.clone(),
+                use_connection_pool,
             )),
             server_conf,
             uid_store,
@@ -1626,6 +1628,7 @@ impl ImapType {
         get_conf_val!(s["use_auth_anonymous"], false)?;
         get_conf_val!(s["use_id"], false)?;
         let _timeout = get_conf_val!(s["timeout"], 16_u64)?;
+        get_conf_val!(s["use_connection_pool"], true)?;
         let extra_keys = s
             .extra
             .keys()
