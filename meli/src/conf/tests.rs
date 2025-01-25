@@ -279,37 +279,32 @@ color_aliases= { "Jebediah" = "$JebediahJr", "JebediahJr" = "mail.listing.tag_de
 #[test]
 fn test_conf_theme_key_values() {
     use std::{collections::VecDeque, fs::File, io::Read, path::PathBuf};
-    let mut rust_files: VecDeque<PathBuf> = VecDeque::new();
-    let mut dirs_queue: VecDeque<PathBuf> = VecDeque::new();
-    dirs_queue.push_back("src/".into());
-    let re_whitespace = regex::Regex::new(r"\s*").unwrap();
-    let re_conf = regex::Regex::new(r#"value\([&]?context,"([^"]*)""#).unwrap();
+    let mut queue: VecDeque<PathBuf> = VecDeque::new();
+    queue.push_back("src/".into());
+    let re_conf = regex::Regex::new(r#"value\((?:\s|\n)*[&]?context,[^"]*"([^"]*)""#).unwrap();
 
-    while let Some(dir) = dirs_queue.pop_front() {
+    let mut content = String::new();
+    while let Some(dir) = queue.pop_front() {
         for entry in std::fs::read_dir(&dir).unwrap() {
             let entry = entry.unwrap();
             let path = entry.path();
             if path.is_dir() {
-                dirs_queue.push_back(path);
+                queue.push_back(path);
             } else if path.extension().map(|os_s| os_s == "rs").unwrap_or(false) {
-                rust_files.push_back(path);
-            }
-        }
-    }
-    for file_path in rust_files {
-        let mut file = File::open(&file_path).unwrap();
-        let mut content = String::new();
-        file.read_to_string(&mut content).unwrap();
-        let content = re_whitespace.replace_all(&content, "");
-        for mat in re_conf.captures_iter(&content) {
-            let theme_key = &mat[1];
-            if !DEFAULT_KEYS.contains(&theme_key) {
-                panic!(
-                    "Source file {} contains a hardcoded theme key str, {:?}, that is not \
-                     included in the DEFAULT_KEYS table.",
-                    file_path.display(),
-                    theme_key
-                );
+                let mut file = File::open(&path).unwrap();
+                content.clear();
+                file.read_to_string(&mut content).unwrap();
+                for mat in re_conf.captures_iter(&content) {
+                    let theme_key = &mat[1];
+                    if !DEFAULT_KEYS.contains(&theme_key) {
+                        panic!(
+                            "Source file {} contains a hardcoded theme key str, {:?}, that is not \
+                             included in the DEFAULT_KEYS table.",
+                            path.display(),
+                            theme_key
+                        );
+                    }
+                }
             }
         }
     }
