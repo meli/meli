@@ -528,7 +528,7 @@ impl ImapStream {
         };
         if let Err(err) = stream
             .get_ref()
-            .set_keepalive(Some(Duration::new(60 * 9, 0)))
+            .set_keepalive(Some(Duration::new(60 * 35, 0)))
         {
             log::warn!("Could not set TCP keepalive in IMAP connection: {}", err);
         }
