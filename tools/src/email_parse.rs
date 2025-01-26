@@ -8,7 +8,6 @@ use melib::{Result, *};
 /// ```sh
 /// ./emailparse /path/to/email [/path/to/email2 /path/to/email3 ..]"
 /// ```
-
 fn main() -> Result<()> {
     if std::env::args().len() == 1 {
         eprintln!("Usage: ./emailparse /path/to/email [/path/to/email2 /path/to/email3 ..]");

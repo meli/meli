@@ -1,7 +1,10 @@
 use std::{
     fs::File,
     io::prelude::*,
-    os::raw::c_int,
+    os::{
+        fd::{AsFd, AsRawFd},
+        raw::c_int,
+    },
     sync::{Arc, Mutex},
 };
 
@@ -20,7 +23,7 @@ fn notify(
         nix::unistd::pipe().map_err(|err| std::io::Error::from_raw_os_error(err as i32))?;
     let alarm_handler = move |info: &nix::libc::siginfo_t| {
         let value = unsafe { info.si_value().sival_ptr as u8 };
-        let _ = nix::unistd::write(alarm_pipe_w, &[value]);
+        let _ = nix::unistd::write(alarm_pipe_w.as_fd(), &[value]);
     };
     unsafe {
         signal_hook_registry::register_sigaction(signal_hook::consts::SIGALRM, alarm_handler)?;
@@ -28,7 +31,7 @@ fn notify(
     let (s, r) = crossbeam::channel::bounded(100);
     let mut signals = signal_hook::iterator::Signals::new(signals)?;
     let _ = nix::fcntl::fcntl(
-        alarm_pipe_r,
+        alarm_pipe_r.as_raw_fd(),
         nix::fcntl::FcntlArg::F_SETFL(nix::fcntl::OFlag::O_NONBLOCK),
     );
     std::thread::spawn(move || {
@@ -178,14 +181,17 @@ impl Component for EmbeddedContainer {
                         .push_back(UIEvent::ChangeMode(UIMode::Embedded));
                     context
                         .replies
-                        .push_back(UIEvent::Fork(ForkedProcess::Embedded(
-                            self.embedded_pty
+                        .push_back(UIEvent::Fork(ForkedProcess::Embedded {
+                            id: "embedded-process".into(),
+                            command: None,
+                            pid: self
+                                .embedded_pty
                                 .as_ref()
                                 .unwrap()
                                 .lock()
                                 .unwrap()
                                 .child_pid,
-                        )));
+                        }));
                 }
                 Err(err) => {
                     context.replies.push_back(UIEvent::Notification {
@@ -504,8 +510,8 @@ fn main() -> std::io::Result<()> {
                                 },
                             }
                         },
-                        ThreadEvent::RefreshMailbox(event) => {
-                            state.refresh_event(*event);
+                        ThreadEvent::MailboxChanges { account_hash, mailbox_hash, events} => {
+                            state.refresh_event(account_hash, mailbox_hash, events);
                             state.redraw();
                         },
                         ThreadEvent::UIEvent(UIEvent::ChangeMode(f)) => {
@@ -543,7 +549,7 @@ fn main() -> std::io::Result<()> {
                             }
                         },
                         signal_hook::consts::SIGCHLD => {
-                            state.rcv_event(UIEvent::EmbeddedInput((Key::Null, vec![0])));
+                            state.try_wait_on_children();
                             state.redraw();
 
                         }
@@ -556,7 +562,7 @@ fn main() -> std::io::Result<()> {
         } // end of 'inner
 
         'reap: loop {
-            match state.try_wait_on_child() {
+            match state.try_wait_on_main_child() {
                 Some(true) => {
                     state.restore_input();
                     state.switch_to_alternate_screen();
