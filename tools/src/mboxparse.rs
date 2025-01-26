@@ -20,7 +20,7 @@
  */
 
 extern crate melib;
-use melib::Result;
+use melib::{mbox, parser::BytesExt, text::Truncate, Result};
 
 /// Parses e-mail from files and prints the debug information of the parsed
 /// `Envelope`
@@ -29,7 +29,6 @@ use melib::Result;
 /// ```sh
 /// ./mboxparse /path/to/mbox"
 /// ```
-
 fn main() -> Result<()> {
     if std::env::args().len() == 1 {
         eprintln!("Usage: ./mboxparse /path/to/mbox");
@@ -41,24 +40,34 @@ fn main() -> Result<()> {
         let filename = std::path::PathBuf::from(&i);
 
         if filename.exists() && filename.is_file() {
-            let buffer = std::fs::read_to_string(&filename)
-                .unwrap_or_else(|_| panic!("Something went wrong reading the file {}", i));
-            let res = melib::mbox::mbox_parse(Default::default(), buffer.as_bytes(), 0, None);
+            let buffer = std::fs::read(&filename).unwrap_or_else(|err| {
+                panic!("Something went wrong reading the file {}: {}", i, err)
+            });
+            let is_crlf: bool = buffer.find(b"\r\n").is_some();
+            let res = mbox::mbox_parse(
+                Default::default(),
+                buffer.as_slice(),
+                0,
+                mbox::MboxFormat::MboxCl,
+                is_crlf,
+            );
             match res {
                 Ok((_, v)) => {
                     println!("{} envelopes parsed", v.len());
                 }
-                Err(melib::nom::Err::Error(err)) => {
+                Err((error_location, err)) => {
+                    let error_offset = buffer.len() - error_location.len();
+                    let line_number = 1 + String::from_utf8_lossy(&buffer[..error_offset])
+                        .lines()
+                        .count();
                     println!(
-                        "Error in parsing {:?}",
-                        unsafe { std::str::from_utf8_unchecked(err.input) }
-                            .chars()
-                            .take(150)
-                            .collect::<String>()
+                        "Error in parsing file:\nError: {}\nLocation: line {}\n{:?}",
+                        err,
+                        line_number,
+                        String::from_utf8_lossy(error_location)
+                            .as_ref()
+                            .trim_at_boundary(150)
                     );
-                }
-                Err(err) => {
-                    println!("Error in parsing {:?}", err);
                 }
             }
         } else {
