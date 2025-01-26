@@ -49,7 +49,7 @@ fn test_mbox_parse() {
             input: sha1dc_diet_thread.as_bytes(),
             offset: 0,
             file_offset: 0,
-            format: Some(MboxFormat::MboxCl2),
+            format: MboxFormat::MboxRd,
             is_crlf: false,
         };
         let envelopes: Vec<Envelope> = message_iter.collect::<Result<Vec<_>>>().unwrap();
@@ -60,7 +60,7 @@ fn test_mbox_parse() {
             input: sha1dc_diet_op.as_bytes(),
             offset: 0,
             file_offset: 0,
-            format: Some(MboxFormat::MboxCl2),
+            format: MboxFormat::MboxRd,
             is_crlf: false,
         }
         .collect::<Result<Vec<_>>>()
@@ -84,7 +84,7 @@ fn test_mbox_parse() {
             input: git_am_thread.as_bytes(),
             offset: 0,
             file_offset: 0,
-            format: Some(MboxFormat::MboxCl2),
+            format: MboxFormat::MboxRd,
             is_crlf: false,
         };
         let envelopes: Vec<Envelope> = message_iter.collect::<Result<Vec<_>>>().unwrap();
@@ -95,7 +95,7 @@ fn test_mbox_parse() {
             input: git_am_op.as_bytes(),
             offset: 0,
             file_offset: 0,
-            format: Some(MboxFormat::MboxCl2),
+            format: MboxFormat::MboxRd,
             is_crlf: false,
         }
         .collect::<Result<Vec<_>>>()

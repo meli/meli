@@ -92,7 +92,7 @@
 //!     input: &file_contents.as_slice(),
 //!     offset: 0,
 //!     file_offset: 0,
-//!     format: Some(MboxFormat::MboxCl2),
+//!     format: MboxFormat::MboxCl2,
 //!     is_crlf: false,
 //! };
 //! let envelopes: Result<Vec<Envelope>> = message_iter.collect();
@@ -140,14 +140,6 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-use nom::{
-    self,
-    bytes::complete::tag,
-    character::complete::digit1,
-    combinator::map_res,
-    error::{Error as NomError, ErrorKind as NomErrorKind},
-    IResult,
-};
 #[cfg(feature = "mbox-notify")]
 use notify::{event::EventKind as NotifyEvent, RecommendedWatcher, RecursiveMode, Watcher};
 
@@ -155,12 +147,17 @@ use crate::{
     backends::prelude::*,
     email::{parser::BytesExt, *},
     error::{Error, ErrorKind, Result, WrapResultIntoError},
+    text::Truncate,
     utils::{lock::*, shellexpand::ShellExpandTrait},
 };
 pub mod write;
 
 pub type Offset = usize;
 pub type Length = usize;
+
+/// Type alias for parsing result with next input and value on success and error
+/// with error position on failure.
+pub type ParsingResult<'a, T> = std::result::Result<(&'a [u8], T), (&'a [u8], Error)>;
 
 #[derive(Debug)]
 pub struct MboxMailbox {
@@ -177,6 +174,7 @@ pub struct MboxMailbox {
     pub total: Arc<Mutex<usize>>,
     pub unseen: Arc<Mutex<usize>>,
     pub index: Arc<Mutex<HashMap<EnvelopeHash, (Offset, Length)>>>,
+    pub format: MboxFormat,
 }
 
 impl BackendMailbox for MboxMailbox {
@@ -208,6 +206,7 @@ impl BackendMailbox for MboxMailbox {
             unseen: self.unseen.clone(),
             total: self.total.clone(),
             index: self.index.clone(),
+            format: self.format,
         })
     }
 
@@ -338,6 +337,22 @@ impl std::str::FromStr for MboxFormat {
     }
 }
 
+impl std::fmt::Display for MboxFormat {
+    /// Formats `self` to one of "mboxo", "mboxrd", "mboxcl", "mboxcl2".
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            fmt,
+            "{}",
+            match self {
+                Self::MboxO => "mboxo",
+                Self::MboxRd => "mboxrd",
+                Self::MboxCl => "mboxcl",
+                Self::MboxCl2 => "mboxcl2",
+            }
+        )
+    }
+}
+
 macro_rules! find_From__line {
     ($input:expr, $is_crlf:expr) => {{
         //debug!("find_From__line invocation");
@@ -383,8 +398,7 @@ macro_rules! find_From__line {
 }
 
 impl MboxFormat {
-    pub fn parse<'i>(&self, input: &'i [u8], is_crlf: bool) -> IResult<&'i [u8], Envelope> {
-        let orig_input = input;
+    pub fn parse<'i>(&self, input: &'i [u8], is_crlf: bool) -> ParsingResult<'i, Envelope> {
         let mut input = input;
         match self {
             Self::MboxO => {
@@ -440,10 +454,7 @@ impl MboxFormat {
                         }
                         Err(err) => {
                             log::debug!("Could not parse mail {:?}", err);
-                            Err(nom::Err::Error(NomError {
-                                input,
-                                code: NomErrorKind::Tag,
-                            }))
+                            Err((&input[start..], err))
                         }
                     }
                 } else {
@@ -492,10 +503,7 @@ impl MboxFormat {
                         }
                         Err(err) => {
                             log::debug!("Could not parse mail at {:?}", err);
-                            Err(nom::Err::Error(NomError {
-                                input,
-                                code: NomErrorKind::Tag,
-                            }))
+                            Err((&input[start..], err))
                         }
                     }
                 }
@@ -553,10 +561,7 @@ impl MboxFormat {
                         }
                         Err(err) => {
                             log::debug!("Could not parse mail {:?}", err);
-                            Err(nom::Err::Error(NomError {
-                                input,
-                                code: NomErrorKind::Tag,
-                            }))
+                            Err((&input[start..len], err))
                         }
                     }
                 } else {
@@ -605,10 +610,7 @@ impl MboxFormat {
                         }
                         Err(err) => {
                             log::debug!("Could not parse mail {:?}", err);
-                            Err(nom::Err::Error(NomError {
-                                input,
-                                code: NomErrorKind::Tag,
-                            }))
+                            Err((&input[start..], err))
                         }
                     }
                 }
@@ -627,74 +629,82 @@ impl MboxFormat {
                     input.find(b"\n\n")
                 }
                 .unwrap_or(input.len());
-                let content_length = if let Some(v) = input[..headers_end].find(b"Content-Length: ")
-                {
-                    v
-                } else {
-                    // Is not MboxCl{,2}
-                    return Self::MboxRd.parse(orig_input, is_crlf);
-                };
-                let (_input, _) = if let Ok(s) = tag::<_, &[u8], (&[u8], nom::error::ErrorKind)>(
-                    "Content-Length:",
-                )(&input[content_length..])
-                {
-                    s
-                } else {
-                    return Self::MboxRd.parse(orig_input, is_crlf);
-                };
-                let (_input, bytes) = if let Ok(s) =
-                    map_res::<&[u8], _, _, (&[u8], nom::error::ErrorKind), _, _, _>(
-                        digit1,
-                        |s: &[u8]| String::from_utf8_lossy(s).parse::<usize>(),
-                    )(_input.ltrim())
-                {
-                    s
-                } else {
-                    return Self::MboxRd.parse(orig_input, is_crlf);
-                };
 
-                match Envelope::from_bytes(&input[..headers_end + bytes], None) {
-                    Ok(mut env) => {
-                        let mut flags = Flag::empty();
-                        if env.other_headers().contains_key("Status") {
-                            if env.other_headers()["Status"].contains('F') {
-                                flags.set(Flag::FLAGGED, true);
-                            }
-                            if env.other_headers()["Status"].contains('A') {
-                                flags.set(Flag::REPLIED, true);
-                            }
-                            if env.other_headers()["Status"].contains('R') {
-                                flags.set(Flag::SEEN, true);
-                            }
-                            if env.other_headers()["Status"].contains('D') {
-                                flags.set(Flag::TRASHED, true);
-                            }
-                        }
-                        if env.other_headers().contains_key("X-Status") {
-                            if env.other_headers()["X-Status"].contains('F') {
-                                flags.set(Flag::FLAGGED, true);
-                            }
-                            if env.other_headers()["X-Status"].contains('A') {
-                                flags.set(Flag::REPLIED, true);
-                            }
-                            if env.other_headers()["X-Status"].contains('R') {
-                                flags.set(Flag::SEEN, true);
-                            }
-                            if env.other_headers()["X-Status"].contains('D') {
-                                flags.set(Flag::TRASHED, true);
-                            }
-                            if env.other_headers()["X-Status"].contains('T') {
-                                flags.set(Flag::DRAFT, true);
-                            }
-                        }
-                        env.set_flags(flags);
-                        input = input
-                            .get(headers_end + bytes + if is_crlf { 6 } else { 3 }..)
-                            .unwrap_or(&[]);
-                        Ok((input, env))
-                    }
-                    Err(_err) => Self::MboxRd.parse(orig_input, is_crlf),
+                fn find_content_length(input: &[u8]) -> Result<Option<usize>> {
+                    let content_length = if let Some(v) = input.find(b"Content-Length: ") {
+                        v
+                    } else {
+                        return Ok(None);
+                    };
+                    let Ok((_, value)) =
+                        crate::email::parser::headers::header_value(&input[content_length..])
+                    else {
+                        return Err(Error::new("Invalid Content-length header"));
+                    };
+                    let bytes = String::from_utf8_lossy(value)
+                        .trim()
+                        .parse::<usize>()
+                        .wrap_err(|| {
+                            format!(
+                                "Invalid Content-length header value {}",
+                                String::from_utf8_lossy(value)
+                            )
+                        })?;
+                    Ok(Some(bytes))
                 }
+
+                let Some(bytes) = find_content_length(&input[..headers_end])
+                    .map_err(|err| (&input[..headers_end], err))?
+                else {
+                    return Err((
+                        input,
+                        Error::new(format!(
+                            "mbox does not appear to be in {} format because it lacks a \
+                             `Content-Length` header. Try setting the format to `mboxrd` or \
+                             `mboxo`",
+                            self
+                        )),
+                    ));
+                };
+                let mut env = Envelope::from_bytes(&input[..headers_end + bytes], None)
+                    .map_err(|err| (input, err))?;
+                let mut flags = Flag::empty();
+                if env.other_headers().contains_key("Status") {
+                    if env.other_headers()["Status"].contains('F') {
+                        flags.set(Flag::FLAGGED, true);
+                    }
+                    if env.other_headers()["Status"].contains('A') {
+                        flags.set(Flag::REPLIED, true);
+                    }
+                    if env.other_headers()["Status"].contains('R') {
+                        flags.set(Flag::SEEN, true);
+                    }
+                    if env.other_headers()["Status"].contains('D') {
+                        flags.set(Flag::TRASHED, true);
+                    }
+                }
+                if env.other_headers().contains_key("X-Status") {
+                    if env.other_headers()["X-Status"].contains('F') {
+                        flags.set(Flag::FLAGGED, true);
+                    }
+                    if env.other_headers()["X-Status"].contains('A') {
+                        flags.set(Flag::REPLIED, true);
+                    }
+                    if env.other_headers()["X-Status"].contains('R') {
+                        flags.set(Flag::SEEN, true);
+                    }
+                    if env.other_headers()["X-Status"].contains('D') {
+                        flags.set(Flag::TRASHED, true);
+                    }
+                    if env.other_headers()["X-Status"].contains('T') {
+                        flags.set(Flag::DRAFT, true);
+                    }
+                }
+                env.set_flags(flags);
+                input = input
+                    .get(headers_end + bytes + if is_crlf { 6 } else { 3 }..)
+                    .unwrap_or(&[]);
+                Ok((input, env))
             }
         }
     }
@@ -704,41 +714,18 @@ pub fn mbox_parse(
     index: Arc<Mutex<HashMap<EnvelopeHash, (Offset, Length)>>>,
     input: &[u8],
     file_offset: usize,
-    format: Option<MboxFormat>,
+    format: MboxFormat,
     is_crlf: bool,
-) -> IResult<&[u8], Vec<Envelope>> {
+) -> ParsingResult<Vec<Envelope>> {
     if input.is_empty() {
-        return Err(nom::Err::Error(NomError {
-            input,
-            code: NomErrorKind::Tag,
-        }));
+        return Ok((input, vec![]));
     }
     let mut offset = 0;
     let mut index = index.lock().unwrap();
     let mut envelopes = Vec::with_capacity(32);
 
-    let format = format.unwrap_or(MboxFormat::MboxCl2);
     while !input[offset + file_offset..].is_empty() {
-        let (next_input, env) = match format.parse(&input[offset + file_offset..], is_crlf) {
-            Ok(v) => v,
-            Err(e) => {
-                // Try to recover from this error by finding a new candidate From_ line
-                if let Some(next_offset) = find_From__line!(&input[offset + file_offset..], is_crlf)
-                {
-                    offset += next_offset;
-                    if offset != input.len() {
-                        // If we are not at EOF, we will be at this point
-                        //    "\n\nFrom ..."
-                        //     ↑
-                        // So, skip those two newlines.
-                        offset += if is_crlf { 4 } else { 2 };
-                    }
-                } else {
-                    return Err(e);
-                }
-                continue;
-            }
-        };
+        let (next_input, env) = format.parse(&input[offset + file_offset..], is_crlf)?;
         let start: Offset = input[offset + file_offset..]
             .find(b"From ")
             .map(|from_offset| {
@@ -768,68 +755,66 @@ pub struct MessageIterator<'a> {
     pub input: &'a [u8],
     pub file_offset: usize,
     pub offset: usize,
-    pub format: Option<MboxFormat>,
+    pub format: MboxFormat,
 }
 
 impl Iterator for MessageIterator<'_> {
     type Item = Result<Envelope>;
+
     fn next(&mut self) -> Option<Self::Item> {
-        if self.input.is_empty() {
+        if self.input.trim().is_empty()
+            || self.input[self.offset + self.file_offset..]
+                .trim()
+                .is_empty()
+        {
             return None;
         }
-        let mut index = self.index.lock().unwrap();
 
-        let format = self.format.unwrap_or(MboxFormat::MboxCl2);
-        while !self.input[self.offset + self.file_offset..].is_empty() {
-            let (next_input, env) =
-                match format.parse(&self.input[self.offset + self.file_offset..], self.is_crlf) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        // Try to recover from this error by finding a new candidate From_ line
-                        if let Some(next_offset) = find_From__line!(
-                            &self.input[self.offset + self.file_offset..],
-                            self.is_crlf
-                        ) {
-                            self.offset += next_offset;
-                            if self.offset != self.input.len() {
-                                // If we are not at EOF, we will be at this point
-                                //    "\n\nFrom ..."
-                                //     ↑
-                                // So, skip those two newlines.
-                                self.offset += if self.is_crlf { 4 } else { 2 };
-                            }
-                        } else {
-                            self.input = b"";
-                            return Some(Err(e.into()));
-                        }
-                        continue;
-                    }
-                };
-            let start: Offset = self.input[self.offset + self.file_offset..]
-                .find(b"From ")
-                .map(|from_offset| {
-                    self.input[self.offset + self.file_offset + from_offset..]
-                        .find(if self.is_crlf {
-                            &b"\r\n"[..]
-                        } else {
-                            &b"\n"[..]
-                        })
-                        .map(|v| v + if self.is_crlf { 2 } else { 1 })
-                        .unwrap_or_else(|| {
-                            self.input[self.offset + self.file_offset + from_offset..]
-                                .len()
-                                .saturating_sub(2)
-                        })
-                })
-                .map(|v| v + if self.is_crlf { 2 } else { 1 })
-                .unwrap_or(0);
-            let len = self.input.len() - next_input.len() - self.offset - self.file_offset - start;
-            index.insert(env.hash(), (self.offset + self.file_offset + start, len));
-            self.offset += len + start;
+        let (next_input, env) = match self
+            .format
+            .parse(&self.input[self.offset + self.file_offset..], self.is_crlf)
+        {
+            Ok(v) => v,
+            Err((error_location, err)) => {
+                let error_offset = self.input.len() - error_location.len();
+                let line_number = 1 + String::from_utf8_lossy(&self.input[..error_offset])
+                    .lines()
+                    .count();
+                return Some(Err(err.set_details(format!(
+                    "Location: line {}\n{:?}",
+                    line_number,
+                    String::from_utf8_lossy(error_location)
+                        .as_ref()
+                        .trim_at_boundary(150)
+                ))));
+            }
+        };
+        let start: Offset = self.input[self.offset + self.file_offset..]
+            .find(b"From ")
+            .map(|from_offset| {
+                self.input[self.offset + self.file_offset + from_offset..]
+                    .find(if self.is_crlf {
+                        &b"\r\n"[..]
+                    } else {
+                        &b"\n"[..]
+                    })
+                    .map(|v| v + if self.is_crlf { 2 } else { 1 })
+                    .unwrap_or_else(|| {
+                        self.input[self.offset + self.file_offset + from_offset..]
+                            .len()
+                            .saturating_sub(2)
+                    })
+            })
+            .map(|v| v + if self.is_crlf { 2 } else { 1 })
+            .unwrap_or(0);
+        let len = self.input.len() - next_input.len() - self.offset - self.file_offset - start;
+        self.index
+            .lock()
+            .unwrap()
+            .insert(env.hash(), (self.offset + self.file_offset + start, len));
+        self.offset += len + start;
 
-            return Some(Ok(env));
-        }
-        None
+        Some(Ok(env))
     }
 }
 
@@ -841,7 +826,7 @@ pub struct MboxType {
     pub collection: Collection,
     pub mailbox_index: Arc<Mutex<HashMap<EnvelopeHash, MailboxHash>>>,
     pub mailboxes: Arc<Mutex<HashMap<MailboxHash, MboxMailbox>>>,
-    pub prefer_mbox_type: Option<MboxFormat>,
+    pub prefer_mbox_type: MboxFormat,
     pub event_consumer: BackendEventConsumer,
 }
 
@@ -869,7 +854,7 @@ impl MailBackend for MboxType {
             mailbox_hash: MailboxHash,
             mailbox_index: Arc<Mutex<HashMap<EnvelopeHash, MailboxHash>>>,
             mailboxes: Arc<Mutex<HashMap<MailboxHash, MboxMailbox>>>,
-            prefer_mbox_type: Option<MboxFormat>,
+            prefer_mbox_type: MboxFormat,
             offset: usize,
             file_offset: usize,
             contents: Vec<u8>,
@@ -1373,14 +1358,14 @@ impl MboxType {
             event_consumer,
             path,
             prefer_mbox_type: if prefer_mbox_type.as_str() == "auto" {
-                None
+                MboxFormat::default()
             } else {
-                Some(MboxFormat::from_str(&prefer_mbox_type).wrap_err(|| {
+                MboxFormat::from_str(&prefer_mbox_type).wrap_err(|| {
                     format!(
                         "{} invalid `prefer_mbox_type` value: `{}`",
                         s.name, prefer_mbox_type,
                     )
-                })?)
+                })?
             },
             collection: Collection::default(),
             mailbox_index: Default::default(),
@@ -1424,59 +1409,75 @@ impl MboxType {
                 unseen: Arc::new(Mutex::new(0)),
                 total: Arc::new(Mutex::new(0)),
                 index: Default::default(),
+                format: ret.prefer_mbox_type,
             },
         );
         /* Look for other mailboxes */
         for (k, f) in s.mailboxes.iter() {
-            if let Some(path_str) = f.extra.get("path") {
-                let hash = MailboxHash::from_bytes(path_str.as_bytes());
-                let pathbuf: PathBuf = Path::new(path_str).expand();
-                if !pathbuf.try_exists().unwrap_or(false) || pathbuf.is_dir() {
-                    return Err(Error::new(format!(
-                        "mbox mailbox configuration entry \"{}\" path value {} is not a file.",
-                        k, path_str
-                    )));
-                }
-                let read_only = if let Ok(metadata) = std::fs::metadata(&pathbuf) {
-                    metadata.permissions().readonly()
-                } else {
-                    true
-                };
-
-                ret.mailboxes.lock().unwrap().insert(
-                    hash,
-                    MboxMailbox {
-                        hash,
-                        name: k.to_string(),
-                        fs_path: pathbuf,
-                        path: k.into(),
-                        content: Vec::new(),
-                        children: Vec::new(),
-                        parent: None,
-                        usage: Arc::new(RwLock::new(f.usage.unwrap_or_default())),
-                        is_subscribed: f.subscribe.is_true(),
-                        permissions: MailboxPermissions {
-                            create_messages: !read_only,
-                            remove_messages: !read_only,
-                            set_flags: !read_only,
-                            create_child: !read_only,
-                            rename_messages: !read_only,
-                            delete_messages: !read_only,
-                            delete_mailbox: !read_only,
-                            change_permissions: false,
-                        },
-                        unseen: Arc::new(Mutex::new(0)),
-                        total: Arc::new(Mutex::new(0)),
-                        index: Default::default(),
-                    },
-                );
-            } else {
+            let Some(path_str) = f.extra.get("path") else {
                 return Err(Error::new(format!(
                     "mbox mailbox configuration entry \"{}\" should have a \"path\" value set \
                      pointing to an mbox file.",
                     k
                 )));
+            };
+            let format = if let Some(format_str) = f.extra.get("format") {
+                if format_str.as_str() == "auto" {
+                    MboxFormat::default()
+                } else {
+                    MboxFormat::from_str(format_str).wrap_err(|| {
+                        format!(
+                            "{}, mailbox {}: invalid `format` value: `{}`",
+                            s.name, k, format_str,
+                        )
+                    })?
+                }
+            } else {
+                ret.prefer_mbox_type
+            };
+
+            let hash = MailboxHash::from_bytes(path_str.as_bytes());
+            let pathbuf: PathBuf = Path::new(path_str).expand();
+            if !pathbuf.try_exists().unwrap_or(false) || pathbuf.is_dir() {
+                return Err(Error::new(format!(
+                    "mbox mailbox configuration entry \"{}\" path value {} is not a file.",
+                    k, path_str
+                )));
             }
+            let read_only = if let Ok(metadata) = std::fs::metadata(&pathbuf) {
+                metadata.permissions().readonly()
+            } else {
+                true
+            };
+
+            ret.mailboxes.lock().unwrap().insert(
+                hash,
+                MboxMailbox {
+                    hash,
+                    name: k.to_string(),
+                    fs_path: pathbuf,
+                    path: k.into(),
+                    content: Vec::new(),
+                    children: Vec::new(),
+                    parent: None,
+                    usage: Arc::new(RwLock::new(f.usage.unwrap_or_default())),
+                    is_subscribed: f.subscribe.is_true(),
+                    permissions: MailboxPermissions {
+                        create_messages: !read_only,
+                        remove_messages: !read_only,
+                        set_flags: !read_only,
+                        create_child: !read_only,
+                        rename_messages: !read_only,
+                        delete_messages: !read_only,
+                        delete_mailbox: !read_only,
+                        change_permissions: false,
+                    },
+                    unseen: Arc::new(Mutex::new(0)),
+                    total: Arc::new(Mutex::new(0)),
+                    index: Default::default(),
+                    format,
+                },
+            );
         }
         Ok(Box::new(ret))
     }
@@ -1519,7 +1520,17 @@ impl MboxType {
         }
         let prefer_mbox_type: Result<String> =
             get_conf_val!(s["prefer_mbox_type"], "auto".to_string());
-        prefer_mbox_type?;
+
+        let prefer_mbox_type = prefer_mbox_type?;
+        if prefer_mbox_type.as_str() == "auto" {
+        } else {
+            MboxFormat::from_str(&prefer_mbox_type).wrap_err(|| {
+                format!(
+                    "{} invalid `prefer_mbox_type` value: `{}`",
+                    s.name, prefer_mbox_type,
+                )
+            })?;
+        }
         Ok(())
     }
 }
