@@ -50,6 +50,7 @@ fn test_mbox_parse() {
             offset: 0,
             file_offset: 0,
             format: Some(MboxFormat::MboxCl2),
+            is_crlf: false,
         };
         let envelopes: Vec<Envelope> = message_iter.collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(envelopes.len(), 36);
@@ -60,6 +61,7 @@ fn test_mbox_parse() {
             offset: 0,
             file_offset: 0,
             format: Some(MboxFormat::MboxCl2),
+            is_crlf: false,
         }
         .collect::<Result<Vec<_>>>()
         .unwrap();
@@ -83,6 +85,7 @@ fn test_mbox_parse() {
             offset: 0,
             file_offset: 0,
             format: Some(MboxFormat::MboxCl2),
+            is_crlf: false,
         };
         let envelopes: Vec<Envelope> = message_iter.collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(envelopes.len(), 7);
@@ -93,6 +96,7 @@ fn test_mbox_parse() {
             offset: 0,
             file_offset: 0,
             format: Some(MboxFormat::MboxCl2),
+            is_crlf: false,
         }
         .collect::<Result<Vec<_>>>()
         .unwrap();

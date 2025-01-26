@@ -93,6 +93,7 @@
 //!     offset: 0,
 //!     file_offset: 0,
 //!     format: Some(MboxFormat::MboxCl2),
+//!     is_crlf: false,
 //! };
 //! let envelopes: Result<Vec<Envelope>> = message_iter.collect();
 //! ```
@@ -338,7 +339,7 @@ impl std::str::FromStr for MboxFormat {
 }
 
 macro_rules! find_From__line {
-    ($input:expr) => {{
+    ($input:expr, $is_crlf:expr) => {{
         //debug!("find_From__line invocation");
         let input = $input;
         let mut ptr = 0;
@@ -346,12 +347,19 @@ macro_rules! find_From__line {
         while ptr < input.len() {
             // Find next From_ candidate line.
             const TAG: &'static [u8] = b"\n\nFrom ";
-            if let Some(end) = input[ptr..].find(TAG) {
+            const CRLF_TAG: &'static [u8] = b"\r\n\r\nFrom ";
+            if let Some((end, tag, line_ending)) = if $is_crlf {
+                input[ptr..]
+                    .find(CRLF_TAG)
+                    .map(|end| (end, CRLF_TAG, &b"\r\n"[..]))
+            } else {
+                input[ptr..].find(TAG).map(|end| (end, TAG, &b"\n"[..]))
+            } {
                 // This candidate is a valid From_ if it ends in a new line and the next line is
                 // a header.
-                if let Some(line_end) = input[ptr + end + TAG.len()..].find(b"\n") {
+                if let Some(line_end) = input[ptr + end + tag.len()..].find(line_ending) {
                     if crate::email::parser::headers::header(
-                        &input[ptr + end + TAG.len() + line_end + 1..],
+                        &input[ptr + end + tag.len() + line_end + line_ending.len()..],
                     )
                     .is_ok()
                     {
@@ -359,11 +367,11 @@ macro_rules! find_From__line {
                         break;
                     } else {
                         /* Ignore invalid From_ line. */
-                        ptr += end + TAG.len() + line_end;
+                        ptr += end + tag.len() + line_end;
                     }
                 } else {
                     /* Ignore invalid From_ line. */
-                    ptr += end + TAG.len();
+                    ptr += end + tag.len();
                 }
             } else {
                 found = Some(input.len());
@@ -375,13 +383,19 @@ macro_rules! find_From__line {
 }
 
 impl MboxFormat {
-    pub fn parse<'i>(&self, input: &'i [u8]) -> IResult<&'i [u8], Envelope> {
+    pub fn parse<'i>(&self, input: &'i [u8], is_crlf: bool) -> IResult<&'i [u8], Envelope> {
         let orig_input = input;
         let mut input = input;
         match self {
             Self::MboxO => {
-                let next_offset: Option<(usize, usize)> = find_From__line!(input)
-                    .and_then(|end| input.find(b"\n").map(|start| (start + 1, end)));
+                let next_offset: Option<(usize, usize)> = find_From__line!(input, is_crlf)
+                    .and_then(|end| {
+                        if is_crlf {
+                            input.find(b"\r\n").map(|start| (start + 2, end))
+                        } else {
+                            input.find(b"\n").map(|start| (start + 1, end))
+                        }
+                    });
 
                 if let Some((start, len)) = next_offset {
                     match Envelope::from_bytes(&input[start..len], None) {
@@ -419,12 +433,10 @@ impl MboxFormat {
                                 }
                             }
                             env.set_flags(flags);
-                            if len == input.len() {
-                                Ok((&[], env))
-                            } else {
-                                input = &input[len + 2..];
-                                Ok((input, env))
-                            }
+                            input = input
+                                .get(start + len + if is_crlf { 4 } else { 2 }..)
+                                .unwrap_or(&[]);
+                            Ok((input, env))
                         }
                         Err(err) => {
                             log::debug!("Could not parse mail {:?}", err);
@@ -435,7 +447,12 @@ impl MboxFormat {
                         }
                     }
                 } else {
-                    let start: Offset = input.find(b"\n").map(|v| v + 1).unwrap_or(0);
+                    let start: Offset = if is_crlf {
+                        input.find(b"\r\n").map(|v| v + 2)
+                    } else {
+                        input.find(b"\n").map(|v| v + 1)
+                    }
+                    .unwrap_or(0);
                     match Envelope::from_bytes(&input[start..], None) {
                         Ok(mut env) => {
                             let mut flags = Flag::empty();
@@ -484,8 +501,14 @@ impl MboxFormat {
                 }
             }
             Self::MboxRd => {
-                let next_offset: Option<(usize, usize)> = find_From__line!(input)
-                    .and_then(|end| input.find(b"\n").map(|start| (start + 1, end)));
+                let next_offset: Option<(usize, usize)> = find_From__line!(input, is_crlf)
+                    .and_then(|end| {
+                        if is_crlf {
+                            input.find(b"\r\n").map(|start| (start + 2, end))
+                        } else {
+                            input.find(b"\n").map(|start| (start + 1, end))
+                        }
+                    });
 
                 if let Some((start, len)) = next_offset {
                     match Envelope::from_bytes(&input[start..len], None) {
@@ -523,12 +546,10 @@ impl MboxFormat {
                                 }
                             }
                             env.set_flags(flags);
-                            if len == input.len() {
-                                Ok((&[], env))
-                            } else {
-                                input = &input[len + 2..];
-                                Ok((input, env))
-                            }
+                            input = input
+                                .get(len + if is_crlf { 4 } else { 2 }..)
+                                .unwrap_or(&[]);
+                            Ok((input, env))
                         }
                         Err(err) => {
                             log::debug!("Could not parse mail {:?}", err);
@@ -539,7 +560,12 @@ impl MboxFormat {
                         }
                     }
                 } else {
-                    let start: Offset = input.find(b"\n").map(|v| v + 1).unwrap_or(0);
+                    let start: Offset = if is_crlf {
+                        input.find(b"\r\n").map(|v| v + 2)
+                    } else {
+                        input.find(b"\n").map(|v| v + 1)
+                    }
+                    .unwrap_or(0);
                     match Envelope::from_bytes(&input[start..], None) {
                         Ok(mut env) => {
                             let mut flags = Flag::empty();
@@ -588,15 +614,25 @@ impl MboxFormat {
                 }
             }
             Self::MboxCl | Self::MboxCl2 => {
-                let start: Offset = input.find(b"\n").map(|v| v + 1).unwrap_or(0);
+                let start: Offset = if is_crlf {
+                    input.find(b"\r\n").map(|v| v + 2)
+                } else {
+                    input.find(b"\n").map(|v| v + 1)
+                }
+                .unwrap_or(0);
                 input = &input[start..];
-                let headers_end: usize = input.find(b"\n\n").unwrap_or(input.len());
+                let headers_end: usize = if is_crlf {
+                    input.find(b"\r\n\r\n")
+                } else {
+                    input.find(b"\n\n")
+                }
+                .unwrap_or(input.len());
                 let content_length = if let Some(v) = input[..headers_end].find(b"Content-Length: ")
                 {
                     v
                 } else {
                     // Is not MboxCl{,2}
-                    return Self::MboxRd.parse(orig_input);
+                    return Self::MboxRd.parse(orig_input, is_crlf);
                 };
                 let (_input, _) = if let Ok(s) = tag::<_, &[u8], (&[u8], nom::error::ErrorKind)>(
                     "Content-Length:",
@@ -604,7 +640,7 @@ impl MboxFormat {
                 {
                     s
                 } else {
-                    return Self::MboxRd.parse(orig_input);
+                    return Self::MboxRd.parse(orig_input, is_crlf);
                 };
                 let (_input, bytes) = if let Ok(s) =
                     map_res::<&[u8], _, _, (&[u8], nom::error::ErrorKind), _, _, _>(
@@ -614,7 +650,7 @@ impl MboxFormat {
                 {
                     s
                 } else {
-                    return Self::MboxRd.parse(orig_input);
+                    return Self::MboxRd.parse(orig_input, is_crlf);
                 };
 
                 match Envelope::from_bytes(&input[..headers_end + bytes], None) {
@@ -652,14 +688,12 @@ impl MboxFormat {
                             }
                         }
                         env.set_flags(flags);
-                        if headers_end + 2 + bytes >= input.len() {
-                            Ok((&[], env))
-                        } else {
-                            input = &input[headers_end + 3 + bytes..];
-                            Ok((input, env))
-                        }
+                        input = input
+                            .get(headers_end + bytes + if is_crlf { 6 } else { 3 }..)
+                            .unwrap_or(&[]);
+                        Ok((input, env))
                     }
-                    Err(_err) => Self::MboxRd.parse(orig_input),
+                    Err(_err) => Self::MboxRd.parse(orig_input, is_crlf),
                 }
             }
         }
@@ -671,6 +705,7 @@ pub fn mbox_parse(
     input: &[u8],
     file_offset: usize,
     format: Option<MboxFormat>,
+    is_crlf: bool,
 ) -> IResult<&[u8], Vec<Envelope>> {
     if input.is_empty() {
         return Err(nom::Err::Error(NomError {
@@ -684,18 +719,19 @@ pub fn mbox_parse(
 
     let format = format.unwrap_or(MboxFormat::MboxCl2);
     while !input[offset + file_offset..].is_empty() {
-        let (next_input, env) = match format.parse(&input[offset + file_offset..]) {
+        let (next_input, env) = match format.parse(&input[offset + file_offset..], is_crlf) {
             Ok(v) => v,
             Err(e) => {
                 // Try to recover from this error by finding a new candidate From_ line
-                if let Some(next_offset) = find_From__line!(&input[offset + file_offset..]) {
+                if let Some(next_offset) = find_From__line!(&input[offset + file_offset..], is_crlf)
+                {
                     offset += next_offset;
                     if offset != input.len() {
                         // If we are not at EOF, we will be at this point
                         //    "\n\nFrom ..."
                         //     ↑
                         // So, skip those two newlines.
-                        offset += 2;
+                        offset += if is_crlf { 4 } else { 2 };
                     }
                 } else {
                     return Err(e);
@@ -707,8 +743,8 @@ pub fn mbox_parse(
             .find(b"From ")
             .map(|from_offset| {
                 input[offset + file_offset + from_offset..]
-                    .find(b"\n")
-                    .map(|v| v + 1)
+                    .find(if is_crlf { &b"\r\n"[..] } else { &b"\n"[..] })
+                    .map(|v| v + if is_crlf { 2 } else { 1 })
                     .unwrap_or_else(|| {
                         input[offset + file_offset + from_offset..]
                             .len()
@@ -727,6 +763,7 @@ pub fn mbox_parse(
 }
 
 pub struct MessageIterator<'a> {
+    pub is_crlf: bool,
     pub index: Arc<Mutex<HashMap<EnvelopeHash, (Offset, Length)>>>,
     pub input: &'a [u8],
     pub file_offset: usize,
@@ -745,20 +782,21 @@ impl Iterator for MessageIterator<'_> {
         let format = self.format.unwrap_or(MboxFormat::MboxCl2);
         while !self.input[self.offset + self.file_offset..].is_empty() {
             let (next_input, env) =
-                match format.parse(&self.input[self.offset + self.file_offset..]) {
+                match format.parse(&self.input[self.offset + self.file_offset..], self.is_crlf) {
                     Ok(v) => v,
                     Err(e) => {
                         // Try to recover from this error by finding a new candidate From_ line
-                        if let Some(next_offset) =
-                            find_From__line!(&self.input[self.offset + self.file_offset..])
-                        {
+                        if let Some(next_offset) = find_From__line!(
+                            &self.input[self.offset + self.file_offset..],
+                            self.is_crlf
+                        ) {
                             self.offset += next_offset;
                             if self.offset != self.input.len() {
                                 // If we are not at EOF, we will be at this point
                                 //    "\n\nFrom ..."
                                 //     ↑
                                 // So, skip those two newlines.
-                                self.offset += 2;
+                                self.offset += if self.is_crlf { 4 } else { 2 };
                             }
                         } else {
                             self.input = b"";
@@ -771,15 +809,19 @@ impl Iterator for MessageIterator<'_> {
                 .find(b"From ")
                 .map(|from_offset| {
                     self.input[self.offset + self.file_offset + from_offset..]
-                        .find(b"\n")
-                        .map(|v| v + 1)
+                        .find(if self.is_crlf {
+                            &b"\r\n"[..]
+                        } else {
+                            &b"\n"[..]
+                        })
+                        .map(|v| v + if self.is_crlf { 2 } else { 1 })
                         .unwrap_or_else(|| {
                             self.input[self.offset + self.file_offset + from_offset..]
                                 .len()
                                 .saturating_sub(2)
                         })
                 })
-                .map(|v| v + 1)
+                .map(|v| v + if self.is_crlf { 2 } else { 1 })
                 .unwrap_or(0);
             let len = self.input.len() - next_input.len() - self.offset - self.file_offset - start;
             index.insert(env.hash(), (self.offset + self.file_offset + start, len));
@@ -840,7 +882,9 @@ impl MailBackend for MboxType {
                 let mailboxes_lck = self.mailboxes.lock().unwrap();
                 let index = mailboxes_lck[&self.mailbox_hash].index.clone();
                 drop(mailboxes_lck);
+                let is_crlf: bool = self.contents.find(b"\r\n").is_some();
                 let mut message_iter = MessageIterator {
+                    is_crlf,
                     index,
                     input: self.contents.as_slice(),
                     offset: self.offset,
@@ -1003,11 +1047,13 @@ impl MailBackend for MboxType {
                                 if contents
                                     .starts_with(mailbox_lock[&mailbox_hash].content.as_slice())
                                 {
+                                    let is_crlf: bool = contents.find(b"\r\n").is_some();
                                     if let Ok((_, envelopes)) = mbox_parse(
                                         mailbox_lock[&mailbox_hash].index.clone(),
                                         &contents,
                                         mailbox_lock[&mailbox_hash].content.len(),
                                         prefer_mbox_type,
+                                        is_crlf,
                                     ) {
                                         let mut mailbox_index_lck = mailbox_index.lock().unwrap();
                                         *mailbox_lock[&mailbox_hash].unseen.lock().unwrap() +=
