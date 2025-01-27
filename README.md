@@ -17,11 +17,12 @@ Try an [old, outdated but online and interactive web demo](https://meli-email.or
 
 - [Install](#install)
 - [Build](#build)
+  - [Cargo Compile-time Features](#cargo-compile-time-features)
 - [Quick start](#quick-start)
-- [Supported E-mail backends](#supported-e-mail-backends)
-- [E-mail submission backends](#e-mail-submission-backends)
-- [Non-exhaustive list of features](#non-exhaustive-list-of-features)
-- [HTML Rendering](#html-rendering)
+  - [Supported E-mail backends](#supported-e-mail-backends)
+  - [E-mail submission backends](#e-mail-submission-backends)
+  - [Non-exhaustive list of features](#non-exhaustive-list-of-features)
+  - [HTML Rendering](#html-rendering)
 - [Documentation](#documentation)
 
 ## Install
@@ -85,6 +86,8 @@ Try an [old, outdated but online and interactive web demo](https://meli-email.or
 ## Build
 
 Run `make` or `cargo build --release --bin meli`.
+
+See `make help` output for information on how to use the `Makefile`.
 
 For detailed building instructions, see [`BUILD.md`](./BUILD.md)
 
@@ -200,7 +203,7 @@ See [`meli(7)`](./meli/docs/meli.7) for an extensive tutorial and [`meli.conf(5)
 - GPG signing, encryption, signing + encryption
 - GPG signature verification
 
-## HTML Rendering
+### HTML Rendering
 
 HTML rendering is achieved using [w3m](https://github.com/tats/w3m) by default.
 You can use the `pager.html_filter` setting to override this (for more details you can consult [`meli.conf(5)`](./meli/docs/meli.conf.5)).
