@@ -30,13 +30,56 @@ Try an [old, outdated but online and interactive web demo](https://meli-email.or
   <img src="https://repology.org/badge/vertical-allrepos/meli.svg" alt="Packaging status table by repology.org" align="right">
 </a>
 
-- `cargo install meli` or `cargo install --git https://git.meli-email.org/meli/meli.git meli` [crates.io link](https://crates.io/crates/meli)
-- Official Debian packages <https://packages.debian.org/trixie/meli>
+- Crates.io with `cargo` on all supported systems and architectures <https://crates.io/crates/meli>
+
+  ![Crates.io](https://img.shields.io/crates/v/meli)
+  ```sh
+  cargo install meli
+  ```
+  Install latest development snapshot from git repository:
+  ```sh
+  cargo install --git https://git.meli-email.org/meli/meli.git meli
+  ```
+- Official Debian (and Debian derivatives) packages <https://packages.debian.org/trixie/meli>
+
+  ![Debian 13 package](https://repology.org/badge/version-for-repo/debian_13/meli.svg) ![Ubuntu 25.04 package](https://repology.org/badge/version-for-repo/ubuntu_25_04/meli.svg) ![Raspbian Testing package](https://repology.org/badge/version-for-repo/raspbian_testing/meli.svg)
+  ```sh
+  apt install meli
+  ```
 - AUR (archlinux) <https://aur.archlinux.org/packages/meli>
+
+  ![AUR package](https://repology.org/badge/version-for-repo/aur/meli.svg)
+- OpenSUSE <https://build.opensuse.org/package/show/openSUSE:Factory/meli>
+
+  ![openSUSE Tumbleweed package](https://repology.org/badge/version-for-repo/opensuse_tumbleweed/meli.svg)
+- Alpine Linux <https://pkgs.alpinelinux.org/packages?name=meli>
+
+  ![Alpine Linux Edge package](https://repology.org/badge/version-for-repo/alpine_edge/meli.svg)
+  ```sh
+  apk install meli
+  ```
 - NetBSD with pkgsrc <https://pkgsrc.se/mail/meli>
+
+  ![pkgsrc current package](https://repology.org/badge/version-for-repo/pkgsrc_current/meli.svg)
 - OpenBSD ports <https://openports.pl/path/mail/meli>
-- macOS with MacPorts <https://ports.macports.org/port/meli/>
+
+  ![OpenBSD port](https://repology.org/badge/version-for-repo/openbsd/meli.svg)
+- macOS with
+  - Homebrew <https://formulae.brew.sh/formula/meli>
+
+    ![Homebrew package](https://repology.org/badge/version-for-repo/homebrew/meli.svg)
+    ```sh
+    brew install meli
+    ```
+  - MacPorts <https://ports.macports.org/port/meli/>
+
+    ![MacPorts package](https://repology.org/badge/version-for-repo/macports/meli.svg)
+    ```sh
+    port install meli
+    ```
 - Nix with Nixpkgs <https://search.nixos.org/packages?query=meli>
+
+  ![nixpkgs unstable package](https://repology.org/badge/version-for-repo/nix_unstable/meli.svg)
 - [Pre-built debian package, static binaries](https://github.com/meli/meli/releases/ "github releases for meli") for <code>amd64</code>, <code>arm64</code> architectures
 
 ## Build
