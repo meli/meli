@@ -834,6 +834,9 @@ impl MailBackend for MboxType {
         }
         impl FetchState {
             async fn fetch(&mut self) -> Result<Option<Vec<Envelope>>> {
+                if self.contents.is_empty() {
+                    return Ok(None);
+                }
                 let mailboxes_lck = self.mailboxes.lock().unwrap();
                 let index = mailboxes_lck[&self.mailbox_hash].index.clone();
                 drop(mailboxes_lck);
@@ -846,17 +849,23 @@ impl MailBackend for MboxType {
                 };
                 let mut payload = vec![];
                 let mut done = false;
-                'iter_for_loop: for _i in 0..150 {
+                let mut total = 0;
+                let mut unseen = 0;
+                for _ in 0..150 {
                     match message_iter.next() {
                         Some(Ok(env)) => {
+                            total += 1;
+                            if !env.is_seen() {
+                                unseen += 1;
+                            }
                             payload.push(env);
                         }
-                        Some(Err(_err)) => {
-                            debug!(&_err);
+                        Some(Err(err)) => {
+                            return Err(err);
                         }
                         None => {
                             done = true;
-                            break 'iter_for_loop;
+                            break;
                         }
                     }
                 }
@@ -868,18 +877,24 @@ impl MailBackend for MboxType {
                         mailbox_index_lck.insert(env.hash(), self.mailbox_hash);
                     }
                 }
+                self.mailboxes
+                    .lock()
+                    .unwrap()
+                    .entry(self.mailbox_hash)
+                    .and_modify(|f| {
+                        *f.unseen.lock().unwrap() += unseen;
+                        *f.total.lock().unwrap() += total;
+                    });
                 if done {
-                    if payload.is_empty() {
-                        Ok(None)
-                    } else {
-                        let contents = std::mem::take(&mut self.contents);
-                        self.mailboxes
-                            .lock()
-                            .unwrap()
-                            .entry(self.mailbox_hash)
-                            .and_modify(|f| f.content = contents);
-                        Ok(Some(payload))
-                    }
+                    let contents = std::mem::take(&mut self.contents);
+                    self.mailboxes
+                        .lock()
+                        .unwrap()
+                        .entry(self.mailbox_hash)
+                        .and_modify(|f| f.content = contents);
+                }
+                if payload.is_empty() {
+                    Ok(None)
                 } else {
                     Ok(Some(payload))
                 }
@@ -995,6 +1010,10 @@ impl MailBackend for MboxType {
                                         prefer_mbox_type,
                                     ) {
                                         let mut mailbox_index_lck = mailbox_index.lock().unwrap();
+                                        *mailbox_lock[&mailbox_hash].unseen.lock().unwrap() +=
+                                            envelopes.iter().filter(|env| !env.is_seen()).count();
+                                        *mailbox_lock[&mailbox_hash].total.lock().unwrap() +=
+                                            envelopes.len();
                                         for env in envelopes {
                                             mailbox_index_lck.insert(env.hash(), mailbox_hash);
                                             (sender)(
