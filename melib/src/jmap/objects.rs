@@ -205,6 +205,13 @@ impl<OBJ> State<OBJ> {
         }
     }
 
+    pub fn new_random() -> Self {
+        Self {
+            inner: crate::utils::base36(crate::utils::random::random_u64()),
+            _ph: PhantomData,
+        }
+    }
+
     pub fn as_str(&self) -> &str {
         self.inner.as_str()
     }
