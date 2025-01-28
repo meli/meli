@@ -19,27 +19,10 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::utils::random::{clock, random_u64};
-
-/// Convert an integer to a base 36 string using only ASCII letters and numbers.
-///
-/// More information: <https://en.wikipedia.org/wiki/Base36>
-pub fn base36(mut m: u64) -> String {
-    if m == 0 {
-        return "0".to_string();
-    }
-    let mut ret = String::new();
-
-    while m >= 36 {
-        ret.push(char::from_digit((m % 36) as u32, 36).unwrap());
-        m /= 36;
-    }
-    if m != 0 {
-        ret.push(char::from_digit(m as u32, 36).unwrap());
-    }
-
-    ret.chars().rev().collect()
-}
+use crate::utils::{
+    base36,
+    random::{clock, random_u64},
+};
 
 pub fn gen_message_id(fqdn: &str) -> String {
     let clock = base36(clock());

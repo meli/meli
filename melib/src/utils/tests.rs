@@ -456,3 +456,13 @@ fn test_fnmatch() {
         );
     }
 }
+
+#[test]
+fn test_utils_base36() {
+    for integer in [0, 8851918182876417271_u64] {
+        assert_eq!(
+            u64::from_str_radix(&super::base36(integer), 36).unwrap(),
+            integer
+        );
+    }
+}
