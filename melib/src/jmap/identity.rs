@@ -35,6 +35,7 @@ use crate::jmap::{
 pub struct Identity {
     ///  id: `Id` (immutable; server-set)
     /// The id of the `Identity`.
+    #[serde(default)]
     pub id: Id<Identity>,
 
     ///  name: `String` (default: "")
