@@ -32,10 +32,10 @@ use crate::jmap::{
 /// user may send from.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct IdentityObject {
+pub struct Identity {
     ///  id: `Id` (immutable; server-set)
     /// The id of the `Identity`.
-    pub id: Id<IdentityObject>,
+    pub id: Id<Identity>,
 
     ///  name: `String` (default: "")
     /// The "From" name the client SHOULD use when creating a new
@@ -89,17 +89,17 @@ pub struct IdentityObject {
     pub may_delete: bool,
 }
 
-impl Object for IdentityObject {
+impl Object for Identity {
     const NAME: &'static str = "Identity";
 }
 
-pub type IdentityGet = Get<IdentityObject>;
+pub type IdentityGet = Get<Identity>;
 
-impl Method<IdentityObject> for IdentityGet {
+impl Method<Identity> for IdentityGet {
     const NAME: &'static str = "Identity/get";
 }
-pub type IdentityChanges = Changes<IdentityObject>;
-impl Method<IdentityObject> for IdentityChanges {
+pub type IdentityChanges = Changes<Identity>;
+impl Method<Identity> for IdentityChanges {
     const NAME: &'static str = "Identity/changes";
 }
 
@@ -115,8 +115,8 @@ impl Method<IdentityObject> for IdentityChanges {
 /// ```
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", transparent)]
-pub struct IdentitySet(pub Set<IdentityObject>);
+pub struct IdentitySet(pub Set<Identity>);
 
-impl Method<IdentityObject> for IdentitySet {
+impl Method<Identity> for IdentitySet {
     const NAME: &'static str = "Identity/set";
 }

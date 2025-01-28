@@ -26,7 +26,7 @@ use serde_json::Value;
 use crate::jmap::{
     argument::Argument,
     email::EmailObject,
-    identity::IdentityObject,
+    identity::Identity,
     methods::Set,
     objects::{Account, BlobObject, Id, Object, PatchObject},
     protocol::Method,
@@ -196,7 +196,7 @@ pub struct EmailSubmissionObject {
     pub account_id: Id<Account>,
     /// identityId: `Id` (immutable)
     /// The id of the Identity to associate with this submission.
-    pub identity_id: Id<IdentityObject>,
+    pub identity_id: Id<Identity>,
     /// The id of the Email to send.  The Email being sent does not have
     /// to be a draft, for example, when "redirecting" an existing Email
     /// to a different address.
@@ -252,7 +252,7 @@ impl EmailSubmissionObject {
     /// initialized as empty.
     pub fn new(
         account_id: Id<Account>,
-        identity_id: Id<IdentityObject>,
+        identity_id: Id<Identity>,
         email_id: impl Into<Argument<Id<EmailObject>>>,
         envelope: Option<EnvelopeObject>,
         undo_status: Option<UndoStatus>,

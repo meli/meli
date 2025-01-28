@@ -26,7 +26,7 @@ use serde_json::Value;
 use url::Url;
 
 use crate::jmap::{
-    identity::IdentityObject,
+    identity::Identity,
     methods::{u64_zero, RequestUrlTemplate},
     objects::{Account, Id, Object, State},
     protocol::JmapMailCapability,
@@ -39,7 +39,7 @@ pub struct Session {
     pub accounts: IndexMap<Id<Account>, Account>,
     pub primary_accounts: IndexMap<String, Id<Account>>,
     #[serde(skip)]
-    pub identities: IndexMap<Id<IdentityObject>, IdentityObject>,
+    pub identities: IndexMap<Id<Identity>, Identity>,
     pub username: String,
     pub api_url: Arc<Url>,
     pub download_url: Arc<RequestUrlTemplate>,
@@ -56,7 +56,7 @@ impl Object for Session {
 
 impl Session {
     /// Return the first identity.
-    pub fn mail_identity_id(&self) -> Option<Id<IdentityObject>> {
+    pub fn mail_identity_id(&self) -> Option<Id<Identity>> {
         self.identities.keys().next().cloned()
     }
 

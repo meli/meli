@@ -45,7 +45,7 @@ use crate::{
             EmailQueryChangesResponse,
         },
         filters::Filter,
-        identity::{IdentityGet, IdentityObject, IdentitySet},
+        identity::{Identity, IdentityGet, IdentitySet},
         mailbox::MailboxObject,
         methods::{
             AddedItem, Changes, ChangesResponse, Get, GetResponse, MethodResponse, QueryChanges,
@@ -342,14 +342,14 @@ impl JmapConnection {
                 }
                 Ok(s) => s,
             };
-            let GetResponse::<IdentityObject> { list, .. } =
-                GetResponse::<IdentityObject>::try_from(v.method_responses.remove(0))?;
+            let GetResponse::<Identity> { list, .. } =
+                GetResponse::<Identity>::try_from(v.method_responses.remove(0))?;
             list
         };
         if id_list.is_empty() {
             let mut req = Request::new(self.request_no.clone());
             let identity_set = IdentitySet(
-                Set::<IdentityObject>::new(None)
+                Set::<Identity>::new(None)
                     .account_id(mail_account_id.clone())
                     .create(Some({
                         let address =
@@ -360,23 +360,23 @@ impl JmapConnection {
                                         self.store.main_identity.clone(),
                                     )
                                 });
-                        let id: Id<IdentityObject> = Id::new_uuid_v4();
+                        let id: Id<Identity> = Id::new_uuid_v4();
                         log::trace!(
                             "identity id = {}, {:#?}",
                             id,
-                            IdentityObject {
+                            Identity {
                                 id: id.clone(),
                                 name: address.get_display_name().unwrap_or_default(),
                                 email: address.get_email(),
-                                ..IdentityObject::default()
+                                ..Identity::default()
                             }
                         );
                         indexmap! {
-                            id.clone().into() => IdentityObject {
+                            id.clone().into() => Identity {
                                 id,
                                 name: address.get_display_name().unwrap_or_default(),
                                 email: address.get_email(),
-                                ..IdentityObject::default()
+                                ..Identity::default()
                             }
                         }
                     })),
@@ -417,8 +417,8 @@ impl JmapConnection {
                 }
                 Ok(s) => s,
             };
-            let GetResponse::<IdentityObject> { list, .. } =
-                GetResponse::<IdentityObject>::try_from(v.method_responses.remove(0))?;
+            let GetResponse::<Identity> { list, .. } =
+                GetResponse::<Identity>::try_from(v.method_responses.remove(0))?;
             id_list = list;
         }
         self.session_guard().await?.identities =

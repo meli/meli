@@ -78,12 +78,12 @@ fn test_jmap_undo_status() {
 
     use crate::jmap::{
         email::EmailObject,
-        identity::IdentityObject,
+        identity::Identity,
         objects::{Account, Id},
         submission::{EmailSubmissionObject, UndoStatus},
     };
     let account_id: Id<Account> = "blahblah".into();
-    let ident_id: Id<IdentityObject> = "sdusssssss".into();
+    let ident_id: Id<Identity> = "sdusssssss".into();
     let email_id: Id<EmailObject> = Id::from("683f9246-56d4-4d7d-bd0c-3d4de6db7cbf");
     let mut obj = EmailSubmissionObject::new(
         account_id,
@@ -142,13 +142,13 @@ fn test_jmap_email_submission_object() {
     use crate::jmap::{
         argument::Argument,
         email::{EmailImport, EmailObject},
-        identity::IdentityObject,
+        identity::Identity,
         methods::ResultField,
         objects::{Account, Id},
         submission::{EmailSubmissionObject, UndoStatus},
     };
     let account_id: Id<Account> = "blahblah".into();
-    let ident_id: Id<IdentityObject> = "sdusssssss".into();
+    let ident_id: Id<Identity> = "sdusssssss".into();
     let email_id: Id<EmailObject> = Id::from("683f9246-56d4-4d7d-bd0c-3d4de6db7cbf");
     let obj = EmailSubmissionObject::new(
         account_id.clone(),
@@ -203,7 +203,7 @@ fn test_jmap_identity_methods() {
     use serde_json::json;
 
     use crate::jmap::{
-        identity::{IdentityGet, IdentityObject, IdentitySet},
+        identity::{Identity, IdentityGet, IdentitySet},
         methods::Set,
         objects::Id,
         protocol::Request,
@@ -214,18 +214,18 @@ fn test_jmap_identity_methods() {
     let mut req = Request::new(Arc::new(FutureMutex::new(prev_seq)));
 
     let identity_set = IdentitySet(
-        Set::<IdentityObject>::new(None)
+        Set::<Identity>::new(None)
             .account_id(account_id.into())
             .create(Some({
-                let id: Id<IdentityObject> = main_identity.into();
+                let id: Id<Identity> = main_identity.into();
                 let address = crate::email::Address::try_from(main_identity)
                     .unwrap_or_else(|_| crate::email::Address::new(None, main_identity.into()));
                 indexmap! {
-                    id.clone().into() => IdentityObject {
+                    id.clone().into() => Identity {
                         id,
                         name: address.get_display_name().unwrap_or_default(),
                         email: address.get_email(),
-                        ..IdentityObject::default()
+                        ..Identity::default()
                     }
                 }
             })),
