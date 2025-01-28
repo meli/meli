@@ -34,7 +34,7 @@ impl Id<MailboxObject> {
     }
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MailboxObject {
     pub id: Id<MailboxObject>,
