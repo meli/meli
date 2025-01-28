@@ -86,7 +86,7 @@ pub struct Identity {
     /// address. Attempts to destroy an Identity with "mayDelete: false"
     /// will be rejected with a standard "forbidden"
     /// [`crate::jmap::methods::SetError`].
-    #[serde(skip_serializing)]
+    #[serde(skip_serializing, default)]
     pub may_delete: bool,
 }
 
