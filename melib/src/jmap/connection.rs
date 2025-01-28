@@ -360,7 +360,7 @@ impl JmapConnection {
                                         self.store.main_identity.clone(),
                                     )
                                 });
-                        let id: Id<Identity> = Id::new_uuid_v4();
+                        let id: Id<Identity> = Id::new_random();
                         log::trace!(
                             "identity id = {}, {:#?}",
                             id,

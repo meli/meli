@@ -124,7 +124,7 @@ impl<OBJ> Id<OBJ> {
         }
     }
 
-    pub fn new_uuid_v4() -> Self {
+    pub fn new_random() -> Self {
         Self {
             inner: uuid::Uuid::new_v4().hyphenated().to_string(),
             _ph: PhantomData,

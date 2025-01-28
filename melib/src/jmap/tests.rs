@@ -294,9 +294,9 @@ fn test_jmap_argument_serde() {
     };
 
     let account_id = "blahblah";
-    let blob_id: Id<BlobObject> = Id::new_uuid_v4();
-    let draft_mailbox_id: Id<MailboxObject> = Id::new_uuid_v4();
-    let sent_mailbox_id: Id<MailboxObject> = Id::new_uuid_v4();
+    let blob_id: Id<BlobObject> = Id::new_random();
+    let draft_mailbox_id: Id<MailboxObject> = Id::new_random();
+    let sent_mailbox_id: Id<MailboxObject> = Id::new_random();
     let prev_seq = 33;
 
     let mut req = Request::new(Arc::new(FutureMutex::new(prev_seq)));
