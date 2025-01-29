@@ -314,6 +314,10 @@ impl JmapConnection {
             .unwrap()
             .clone_from(&session.capabilities);
         let mail_account_id = session.mail_account_id();
+        {
+            let mut metadata = self.store.metadata.lock().unwrap();
+            metadata.insert("session".into(), serde_json::json! {session});
+        };
         _ = self
             .store
             .online_status

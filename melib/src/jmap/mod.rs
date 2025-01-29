@@ -296,6 +296,7 @@ pub struct Store {
     pub online_status: OnlineStatus,
     pub is_subscribed: IsSubscribedFn,
     pub core_capabilities: Arc<Mutex<IndexMap<String, CapabilitiesObject>>>,
+    pub metadata: Arc<Mutex<IndexMap<String, serde_json::Value>>>,
     pub event_consumer: BackendEventConsumer,
 }
 
@@ -395,18 +396,51 @@ impl MailBackend for JmapType {
             supports_search: true,
             extensions: None,
             supports_tags: true,
-            supports_submission: true,
+            supports_submission: false,
             extra_submission_headers: &[],
             metadata: None,
         };
-        let supports_submission: bool = self
-            .store
-            .core_capabilities
-            .lock()
-            .map(|c| c.contains_key(JmapSubmissionCapability::uri()))
-            .unwrap_or(false);
+        let mut supports_submission = false;
+        let mut extensions = None;
+        if let Ok(core_capabilities) = self.store.core_capabilities.lock() {
+            let mut caps = vec![];
+            supports_submission = core_capabilities.contains_key(JmapSubmissionCapability::uri());
+            for k in core_capabilities.keys() {
+                if [
+                    JmapCoreCapability::uri(),
+                    JmapMailCapability::uri(),
+                    JmapSubmissionCapability::uri(),
+                ]
+                .contains(&k.as_str())
+                {
+                    caps.push((
+                        k.to_string(),
+                        MailBackendExtensionStatus::Supported { comment: None },
+                    ));
+                } else {
+                    caps.push((
+                        k.to_string(),
+                        MailBackendExtensionStatus::Unsupported { comment: None },
+                    ));
+                }
+            }
+            if !caps.is_empty() {
+                extensions = Some(caps);
+            }
+        };
+        let metadata = {
+            let lck = self.store.metadata.lock().unwrap();
+            if lck.is_empty() {
+                None
+            } else {
+                Some(serde_json::json! {lck.clone()})
+            }
+        };
+
         MailBackendCapabilities {
-            supports_submission: CAPABILITIES.supports_submission || supports_submission,
+            supports_submission,
+            metadata,
+            extensions,
             ..CAPABILITIES
         }
     }
@@ -1446,6 +1480,7 @@ impl JmapType {
             is_subscribed,
             collection: Collection::default(),
             core_capabilities: Arc::new(Mutex::new(IndexMap::default())),
+            metadata: Arc::new(Mutex::new(IndexMap::default())),
             byte_cache: Default::default(),
             id_store: Default::default(),
             reverse_id_store: Default::default(),
