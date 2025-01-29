@@ -57,7 +57,7 @@ impl AccountStatus {
         }
     }
 
-    fn calculate_content_height(&self, context: &Context) -> usize {
+    fn calculate_content_height(&self, context: &Context, width: usize) -> usize {
         let mut line = 5;
 
         let a = &context.accounts[self.account_pos];
@@ -74,6 +74,12 @@ impl AccountStatus {
             line += 1;
         }
 
+        line += 1 + a
+            .backend_capabilities
+            .metadata
+            .as_ref()
+            .map(|v| v.to_string().len().wrapping_div(width))
+            .unwrap_or_default();
         line += 3;
         line += a
             .mailbox_entries
@@ -89,7 +95,7 @@ impl AccountStatus {
     }
 
     fn update_content(&mut self, (width, height): (usize, usize), context: &Context) {
-        let height = height.max(self.calculate_content_height(context));
+        let height = height.max(self.calculate_content_height(context, width));
         if !self.content.resize_with_context(width, height, context) {
             return;
         }
@@ -194,29 +200,34 @@ impl AccountStatus {
         );
         line += 1;
         let area = self.content.area().skip(1, line);
-        let (_x, _) = self.content.grid_mut().write_string(
-            "Metadata: ",
-            self.theme_default.fg,
-            self.theme_default.bg,
-            self.theme_default.attrs | Attr::BOLD,
-            area,
-            None,
-            None,
-        );
-        self.content.grid_mut().write_string(
-            &a.backend_capabilities
-                .metadata
-                .as_ref()
-                .map(|v| v.to_string())
-                .unwrap_or_default(),
-            self.theme_default.fg,
-            self.theme_default.bg,
-            self.theme_default.attrs,
-            area.skip_cols(_x),
-            None,
-            None,
-        );
-        line += 1;
+        let metadata = a
+            .backend_capabilities
+            .metadata
+            .as_ref()
+            .map(|v| v.to_string());
+        if let Some(metadata) = metadata {
+            self.content.grid_mut().write_string(
+                "Metadata:",
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs | Attr::BOLD,
+                area,
+                None,
+                None,
+            );
+            line += 1;
+            let area = self.content.area().skip_rows(line);
+            let (_, _y) = self.content.grid_mut().write_string(
+                &metadata,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs,
+                area,
+                None,
+                Some(0),
+            );
+            line += 1 + _y;
+        }
         let area = self.content.area().skip(1, line);
         let (_x, _y) = self.content.grid_mut().write_string(
             "Search backend: ",
