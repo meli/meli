@@ -694,9 +694,10 @@ impl From<EnvelopeHash> for EnvelopeHashBatch {
     }
 }
 
-impl std::convert::TryFrom<&[EnvelopeHash]> for EnvelopeHashBatch {
+impl TryFrom<&[EnvelopeHash]> for EnvelopeHashBatch {
     type Error = ();
 
+    /// Convert a non-empty [`EnvelopeHash`] array.
     fn try_from(value: &[EnvelopeHash]) -> std::result::Result<Self, Self::Error> {
         if value.is_empty() {
             return Err(());
