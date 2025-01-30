@@ -509,8 +509,6 @@ impl JmapConnection {
                         .properties(Some(vec!["keywords".to_string(), "mailboxIds".to_string()])),
                 );
                 req.add_call(&email_get_call).await;
-            } else {
-                return Ok(None);
             }
             let res_text = self
                 .post_async(None, serde_json::to_string(&req)?)
@@ -540,7 +538,7 @@ impl JmapConnection {
                     self.store.remove_envelope(destroyed_id).await
                 {
                     for mailbox_hash in mailbox_hashes {
-                        self.add_refresh_event(RefreshEvent {
+                        events.push(RefreshEvent {
                             account_hash: self.store.account_hash,
                             mailbox_hash,
                             kind: RefreshEventKind::Remove(env_hash),
@@ -601,93 +599,95 @@ impl JmapConnection {
                 }
             }
             let reverse_id_store_lck = self.store.reverse_id_store.lock().await;
-            let response = v.method_responses.remove(0);
-            match EmailQueryChangesResponse::try_from(response) {
-                Ok(EmailQueryChangesResponse {
-                    collapse_threads: _,
-                    query_changes_response:
-                        QueryChangesResponse {
-                            account_id: _,
-                            old_query_state,
-                            new_query_state,
-                            total: _,
-                            removed,
-                            added,
-                        },
-                }) if old_query_state != new_query_state => {
-                    self.store
-                        .mailboxes
-                        .write()
-                        .unwrap()
-                        .entry(mailbox_hash)
-                        .and_modify(|mbox| {
-                            *mbox.email_query_state.lock().unwrap() = Some(new_query_state);
-                        });
-                    /*  If the "filter" or "sort" includes a mutable property, the server
-                    MUST include all Foos in the current results for which this
-                    property may have changed.  The position of these may have moved
-                    in the results, so they must be reinserted by the client to ensure
-                    its query cache is correct.  */
-                    for email_obj_id in removed
-                        .into_iter()
-                        .filter(|id| !added.iter().any(|item| item.id == *id))
-                    {
-                        if let Some(env_hash) = reverse_id_store_lck.get(&email_obj_id) {
-                            let mut mailboxes_lck = self.store.mailboxes.write().unwrap();
-                            mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
-                                mbox.unread_emails.lock().unwrap().remove(*env_hash);
-                                mbox.total_emails.lock().unwrap().insert_new(*env_hash);
+            if !v.method_responses.is_empty() {
+                let response = v.method_responses.remove(0);
+                match EmailQueryChangesResponse::try_from(response) {
+                    Ok(EmailQueryChangesResponse {
+                        collapse_threads: _,
+                        query_changes_response:
+                            QueryChangesResponse {
+                                account_id: _,
+                                old_query_state,
+                                new_query_state,
+                                total: _,
+                                removed,
+                                added,
+                            },
+                    }) if old_query_state != new_query_state => {
+                        self.store
+                            .mailboxes
+                            .write()
+                            .unwrap()
+                            .entry(mailbox_hash)
+                            .and_modify(|mbox| {
+                                *mbox.email_query_state.lock().unwrap() = Some(new_query_state);
                             });
-                            events.push(RefreshEvent {
-                                account_hash: self.store.account_hash,
-                                mailbox_hash,
-                                kind: RefreshEventKind::Remove(*env_hash),
-                            });
+                        /*  If the "filter" or "sort" includes a mutable property, the server
+                        MUST include all Foos in the current results for which this
+                        property may have changed.  The position of these may have moved
+                        in the results, so they must be reinserted by the client to ensure
+                        its query cache is correct.  */
+                        for email_obj_id in removed
+                            .into_iter()
+                            .filter(|id| !added.iter().any(|item| item.id == *id))
+                        {
+                            if let Some(env_hash) = reverse_id_store_lck.get(&email_obj_id) {
+                                let mut mailboxes_lck = self.store.mailboxes.write().unwrap();
+                                mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
+                                    mbox.unread_emails.lock().unwrap().remove(*env_hash);
+                                    mbox.total_emails.lock().unwrap().insert_new(*env_hash);
+                                });
+                                events.push(RefreshEvent {
+                                    account_hash: self.store.account_hash,
+                                    mailbox_hash,
+                                    kind: RefreshEventKind::Remove(*env_hash),
+                                });
+                            }
+                        }
+                        for AddedItem {
+                            id: _email_obj_id,
+                            index: _,
+                        } in added
+                        {
+                            // [ref:TODO] do something with added items
                         }
                     }
-                    for AddedItem {
-                        id: _email_obj_id,
-                        index: _,
-                    } in added
-                    {
-                        // [ref:TODO] do something with added items
-                    }
-                }
-                Ok(_) => {}
-                Err(err) => {
-                    log::error!(
-                        "Could not deserialize EmailQueryChangesResponse from server response:
+                    Ok(_) => {}
+                    Err(err) => {
+                        log::error!(
+                            "Could not deserialize EmailQueryChangesResponse from server response:
 - mailbox_hash: {mailbox_hash}
 - error: {err}
 - debug details:
   Json request was: {:?}
   Json reply was: {}",
-                        serde_json::to_string(&req),
-                        res_text
-                    );
-                }
-            }
-            let GetResponse::<EmailObject> { list, .. } =
-                GetResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
-            {
-                let mut mailboxes_lck = self.store.mailboxes.write().unwrap();
-                for envobj in list {
-                    if let Some(env_hash) = reverse_id_store_lck.get(&envobj.id) {
-                        let new_flags = protocol::keywords_to_flags(
-                            envobj.keywords().keys().cloned().collect(),
+                            serde_json::to_string(&req),
+                            res_text
                         );
-                        mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
-                            if new_flags.0.contains(Flag::SEEN) {
-                                mbox.unread_emails.lock().unwrap().remove(*env_hash);
-                            } else {
-                                mbox.unread_emails.lock().unwrap().insert_new(*env_hash);
-                            }
-                        });
-                        events.push(RefreshEvent {
-                            account_hash: self.store.account_hash,
-                            mailbox_hash,
-                            kind: RefreshEventKind::NewFlags(*env_hash, new_flags),
-                        });
+                    }
+                }
+                let GetResponse::<EmailObject> { list, .. } =
+                    GetResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
+                {
+                    let mut mailboxes_lck = self.store.mailboxes.write().unwrap();
+                    for envobj in list {
+                        if let Some(env_hash) = reverse_id_store_lck.get(&envobj.id) {
+                            let new_flags = protocol::keywords_to_flags(
+                                envobj.keywords().keys().cloned().collect(),
+                            );
+                            mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
+                                if new_flags.0.contains(Flag::SEEN) {
+                                    mbox.unread_emails.lock().unwrap().remove(*env_hash);
+                                } else {
+                                    mbox.unread_emails.lock().unwrap().insert_new(*env_hash);
+                                }
+                            });
+                            events.push(RefreshEvent {
+                                account_hash: self.store.account_hash,
+                                mailbox_hash,
+                                kind: RefreshEventKind::NewFlags(*env_hash, new_flags),
+                            });
+                        }
                     }
                 }
             }
