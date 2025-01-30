@@ -297,6 +297,13 @@ impl From<Error> for BackendEvent {
     }
 }
 
+impl From<RefreshEvent> for BackendEvent {
+    /// Convert into [`BackendEvent::Refresh`] variant.
+    fn from(val: RefreshEvent) -> Self {
+        Self::Refresh(val)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum RefreshEventKind {
     Update(EnvelopeHash, Box<Envelope>),
