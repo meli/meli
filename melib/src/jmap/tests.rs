@@ -788,4 +788,157 @@ fn test_jmap_server_set_method_and_response() {
         json! {&serde_json::from_value::<mailbox::MailboxSet>(json! {&mailbox_set_call}).unwrap()},
         expected_json,
     );
+    // > Suppose the rename succeeds, but we don't have permission to destroy the
+    // > Mailbox we tried
+    // > to destroy; we might get back:
+
+    let expected_json = json! {{
+        "accountId": "blahblah",
+        "oldState": "78542",
+        "newState": "78549",
+        "updated": {
+            "MB674cc24095db49ce": null
+        },
+        "notDestroyed": {
+            "MB23cfa8094c0f41e6": {
+                "type": "forbidden"
+            }
+        }
+    }};
+    let mailbox_set_response: SetResponse<mailbox::MailboxObject> = SetResponse {
+        account_id: account_id.into(),
+        old_state: Some("78542".to_string().into()),
+        new_state: "78549".to_string().into(),
+        created: None,
+        updated: Some(indexmap! {
+            id => None
+        }),
+        destroyed: None,
+        not_created: None,
+        not_updated: None,
+        not_destroyed: Some(indexmap! {
+            destroy_id => SetError::Forbidden(None)
+        }),
+    };
+    assert_eq!(json! {&mailbox_set_response}, expected_json);
+    assert_eq!(
+        json! {&serde_json::from_value::<SetResponse<mailbox::MailboxObject>>(json! {&mailbox_set_response}).unwrap()},
+        expected_json,
+    );
+
+    // Check SetError ser/de
+    let description = Some("some text".to_string());
+    let set_errors = [
+        (json! {{ "type": "forbidden" }}, SetError::Forbidden(None)),
+        (
+            json! {{ "type": "forbidden", "description": "some text" }},
+            SetError::Forbidden(description.clone()),
+        ),
+        (json! {{ "type": "overQuota" }}, SetError::OverQuota(None)),
+        (
+            json! {{ "type": "overQuota", "description": "some text" }},
+            SetError::OverQuota(description.clone()),
+        ),
+        (json! {{ "type": "tooLarge" }}, SetError::TooLarge(None)),
+        (
+            json! {{ "type": "tooLarge", "description": "some text" }},
+            SetError::TooLarge(description.clone()),
+        ),
+        (json! {{ "type": "rateLimit" }}, SetError::RateLimit(None)),
+        (
+            json! {{ "type": "rateLimit", "description": "some text" }},
+            SetError::RateLimit(description.clone()),
+        ),
+        (json! {{ "type": "notFound" }}, SetError::NotFound(None)),
+        (
+            json! {{ "type": "notFound", "description": "some text" }},
+            SetError::NotFound(description.clone()),
+        ),
+        (
+            json! {{ "type": "invalidPatch" }},
+            SetError::InvalidPatch(None),
+        ),
+        (
+            json! {{ "type": "invalidPatch", "description": "some text" }},
+            SetError::InvalidPatch(description.clone()),
+        ),
+        (
+            json! {{ "type": "willDestroy" }},
+            SetError::WillDestroy(None),
+        ),
+        (
+            json! {{ "type": "willDestroy", "description": "some text" }},
+            SetError::WillDestroy(description.clone()),
+        ),
+        (
+            json! {{ "type": "invalidProperties", "properties": ["someProperty"] }},
+            SetError::InvalidProperties {
+                description: None,
+                properties: vec!["someProperty".to_string()],
+            },
+        ),
+        (
+            json! {{ "type": "invalidProperties", "description": "some text", "properties": ["someProperty"] }},
+            SetError::InvalidProperties {
+                description: description.clone(),
+                properties: vec!["someProperty".to_string()],
+            },
+        ),
+        (json! {{ "type": "singleton" }}, SetError::Singleton(None)),
+        (
+            json! {{ "type": "singleton", "description": "some text" }},
+            SetError::Singleton(description.clone()),
+        ),
+        (
+            json! {{ "type": "requestTooLarge" }},
+            SetError::RequestTooLarge(None),
+        ),
+        (
+            json! {{ "type": "requestTooLarge", "description": "some text" }},
+            SetError::RequestTooLarge(description.clone()),
+        ),
+        (
+            json! {{ "type": "stateMismatch" }},
+            SetError::StateMismatch(None),
+        ),
+        (
+            json! {{ "type": "stateMismatch", "description": "some text" }},
+            SetError::StateMismatch(description),
+        ),
+    ];
+    for (expected_json, set_error) in set_errors {
+        assert_eq!(json! {&set_error}, expected_json);
+        assert_eq!(
+            json! {&serde_json::from_value::<SetError>(json! {&set_error}).unwrap()},
+            expected_json,
+        );
+    }
+    assert_eq!(
+        serde_json::from_value::<SetError>(json! {{
+            "type": "invalidProperties",
+        }})
+        .unwrap_err()
+        .to_string(),
+        "missing field `properties`"
+    );
+    assert_eq!(
+        serde_json::from_value::<SetError>(json! {{
+            "type": "forbidden",
+            "properties": vec!["someProperty".to_string()],
+        }})
+        .unwrap_err()
+        .to_string(),
+        "unknown field `properties`, expected `type` or `description`"
+    );
+    assert_eq!(
+        serde_json::from_value::<SetError>(json! {{
+            "type": "unknown variant",
+            "description": "foo",
+        }})
+        .unwrap_err()
+        .to_string(),
+        "unknown variant `unknown variant`, expected one of `forbidden`, `overQuota`, `tooLarge`, \
+         `rateLimit`, `notFound`, `invalidPatch`, `willDestroy`, `invalidProperties`, \
+         `singleton`, `requestTooLarge`, `stateMismatch`"
+    );
 }

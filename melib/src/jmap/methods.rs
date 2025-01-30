@@ -680,9 +680,7 @@ impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for SetRes
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(tag = "type", content = "description")]
+#[derive(Clone, Debug)]
 pub enum SetError {
     /// (create; update; destroy). The create/update/destroy would violate an
     /// ACL or other permissions policy.
@@ -722,6 +720,123 @@ pub enum SetError {
     Singleton(Option<String>),
     RequestTooLarge(Option<String>),
     StateMismatch(Option<String>),
+}
+
+impl Serialize for SetError {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let (r#type, description) = match self {
+            Self::Forbidden(ref d) => ("forbidden", d),
+            Self::OverQuota(ref d) => ("overQuota", d),
+            Self::TooLarge(ref d) => ("tooLarge", d),
+            Self::RateLimit(ref d) => ("rateLimit", d),
+            Self::NotFound(ref d) => ("notFound", d),
+            Self::InvalidPatch(ref d) => ("invalidPatch", d),
+            Self::WillDestroy(ref d) => ("willDestroy", d),
+            Self::InvalidProperties {
+                ref description,
+                ref properties,
+            } => {
+                if let Some(description) = description {
+                    let mut set_error = serializer.serialize_struct("SetError", 3)?;
+                    set_error.serialize_field("type", "invalidProperties")?;
+                    set_error.serialize_field("description", description)?;
+                    set_error.serialize_field("properties", properties)?;
+                    return set_error.end();
+                } else {
+                    let mut set_error = serializer.serialize_struct("SetError", 2)?;
+                    set_error.serialize_field("type", "invalidProperties")?;
+                    set_error.serialize_field("properties", properties)?;
+                    return set_error.end();
+                }
+            }
+            Self::Singleton(ref d) => ("singleton", d),
+            Self::RequestTooLarge(ref d) => ("requestTooLarge", d),
+            Self::StateMismatch(ref d) => ("stateMismatch", d),
+        };
+        if let Some(description) = description {
+            let mut set_error = serializer.serialize_struct("SetError", 2)?;
+            set_error.serialize_field("type", r#type)?;
+            set_error.serialize_field("description", description)?;
+            set_error.end()
+        } else {
+            let mut set_error = serializer.serialize_struct("SetError", 1)?;
+            set_error.serialize_field("type", r#type)?;
+            set_error.end()
+        }
+    }
+}
+
+impl<'de> ::serde::de::Deserialize<'de> for SetError {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: ::serde::de::Deserializer<'de>,
+    {
+        use serde::de::Error;
+
+        #[derive(Deserialize)]
+        struct Blanket {
+            r#type: String,
+            #[serde(default)]
+            description: Option<String>,
+            #[serde(default)]
+            properties: Option<Vec<String>>,
+        }
+
+        let Blanket {
+            r#type,
+            description,
+            properties,
+        } = Blanket::deserialize(deserializer)?;
+        if r#type != "invalidProperties" && properties.is_some() {
+            return Err(serde::de::Error::unknown_field(
+                "properties",
+                &["type", "description"],
+            ));
+        }
+        let set_error = match r#type.as_str() {
+            "forbidden" => Self::Forbidden(description),
+            "overQuota" => Self::OverQuota(description),
+            "tooLarge" => Self::TooLarge(description),
+            "rateLimit" => Self::RateLimit(description),
+            "notFound" => Self::NotFound(description),
+            "invalidPatch" => Self::InvalidPatch(description),
+            "willDestroy" => Self::WillDestroy(description),
+            "invalidProperties" => {
+                let Some(properties) = properties else {
+                    return Err(Error::missing_field("properties"));
+                };
+                Self::InvalidProperties {
+                    description,
+                    properties,
+                }
+            }
+            "singleton" => Self::Singleton(description),
+            "requestTooLarge" => Self::RequestTooLarge(description),
+            "stateMismatch" => Self::StateMismatch(description),
+            other => {
+                return Err(Error::unknown_variant(
+                    other,
+                    &[
+                        "forbidden",
+                        "overQuota",
+                        "tooLarge",
+                        "rateLimit",
+                        "notFound",
+                        "invalidPatch",
+                        "willDestroy",
+                        "invalidProperties",
+                        "singleton",
+                        "requestTooLarge",
+                        "stateMismatch",
+                    ],
+                ));
+            }
+        };
+        Ok(set_error)
+    }
 }
 
 impl std::fmt::Display for SetError {
