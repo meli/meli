@@ -267,7 +267,7 @@ enum JmapError {
     InvalidResultReference,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Query<F: filters::FilterTrait<OBJ>, OBJ>
 where
@@ -285,10 +285,10 @@ where
     pub anchor_offset: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u64>,
-    #[serde(default = "false_val")]
+    #[serde(default = "crate::false_val")]
     pub calculate_total: bool,
     #[serde(skip)]
-    _ph: PhantomData<fn() -> OBJ>,
+    pub _ph: PhantomData<fn() -> OBJ>,
 }
 
 impl<F: filters::FilterTrait<OBJ>, OBJ> Query<F, OBJ>
@@ -341,11 +341,11 @@ pub struct QueryResponse<OBJ: Object> {
     pub position: u64,
     pub ids: Vec<Id<OBJ>>,
     #[serde(default)]
-    pub total: u64,
+    pub total: Option<u64>,
     #[serde(default)]
-    pub limit: u64,
+    pub limit: Option<u64>,
     #[serde(skip)]
-    _ph: PhantomData<fn() -> OBJ>,
+    pub _ph: PhantomData<fn() -> OBJ>,
 }
 
 impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for QueryResponse<OBJ> {

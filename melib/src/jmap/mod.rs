@@ -669,11 +669,8 @@ impl MailBackend for JmapType {
                 .id
                 .clone();
 
-            let mut f = Filter::Condition(
-                email::EmailFilterCondition::new()
-                    .in_mailbox(Some(mailbox_id))
-                    .into(),
-            );
+            let mut f =
+                Filter::Condition(email::EmailFilterCondition::new().in_mailbox(Some(mailbox_id)));
             f &= Filter::<email::EmailFilterCondition, email::EmailObject>::from(q);
             f
         } else {

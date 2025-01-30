@@ -25,29 +25,23 @@ use crate::jmap::objects::Object;
 
 pub trait FilterTrait<T>: Default + Send + Sync {}
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(untagged)]
 pub enum Filter<F: FilterTrait<OBJ>, OBJ: Object> {
     Operator {
         operator: FilterOperator,
         conditions: Vec<Filter<F, OBJ>>,
+        #[serde(skip)]
+        _ph: PhantomData<fn() -> OBJ>,
     },
-    Condition(FilterCondition<F, OBJ>),
+    #[serde(untagged)]
+    Condition(F),
 }
 
 impl<F: FilterTrait<OBJ>, OBJ: Object> FilterTrait<OBJ> for Filter<F, OBJ> {}
-impl<F: FilterTrait<OBJ>, OBJ: Object> FilterTrait<OBJ> for FilterCondition<F, OBJ> {}
 
-#[derive(Debug, Serialize)]
-pub struct FilterCondition<F: FilterTrait<OBJ>, OBJ: Object> {
-    #[serde(flatten)]
-    pub cond: F,
-    #[serde(skip)]
-    pub _ph: PhantomData<fn() -> OBJ>,
-}
-
-#[derive(Debug, Eq, PartialEq, Serialize)]
+#[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum FilterOperator {
     And,
@@ -55,24 +49,9 @@ pub enum FilterOperator {
     Not,
 }
 
-impl<F: FilterTrait<OBJ>, OBJ: Object> FilterCondition<F, OBJ> {
-    pub fn new() -> Self {
-        Self {
-            cond: F::default(),
-            _ph: PhantomData,
-        }
-    }
-}
-
-impl<F: FilterTrait<OBJ>, OBJ: Object> Default for FilterCondition<F, OBJ> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl<F: FilterTrait<OBJ>, OBJ: Object> Default for Filter<F, OBJ> {
     fn default() -> Self {
-        Self::Condition(FilterCondition::default())
+        Self::Condition(F::default())
     }
 }
 
@@ -84,16 +63,15 @@ impl<F: FilterTrait<OBJ>, OBJ: Object> BitAndAssign for Filter<F, OBJ> {
             Self::Operator {
                 operator: FilterOperator::And,
                 ref mut conditions,
+                _ph: _,
             } => {
                 conditions.push(rhs);
             }
             Self::Condition(_) | Self::Operator { .. } => {
                 *self = Self::Operator {
                     operator: FilterOperator::And,
-                    conditions: vec![
-                        std::mem::replace(self, Self::Condition(FilterCondition::new())),
-                        rhs,
-                    ],
+                    conditions: vec![std::mem::take(self), rhs],
+                    _ph: PhantomData,
                 };
             }
         }
@@ -106,16 +84,15 @@ impl<F: FilterTrait<OBJ>, OBJ: Object> BitOrAssign for Filter<F, OBJ> {
             Self::Operator {
                 operator: FilterOperator::Or,
                 ref mut conditions,
+                _ph: _,
             } => {
                 conditions.push(rhs);
             }
             Self::Condition(_) | Self::Operator { .. } => {
                 *self = Self::Operator {
                     operator: FilterOperator::Or,
-                    conditions: vec![
-                        std::mem::replace(self, Self::Condition(FilterCondition::new())),
-                        rhs,
-                    ],
+                    conditions: vec![std::mem::take(self), rhs],
+                    _ph: PhantomData,
                 };
             }
         }
@@ -129,13 +106,16 @@ impl<F: FilterTrait<OBJ>, OBJ: Object> Not for Filter<F, OBJ> {
             Self::Operator {
                 operator: FilterOperator::Not,
                 conditions,
+                _ph: _,
             } => Self::Operator {
                 operator: FilterOperator::Or,
                 conditions,
+                _ph: PhantomData,
             },
             Self::Condition(_) | Self::Operator { .. } => Self::Operator {
                 operator: FilterOperator::Not,
                 conditions: vec![self],
+                _ph: PhantomData,
             },
         }
     }

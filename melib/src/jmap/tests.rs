@@ -27,11 +27,65 @@ fn test_jmap_query() {
     use futures::lock::Mutex as FutureMutex;
 
     use crate::jmap::{
+        comparator::Comparator,
         email::{EmailFilterCondition, EmailObject, EmailQuery},
         filters::Filter,
         methods::Query,
         protocol::Request,
     };
+    assert_eq!(
+        r#"{"inMailbox":"mailbox_id"}"#,
+        serde_json::to_string(&Filter::<EmailFilterCondition, EmailObject>::Condition(
+            EmailFilterCondition::new().in_mailbox(Some("mailbox_id".to_string().into())),
+        ))
+        .unwrap()
+        .as_str()
+    );
+    assert_eq!(
+        serde_json::to_string(
+            &serde_json::from_str::<Filter<EmailFilterCondition, EmailObject>>(
+                r#"{"inMailbox":"mailbox_id"}"#
+            )
+            .unwrap()
+        )
+        .unwrap()
+        .as_str(),
+        serde_json::to_string(&Filter::<EmailFilterCondition, EmailObject>::Condition(
+            EmailFilterCondition::new().in_mailbox(Some("mailbox_id".to_string().into()))
+        ))
+        .unwrap()
+        .as_str()
+    );
+    serde_json::from_str::<EmailQuery>(
+        r#"{"accountId":"A13824","calculateTotal":false,"collapseThreads":false,"filter":{"inMailbox":"872f54fd-0367-422b-89a0-1c76efec1653"},"limit":256,"position":0,"sort":[{"collation":null,"isAscending":false,"property":"receivedAt"}]}"#).unwrap();
+    assert_eq!(
+        serde_json::to_string(
+            &serde_json::from_str::<EmailQuery>(
+        r#"{"accountId":"A13824","calculateTotal":false,"collapseThreads":false,"filter":{"inMailbox":"872f54fd-0367-422b-89a0-1c76efec1653"},"limit":256,"position":0,"sort":[{"collation":null,"isAscending":false,"property":"receivedAt"}]}"#).unwrap()).unwrap().as_str(),
+        serde_json::to_string(&EmailQuery {
+            query_call: Query {
+                account_id: "A13824".into(),
+                filter: Some(Filter::Condition ( EmailFilterCondition { in_mailbox: Some("872f54fd-0367-422b-89a0-1c76efec1653".into()), ..EmailFilterCondition::default() } )),
+                sort: Some(vec![Comparator {
+                    collation: None,
+                    is_ascending: false,
+                    property: "receivedAt".to_string().into(),
+                    additional_properties: Default::default(),
+                    _ph: std::marker::PhantomData,
+                }]),
+                position: 0,
+                anchor: None,
+                anchor_offset: 0,
+                limit: Some(256),
+                calculate_total: false,
+                _ph: std::marker::PhantomData,
+            },
+            collapse_threads: false,
+        })
+        .unwrap()
+        .as_str()
+    );
+
     let q: crate::search::Query = crate::search::Query::try_from(
         "subject:wah or (from:Manos and (subject:foo or subject:bar))",
     )
@@ -44,11 +98,8 @@ fn test_jmap_query() {
     let filter = {
         let mailbox_id = "mailbox_id".to_string();
 
-        let mut r = Filter::Condition(
-            EmailFilterCondition::new()
-                .in_mailbox(Some(mailbox_id.into()))
-                .into(),
-        );
+        let mut r =
+            Filter::Condition(EmailFilterCondition::new().in_mailbox(Some(mailbox_id.into())));
         r &= f;
         r
     };

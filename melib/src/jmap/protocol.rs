@@ -216,9 +216,7 @@ pub async fn get_message_list(
         Query::new()
             .account_id(mail_account_id)
             .filter(Some(Filter::Condition(
-                EmailFilterCondition::new()
-                    .in_mailbox(Some(mailbox.id.clone()))
-                    .into(),
+                EmailFilterCondition::new().in_mailbox(Some(mailbox.id.clone())),
             )))
             .position(0),
     )
@@ -303,9 +301,7 @@ impl EmailFetcher {
                         Query::new()
                             .account_id(mail_account_id.clone())
                             .filter(Some(Filter::Condition(
-                                EmailFilterCondition::new()
-                                    .in_mailbox(Some(mailbox_id))
-                                    .into(),
+                                EmailFilterCondition::new().in_mailbox(Some(mailbox_id)),
                             )))
                             .position(position)
                             .limit(Some(self.batch_size)),

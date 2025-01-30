@@ -35,7 +35,7 @@ use crate::{
     jmap::{
         comparator::Comparator,
         deserialize_from_str,
-        filters::{Filter, FilterCondition, FilterTrait},
+        filters::{Filter, FilterTrait},
         mailbox::MailboxObject,
         methods::{
             u64_zero, Changes, Get, Query, QueryChanges, QueryChangesResponse, ResultField, Set,
@@ -411,7 +411,7 @@ impl Object for EmailObject {
     const NAME: &'static str = "Email";
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailQuery {
     #[serde(flatten)]
@@ -490,47 +490,45 @@ impl EmailGet {
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailFilterCondition {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub in_mailbox: Option<Id<MailboxObject>>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub in_mailbox_other_than: Vec<Id<MailboxObject>>,
-    #[serde(skip_serializing_if = "String::is_empty")]
+    #[serde(skip_serializing_if = "String::is_empty", default)]
     pub before: UtcDate,
-    #[serde(skip_serializing_if = "String::is_empty")]
+    #[serde(skip_serializing_if = "String::is_empty", default)]
     pub after: UtcDate,
-    #[serde(default)]
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub min_size: Option<u64>,
-    #[serde(default)]
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub max_size: Option<u64>,
-    #[serde(skip_serializing_if = "String::is_empty")]
+    #[serde(skip_serializing_if = "String::is_empty", default)]
     pub all_in_thread_have_keyword: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
+    #[serde(skip_serializing_if = "String::is_empty", default)]
     pub some_in_thread_have_keyword: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
+    #[serde(skip_serializing_if = "String::is_empty", default)]
     pub none_in_thread_have_keyword: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
+    #[serde(skip_serializing_if = "String::is_empty", default)]
     pub has_keyword: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
+    #[serde(skip_serializing_if = "String::is_empty", default)]
     pub not_keyword: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub has_attachment: Option<bool>,
-    #[serde(skip_serializing_if = "String::is_empty")]
+    #[serde(skip_serializing_if = "String::is_empty", default)]
     pub text: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
+    #[serde(skip_serializing_if = "String::is_empty", default)]
     pub from: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
+    #[serde(skip_serializing_if = "String::is_empty", default)]
     pub to: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
+    #[serde(skip_serializing_if = "String::is_empty", default)]
     pub cc: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
+    #[serde(skip_serializing_if = "String::is_empty", default)]
     pub bcc: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
+    #[serde(skip_serializing_if = "String::is_empty", default)]
     pub subject: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
+    #[serde(skip_serializing_if = "String::is_empty", default)]
     pub body: String,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub header: Vec<Value>,
 }
 
@@ -563,15 +561,6 @@ impl EmailFilterCondition {
 
 impl FilterTrait<EmailObject> for EmailFilterCondition {}
 
-impl From<EmailFilterCondition> for FilterCondition<EmailFilterCondition, EmailObject> {
-    fn from(val: EmailFilterCondition) -> Self {
-        Self {
-            cond: val,
-            _ph: PhantomData,
-        }
-    }
-}
-
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum MessageProperty {
@@ -602,7 +591,7 @@ pub enum MessageProperty {
 
 impl From<crate::search::Query> for Filter<EmailFilterCondition, EmailObject> {
     fn from(val: crate::search::Query) -> Self {
-        let mut ret = Self::Condition(EmailFilterCondition::new().into());
+        let mut ret = Self::Condition(EmailFilterCondition::new());
         fn rec(q: &crate::search::Query, f: &mut Filter<EmailFilterCondition, EmailObject>) {
             use datetime::{formats::RFC3339_DATE, timestamp_to_string_utc};
 
@@ -610,80 +599,79 @@ impl From<crate::search::Query> for Filter<EmailFilterCondition, EmailObject> {
 
             match q {
                 Subject(t) => {
-                    *f = Filter::Condition(EmailFilterCondition::new().subject(t.clone()).into());
+                    *f = Filter::Condition(EmailFilterCondition::new().subject(t.clone()));
                 }
                 From(t) => {
-                    *f = Filter::Condition(EmailFilterCondition::new().from(t.clone()).into());
+                    *f = Filter::Condition(EmailFilterCondition::new().from(t.clone()));
                 }
                 To(t) => {
-                    *f = Filter::Condition(EmailFilterCondition::new().to(t.clone()).into());
+                    *f = Filter::Condition(EmailFilterCondition::new().to(t.clone()));
                 }
                 Cc(t) => {
-                    *f = Filter::Condition(EmailFilterCondition::new().cc(t.clone()).into());
+                    *f = Filter::Condition(EmailFilterCondition::new().cc(t.clone()));
                 }
                 Bcc(t) => {
-                    *f = Filter::Condition(EmailFilterCondition::new().bcc(t.clone()).into());
+                    *f = Filter::Condition(EmailFilterCondition::new().bcc(t.clone()));
                 }
                 AllText(t) => {
-                    *f = Filter::Condition(EmailFilterCondition::new().text(t.clone()).into());
+                    *f = Filter::Condition(EmailFilterCondition::new().text(t.clone()));
                 }
                 Body(t) => {
-                    *f = Filter::Condition(EmailFilterCondition::new().body(t.clone()).into());
+                    *f = Filter::Condition(EmailFilterCondition::new().body(t.clone()));
                 }
                 Before(t) => {
                     *f = Filter::Condition(
-                        EmailFilterCondition::new()
-                            .before(timestamp_to_string_utc(*t, Some(RFC3339_DATE), true))
-                            .into(),
+                        EmailFilterCondition::new().before(timestamp_to_string_utc(
+                            *t,
+                            Some(RFC3339_DATE),
+                            true,
+                        )),
                     );
                 }
                 After(t) => {
                     *f = Filter::Condition(
-                        EmailFilterCondition::new()
-                            .after(timestamp_to_string_utc(*t, Some(RFC3339_DATE), true))
-                            .into(),
+                        EmailFilterCondition::new().after(timestamp_to_string_utc(
+                            *t,
+                            Some(RFC3339_DATE),
+                            true,
+                        )),
                     );
                 }
                 Between(a, b) => {
                     *f = Filter::Condition(
-                        EmailFilterCondition::new()
-                            .after(timestamp_to_string_utc(*a, Some(RFC3339_DATE), true))
-                            .into(),
+                        EmailFilterCondition::new().after(timestamp_to_string_utc(
+                            *a,
+                            Some(RFC3339_DATE),
+                            true,
+                        )),
                     );
                     *f &= Filter::Condition(
-                        EmailFilterCondition::new()
-                            .before(timestamp_to_string_utc(*b, Some(RFC3339_DATE), true))
-                            .into(),
+                        EmailFilterCondition::new().before(timestamp_to_string_utc(
+                            *b,
+                            Some(RFC3339_DATE),
+                            true,
+                        )),
                     );
                 }
                 On(t) => {
                     rec(&Between(*t, *t), f);
                 }
                 InReplyTo(ref s) => {
-                    *f = Filter::Condition(
-                        EmailFilterCondition::new()
-                            .header(vec![
-                                HeaderName::IN_REPLY_TO.as_str().into(),
-                                s.to_string().into(),
-                            ])
-                            .into(),
-                    );
+                    *f = Filter::Condition(EmailFilterCondition::new().header(vec![
+                        HeaderName::IN_REPLY_TO.as_str().into(),
+                        s.to_string().into(),
+                    ]));
                 }
                 References(ref s) => {
-                    *f = Filter::Condition(
-                        EmailFilterCondition::new()
-                            .header(vec![
-                                HeaderName::REFERENCES.as_str().into(),
-                                s.to_string().into(),
-                            ])
-                            .into(),
-                    );
+                    *f = Filter::Condition(EmailFilterCondition::new().header(vec![
+                        HeaderName::REFERENCES.as_str().into(),
+                        s.to_string().into(),
+                    ]));
                 }
                 Header(ref t, ref v) => {
                     *f = Filter::Condition(
                         EmailFilterCondition::new()
-                            .header(vec![t.as_str().into(), v.to_string().into()])
-                            .into(),
+                            .header(vec![t.as_str().into(), v.to_string().into()]),
                     );
                 }
                 AllAddresses(_) => {
@@ -693,46 +681,32 @@ impl From<crate::search::Query> for Filter<EmailFilterCondition, EmailObject> {
                     fn flag_to_filter(f: &str) -> Filter<EmailFilterCondition, EmailObject> {
                         match f {
                             "draft" => Filter::Condition(
-                                EmailFilterCondition::new()
-                                    .has_keyword("$draft".to_string())
-                                    .into(),
+                                EmailFilterCondition::new().has_keyword("$draft".to_string()),
                             ),
                             "flagged" => Filter::Condition(
-                                EmailFilterCondition::new()
-                                    .has_keyword("$flagged".to_string())
-                                    .into(),
+                                EmailFilterCondition::new().has_keyword("$flagged".to_string()),
                             ),
                             "seen" | "read" => Filter::Condition(
-                                EmailFilterCondition::new()
-                                    .has_keyword("$seen".to_string())
-                                    .into(),
+                                EmailFilterCondition::new().has_keyword("$seen".to_string()),
                             ),
                             "unseen" | "unread" => Filter::Condition(
-                                EmailFilterCondition::new()
-                                    .not_keyword("$seen".to_string())
-                                    .into(),
+                                EmailFilterCondition::new().not_keyword("$seen".to_string()),
                             ),
                             "answered" => Filter::Condition(
-                                EmailFilterCondition::new()
-                                    .has_keyword("$answered".to_string())
-                                    .into(),
+                                EmailFilterCondition::new().has_keyword("$answered".to_string()),
                             ),
                             "unanswered" => Filter::Condition(
-                                EmailFilterCondition::new()
-                                    .not_keyword("$answered".to_string())
-                                    .into(),
+                                EmailFilterCondition::new().not_keyword("$answered".to_string()),
                             ),
                             keyword => Filter::Condition(
-                                EmailFilterCondition::new()
-                                    .not_keyword(keyword.to_string())
-                                    .into(),
+                                EmailFilterCondition::new().not_keyword(keyword.to_string()),
                             ),
                         }
                     }
                     let mut accum = if let Some(first) = v.first() {
                         flag_to_filter(first.as_str())
                     } else {
-                        Filter::Condition(EmailFilterCondition::new().into())
+                        Filter::Condition(EmailFilterCondition::new())
                     };
                     for f in v.iter().skip(1) {
                         accum &= flag_to_filter(f.as_str());
@@ -740,30 +714,26 @@ impl From<crate::search::Query> for Filter<EmailFilterCondition, EmailObject> {
                     *f = accum;
                 }
                 HasAttachment => {
-                    *f = Filter::Condition(
-                        EmailFilterCondition::new()
-                            .has_attachment(Some(true))
-                            .into(),
-                    );
+                    *f = Filter::Condition(EmailFilterCondition::new().has_attachment(Some(true)));
                 }
                 And(q1, q2) => {
-                    let mut rhs = Filter::Condition(EmailFilterCondition::new().into());
-                    let mut lhs = Filter::Condition(EmailFilterCondition::new().into());
+                    let mut rhs = Filter::Condition(EmailFilterCondition::new());
+                    let mut lhs = Filter::Condition(EmailFilterCondition::new());
                     rec(q1, &mut rhs);
                     rec(q2, &mut lhs);
                     rhs &= lhs;
                     *f = rhs;
                 }
                 Or(q1, q2) => {
-                    let mut rhs = Filter::Condition(EmailFilterCondition::new().into());
-                    let mut lhs = Filter::Condition(EmailFilterCondition::new().into());
+                    let mut rhs = Filter::Condition(EmailFilterCondition::new());
+                    let mut lhs = Filter::Condition(EmailFilterCondition::new());
                     rec(q1, &mut rhs);
                     rec(q2, &mut lhs);
                     rhs |= lhs;
                     *f = rhs;
                 }
                 Not(q) => {
-                    let mut qhs = Filter::Condition(EmailFilterCondition::new().into());
+                    let mut qhs = Filter::Condition(EmailFilterCondition::new());
                     rec(q, &mut qhs);
                     *f = !qhs;
                 }

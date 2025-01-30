@@ -490,9 +490,7 @@ impl JmapConnection {
                 let email_query_changes_call = EmailQueryChanges::new(
                     QueryChanges::new(mail_account_id.clone(), email_query_state).filter(Some(
                         Filter::Condition(
-                            EmailFilterCondition::new()
-                                .in_mailbox(Some(mailbox_id.clone()))
-                                .into(),
+                            EmailFilterCondition::new().in_mailbox(Some(mailbox_id.clone())),
                         ),
                     )),
                 );
