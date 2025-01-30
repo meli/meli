@@ -22,7 +22,10 @@
 use std::marker::PhantomData;
 
 use indexmap::IndexMap;
-use serde::de::{Deserialize, Deserializer};
+use serde::{
+    de::{Deserialize, Deserializer},
+    ser::{Serialize, Serializer},
+};
 use serde_json::{value::RawValue, Value};
 use smallvec::SmallVec;
 
@@ -194,7 +197,10 @@ pub struct EmailObject {
     #[serde(default)]
     pub has_attachment: bool,
     #[serde(default)]
-    #[serde(deserialize_with = "deserialize_header")]
+    #[serde(
+        deserialize_with = "deserialize_header",
+        serialize_with = "serialize_header"
+    )]
     pub headers: IndexMap<String, String>,
     #[serde(default)]
     pub html_body: Vec<EmailBodyPart>,
@@ -245,11 +251,34 @@ where
     Ok(v.into_iter().map(|t| (t.name, t.value)).collect())
 }
 
+fn serialize_header<S>(
+    value: &IndexMap<String, String>,
+    serializer: S,
+) -> std::result::Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    value
+        .iter()
+        .map(|(n, v)| (n.clone(), v.clone()))
+        .collect::<Vec<_>>()
+        .serialize(serializer)
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailAddress {
     pub email: String,
     pub name: Option<String>,
+}
+
+impl From<crate::email::Address> for EmailAddress {
+    fn from(val: crate::email::Address) -> Self {
+        Self {
+            email: val.get_email(),
+            name: val.get_display_name(),
+        }
+    }
 }
 
 impl From<EmailAddress> for crate::email::Address {
@@ -376,6 +405,43 @@ impl From<EmailObject> for crate::Envelope {
         }
 
         env
+    }
+}
+
+impl From<&crate::Mail> for EmailObject {
+    fn from(env: &crate::Mail) -> Self {
+        Self {
+            id: Id::new_random(),
+            blob_id: Id::new_random(),
+            mailbox_ids: IndexMap::new(),
+            size: env.bytes.len().try_into().unwrap_or_default(),
+            received_at: String::new(),
+            message_id: vec![env.message_id().to_string()],
+            to: if env.from.is_empty() {
+                None
+            } else {
+                Some(env.from.iter().cloned().map(Into::into).collect())
+            },
+            bcc: None,
+            reply_to: None,
+            cc: None,
+            sender: None,
+            from: None,
+            in_reply_to: None,
+            references: None,
+            keywords: IndexMap::new(),
+            attached_emails: None,
+            attachments: vec![],
+            has_attachment: env.has_attachments,
+            headers: IndexMap::new(),
+            html_body: vec![],
+            preview: None,
+            sent_at: None,
+            subject: None,
+            text_body: vec![],
+            thread_id: Id::new_random(),
+            extra: IndexMap::new(),
+        }
     }
 }
 
