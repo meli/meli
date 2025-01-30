@@ -304,6 +304,23 @@ impl From<RefreshEvent> for BackendEvent {
     }
 }
 
+impl TryFrom<Vec<RefreshEvent>> for BackendEvent {
+    type Error = ();
+
+    /// Convert a non-empty vector into [`BackendEvent::Refresh`] or
+    /// [`BackendEvent::RefreshBatch`] variants.
+    fn try_from(mut val: Vec<RefreshEvent>) -> std::result::Result<Self, Self::Error> {
+        if val.is_empty() {
+            return Err(());
+        }
+        if val.len() == 1 {
+            Ok(Self::Refresh(val.pop().unwrap()))
+        } else {
+            Ok(Self::RefreshBatch(val))
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum RefreshEventKind {
     Update(EnvelopeHash, Box<Envelope>),
