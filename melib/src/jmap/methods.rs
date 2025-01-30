@@ -582,9 +582,15 @@ impl<OBJ: Object + Serialize + std::fmt::Debug> Serialize for Set<OBJ> {
 
         let mut state = serializer.serialize_struct("Set", fields_no)?;
         state.serialize_field("accountId", &self.account_id)?;
-        state.serialize_field("ifInState", &self.if_in_state)?;
-        state.serialize_field("update", &self.update)?;
-        state.serialize_field("destroy", &self.destroy)?;
+        if let Some(ref if_in_state) = self.if_in_state {
+            state.serialize_field("ifInState", if_in_state)?;
+        }
+        if let Some(ref update) = self.update {
+            state.serialize_field("update", update)?;
+        }
+        if let Some(ref destroy) = self.destroy {
+            state.serialize_field("destroy", destroy)?;
+        }
         if let Some(ref m) = self.create {
             let map = m
                 .into_iter()
@@ -600,8 +606,6 @@ impl<OBJ: Object + Serialize + std::fmt::Debug> Serialize for Set<OBJ> {
                 })
                 .collect::<IndexMap<_, Value>>();
             state.serialize_field("create", &map)?;
-        } else {
-            state.serialize_field("create", &self.create)?;
         }
 
         state.end()
@@ -616,6 +620,7 @@ pub struct SetResponse<OBJ: Object> {
     /// `oldState`: `String|null` The state string that would have been returned
     /// by `Foo/get` before making the requested changes, or null if the server
     /// doesn't know what the previous state string was.
+    #[serde(default = "default_none", skip_serializing_if = "Option::is_none")]
     pub old_state: Option<State<OBJ>>,
     /// `newState`: `String` The state string that will now be returned by
     /// `Foo/get`.
@@ -627,6 +632,7 @@ pub struct SetResponse<OBJ: Object> {
     /// and thus set to a default by the server.
     ///
     /// This argument is null if no `Foo` objects were successfully created.
+    #[serde(default = "default_none", skip_serializing_if = "Option::is_none")]
     pub created: Option<IndexMap<Id<OBJ>, OBJ>>,
     /// `updated`: `Id[Foo|null]|null` The keys in this map are the ids of all
     /// `Foo`s that were successfully updated.
@@ -637,22 +643,31 @@ pub struct SetResponse<OBJ: Object> {
     /// any changes to server-set or computed properties.
     ///
     /// This argument is null if no `Foo` objects were successfully updated.
+    #[serde(default = "default_none", skip_serializing_if = "Option::is_none")]
     pub updated: Option<IndexMap<Id<OBJ>, Option<OBJ>>>,
     /// `destroyed`: `Id[]|null` A list of `Foo` ids for records that were
     /// successfully destroyed, or `null` if none.
+    #[serde(default = "default_none", skip_serializing_if = "Option::is_none")]
     pub destroyed: Option<Vec<Id<OBJ>>>,
     /// `notCreated`: `Id[SetError]|null` A map of the creation id to a
     /// [`SetError`] object for each record that failed to be created, or `null`
     /// if all successful.
-    pub not_created: Option<Vec<SetError>>,
+    #[serde(default = "default_none", skip_serializing_if = "Option::is_none")]
+    pub not_created: Option<IndexMap<Id<OBJ>, SetError>>,
     /// `notUpdated`: `Id[SetError]|null` A map of the `Foo` id to a
     /// [`SetError`] object for each record that failed to be updated, or `null`
     /// if all successful.
-    pub not_updated: Option<Vec<SetError>>,
+    #[serde(default = "default_none", skip_serializing_if = "Option::is_none")]
+    pub not_updated: Option<IndexMap<Id<OBJ>, SetError>>,
     /// `notDestroyed`: `Id[SetError]|null` A map of the `Foo` id to a
     /// [`SetError`] object for each record that failed to be destroyed, or
     /// `null` if all successful.//
-    pub not_destroyed: Option<Vec<SetError>>,
+    #[serde(default = "default_none", skip_serializing_if = "Option::is_none")]
+    pub not_destroyed: Option<IndexMap<Id<OBJ>, SetError>>,
+}
+
+const fn default_none<T>() -> Option<T> {
+    None
 }
 
 impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for SetResponse<OBJ> {

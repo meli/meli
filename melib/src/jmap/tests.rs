@@ -253,9 +253,6 @@ fn test_jmap_identity_methods() {
                                 "textSignature" : ""
                             }
                         },
-                        "destroy" : null,
-                        "ifInState" : null,
-                        "update" : null
                     },
                     "m33"
                 ],
@@ -358,8 +355,6 @@ fn test_jmap_argument_serde() {
                     "undoStatus": "final"
                 }
             },
-            "destroy": null,
-            "ifInState": null,
             "onSuccessDestroyEmail": null,
             "onSuccessUpdateEmail": {
                 "#k1490": {
@@ -368,7 +363,6 @@ fn test_jmap_argument_serde() {
                     format!("mailboxIds/{sent_mailbox_id}"): true
                 }
             },
-            "update": null,
         }},
     );
     assert_eq!(
@@ -410,8 +404,6 @@ fn test_jmap_argument_serde() {
                                 "undoStatus": "final"
                             }
                         },
-                        "destroy": null,
-                        "ifInState": null,
                         "onSuccessDestroyEmail": null,
                         "onSuccessUpdateEmail": {
                             "#k1490": {
@@ -420,7 +412,6 @@ fn test_jmap_argument_serde() {
                                 format!("mailboxIds/{sent_mailbox_id}"): true
                             }
                         },
-                        "update": null
                     },
                     "m34"
                         ]
@@ -700,13 +691,20 @@ fn test_jmap_session_serde() {
 }
 
 #[test]
-fn test_jmap_server_set_fields_in_set_create() {
+/// Check that `Set` method calls and `Set` responses are serialized and
+/// serialized properly.
+fn test_jmap_server_set_method_and_response() {
     use std::sync::Arc;
 
     use futures::lock::Mutex as FutureMutex;
     use serde_json::json;
 
-    use crate::jmap::{mailbox, methods::Set, objects::Id, protocol::Request};
+    use crate::jmap::{
+        mailbox,
+        methods::{Set, SetError, SetResponse},
+        objects::Id,
+        protocol::Request,
+    };
     let account_id = "blahblah";
     let prev_seq = 33;
     let mut req = Request::new(Arc::new(FutureMutex::new(prev_seq)));
@@ -725,7 +723,8 @@ fn test_jmap_server_set_fields_in_set_create() {
                     }
                 }
             })),
-    );
+    )
+    .on_destroy_remove_emails(true);
     futures::executor::block_on(req.add_call(&mailbox_set_call));
 
     assert_eq!(
@@ -745,10 +744,7 @@ fn test_jmap_server_set_fields_in_set_create() {
                                 "sortOrder": 0,
                             }
                         },
-                        "destroy" : null,
-                        "ifInState" : null,
-                        "onDestroyRemoveEmails": false,
-                        "update" : null
+                        "onDestroyRemoveEmails": true
                     },
                     "m33"
                 ],
@@ -759,5 +755,37 @@ fn test_jmap_server_set_fields_in_set_create() {
                     "urn:ietf:params:jmap:submission"
                 ]
         }},
+    );
+    // Example "where we try to rename one Mailbox and destroy another" from RFC
+    // 8621 section-2.6
+    let id = Id::<mailbox::MailboxObject>::from("MB674cc24095db49ce");
+    let destroy_id = Id::<mailbox::MailboxObject>::from("MB23cfa8094c0f41e6");
+    let mailbox_set_call = mailbox::MailboxSet::new(
+        Set::<mailbox::MailboxObject>::new(None)
+            .account_id(account_id.into())
+            .if_in_state(Some("78542".to_string().into()))
+            .update(Some({
+                indexmap! {
+                    id.clone().into() => json! {{
+                        "name" : "Maybe important mail"
+                    }}
+                }
+            }))
+            .destroy(Some(vec![destroy_id.clone().into()])),
+    );
+    let expected_json = json! {{
+        "accountId": &account_id,
+        "ifInState": "78542",
+        "update": {
+            id.as_str(): {
+                "name": "Maybe important mail"
+            }
+        },
+        "destroy": [ destroy_id.as_str() ]
+    }};
+    assert_eq!(json! {&mailbox_set_call}, expected_json);
+    assert_eq!(
+        json! {&serde_json::from_value::<mailbox::MailboxSet>(json! {&mailbox_set_call}).unwrap()},
+        expected_json,
     );
 }

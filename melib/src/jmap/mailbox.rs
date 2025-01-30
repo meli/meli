@@ -144,8 +144,12 @@ pub struct MailboxSet {
     /// other [`Mailbox`es](crate::jmap::mailbox::MailboxObject), they will be
     /// destroyed when the [`Mailbox`](crate::jmap::mailbox::MailboxObject)
     /// is destroyed.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub on_destroy_remove_emails: bool,
+}
+
+const fn is_false(v: &bool) -> bool {
+    !*v
 }
 
 impl MailboxSet {
@@ -155,6 +159,8 @@ impl MailboxSet {
             on_destroy_remove_emails: false,
         }
     }
+
+    _impl!(on_destroy_remove_emails: bool);
 }
 
 impl Method<MailboxObject> for MailboxSet {

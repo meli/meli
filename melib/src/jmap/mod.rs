@@ -747,6 +747,7 @@ impl MailBackend for JmapType {
 
             let mut req = Request::new(conn.request_no.clone());
             let _prev_seq = req.add_call(&mailbox_set_call).await;
+            // [ref:FIXME]: inspect Set response for errors in `notCreated` field.
             let new_mailboxes = protocol::get_mailboxes(&mut conn, Some(req)).await?;
 
             let new_mailbox: Mailbox = new_mailboxes
@@ -791,6 +792,7 @@ impl MailBackend for JmapType {
 
             let mut req = Request::new(conn.request_no.clone());
             let _prev_seq = req.add_call(&mailbox_set_call).await;
+            // [ref:FIXME]: inspect Set response for errors in `notCreated` field.
             let new_mailboxes = protocol::get_mailboxes(&mut conn, Some(req)).await?;
             *store.mailboxes.write().unwrap() = new_mailboxes;
 
@@ -865,7 +867,7 @@ impl MailBackend for JmapType {
                 if !ids.is_empty() {
                     return Err(Error::new(format!(
                         "Could not delete mailbox: {}",
-                        ids.iter()
+                        ids.values()
                             .map(|err| err.to_string())
                             .collect::<Vec<String>>()
                             .join(",")
@@ -929,12 +931,26 @@ impl MailBackend for JmapType {
             let res_text = conn.send_request(serde_json::to_string(&req)?).await?;
             let v: MethodResponse = deserialize_from_str(&res_text)?;
             conn.store.online_status.update_timestamp(None).await;
-            let SetResponse::<mailbox::MailboxObject> { new_state, .. } =
-                SetResponse::<mailbox::MailboxObject>::try_from(
-                    *v.method_responses.last().unwrap(),
-                )?;
+            let SetResponse::<mailbox::MailboxObject> {
+                new_state,
+                not_updated,
+                ..
+            } = SetResponse::<mailbox::MailboxObject>::try_from(
+                *v.method_responses.last().unwrap(),
+            )?;
             *conn.store.mailbox_state.lock().await = Some(new_state);
             conn.last_method_response = Some(res_text);
+            if let Some(ids) = not_updated {
+                if !ids.is_empty() {
+                    return Err(Error::new(format!(
+                        "Could not update mailbox subscription: {}",
+                        ids.values()
+                            .map(|err| err.to_string())
+                            .collect::<Vec<String>>()
+                            .join(",")
+                    )));
+                }
+            }
 
             Ok(())
         }))
@@ -997,8 +1013,6 @@ impl MailBackend for JmapType {
             {
                 for env_hash in env_hashes.iter() {
                     if let Some(id) = store.id_store.lock().await.get(&env_hash) {
-                        // ids.push(id.clone());
-                        // id_map.insert(id.clone(), env_hash);
                         update_map.insert(
                             Argument::from(id.clone()),
                             serde_json::json!(update_keywords.clone()),
@@ -1006,6 +1020,7 @@ impl MailBackend for JmapType {
                     }
                 }
             }
+            let batch_len = update_map.len();
             let conn = connection.lock().await;
             let mail_account_id = conn.session_guard().await?.mail_account_id();
             let state = conn.store.email_state.lock().await.clone();
@@ -1042,8 +1057,9 @@ impl MailBackend for JmapType {
             if let Some(ids) = not_updated {
                 if !ids.is_empty() {
                     return Err(Error::new(format!(
-                        "Could not update ids: {}",
-                        ids.into_iter()
+                        "Could not copy {}emails: {}",
+                        if ids.len() == batch_len { "" } else { "some " },
+                        ids.values()
                             .map(|err| err.to_string())
                             .collect::<Vec<String>>()
                             .join(",")
@@ -1064,6 +1080,8 @@ impl MailBackend for JmapType {
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
             let mut update_map: IndexMap<Argument<Id<email::EmailObject>>, Value> =
+                IndexMap::default();
+            let mut updated_map: IndexMap<Id<email::EmailObject>, EnvelopeHash> =
                 IndexMap::default();
             let mut ids: Vec<Id<email::EmailObject>> =
                 Vec::with_capacity(env_hashes.rest.len() + 1);
@@ -1114,17 +1132,19 @@ impl MailBackend for JmapType {
                 }
             }
             {
-                for hash in env_hashes.iter() {
-                    if let Some(id) = store.id_store.lock().await.get(&hash) {
+                for env_hash in env_hashes.iter() {
+                    if let Some(id) = store.id_store.lock().await.get(&env_hash) {
                         ids.push(id.clone());
-                        id_map.insert(id.clone(), hash);
+                        id_map.insert(id.clone(), env_hash);
                         update_map.insert(
                             Argument::from(id.clone()),
                             serde_json::json!(update_keywords.clone()),
                         );
+                        updated_map.insert(id.clone(), env_hash);
                     }
                 }
             }
+            let batch_len = update_map.len();
             let conn = connection.lock().await;
             let mail_account_id = conn.session_guard().await?.mail_account_id();
             let state = conn.store.email_state.lock().await.clone();
@@ -1165,17 +1185,14 @@ impl MailBackend for JmapType {
                 new_state,
                 ..
             } = SetResponse::<email::EmailObject>::try_from(v.method_responses.remove(0))?;
-            *conn.store.email_state.lock().await = Some(new_state);
-            if let Some(ids) = not_updated {
-                return Err(Error::new(
-                    ids.into_iter()
-                        .map(|err| err.to_string())
-                        .collect::<Vec<String>>()
-                        .join(","),
-                ));
+            if let Some(ref ids) = not_updated {
+                for id in ids.keys() {
+                    updated_map.swap_remove(id);
+                }
             }
 
-            {
+            *conn.store.email_state.lock().await = Some(new_state);
+            if !updated_map.is_empty() {
                 let mut tag_index_lck = store.collection.tag_index.write().unwrap();
                 for op in flags.iter() {
                     if let FlagOp::SetTag(t) = op {
@@ -1184,20 +1201,43 @@ impl MailBackend for JmapType {
                 }
                 drop(tag_index_lck);
             }
-            let e = GetResponse::<email::EmailObject>::try_from(v.method_responses.pop().unwrap())?;
-            let GetResponse::<email::EmailObject> { list, .. } = e;
-            debug!(&list);
-            for envobj in list {
-                let env_hash = id_map[&envobj.id];
-                conn.add_refresh_event(RefreshEvent {
-                    account_hash: store.account_hash,
-                    mailbox_hash,
-                    kind: RefreshEventKind::NewFlags(
-                        env_hash,
-                        protocol::keywords_to_flags(envobj.keywords().keys().cloned().collect()),
-                    ),
-                });
+            let GetResponse::<email::EmailObject> { list, .. } =
+                GetResponse::try_from(v.method_responses.pop().unwrap())?;
+            if !list.is_empty() {
+                let list = list
+                    .into_iter()
+                    .filter(|envobj| updated_map.contains_key(&envobj.id))
+                    .map(|envobj| {
+                        let env_hash = id_map[&envobj.id];
+                        RefreshEvent {
+                            account_hash: store.account_hash,
+                            mailbox_hash,
+                            kind: RefreshEventKind::NewFlags(
+                                env_hash,
+                                protocol::keywords_to_flags(
+                                    envobj.keywords().keys().cloned().collect(),
+                                ),
+                            ),
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                if let Ok(ev) = list.try_into() {
+                    conn.add_backend_event(ev);
+                }
             }
+            if let Some(ids) = not_updated {
+                if !ids.is_empty() {
+                    return Err(Error::new(format!(
+                        "Could not update {}email flags: {}",
+                        if ids.len() == batch_len { "" } else { "some " },
+                        ids.values()
+                            .map(|err| err.to_string())
+                            .collect::<Vec<String>>()
+                            .join(",")
+                    )));
+                }
+            }
+
             Ok(())
         }))
     }
@@ -1221,9 +1261,11 @@ impl MailBackend for JmapType {
         Ok(Box::pin(async move {
             let mut destroy_vec: Vec<Argument<Id<email::EmailObject>>> =
                 Vec::with_capacity(env_hashes.len());
+            let mut destroyed_map: IndexMap<Id<email::EmailObject>, EnvelopeHash> = IndexMap::new();
             for env_hash in env_hashes.iter() {
                 if let Some(id) = store.id_store.lock().await.get(&env_hash) {
                     destroy_vec.push(Argument::Value(id.clone()));
+                    destroyed_map.insert(id.clone(), env_hash);
                 }
             }
             let batch_len = destroy_vec.len();
@@ -1260,22 +1302,29 @@ impl MailBackend for JmapType {
                 ..
             } = SetResponse::<email::EmailObject>::try_from(v.method_responses.remove(0))?;
             *conn.store.email_state.lock().await = Some(new_state);
-            conn.add_backend_event(BackendEvent::RefreshBatch(
-                env_hashes
-                    .iter()
-                    .map(|h| RefreshEvent {
-                        account_hash: store.account_hash,
-                        mailbox_hash,
-                        kind: RefreshEventKind::Remove(h),
-                    })
-                    .collect(),
-            ));
+            if let Some(ref ids) = not_destroyed {
+                for id in ids.keys() {
+                    destroyed_map.swap_remove(id);
+                }
+            }
+            if !destroyed_map.is_empty() {
+                conn.add_backend_event(BackendEvent::RefreshBatch(
+                    destroyed_map
+                        .values()
+                        .map(|h| RefreshEvent {
+                            account_hash: store.account_hash,
+                            mailbox_hash,
+                            kind: RefreshEventKind::Remove(*h),
+                        })
+                        .collect(),
+                ));
+            }
             if let Some(ids) = not_destroyed {
                 if !ids.is_empty() {
                     return Err(Error::new(format!(
-                        "Could not destroy {}ids: {}",
+                        "Could not delete {}emails: {}",
                         if ids.len() == batch_len { "" } else { "some " },
-                        ids.iter()
+                        ids.values()
                             .map(|err| err.to_string())
                             .collect::<Vec<String>>()
                             .join(",")
