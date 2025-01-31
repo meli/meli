@@ -54,6 +54,7 @@ impl ConfigFile {
             .append(true)
             .open(&path)?;
         file.write_all(content.as_bytes())?;
+        file.flush()?;
         Ok(Self { path, file })
     }
 }
