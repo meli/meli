@@ -692,7 +692,7 @@ fn test_jmap_session_serde() {
 
 #[test]
 /// Check that `Set` method calls and `Set` responses are serialized and
-/// serialized properly.
+/// deserialized properly.
 fn test_jmap_server_set_method_and_response() {
     use std::sync::Arc;
 
@@ -941,4 +941,173 @@ fn test_jmap_server_set_method_and_response() {
          `rateLimit`, `notFound`, `invalidPatch`, `willDestroy`, `invalidProperties`, \
          `singleton`, `requestTooLarge`, `stateMismatch`"
     );
+}
+
+#[test]
+/// Check that `Get` method calls and `Get` responses are serialized and
+/// deserialized properly.
+fn test_jmap_server_get_method_and_response() {
+    use std::sync::Arc;
+
+    use futures::lock::Mutex as FutureMutex;
+    use serde_json::json;
+
+    use crate::jmap::{
+        argument::Argument,
+        email, mailbox,
+        methods::{Get, GetResponse, ResultField},
+        protocol::Request,
+    };
+    let account_id = "blahblah";
+    let prev_seq = 33;
+    let mut req = Request::new(Arc::new(FutureMutex::new(prev_seq)));
+
+    let mailbox_get_call = mailbox::MailboxGet::new(
+        Get::<mailbox::MailboxObject>::new()
+            .account_id(account_id.into())
+            .ids(None),
+    );
+    futures::executor::block_on(req.add_call(&mailbox_get_call));
+
+    assert_eq!(
+        json! {&req},
+        json! {{
+            "methodCalls" : [
+                [
+                    "Mailbox/get",
+                    {
+                        "accountId" : account_id
+                    },
+                    "m33"
+                ],
+                ],
+                "using" : [
+                    "urn:ietf:params:jmap:core",
+                    "urn:ietf:params:jmap:mail",
+                    "urn:ietf:params:jmap:submission"
+                ]
+        }},
+    );
+    let gets: &[(serde_json::Value, mailbox::MailboxGet)] = &[
+        (
+            json! {{
+                "accountId" : account_id
+            }},
+            mailbox::MailboxGet::new(
+                Get::<mailbox::MailboxObject>::new()
+                    .account_id(account_id.into())
+                    .ids(None),
+            ),
+        ),
+        (
+            json! {{
+                "accountId" : account_id,
+                "#ids": {
+                    "resultOf": "m42",
+                    "name": "Email/changes",
+                    "path": "/created"
+                }
+            }},
+            mailbox::MailboxGet::new(
+                Get::<mailbox::MailboxObject>::new()
+                    .account_id(account_id.into())
+                    .ids(Some(Argument::reference::<
+                        email::EmailChanges,
+                        email::EmailObject,
+                        email::EmailObject,
+                    >(
+                        42,
+                        ResultField::<email::EmailChanges, email::EmailObject>::new("/created"),
+                    ))),
+            ),
+        ),
+    ];
+    for (expected_json, mailbox_get) in gets {
+        assert_eq!(&json! {&mailbox_get}, expected_json);
+        assert_eq!(
+            &json! {&serde_json::from_value::<mailbox::MailboxGet>(json! {&mailbox_get}).unwrap()},
+            expected_json,
+        );
+    }
+    let responses: &[(serde_json::Value, GetResponse<mailbox::MailboxObject>)] = &[
+        (
+            json! {{
+                "accountId": "blahblah",
+                "list": [],
+                "notFound": [],
+                "state": "75128aab4b1b",
+            }},
+            GetResponse {
+                account_id: account_id.into(),
+                state: "75128aab4b1b".to_string().into(),
+                list: vec![],
+                not_found: vec![],
+            },
+        ),
+        (
+            json! {{
+                "accountId": "blahblah",
+                "list": [{
+                    "id": "MB23cfa8094c0f41e6",
+                    "name": "Inbox",
+                    "parentId": null,
+                    "role": "inbox",
+                    "sortOrder": 10,
+                    "totalEmails": 16307,
+                    "unreadEmails": 13905,
+                    "totalThreads": 5833,
+                    "unreadThreads": 5128,
+                    "myRights": {
+                        "mayAddItems": true,
+                        "mayRename": false,
+                        "maySubmit": true,
+                        "mayDelete": false,
+                        "maySetKeywords": true,
+                        "mayRemoveItems": true,
+                        "mayCreateChild": true,
+                        "maySetSeen": true,
+                        "mayReadItems": true
+                    },
+                    "isSubscribed": true
+                }],
+                "notFound": ["MB23cfa8094c0f41e7"],
+                "state": "75128aab4b1b",
+            }},
+            GetResponse {
+                account_id: account_id.into(),
+                state: "75128aab4b1b".to_string().into(),
+                list: vec![mailbox::MailboxObject {
+                    id: "MB23cfa8094c0f41e6".into(),
+                    name: "Inbox".into(),
+                    parent_id: None,
+                    role: Some("inbox".into()),
+                    sort_order: 10,
+                    total_emails: 16307,
+                    unread_emails: 13905,
+                    total_threads: 5833,
+                    unread_threads: 5128,
+                    my_rights: mailbox::JmapRights {
+                        may_add_items: true,
+                        may_rename: false,
+                        may_submit: true,
+                        may_delete: false,
+                        may_set_keywords: true,
+                        may_remove_items: true,
+                        may_create_child: true,
+                        may_set_seen: true,
+                        may_read_items: true,
+                    },
+                    is_subscribed: true,
+                }],
+                not_found: vec!["MB23cfa8094c0f41e7".into()],
+            },
+        ),
+    ];
+    for (expected_json, mailbox_get_response) in responses {
+        assert_eq!(&json! {&mailbox_get_response}, expected_json);
+        assert_eq!(
+            &json! {&serde_json::from_value::<GetResponse<mailbox::MailboxObject>>(json! {&mailbox_get_response}).unwrap()},
+            expected_json,
+        );
+    }
 }

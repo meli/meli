@@ -45,22 +45,18 @@ use crate::{
 /// `/get`
 ///
 /// Objects of type `Foo` are fetched via a call to `Foo/get`.
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug)]
 pub struct Get<OBJ>
 where
     OBJ: Object + std::fmt::Debug + Serialize,
 {
     /// `account_id`: `Id` The id of the account to use.
     pub account_id: Id<Account>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(flatten)]
     /// `ids`: `Id[]|null` The ids of the `Foo` objects to return. If `null`,
     /// then *all* records of the data type are returned, if this is
     /// supported for that data type and the number of records does not
     /// exceed the `maxObjectsInGet` limit.
     pub ids: Option<Argument<Vec<Id<OBJ>>>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     /// `properties`: `String[]|null` If supplied, only the properties listed in
     /// the array are returned for each `Foo` object. If `null`, all
     /// properties of the object are returned. The `id` property of the
@@ -68,7 +64,6 @@ where
     /// invalid property is requested, the call **MUST** be rejected with an
     /// `invalidArguments` error.
     pub properties: Option<Vec<String>>,
-    #[serde(skip)]
     _ph: PhantomData<fn() -> OBJ>,
 }
 
@@ -118,10 +113,7 @@ impl<OBJ: Object + Serialize + std::fmt::Debug> Serialize for Get<OBJ> {
     where
         S: Serializer,
     {
-        let mut fields_no = 0;
-        if !self.account_id.is_empty() {
-            fields_no += 1;
-        }
+        let mut fields_no = 1;
         if self.ids.is_some() {
             fields_no += 1;
         }
@@ -130,9 +122,7 @@ impl<OBJ: Object + Serialize + std::fmt::Debug> Serialize for Get<OBJ> {
         }
 
         let mut state = serializer.serialize_struct("Get", fields_no)?;
-        if !self.account_id.is_empty() {
-            state.serialize_field("accountId", &self.account_id)?;
-        }
+        state.serialize_field("accountId", &self.account_id)?;
         match self.ids.as_ref() {
             None => {}
             Some(Argument::Value(ref v)) => state.serialize_field("ids", v)?,
@@ -161,11 +151,73 @@ impl<OBJ: Object + Serialize + std::fmt::Debug> Serialize for Get<OBJ> {
             }
         }
 
-        if self.properties.is_some() {
-            state.serialize_field("properties", self.properties.as_ref().unwrap())?;
+        if let Some(ref properties) = self.properties {
+            state.serialize_field("properties", properties)?;
         }
 
         state.end()
+    }
+}
+
+impl<'de, OBJ: Object + ::serde::de::Deserialize<'de> + Serialize + std::fmt::Debug>
+    ::serde::de::Deserialize<'de> for Get<OBJ>
+{
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: ::serde::de::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct ResultReference {
+            result_of: String,
+            name: String,
+            path: String,
+        }
+
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Blanket<OBJ> {
+            account_id: Id<Account>,
+            #[serde(default = "default_none", rename = "#ids")]
+            _ids: Option<ResultReference>,
+            #[serde(default = "default_none")]
+            ids: Option<Vec<Id<OBJ>>>,
+            #[serde(default)]
+            properties: Option<Vec<String>>,
+        }
+
+        let Blanket {
+            account_id,
+            _ids,
+            ids,
+            properties,
+        } = Blanket::deserialize(deserializer)?;
+        match (_ids, ids) {
+            (Some(_), Some(_)) => Err(serde::de::Error::duplicate_field("ids")),
+            (Some(result_ref), None) => {
+                let ResultReference {
+                    result_of,
+                    name,
+                    path,
+                } = result_ref;
+                Ok(Self {
+                    account_id,
+                    ids: Some(Argument::ResultReference {
+                        result_of,
+                        name,
+                        path,
+                    }),
+                    properties,
+                    _ph: PhantomData,
+                })
+            }
+            (None, ids) => Ok(Self {
+                account_id,
+                ids: ids.map(Argument::Value),
+                properties,
+                _ph: PhantomData,
+            }),
+        }
     }
 }
 
