@@ -799,7 +799,6 @@ impl Account {
                         child,
                     },
                 )));
-            return Ok(());
         }
         let refresh_job = self.backend.write().unwrap().refresh(mailbox_hash);
         if let Ok(refresh_job) = refresh_job {
