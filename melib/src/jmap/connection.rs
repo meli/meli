@@ -535,11 +535,25 @@ impl JmapConnection {
                 }
                 Ok(s) => s,
             };
-            let changes_response =
+            let mut changes_response =
                 ChangesResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
             if changes_response.new_state == current_state {
                 return Ok(());
             }
+            for destroyed_id in std::mem::take(&mut changes_response.destroyed) {
+                if let Some((env_hash, mailbox_hashes)) =
+                    self.store.remove_envelope(destroyed_id).await
+                {
+                    for mailbox_hash in mailbox_hashes {
+                        self.add_refresh_event(RefreshEvent {
+                            account_hash: self.store.account_hash,
+                            mailbox_hash,
+                            kind: RefreshEventKind::Remove(env_hash),
+                        });
+                    }
+                }
+            }
+            // [ref:TODO]: process changes_response.updated too
             let get_response = GetResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
 
             {
