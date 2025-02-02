@@ -1354,7 +1354,7 @@ impl Component for Composer {
                                 )));
                             self.mode = ViewMode::WaitingForSendResult(
                                 UIDialog::new(
-                                    "Waiting for confirmation.. The tab will close automatically \
+                                    "Waiting for confirmation. The tab will close automatically \
                                      on successful submission.",
                                     vec![
                                         ('c', "force close tab".to_string()),
