@@ -61,8 +61,10 @@ pub mod formats {
     pub const RFC3339_DATE: &str = "%Y-%m-%d\0";
 
     pub const RFC822_DATE: &str = "%a, %d %b %Y %H:%M:%S %z\0";
-    pub const RFC822_FMT_WITH_TIME: &str = "%a, %e %h %Y %H:%M:%S \0";
-    pub const RFC822_FMT: &str = "%e %h %Y %H:%M:%S \0";
+    pub const RFC822_FMT_DAY: &str = "%a, %e %h %Y %H:%M \0";
+    pub const RFC822_FMT_DAY_WITH_SECONDS: &str = "%a, %e %h %Y %H:%M:%S \0";
+    pub const RFC822_FMT: &str = "%e %h %Y %H:%M \0";
+    pub const RFC822_FMT_WITH_SECONDS: &str = "%e %h %Y %H:%M:%S \0";
     pub const DEFAULT_FMT: &str = "%a, %d %b %Y %R\0";
     //"Tue May 21 13:46:22 1991\n"
     //"Wed Sep  9 00:27:54 2020\n"
@@ -385,8 +387,17 @@ where
     T: Into<Vec<u8>>,
 {
     let s = CString::new(s)?;
-    let mut new_tm: libc::tm = unsafe { std::mem::zeroed() };
-    for fmt in &[fmt::RFC822_FMT_WITH_TIME, fmt::RFC822_FMT, fmt::ASCTIME_FMT] {
+    for fmt in &[
+        fmt::RFC822_FMT_DAY_WITH_SECONDS,
+        fmt::RFC822_FMT_DAY,
+        fmt::RFC822_FMT_WITH_SECONDS,
+        fmt::RFC822_FMT,
+        fmt::ASCTIME_FMT,
+    ] {
+        // SAFETY: it's safe to zero initialize a `struct tm`.
+        let mut new_tm: libc::tm = unsafe { std::mem::zeroed() };
+        debug_assert!(fmt.ends_with('\0'));
+        // SAFETY: all formats::* constants include nul bytes at the end.
         let fmt = unsafe { CStr::from_bytes_with_nul_unchecked(fmt.as_bytes()) };
         let ret = {
             let _with_locale = Locale::new(
@@ -397,6 +408,7 @@ where
             )
             .chain_err_summary(|| "Could not set locale for datetime conversion")
             .chain_err_kind(ErrorKind::External)?;
+            // SAFETY: s, fmt are valid C strings and new_tm a struct tm.
             unsafe { strptime(s.as_ptr(), fmt.as_ptr(), std::ptr::addr_of_mut!(new_tm)) }
         };
 

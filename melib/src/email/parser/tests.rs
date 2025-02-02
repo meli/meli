@@ -205,6 +205,69 @@ fn test_email_parser_address_list() {
 }
 
 #[test]
+fn test_email_parser_whitespace_comments_and_other_oddities() {
+    // Examples from RFC5322 Appendix A.5. White Space, Comments, and Other Oddities
+    assert_eq!(
+        rfc5322_date(
+            br#"Thu,
+      13
+        Feb
+          1999
+      23:32
+               -0330 (Newfoundland Time)"#
+        )
+        .unwrap(),
+        rfc5322_date(b"Thu, 13 Feb 1999 23:32 -0330").unwrap()
+    );
+    assert_eq!(
+        rfc5322_date(b"Thu, 13 Feb 1999 23:32 -0330").unwrap(),
+        rfc5322_date(b"Thu, 13 Feb 1999 23:32:00 -0330").unwrap()
+    );
+    assert_eq!(
+        (
+            [].as_slice(),
+            smallvec::smallvec![Address::new(
+                Some("Pete".to_string()),
+                "pete@silly.test".to_string()
+            )]
+        ),
+        rfc2822address_list(br#"Pete(A nice \) chap) <pete(his account)@silly.test(his host)>"#)
+            .unwrap()
+    );
+    assert_eq!(
+        (
+            [].as_slice(),
+            smallvec::smallvec![Address::new_group(
+                "A Group".to_string(),
+                vec![
+                    Address::new(
+                        Some("Chris Jones".to_string()),
+                        "c@public.example".to_string()
+                    ),
+                    Address::new(None, "joe@example.org".to_string()),
+                    Address::new(Some("John".to_string()), "jdoe@one.test".to_string()),
+                ]
+            )]
+        ),
+        rfc2822address_list(
+            br#"A Group(Some people)
+     :Chris Jones <c@(Chris's host.)public.example>,
+         joe@example.org,
+  John <jdoe@one.test> (my dear friend); (the end of the group)"#
+        )
+        .unwrap()
+    );
+    assert_eq!(
+        (
+            [].as_slice(),
+            smallvec::smallvec![Address::new_group("Hidden recipients".to_string(), vec![])]
+        ),
+        rfc2822address_list(br#"(Empty list)(start)Hidden recipients  :(nobody(that I know))  ;"#)
+            .unwrap()
+    );
+}
+
+#[test]
 fn test_email_parser_addresses() {
     macro_rules! assert_parse {
         ($name:literal, $addr:literal, $raw:literal) => {{
