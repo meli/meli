@@ -318,9 +318,8 @@ fn test_email_compose_draft_from_str() {
     let err = Draft::from_str("safd ffsadfa asfd ").unwrap_err();
     assert_eq!(
         &err.summary,
-        "Parsing error. In input: \"safd ffsadfa asfd ...\",\nError: Alternative, Many1, \
-         Alternative, header_with_val(): invalid character: ' '. Could not parse mail. Could not \
-         parse e-mail into a Draft"
+        "Error when parsing: \"safd ffsadfa asfd \". Could not parse mail. Could not parse e-mail \
+         into a Draft"
     );
     assert_eq!(err.kind, ErrorKind::ValueError);
 }

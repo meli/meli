@@ -318,9 +318,8 @@ mod tests {
         let err_msg = hook(&mut ctx, &mut draft).unwrap_err().to_string();
         assert_eq!(
             err_msg,
-            "From header value is invalid\nCaused by:\n[2] Parsing error. In input: \
-             \"...\",\nError: Alternative, Many1, Alternative, atom(): starts with whitespace or \
-             empty",
+            "From header value is invalid\nCaused by:\n[2] Error when parsing: \"\"\nAlternative, \
+             Many1, Alternative, atom(): starts with whitespace or empty",
             "HEADERWARN should complain about From value being empty: {}",
             err_msg
         );
@@ -330,9 +329,8 @@ mod tests {
         let err_msg = hook(&mut ctx, &mut draft).unwrap_err().to_string();
         assert_eq!(
             err_msg,
-            "To header value is invalid\nCaused by:\n[2] Parsing error. In input: \
-             \"...\",\nError: Alternative, Many1, Alternative, atom(): starts with whitespace or \
-             empty",
+            "To header value is invalid\nCaused by:\n[2] Error when parsing: \"\"\nAlternative, \
+             Many1, Alternative, atom(): starts with whitespace or empty",
             "HEADERWARN should complain about To value being empty: {}",
             err_msg
         );
@@ -360,8 +358,8 @@ mod tests {
         let err_msg = hook(&mut ctx, &mut draft).unwrap_err().to_string();
         assert_eq!(
             err_msg,
-            "From header value is invalid\nCaused by:\n[2] Parsing error. In input: \"user \
-             user@example.com>...\",\nError: Alternative, Tag",
+            "From header value is invalid\nCaused by:\n[2] Error when parsing: \"user \
+             user@example.com>\"\nAlternative, Tag",
             "HEADERWARN should complain about From value being invalid: {}",
             err_msg
         );

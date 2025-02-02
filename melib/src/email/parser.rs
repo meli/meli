@@ -212,63 +212,33 @@ impl<I> nom::error::ContextError<I> for ParsingError<I> {}
 
 impl<'i> From<ParsingError<&'i [u8]>> for Error {
     fn from(val: ParsingError<&'i [u8]>) -> Self {
-        Self::new("Parsing error")
-            .set_summary(format!(
-                r#"In input: "{}...",
-Error: {}"#,
-                String::from_utf8_lossy(val.input)
-                    .chars()
-                    .take(30)
-                    .collect::<String>(),
-                val.error
-            ))
-            .set_details({
-                #[cfg(any(test, doc))]
-                {
-                    println!(
-                        "\tInput:\n{}\tError:\n{}\n\tBacktrace:\n{}",
-                        String::from_utf8_lossy(val.input)
-                            .chars()
-                            .take(30)
-                            .collect::<String>(),
-                        val.error,
-                        val.backtrace
-                    );
-                    val.backtrace.to_string()
-                }
-                #[cfg(not(any(test, doc)))]
-                {
-                    ""
-                }
-            })
+        #[cfg(any(test, doc))]
+        {
+            eprintln!(
+                "Parsing error for input:\n{}\nError:\n{}\nBacktrace:\n{}",
+                String::from_utf8_lossy(val.input),
+                val.error,
+                val.backtrace
+            );
+        }
+        Self::new(format!(
+            "Error when parsing: \"{}\"",
+            String::from_utf8_lossy(val.input)
+        ))
+        .set_details(val.error)
     }
 }
 
 impl<'i> From<ParsingError<&'i str>> for Error {
     fn from(val: ParsingError<&'i str>) -> Self {
-        Self::new("Parsing error")
-            .set_summary(format!(
-                r#"In input: "{}...",
-Error: {}"#,
-                val.input.chars().take(30).collect::<String>(),
-                val.error
-            ))
-            .set_details({
-                #[cfg(any(test, doc))]
-                {
-                    println!(
-                        "\tInput:\n{}\tError:\n{}\n\tBacktrace:\n{}",
-                        val.input.chars().take(30).collect::<String>(),
-                        val.error,
-                        val.backtrace
-                    );
-                    val.backtrace.to_string()
-                }
-                #[cfg(not(any(test, doc)))]
-                {
-                    ""
-                }
-            })
+        #[cfg(any(test, doc))]
+        {
+            eprintln!(
+                "Parsing error for input:\n{}\nError:\n{}\nBacktrace:\n{}",
+                val.input, val.error, val.backtrace
+            );
+        }
+        Self::new(format!("Error when parsing: \"{}\"", val.input)).set_details(val.error)
     }
 }
 
