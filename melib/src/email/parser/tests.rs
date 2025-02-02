@@ -118,12 +118,9 @@ fn test_email_parser_phrase() {
 
 #[test]
 fn test_email_parser_address_list() {
-    let s = b"Obit Oppidum <user@domain>,
-            list <list@domain.tld>, list2 <list2@domain.tld>,
-            Bobit Boppidum <user@otherdomain.com>, Cobit Coppidum <user2@otherdomain.com>, <user@domain.tld>";
     assert_eq!(
         (
-            &s[0..0],
+            [].as_slice(),
             smallvec::smallvec![
                 make_address!("Obit Oppidum", "user@domain"),
                 make_address!("list", "list@domain.tld"),
@@ -133,7 +130,77 @@ fn test_email_parser_address_list() {
                 make_address!("", "user@domain.tld")
             ]
         ),
-        rfc2822address_list(s).unwrap()
+        rfc2822address_list(b"Obit Oppidum <user@domain>, list <list@domain.tld>, list2 <list2@domain.tld>, Bobit Boppidum <user@otherdomain.com>, Cobit Coppidum <user2@otherdomain.com>, <user@domain.tld>").unwrap()
+    );
+    assert_eq!(
+        crate::Error::from(
+            rfc2822address_list(b"Prof. Einstein <einstein@example.org>").unwrap_err()
+        )
+        .to_string(),
+        "Error when parsing: \"Prof. Einstein <einstein@example.org>\"\nAddress `Prof. Einstein \
+         <einstein@example.org>` contains errors: Display names that contain ()<>[]:;@\\,.\" must \
+         be quoted. Try: `\"Prof. Einstein\" <einstein@example.org>` instead",
+    );
+    // Examples from RFC5322 Appendix A.1.2. "Different Types of Mailboxes"
+    assert_eq!(
+        (
+            [].as_slice(),
+            smallvec::smallvec![make_address!("Joe Q. Public", "john.q.public@example.com")],
+        ),
+        rfc2822address_list(br#""Joe Q. Public" <john.q.public@example.com>"#).unwrap()
+    );
+    assert_eq!(
+        (
+            [].as_slice(),
+            smallvec::smallvec![
+                make_address!("Mary Smith", "mary@example.com"),
+                make_address!("", "jdoe@example.org"),
+                make_address!("Who?", "one@example.com"),
+            ],
+        ),
+        rfc2822address_list(
+            br#"Mary Smith <mary@example.com>, jdoe@example.org, Who? <one@example.com>"#
+        )
+        .unwrap()
+    );
+    assert_eq!(
+        (
+            [].as_slice(),
+            smallvec::smallvec![
+                make_address!("", "boss@example.com"),
+                make_address!("Giant; \"Big\" Box", "sysservices@example.com"),
+            ]
+        ),
+        rfc2822address_list(
+            br#"<boss@example.com>, "Giant; \"Big\" Box" <sysservices@example.com>"#
+        )
+        .unwrap()
+    );
+    // Examples from RFC5322 Appendix A.1.3. "Group Addresses"
+    assert_eq!(
+        (
+            [].as_slice(),
+            smallvec::smallvec![Address::new_group(
+                "A Group".to_string(),
+                vec![
+                    make_address!("Ed Jones", "c@a.test"),
+                    make_address!("", "joe@where.test"),
+                    make_address!("John", "jdoe@one.test"),
+                ]
+            )]
+        ),
+        rfc2822address_list(br#"A Group:Ed Jones <c@a.test>,joe@where.test,John <jdoe@one.test>;"#)
+            .unwrap()
+    );
+    assert_eq!(
+        (
+            [].as_slice(),
+            smallvec::smallvec![Address::new_group(
+                "Undisclosed recipients".to_string(),
+                vec![]
+            )]
+        ),
+        rfc2822address_list(br#"Undisclosed recipients:;"#).unwrap()
     );
 }
 

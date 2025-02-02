@@ -2595,7 +2595,39 @@ pub mod address {
 
     /// `address         =   mailbox / group`
     pub fn address(input: &[u8]) -> IResult<&[u8], Address> {
-        alt((mailbox, group))(input.ltrim())
+        let err = match alt((mailbox, group))(input.ltrim()) {
+            ok @ Ok(_) => return ok,
+            Err(err) => err,
+        };
+        // Try to detect common errors
+        static RE: std::sync::OnceLock<regex::bytes::Regex> = std::sync::OnceLock::new();
+
+        let re = RE.get_or_init(|| {
+            regex::bytes::Regex::new(r"(?m)(?:^(?P<display>.*?) [<](?P<addr_spec>.*?[@].*?)[>]$)|(?:^()(?P<addr_spec_bare>[^<@]*?[@][^>]*$))|(?:^()[<](?P<addr_spec_bare_bracketed>.*?[@].*?)[>]$)").unwrap()
+        });
+
+        if let Some((full, [display_name, addr_spec])) =
+            re.captures(input).map(|cap| cap.extract::<2>())
+        {
+            if [
+                b'(', b')', b'<', b'>', b'[', b']', b':', b';', b'@', b'\\', b',', b'.', b'"',
+            ]
+            .iter()
+            .any(|b| display_name.contains(b))
+            {
+                return Err(nom::Err::Error(ParsingError::<&[u8]>::new(
+                    full,
+                    Cow::Owned(format!(
+                        "Address `{}` contains errors: Display names that contain ()<>[]:;@\\,.\" \
+                         must be quoted. Try: `\"{}\" <{}>` instead",
+                        String::from_utf8_lossy(input),
+                        String::from_utf8_lossy(display_name),
+                        String::from_utf8_lossy(addr_spec)
+                    )),
+                )));
+            }
+        }
+        Err(err)
     }
 
     pub fn rfc2822address_list(input: &[u8]) -> IResult<&[u8], SmallVec<[Address; 1]>> {
