@@ -910,6 +910,7 @@ pub enum ReplyCode {
 }
 
 impl ReplyCode {
+    /// Return a description of the reply code in English.
     pub const fn as_str(&self) -> &'static str {
         use ReplyCode::*;
         match self {
@@ -987,6 +988,7 @@ impl ReplyCode {
         }
     }
 
+    /// Returns `true` if reply code indicates that an error has occured.
     pub const fn is_err(&self) -> bool {
         use ReplyCode::*;
         matches!(
@@ -1012,6 +1014,7 @@ impl ReplyCode {
     }
 }
 
+/// Parse a [`ReplyCode`] from a string slice of three digits, e.g. `"250"`.
 impl TryFrom<&'_ str> for ReplyCode {
     type Error = Error;
     fn try_from(val: &'_ str) -> Result<Self> {
