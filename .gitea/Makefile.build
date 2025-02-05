@@ -26,7 +26,7 @@ cargo-test-compiles:
 .PHONY: cargo-test
 cargo-test:
 	@printf "cargo-test\n"
-	cargo nextest run --all --no-fail-fast --all-features --future-incompat-report -E 'not (test(smtp::test::test_smtp))'
+	cargo nextest run --all --no-fail-fast --all-features --future-incompat-report
 .PHONY: rustdoc-build
 rustdoc-build:
 	@printf "rustdoc-build\n"
