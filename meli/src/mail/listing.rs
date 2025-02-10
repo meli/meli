@@ -1675,6 +1675,8 @@ impl Component for Listing {
                 }
             }
         }
+
+        let mut have_forwarded_to_component = false;
         // Forward events to self.component if it's focused, otherwise forward any
         // unhandled events to self.component at the end of this function.
         if (self.focus == ListingFocus::Mailbox && self.status.is_none())
@@ -1684,7 +1686,10 @@ impl Component for Listing {
                     .as_mut()
                     .map(|v| v.process_event(event, context))
                     .unwrap_or(false))
-                || self.component.process_event(event, context))
+                || {
+                    have_forwarded_to_component = true;
+                    self.component.process_event(event, context)
+                })
         {
             return true;
         }
@@ -2866,8 +2871,10 @@ impl Component for Listing {
             _ => {}
         }
         // Forward unhandled events to self.component if that hasn't happened already.
-        if !((self.focus == ListingFocus::Mailbox && self.status.is_none())
-            && self.component.unfocused())
+        if !(have_forwarded_to_component
+            || (self.focus == ListingFocus::Mailbox
+                && self.status.is_none()
+                && self.component.unfocused()))
         {
             self.component.process_event(event, context);
         }
