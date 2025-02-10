@@ -231,8 +231,10 @@ impl Component for OfflineListing {
             UIEvent::AccountStatusChange(account_hash, msg)
                 if *account_hash == self.cursor_pos.0 =>
             {
-                if let Some(msg) = msg.clone() {
-                    self.messages.push(msg);
+                if let Some(ref msg) = msg {
+                    if !matches!(self.messages.last(), Some(last_msg) if last_msg == msg) {
+                        self.messages.push(msg.clone());
+                    }
                 }
                 self.set_dirty(true);
             }
