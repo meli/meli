@@ -212,7 +212,7 @@ impl NntpStream {
         if let Err(err) = ret
             .stream
             .get_ref()
-            .set_keepalive(Some(std::time::Duration::new(60 * 9, 0)))
+            .set_keepalive(Some(std::time::Duration::new(60 * 30, 0)))
         {
             log::warn!("Could not set TCP keepalive in NNTP connection: {}", err);
         }
