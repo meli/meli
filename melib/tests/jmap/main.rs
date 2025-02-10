@@ -110,7 +110,7 @@ pub mod server {
          "maxSizeUpload": 50000000,
          "maxConcurrentUpload": 8,
          "maxSizeRequest": 10000000,
-         "maxConcurrentRequest": 8,
+         "maxConcurrentRequests": 8,
          "maxCallsInRequest": 32,
          "maxObjectsInGet": 256,
          "maxObjectsInSet": 128,
