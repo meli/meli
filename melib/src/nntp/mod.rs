@@ -429,7 +429,7 @@ impl MailBackend for NntpType {
         _mailbox_hash: MailboxHash,
         _flags: Option<Flag>,
     ) -> ResultFuture<()> {
-        Err(Error::new("NNTP doesn't support saving."))
+        Err(Error::new("NNTP doesn't support saving.").set_kind(ErrorKind::NotSupported))
     }
 
     fn copy_messages(
@@ -439,7 +439,7 @@ impl MailBackend for NntpType {
         _destination_mailbox_hash: MailboxHash,
         _move_: bool,
     ) -> ResultFuture<()> {
-        Err(Error::new("NNTP doesn't support copying/moving."))
+        Err(Error::new("NNTP doesn't support copying/moving.").set_kind(ErrorKind::NotSupported))
     }
 
     fn set_flags(
@@ -504,7 +504,7 @@ impl MailBackend for NntpType {
         _env_hashes: EnvelopeHashBatch,
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<()> {
-        Err(Error::new("NNTP doesn't support deletion."))
+        Err(Error::new("NNTP doesn't support deletion.").set_kind(ErrorKind::NotSupported))
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -525,7 +525,7 @@ impl MailBackend for NntpType {
     ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
         Err(
             Error::new("Creating mailbox is not supported for nntp backend.")
-                .set_kind(ErrorKind::NotImplemented),
+                .set_kind(ErrorKind::NotSupported),
         )
     }
 
@@ -593,7 +593,9 @@ impl MailBackend for NntpType {
             let mut conn = timeout(timeout_dur, connection.lock()).await?;
             let stream = conn.stream.as_ref()?;
             if !stream.supports_submission {
-                return Err(Error::new("Server prohibits posting."));
+                return Err(
+                    Error::new("Server prohibits posting.").set_kind(ErrorKind::NotSupported)
+                );
             }
             // [ref:TODO] normalize CRLF in `bytes`
             let mut res = String::with_capacity(8 * 1024);

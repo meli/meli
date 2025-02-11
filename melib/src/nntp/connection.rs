@@ -117,9 +117,10 @@ impl NntpStream {
                     .await?;
                 if !res.starts_with("101 ") {
                     return Err(Error::new(format!(
-                        "Could not connect to {}: expected CAPABILITIES response but got:{}",
+                        "Could not connect to {}: expected CAPABILITIES response but got: {}",
                         &server_conf.server_hostname, res
-                    )));
+                    ))
+                    .set_kind(ErrorKind::ProtocolError));
                 }
                 let capabilities: Vec<&str> = res.lines().skip(1).collect();
 
@@ -130,16 +131,17 @@ impl NntpStream {
                     return Err(Error::new(format!(
                         "Could not connect to {}: server is not NNTP VERSION 2 compliant",
                         &server_conf.server_hostname
-                    )));
+                    ))
+                    .set_kind(ErrorKind::ProtocolNotSupported));
                 }
                 if !capabilities
                     .iter()
                     .any(|cap| cap.eq_ignore_ascii_case("STARTTLS"))
                 {
                     return Err(Error::new(format!(
-                        "Could not connect to {}: server does not support STARTTLS",
+                        "Could not connect to {}: server does not support STARTTLS but it was required by user configuration",
                         &server_conf.server_hostname
-                    )));
+                    )).set_kind(ErrorKind::NotSupported));
                 }
                 ret.stream.write_all(b"STARTTLS\r\n").await?;
                 ret.stream.flush().await?;
