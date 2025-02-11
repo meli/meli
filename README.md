@@ -4,7 +4,8 @@
 
 Try an [old, outdated but online and interactive web demo](https://meli-email.org/wasm2.html "online interactive web demo") powered by WebAssembly!
 
-* `#meli` on OFTC IRC
+* Say hello on `#meli` on OFTC IRC, or,
+* [`#meli:matrix.org`](https://matrix.to/#/#meli:matrix.org) Matrix bridge (if operational)
 * [Mailing lists](https://lists.meli-email.org/)
 * Main repository <https://git.meli-email.org/meli/meli> Report bugs and/or feature requests in [meli's issue tracker](https://git.meli-email.org/meli/meli/issues "meli gitea issue tracker")<details><summary>Official git mirrors</summary>
   - <https://codeberg.org/meli/meli>
