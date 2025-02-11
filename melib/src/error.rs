@@ -108,6 +108,7 @@ impl ErrorKind {
     is_variant! { is_from_linked_library, LinkedLibrary(_) }
     is_variant! { is_network, Network(_) }
     is_variant! { is_network_down, Network(ref k) if k.is_network_down() }
+    is_variant! { is_disconnected, Network(ref k) if k.is_disconnected() }
     is_variant! { is_not_implemented, NotImplemented }
     is_variant! { is_not_supported, NotSupported }
     is_variant! { is_not_found, NotFound }

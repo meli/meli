@@ -256,6 +256,15 @@ impl NetworkErrorKind {
                 | TLSConnectionFailed
         )
     }
+
+    /// Error kind means there has been a loss of connection.
+    pub const fn is_disconnected(&self) -> bool {
+        use NetworkErrorKind::*;
+        matches!(
+            self,
+            ConnectionFailed | TLSConnectionFailed | InvalidTLSConnection
+        )
+    }
 }
 
 impl Default for NetworkErrorKind {

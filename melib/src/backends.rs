@@ -56,7 +56,7 @@ pub mod prelude {
     pub use crate::{
         conf::AccountSettings,
         email::{Envelope, EnvelopeHash, Flag},
-        error::{Error, ErrorKind, Result},
+        error::{Error, ErrorKind, NetworkErrorKind, Result},
         search::Query,
         Collection, HeaderName, LogLevel, SpecialUsageMailbox,
     };
