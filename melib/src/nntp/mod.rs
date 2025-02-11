@@ -398,7 +398,7 @@ impl MailBackend for NntpType {
 
     fn watch(&self) -> ResultStream<BackendEvent> {
         Err(
-            Error::new("Watching is currently uniplemented for nntp backend")
+            Error::new("Watching is currently unimplemented for nntp backend")
                 .set_kind(ErrorKind::NotImplemented),
         )
     }
@@ -556,7 +556,7 @@ impl MailBackend for NntpType {
         _new_path: String,
     ) -> ResultFuture<Mailbox> {
         Err(
-            Error::new("Renaming mailbox is not supported for nntp backend.")
+            Error::new("Renaming a mailbox is not supported for nntp backend.")
                 .set_kind(ErrorKind::NotSupported),
         )
     }
