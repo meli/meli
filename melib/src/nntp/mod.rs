@@ -241,9 +241,14 @@ impl MailBackend for NntpType {
                 f.unseen.lock().unwrap().clear();
             };
             loop {
-                if let Some(ret) = state.fetch_envs().await? {
-                    emitter.emit(ret).await;
-                    continue;
+                match state.fetch_envs().await {
+                    Err(err) if err.kind.is_disconnected() => continue,
+                    Err(err) => return Err(err),
+                    Ok(Some(ret)) => {
+                        emitter.emit(ret).await;
+                        continue;
+                    }
+                    Ok(None) => {}
                 }
                 break;
             }
@@ -1022,11 +1027,16 @@ impl FetchState {
                 .name()
                 .to_string();
             if s.len() != 5 {
-                return Err(Error::new(format!(
+                let err = Error::new(format!(
                     "{} Could not select newsgroup {}: expected GROUP response but got: {}",
                     &uid_store.account_name, path, res
                 ))
-                .set_kind(ErrorKind::ProtocolError));
+                .set_kind(ErrorKind::ProtocolError);
+                conn.stream = Err(err.clone());
+                conn.connect().await?;
+                // If .connect() didn't error out, this means our error was a connection
+                // failure.
+                return Err(err.set_kind(ErrorKind::Network(NetworkErrorKind::ConnectionFailed)));
             }
             let total = usize::from_str(s[1]).unwrap_or(0);
             let low = usize::from_str(s[2]).unwrap_or(0);
