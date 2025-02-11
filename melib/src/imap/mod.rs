@@ -97,6 +97,7 @@ pub static SUPPORTED_CAPABILITIES: &[&str] = &[
     "LIST-EXTENDED",
     "LIST-STATUS",
     "LITERAL+",
+    "LITERAL-",
     "LOGIN",
     "LOGINDISABLED",
     "MOVE",

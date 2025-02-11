@@ -1665,17 +1665,20 @@ impl ImapConnection {
             mailbox.imap_path().to_string()
         };
         let flags = flags.unwrap_or_else(Flag::empty);
-        let has_literal_plus: bool = self
-            .uid_store
-            .capabilities
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|cap| cap.eq_ignore_ascii_case(b"LITERAL+"));
-        let data = if has_literal_plus {
-            Literal::try_from(bytes)?.into_non_sync()
-        } else {
-            Literal::try_from(bytes)?
+        let data = {
+            let capabilities = self.uid_store.capabilities.lock().unwrap();
+            let has_literal_plus: bool = capabilities
+                .iter()
+                .any(|cap| cap.eq_ignore_ascii_case(b"LITERAL+"));
+            let has_literal_minus: bool = capabilities
+                .iter()
+                .any(|cap| cap.eq_ignore_ascii_case(b"LITERAL-"));
+            drop(capabilities);
+            if has_literal_plus || (has_literal_minus && bytes.len() <= 4096) {
+                Literal::try_from(bytes)?.into_non_sync()
+            } else {
+                Literal::try_from(bytes)?
+            }
         };
         self.send_command(CommandBody::append(path, flags.into(), None, data)?)
             .await?;
