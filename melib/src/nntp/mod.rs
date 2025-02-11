@@ -228,6 +228,7 @@ impl MailBackend for NntpType {
     }
 
     fn fetch(&mut self, mailbox_hash: MailboxHash) -> ResultStream<Vec<Envelope>> {
+        let is_online_fut = self.is_online()?;
         let mut state = FetchState {
             mailbox_hash,
             uid_store: self.uid_store.clone(),
@@ -235,6 +236,7 @@ impl MailBackend for NntpType {
             total_low_high: None,
         };
         Ok(Box::pin(try_fn_stream(|emitter| async move {
+            is_online_fut.await?;
             {
                 let f = &state.uid_store.mailboxes.lock().await[&state.mailbox_hash];
                 f.exists.lock().unwrap().clear();
@@ -257,10 +259,12 @@ impl MailBackend for NntpType {
     }
 
     fn refresh(&mut self, mailbox_hash: MailboxHash) -> ResultFuture<()> {
+        let is_online_fut = self.is_online()?;
         let uid_store = self.uid_store.clone();
         let connection = self.connection.clone();
         let timeout_dur = self.server_conf.timeout_dur;
         Ok(Box::pin(async move {
+            is_online_fut.await?;
             // To get updates, either issue NEWNEWS if it's supported by the server, and fallback
             // to OVER otherwise
             let mbox: NntpMailbox = uid_store
@@ -371,10 +375,12 @@ impl MailBackend for NntpType {
     }
 
     fn mailboxes(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
+        let is_online_fut = self.is_online()?;
         let uid_store = self.uid_store.clone();
         let connection = self.connection.clone();
         let timeout_dur = self.server_conf.timeout_dur;
         Ok(Box::pin(async move {
+            is_online_fut.await?;
             Self::nntp_mailboxes(&connection, timeout_dur).await?;
             let mailboxes_lck = uid_store.mailboxes.lock().await;
             let ret = mailboxes_lck
@@ -390,7 +396,6 @@ impl MailBackend for NntpType {
         let timeout_dur = self.server_conf.timeout_dur;
         Ok(Box::pin(async move {
             let mut conn = timeout(timeout_dur, connection.lock()).await?;
-            log::trace!("is_online");
             match timeout(timeout_dur, conn.connect()).await {
                 Ok(Ok(())) => Ok(()),
                 Err(err) | Ok(Err(err)) => {
@@ -409,6 +414,7 @@ impl MailBackend for NntpType {
     }
 
     fn envelope_bytes_by_hash(&self, hash: EnvelopeHash) -> ResultFuture<Vec<u8>> {
+        let is_online_fut = self.is_online()?;
         let (uid, mailbox_hash) =
             if let Some(v) = self.uid_store.hash_index.lock().unwrap().get(&hash) {
                 *v
@@ -425,7 +431,10 @@ impl MailBackend for NntpType {
             self.uid_store.clone(),
         );
 
-        Ok(Box::pin(async move { op.as_bytes().await }))
+        Ok(Box::pin(async move {
+            is_online_fut.await?;
+            op.as_bytes().await
+        }))
     }
 
     fn save(
@@ -592,9 +601,11 @@ impl MailBackend for NntpType {
         mailbox_hash: Option<MailboxHash>,
         _flags: Option<Flag>,
     ) -> ResultFuture<()> {
+        let is_online_fut = self.is_online()?;
         let connection = self.connection.clone();
         let timeout_dur = self.server_conf.timeout_dur;
         Ok(Box::pin(async move {
+            is_online_fut.await?;
             let mut conn = timeout(timeout_dur, connection.lock()).await?;
             let stream = conn.stream.as_ref()?;
             if !stream.supports_submission {
