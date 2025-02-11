@@ -256,8 +256,8 @@ impl MailBackend for NntpType {
         let connection = self.connection.clone();
         let timeout_dur = self.server_conf.timeout_dur;
         Ok(Box::pin(async move {
-            /* To get updates, either issue NEWNEWS if it's supported by the server, and
-             * fallback to OVER otherwise */
+            // To get updates, either issue NEWNEWS if it's supported by the server, and fallback
+            // to OVER otherwise
             let mbox: NntpMailbox = uid_store
                 .mailboxes
                 .lock()
@@ -768,7 +768,7 @@ impl NntpType {
         while !mailboxes.is_empty() {
             let mut command = "LIST ACTIVE ".to_string();
             'batch: while let Some(m) = mailboxes.pop() {
-                /* first check if the group name itself is too big for `LIST ACTIVE`. */
+                // first check if the group name itself is too big for `LIST ACTIVE`.
                 if "LIST ACTIVE ".len() + m.len() + "\r\n".len() >= 512 {
                     log::warn!(
                         "{}: Newsgroup named {} has a name that exceeds RFC 3977 limits of \
@@ -1012,13 +1012,11 @@ impl FetchState {
 
         if total_low_high.is_none() {
             conn.select_group(mailbox_hash, true, &mut res).await?;
-            /*
-             *   Parameters
-                     group     Name of newsgroup
-                     number    Estimated number of articles in the group
-                     low       Reported low water mark
-                     high      Reported high water mark
-            */
+            // Parameters
+            //     group     Name of newsgroup
+            //     number    Estimated number of articles in the group
+            //     low       Reported low water mark
+            //     high      Reported high water mark
             let s = res.split_whitespace().collect::<SmallVec<[&str; 6]>>();
             let path = conn.uid_store.mailboxes.lock().await[&mailbox_hash]
                 .name()
