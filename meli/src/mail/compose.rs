@@ -242,7 +242,7 @@ impl Composer {
         if *account_settings!(context[account_hash].composing.insert_user_agent) {
             ret.draft.set_header(
                 HeaderName::USER_AGENT,
-                format!("meli {}", option_env!("CARGO_PKG_VERSION").unwrap_or("0.0")),
+                format!("meli/{}", crate::version_migrations::LATEST.as_str()),
             );
         }
         let format_flowed = *account_settings!(context[account_hash].composing.format_flowed);
