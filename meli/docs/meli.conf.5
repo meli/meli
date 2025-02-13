@@ -1072,6 +1072,14 @@ No signature otherwise.
 .Pq Em optional
 Signature delimiter, that is, text that will be prefixed to your signature to separate it from the email body.
 .Pq Ql \en\en\-\- \en
+.It Ic allow_reply_to_self Ar boolean
+.Pq Em optional
+When replying to an e\-mail authored by our main identity or one of our extra identities,
+reply to those addresses instead of reusing the receivers of the original e\-mail we are
+replying to.
+The default is false, because the intuitive behavior when replying to ourselves is to
+follow\-up on an e\-mail we sent.
+.Pq Em false \" default value
 .El
 .\"
 .\"

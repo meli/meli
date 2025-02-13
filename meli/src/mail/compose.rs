@@ -304,7 +304,7 @@ impl Composer {
         coordinates @ (account_hash, _, _): (AccountHash, MailboxHash, EnvelopeHash),
         reply_body: String,
         context: &Context,
-        reply_to_all: bool,
+        mut reply_to_all: bool,
     ) -> Self {
         let mut ret = Self::with_account(account_hash, context);
         let account = &context.accounts[&account_hash];
@@ -378,6 +378,17 @@ impl Composer {
             .settings
             .account()
             .extra_identity_addresses();
+
+        // Check if we're replying to an e-mail we authored. In that case, we will reply
+        // to the receivers of that e-mail.
+        if !reply_to_all
+            && std::iter::once(&ours)
+                .chain(extra_ours.iter())
+                .any(|addr| envelope.from().contains(addr))
+            && !*account_settings!(context[account_hash].composing.allow_reply_to_self)
+        {
+            reply_to_all = true;
+        }
 
         // "Mail-Followup-To/(To+Cc+(Mail-Reply-To/Reply-To/From)) for follow-up,
         // Mail-Reply-To/Reply-To/From for reply-to-author."

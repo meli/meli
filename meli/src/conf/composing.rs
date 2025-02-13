@@ -140,6 +140,16 @@ pub struct ComposingSettings {
     /// Default: `"\n\n-- \n"`
     #[serde(default, alias = "signature-delimiter")]
     pub signature_delimiter: Option<String>,
+    /// When replying to an e-mail authored by our main identity or one of our
+    /// extra identities, reply to those addresses instead of reusing the
+    /// receivers of the original e-mail we are replying to.
+    ///
+    /// The default is `false`, because the intuitive behavior when replying to
+    /// ourselves is to follow-up on an e-mail we sent.
+    ///
+    /// Default: `false`
+    #[serde(default = "false_val", alias = "allow-reply-to-self")]
+    pub allow_reply_to_self: bool,
 }
 
 impl Default for ComposingSettings {
@@ -162,6 +172,7 @@ impl Default for ComposingSettings {
             signature_file: None,
             use_signature: false,
             signature_delimiter: None,
+            allow_reply_to_self: false,
         }
     }
 }
