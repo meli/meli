@@ -265,8 +265,8 @@ impl MailBackend for NntpType {
         let timeout_dur = self.server_conf.timeout_dur;
         Ok(Box::pin(async move {
             is_online_fut.await?;
-            // To get updates, either issue NEWNEWS if it's supported by the server, and fallback
-            // to OVER otherwise
+            // To get updates, either issue NEWNEWS if it's supported by the server, and
+            // fallback to OVER otherwise
             let mbox: NntpMailbox = uid_store
                 .mailboxes
                 .lock()

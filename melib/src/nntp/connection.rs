@@ -139,9 +139,11 @@ impl NntpStream {
                     .any(|cap| cap.eq_ignore_ascii_case("STARTTLS"))
                 {
                     return Err(Error::new(format!(
-                        "Could not connect to {}: server does not support STARTTLS but it was required by user configuration",
+                        "Could not connect to {}: server does not support STARTTLS but it was \
+                         required by user configuration",
                         &server_conf.server_hostname
-                    )).set_kind(ErrorKind::NotSupported));
+                    ))
+                    .set_kind(ErrorKind::NotSupported));
                 }
                 ret.stream.write_all(b"STARTTLS\r\n").await?;
                 ret.stream.flush().await?;
