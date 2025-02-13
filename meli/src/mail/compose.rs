@@ -295,19 +295,6 @@ impl Composer {
         context: &Context,
     ) -> Result<Self> {
         let mut ret = Self::with_account(account_hash, context);
-        // Add user's custom hooks.
-        for hook in account_settings!(context[account_hash].composing.custom_compose_hooks)
-            .iter()
-            .cloned()
-            .map(Into::into)
-        {
-            ret.hooks.push(hook);
-        }
-        ret.hooks.retain(|h| {
-            !account_settings!(context[account_hash].composing.disabled_compose_hooks)
-                .iter()
-                .any(|hn| hn.as_str() == h.name())
-        });
         let envelope: EnvelopeRef = context.accounts[&account_hash].collection.get_env(env_hash);
 
         ret.draft = Draft::edit(&envelope, bytes, Text::Plain)?;
@@ -323,19 +310,6 @@ impl Composer {
         reply_to_all: bool,
     ) -> Self {
         let mut ret = Self::with_account(account_hash, context);
-        // Add user's custom hooks.
-        for hook in account_settings!(context[account_hash].composing.custom_compose_hooks)
-            .iter()
-            .cloned()
-            .map(Into::into)
-        {
-            ret.hooks.push(hook);
-        }
-        ret.hooks.retain(|h| {
-            !account_settings!(context[account_hash].composing.disabled_compose_hooks)
-                .iter()
-                .any(|hn| hn.as_str() == h.name())
-        });
         let account = &context.accounts[&account_hash];
         let envelope = account.collection.get_env(coordinates.2);
         let subject = {
