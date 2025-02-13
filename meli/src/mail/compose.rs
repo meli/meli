@@ -237,9 +237,6 @@ impl Composer {
         for (h, v) in
             account_settings!(context[account_hash].composing.default_header_values).iter()
         {
-            if v.is_empty() {
-                continue;
-            }
             ret.draft.set_header(h.into(), v.into());
         }
         if *account_settings!(context[account_hash].composing.insert_user_agent) {
