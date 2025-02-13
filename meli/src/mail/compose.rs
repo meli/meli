@@ -370,6 +370,15 @@ impl Composer {
             }
         }
 
+        let ours = context.accounts[&coordinates.0]
+            .settings
+            .account()
+            .main_identity_address();
+        let extra_ours = context.accounts[&coordinates.0]
+            .settings
+            .account()
+            .extra_identity_addresses();
+
         // "Mail-Followup-To/(To+Cc+(Mail-Reply-To/Reply-To/From)) for follow-up,
         // Mail-Reply-To/Reply-To/From for reply-to-author."
         // source: https://cr.yp.to/proto/replyto.html
@@ -404,11 +413,10 @@ impl Composer {
                 to.extend(envelope.from().iter().cloned());
             }
             to.extend(envelope.to().iter().cloned());
-            let ours = context.accounts[&coordinates.0]
-                .settings
-                .account()
-                .main_identity_address();
             to.shift_remove(&ours);
+            for addr in &extra_ours {
+                to.shift_remove(addr);
+            }
             ret.draft.set_header(HeaderName::TO, {
                 let mut ret: String =
                     to.into_iter()
