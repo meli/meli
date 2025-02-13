@@ -41,6 +41,7 @@ pub trait DotAddressable: serde::Serialize {
 impl DotAddressable for bool {}
 
 impl DotAddressable for String {}
+impl DotAddressable for (String, String) {}
 impl DotAddressable for char {}
 impl DotAddressable for data_types::IndexStyle {}
 impl DotAddressable for data_types::SearchBackend {}
@@ -58,6 +59,7 @@ impl DotAddressable for PathBuf {}
 impl DotAddressable for ToggleFlag {}
 impl DotAddressable for ActionFlag {}
 impl DotAddressable for melib::SpecialUsageMailbox {}
+impl DotAddressable for melib::email::HeaderName {}
 impl<T: DotAddressable> DotAddressable for Option<T> {}
 impl<T: DotAddressable> DotAddressable for Vec<T> {}
 // impl<K: DotAddressable + std::cmp::Eq + std::hash::Hash, V: DotAddressable>

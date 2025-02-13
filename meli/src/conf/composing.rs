@@ -24,12 +24,17 @@
 use std::path::PathBuf;
 
 use indexmap::IndexMap;
-use melib::{conf::ActionFlag, email::HeaderName};
+use melib::{
+    conf::ActionFlag,
+    email::HeaderName,
+    error::{Error, Result},
+};
 use serde::{de, Deserialize, Deserializer};
 
 use crate::conf::{
     default_values::{ask, false_val, none, true_val},
     deserializers::non_empty_string,
+    DotAddressable,
 };
 
 /// Settings for writing and sending new e-mail
@@ -177,6 +182,49 @@ impl Default for ComposingSettings {
     }
 }
 
+impl DotAddressable for ComposingSettings {
+    fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
+        match path.first() {
+            Some(field) => {
+                let tail = &path[1..];
+                match *field {
+                    "editor_command" => self.editor_command.lookup(field, tail),
+                    "embedded_pty" => self.embedded_pty.lookup(field, tail),
+                    "format_flowed" => self.format_flowed.lookup(field, tail),
+                    "insert_user_agent" => self.insert_user_agent.lookup(field, tail),
+                    "default_header_values" => self.default_header_values.lookup(field, tail),
+                    "store_sent_mail" => self.store_sent_mail.lookup(field, tail),
+                    "wrap_header_preamble" => self.wrap_header_preamble.lookup(field, tail),
+                    "attribution_format_string" => {
+                        self.attribution_format_string.lookup(field, tail)
+                    }
+                    "attribution_use_posix_locale" => {
+                        self.attribution_use_posix_locale.lookup(field, tail)
+                    }
+                    "forward_as_attachment" => self.forward_as_attachment.lookup(field, tail),
+                    "reply_prefix_list_to_strip" => {
+                        self.reply_prefix_list_to_strip.lookup(field, tail)
+                    }
+                    "reply_prefix" => self.reply_prefix.lookup(field, tail),
+                    "custom_compose_hooks" => self.custom_compose_hooks.lookup(field, tail),
+                    "disabled_compose_hooks" => self.disabled_compose_hooks.lookup(field, tail),
+                    "signature_file" => self.signature_file.lookup(field, tail),
+                    "use_signature" => self.use_signature.lookup(field, tail),
+                    "signature_delimiter" => self.signature_delimiter.lookup(field, tail),
+                    "allow_reply_to_self" => self.allow_reply_to_self.lookup(field, tail),
+                    other => Err(Error::new(format!(
+                        "{} has no field named {}",
+                        parent_field, other
+                    ))),
+                }
+            }
+            None => Ok(toml::Value::try_from(self)
+                .map_err(|err| err.to_string())?
+                .to_string()),
+        }
+    }
+}
+
 fn res() -> String {
     "Re:".to_string()
 }
@@ -247,6 +295,8 @@ pub struct ComposeHook {
     #[serde(deserialize_with = "non_empty_string")]
     command: String,
 }
+
+impl DotAddressable for ComposeHook {}
 
 impl From<ComposeHook> for crate::mail::hooks::Hook {
     fn from(c: ComposeHook) -> Self {
