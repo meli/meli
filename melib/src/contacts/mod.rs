@@ -35,11 +35,7 @@ pub use card::*;
 use indexmap::IndexMap;
 use uuid::Uuid;
 
-use crate::utils::{
-    datetime::{now, UnixTimestamp},
-    parsec::Parser,
-    shellexpand::ShellExpandTrait,
-};
+use crate::utils::{parsec::Parser, shellexpand::ShellExpandTrait};
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(from = "String")]
@@ -83,8 +79,6 @@ impl From<String> for CardId {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Contacts {
     display_name: String,
-    created: UnixTimestamp,
-    last_edited: UnixTimestamp,
     pub cards: IndexMap<CardId, Card>,
 }
 
@@ -92,8 +86,6 @@ impl Contacts {
     pub fn new(display_name: String) -> Self {
         Self {
             display_name,
-            created: now(),
-            last_edited: now(),
             cards: IndexMap::default(),
         }
     }
