@@ -22,7 +22,7 @@
 use std::borrow::Cow;
 
 use indexmap::IndexMap;
-use melib::Card;
+use melib::{AccountHash, Card};
 
 use crate::{
     terminal::*,
@@ -42,10 +42,10 @@ enum ViewMode {
 pub struct ContactManager {
     id: ComponentId,
     parent_id: Option<ComponentId>,
-    pub card: Card,
+    card: Card,
     mode: ViewMode,
     form: FormWidget<FormButtonAction>,
-    pub account_pos: usize,
+    account_hash: AccountHash,
     content: Screen<Virtual>,
     theme_default: ThemeAttribute,
     dirty: bool,
@@ -60,7 +60,7 @@ impl std::fmt::Display for ContactManager {
 }
 
 impl ContactManager {
-    pub fn new(context: &Context) -> Self {
+    pub fn new(account_hash: AccountHash, context: &Context) -> Self {
         let theme_default: ThemeAttribute = crate::conf::value(context, "theme_default");
         Self {
             id: ComponentId::default(),
@@ -68,7 +68,7 @@ impl ContactManager {
             card: Card::new(),
             mode: ViewMode::Edit,
             form: FormWidget::default(),
-            account_pos: 0,
+            account_hash,
             content: Screen::<Virtual>::new(theme_default),
             theme_default,
             dirty: true,
@@ -158,6 +158,12 @@ impl ContactManager {
     pub fn set_parent_id(&mut self, new_val: ComponentId) {
         self.parent_id = Some(new_val);
     }
+
+    pub fn set_card(&mut self, new_val: Card) {
+        self.card = new_val;
+        self.initialized = false;
+        self.set_dirty(true);
+    }
 }
 
 impl Component for ContactManager {
@@ -229,7 +235,7 @@ impl Component for ContactManager {
                                 .collect();
                             let mut new_card = Card::from(fields);
                             new_card.set_id(*self.card.id());
-                            context.accounts[self.account_pos]
+                            context.accounts[&self.account_hash]
                                 .contacts
                                 .add_card(new_card);
                             context.replies.push_back(UIEvent::StatusEvent(
@@ -263,7 +269,7 @@ impl Component for ContactManager {
                             } else {
                                 Cow::Borrowed(&self.card)
                             };
-                            super::export_to_vcard(&card, self.account_pos, context);
+                            super::export_to_vcard(&card, self.account_hash, context);
                             return true;
                         }
                         Some(FormButtonAction::Reset | FormButtonAction::Other(_)) => {}

@@ -570,9 +570,9 @@ impl Component for ContactList {
                 UIEvent::Input(ref key)
                     if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["create_contact"]) =>
                 {
-                    let mut manager = Box::new(ContactManager::new(context));
+                    let account_hash = context.accounts[self.account_pos].hash();
+                    let mut manager = Box::new(ContactManager::new(account_hash, context));
                     manager.set_parent_id(self.id);
-                    manager.account_pos = self.account_pos;
 
                     self.mode = ViewMode::View(manager);
                     context
@@ -591,10 +591,9 @@ impl Component for ContactList {
                     let account = &mut context.accounts[self.account_pos];
                     let contacts = &mut account.contacts;
                     let card = contacts[&self.id_positions[self.cursor_pos]].clone();
-                    let mut manager = Box::new(ContactManager::new(context));
+                    let mut manager = Box::new(ContactManager::new(account.hash(), context));
                     manager.set_parent_id(self.id);
-                    manager.card = card;
-                    manager.account_pos = self.account_pos;
+                    manager.set_card(card);
 
                     self.mode = ViewMode::View(manager);
                     context
@@ -610,12 +609,15 @@ impl Component for ContactList {
                     if self.length == 0 {
                         return true;
                     }
-                    let card = {
+                    let (account_hash, card) = {
                         let account = &context.accounts[self.account_pos];
                         let contacts = &account.contacts;
-                        contacts[&self.id_positions[self.cursor_pos]].clone()
+                        (
+                            account.hash(),
+                            contacts[&self.id_positions[self.cursor_pos]].clone(),
+                        )
                     };
-                    super::export_to_vcard(&card, self.account_pos, context);
+                    super::export_to_vcard(&card, account_hash, context);
                     return true;
                 }
                 UIEvent::Input(ref key)

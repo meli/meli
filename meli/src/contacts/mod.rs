@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use melib::Card;
+use melib::{AccountHash, Card};
 
 use crate::{
     types::{sanitize_filename, File, NotificationType, UIEvent},
@@ -29,8 +29,8 @@ use crate::{
 pub mod editor;
 pub mod list;
 
-pub fn export_to_vcard(card: &Card, account_pos: usize, context: &mut Context) {
-    let mut output_dir = context.accounts[account_pos]
+pub fn export_to_vcard(card: &Card, account_hash: AccountHash, context: &mut Context) {
+    let mut output_dir = context.accounts[&account_hash]
         .settings
         .account
         .vcard_folder()
