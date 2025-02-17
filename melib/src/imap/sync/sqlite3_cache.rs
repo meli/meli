@@ -155,7 +155,9 @@ impl ImapCache for Sqlite3Cache {
     }
 
     fn max_uid(&mut self, mailbox_hash: MailboxHash) -> Result<Option<UID>> {
-        let tx = self.connection.transaction()?;
+        let tx = self
+            .connection
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
         let env_max_uid: Option<UID> = {
             let mut stmt = tx.prepare("SELECT MAX(uid) FROM envelopes WHERE mailbox_hash = ?1;")?;
 
@@ -263,7 +265,9 @@ impl ImapCache for Sqlite3Cache {
         select_response: &SelectResponse,
     ) -> Result<()> {
         self.loaded_mailboxes.remove(&mailbox_hash);
-        let tx = self.connection.transaction()?;
+        let tx = self
+            .connection
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
         tx.execute(
             "DELETE FROM mailbox WHERE mailbox_hash = ?1",
             sqlite3::params![mailbox_hash],
@@ -318,7 +322,9 @@ impl ImapCache for Sqlite3Cache {
             return Err(Error::new("Mailbox is not in cache").set_kind(ErrorKind::NotFound));
         }
 
-        let tx = self.connection.transaction()?;
+        let tx = self
+            .connection
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
         let highestmodseq: Option<ModSequence> =
             select_response.highestmodseq.transpose().unwrap_or(None);
         tx.execute(
@@ -440,7 +446,7 @@ impl ImapCache for Sqlite3Cache {
             loaded_mailboxes: _,
             data_dir: _,
         } = self;
-        let tx = connection.transaction()?;
+        let tx = connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
         for item in fetches {
             if let FetchResponse {
                 uid: Some(uid),
@@ -506,7 +512,7 @@ impl ImapCache for Sqlite3Cache {
             loaded_mailboxes: _,
             data_dir: _,
         } = self;
-        let tx = connection.transaction()?;
+        let tx = connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
         let values = std::rc::Rc::new(env_hashes.iter().map(Value::from).collect::<Vec<Value>>());
 
         let mut stmt =
@@ -570,7 +576,8 @@ impl ImapCache for Sqlite3Cache {
                 loaded_mailboxes: _,
                 data_dir: _,
             } = self;
-            let tx = connection.transaction()?;
+            let tx =
+                connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
             let mut hash_index_lck = uid_store.hash_index.lock().unwrap();
             for (uid, event) in refresh_events {
                 match &event.kind {
