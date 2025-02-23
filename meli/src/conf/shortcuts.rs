@@ -194,16 +194,11 @@ shortcut_key_values! { "listing",
 shortcut_key_values! { "contact-list",
     /// Shortcut listing for the contact list view
     pub struct ContactListShortcuts {
-        scroll_up |> "Scroll up list." |> Key::Char('k'),
-        scroll_down |> "Scroll down list." |> Key::Char('j'),
         create_contact |> "Create new contact." |> Key::Char('c'),
         edit_contact |> "Edit contact under cursor." |> Key::Char('e'),
         export_contact |> "Export contact under cursor to .vcf." |> Key::Char('E'),
         delete_contact |> "Delete contact under cursor." |> Key::Char('d'),
         mail_contact |> "Mail contact under cursor." |> Key::Char('m'),
-        next_account |> "Go to next account." |> Key::Char('H'),
-        prev_account |> "Go to previous account." |> Key::Char('L'),
-        toggle_menu_visibility |> "Toggle visibility of side menu in mail list." |> Key::Char('`')
     }
 }
 

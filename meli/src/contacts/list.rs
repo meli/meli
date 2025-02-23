@@ -1,170 +1,154 @@
-/*
- * meli
- *
- * Copyright 2019 Manos Pitsidianakis
- *
- * This file is part of meli.
- *
- * meli is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * meli is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with meli. If not, see <http://www.gnu.org/licenses/>.
- */
+//
+// meli
+//
+// Copyright 2019, 2025, 2026 Manos Pitsidianakis <manos@pitsidianak.is>
+//
+// This file is part of meli.
+//
+// meli is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// meli is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with meli. If not, see <http://www.gnu.org/licenses/>.
+//
+// SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
-use std::cmp;
+//! Contacts and address book components
+//!
+//! This module is split into three main structures:
+//!
+//! - [`AddressBookList`]: a [`Component`] that
+//!   displays an [`AddressBook`] as a list using
+//!   [`DataColumns`]
+//! - [`AccountContacts`]: a [`Component`] that holds all [`AddressBookList`] of
+//!   an account and shows one at a time, using a cursor as an index.
+//! - [`ContactList`]: a [`Component`] that holds one or more accounts as
+//!   [`AccountContacts`] and shows one at a time using a cursor as an index.
+//!   Furthmore, it has a sidebar showing all entries.
 
-use melib::{backends::AccountHash, text::TextProcessing, Card, CardId, Draft};
+use std::sync::Arc;
+
+use indexmap::IndexMap;
+use melib::{
+    contacts::{AddressBook, AddressBookName, Card, CardId},
+    email::compose::Draft,
+    error::Result,
+    text::TextProcessing,
+    AccountHash,
+};
 
 use crate::{
-    conf, contacts::editor::ContactManager, shortcut, terminal::*, Action::Tab, Component,
-    ComponentId, Composer, Context, DataColumns, PageMovement, ScrollContext, ScrollUpdate,
-    ShortcutMaps, Shortcuts, StatusEvent, TabAction, ThemeAttribute, UIEvent, UIMode,
+    account_settings,
+    components::prelude::*,
+    contacts::editor::ContactManager,
+    mail::compose::Composer,
+    utilities::listings::{AccountEntryTrait, List},
 };
 
 #[derive(Debug)]
-enum ViewMode {
-    List,
-    View(Box<ContactManager>),
-}
-
-#[derive(Debug)]
-struct AccountMenuEntry {
-    name: String,
-    _hash: AccountHash,
-    // Index in the config account vector.
-    index: usize,
-}
-
-#[derive(Debug)]
-pub struct ContactList {
-    accounts: Vec<AccountMenuEntry>,
+pub struct AddressBookList {
+    account_hash: AccountHash,
+    name: AddressBookName,
+    format: Arc<str>,
+    read_only: bool,
+    editor: Option<Box<ContactManager>>,
     cursor_pos: usize,
     new_cursor_pos: usize,
-    account_pos: usize,
-    length: usize,
-    data_columns: DataColumns<4>,
+    id_positions: Vec<CardId>,
+    data_columns: DataColumns<3>,
     initialized: bool,
+    movement: Option<PageMovement>,
     theme_default: ThemeAttribute,
     highlight_theme: ThemeAttribute,
-
-    id_positions: Vec<CardId>,
-
-    mode: ViewMode,
     dirty: bool,
-
-    sidebar_divider: char,
-    sidebar_divider_theme: ThemeAttribute,
-
-    menu_visibility: bool,
-    movement: Option<PageMovement>,
-    cmd_buf: String,
-    ratio: usize, // right/(container width) * 100
     id: ComponentId,
 }
 
-impl std::fmt::Display for ContactList {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "contacts")
-    }
-}
-
-impl ContactList {
-    pub fn new(context: &Context) -> Self {
-        let accounts = context
-            .accounts
-            .iter()
-            .enumerate()
-            .map(|(i, (h, a))| AccountMenuEntry {
-                name: a.name().to_string(),
-                _hash: *h,
-                index: i,
-            })
-            .collect();
+impl AddressBookList {
+    fn new(book: &AddressBook, account_hash: AccountHash, context: &Context) -> Self {
         let theme_default = crate::conf::value(context, "theme_default");
+        let highlight_theme = crate::conf::value(context, "highlight");
+        let data_columns = DataColumns::new(theme_default);
+
         Self {
-            accounts,
+            account_hash,
+            name: book.name.clone(),
+            format: book.format.clone(),
+            read_only: book.read_only,
+            editor: None,
             cursor_pos: 0,
             new_cursor_pos: 0,
-            length: 0,
-            account_pos: 0,
-            id_positions: Vec::new(),
-            mode: ViewMode::List,
-            data_columns: DataColumns::new(theme_default),
-            theme_default,
-            highlight_theme: crate::conf::value(context, "highlight"),
+            id_positions: book.cards.keys().cloned().collect(),
+            data_columns,
             initialized: false,
-            dirty: true,
             movement: None,
-            cmd_buf: String::with_capacity(8),
-            ratio: 90,
-            sidebar_divider: context.settings.listing.sidebar_divider,
-            sidebar_divider_theme: conf::value(context, "mail.sidebar_divider"),
-            menu_visibility: true,
+            theme_default,
+            highlight_theme,
+            dirty: true,
             id: ComponentId::default(),
-        }
-    }
-
-    pub fn for_account(pos: usize, context: &Context) -> Self {
-        Self {
-            account_pos: pos,
-            ..Self::new(context)
         }
     }
 
     fn initialize(&mut self, context: &Context) {
         self.data_columns.clear();
-        let account = &context.accounts[self.account_pos];
-        let contacts = &account.contacts;
-        self.length = contacts.len();
+        let account = &context.accounts[&self.account_hash];
+        let contacts: &AddressBook = &account.contacts.books[&self.name];
+        if contacts.cards.is_empty() {
+            let message = "Address book is empty.".to_string();
+            if self.data_columns.columns[0].resize_with_context(message.len(), 1, context) {
+                let area = self.data_columns.columns[0].area();
+                self.data_columns.columns[0].grid_mut().write_string(
+                    &message,
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
+                    area,
+                    None,
+                    None,
+                );
+            }
+            return;
+        }
 
         self.id_positions.clear();
         if self.id_positions.capacity() < contacts.len() {
             self.id_positions.reserve(contacts.len());
         }
         self.dirty = true;
-        let mut min_width = ("Name".len(), "E-mail".len(), 0, "external".len(), 0, 0);
+        let mut min_width = ("Name".len(), "E-mail".len(), 0);
 
         for c in contacts.values() {
-            /* name */
-            let name = c.name().split_graphemes().len();
+            // name
+            let name = c.name().grapheme_len();
             if name > 0 {
-                min_width.0 = cmp::max(min_width.0, name + 1);
+                min_width.0 = min_width.0.max(name + 1);
             }
-            /* email */
-            let email = c.email().split_graphemes().len();
+            // email
+            let email = c.email().grapheme_len();
             if email > 0 {
-                min_width.1 = cmp::max(min_width.1, email + 1);
+                min_width.1 = min_width.1.max(email + 1);
             }
-            /* url */
-            let url = c.url().split_graphemes().len();
+            // url
+            let url = c.url().grapheme_len();
             if url > 0 {
-                min_width.2 = cmp::max(min_width.2, url + 1);
+                min_width.2 = min_width.2.max(url + 1);
             }
         }
 
-        /* name column */
-        _ = self.data_columns.columns[0].resize_with_context(min_width.0, self.length, context);
-        /* email column */
-        _ = self.data_columns.columns[1].resize_with_context(min_width.1, self.length, context);
-        /* url column */
-        _ = self.data_columns.columns[2].resize_with_context(min_width.2, self.length, context);
-        /* source column */
-        _ = self.data_columns.columns[3].resize_with_context(
-            "external".len(),
-            self.length,
-            context,
-        );
+        // name column
+        _ = self.data_columns.columns[0].resize_with_context(min_width.0, contacts.len(), context);
+        // email column
+        _ = self.data_columns.columns[1].resize_with_context(min_width.1, contacts.len(), context);
+        // url column
+        _ = self.data_columns.columns[2].resize_with_context(min_width.2, contacts.len(), context);
 
-        let account = &context.accounts[self.account_pos];
-        let contacts = &account.contacts;
         let mut book_values = contacts.values().collect::<Vec<&Card>>();
         book_values.sort_unstable_by_key(|c| c.name());
         for (idx, c) in book_values.iter().enumerate() {
@@ -208,45 +192,11 @@ impl ContactList {
                     None,
                 )
             };
-
-            {
-                let area = self.data_columns.columns[3].area().nth_row(idx);
-                self.data_columns.columns[3].grid_mut().write_string(
-                    if c.external_resource() {
-                        "external"
-                    } else {
-                        "local"
-                    },
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
-                    area,
-                    None,
-                    None,
-                )
-            };
-        }
-
-        if self.length == 0 {
-            let message = "Address book is empty.".to_string();
-            if self.data_columns.columns[0].resize_with_context(message.len(), self.length, context)
-            {
-                let area = self.data_columns.columns[0].area();
-                self.data_columns.columns[0].grid_mut().write_string(
-                    &message,
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
-                    area,
-                    None,
-                    None,
-                );
-            }
         }
     }
 
     fn highlight_line(&self, grid: &mut CellBuffer, area: Area, idx: usize) {
-        /* Reset previously highlighted line */
+        // Reset previously highlighted line
         let mut theme = if idx == self.new_cursor_pos {
             self.highlight_theme
         } else {
@@ -257,83 +207,48 @@ impl ContactList {
         }
         grid.change_theme(area, theme);
     }
+}
 
-    fn draw_menu(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+impl std::fmt::Display for AddressBookList {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "contacts")
+    }
+}
+
+impl Component for AddressBookList {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if !self.is_dirty() {
             return;
         }
-        grid.clear_area(area, self.theme_default);
-        self.dirty = false;
-        for (y, a) in self.accounts.iter().enumerate() {
-            self.print_account(grid, area.nth_row(y), a, context);
+        if !self.initialized {
+            self.initialized = true;
+            self.initialize(context);
+        }
+        if let Some(ref mut editor) = self.editor {
+            return editor.draw(grid, area, context);
         }
 
-        context.dirty_areas.push_back(area);
-    }
-
-    /*
-     * Print a single account in the menu area.
-     */
-    fn print_account(
-        &self,
-        grid: &mut CellBuffer,
-        area: Area,
-        a: &AccountMenuEntry,
-        context: &Context,
-    ) {
-        let width = area.width();
-        let must_highlight_account: bool = self.account_pos == a.index;
-        let account_attrs = if must_highlight_account {
-            let mut v = crate::conf::value(context, "mail.sidebar_highlighted");
-            if !context.settings.terminal.use_color() {
-                v.attrs |= Attr::REVERSE;
-            }
-            v
-        } else {
-            crate::conf::value(context, "mail.sidebar_account_name")
-        };
-
-        grid.change_theme(area, account_attrs);
-        let s = format!(" [{}]", context.accounts[a.index].contacts.len());
-        /* Print account name */
-        grid.write_string(
-            &a.name,
-            account_attrs.fg,
-            account_attrs.bg,
-            account_attrs.attrs,
-            area,
-            None,
-            None,
-        );
-        grid.write_string(
-            &s,
-            account_attrs.fg,
-            account_attrs.bg,
-            account_attrs.attrs,
-            area.skip_cols(area.width().saturating_sub(s.len())),
-            None,
-            None,
-        );
-
-        if a.name.grapheme_len() + s.len() > width + 1 {
-            grid.write_string(
-                "…",
-                account_attrs.fg,
-                account_attrs.bg,
-                account_attrs.attrs,
-                area.skip_cols(area.width().saturating_sub(s.len() + 1)),
-                None,
-                None,
-            );
-        }
-    }
-
-    fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let total_area = area;
-        /* reserve top row for column headers */
-        let header_area = area.nth_row(0);
-        let area = area.skip_rows(1);
-        if self.length == 0 {
+        // reserve top row for address book info
+        let info_area = area.nth_row(0);
+        // reserve top table row for column headers
+        let header_area = area.nth_row(1);
+        let area = area.skip_rows(2);
+        let rows = area.height();
+
+        grid.clear_area(info_area, self.theme_default);
+        grid.clear_area(header_area, self.theme_default);
+        grid.write_string(
+            &format!("{} [{}]", self.name, self.format),
+            self.theme_default.fg,
+            self.theme_default.bg,
+            self.theme_default.attrs,
+            info_area,
+            None,
+            None,
+        );
+        context.dirty_areas.push_back(info_area);
+        if self.id_positions.is_empty() {
             grid.clear_area(area, self.theme_default);
 
             grid.copy_area(
@@ -342,10 +257,9 @@ impl ContactList {
                 self.data_columns.columns[0].area(),
             );
             context.dirty_areas.push_back(total_area);
+            self.set_dirty(false);
             return;
         }
-        let rows = area.height();
-
         if let Some(mvm) = self.movement.take() {
             match mvm {
                 PageMovement::Up(amount) => {
@@ -355,20 +269,20 @@ impl ContactList {
                     self.new_cursor_pos = self.new_cursor_pos.saturating_sub(rows * multiplier);
                 }
                 PageMovement::Down(amount) => {
-                    if self.new_cursor_pos + amount < self.length {
+                    if self.new_cursor_pos + amount < self.id_positions.len() {
                         self.new_cursor_pos += amount;
                     } else {
-                        self.new_cursor_pos = self.length - 1;
+                        self.new_cursor_pos = self.id_positions.len() - 1;
                     }
                 }
                 PageMovement::PageDown(multiplier) => {
                     #[allow(clippy::comparison_chain)]
-                    if self.new_cursor_pos + rows * multiplier < self.length {
+                    if self.new_cursor_pos + rows * multiplier < self.id_positions.len() {
                         self.new_cursor_pos += rows * multiplier;
-                    } else if self.new_cursor_pos + rows * multiplier > self.length {
-                        self.new_cursor_pos = self.length - 1;
+                    } else if self.new_cursor_pos + rows * multiplier > self.id_positions.len() {
+                        self.new_cursor_pos = self.id_positions.len() - 1;
                     } else {
-                        self.new_cursor_pos = (self.length / rows) * rows;
+                        self.new_cursor_pos = (self.id_positions.len() / rows) * rows;
                     }
                 }
                 PageMovement::Right(_) | PageMovement::Left(_) => {}
@@ -376,7 +290,7 @@ impl ContactList {
                     self.new_cursor_pos = 0;
                 }
                 PageMovement::End => {
-                    self.new_cursor_pos = self.length - 1;
+                    self.new_cursor_pos = self.id_positions.len() - 1;
                 }
             }
         }
@@ -386,15 +300,15 @@ impl ContactList {
 
         let top_idx = page_no * rows;
 
-        if self.length >= rows {
+        if self.id_positions.len() >= rows {
             context
                 .replies
                 .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
                     ScrollUpdate::Update {
                         id: self.id,
                         context: ScrollContext {
-                            shown_lines: (top_idx + rows).min(self.length - top_idx),
-                            total_lines: self.length,
+                            shown_lines: (top_idx + rows).min(self.id_positions.len() - top_idx),
+                            total_lines: self.id_positions.len(),
                             has_more_lines: false,
                         },
                     },
@@ -407,13 +321,13 @@ impl ContactList {
                 )));
         }
 
-        /* If cursor position has changed, remove the highlight from the previous
-         * position and apply it in the new one. */
+        // If cursor position has changed, remove the highlight from the previous
+        // position and apply it in the new one.
         if self.cursor_pos != self.new_cursor_pos && prev_page_no == page_no {
             let old_cursor_pos = self.cursor_pos;
             self.cursor_pos = self.new_cursor_pos;
             for idx in &[old_cursor_pos, self.new_cursor_pos] {
-                if *idx >= self.length {
+                if *idx >= self.id_positions.len() {
                     continue;
                 }
                 let new_area = area.nth_row(*idx % rows);
@@ -424,15 +338,15 @@ impl ContactList {
         } else if self.cursor_pos != self.new_cursor_pos {
             self.cursor_pos = self.new_cursor_pos;
         }
-        if self.new_cursor_pos >= self.length {
-            self.new_cursor_pos = self.length - 1;
+        if self.new_cursor_pos >= self.id_positions.len() {
+            self.new_cursor_pos = self.id_positions.len().saturating_sub(1);
             self.cursor_pos = self.new_cursor_pos;
         }
 
-        /* Page_no has changed, so draw new page */
-        grid.clear_area(total_area, self.theme_default);
+        // Page_no has changed, so draw new page
+        grid.clear_area(area, self.theme_default);
         _ = self.data_columns.recalc_widths(area.size(), top_idx);
-        /* copy table columns */
+        // copy table columns
         self.data_columns
             .draw(grid, top_idx, self.cursor_pos, grid.bounds_iter(area));
 
@@ -447,7 +361,6 @@ impl ContactList {
                     0 => "NAME",
                     1 => "E-MAIL",
                     2 => "URL",
-                    3 => "SOURCE",
                     _ => "",
                 },
                 header_attrs.fg,
@@ -467,478 +380,502 @@ impl ContactList {
         }
 
         grid.change_theme(header_area, header_attrs);
+        context.dirty_areas.push_back(header_area);
 
-        if top_idx + rows > self.length {
+        if top_idx + rows > self.id_positions.len() {
             grid.clear_area(
-                area.skip_rows(top_idx + rows - self.length.saturating_sub(1)),
+                area.skip_rows(top_idx + rows - self.id_positions.len().saturating_sub(1)),
                 self.theme_default,
             );
         }
         self.highlight_line(grid, area.nth_row(self.cursor_pos % rows), self.cursor_pos);
         context.dirty_areas.push_back(total_area);
-    }
-}
 
-impl Component for ContactList {
-    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if let ViewMode::View(ref mut mgr) = self.mode {
-            mgr.draw(grid, area, context);
-            return;
-        }
-
-        if !self.dirty {
-            return;
-        }
-        if !self.initialized {
-            self.initialize(context);
-        }
-
-        let total_cols = area.width();
-
-        let right_component_width = if self.menu_visibility {
-            (self.ratio * total_cols) / 100
-        } else {
-            total_cols
-        };
-        let mid = area.width().saturating_sub(right_component_width);
-        if self.dirty && mid != 0 {
-            let divider_area = area.nth_col(mid);
-            for row in grid.bounds_iter(divider_area) {
-                for c in row {
-                    grid[c]
-                        .set_ch(self.sidebar_divider)
-                        .set_fg(self.sidebar_divider_theme.fg)
-                        .set_bg(self.sidebar_divider_theme.bg)
-                        .set_attrs(self.sidebar_divider_theme.attrs);
-                }
-            }
-            context.dirty_areas.push_back(divider_area);
-        }
-
-        if right_component_width == total_cols {
-            self.draw_list(grid, area, context);
-        } else if right_component_width == 0 {
-            self.draw_menu(grid, area, context);
-        } else {
-            self.draw_menu(grid, area.take_cols(mid), context);
-            self.draw_list(grid, area.skip_cols(mid + 1), context);
-        }
-        self.dirty = false;
+        self.set_dirty(false);
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        if let Some(ref mut editor) = self.editor {
+            if matches!(event, UIEvent::ComponentUnrealize(id) if *id == editor.id()) {
+                editor.unrealize(context);
+                self.initialized = false;
+                self.editor = None;
+                self.set_dirty(true);
+                return true;
+            }
+            if editor.process_event(event, context) {
+                return true;
+            }
+        }
+
         match event {
-            UIEvent::VisibilityChange(true) => {
-                self.initialized = false;
+            UIEvent::ChangeMode(UIMode::Normal)
+            | UIEvent::Resize
+            | UIEvent::ConfigReload { old_settings: _ }
+            | UIEvent::VisibilityChange(_) => {
                 self.set_dirty(true);
-            }
-            UIEvent::ConfigReload { old_settings: _ } => {
-                self.theme_default = crate::conf::value(context, "theme_default");
-                self.initialized = false;
-                self.sidebar_divider = context.settings.listing.sidebar_divider;
-                self.sidebar_divider_theme = conf::value(context, "mail.sidebar_divider");
-                self.set_dirty(true);
-            }
-            UIEvent::AccountStatusChange(_, _) => {
-                self.initialized = false;
-                self.set_dirty(true);
-            }
-            UIEvent::ChangeMode(UIMode::Normal) => {
-                self.set_dirty(true);
-            }
-            UIEvent::Resize => {
-                self.set_dirty(true);
+                return false;
             }
             _ => {}
         }
-
-        if let ViewMode::View(ref mut mgr) = self.mode {
-            if matches!(event, UIEvent::ComponentUnrealize(id) if *id == mgr.id()) {
-                mgr.unrealize(context);
-                self.mode = ViewMode::List;
+        let shortcuts = self.shortcuts(context);
+        match *event {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::LISTING]["refresh"]) =>
+            {
+                self.initialized = false;
                 self.set_dirty(true);
                 return true;
             }
-            if mgr.process_event(event, context) {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["create_contact"]) =>
+            {
+                if self.read_only {
+                    return true;
+                }
+                let mut editor = Box::new(ContactManager::new(
+                    self.account_hash,
+                    self.name.clone(),
+                    context,
+                ));
+                editor.set_parent_id(self.id);
+
+                self.editor = Some(editor);
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
+                        ScrollUpdate::End(self.id),
+                    )));
                 return true;
             }
-        }
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["edit_contact"]) =>
+            {
+                if self.id_positions.is_empty() {
+                    return true;
+                }
 
-        let shortcuts = self.shortcuts(context);
-        if matches!(self.mode, ViewMode::List) {
-            match *event {
-                UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["create_contact"]) =>
-                {
-                    let account_hash = context.accounts[self.account_pos].hash();
-                    let mut manager = Box::new(ContactManager::new(account_hash, context));
-                    manager.set_parent_id(self.id);
+                let mut editor = Box::new(ContactManager::new(
+                    self.account_hash,
+                    self.name.clone(),
+                    context,
+                ));
+                let card = context.accounts[&self.account_hash].contacts.books[&self.name]
+                    [&self.id_positions[self.cursor_pos]]
+                    .clone();
+                editor.set_card(card);
+                editor.set_parent_id(self.id);
 
-                    self.mode = ViewMode::View(manager);
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
-                            ScrollUpdate::End(self.id),
-                        )));
-                    return true;
-                }
-                UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["edit_contact"]) =>
-                {
-                    if self.length == 0 {
-                        return true;
-                    }
-                    let account = &mut context.accounts[self.account_pos];
-                    let contacts = &mut account.contacts;
-                    let card = contacts[&self.id_positions[self.cursor_pos]].clone();
-                    let mut manager = Box::new(ContactManager::new(account.hash(), context));
-                    manager.set_parent_id(self.id);
-                    manager.set_card(card);
-
-                    self.mode = ViewMode::View(manager);
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
-                            ScrollUpdate::End(self.id),
-                        )));
-                    return true;
-                }
-                UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["export_contact"]) =>
-                {
-                    if self.length == 0 {
-                        return true;
-                    }
-                    let (account_hash, card) = {
-                        let account = &context.accounts[self.account_pos];
-                        let contacts = &account.contacts;
-                        (
-                            account.hash(),
-                            contacts[&self.id_positions[self.cursor_pos]].clone(),
-                        )
-                    };
-                    super::export_to_vcard(&card, account_hash, context);
-                    return true;
-                }
-                UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["mail_contact"]) =>
-                {
-                    if self.length == 0 {
-                        return true;
-                    }
-                    let account = &context.accounts[self.account_pos];
-                    let account_hash = account.hash();
-                    let contacts = &account.contacts;
-                    let card = &contacts[&self.id_positions[self.cursor_pos]];
-                    let mut draft: Draft = Draft::default();
-                    *draft.headers_mut().get_mut("To").unwrap() =
-                        format!("{} <{}>", card.name(), card.email());
-                    let mut composer = Composer::with_account(account_hash, context);
-                    composer.set_draft(draft, context);
-                    context
-                        .replies
-                        .push_back(UIEvent::Action(Tab(TabAction::New(Some(Box::new(
-                            composer,
-                        ))))));
-
-                    return true;
-                }
-                UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["delete_contact"]) =>
-                {
-                    if self.length == 0 {
-                        return true;
-                    }
-                    // [ref:TODO]: add a confirmation dialog?
-                    context.accounts[self.account_pos]
-                        .contacts
-                        .remove_card(self.id_positions[self.cursor_pos]);
-                    self.initialized = false;
-                    self.set_dirty(true);
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-
-                    return true;
-                }
-                UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["next_account"]) =>
-                {
-                    let amount = if self.cmd_buf.is_empty() {
-                        1
-                    } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
-                        self.cmd_buf.clear();
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        amount
-                    } else {
-                        self.cmd_buf.clear();
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        return true;
-                    };
-                    if self.account_pos + amount < self.accounts.len() {
-                        self.account_pos += amount;
-                        self.set_dirty(true);
-                        self.initialized = false;
-                        self.cursor_pos = 0;
-                        self.new_cursor_pos = 0;
-                        self.length = 0;
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                                self.status(context),
-                            )));
-                    }
-
-                    return true;
-                }
-                UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["prev_account"]) =>
-                {
-                    let amount = if self.cmd_buf.is_empty() {
-                        1
-                    } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
-                        self.cmd_buf.clear();
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        amount
-                    } else {
-                        self.cmd_buf.clear();
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        return true;
-                    };
-                    if self.accounts.is_empty() {
-                        return true;
-                    }
-                    if self.account_pos >= amount {
-                        self.account_pos -= amount;
-                        self.set_dirty(true);
-                        self.cursor_pos = 0;
-                        self.new_cursor_pos = 0;
-                        self.length = 0;
-                        self.initialized = false;
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                                self.status(context),
-                            )));
-                    }
-                    return true;
-                }
-                UIEvent::Input(ref k)
-                    if shortcut!(
-                        k == shortcuts[Shortcuts::CONTACT_LIST]["toggle_menu_visibility"]
-                    ) =>
-                {
-                    self.menu_visibility = !self.menu_visibility;
-                    self.set_dirty(true);
-                }
-                UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Char('\x1b'))
-                    if !self.cmd_buf.is_empty() =>
-                {
-                    self.cmd_buf.clear();
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                    return true;
-                }
-                UIEvent::Input(Key::Char(c)) if c.is_ascii_digit() => {
-                    self.cmd_buf.push(c);
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
-                            self.cmd_buf.clone(),
-                        )));
-                    return true;
-                }
-                UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["scroll_up"]) =>
-                {
-                    let amount = if self.cmd_buf.is_empty() {
-                        1
-                    } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
-                        self.cmd_buf.clear();
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        amount
-                    } else {
-                        self.cmd_buf.clear();
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        return true;
-                    };
-                    self.movement = Some(PageMovement::Up(amount));
-                    self.set_dirty(true);
-                    return true;
-                }
-                UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["scroll_down"]) =>
-                {
-                    if self.cursor_pos >= self.length.saturating_sub(1) {
-                        return true;
-                    }
-                    let amount = if self.cmd_buf.is_empty() {
-                        1
-                    } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
-                        self.cmd_buf.clear();
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        amount
-                    } else {
-                        self.cmd_buf.clear();
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        return true;
-                    };
-                    self.set_dirty(true);
-                    self.movement = Some(PageMovement::Down(amount));
-                    return true;
-                }
-                UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Shortcuts::GENERAL]["prev_page"]) =>
-                {
-                    let mult = if self.cmd_buf.is_empty() {
-                        1
-                    } else if let Ok(mult) = self.cmd_buf.parse::<usize>() {
-                        self.cmd_buf.clear();
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        mult
-                    } else {
-                        self.cmd_buf.clear();
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        return true;
-                    };
-                    self.set_dirty(true);
-                    self.movement = Some(PageMovement::PageUp(mult));
-                    return true;
-                }
-                UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Shortcuts::GENERAL]["next_page"]) =>
-                {
-                    let mult = if self.cmd_buf.is_empty() {
-                        1
-                    } else if let Ok(mult) = self.cmd_buf.parse::<usize>() {
-                        self.cmd_buf.clear();
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        mult
-                    } else {
-                        self.cmd_buf.clear();
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        return true;
-                    };
-                    self.set_dirty(true);
-                    self.movement = Some(PageMovement::PageDown(mult));
-                    return true;
-                }
-                UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Shortcuts::GENERAL]["home_page"]) =>
-                {
-                    self.set_dirty(true);
-                    self.movement = Some(PageMovement::Home);
-                    return true;
-                }
-                UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Shortcuts::GENERAL]["end_page"]) =>
-                {
-                    self.set_dirty(true);
-                    self.movement = Some(PageMovement::End);
-                    return true;
-                }
-                UIEvent::Input(ref key)
-                    if context
-                        .settings
-                        .shortcuts
-                        .contact_list
-                        .commands
-                        .iter()
-                        .any(|cmd| {
-                            if cmd.shortcut == *key {
-                                for cmd in &cmd.command {
-                                    context.replies.push_back(UIEvent::Command(cmd.to_string()));
-                                }
-                                return true;
-                            }
-                            false
-                        }) =>
-                {
-                    return true;
-                }
-                _ => {}
+                self.editor = Some(editor);
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
+                        ScrollUpdate::End(self.id),
+                    )));
+                return true;
             }
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["export_contact"]) =>
+            {
+                if self.id_positions.is_empty() {
+                    return true;
+                }
+                let card = context.accounts[&self.account_hash].contacts.books[&self.name]
+                    [&self.id_positions[self.cursor_pos]]
+                    .clone();
+                super::export_to_vcard(&card, self.account_hash, context);
+                return true;
+            }
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["mail_contact"]) =>
+            {
+                if self.id_positions.is_empty() {
+                    return true;
+                }
+                let card = &context.accounts[&self.account_hash].contacts.books[&self.name]
+                    [&self.id_positions[self.cursor_pos]];
+                let mut draft: Draft = Draft::default();
+                *draft.headers_mut().get_mut("To").unwrap() =
+                    format!("{} <{}>", card.name(), card.email());
+                let mut composer = Composer::with_account(self.account_hash, context);
+                composer.set_draft(draft, context);
+                context
+                    .replies
+                    .push_back(UIEvent::Action(Action::Tab(TabAction::New(Some(
+                        Box::new(composer),
+                    )))));
+
+                return true;
+            }
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["delete_contact"]) =>
+            {
+                if self.id_positions.is_empty() {
+                    return true;
+                }
+                // [ref:TODO]: add a confirmation dialog?
+                context.accounts[&self.account_hash].contacts.books[&self.name]
+                    .remove_card(self.id_positions[self.cursor_pos]);
+                self.initialized = false;
+                self.set_dirty(true);
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+
+                return true;
+            }
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::LISTING]["scroll_up"]) =>
+            {
+                if self.new_cursor_pos == 0 {
+                    return true;
+                }
+                self.movement = Some(PageMovement::Up(1));
+                self.set_dirty(true);
+                return true;
+            }
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::LISTING]["scroll_down"]) =>
+            {
+                if self.cursor_pos >= self.id_positions.len().saturating_sub(1) {
+                    return true;
+                }
+                self.movement = Some(PageMovement::Down(1));
+                self.set_dirty(true);
+                return true;
+            }
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["prev_page"]) =>
+            {
+                self.movement = Some(PageMovement::PageUp(1));
+                self.set_dirty(true);
+                return true;
+            }
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["next_page"]) =>
+            {
+                self.movement = Some(PageMovement::PageDown(1));
+                self.set_dirty(true);
+                return true;
+            }
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["home_page"]) =>
+            {
+                self.movement = Some(PageMovement::Home);
+                self.set_dirty(true);
+                return true;
+            }
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["end_page"]) =>
+            {
+                self.movement = Some(PageMovement::End);
+                self.set_dirty(true);
+                return true;
+            }
+            UIEvent::Input(ref key)
+                if context
+                    .settings
+                    .shortcuts
+                    .contact_list
+                    .commands
+                    .iter()
+                    .any(|cmd| {
+                        if cmd.shortcut == *key {
+                            for cmd in &cmd.command {
+                                context.replies.push_back(UIEvent::Command(cmd.to_string()));
+                            }
+                            return true;
+                        }
+                        false
+                    }) =>
+            {
+                return true;
+            }
+            _ => {}
         }
         false
     }
 
     fn is_dirty(&self) -> bool {
-        self.dirty || matches!(self.mode, ViewMode::View(ref mgr) if mgr.is_dirty())
+        self.dirty
+            || self
+                .editor
+                .as_deref()
+                .map(Component::is_dirty)
+                .unwrap_or(false)
     }
 
     fn set_dirty(&mut self, value: bool) {
-        if let ViewMode::View(ref mut mgr) = self.mode {
-            mgr.set_dirty(value);
-        }
         self.dirty = value;
-    }
-
-    fn kill(&mut self, uuid: ComponentId, context: &mut Context) {
-        debug_assert!(uuid == self.id);
-        context
-            .replies
-            .push_back(UIEvent::Action(Tab(TabAction::Kill(uuid))));
+        if let Some(ref mut editor) = self.editor {
+            editor.set_dirty(value);
+        }
     }
 
     fn shortcuts(&self, context: &Context) -> ShortcutMaps {
-        let mut map = if let ViewMode::View(ref mgr) = self.mode {
-            mgr.shortcuts(context)
+        let mut map = if let Some(ref editor) = self.editor {
+            editor.shortcuts(context)
         } else {
             ShortcutMaps::default()
         };
-
         map.insert(
             Shortcuts::CONTACT_LIST,
-            context.settings.shortcuts.contact_list.key_values(),
+            account_settings!(context[&self.account_hash].shortcuts.contact_list).key_values(),
+        );
+        map.insert(
+            Shortcuts::LISTING,
+            account_settings!(context[&self.account_hash].shortcuts.listing).key_values(),
         );
         map.insert(
             Shortcuts::GENERAL,
-            context.settings.shortcuts.general.key_values(),
+            account_settings!(context[&self.account_hash].shortcuts.general).key_values(),
         );
 
         map
     }
 
-    fn id(&self) -> ComponentId {
-        self.id
+    fn status(&self, context: &Context) -> String {
+        if let Some(ref editor) = self.editor {
+            return editor.status(context);
+        }
+
+        match self.id_positions.len() {
+            1 => "1 entry".into(),
+            no => format!("{no} entries"),
+        }
     }
 
     fn can_quit_cleanly(&mut self, context: &Context) -> bool {
-        if let ViewMode::View(ref mut mgr) = self.mode {
-            return mgr.can_quit_cleanly(context);
+        if let Some(ref mut editor) = self.editor {
+            return editor.can_quit_cleanly(context);
         }
         true
     }
 
-    fn status(&self, context: &Context) -> String {
-        format!(
-            "{} entries",
-            context.accounts[self.account_pos].contacts.len()
-        )
+    fn id(&self) -> ComponentId {
+        self.id
     }
 }
+
+#[derive(Debug)]
+pub struct AccountContacts {
+    account_hash: AccountHash,
+    book_pos: usize,
+    books: IndexMap<AddressBookName, Box<AddressBookList>>,
+    dirty: bool,
+    theme_default: ThemeAttribute,
+    highlight_theme: ThemeAttribute,
+    id: ComponentId,
+}
+
+impl AccountEntryTrait for AccountContacts {
+    const DESCRIPTION: &str = "contacts";
+    type Entry = AddressBookList;
+
+    fn account_hash(&self) -> &AccountHash {
+        &self.account_hash
+    }
+
+    fn new(
+        _parent: ComponentId,
+        id: ComponentId,
+        account_hash: AccountHash,
+        context: &mut Context,
+    ) -> Result<Self> {
+        let theme_default = crate::conf::value(context, "theme_default");
+        let highlight_theme = crate::conf::value(context, "highlight");
+        Ok(Self {
+            account_hash,
+            book_pos: 0,
+            dirty: true,
+            theme_default,
+            highlight_theme,
+            books: context.accounts[&account_hash]
+                .contacts
+                .books
+                .iter()
+                .map(|(name, book)| {
+                    (
+                        name.clone(),
+                        Box::new(AddressBookList::new(book, account_hash, context)),
+                    )
+                })
+                .collect(),
+            id,
+        })
+    }
+
+    fn no_of_entries(&self) -> usize {
+        self.books.len()
+    }
+
+    fn draw_menu_entry(
+        &self,
+        i: usize,
+        must_highlight_account: bool,
+        grid: &mut CellBuffer,
+        area: Area,
+        _: &mut Context,
+    ) {
+        let book = &self.books[i];
+        let book_attr = if must_highlight_account && self.book_pos == i {
+            self.highlight_theme
+        } else {
+            self.theme_default
+        };
+        grid.change_theme(area, book_attr);
+        let (x, y) = grid.write_string(
+            &book.name,
+            book_attr.fg,
+            book_attr.bg,
+            book_attr.attrs,
+            area,
+            None,
+            None,
+        );
+        grid.write_string(
+            &format!(" [{}]", book.id_positions.len()),
+            book_attr.fg,
+            book_attr.bg,
+            book_attr.attrs,
+            area.skip(x, y),
+            None,
+            None,
+        );
+    }
+}
+
+impl std::fmt::Display for AccountContacts {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "contacts")
+    }
+}
+
+impl Component for AccountContacts {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        if !self.is_dirty() {
+            return;
+        }
+        if self.books.is_empty() {
+            grid.clear_area(area, self.theme_default);
+            context.dirty_areas.push_back(area);
+        } else {
+            self.books[self.book_pos].draw(grid, area, context);
+        }
+        self.set_dirty(false);
+    }
+
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        if !self.books.is_empty() && self.books[self.book_pos].process_event(event, context) {
+            return true;
+        }
+        match event {
+            UIEvent::ConfigReload { old_settings: _ } => {
+                self.theme_default = crate::conf::value(context, "theme_default");
+                self.highlight_theme = crate::conf::value(context, "highlight");
+            }
+            UIEvent::ChangeMode(UIMode::Normal)
+            | UIEvent::Resize
+            | UIEvent::VisibilityChange(_) => {
+                self.set_dirty(true);
+            }
+            _ => {}
+        }
+        let shortcuts = self.shortcuts(context);
+        match *event {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::LISTING]["next_mailbox"]) =>
+            {
+                let amount = 1;
+                if self.book_pos + amount < self.books.len() {
+                    self.book_pos += amount;
+                    self.set_dirty(true);
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
+                            self.status(context),
+                        )));
+                }
+
+                return true;
+            }
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::LISTING]["prev_mailbox"]) =>
+            {
+                if self.books.is_empty() {
+                    return true;
+                }
+                let amount = 1;
+                if self.book_pos >= amount {
+                    self.book_pos -= amount;
+                    self.set_dirty(true);
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
+                            self.status(context),
+                        )));
+                }
+                return true;
+            }
+            _ => {}
+        }
+        false
+    }
+
+    fn is_dirty(&self) -> bool {
+        if !self.books.is_empty() {
+            self.dirty || self.books[self.book_pos].is_dirty()
+        } else {
+            self.dirty
+        }
+    }
+
+    fn set_dirty(&mut self, value: bool) {
+        if !self.books.is_empty() {
+            self.books[self.book_pos].set_dirty(value)
+        }
+        self.dirty = value;
+    }
+
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
+        if !self.books.is_empty() {
+            self.books[self.book_pos].shortcuts(context)
+        } else {
+            let mut map = ShortcutMaps::default();
+            if !map.contains_key(Shortcuts::CONTACT_LIST) {
+                map.insert(
+                    Shortcuts::CONTACT_LIST,
+                    context.settings.shortcuts.contact_list.key_values(),
+                );
+            }
+            if !map.contains_key(Shortcuts::LISTING) {
+                map.insert(
+                    Shortcuts::LISTING,
+                    context.settings.shortcuts.listing.key_values(),
+                );
+            }
+            if !map.contains_key(Shortcuts::GENERAL) {
+                map.insert(
+                    Shortcuts::GENERAL,
+                    context.settings.shortcuts.general.key_values(),
+                );
+            }
+            map
+        }
+    }
+
+    fn status(&self, context: &Context) -> String {
+        if !self.books.is_empty() {
+            self.books[self.book_pos].status(context)
+        } else {
+            "No address books".into()
+        }
+    }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+}
+
+/// Display all account address books and a sidebar.
+pub type ContactList = List<AccountContacts>;

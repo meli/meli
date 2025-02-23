@@ -25,6 +25,7 @@ use std::{
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
     convert::TryFrom,
     future::Future,
+    io::Write,
     ops::{Index, IndexMut},
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
@@ -37,11 +38,12 @@ use futures::{future::FutureExt, stream::StreamExt};
 use indexmap::IndexMap;
 use melib::{
     backends::{prelude::*, Backends},
-    error::{Error, ErrorKind, NetworkErrorKind, Result},
+    contacts::{AddressBook, Card, CardId, Contacts},
+    error::{Error, ErrorKind, NetworkErrorKind, Result, ResultIntoError},
     log,
     thread::Threads,
     utils::{fnmatch::Fnmatch, futures::sleep, random, shellexpand::ShellExpandTrait},
-    Contacts, SortField, SortOrder,
+    SortField, SortOrder,
 };
 
 #[cfg(feature = "sqlite3")]
@@ -139,51 +141,8 @@ pub struct Account {
 
 impl Drop for Account {
     fn drop(&mut self) {
-        if let Ok(data_dir) = xdg::BaseDirectories::with_profile("meli", self.name.as_ref()) {
-            if let Ok(data) = data_dir.place_data_file("contacts") {
-                /* place result in cache directory */
-                let f = match std::fs::File::create(data) {
-                    Ok(f) => f,
-                    Err(e) => {
-                        eprintln!("{e}");
-                        return;
-                    }
-                };
-                let metadata = f.metadata().unwrap();
-                let mut permissions = metadata.permissions();
-
-                permissions.set_mode(0o600); // Read/write for owner only.
-                f.set_permissions(permissions).unwrap();
-                let writer = std::io::BufWriter::new(f);
-                if let Err(err) = serde_json::to_writer(writer, &self.contacts) {
-                    eprintln!("{err}");
-                };
-            };
-            /*
-            if let Ok(data) = data_dir.place_data_file("mailbox") {
-                /* place result in cache directory */
-                let f = match fs::File::create(data) {
-                    Ok(f) => f,
-                    Err(e) => {
-                        eprintln!("{}", e);
-                        return;
-                    }
-                };
-                let metadata = f.metadata().unwrap();
-                let mut permissions = metadata.permissions();
-
-                permissions.set_mode(0o600); // Read/write for owner only.
-                f.set_permissions(permissions).unwrap();
-                let writer = io::BufWriter::new(f);
-                if let Err(err) = bincode::Options::serialize_into(
-                    bincode::config::DefaultOptions::new(),
-                    writer,
-                    &self.collection,
-                ) {
-                    eprintln!("{}", err);
-                };
-            };
-                */
+        if let Err(err) = self.write_default_address_book_to_disk() {
+            eprintln!("Could not flush contacts to disk: {err}");
         }
     }
 }
@@ -216,21 +175,45 @@ impl Account {
             event_consumer,
         )?;
 
-        let data_dir = xdg::BaseDirectories::with_profile("meli", name.as_ref())?;
-        let mut contacts = Contacts::with_account(settings.account());
+        let contacts = {
+            let data_dir = xdg::BaseDirectories::with_profile("meli", name.as_ref())?;
+            let mut contacts = Contacts::with_account(settings.account());
+            // Create a default local address book for the account.
+            let mut default_address_book = AddressBook::new("default".into(), "Card".into(), false);
 
-        if let Ok(data) = data_dir.place_data_file("contacts") {
-            if data.exists() {
-                let reader = std::io::BufReader::new(std::fs::File::open(data).unwrap());
-                let result: std::result::Result<Contacts, _> = serde_json::from_reader(reader);
-                if let Ok(data_t) = result {
-                    for (id, c) in data_t.cards {
-                        if !contacts.card_exists(id) && !c.external_resource() {
-                            contacts.add_card(c);
+            if let Ok(data) = data_dir.place_data_file("contacts") {
+                if data.exists() {
+                    fn read_contacts(book: &mut AddressBook, file: &Path) -> Result<()> {
+                        let reader = std::io::BufReader::new(
+                            std::fs::File::open(file).chain_err_related_path(file)?,
+                        );
+                        let data: IndexMap<CardId, Card> =
+                            serde_json::from_reader(reader).chain_err_related_path(file)?;
+                        for (id, c) in data {
+                            if !book.card_exists(id) && !c.external_resource() {
+                                book.add_card(c);
+                            }
                         }
+                        Ok(())
+                    }
+                    if let Err(err) = read_contacts(&mut default_address_book, &data) {
+                        main_loop_handler.send(ThreadEvent::UIEvent(UIEvent::Notification {
+                            title: Some(format!("{}: Could not load contacts", name).into()),
+                            body: err.to_string().into(),
+                            kind: Some(NotificationType::Error(err.kind)),
+                            source: Some(err),
+                        }));
                     }
                 }
             }
+            let was_empty = contacts.books.is_empty();
+            let name = default_address_book.name.clone();
+            let default_index = contacts.books.insert_full(name, default_address_book).0;
+            if !was_empty {
+                // Ensure default address book is first.
+                contacts.books.swap_indices(0, default_index);
+            }
+            contacts
         };
 
         if settings.conf.search_backend == SearchBackend::Auto {
@@ -1902,6 +1885,32 @@ impl Account {
                 })
             })
             .or_else(|| Some(Path::new("~/.signature").expand()).filter(|p| p.is_file()))
+    }
+
+    pub fn write_default_address_book_to_disk(&self) -> Result<()> {
+        if self.contacts.books.is_empty() {
+            return Ok(());
+        }
+        let data_dir = xdg::BaseDirectories::with_profile("meli", self.name.as_ref())?;
+        let (data, data_new) = (
+            data_dir.place_data_file("contacts")?,
+            data_dir.place_data_file("contacts_new")?,
+        );
+        let f = std::fs::File::create(&data_new).chain_err_related_path(&data_new)?;
+        if let Ok(metadata) = f.metadata() {
+            let mut permissions = metadata.permissions();
+
+            permissions.set_mode(0o600); // Read/write for owner only.
+            f.set_permissions(permissions)
+                .chain_err_related_path(&data_new)?;
+        }
+        let mut writer = std::io::BufWriter::new(f);
+        serde_json::to_writer(&mut writer, &self.contacts.books[0].cards)
+            .chain_err_related_path(&data_new)?;
+        writer.flush().chain_err_related_path(&data_new)?;
+        drop(writer);
+        std::fs::rename(&data_new, &data).chain_err_related_path(&data)?;
+        Ok(())
     }
 }
 

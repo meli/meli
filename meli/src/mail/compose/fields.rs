@@ -95,18 +95,25 @@ pub(super) fn generic_address_complete_fn(account_hash: AccountHash) -> AutoComp
             rest = &input[1..];
         }
         let rest = String::from_utf8_lossy(rest.ltrim());
-        let book: &Contacts = &c.accounts[&account_hash].contacts;
-        let results = book.search(&rest);
         let stripped_term = term.strip_suffix(rest.as_ref()).unwrap();
         let pad = if term.ends_with(",") { " " } else { "" };
-        results
-            .into_iter()
-            .map(|card| card.as_address())
-            .filter(|addr| !valid.contains(addr))
-            .map(|addr| addr.to_string())
-            .map(|r| format!("{stripped_term}{pad}{r}"))
-            .filter(|c| c != term)
-            .map(AutoCompleteEntry::from)
+        let contacts: &Contacts = &c.accounts[&account_hash].contacts;
+        contacts
+            .books
+            .iter()
+            .flat_map(|(k, v)| {
+                v.search(&rest)
+                    .into_iter()
+                    .map(|card| card.as_address())
+                    .filter(|addr| !valid.contains(addr))
+                    .map(|addr| addr.to_string())
+                    .map(|r| format!("{stripped_term}{pad}{r}"))
+                    .filter(|c| c != term)
+                    .map(|entry| AutoCompleteEntry {
+                        entry,
+                        description: k.to_string().into(),
+                    })
+            })
             .collect::<Vec<AutoCompleteEntry>>()
     })
 }
@@ -164,9 +171,9 @@ mod tests {
             ..Card::default()
         };
         let account_hash = context.accounts[0].hash;
-        context.accounts[0].contacts.add_card(card_a);
-        context.accounts[0].contacts.add_card(card_b);
-        context.accounts[0].contacts.add_card(card_c);
+        context.accounts[0].contacts.books[0].add_card(card_a);
+        context.accounts[0].contacts.books[0].add_card(card_b);
+        context.accounts[0].contacts.books[0].add_card(card_c);
 
         let complete_fn = generic_address_complete_fn(account_hash);
 
@@ -177,7 +184,7 @@ mod tests {
             complete_fn(&context, "foo"),
             vec![AutoCompleteEntry {
                 entry: "foo@example.com".into(),
-                description: "".into()
+                description: "default".into()
             }]
         );
         // Ensure first completion is not quoted if not necessary
@@ -185,7 +192,7 @@ mod tests {
             complete_fn(&context, "bar"),
             vec![AutoCompleteEntry {
                 entry: "Bar Jr <bar@example.com>".into(),
-                description: "".into()
+                description: "default".into()
             }]
         );
         // Ensure first completion is properly quoted if necessary
@@ -193,7 +200,7 @@ mod tests {
             complete_fn(&context, "Nightmare"),
             vec![AutoCompleteEntry {
                 entry: "\"Nightmare D. Macdonald\" <nightd@example.com>".into(),
-                description: "".into()
+                description: "default".into()
             }]
         );
         // Ensure a full match is not completed until you add a comma
@@ -203,12 +210,12 @@ mod tests {
             vec![
                 AutoCompleteEntry {
                     entry: "foo@example.com, Bar Jr <bar@example.com>".into(),
-                    description: "".into()
+                    description: "default".into()
                 },
                 AutoCompleteEntry {
                     entry: "foo@example.com, \"Nightmare D. Macdonald\" <nightd@example.com>"
                         .into(),
-                    description: "".into()
+                    description: "default".into()
                 }
             ]
         );
@@ -217,12 +224,12 @@ mod tests {
             vec![
                 AutoCompleteEntry {
                     entry: "foo@example.com, Bar Jr <bar@example.com>".into(),
-                    description: "".into()
+                    description: "default".into()
                 },
                 AutoCompleteEntry {
                     entry: "foo@example.com, \"Nightmare D. Macdonald\" <nightd@example.com>"
                         .into(),
-                    description: "".into()
+                    description: "default".into()
                 }
             ]
         );
@@ -232,7 +239,7 @@ mod tests {
             complete_fn(&context, "foo@example.com, Nightm"),
             vec![AutoCompleteEntry {
                 entry: "foo@example.com, \"Nightmare D. Macdonald\" <nightd@example.com>".into(),
-                description: "".into()
+                description: "default".into()
             }]
         );
         // Ensure values are not repeated

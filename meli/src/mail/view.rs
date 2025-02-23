@@ -429,8 +429,10 @@ impl Component for MailView {
                 if let Some(results) = results.downcast_ref::<Vec<Card>>() {
                     let account = &mut context.accounts[&coordinates.0];
                     {
-                        for card in results.iter() {
-                            account.contacts.add_card(card.clone());
+                        if let Some((_, book)) = account.contacts.books.get_index_mut(0) {
+                            for card in results.iter() {
+                                book.add_card(card.clone());
+                            }
                         }
                     }
                     self.contact_selector = None;

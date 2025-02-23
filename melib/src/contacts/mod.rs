@@ -23,6 +23,8 @@ use std::{
     hash::{Hash, Hasher},
     ops::Deref,
     path::Path,
+    process::Command,
+    sync::Arc,
 };
 
 use indexmap::IndexMap;
@@ -33,12 +35,12 @@ use crate::{
     utils::{parsec::Parser, shellexpand::ShellExpandTrait},
 };
 
+mod card;
 pub mod jscontact;
 pub mod mutt;
 pub mod notmuchcontact;
 pub mod vcard;
 
-mod card;
 pub use card::*;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
@@ -80,17 +82,81 @@ impl From<String> for CardId {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub struct AddressBookName(Arc<str>);
+
+impl Deref for AddressBookName {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for AddressBookName {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.0.fmt(fmt)
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct Contacts {
-    display_name: String,
+pub struct AddressBook {
+    pub name: AddressBookName,
+    pub format: Arc<str>,
+    pub read_only: bool,
     pub cards: IndexMap<CardId, Card>,
 }
 
-impl Contacts {
-    pub fn new(display_name: String) -> Self {
+impl AddressBook {
+    pub fn new(name: Arc<str>, format: Arc<str>, read_only: bool) -> Self {
         Self {
-            display_name,
+            name: AddressBookName(name),
+            format,
+            read_only,
             cards: IndexMap::default(),
+        }
+    }
+
+    pub fn add_card(&mut self, card: Card) {
+        self.cards.insert(card.id, card);
+    }
+
+    pub fn remove_card(&mut self, card_id: CardId) {
+        self.cards.shift_remove(&card_id);
+    }
+
+    pub fn card_exists(&self, card_id: CardId) -> bool {
+        self.cards.contains_key(&card_id)
+    }
+
+    pub fn search(&self, term: &str) -> Vec<Card> {
+        self.cards
+            .values()
+            .filter(|c| c.email.contains(term) || c.name.contains(term))
+            .cloned()
+            .collect()
+    }
+}
+
+impl Deref for AddressBook {
+    type Target = IndexMap<CardId, Card>;
+
+    fn deref(&self) -> &IndexMap<CardId, Card> {
+        &self.cards
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct Contacts {
+    name: String,
+    pub books: IndexMap<AddressBookName, AddressBook>,
+}
+
+impl Contacts {
+    pub fn new(name: String) -> Self {
+        Self {
+            name,
+            books: IndexMap::default(),
         }
     }
 
@@ -109,9 +175,15 @@ impl Contacts {
                             .map_err(|err| err.to_string())
                     }) {
                     Ok(cards) => {
+                        let mut book = AddressBook::new(
+                            mutt_alias_file.into(),
+                            "mutt_alias_file".into(),
+                            true,
+                        );
                         for c in cards {
-                            ret.add_card(c);
+                            book.add_card(c);
                         }
+                        ret.books.insert(book.name.clone(), book);
                     }
                     Err(err) => {
                         log::warn!(
@@ -123,7 +195,7 @@ impl Contacts {
                 }
             }
             Err(err) => {
-                log::warn!("Could not parse mutt_alias_file value: {err}");
+                log::error!("Could not read mutt alias configuration value: {err}",);
             }
         }
         match s.vcard_folder() {
@@ -132,15 +204,18 @@ impl Contacts {
                 let expanded_path = Path::new(vcard_path.as_ref()).expand();
                 match vcard::load_cards(&expanded_path) {
                     Ok(cards) => {
+                        let mut book = AddressBook::new(vcard_path.into(), "vcard".into(), true);
                         for c in cards {
-                            ret.add_card(c);
+                            book.add_card(c);
                         }
+                        ret.books.insert(book.name.clone(), book);
                     }
                     Err(err) => {
-                        log::warn!("Could not load vcards from {vcard_path:?}: {err}");
+                        log::warn!("Could not load vcards from {:?}: {}", vcard_path, err);
                         if expanded_path.display().to_string() != vcard_path {
                             log::warn!(
-                                "Note: vcard_folder was expanded from {vcard_path} to {}",
+                                "Note: vcard_folder was expanded from {} to {}",
+                                vcard_path,
                                 expanded_path.display()
                             );
                         }
@@ -148,10 +223,9 @@ impl Contacts {
                 }
             }
             Err(err) => {
-                log::warn!("Could not parse vcard_folder value: {err}");
+                log::error!("Could not read vcard_folder value: {err}",);
             }
-        };
-        use std::process::Command;
+        }
         match s.notmuch_address_book_query() {
             Ok(None) => {}
             Ok(Some(notmuch_address_book_query)) => {
@@ -176,9 +250,15 @@ impl Contacts {
                                         notmuch_address_out,
                                     ) {
                                         Ok(contacts) => {
+                                            let mut book = AddressBook::new(
+                                                notmuch_address_book_query.into(),
+                                                "notmuch_address_book_query".into(),
+                                                true,
+                                            );
                                             for c in contacts {
-                                                ret.add_card(c.clone());
+                                                book.add_card(c);
                                             }
+                                            ret.books.insert(book.name.clone(), book);
                                         }
                                         Err(err) => {
                                             log::warn!(
@@ -209,37 +289,9 @@ impl Contacts {
                 }
             }
             Err(err) => {
-                log::warn!("Could not parse notmuch_address_book_query value: {err}");
+                log::error!("Could not read notmuch_address_book_query configuration value: {err}",);
             }
         }
         ret
-    }
-
-    pub fn add_card(&mut self, card: Card) {
-        self.cards.insert(card.id, card);
-    }
-
-    pub fn remove_card(&mut self, card_id: CardId) {
-        self.cards.shift_remove(&card_id);
-    }
-
-    pub fn card_exists(&self, card_id: CardId) -> bool {
-        self.cards.contains_key(&card_id)
-    }
-
-    pub fn search(&self, term: &str) -> Vec<Card> {
-        self.cards
-            .values()
-            .filter(|c| c.email.contains(term) || c.name.contains(term))
-            .cloned()
-            .collect()
-    }
-}
-
-impl Deref for Contacts {
-    type Target = IndexMap<CardId, Card>;
-
-    fn deref(&self) -> &IndexMap<CardId, Card> {
-        &self.cards
     }
 }

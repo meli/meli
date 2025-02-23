@@ -22,7 +22,10 @@
 use std::borrow::Cow;
 
 use indexmap::IndexMap;
-use melib::{AccountHash, Card};
+use melib::{
+    contacts::{AddressBook, AddressBookName, Card},
+    AccountHash,
+};
 
 use crate::{
     terminal::*,
@@ -46,6 +49,7 @@ pub struct ContactManager {
     mode: ViewMode,
     form: FormWidget<FormButtonAction>,
     account_hash: AccountHash,
+    book: AddressBookName,
     content: Screen<Virtual>,
     theme_default: ThemeAttribute,
     dirty: bool,
@@ -60,15 +64,23 @@ impl std::fmt::Display for ContactManager {
 }
 
 impl ContactManager {
-    pub fn new(account_hash: AccountHash, context: &Context) -> Self {
+    pub fn new(account_hash: AccountHash, book: AddressBookName, context: &Context) -> Self {
+        let book: &AddressBook = &context.accounts[&account_hash].contacts.books[&book];
+        let mode = if book.read_only {
+            ViewMode::ReadOnly
+        } else {
+            ViewMode::Edit
+        };
+        let book = book.name.clone();
         let theme_default: ThemeAttribute = crate::conf::value(context, "theme_default");
         Self {
             id: ComponentId::default(),
             parent_id: None,
             card: Card::new(),
-            mode: ViewMode::Edit,
+            mode,
             form: FormWidget::default(),
             account_hash,
+            book,
             content: Screen::<Virtual>::new(theme_default),
             theme_default,
             dirty: true,
@@ -83,8 +95,7 @@ impl ContactManager {
         }
         let area = self.content.area();
 
-        if self.card.external_resource() {
-            self.mode = ViewMode::ReadOnly;
+        if matches!(self.mode, ViewMode::ReadOnly) {
             self.content.grid_mut().write_string(
                 "This contact's origin is external and cannot be edited within meli.",
                 self.theme_default.fg,
@@ -241,8 +252,7 @@ impl Component for ContactManager {
                                 body: format!("{new_card} was saved.").into(),
                                 kind: Some(NotificationType::Info),
                             });
-                            context.accounts[&self.account_hash]
-                                .contacts
+                            context.accounts[&self.account_hash].contacts.books[&self.book]
                                 .add_card(new_card);
                             self.unrealize(context);
                         }

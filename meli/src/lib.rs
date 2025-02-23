@@ -136,7 +136,6 @@ pub mod utilities;
 pub use crate::utilities::*;
 
 pub mod contacts;
-pub use crate::contacts::*;
 
 pub mod mail;
 pub use crate::mail::*;
