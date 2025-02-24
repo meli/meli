@@ -24,14 +24,11 @@
 use std::{
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
     convert::TryFrom,
-    fs,
     future::Future,
-    io,
     ops::{Index, IndexMut},
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     pin::Pin,
-    result,
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -145,7 +142,7 @@ impl Drop for Account {
         if let Ok(data_dir) = xdg::BaseDirectories::with_profile("meli", self.name.as_ref()) {
             if let Ok(data) = data_dir.place_data_file("contacts") {
                 /* place result in cache directory */
-                let f = match fs::File::create(data) {
+                let f = match std::fs::File::create(data) {
                     Ok(f) => f,
                     Err(e) => {
                         eprintln!("{}", e);
@@ -157,7 +154,7 @@ impl Drop for Account {
 
                 permissions.set_mode(0o600); // Read/write for owner only.
                 f.set_permissions(permissions).unwrap();
-                let writer = io::BufWriter::new(f);
+                let writer = std::io::BufWriter::new(f);
                 if let Err(err) = serde_json::to_writer(writer, &self.contacts) {
                     eprintln!("{}", err);
                 };
@@ -224,8 +221,8 @@ impl Account {
 
         if let Ok(data) = data_dir.place_data_file("contacts") {
             if data.exists() {
-                let reader = io::BufReader::new(fs::File::open(data).unwrap());
-                let result: result::Result<Contacts, _> = serde_json::from_reader(reader);
+                let reader = std::io::BufReader::new(std::fs::File::open(data).unwrap());
+                let result: std::result::Result<Contacts, _> = serde_json::from_reader(reader);
                 if let Ok(data_t) = result {
                     for (id, c) in data_t.cards {
                         if !contacts.card_exists(id) && !c.external_resource() {
@@ -892,7 +889,11 @@ impl Account {
         self.hash
     }
 
-    pub fn load(&mut self, mailbox_hash: MailboxHash, force: bool) -> result::Result<(), usize> {
+    pub fn load(
+        &mut self,
+        mailbox_hash: MailboxHash,
+        force: bool,
+    ) -> std::result::Result<(), usize> {
         if mailbox_hash.is_null() {
             return Err(0);
         }
