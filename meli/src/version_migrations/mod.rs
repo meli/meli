@@ -181,38 +181,19 @@ macro_rules! decl_version_map {
                      && ($v2.patch() == $v1.patch()))
                 }}
             }
-            macro_rules! is_version_ids_sorted {
-                () => {
-                    true
-                };
-                ($v0:expr) => {
-                    $v0 > VersionIdentifier::NULL && true
-                };
-                ($v1:expr, $v2:expr) => {{
-                    v_ids_cmp!($v2, $v1)
-                }};
-                ($v1:expr, $v2:expr, $tail_v:tt) => {{
-                    v_ids_cmp!($v2, $v1) && is_version_ids_sorted! { $v1, $tail_v }
-                }};
-            }
+            const _VERSION_ARRAY: &[VersionIdentifier] = &[$($version_id),*];
             const fn __assert_sorted() -> () {
-                assert!(is_version_ids_sorted! { $($version_id),* }, "Version ids in decl_version_mods are not sorted! Please fix it.");
+                const N: usize = _VERSION_ARRAY.len();
+                let mut i = 0;
+                while i < N - 1 {
+                    assert!(v_ids_cmp!(_VERSION_ARRAY[i+1], _VERSION_ARRAY[i]), "Version ids in decl_version_mods are not sorted! Please fix it.");
+                    i += 1;
+                }
             }
             const _SORT_ASSERTION: () = __assert_sorted();
             const fn __assert_latest() -> () {
-                macro_rules! latest_version_id {
-                    ($v0:expr) => {
-                        $v0
-                    };
-                    ($v1:expr, $v2:expr) => {{
-                        $v2
-                    }};
-                    ($v1:expr, $v2:expr, $tail_v:tt) => {{
-                        latest_version_id! { $tail_v }
-                    }};
-                }
                 if let Some(current_version) = option_env!("CARGO_PKG_VERSION") {
-                    let latest_version = latest_version_id!{ $($version_id),* };
+                    let latest_version = _VERSION_ARRAY[_VERSION_ARRAY.len() - 1];
                     if const_str_cmp(current_version, latest_version.as_str()) as i8 != std::cmp::Ordering::Equal as i8 {
                         panic!("Current version does not match latest version from version migrations map declaration, please fix it.");
                     }
