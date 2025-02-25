@@ -374,7 +374,9 @@ impl FileSettings {
 
         let mut stdout = std::io::stdout();
         let stdin = std::io::stdin();
-        crate::version_migrations::version_setup(&config_path, &mut stdout, &mut stdin.lock())?;
+        if !cfg!(test) {
+            crate::version_migrations::version_setup(&config_path, &mut stdout, &mut stdin.lock())?;
+        }
         Self::validate(config_path, false)
     }
 
