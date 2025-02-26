@@ -1246,7 +1246,6 @@ pub struct Listing {
     mail_view_divider_theme: ThemeAttribute,
     // State
     menu_visibility: bool,
-    cmd_buf: String,
     /// This is the width of the right container to the entire width.
     ratio: usize, // right/(container width) * 100
     prev_ratio: usize,
@@ -1761,23 +1760,8 @@ impl Component for Listing {
                     if shortcut!(k == shortcuts[Shortcuts::LISTING]["next_mailbox"])
                         || shortcut!(k == shortcuts[Shortcuts::LISTING]["prev_mailbox"]) =>
                 {
-                    let amount = if self.cmd_buf.is_empty() {
-                        1
-                    } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
-                        self.cmd_buf.clear();
-                        self.component.set_modifier_active(false);
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        amount
-                    } else {
-                        self.cmd_buf.clear();
-                        self.component.set_modifier_active(false);
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        return true;
-                    };
+                    self.component.set_modifier_active(false);
+                    let amount = context.cmd_buf_clear().unwrap_or(1);
                     let target = match k {
                         k if shortcut!(k == shortcuts[Shortcuts::LISTING]["next_mailbox"]) => {
                             match self.cursor_pos.menu {
@@ -1817,23 +1801,8 @@ impl Component for Listing {
                     if shortcut!(k == shortcuts[Shortcuts::LISTING]["next_account"])
                         || shortcut!(k == shortcuts[Shortcuts::LISTING]["prev_account"]) =>
                 {
-                    let amount = if self.cmd_buf.is_empty() {
-                        1
-                    } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
-                        self.cmd_buf.clear();
-                        self.component.set_modifier_active(false);
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        amount
-                    } else {
-                        self.cmd_buf.clear();
-                        self.component.set_modifier_active(false);
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        return true;
-                    };
+                    self.component.set_modifier_active(false);
+                    let amount = context.cmd_buf_clear().unwrap_or(1);
                     match k {
                         k if shortcut!(k == shortcuts[Shortcuts::LISTING]["next_account"]) => {
                             if self.cursor_pos.account + amount < self.accounts.len() {
@@ -1994,23 +1963,8 @@ impl Component for Listing {
                                 Key::Mouse(MouseEvent::Press(MouseButton::WheelUp, _, __))
                             ) =>
                     {
-                        let amount = if self.cmd_buf.is_empty() {
-                            1
-                        } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
-                            self.cmd_buf.clear();
-                            self.component.set_modifier_active(false);
-                            context
-                                .replies
-                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                            amount
-                        } else {
-                            self.cmd_buf.clear();
-                            self.component.set_modifier_active(false);
-                            context
-                                .replies
-                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                            return true;
-                        };
+                        self.component.set_modifier_active(false);
+                        let amount = context.cmd_buf_clear().unwrap_or(1);
                         self.component.set_movement(PageMovement::Up(amount));
                         return true;
                     }
@@ -2021,141 +1975,55 @@ impl Component for Listing {
                                 Key::Mouse(MouseEvent::Press(MouseButton::WheelDown, _, __))
                             ) =>
                     {
-                        let amount = if self.cmd_buf.is_empty() {
-                            1
-                        } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
-                            self.cmd_buf.clear();
-                            self.component.set_modifier_active(false);
-                            context
-                                .replies
-                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                            amount
-                        } else {
-                            self.cmd_buf.clear();
-                            self.component.set_modifier_active(false);
-                            context
-                                .replies
-                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                            return true;
-                        };
+                        self.component.set_modifier_active(false);
+                        let amount = context.cmd_buf_clear().unwrap_or(1);
                         self.component.set_movement(PageMovement::Down(amount));
                         return true;
                     }
                     UIEvent::Input(ref key)
                         if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_right"]) =>
                     {
-                        let amount = if self.cmd_buf.is_empty() {
-                            1
-                        } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
-                            self.cmd_buf.clear();
-                            self.component.set_modifier_active(false);
-                            context
-                                .replies
-                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                            amount
-                        } else {
-                            self.cmd_buf.clear();
-                            self.component.set_modifier_active(false);
-                            context
-                                .replies
-                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                            return true;
-                        };
+                        self.component.set_modifier_active(false);
+                        let amount = context.cmd_buf_clear().unwrap_or(1);
                         self.component.set_movement(PageMovement::Right(amount));
                         return true;
                     }
                     UIEvent::Input(ref key)
                         if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_left"]) =>
                     {
-                        let amount = if self.cmd_buf.is_empty() {
-                            1
-                        } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
-                            self.cmd_buf.clear();
-                            self.component.set_modifier_active(false);
-                            context
-                                .replies
-                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                            amount
-                        } else {
-                            self.cmd_buf.clear();
-                            self.component.set_modifier_active(false);
-                            context
-                                .replies
-                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                            return true;
-                        };
+                        let amount = context.cmd_buf_clear().unwrap_or(1);
                         self.component.set_movement(PageMovement::Left(amount));
                         return true;
                     }
                     UIEvent::Input(ref key)
                         if shortcut!(key == shortcuts[Shortcuts::LISTING]["prev_page"]) =>
                     {
-                        let mult = if self.cmd_buf.is_empty() {
-                            1
-                        } else if let Ok(mult) = self.cmd_buf.parse::<usize>() {
-                            self.cmd_buf.clear();
-                            self.component.set_modifier_active(false);
-                            context
-                                .replies
-                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                            mult
-                        } else {
-                            self.cmd_buf.clear();
-                            self.component.set_modifier_active(false);
-                            context
-                                .replies
-                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                            return true;
-                        };
+                        self.component.set_modifier_active(false);
+                        let mult = context.cmd_buf_clear().unwrap_or(1);
                         self.component.set_movement(PageMovement::PageUp(mult));
                         return true;
                     }
                     UIEvent::Input(ref key)
                         if shortcut!(key == shortcuts[Shortcuts::LISTING]["next_page"]) =>
                     {
-                        let mult = if self.cmd_buf.is_empty() {
-                            1
-                        } else if let Ok(mult) = self.cmd_buf.parse::<usize>() {
-                            self.cmd_buf.clear();
-                            self.component.set_modifier_active(false);
-                            context
-                                .replies
-                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                            mult
-                        } else {
-                            self.cmd_buf.clear();
-                            self.component.set_modifier_active(false);
-                            context
-                                .replies
-                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                            return true;
-                        };
+                        self.component.set_modifier_active(false);
+                        let mult = context.cmd_buf_clear().unwrap_or(1);
                         self.component.set_movement(PageMovement::PageDown(mult));
                         return true;
                     }
                     UIEvent::Input(ref key)
                         if shortcut!(key == shortcuts[Shortcuts::GENERAL]["home_page"]) =>
                     {
-                        if !self.cmd_buf.is_empty() {
-                            self.cmd_buf.clear();
-                            self.component.set_modifier_active(false);
-                            context
-                                .replies
-                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        }
+                        self.component.set_modifier_active(false);
+                        _ = context.cmd_buf_clear();
                         self.component.set_movement(PageMovement::Home);
                         return true;
                     }
                     UIEvent::Input(ref key)
                         if shortcut!(key == shortcuts[Shortcuts::GENERAL]["end_page"]) =>
                     {
-                        if !self.cmd_buf.is_empty() {
-                            self.cmd_buf.clear();
-                            self.component.set_modifier_active(false);
-                            context
-                                .replies
-                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        }
+                        self.component.set_modifier_active(false);
+                        _ = context.cmd_buf_clear();
                         self.component.set_movement(PageMovement::End);
                         return true;
                     }
@@ -2213,15 +2081,17 @@ impl Component for Listing {
                             && self.component.modifier_active() =>
                     {
                         self.component.set_modifier_command(Some(Modifier::Union));
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
-                                if let Some(modf) = self.component.modifier_command() {
-                                    format!("{} {}", modf, self.cmd_buf)
-                                } else {
-                                    self.cmd_buf.clone()
-                                },
-                            )));
+                        if let Some(cmd_buf) = context.cmd_buf() {
+                            context
+                                .replies
+                                .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
+                                    if let Some(modf) = self.component.modifier_command() {
+                                        format!("{} {}", modf, cmd_buf)
+                                    } else {
+                                        cmd_buf.to_string()
+                                    },
+                                )));
+                        }
                         return true;
                     }
                     UIEvent::Input(ref key)
@@ -2231,15 +2101,17 @@ impl Component for Listing {
                     {
                         self.component
                             .set_modifier_command(Some(Modifier::Difference));
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
-                                if let Some(modf) = self.component.modifier_command() {
-                                    format!("{} {}", modf, self.cmd_buf)
-                                } else {
-                                    self.cmd_buf.clone()
-                                },
-                            )));
+                        if let Some(cmd_buf) = context.cmd_buf() {
+                            context
+                                .replies
+                                .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
+                                    if let Some(modf) = self.component.modifier_command() {
+                                        format!("{} {}", modf, cmd_buf)
+                                    } else {
+                                        cmd_buf.to_string()
+                                    },
+                                )));
+                        }
                         return true;
                     }
                     UIEvent::Input(ref key)
@@ -2251,15 +2123,17 @@ impl Component for Listing {
                     {
                         self.component
                             .set_modifier_command(Some(Modifier::Intersection));
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
-                                if let Some(modf) = self.component.modifier_command() {
-                                    format!("{} {}", modf, self.cmd_buf)
-                                } else {
-                                    self.cmd_buf.clone()
-                                },
-                            )));
+                        if let Some(cmd_buf) = context.cmd_buf() {
+                            context
+                                .replies
+                                .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
+                                    if let Some(modf) = self.component.modifier_command() {
+                                        format!("{} {}", modf, cmd_buf)
+                                    } else {
+                                        cmd_buf.to_string()
+                                    },
+                                )));
+                        }
                         return true;
                     }
                     UIEvent::Input(ref key)
@@ -2281,6 +2155,9 @@ impl Component for Listing {
                     UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Char('\x1b'))
                         if !self.component.unfocused() =>
                     {
+                        // Clear command buffer.
+                        _ = context.cmd_buf_clear();
+                        self.component.set_modifier_active(false);
                         // Clear selection.
                         let row_updates: SmallVec<[EnvelopeHash; 8]> =
                             self.component.get_focused_items(context);
@@ -2293,28 +2170,9 @@ impl Component for Listing {
                         self.component.set_dirty(true);
                         return true;
                     }
-                    UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Char('\x1b'))
-                        if !self.cmd_buf.is_empty() =>
-                    {
-                        self.cmd_buf.clear();
-                        self.component.set_modifier_active(false);
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        return true;
-                    }
                     UIEvent::Input(Key::Char(c)) if c.is_ascii_digit() => {
-                        self.cmd_buf.push(*c);
                         self.component.set_modifier_active(true);
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
-                                if let Some(modf) = self.component.modifier_command() {
-                                    format!("{} {}", modf, self.cmd_buf)
-                                } else {
-                                    self.cmd_buf.clone()
-                                },
-                            )));
+                        context.cmd_buf_push(*c, self.component.modifier_command());
                         return true;
                     }
                     _ => {}
@@ -2401,23 +2259,8 @@ impl Component for Listing {
                     if shortcut!(k == shortcuts[Shortcuts::LISTING]["scroll_up"])
                         || shortcut!(k == shortcuts[Shortcuts::LISTING]["scroll_down"]) =>
                 {
-                    let mut amount = if self.cmd_buf.is_empty() {
-                        1
-                    } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
-                        self.cmd_buf.clear();
-                        self.component.set_modifier_active(false);
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        amount
-                    } else {
-                        self.cmd_buf.clear();
-                        self.component.set_modifier_active(false);
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        return true;
-                    };
+                    self.component.set_modifier_active(false);
+                    let mut amount = context.cmd_buf_clear().unwrap_or(1);
                     if shortcut!(k == shortcuts[Shortcuts::LISTING]["scroll_up"]) {
                         while amount > 0 {
                             match self.menu_cursor_pos {
@@ -2529,23 +2372,8 @@ impl Component for Listing {
                     if shortcut!(k == shortcuts[Shortcuts::LISTING]["next_mailbox"])
                         || shortcut!(k == shortcuts[Shortcuts::LISTING]["prev_mailbox"]) =>
                 {
-                    let amount = if self.cmd_buf.is_empty() {
-                        1
-                    } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
-                        self.cmd_buf.clear();
-                        self.component.set_modifier_active(false);
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        amount
-                    } else {
-                        self.cmd_buf.clear();
-                        self.component.set_modifier_active(false);
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        return true;
-                    };
+                    self.component.set_modifier_active(false);
+                    let amount = context.cmd_buf_clear().unwrap_or(1);
                     let target = match k {
                         k if shortcut!(k == shortcuts[Shortcuts::LISTING]["next_mailbox"]) => {
                             match self.menu_cursor_pos.menu {
@@ -2591,23 +2419,8 @@ impl Component for Listing {
                         || shortcut!(k == shortcuts[Shortcuts::LISTING]["next_page"])
                         || shortcut!(k == shortcuts[Shortcuts::LISTING]["prev_page"]) =>
                 {
-                    let amount = if self.cmd_buf.is_empty() {
-                        1
-                    } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
-                        self.cmd_buf.clear();
-                        self.component.set_modifier_active(false);
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        amount
-                    } else {
-                        self.cmd_buf.clear();
-                        self.component.set_modifier_active(false);
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        return true;
-                    };
+                    self.component.set_modifier_active(false);
+                    let amount = context.cmd_buf_clear().unwrap_or(1);
                     match k {
                         k if shortcut!(k == shortcuts[Shortcuts::LISTING]["next_account"])
                             || shortcut!(k == shortcuts[Shortcuts::LISTING]["next_page"]) =>
@@ -2812,41 +2625,20 @@ impl Component for Listing {
                         self.status(context),
                     )));
             }
-            UIEvent::Input(Key::Backspace) if !self.cmd_buf.is_empty() => {
-                self.cmd_buf.pop();
-                context
-                    .replies
-                    .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
-                        if let Some(modf) = self.component.modifier_command() {
-                            format!("{} {}", modf, self.cmd_buf)
-                        } else {
-                            self.cmd_buf.clone()
-                        },
-                    )));
+            UIEvent::Input(Key::Backspace) if context.cmd_buf().is_some() => {
+                context.cmd_buf_pop(self.component.modifier_command());
                 return true;
             }
             UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Char('\x1b'))
-                if !self.cmd_buf.is_empty() =>
+                if context.cmd_buf().is_some() =>
             {
-                self.cmd_buf.clear();
                 self.component.set_modifier_active(false);
-                context
-                    .replies
-                    .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                _ = context.cmd_buf_clear();
                 return true;
             }
             UIEvent::Input(Key::Char(c)) if c.is_ascii_digit() => {
-                self.cmd_buf.push(c);
                 self.component.set_modifier_active(true);
-                context
-                    .replies
-                    .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
-                        if let Some(modf) = self.component.modifier_command() {
-                            format!("{} {}", modf, self.cmd_buf)
-                        } else {
-                            self.cmd_buf.clone()
-                        },
-                    )));
+                context.cmd_buf_push(c, self.component.modifier_command());
                 return true;
             }
             UIEvent::Input(ref key)
@@ -3083,7 +2875,6 @@ impl Listing {
             prev_ratio: *account_settings!(context[first_account_hash].listing.sidebar_ratio),
             menu_width: WidgetWidth::Unset,
             focus: ListingFocus::Mailbox,
-            cmd_buf: String::with_capacity(4),
         };
         ret.component.realize(ret.id().into(), context);
         {

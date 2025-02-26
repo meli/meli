@@ -146,6 +146,17 @@ pub struct Context {
     pub receiver: Receiver<ThreadEvent>,
     input_thread: InputHandler,
     current_dir: PathBuf,
+    /// The `cmd_buf` is a integer buffer that accumulates pressed digit
+    /// buttons.
+    ///
+    /// When a movement command is received, such as "move cursor" down, a
+    /// component might choose to multiply that movement with the value in
+    /// the buffer.
+    ///
+    /// Since pushing/popping/clearing operations need to also update the status
+    /// buffer on the bottom right, this field is only accessible through
+    /// special [`Context`] methods.
+    cmd_buf: Option<usize>,
     /// Children processes
     pub children: IndexMap<Cow<'static, str>, Vec<ForkedProcess>>,
     pub temp_files: Vec<File>,
@@ -258,6 +269,7 @@ impl Context {
             temp_files: Vec::new(),
             current_dir: std::env::current_dir().unwrap(),
             children: IndexMap::default(),
+            cmd_buf: None,
 
             input_thread: InputHandler {
                 pipe: input_thread_pipe,
@@ -272,6 +284,64 @@ impl Context {
             },
             receiver,
         }
+    }
+
+    #[inline]
+    pub fn cmd_buf(&self) -> Option<usize> {
+        self.cmd_buf
+    }
+
+    #[inline]
+    pub fn cmd_buf_push(&mut self, c: char, modifier_command: Option<Modifier>) {
+        if !c.is_ascii_digit() {
+            return;
+        }
+        let mut cmd_buf = self.cmd_buf.unwrap_or(0);
+        cmd_buf *= 10;
+        cmd_buf += (c as u32 - '0' as u32) as usize;
+        self.replies
+            .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
+                if let Some(modf) = modifier_command {
+                    format!("{} {}", modf, cmd_buf)
+                } else {
+                    cmd_buf.to_string()
+                },
+            )));
+        self.cmd_buf = Some(cmd_buf);
+    }
+
+    #[inline]
+    pub fn cmd_buf_pop(&mut self, modifier_command: Option<Modifier>) {
+        if self.cmd_buf.is_none() {
+            return;
+        }
+        let mut cmd_buf = self.cmd_buf.unwrap_or(0);
+        cmd_buf /= 10;
+        if cmd_buf == 0 {
+            self.cmd_buf = None;
+            self.replies
+                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+            return;
+        }
+        self.replies
+            .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
+                if let Some(modf) = modifier_command {
+                    format!("{} {}", modf, cmd_buf)
+                } else {
+                    cmd_buf.to_string()
+                },
+            )));
+        self.cmd_buf = Some(cmd_buf);
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn cmd_buf_clear(&mut self) -> Option<usize> {
+        if self.cmd_buf.is_some() {
+            self.replies
+                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+        }
+        std::mem::take(&mut self.cmd_buf)
     }
 
     pub fn current_dir(&self) -> &Path {
@@ -445,7 +515,7 @@ impl State {
                 temp_files: Vec::new(),
                 current_dir: std::env::current_dir()?,
                 children: IndexMap::default(),
-
+                cmd_buf: None,
                 input_thread: InputHandler {
                     pipe: input_thread_pipe,
                     rx: input_thread.1,
