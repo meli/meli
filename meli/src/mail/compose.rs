@@ -1615,13 +1615,7 @@ impl Component for Composer {
                     // Collect errors in a vector because filter_map borrows context
                     let errors = hooks
                         .iter_mut()
-                        .filter_map(|h| {
-                            if let Err(err) = h(context, draft) {
-                                Some(err)
-                            } else {
-                                None
-                            }
-                        })
+                        .filter_map(|h| h(context, draft).err())
                         .collect::<Vec<_>>();
                     for err in errors {
                         context.replies.push_back(UIEvent::Notification {
