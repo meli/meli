@@ -145,7 +145,7 @@ impl MailBackend for MaildirType {
         let chunk_size = 2048;
         path.push("new");
         for p in path.read_dir()?.flatten() {
-            utilities::move_to_cur(&self.config, &p.path()).ok().take();
+            _ = utilities::move_to_cur(&self.config, &p.path());
         }
         path.pop();
         path.push("cur");
@@ -932,7 +932,7 @@ impl MaildirType {
         path.push("new");
         for p in path.read_dir().chain_err_related_path(&path)?.flatten() {
             if !read_only {
-                utilities::move_to_cur(config, &p.path()).ok().take();
+                _ = utilities::move_to_cur(config, &p.path());
             } else {
                 files.push(p.path());
             }
