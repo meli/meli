@@ -137,7 +137,7 @@ pub mod impls {
             } else {
                 let last_component = _self
                     .components()
-                    .last()
+                    .next_back()
                     .map(|c| c.as_os_str())
                     .unwrap_or_else(|| OsStr::from_bytes(b""));
                 let prefix = if let Some(p) = _self.parent() {
@@ -225,7 +225,7 @@ pub mod impls {
         } else {
             let last_component = _self
                 .components()
-                .last()
+                .next_back()
                 .map(|c| c.as_os_str())
                 .unwrap_or_else(|| OsStr::from_bytes(b""));
             let prefix = if let Some(p) = _self.parent() {
