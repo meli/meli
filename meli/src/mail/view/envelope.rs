@@ -58,7 +58,6 @@ pub struct EnvelopeView {
     pub headers_cursor: usize,
     pub force_charset: ForceCharset,
     pub view_settings: ViewSettings,
-    pub cmd_buf: String,
     pub active_jobs: HashSet<JobId>,
     pub main_loop_handler: MainLoopHandler,
     pub id: ComponentId,
@@ -114,7 +113,6 @@ impl EnvelopeView {
             mail,
             main_loop_handler,
             active_jobs: HashSet::default(),
-            cmd_buf: String::with_capacity(4),
             id: ComponentId::default(),
         };
 
@@ -1058,10 +1056,8 @@ impl Component for EnvelopeView {
         // Draw number command buffer at the bottom right corner:
 
         let l = area.nth_row(area.height());
-        if self.cmd_buf.is_empty() {
-            grid.clear_area(l.skip_cols_from_end(8), self.view_settings.theme_default);
-        } else {
-            let s = self.cmd_buf.to_string();
+        if let Some(cmd_buf) = context.cmd_buf() {
+            let s = cmd_buf.to_string();
             grid.write_string(
                 &s,
                 self.view_settings.theme_default.fg,
@@ -1071,6 +1067,8 @@ impl Component for EnvelopeView {
                 None,
                 None,
             );
+        } else {
+            grid.clear_area(l.skip_cols_from_end(8), self.view_settings.theme_default);
         }
 
         self.dirty = false;
@@ -1329,19 +1327,14 @@ impl Component for EnvelopeView {
                 self.set_dirty(true);
             }
             UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Char('\x1B'))
-                if !self.cmd_buf.is_empty() =>
+                if context.cmd_buf().is_some() =>
             {
-                self.cmd_buf.clear();
-                context
-                    .replies
-                    .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                _ = context.cmd_buf_clear();
                 return true;
             }
             UIEvent::Input(Key::Char(c)) if c.is_ascii_digit() => {
-                if self.cmd_buf.len() < 9 {
-                    self.cmd_buf.push(c);
-                    self.set_dirty(true);
-                }
+                context.cmd_buf_push(c, None);
+                self.set_dirty(true);
                 return true;
             }
             UIEvent::Input(ref key)
@@ -1384,14 +1377,12 @@ impl Component for EnvelopeView {
                 return true;
             }
             UIEvent::Input(ref key)
-                if !self.cmd_buf.is_empty()
+                if context.cmd_buf().is_some()
                     && shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["open_mailcap"]) =>
             {
-                let lidx = self.cmd_buf.parse::<usize>().unwrap();
-                self.cmd_buf.clear();
-                context
-                    .replies
-                    .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                let Some(lidx) = context.cmd_buf_clear() else {
+                    return true;
+                };
                 if let Some(attachment) = self.open_attachment(lidx, context) {
                     if crate::mailcap::MailcapEntry::execute(attachment, context).is_ok() {
                         self.set_dirty(true);
@@ -1584,14 +1575,12 @@ impl Component for EnvelopeView {
                 return true;
             }
             UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["open_attachment"])
-                    && !self.cmd_buf.is_empty() =>
+                if context.cmd_buf().is_some()
+                    && shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["open_attachment"]) =>
             {
-                let lidx = self.cmd_buf.parse::<usize>().unwrap();
-                self.cmd_buf.clear();
-                context
-                    .replies
-                    .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                let Some(lidx) = context.cmd_buf_clear() else {
+                    return true;
+                };
                 if let Some(attachment) = self.open_attachment(lidx, context) {
                     match attachment.content_type() {
                         ContentType::MessageRfc822 => {
@@ -1716,15 +1705,13 @@ impl Component for EnvelopeView {
                 return true;
             }
             UIEvent::Input(ref key)
-                if !self.cmd_buf.is_empty()
+                if context.cmd_buf().is_some()
                     && self.options.contains(ViewOptions::URL)
                     && shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["go_to_url"]) =>
             {
-                let lidx = self.cmd_buf.parse::<usize>().unwrap();
-                self.cmd_buf.clear();
-                context
-                    .replies
-                    .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                let Some(lidx) = context.cmd_buf_clear() else {
+                    return true;
+                };
                 let links = &self.links;
                 let (_kind, url) = {
                     if let Some(l) = links.get(lidx).map(|l| (l.kind, l.value.as_str())) {
