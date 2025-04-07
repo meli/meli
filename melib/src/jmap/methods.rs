@@ -980,6 +980,15 @@ impl<'de> ::serde::de::Deserialize<'de> for RequestUrlTemplate {
     }
 }
 
+#[allow(clippy::literal_string_with_formatting_args)]
+const ACCOUNT_ID_URL_FORMAT_ARG: &str = "{accountId}";
+#[allow(clippy::literal_string_with_formatting_args)]
+const BLOB_ID_URL_FORMAT_ARG: &str = "{blobId}";
+#[allow(clippy::literal_string_with_formatting_args)]
+const NAME_URL_FORMAT_ARG: &str = "{name}";
+#[allow(clippy::literal_string_with_formatting_args)]
+const TYPE_URL_FORMAT_ARG: &str = "{type}";
+
 pub fn download_request_format(
     download_url: &RequestUrlTemplate,
     account_id: &Id<Account>,
@@ -997,18 +1006,18 @@ pub fn download_request_format(
     while let Some(pos) = download_url.text.as_bytes()[prev_pos..].find(b"{") {
         ret.push_str(&download_url.text[prev_pos..prev_pos + pos]);
         prev_pos += pos;
-        if download_url.text[prev_pos..].starts_with("{accountId}") {
+        if download_url.text[prev_pos..].starts_with(ACCOUNT_ID_URL_FORMAT_ARG) {
             ret.push_str(account_id.as_str());
-            prev_pos += "{accountId}".len();
-        } else if download_url.text[prev_pos..].starts_with("{blobId}") {
+            prev_pos += ACCOUNT_ID_URL_FORMAT_ARG.len();
+        } else if download_url.text[prev_pos..].starts_with(BLOB_ID_URL_FORMAT_ARG) {
             ret.push_str(blob_id.as_str());
-            prev_pos += "{blobId}".len();
-        } else if download_url.text[prev_pos..].starts_with("{name}") {
+            prev_pos += BLOB_ID_URL_FORMAT_ARG.len();
+        } else if download_url.text[prev_pos..].starts_with(NAME_URL_FORMAT_ARG) {
             ret.push_str(name.as_deref().unwrap_or(""));
-            prev_pos += "{name}".len();
-        } else if download_url.text[prev_pos..].starts_with("{type}") {
+            prev_pos += NAME_URL_FORMAT_ARG.len();
+        } else if download_url.text[prev_pos..].starts_with(TYPE_URL_FORMAT_ARG) {
             ret.push_str("application/octet-stream");
-            prev_pos += "{name}".len();
+            prev_pos += TYPE_URL_FORMAT_ARG.len();
         } else {
             log::error!(
                 "BUG: unknown parameter in download_url: {}",
@@ -1059,9 +1068,9 @@ pub fn upload_request_format(
     while let Some(pos) = upload_url.text.as_bytes()[prev_pos..].find(b"{") {
         ret.push_str(&upload_url.text[prev_pos..prev_pos + pos]);
         prev_pos += pos;
-        if upload_url.text[prev_pos..].starts_with("{accountId}") {
+        if upload_url.text[prev_pos..].starts_with(ACCOUNT_ID_URL_FORMAT_ARG) {
             ret.push_str(account_id.as_str());
-            prev_pos += "{accountId}".len();
+            prev_pos += ACCOUNT_ID_URL_FORMAT_ARG.len();
             break;
         } else {
             ret.push('{');
