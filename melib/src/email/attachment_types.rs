@@ -56,6 +56,7 @@ pub enum Charset {
     EUCJP,
     KOI8R,
     KOI8U,
+    KSX1001,
 }
 
 impl<'a> From<&'a [u8]> for Charset {
@@ -151,6 +152,7 @@ impl<'a> From<&'a [u8]> for Charset {
             b if b.eq_ignore_ascii_case(b"euc-jp") => Self::EUCJP,
             b if b.eq_ignore_ascii_case(b"koi8-r") => Self::KOI8R,
             b if b.eq_ignore_ascii_case(b"koi8-u") => Self::KOI8U,
+            b if b.eq_ignore_ascii_case(b"ks_c_5601-1987") => Self::KSX1001,
             _ => {
                 debug!("unknown tag is {:?}", str::from_utf8(b));
                 Self::Ascii
@@ -188,6 +190,7 @@ impl std::fmt::Display for Charset {
             Self::BIG5 => write!(f, "big5"),
             Self::ISO2022JP => write!(f, "iso-2022-jp"),
             Self::EUCJP => write!(f, "euc-jp"),
+            Self::KSX1001 => write!(f, "ks_c_5601-1987"),
             Self::KOI8R => write!(f, "koi8-r"),
             Self::KOI8U => write!(f, "koi8-u"),
         }

@@ -38,16 +38,13 @@ pub fn encode_header(value: &str) -> String {
                      *
                      * Whitespaces inside encoded tokens must be greedily taken,
                      * instead of splitting each non-ascii word into separate encoded tokens. */
-                    if g.split_whitespace().next().is_some() {
+                    if !g.is_empty() && !g.trim_matches(&[' ', '\t'] as &[_]).is_empty() {
                         ret.push_str(&format!(
                             "=?UTF-8?B?{}?=",
                             BASE64_MIME
                                 .encode(&value.as_bytes()[current_window_start..idx])
                                 .trim()
                         ));
-                        if idx != value.len() - 1 && (idx == 0 || !value[..idx].ends_with(' ')) {
-                            ret.push(' ');
-                        }
                         is_current_window_ascii = true;
                         current_window_start = idx;
                         ret.push_str(g);

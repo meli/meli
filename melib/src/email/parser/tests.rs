@@ -30,7 +30,6 @@ use crate::{
             generic::{comment, phrase2, unstructured},
             headers,
             mailing_lists::rfc_2369_list_headers_action_list,
-            BytesExt,
         },
     },
     make_address,
@@ -42,78 +41,150 @@ macro_rules! to_str {
     }};
 }
 
+pub struct MimeEncodedWord {
+    pub encoded: &'static [u8],
+    pub decoded: &'static str,
+}
+
+pub const MIME_ENCODED_WORDS: &[MimeEncodedWord] = &[
+    // No encoding
+    MimeEncodedWord {
+        encoded: b"sdf",
+        decoded: "sdf"
+    },
+    // UTF-8
+    MimeEncodedWord {
+        encoded: br#"=?UTF-8?Q?foo=20=22=20bar?="#,
+        decoded: "foo \" bar"
+    },
+    MimeEncodedWord {
+        encoded: b"=?UTF-8?Q?=CE=A0=CF=81=CF=8C=CF=83=CE=B8=CE=B5?= =?UTF-8?Q?=CF=84=CE=B7_=CE=B5=CE=BE=CE=B5=CF=84?= =?UTF-8?Q?=CE=B1=CF=83=CF=84=CE=B9=CE=BA=CE=AE?=",
+        decoded: "Πρόσθετη εξεταστική"
+    },
+    MimeEncodedWord {
+        encoded: b"[Advcomparch] =?utf-8?b?zqPPhc68z4DOtc+BzrnPhs6/z4HOrCDPg861IGZs?=\n\t=?utf-8?b?dXNoIM67z4zOs8+JIG1pc3ByZWRpY3Rpb24gzrrOsc+Ezqwgz4TOt869?=\n\t=?utf-8?b?IM61zrrPhM6tzrvOtc+Dzrcgc3RvcmU=?=",
+        decoded: "[Advcomparch] Συμπεριφορά σε flush λόγω misprediction κατά την εκτέλεση store"
+    },
+    MimeEncodedWord {
+        encoded: b"Re: [Advcomparch] =?utf-8?b?zqPPhc68z4DOtc+BzrnPhs6/z4HOrCDPg861IGZs?=
+=?utf-8?b?dXNoIM67z4zOs8+JIG1pc3ByZWRpY3Rpb24gzrrOsc+Ezqwgz4TOt869?=
+=?utf-8?b?IM61zrrPhM6tzrvOtc+Dzrcgc3RvcmU=?=",
+        decoded: "Re: [Advcomparch] Συμπεριφορά σε flush λόγω misprediction κατά την εκτέλεση store"
+    },
+    MimeEncodedWord {
+        encoded: br#"[internal] =?UTF-8?B?zp3Orc6/z4Igzp/OtM63zrPPjM+CIM6jz4XOs86zz4E=?=
+                =?UTF-8?B?zrHPhs6uz4I=?="#,
+        decoded: "[internal] Νέος Οδηγός Συγγραφής"
+    },
+    MimeEncodedWord {
+        encoded: br#"=?UTF-8?Q?Re=3a_Climate_crisis_reality_check_=e2=80=93=c2=a0EcoHust?=
+                =?UTF-8?Q?ler?="#,
+        decoded: "Re: Climate crisis reality check –\u{a0}EcoHustler"
+    },
+    MimeEncodedWord {
+        encoded: br#"=?UTF-8?Q?Invitation=3A_Test_event_=E2=8F=B0_=40_Thu_Apr_11=2C_2024_11am_=2D?=
+                    =?UTF-8?Q?_12pm_=28GMT=2B3=29_=28user=40example=2Ecom=29?="#,
+        decoded: "Invitation: Test event ⏰ @ Thu Apr 11, 2024 11am - 12pm (GMT+3) (user@example.com)"
+    },
+    MimeEncodedWord {
+        encoded: br#"=?UTF-8?Q?thisisatest123_"test"?="#,
+        decoded: "thisisatest123 \"test\""
+    },
+    MimeEncodedWord {
+        encoded: b"=?utf-8?Q?{#D=C3=A8=C3=A9=C2=A3=C3=A5=C3=BD_M$=C3=A1=C3?= =?utf-8?Q?=AD.=C3=A7=C3=B8m}?= <user@domain.com>",
+        decoded: "{#Dèé£åý M$áí.çøm} <user@domain.com>"
+    },
+    // windows-1250
+    MimeEncodedWord {
+        encoded: br#"Re: Climate crisis reality check =?windows-1250?B?lqBFY29IdXN0?=
+                =?windows-1250?B?bGVy?="#,
+        decoded: "Re: Climate crisis reality check –\u{a0}EcoHustler"
+    },
+    // windows-1251
+    MimeEncodedWord {
+        encoded: br#"=?WINDOWS-1251?Q?=C0=F0=F2=E5=EC?="#,
+        decoded: "Артем"
+    },
+    // gb18030
+    MimeEncodedWord {
+        encoded: br#"=?gb18030?B?zNrRtsbz0rXTys/k19S2r9eqt6LR6dak08q8/g==?="#,
+        decoded: "腾讯企业邮箱自动转发验证邮件"
+    },
+    // GBK
+    MimeEncodedWord {
+        encoded: br#"=?GBK?B?1cK5scf4s8e53L7WudjT2s34wufT38fp0MXPoteo?=
+                   =?GBK?B?sai1xLTwuLQoz8K6vszBMbrFKS5kb2M=?="#,
+        decoded: "章贡区城管局关于网络舆情信息专报的答复(下壕塘1号).doc"
+    },
+    // KOI-8R
+    MimeEncodedWord {
+        encoded: br#"=?KOI8-R?B?4sHCyd7F1yDzxdLHxco=?="#,
+        decoded: "Бабичев Сергей"
+    },
+    // ISO-8859-1
+    MimeEncodedWord {
+        encoded: br#"=?iso-8859-1?Q?=A1Hola,_se=F1or!?="#,
+        decoded: "¡Hola, señor!"
+    },
+    MimeEncodedWord {
+        encoded: br#"=?iso-8859-1?q?=C5ngstr=F6m_=E5ngstr=F6m?="#,
+        decoded: "Ångström ångström"
+    },
+    MimeEncodedWord {
+        encoded: br#"=?iso-8859-1?q?Fran=E7ois?="#,
+        decoded: "François"
+    },
+    MimeEncodedWord {
+        encoded: br#"=?iso-8859-1?b?VIH1aXZvIExlZWRqgeRydg==?="#,
+        decoded: "T\u{81}õivo Leedj\u{81}ärv"
+    },
+    MimeEncodedWord {
+        encoded: b"=?ISO-8859-1?B?SWYgeW91IGNhbiByZWFkIHRoaXMgeW8=?==?ISO-8859-2?B?dSB1bmRlcnN0YW5kIHRoZSBleGFtcGxlLg==?==?US-ASCII?Q?.._cool!?=",
+        decoded: "If you can read this you understand the example... cool!",
+    },
+    // ISO-8859-2
+    MimeEncodedWord {
+        encoded: br#"=?ISO-8859-2?Q?TEST?="#,
+        decoded: "TEST"
+    },
+    // ISO-8859-7
+    MimeEncodedWord {
+        encoded: b"=?iso-8859-7?B?W215Y291cnNlcy5udHVhLmdyIC0gyvXs4fTp6t4g6uHpIMri4e306ere?=
+       =?iso-8859-7?B?INb18+nq3l0gzd3hIMHt4erv3+358+c6IMzF0c/TIMHQz9TFy8XTzMHU?=
+=?iso-8859-7?B?2c0gwiDUzC4gysHNLiDFzsXUwdPH0yAyMDE3LTE4OiDTx8zFydnTxw==?=",
+        decoded: "[mycourses.ntua.gr - Κυματική και Κβαντική Φυσική] Νέα Ανακοίνωση: ΜΕΡΟΣ ΑΠΟΤΕΛΕΣΜΑΤΩΝ Β \
+    ΤΜ. ΚΑΝ. ΕΞΕΤΑΣΗΣ 2017-18: ΣΗΜΕΙΩΣΗ"
+    },
+    MimeEncodedWord {
+        encoded: b"=?iso-8859-7?b?U2VnIGZhdWx0IPP05+0g5er03evl8+cg9O/1?= =?iso-8859-7?q?_example_ru_n_=5Fsniper?=",
+        decoded: "Seg fault στην εκτέλεση του example ru n _sniper"
+    },
+    MimeEncodedWord {
+        encoded: b"Re: [Advcomparch]
+=?iso-8859-7?b?U2VnIGZhdWx0IPP05+0g5er03evl8+cg9O/1?=
+=?iso-8859-7?q?_example_ru_n_=5Fsniper?=",
+        decoded: "Re: [Advcomparch] Seg fault στην εκτέλεση του example ru n _sniper"
+    },
+    // ks_c_5601-1987
+    MimeEncodedWord {
+        encoded: b"=?ks_c_5601-1987?B?MTMwMTE3X8HWwvfA5V+1tcDlX7jetLq+8y5wZGY=?=",
+        decoded: "130117_주차장_도장_메뉴얼.pdf"
+    },
+    // ISO-2022-JP
+    MimeEncodedWord {
+        encoded: br#"=?ISO-2022-JP?B?GyRCM1g5OzU7PVEwdzgmPSQ4IUYkMnFKczlwGyhC?="#,
+        decoded: "学校技術員研修検討会報告"
+    },
+];
+
 #[test]
 fn test_email_parser_phrase() {
-    let words = b"=?iso-8859-7?B?W215Y291cnNlcy5udHVhLmdyIC0gyvXs4fTp6t4g6uHpIMri4e306ere?=
-     =?iso-8859-7?B?INb18+nq3l0gzd3hIMHt4erv3+358+c6IMzF0c/TIMHQz9TFy8XTzMHU?=
-      =?iso-8859-7?B?2c0gwiDUzC4gysHNLiDFzsXUwdPH0yAyMDE3LTE4OiDTx8zFydnTxw==?=";
-    assert_eq!(
-        "[mycourses.ntua.gr - Κυματική και Κβαντική Φυσική] Νέα Ανακοίνωση: ΜΕΡΟΣ ΑΠΟΤΕΛΕΣΜΑΤΩΝ Β \
-         ΤΜ. ΚΑΝ. ΕΞΕΤΑΣΗΣ 2017-18: ΣΗΜΕΙΩΣΗ",
-        std::str::from_utf8(&phrase(words.trim(), false).unwrap().1).unwrap()
-    );
-    let words = b"=?UTF-8?Q?=CE=A0=CF=81=CF=8C=CF=83=CE=B8=CE=B5?= =?UTF-8?Q?=CF=84=CE=B7_=CE=B5=CE=BE=CE=B5=CF=84?= =?UTF-8?Q?=CE=B1=CF=83=CF=84=CE=B9=CE=BA=CE=AE?=";
-    assert_eq!(
-        "Πρόσθετη εξεταστική",
-        std::str::from_utf8(&phrase(words.trim(), false).unwrap().1).unwrap()
-    );
-    let words = b"[Advcomparch] =?utf-8?b?zqPPhc68z4DOtc+BzrnPhs6/z4HOrCDPg861IGZs?=\n\t=?utf-8?b?dXNoIM67z4zOs8+JIG1pc3ByZWRpY3Rpb24gzrrOsc+Ezqwgz4TOt869?=\n\t=?utf-8?b?IM61zrrPhM6tzrvOtc+Dzrcgc3RvcmU=?=";
-    assert_eq!(
-        "[Advcomparch] Συμπεριφορά σε flush λόγω misprediction κατά την εκτέλεση store",
-        std::str::from_utf8(&phrase(words.trim(), false).unwrap().1).unwrap()
-    );
-    let words = b"Re: [Advcomparch] =?utf-8?b?zqPPhc68z4DOtc+BzrnPhs6/z4HOrCDPg861IGZs?=
-	=?utf-8?b?dXNoIM67z4zOs8+JIG1pc3ByZWRpY3Rpb24gzrrOsc+Ezqwgz4TOt869?=
-	=?utf-8?b?IM61zrrPhM6tzrvOtc+Dzrcgc3RvcmU=?=";
-    assert_eq!(
-        "Re: [Advcomparch] Συμπεριφορά σε flush λόγω misprediction κατά την εκτέλεση store",
-        std::str::from_utf8(&phrase(words.trim(), false).unwrap().1).unwrap()
-    );
-    let words = b"sdf";
-    assert_eq!(
-        "sdf",
-        std::str::from_utf8(&phrase(words, false).unwrap().1).unwrap()
-    );
-    let words = b"=?iso-8859-7?b?U2VnIGZhdWx0IPP05+0g5er03evl8+cg9O/1?= =?iso-8859-7?q?_example_ru_n_=5Fsniper?=";
-    assert_eq!(
-        "Seg fault στην εκτέλεση του example ru n _sniper",
-        std::str::from_utf8(&phrase(words, false).unwrap().1).unwrap()
-    );
-    let words = b"Re: [Advcomparch]
- =?iso-8859-7?b?U2VnIGZhdWx0IPP05+0g5er03evl8+cg9O/1?=
- =?iso-8859-7?q?_example_ru_n_=5Fsniper?=";
-
-    assert_eq!(
-        "Re: [Advcomparch] Seg fault στην εκτέλεση του example ru n _sniper",
-        std::str::from_utf8(&phrase(words, false).unwrap().1).unwrap()
-    );
-
-    let words = r#"[internal] =?UTF-8?B?zp3Orc6/z4Igzp/OtM63zrPPjM+CIM6jz4XOs86zz4E=?=
- =?UTF-8?B?zrHPhs6uz4I=?="#;
-    assert_eq!(
-        "[internal] Νέος Οδηγός Συγγραφής",
-        std::str::from_utf8(&phrase(words.as_bytes(), false).unwrap().1).unwrap()
-    );
-
-    let words = r#"=?UTF-8?Q?Re=3a_Climate_crisis_reality_check_=e2=80=93=c2=a0EcoHust?=
- =?UTF-8?Q?ler?="#;
-    assert_eq!(
-        "Re: Climate crisis reality check –\u{a0}EcoHustler",
-        std::str::from_utf8(&phrase(words.as_bytes(), false).unwrap().1).unwrap()
-    );
-
-    let words = r#"Re: Climate crisis reality check =?windows-1250?B?lqBFY29IdXN0?=
- =?windows-1250?B?bGVy?="#;
-    assert_eq!(
-        "Re: Climate crisis reality check –\u{a0}EcoHustler",
-        std::str::from_utf8(&phrase(words.as_bytes(), false).unwrap().1).unwrap()
-    );
-
-    let words = r#"=?gb18030?B?zNrRtsbz0rXTys/k19S2r9eqt6LR6dak08q8/g==?="#;
-    assert_eq!(
-        "腾讯企业邮箱自动转发验证邮件",
-        std::str::from_utf8(&phrase(words.as_bytes(), false).unwrap().1).unwrap()
-    );
+    for word in MIME_ENCODED_WORDS {
+        assert_eq!(
+            word.decoded,
+            std::str::from_utf8(&phrase(word.encoded, false).unwrap().1).unwrap()
+        );
+    }
 }
 
 #[test]

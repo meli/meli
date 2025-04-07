@@ -305,6 +305,33 @@ fn test_email_compose_mime_encode_header() {
         )
         .unwrap(),
     );
+    assert_eq!(
+        "übänöte",
+        std::str::from_utf8(
+            &crate::email::parser::encodings::phrase(
+                mime::encode_header("übänöte").as_bytes(),
+                false
+            )
+            .unwrap()
+            .1
+        )
+        .unwrap(),
+    );
+
+    for word in crate::email::parser::tests::MIME_ENCODED_WORDS {
+        assert_eq!(
+            word.decoded,
+            std::str::from_utf8(
+                &crate::email::parser::encodings::phrase(
+                    mime::encode_header(word.decoded).as_bytes(),
+                    false
+                )
+                .unwrap()
+                .1
+            )
+            .unwrap(),
+        );
+    }
 }
 
 #[test]

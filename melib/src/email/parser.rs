@@ -23,7 +23,7 @@
 #![allow(clippy::type_complexity)]
 
 #[cfg(test)]
-mod tests;
+pub mod tests;
 
 #[cfg(any(test, doc))]
 use std::backtrace::Backtrace;
@@ -2160,6 +2160,7 @@ pub mod encodings {
             Charset::UTF16 => Ok(UTF_16LE.decode(s).0.to_string()),
             Charset::ISO2022JP => Ok(ISO_2022_JP.decode(s).0.to_string()),
             Charset::EUCJP => Ok(EUC_JP.decode(s).0.to_string()),
+            Charset::KSX1001 => Ok(EUC_KR.decode(s).0.to_string()),
         }
     }
 
@@ -2245,12 +2246,14 @@ pub mod encodings {
         let mut ptr = 0;
 
         while ptr < input.len() {
+            let mut token_start = ptr;
             let mut flag = false;
             // Check if word is encoded.
             while let Ok((rest, v)) = encoded_word(&input[ptr..]) {
                 flag = true;
                 input = rest;
                 ptr = 0;
+                token_start = 0;
                 acc.extend(v);
 
                 // consume whitespace
@@ -2262,8 +2265,8 @@ pub mod encodings {
                     break;
                 }
             }
-            if flag && ptr < input.len() && ptr != 0 {
-                acc.push(b' ');
+            if flag && token_start != ptr {
+                acc.extend(ascii_token(&input[token_start..ptr])?.1);
             }
             let end = input[ptr..].find(b"=?");
 
