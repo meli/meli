@@ -255,7 +255,7 @@ impl MailListingTrait for ThreadListing {
         let account = &context.accounts[&self.new_cursor_pos.0];
         let threads = account.collection.get_threads(self.new_cursor_pos.1);
         self.length = 0;
-        if threads.len() == 0 {
+        if threads.is_empty() {
             let message: String = account[&self.new_cursor_pos.1].status();
             _ = self.data_columns.columns[0].resize_with_context(message.len(), 1, context);
             let area = self.data_columns.columns[0].area();
