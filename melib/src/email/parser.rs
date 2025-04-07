@@ -1037,7 +1037,7 @@ pub mod generic {
         let end = decoded.as_bytes().iter().position(|e| *e == b'?');
         let end_or_len = end.unwrap_or(decoded.len());
 
-        if let Ok(addr) = percent_decode(decoded[..end_or_len].as_bytes())
+        if let Ok(addr) = percent_decode(&decoded.as_bytes()[..end_or_len])
             .decode_utf8()
             .map_err(|_| nom::Err::Error((input, "mailto(): Not valid UTF-8.")))
             .and_then(|s| {
@@ -1047,7 +1047,7 @@ pub mod generic {
             })
         {
             address = addr;
-            decoded = if decoded[end_or_len..].is_empty() {
+            decoded = if decoded.as_bytes()[end_or_len..].is_empty() {
                 &decoded[end_or_len..]
             } else {
                 &decoded[end_or_len + 1..]
@@ -1080,13 +1080,13 @@ pub mod generic {
 
         let mut i = 0;
         while !decoded[i..].is_empty() {
-            let tag = if let Some(tag_pos) = decoded[i..].as_bytes().iter().position(|e| *e == b'=')
+            let tag = if let Some(tag_pos) = decoded.as_bytes()[i..].iter().position(|e| *e == b'=')
             {
-                let ret = &decoded[i..][0..tag_pos];
+                let ret = &decoded.as_bytes()[i..][0..tag_pos];
                 i += tag_pos + 1;
                 ret
-            } else if decoded[i..].as_bytes().starts_with(b"body") {
-                let ret = &decoded[i..][0.."body".len()];
+            } else if decoded.as_bytes()[i..].starts_with(b"body") {
+                let ret = &decoded.as_bytes()[i..][0.."body".len()];
                 i += "body".len() + 1;
                 ret
             } else {
@@ -1102,20 +1102,19 @@ pub mod generic {
                 ));
             };
 
-            let value_end = decoded[i..]
-                .as_bytes()
+            let value_end = decoded.as_bytes()[i..]
                 .iter()
                 .position(|e| *e == b'&')
-                .unwrap_or_else(|| decoded[i..].len());
+                .unwrap_or_else(|| decoded.as_bytes()[i..].len());
 
-            let Ok(value) = percent_decode(decoded[i..][..value_end].as_bytes())
+            let Ok(value) = percent_decode(&decoded.as_bytes()[i..][..value_end])
                 .decode_utf8()
                 .map(|v| v.to_string())
             else {
                 return Err(nom::Err::Error((input, "mailto(): invalid UTF-8.").into()));
             };
             match tag {
-                "body" if body.is_none() => {
+                b"body" if body.is_none() => {
                     body = Some(value);
                 }
                 other => match HeaderName::try_from(other) {
@@ -1154,7 +1153,7 @@ pub mod generic {
                     }
                 },
             }
-            if decoded[i..][value_end..].is_empty() {
+            if decoded.as_bytes()[i..][value_end..].is_empty() {
                 break;
             }
             i += value_end + 1;

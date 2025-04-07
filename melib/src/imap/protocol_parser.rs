@@ -521,7 +521,7 @@ pub fn list_mailbox_result(input: &[u8]) -> IResult<&[u8], ImapMailbox> {
             };
             f.name = if let Some(pos) = f.imap_path.as_bytes().iter().rposition(|&c| c == separator)
             {
-                f.parent = Some(MailboxHash::from_bytes(f.imap_path[..pos].as_bytes()));
+                f.parent = Some(MailboxHash::from_bytes(&f.imap_path.as_bytes()[..pos]));
                 f.imap_path[pos + 1..].to_string()
             } else {
                 f.imap_path.clone()

@@ -396,7 +396,7 @@ impl Color {
             "Default" => return Ok(Self::Default),
             s if s.starts_with('#')
                 && s.len() == 7
-                && s[1..].as_bytes().iter().all(|&b| {
+                && s.as_bytes()[1..].iter().all(|&b| {
                     b.is_ascii_digit() || (b'a'..=b'f').contains(&b) || (b'A'..=b'F').contains(&b)
                 }) =>
             {
@@ -411,7 +411,7 @@ impl Color {
             }
             s if s.starts_with('#')
                 && s.len() == 4
-                && s[1..].as_bytes().iter().all(|&b| {
+                && s.as_bytes()[1..].iter().all(|&b| {
                     b.is_ascii_digit() || (b'a'..=b'f').contains(&b) || (b'A'..=b'F').contains(&b)
                 }) =>
             {

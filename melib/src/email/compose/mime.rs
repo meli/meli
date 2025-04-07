@@ -42,7 +42,7 @@ pub fn encode_header(value: &str) -> String {
                         ret.push_str(&format!(
                             "=?UTF-8?B?{}?=",
                             BASE64_MIME
-                                .encode(value[current_window_start..idx].as_bytes())
+                                .encode(&value.as_bytes()[current_window_start..idx])
                                 .trim()
                         ));
                         if idx != value.len() - 1 && (idx == 0 || !value[..idx].ends_with(' ')) {
@@ -67,7 +67,7 @@ pub fn encode_header(value: &str) -> String {
                     ret.push_str(&format!(
                         "=?UTF-8?B?{}?=",
                         BASE64_MIME
-                            .encode(value[current_window_start..idx].as_bytes())
+                            .encode(&value.as_bytes()[current_window_start..idx])
                             .trim()
                     ));
                     if idx != value.len() - 1 {
@@ -85,7 +85,7 @@ pub fn encode_header(value: &str) -> String {
         ret.push_str(&format!(
             "=?UTF-8?B?{}?=",
             BASE64_MIME
-                .encode(value[current_window_start..].as_bytes())
+                .encode(&value.as_bytes()[current_window_start..])
                 .trim()
         ));
     }
