@@ -171,7 +171,7 @@ impl Context {
             ..
         } = self;
         let was_online = accounts[account_pos].is_online.is_true();
-        let ret = accounts[account_pos].is_online();
+        let ret = accounts[account_pos].is_online(false);
         if ret.is_ok() && !was_online {
             log::trace!("inserting mailbox hashes:");
             for mailbox_node in accounts[account_pos].list_mailboxes() {

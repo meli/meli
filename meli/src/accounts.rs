@@ -1214,12 +1214,13 @@ impl Account {
         ret.as_ref().map(|ret| ret.1.ref_mailbox.hash())
     }
 
-    /* Call only in Context::is_online, since only Context can launch the watcher
-     * threads if an account goes from offline to online. */
-    pub fn is_online(&mut self) -> Result<()> {
+    /// Callers should ensure `watch` is called if transitioning from
+    /// offline/error to online.
+    pub fn is_online(&mut self, force: bool) -> Result<()> {
         let (ret, wait) = match &mut self.is_online {
             IsOnline::Uninit => (Err(Error::new("Attempting connection.")), None),
-            IsOnline::True => return Ok(()),
+            IsOnline::True if !force => return Ok(()),
+            IsOnline::True => (Ok(()), None),
             IsOnline::Err {
                 value,
                 ref mut retries,
@@ -1246,7 +1247,7 @@ impl Account {
                 (ret, wait)
             }
         };
-        if !self.active_jobs.values().any(JobRequest::is_online) {
+        if force || !self.active_jobs.values().any(JobRequest::is_online) {
             let online_fut = self.backend.read().unwrap().is_online();
             if let Ok(online_fut) = online_fut {
                 let handle = match wait {
@@ -1576,7 +1577,7 @@ impl Account {
                                 .job_executor
                                 .set_job_success(job_id, false);
                             self.is_online.set_err(err);
-                            _ = self.is_online();
+                            _ = self.is_online(true);
                             self.main_loop_handler.send(ThreadEvent::UIEvent(
                                 UIEvent::AccountStatusChange(self.hash, None),
                             ));
@@ -1739,9 +1740,11 @@ impl Account {
                         Ok(Some((None, _))) => {
                             log::trace!("JobRequest::Watch stream returned None");
                             self.watch(None);
+                            _ = self.is_online(true);
                         }
                         Ok(None) => {
                             self.watch(None);
+                            _ = self.is_online(true);
                         }
                         Ok(Some((Some(ev), rest))) => {
                             let handle = self.main_loop_handler.job_executor.spawn(
@@ -1759,8 +1762,10 @@ impl Account {
                                             err.kind,
                                             ErrorKind::Network(NetworkErrorKind::HostLookupFailed)
                                         )
+                                        || err.is_recoverable()
                                     {
                                         self.watch(Some(Duration::from_secs(3)));
+                                        _ = self.is_online(true);
                                     } else {
                                         self.main_loop_handler
                                             .job_executor
