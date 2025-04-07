@@ -1271,9 +1271,12 @@ impl Component for Composer {
                     #[cfg(feature = "gpgme")]
                     Focus::Sign => Focus::Attachments,
                     Focus::Body if !self.pager.process_event(event, context) => {
-                        if cfg!(feature = "gpgme") {
+                        #[cfg(feature = "gpgme")]
+                        {
                             Focus::Encrypt
-                        } else {
+                        }
+                        #[cfg(not(feature = "gpgme"))]
+                        {
                             Focus::Attachments
                         }
                     }
