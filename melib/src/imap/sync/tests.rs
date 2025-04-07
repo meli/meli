@@ -23,7 +23,7 @@
 #[cfg(feature = "sqlite3")]
 #[test]
 fn test_imap_sync_sqlite() {
-    use crate::imap::*;
+    use crate::{backends::IsSubscribedFn, imap::*};
 
     let tempdir = tempfile::tempdir().unwrap();
     let account_hash = AccountHash::from_bytes(b"test".as_slice());
@@ -31,7 +31,14 @@ fn test_imap_sync_sqlite() {
     let event_consumer = BackendEventConsumer::new(Arc::new(|_, _| {}));
     let uid_store: Arc<UIDStore> = Arc::new(UIDStore {
         offline_cache: Arc::new(Mutex::new(None)),
-        ..UIDStore::new(account_hash, account_name, event_consumer, None, true)
+        ..UIDStore::new(
+            IsSubscribedFn::default(),
+            account_hash,
+            account_name,
+            event_consumer,
+            None,
+            true,
+        )
     });
     let mut value =
         sync::sqlite3_cache::Sqlite3Cache::get(Arc::clone(&uid_store), Some(tempdir.path()))

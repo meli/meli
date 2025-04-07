@@ -87,6 +87,7 @@ impl ManageSieveConnection {
                 Err(Error::new("Account is uninitialised.")),
             ))),
             ..UIDStore::new(
+                Default::default(),
                 account_hash,
                 account_name.into(),
                 event_consumer,

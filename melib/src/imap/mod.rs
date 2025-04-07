@@ -158,6 +158,7 @@ macro_rules! get_conf_val {
 
 #[derive(Debug)]
 pub struct UIDStore {
+    pub is_subscribed: IsSubscribedFn,
     pub account_hash: AccountHash,
     pub account_name: Arc<str>,
     pub server_id: Arc<Mutex<Option<IDResponse>>>,
@@ -185,6 +186,7 @@ pub struct UIDStore {
 
 impl UIDStore {
     pub fn new(
+        is_subscribed: IsSubscribedFn,
         account_hash: AccountHash,
         account_name: Arc<str>,
         event_consumer: BackendEventConsumer,
@@ -194,6 +196,7 @@ impl UIDStore {
         Self {
             account_hash,
             account_name,
+            is_subscribed,
             server_id: Default::default(),
             keep_offline_cache: AtomicBool::new(keep_offline_cache),
             offline_cache: Arc::new(Mutex::new(None)),
@@ -246,7 +249,6 @@ impl UIDStore {
 
 #[derive(Debug)]
 pub struct ImapType {
-    pub _is_subscribed: IsSubscribedFn,
     pub connection: Arc<ConnectionMutex>,
     pub server_conf: ImapServerConf,
     pub uid_store: Arc<UIDStore>,
@@ -455,6 +457,16 @@ impl MailBackend for ImapType {
             let new_mailboxes = Self::imap_mailboxes(&connection).await?;
             let mut mailboxes = uid_store.mailboxes.lock().await;
             *mailboxes = new_mailboxes;
+            for m in mailboxes.values_mut() {
+                log::trace!(
+                    "mailbox: {} is_subscribed: {}",
+                    m.path(),
+                    (uid_store.is_subscribed)(m.path())
+                );
+                if (uid_store.is_subscribed)(m.path()) {
+                    m.set_is_subscribed(true)?;
+                }
+            }
             /*
             let mut invalid_configs = vec![];
             for m in mailboxes.values() {
@@ -1367,6 +1379,7 @@ impl ImapType {
         let uid_store: Arc<UIDStore> = Arc::new(UIDStore {
             offline_cache: Arc::new(Mutex::new(None)),
             ..UIDStore::new(
+                is_subscribed,
                 account_hash,
                 account_name,
                 event_consumer,
@@ -1386,7 +1399,6 @@ impl ImapType {
         );
 
         Ok(Box::new(Self {
-            _is_subscribed: is_subscribed,
             connection: Arc::new(ConnectionMutex::new(
                 connection,
                 server_conf.clone(),
