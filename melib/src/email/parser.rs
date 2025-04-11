@@ -1006,11 +1006,14 @@ pub mod generic {
         let mut headers = HeaderMap::empty();
         let mut address: Vec<Address>;
 
-        if String::from_utf8_lossy(input).matches('?').count() > 1 {
-            return Err(nom::Err::Error(
-                (input, "mailto(): Using '?' twice is invalid.").into(),
-            ));
-        }
+        // [ref:TODO]: Validate header content (e.g. test address containing Headers for valid address,
+        // so that the following would return an error:
+
+        // if String::from_utf8_lossy(input).matches('?').count() > 1 {
+        //     return Err(nom::Err::Error(
+        //         (input, "mailto(): Using '?' twice is invalid.").into(),
+        //     ));
+        // }
         input = &input[b"mailto:".len()..];
         let Ok(mut decoded_owned) = String::from_utf8(input.to_vec()) else {
             return Err(nom::Err::Error(

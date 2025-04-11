@@ -175,11 +175,15 @@ fn test_email_mailto() {
         ("To", "joe@example.com"), ("Cc", "bob@example.com")
     );
 
-    //    Note the use of the "&" reserved character, above. The following example,
-    // by using "?" twice, is incorrect: <mailto:joe@example.com?cc=bob@
-    // example.com?body=hello>   ; WRONG!
+    // [ref:TODO]: Validate header content (e.g. test address containing Headers for valid address,
+    // so that the following would return an error:
+    //
+    // //    Note the use of the "&" reserved character, above. The following
+    // example, // by using "?" twice, is incorrect:
+    // <mailto:joe@example.com?cc=bob@ // example.com?body=hello>   ; WRONG!
 
-    Mailto::try_from("mailto:joe@example.com?cc=bob@example.com?body=hello").unwrap_err();
+    // Mailto::try_from("mailto:joe@example.com?cc=bob@example.com?body=hello").
+    // unwrap_err();
 
     // <a href="mailto:?to=joe@xyz.com&amp;cc=bob@xyz.com&amp;body=hello"> assert
     // these are equal
@@ -316,5 +320,12 @@ fn test_email_mailto() {
         addresses=> "1001084@bugs.debian.org";
         body => Some("On Tue, 23 Jan 2024 19:46:47 +0100 Jonas Smedegaard <dr@jones.dk> wrote:\n> 0.8.5+20240101 draft 1 needs embedding 5 crates (3 missing, 2 ahead); runs and seems to work from a brief test use.\n> \n> Main tasks are still to keep package up-to-date with upstream releases,\n> and to package more of the crates currently embedded.\n> \n> Here's how you can help:\n> \n> As user running Debian, you can test this draft package: Either build it\n> yourself from source or tell (by posting to this bugreport) if you\n> prefer testing the binary packages I built - then I will share those.\n> \n> As developer (but no need to be official member of Debian!), you can\n> join the Debian Rust team and help package these missing crates:\n> https://salsa.debian.org/debian/meli/-/blob/debian/latest/debian/TODO\n> \n> \n>  - Jonas\n> \n> -- \n>  * Jonas Smedegaard - idealist & Internet-arkitekt\n>  * Tlf.: +45 40843136  Website: http://dr.jones.dk/\n> \n>  [x] quote me freely  [ ] ask before reusing  [ ] keep private");
         ("To", "1001084@bugs.debian.org"), ("Subject", "Re: ITP: meli -- terminal mail client"), ("In-Reply-To", "<170603560794.2588145.11750867315250989304@auryn.jones.dk>"), ("References", "<163857393129.1083042.11053317018847169002.reportbug@auryn.jones.dk>\n <170603560794.2588145.11750867315250989304@auryn.jones.dk>")
+    );
+
+    // Test case where Header value contains '?'
+    test_case!("mailto:example-devel@lists.example.org?in-reply-to=<__@example>&subject=Re:%20Re: Should stuff choose things?",
+        addresses => "example-devel@lists.example.org";
+        body => None;
+        ("To", "example-devel@lists.example.org"), ("Subject", "Re: Re: Should stuff choose things?"), ("In-Reply-To", "<__@example>")
     );
 }
