@@ -90,6 +90,9 @@ fn bisearch(ucs: WChar, table: &'static [Interval]) -> bool {
     let mut min = 0;
     let mut mid;
 
+    if table.is_empty() {
+        return false;
+    }
     let mut max = table.len() - 1;
 
     if ucs < table[0].0 || ucs > table[max].1 {

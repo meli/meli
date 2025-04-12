@@ -331,7 +331,7 @@ fn main() -> Result<(), std::io::Error> {
         let mut file = File::create(mod_path)?;
         file.write_all(
             br#"/*
- * meli - text crate.
+ * meli - text mod.
  *
  * Copyright 2017-2020 Manos Pitsidianakis
  *
@@ -410,18 +410,20 @@ pub const {}: &[(u32, u32)] = &[
             )
             .unwrap();
             let mut iter = codepoints.iter().filter(filter);
-            let mut prev = iter.next().unwrap().raw;
-            let mut a = prev;
-            for cp in iter {
-                if prev + 1 != cp.raw {
-                    file.write_all(format!("    (0x{:X}, 0x{:X}),\n", a, prev).as_bytes())
-                        .unwrap();
-                    a = cp.raw;
+            if let Some(prev) = iter.next() {
+                let mut prev = prev.raw;
+                let mut a = prev;
+                for cp in iter {
+                    if prev + 1 != cp.raw {
+                        file.write_all(format!("    (0x{:X}, 0x{:X}),\n", a, prev).as_bytes())
+                            .unwrap();
+                        a = cp.raw;
+                    }
+                    prev = cp.raw;
                 }
-                prev = cp.raw;
+                file.write_all(format!("    (0x{:X}, 0x{:X}),\n", a, prev).as_bytes())
+                    .unwrap();
             }
-            file.write_all(format!("    (0x{:X}, 0x{:X}),\n", a, prev).as_bytes())
-                .unwrap();
             file.write_all(b"];\n").unwrap();
         }
     }
