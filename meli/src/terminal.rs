@@ -390,6 +390,21 @@ derive_csi_sequence!(
 );
 
 derive_csi_sequence!(
+    /// Save `?7` Wraparound Mode (DECAWM)
+    (SaveWraparoundMode, "?7s")
+);
+
+derive_csi_sequence!(
+    /// Restore `?7` Wraparound Mode (DECAWM)
+    (RestoreWraparoundMode, "?7r")
+);
+
+derive_csi_sequence!(
+    /// Disable `?7` Wraparound Mode (DECAWM)
+    (DisableWraparoundMode, "?7l")
+);
+
+derive_csi_sequence!(
     #[doc = "`CSI Ps ; Ps ; Ps t`, where `Ps = 2 2 ; 0`  -> Save xterm icon and window title on \
              stack."]
     (SaveWindowTitleIconToStack, "22;0t")

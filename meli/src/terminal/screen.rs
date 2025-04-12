@@ -28,10 +28,10 @@ use termion::{clear, cursor, raw::IntoRawMode, screen::AlternateScreen};
 use crate::{
     terminal::{
         cells::CellBuffer, Alignment, BracketModeEnd, BracketModeStart, Cell, Color,
-        DisableAlternateScrollMode, DisableMouse, DisableSGRMouse, EnableAlternateScrollMode,
-        EnableMouse, EnableSGRMouse, Pos, QueryBackground, QueryForeground,
-        QuerySynchronizedOutputSupport, RestoreWindowTitleIconFromStack,
-        SaveWindowTitleIconToStack,
+        DisableAlternateScrollMode, DisableMouse, DisableSGRMouse, DisableWraparoundMode,
+        EnableAlternateScrollMode, EnableMouse, EnableSGRMouse, Pos, QueryBackground,
+        QueryForeground, QuerySynchronizedOutputSupport, RestoreWindowTitleIconFromStack,
+        RestoreWraparoundMode, SaveWindowTitleIconToStack, SaveWraparoundMode,
     },
     Attr, Context, ThemeAttribute,
 };
@@ -355,11 +355,12 @@ impl Screen<Tty> {
         let mouse = self.display.mouse;
         write!(
             stdout,
-            "{}{}{}{}{disable_sgr_mouse}{disable_mouse}{disable_alt_scroll}",
+            "{restore_wraparound}{}{}{}{}{disable_sgr_mouse}{disable_mouse}{disable_alt_scroll}",
             termion::screen::ToMainScreen,
             cursor::Show,
             RestoreWindowTitleIconFromStack,
             BracketModeEnd,
+            restore_wraparound = RestoreWraparoundMode,
             disable_sgr_mouse = if mouse { DisableSGRMouse.as_ref() } else { "" },
             disable_mouse = if mouse { DisableMouse.as_ref() } else { "" },
             disable_alt_scroll = if mouse {
@@ -381,12 +382,14 @@ impl Screen<Tty> {
 
         write!(
             &mut stdout,
-            "{save_title_to_stack}{}{}{}{window_title}{}{}{enable_mouse}{enable_sgr_mouse}{enable_alt_scroll}",
+            "{save_title_to_stack}{}{}{}{save_wraparound}{disable_wraparound}{window_title}{}{}{enable_mouse}{enable_sgr_mouse}{enable_alt_scroll}",
             termion::screen::ToAlternateScreen,
             cursor::Hide,
             clear::All,
             cursor::Goto(1, 1),
             BracketModeStart,
+            save_wraparound = SaveWraparoundMode,
+            disable_wraparound = DisableWraparoundMode,
             save_title_to_stack = SaveWindowTitleIconToStack,
             window_title = if let Some(ref title) = context.settings.terminal.window_title {
                 format!("\x1b]2;{}\x07", title)
