@@ -292,7 +292,7 @@ impl Component for NotificationCommand {
                         );
                         match Command::new("osascript")
                             .arg("-e")
-                            .arg(applescript)
+                            .arg(&applescript)
                             .stdin(Stdio::piped())
                             .stdout(Stdio::piped())
                             .spawn()
