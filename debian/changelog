@@ -1,3 +1,9 @@
+meli (0.8.12-1) bookworm; urgency=low
+
+  This release only fixes compilation under macos and does not affect debian.
+
+ -- Manos Pitsidianakis <manos@pitsidianak.is>  Tue, 29 Apr 2025 17:12:39 +0000
+
 meli (0.8.11-1) bookworm; urgency=low
 
   This is mostly a fixups release.

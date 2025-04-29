@@ -21,6 +21,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- ### Miscellaneous Tasks -->
 
+## [v0.8.12] - 2025-04-21
+
+This release fixes compilation under macos which was broken with the previous release, [v0.8.11].
+
+### Bug Fixes
+
+- [**`a2bc4420`**](https://git.meli-email.org/meli/meli/commit/a2bc442044cd08a8433cc2060f590e4a1f2ec513) `Fix compilation under macos`
+
 ## [v0.8.11] - 2025-04-21
 
 This is mostly a fixups release.
@@ -1664,3 +1672,4 @@ Notable changes:
 [v0.8.9]: https://git.meli-email.org/meli/meli/releases/tag/v0.8.9
 [v0.8.10]: https://git.meli-email.org/meli/meli/releases/tag/v0.8.10
 [v0.8.11]: https://git.meli-email.org/meli/meli/releases/tag/v0.8.11
+[v0.8.12]: https://git.meli-email.org/meli/meli/releases/tag/v0.8.12

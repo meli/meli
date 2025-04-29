@@ -99,6 +99,7 @@ pub type VersionMap = IndexMap<VersionIdentifier, Box<dyn Version + Send + Sync 
 ///    v0_8_9::V0_8_9_ID => v0_8_9::V0_8_9,
 ///    v0_8_10::V0_8_10_ID => v0_8_10::V0_8_10,
 ///    v0_8_11::V0_8_11_ID => v0_8_11::V0_8_11,
+///    v0_8_12::V0_8_12_ID => v0_8_12::V0_8_12,
 /// }
 /// ```
 ///
@@ -244,7 +245,8 @@ decl_version_mods! {
     v0_8_8::V0_8_8_ID => v0_8_8::V0_8_8,
     v0_8_9::V0_8_9_ID => v0_8_9::V0_8_9,
     v0_8_10::V0_8_10_ID => v0_8_10::V0_8_10,
-    v0_8_11::V0_8_11_ID => v0_8_11::V0_8_11
+    v0_8_11::V0_8_11_ID => v0_8_11::V0_8_11,
+    v0_8_12::V0_8_12_ID => v0_8_12::V0_8_12,
 }
 
 use std::{
@@ -262,7 +264,7 @@ use crate::{conf::FileSettings, terminal::Ask};
 /// On compile-time if the `CARGO_PKG_VERSION` environment variable is
 /// available, the macro [`decl_version_map`] asserts that it matches the actual
 /// latest version string.
-pub const LATEST: VersionIdentifier = v0_8_11::V0_8_11_ID;
+pub const LATEST: VersionIdentifier = v0_8_12::V0_8_12_ID;
 
 /// An application version identifier with [Semantic Versioning v2.0.0]
 /// semantics.
