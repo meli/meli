@@ -102,7 +102,7 @@ root_mailbox = "/var/mail/username"
 format = "mbox"
 listing.index_style = "Compact"
 identity="username@hostname.local"
-composing.send_mail = '/bin/false'
+send_mail = '/bin/false'
 .Ed
 .Sh IMAP ACCOUNT
 .Bd -literal
@@ -202,26 +202,3 @@ for full copyright and warranty notices.
 .It
 .Lk https://crates.io/crates/meli "meli\ crate\ on\ crates.io"
 .El
-.\" [pager]
-.\" filter = "COLUMNS=72 /usr/local/bin/pygmentize -l email"
-.\" html_filter = "w3m -I utf-8 -T text/html"
-
-.\" [notifications]
-.\" script = "notify-send"
-
-.\" [composing]
-.\" # required for sending e-mail
-.\" send_mail = 'msmtp --read-recipients --read-envelope-from'
-.\" #send_mail = { hostname = "smtp.example.com", port = 587, auth = { type = "auto", username = "user", password = { type = "command_eval", value = "gpg2 --no-tty -q -d ~/.passwords/user.gpg" } }, security = { type = "STARTTLS" } }
-.\" editor_command = 'vim +/^$'
-
-.\" [shortcuts]
-.\" [shortcuts.composing]
-.\" edit = 'e'
-
-.\" [shortcuts.listing]
-.\" new_mail = 'm'
-.\" set_seen = 'n'
-
-.\" [terminal]
-.\" theme = "light"

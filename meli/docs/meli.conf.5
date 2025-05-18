@@ -159,6 +159,8 @@ listing.index_style = "Compact"
 identity="email@example.com"
 subscribed_mailboxes = ["folder", "folder/Sent"] # or [ "*", ] for all mailboxes
 display_name = "Name"
+send_mail = 'msmtp --read-recipients --read-envelope-from'
+#send_mail = { hostname = "smtp.example.com", port = 587, auth = { type = "auto", username = "user", password = { type = "command_eval", value = "gpg2 --no-tty -q -d ~/.passwords/user.gpg" } }, security = { type = "STARTTLS" } }
 
 # Set mailbox-specific settings
   [accounts.account-name.mailboxes]
@@ -173,7 +175,7 @@ root_mailbox = "/var/mail/username"
 format = "mbox"
 listing.index_style = "Compact"
 identity="username@hostname.local"
-composing.send_mail = { hostname = "localhost", port = 25, auth = { type = "none" }, security = { type = "none" } }
+send_mail = { hostname = "localhost", port = 25, auth = { type = "none" }, security = { type = "none" } }
 
 [pager]
 filter = "COLUMNS=72 /usr/local/bin/pygmentize -l email"
@@ -183,9 +185,6 @@ html_filter = "w3m -I utf-8 -T text/html"
 script = "notify-send"
 
 [composing]
-# required for sending e-mail
-send_mail = 'msmtp --read-recipients --read-envelope-from'
-#send_mail = { hostname = "smtp.example.com", port = 587, auth = { type = "auto", username = "user", password = { type = "command_eval", value = "gpg2 --no-tty -q -d ~/.passwords/user.gpg" } }, security = { type = "STARTTLS" } }
 editor_command = 'vim +/^$'
 
 [shortcuts]
@@ -217,6 +216,19 @@ Default values are shown in parentheses.
 The backend-specific path of the root_mailbox, usually
 .Sy INBOX Ns
 \&.
+.It Ic send_mail Ar String|SmtpServerConf
+Command to pipe new mail to
+.Po
+exit code must be
+.Li 0
+for success
+.Pc
+or settings for an
+.Em SMTP
+server connection.
+See section
+.Sx SMTP Connections
+for its fields.
 .It Ic default_mailbox Ar String
 .Pq Em optional
 The mailbox that is the default to open or view for this account.
@@ -584,8 +596,8 @@ listing.index_style = "Conversations"
 identity = "username@gmail.com"
 display_name = "Name Name"
 subscribed_mailboxes = ["*" ]
+send_mail = { hostname = "smtp.gmail.com", port = 587, auth = { type = "xoauth2", token_command = "...", require_auth = true }, security = { type = "STARTTLS" } }
 composing.store_sent_mail = false
-composing.send_mail = { hostname = "smtp.gmail.com", port = 587, auth = { type = "xoauth2", token_command = "...", require_auth = true }, security = { type = "STARTTLS" } }
 .Ed
 .El
 .Ss JMAP only
@@ -739,7 +751,7 @@ To submit articles directly to the
 .Em NNTP
 server, you must set the special value
 .Em server_submission
-in the
+in the account
 .Ic send_mail
 field.
 Example:
@@ -747,7 +759,7 @@ Example:
 .\"
 .\"
 .Bd -literal
-composing.send_mail = "server_submission"
+send_mail = "server_submission"
 .Ed
 .\"
 .\"
@@ -859,19 +871,6 @@ mailboxes.
 .Ss Composing specific configuration settings
 Default values are shown in parentheses.
 .Bl -tag -width 36n
-.It Ic send_mail Ar String|SmtpServerConf
-Command to pipe new mail to
-.Po
-exit code must be
-.Li 0
-for success
-.Pc
-or settings for an
-.Em SMTP
-server connection.
-See section
-.Sx SMTP Connections
-for its fields.
 .It Ic editor_command Ar String
 Command to launch editor.
 Can have arguments.
