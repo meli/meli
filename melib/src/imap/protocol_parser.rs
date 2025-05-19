@@ -1394,7 +1394,15 @@ pub fn literal(input: &[u8]) -> IResult<&[u8], &[u8]> {
 pub fn quoted(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
     if let Ok((r, o)) = literal(input) {
         return match crate::email::parser::encodings::phrase(o, false) {
-            Ok((_, out)) => Ok((r, out)),
+            Ok((_, mut out)) => {
+                if out.contains_subsequence(b"\\\\") {
+                    out = out.replace(b"\\\\", b"\\");
+                }
+                if out.contains_subsequence(b"\\\"") {
+                    out = out.replace(b"\\\"", b"\"");
+                }
+                Ok((r, out))
+            }
             e => e,
         };
     }
@@ -1414,7 +1422,15 @@ pub fn quoted(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
             }
             (b'\"', false) => {
                 return match crate::email::parser::encodings::phrase(&input[1..i], false) {
-                    Ok((_, out)) => Ok((&input[i + 1..], out)),
+                    Ok((_, mut out)) => {
+                        if out.contains_subsequence(b"\\\\") {
+                            out = out.replace(b"\\\\", b"\\");
+                        }
+                        if out.contains_subsequence(b"\\\"") {
+                            out = out.replace(b"\\\"", b"\"");
+                        }
+                        Ok((&input[i + 1..], out))
+                    }
                     e => e,
                 };
             }
