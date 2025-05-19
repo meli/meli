@@ -30,6 +30,7 @@ use crate::{
             generic::{comment, phrase2, unstructured},
             headers,
             mailing_lists::rfc_2369_list_headers_action_list,
+            BytesExt,
         },
     },
     make_address,
@@ -704,4 +705,42 @@ List-Archive: <http://www.host.com/list/archive/> (Web Archive)
         let (rest, _action_list) = rfc_2369_list_headers_action_list(v).unwrap();
         assert!(rest.is_empty());
     }
+}
+
+#[test]
+fn test_email_parser_bytesext_trait() {
+    const TO_TRIM: &[u8] = b"   foo| ";
+    assert_eq!(to_str!(BytesExt::ltrim(TO_TRIM)), "foo| ");
+    assert_eq!(to_str!(BytesExt::trim_start(TO_TRIM)), "foo| ");
+    assert_eq!(to_str!(BytesExt::rtrim(TO_TRIM)), "   foo|");
+    assert_eq!(to_str!(BytesExt::trim_end(TO_TRIM)), "   foo|");
+    assert_eq!(to_str!(BytesExt::trim(TO_TRIM)), "foo|");
+    const TO_REPLACE: &[u8] = b"  \t \t\n \t ";
+    assert_eq!(BytesExt::find(TO_REPLACE, b"\t"), Some(2));
+    assert_eq!(BytesExt::find(&TO_REPLACE[3..], b"\t"), Some(1));
+    assert_eq!(BytesExt::find(&TO_REPLACE[5..], b"\t"), Some(2));
+    assert_eq!(BytesExt::find(&TO_REPLACE[8..], b"\t"), None);
+    assert_eq!(BytesExt::rfind(TO_REPLACE, b"\t"), Some(7));
+    assert_eq!(
+        to_str!(&BytesExt::replace(TO_REPLACE, b"\t", b"\0")),
+        "  \0 \0\n \0 "
+    );
+    assert_eq!(
+        to_str!(&BytesExt::replace(TO_REPLACE, b"\n", b"\0")),
+        "  \t \t\0 \t "
+    );
+    assert_eq!(
+        to_str!(&BytesExt::replace(TO_REPLACE, b" ", b"")),
+        "\t\t\n\t"
+    );
+    assert_eq!(
+        to_str!(&BytesExt::replace(TO_REPLACE, b"  ", b"")),
+        "\t \t\n \t "
+    );
+    assert_eq!(
+        to_str!(&BytesExt::replace(TO_REPLACE, b"X", b"\0")),
+        to_str!(TO_REPLACE)
+    );
+    assert!(!BytesExt::is_quoted(TO_REPLACE));
+    assert!(BytesExt::is_quoted(b"\"aaa\"".as_ref()));
 }
