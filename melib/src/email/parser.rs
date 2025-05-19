@@ -316,6 +316,7 @@ pub trait BytesExt {
 }
 
 impl BytesExt for [u8] {
+    #[inline]
     fn rtrim(&self) -> &Self {
         if let Some(last) = self.iter().rposition(|b| !is_whitespace!(*b)) {
             &self[..=last]
@@ -323,6 +324,8 @@ impl BytesExt for [u8] {
             &[]
         }
     }
+
+    #[inline]
     fn ltrim(&self) -> &Self {
         if let Some(first) = self.iter().position(|b| !is_whitespace!(*b)) {
             &self[first..]
@@ -330,10 +333,13 @@ impl BytesExt for [u8] {
             &[]
         }
     }
+
+    #[inline]
     fn trim(&self) -> &[u8] {
         self.rtrim().ltrim()
     }
 
+    #[inline]
     // https://stackoverflow.com/a/35907071
     fn find<T: AsRef<[u8]>>(&self, needle: T) -> Option<usize> {
         let needle = needle.as_ref();
@@ -344,6 +350,7 @@ impl BytesExt for [u8] {
             .position(|window| window == needle)
     }
 
+    #[inline]
     fn rfind<T: AsRef<[u8]>>(&self, needle: T) -> Option<usize> {
         let needle = needle.as_ref();
         if needle.is_empty() {
@@ -353,6 +360,7 @@ impl BytesExt for [u8] {
             .rposition(|window| window == needle)
     }
 
+    #[inline]
     fn replace(&self, from: &[u8], to: &[u8]) -> Vec<u8> {
         let mut ret = self.to_vec();
         let mut offset = 0;
@@ -363,6 +371,7 @@ impl BytesExt for [u8] {
         ret
     }
 
+    #[inline]
     fn is_quoted(&self) -> bool {
         self.starts_with(b"\"") && self.ends_with(b"\"") && self.len() > 1
     }
