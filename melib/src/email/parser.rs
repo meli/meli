@@ -355,8 +355,10 @@ impl BytesExt for [u8] {
 
     fn replace(&self, from: &[u8], to: &[u8]) -> Vec<u8> {
         let mut ret = self.to_vec();
-        if let Some(idx) = self.find(from) {
-            ret.splice(idx..(idx + from.len()), to.iter().cloned());
+        let mut offset = 0;
+        while let Some(idx) = ret[offset..].find(from) {
+            offset += idx;
+            ret.splice(offset..(offset + from.len()), to.iter().cloned());
         }
         ret
     }
