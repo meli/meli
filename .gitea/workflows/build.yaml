@@ -91,7 +91,7 @@ jobs:
       - name: Add test dependencies
         if: steps.cache-rustup.outputs.cache-hit != 'true'
         run: |
-          cargo install --quiet --version 0.9.54 --target "${{ matrix.target }}" cargo-nextest
+          cargo install --quiet --version 0.9.99 --target "${{ matrix.target }}" cargo-nextest
       - name: Restore build artifacts cache in target dir
         id: cache-deps
         uses: actions/cache/restore@v4
