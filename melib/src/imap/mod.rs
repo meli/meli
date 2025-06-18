@@ -101,6 +101,7 @@ pub static SUPPORTED_CAPABILITIES: &[&str] = &[
     "LOGIN",
     "LOGINDISABLED",
     "MOVE",
+    "SASL-IR",
     "SPECIAL-USE",
     "UIDPLUS",
     "UNSELECT",

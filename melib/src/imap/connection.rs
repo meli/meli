@@ -29,6 +29,7 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 
+use base64::{engine::general_purpose::STANDARD as base64, Engine};
 use futures::{
     io::{AsyncReadExt, AsyncWriteExt},
     lock::{
@@ -547,11 +548,11 @@ impl ImapStream {
                 "\0{}\0{}",
                 &server_conf.server_username, &server_conf.server_password
             );
-            ret.send_command(CommandBody::authenticate_with_ir(
-                AuthMechanism::Plain,
-                credentials.as_bytes(),
-            ))
-            .await?;
+            ret.send_command(CommandBody::authenticate(AuthMechanism::Plain))
+                .await?;
+            ret.wait_for_continuation_request().await?;
+            ret.send_literal(base64.encode(credentials).as_bytes())
+                .await?;
             ret.read_response(&mut res).await?;
             return Ok((Default::default(), ret));
         }
@@ -619,6 +620,9 @@ impl ImapStream {
             ))
             .set_kind(ErrorKind::ProtocolNotSupported));
         }
+        let has_sasl_ir: bool = capabilities
+            .iter()
+            .any(|cap| cap.eq_ignore_ascii_case(b"SASL-IR"));
 
         if send_state_changes {
             (uid_store.event_consumer)(
@@ -649,17 +653,25 @@ impl ImapStream {
                     ))
                     .set_kind(ErrorKind::Authentication));
                 }
-                #[allow(deprecated)]
-                let xoauth2 = base64::decode(&server_conf.server_password)
-                    .chain_err_summary(|| {
-                        "Could not decode `server_password` from base64. Is the value correct?"
-                    })
-                    .chain_err_kind(ErrorKind::Configuration)?;
-                ret.send_command(CommandBody::authenticate_with_ir(
-                    AuthMechanism::XOAuth2,
-                    &xoauth2,
-                ))
-                .await?;
+                if has_sasl_ir {
+                    let xoauth2 = base64
+                        .decode(&server_conf.server_password)
+                        .chain_err_summary(|| {
+                            "Could not decode `server_password` from base64. Is the value correct?"
+                        })
+                        .chain_err_kind(ErrorKind::Configuration)?;
+                    ret.send_command(CommandBody::authenticate_with_ir(
+                        AuthMechanism::XOAuth2,
+                        &xoauth2,
+                    ))
+                    .await?;
+                } else {
+                    ret.send_command(CommandBody::authenticate(AuthMechanism::XOAuth2))
+                        .await?;
+                    ret.wait_for_continuation_request().await?;
+                    ret.send_literal(server_conf.server_password.as_bytes())
+                        .await?;
+                }
             }
             ImapProtocol::IMAP {
                 extension_use: ImapExtensionUse { auth_anonymous, .. },
@@ -692,11 +704,19 @@ impl ImapStream {
                     "\0{}\0{}",
                     &server_conf.server_username, &server_conf.server_password
                 );
-                ret.send_command(CommandBody::authenticate_with_ir(
-                    AuthMechanism::Plain,
-                    credentials.as_bytes(),
-                ))
-                .await?;
+                if has_sasl_ir {
+                    ret.send_command(CommandBody::authenticate_with_ir(
+                        AuthMechanism::Plain,
+                        credentials.as_bytes(),
+                    ))
+                    .await?;
+                } else {
+                    ret.send_command(CommandBody::authenticate(AuthMechanism::Plain))
+                        .await?;
+                    ret.wait_for_continuation_request().await?;
+                    ret.send_literal(base64.encode(credentials).as_bytes())
+                        .await?;
+                }
             }
             _ => {
                 if capabilities
