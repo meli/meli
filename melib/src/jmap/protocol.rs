@@ -79,6 +79,7 @@ pub struct Request {
     method_calls: Vec<Value>,
 
     #[serde(skip)]
+    #[allow(clippy::struct_field_names)]
     request_no: Arc<FutureMutex<usize>>,
 }
 
