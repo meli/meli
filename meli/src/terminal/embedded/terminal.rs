@@ -163,7 +163,7 @@ impl Terminal {
     /// Helper function to get every byte written to `pty_fd` and process it in
     /// the terminal state machine.
     pub fn forward_pty_translate_escape_codes(pty: Arc<Mutex<Self>>, pty_fd: std::fs::File) {
-        let mut bytes_iter = pty_fd.bytes();
+        let mut bytes_iter = std::io::BufReader::new(pty_fd).bytes();
         //log::trace!("waiting for bytes");
         while let Some(Ok(byte)) = bytes_iter.next() {
             //log::trace!("got a byte? {:?}", byte as char);
