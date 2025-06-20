@@ -194,70 +194,71 @@ pub mod server {
             state: Arc<Mutex<ServerState>>,
         ) -> Self {
             let mut buf = vec![0; 64 * 1024];
-            let tcp_stream =
-                {
-                    let (mut tcp_stream, next_fut) = {
-                        let accept_fut = listener.accept();
-                        pin_mut!(accept_fut);
+            let tcp_stream = {
+                let (mut tcp_stream, next_fut) = {
+                    let accept_fut = listener.accept();
+                    pin_mut!(accept_fut);
 
-                        match block_on(future::select(fut, accept_fut)) {
-                            Either::Left((_, _)) => {
-                                unreachable!();
-                            }
-                            Either::Right((value2, fut)) => (value2.unwrap().0, fut),
+                    match block_on(future::select(fut, accept_fut)) {
+                        Either::Left((_, _)) => {
+                            unreachable!();
                         }
-                    };
-                    {
-                        let read_fut = tcp_stream.read(&mut buf);
-                        pin_mut!(read_fut);
-                        let next_fut = match block_on(future::select(next_fut, read_fut)) {
-                            Either::Left((_, _)) => {
-                                unreachable!();
-                            }
-                            Either::Right((value2, fut)) => {
-                                let read_bytes = value2.unwrap();
-                                assert_eq!(&buf[..read_bytes], b"M1 CAPABILITY\r\n");
-                                fut
-                            }
-                        };
-                        block_on(tcp_stream.write_all(
-                            b"* CAPABILITY IMAP4rev1 AUTH=PLAIN\r\nM1 OK CAPABILITY completed\r\n",
-                        ))
-                        .unwrap();
-                        let read_fut = tcp_stream.read(&mut buf);
-                        pin_mut!(read_fut);
-                        let next_fut = match block_on(future::select(next_fut, read_fut)) {
-                            Either::Left((_, _)) => {
-                                unreachable!();
-                            }
-                            Either::Right((value2, fut)) => {
-                                let read_bytes = value2.unwrap();
-                                assert_eq!(
-                                    &buf[..read_bytes],
-                                    b"M2 AUTHENTICATE PLAIN AHVzZXIAcGFzc3dvcmQ=\r\n"
-                                );
-                                fut
-                            }
-                        };
-                        block_on(tcp_stream.write_all(b"M2 OK Success\r\n")).unwrap();
-                        let read_fut = tcp_stream.read(&mut buf);
-                        pin_mut!(read_fut);
-                        match block_on(future::select(next_fut, read_fut)) {
-                            Either::Left((_, _)) => {
-                                unreachable!();
-                            }
-                            Either::Right((value2, _)) => {
-                                let read_bytes = value2.unwrap();
-                                assert_eq!(&buf[..read_bytes], b"M3 CAPABILITY\r\n");
-                            }
-                        };
-                        block_on(tcp_stream.write_all(
-                            b"* CAPABILITY IMAP4rev1 ID IDLE ENABLE\r\nM3 OK Success\r\n",
-                        ))
-                        .unwrap();
-                        tcp_stream
+                        Either::Right((value2, fut)) => (value2.unwrap().0, fut),
                     }
                 };
+                {
+                    let read_fut = tcp_stream.read(&mut buf);
+                    pin_mut!(read_fut);
+                    let next_fut = match block_on(future::select(next_fut, read_fut)) {
+                        Either::Left((_, _)) => {
+                            unreachable!();
+                        }
+                        Either::Right((value2, fut)) => {
+                            let read_bytes = value2.unwrap();
+                            assert_eq!(&buf[..read_bytes], b"M1 CAPABILITY\r\n");
+                            fut
+                        }
+                    };
+                    block_on(tcp_stream.write_all(
+                            b"* CAPABILITY IMAP4rev1 AUTH=PLAIN SASL-IR\r\nM1 OK CAPABILITY completed\r\n",
+                        ))
+                        .unwrap();
+                    let read_fut = tcp_stream.read(&mut buf);
+                    pin_mut!(read_fut);
+                    let next_fut = match block_on(future::select(next_fut, read_fut)) {
+                        Either::Left((_, _)) => {
+                            unreachable!();
+                        }
+                        Either::Right((value2, fut)) => {
+                            let read_bytes = value2.unwrap();
+                            assert_eq!(
+                                &buf[..read_bytes],
+                                b"M2 AUTHENTICATE PLAIN AHVzZXIAcGFzc3dvcmQ=\r\n"
+                            );
+                            fut
+                        }
+                    };
+                    block_on(tcp_stream.write_all(b"M2 OK Success\r\n")).unwrap();
+                    let read_fut = tcp_stream.read(&mut buf);
+                    pin_mut!(read_fut);
+                    match block_on(future::select(next_fut, read_fut)) {
+                        Either::Left((_, _)) => {
+                            unreachable!();
+                        }
+                        Either::Right((value2, _)) => {
+                            let read_bytes = value2.unwrap();
+                            assert_eq!(&buf[..read_bytes], b"M3 CAPABILITY\r\n");
+                        }
+                    };
+                    block_on(
+                        tcp_stream.write_all(
+                            b"* CAPABILITY IMAP4rev1 ID IDLE ENABLE\r\nM3 OK Success\r\n",
+                        ),
+                    )
+                    .unwrap();
+                    tcp_stream
+                }
+            };
             Self {
                 tcp_stream,
                 command_receiver,
