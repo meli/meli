@@ -954,7 +954,7 @@ pub enum UntaggedResponse<'s> {
     /// messages).
     /// ```
     Recent(ImapNum),
-    Fetch(FetchResponse<'s>),
+    Fetch(Box<FetchResponse<'s>>),
     Bye {
         reason: &'s str,
     },
@@ -981,7 +981,9 @@ pub fn untagged_responses(input: &[u8]) -> ImapParseResult<Option<UntaggedRespon
                 b"EXPUNGE" => Some(Expunge(num)),
                 b"EXISTS" => Some(Exists(num)),
                 b"RECENT" => Some(Recent(num)),
-                _ if _tag.starts_with(b"FETCH ") => Some(Fetch(fetch_response(orig_input)?.1)),
+                _ if _tag.starts_with(b"FETCH ") => {
+                    Some(Fetch(Box::new(fetch_response(orig_input)?.1)))
+                }
                 _ => {
                     log::error!(
                         "unknown untagged_response: {}, message was {:?}",

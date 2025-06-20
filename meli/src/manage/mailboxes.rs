@@ -34,7 +34,7 @@ enum MailboxAction {
 enum ViewMode {
     #[default]
     List,
-    Action(UIDialog<MailboxAction>),
+    Action(Box<UIDialog<MailboxAction>>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -673,7 +673,7 @@ impl Component for MailboxManager {
                 if shortcut!(key == shortcuts[Shortcuts::GENERAL]["open_entry"]) =>
             {
                 self.set_dirty(true);
-                self.mode = ViewMode::Action(UIDialog::new(
+                self.mode = ViewMode::Action(Box::new(UIDialog::new(
                     "select action",
                     vec![
                         (MailboxAction::Rename, "rename".into()),
@@ -689,7 +689,7 @@ impl Component for MailboxManager {
                         },
                     )),
                     context,
-                ));
+                )));
                 return true;
             }
             _ => {}

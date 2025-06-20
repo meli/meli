@@ -965,7 +965,7 @@ impl MailBackend for NotmuchDb {
         &mut self,
         env_hashes: EnvelopeHashBatch,
         mailbox_hash: MailboxHash,
-        flags: SmallVec<[FlagOp; 8]>,
+        flags: Vec<FlagOp>,
     ) -> ResultFuture<()> {
         let database = DbConnection::new(self.path.as_path(), self.lib.clone(), true)?;
         let tag_index = self.collection.clone().tag_index;

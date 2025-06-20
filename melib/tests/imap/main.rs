@@ -71,9 +71,9 @@ pub mod server {
     }
 
     impl ServerState {
-        pub fn insert(&mut self, new: Mail) -> UID {
+        pub fn insert(&mut self, new: Box<Mail>) -> UID {
             let uid = self.next_uid;
-            self.envelopes.insert(uid, new);
+            self.envelopes.insert(uid, *new);
             self.next_uid += 1;
             uid
         }
@@ -169,7 +169,7 @@ pub mod server {
 
     #[derive(Debug)]
     pub enum ServerEvent {
-        New(Mail),
+        New(Box<Mail>),
         Delete(UID),
         Quit,
     }
@@ -806,8 +806,9 @@ mod tests {
             (watch_conn_sender.clone(), watch_conn_receiver),
             Arc::clone(&server_state),
         );
-        let new_mail = Mail::new(
-            br#"From: "some name" <some@example.com>
+        let new_mail = Box::new(
+            Mail::new(
+                br#"From: "some name" <some@example.com>
 To: "me" <myself@example.com>
 Cc:
 Subject: RE: your e-mail
@@ -816,10 +817,11 @@ Content-Type: text/plain
 
 hello world.
 "#
-            .to_vec(),
-            None,
-        )
-        .unwrap();
+                .to_vec(),
+                None,
+            )
+            .unwrap(),
+        );
         watch_conn_sender
             .unbounded_send(ServerEvent::New(new_mail))
             .unwrap();

@@ -26,8 +26,6 @@ use std::{
     sync::Arc,
 };
 
-use smallvec::SmallVec;
-
 use crate::{
     backends::{EnvelopeHashBatch, FlagOp, MailboxHash, RefreshEvent, RefreshEventKind, TagHash},
     email::{Envelope, EnvelopeHash},
@@ -504,7 +502,7 @@ impl ImapCache for Sqlite3Cache {
         &mut self,
         env_hashes: EnvelopeHashBatch,
         mailbox_hash: MailboxHash,
-        flags: SmallVec<[FlagOp; 8]>,
+        flags: Vec<FlagOp>,
     ) -> Result<()> {
         let Self {
             ref mut connection,

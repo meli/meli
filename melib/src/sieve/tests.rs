@@ -157,7 +157,7 @@ elsif address :matches :domain "from" "*hmrc.gov.uk"
                     },
                     RuleBlock([Action(Discard)].to_vec())
                 ),
-                elsif: Some((
+                elsif: Some(Box::new((
                     Address {
                         comparator: None,
                         address_part: Some(Domain),
@@ -166,7 +166,7 @@ elsif address :matches :domain "from" "*hmrc.gov.uk"
                         key_list: ["*hmrc.gov.uk".to_string()].to_vec()
                     },
                     RuleBlock([Action(Keep)].to_vec())
-                )),
+                ))),
                 else_: None
             })]
             .to_vec()
@@ -233,7 +233,7 @@ elsif anyof (not exists ["from", "date"],
                     ),
                     RuleBlock([Action(Discard)].to_vec())
                 ),
-                elsif: Some((
+                elsif: Some(Box::new((
                     AnyOf(
                         [
                             Not(Box::new(Exists(
@@ -249,7 +249,7 @@ elsif anyof (not exists ["from", "date"],
                         .to_vec()
                     ),
                     RuleBlock([Action(Discard)].to_vec())
-                )),
+                ))),
                 else_: None
             })]
             .to_vec()
@@ -314,7 +314,7 @@ if size :under 1k
                         },
                         RuleBlock([Action(Discard)].to_vec())
                     ),
-                    elsif: Some((
+                    elsif: Some(Box::new((
                         Header {
                             comparator: None,
                             match_operator: Some(Contains),
@@ -322,7 +322,7 @@ if size :under 1k
                             key_list: ["$$$".to_string()].to_vec()
                         },
                         RuleBlock([Action(Discard)].to_vec())
-                    )),
+                    ))),
                     else_: Some(RuleBlock(
                         [Action(Fileinto {
                             mailbox: "INBOX".to_string()

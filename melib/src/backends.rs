@@ -488,7 +488,7 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         &mut self,
         env_hashes: EnvelopeHashBatch,
         mailbox_hash: MailboxHash,
-        flags: SmallVec<[FlagOp; 8]>,
+        flags: Vec<FlagOp>,
     ) -> ResultFuture<()>;
 
     fn delete_messages(
@@ -683,14 +683,14 @@ impl std::fmt::Display for MailboxPermissions {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EnvelopeHashBatch {
     pub first: EnvelopeHash,
-    pub rest: SmallVec<[EnvelopeHash; 64]>,
+    pub rest: Vec<EnvelopeHash>,
 }
 
 impl From<EnvelopeHash> for EnvelopeHashBatch {
     fn from(value: EnvelopeHash) -> Self {
         Self {
             first: value,
-            rest: SmallVec::new(),
+            rest: vec![],
         }
     }
 }
@@ -705,7 +705,7 @@ impl TryFrom<&[EnvelopeHash]> for EnvelopeHashBatch {
         }
         Ok(Self {
             first: value[0],
-            rest: value[1..].iter().cloned().collect(),
+            rest: value[1..].to_vec(),
         })
     }
 }

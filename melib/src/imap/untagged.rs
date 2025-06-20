@@ -504,17 +504,18 @@ impl ImapConnection {
                     }
                 }
             }
-            UntaggedResponse::Fetch(FetchResponse {
-                uid,
-                message_sequence_number: msg_seq,
-                modseq,
-                flags,
-                body: _,
-                references: _,
-                envelope: _,
-                bodystructure: _,
-                raw_fetch_value: _,
-            }) => {
+            UntaggedResponse::Fetch(fetch) => {
+                let FetchResponse {
+                    uid,
+                    message_sequence_number: msg_seq,
+                    modseq,
+                    flags,
+                    body: _,
+                    references: _,
+                    envelope: _,
+                    bodystructure: _,
+                    raw_fetch_value: _,
+                } = *fetch;
                 if let Some(flags) = flags {
                     let uid = if let Some(uid) = uid {
                         uid

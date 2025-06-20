@@ -460,7 +460,7 @@ impl MailBackend for NntpType {
         &mut self,
         env_hashes: EnvelopeHashBatch,
         mailbox_hash: MailboxHash,
-        flags: SmallVec<[FlagOp; 8]>,
+        flags: Vec<FlagOp>,
     ) -> ResultFuture<()> {
         let uid_store = self.uid_store.clone();
         Ok(Box::pin(async move {

@@ -464,7 +464,7 @@ pub fn parse_sieve_if_bare<'a>() -> impl Parser<'a, ControlCommand> {
             ),
             |(condition, elsif)| ControlCommand::If {
                 condition,
-                elsif: Some(elsif),
+                elsif: Some(Box::new(elsif)),
                 else_: None,
             },
         ),

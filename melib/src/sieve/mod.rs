@@ -58,7 +58,7 @@ pub enum ControlCommand {
     Require(Vec<String>),
     If {
         condition: (ConditionRule, RuleBlock),
-        elsif: Option<(ConditionRule, RuleBlock)>,
+        elsif: Option<Box<(ConditionRule, RuleBlock)>>,
         else_: Option<RuleBlock>,
     },
 }

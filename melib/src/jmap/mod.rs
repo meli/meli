@@ -1078,7 +1078,7 @@ impl MailBackend for JmapType {
         &mut self,
         env_hashes: EnvelopeHashBatch,
         mailbox_hash: MailboxHash,
-        flags: SmallVec<[FlagOp; 8]>,
+        flags: Vec<FlagOp>,
     ) -> ResultFuture<()> {
         let store = self.store.clone();
         let connection = self.connection.clone();

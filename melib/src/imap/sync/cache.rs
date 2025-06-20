@@ -122,7 +122,7 @@ pub trait ImapCache: Send + std::fmt::Debug {
         &mut self,
         env_hashes: EnvelopeHashBatch,
         mailbox_hash: MailboxHash,
-        flags: SmallVec<[FlagOp; 8]>,
+        flags: Vec<FlagOp>,
     ) -> Result<()>;
 }
 
@@ -294,7 +294,7 @@ impl ImapCache for Arc<UIDStore> {
         &mut self,
         env_hashes: EnvelopeHashBatch,
         mailbox_hash: MailboxHash,
-        flags: SmallVec<[FlagOp; 8]>,
+        flags: Vec<FlagOp>,
     ) -> Result<()> {
         if !self.keep_offline_cache.load(Ordering::SeqCst) {
             return Ok(());

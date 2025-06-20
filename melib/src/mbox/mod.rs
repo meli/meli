@@ -1209,7 +1209,7 @@ impl MailBackend for MboxType {
         &mut self,
         _env_hashes: EnvelopeHashBatch,
         _mailbox_hash: MailboxHash,
-        _flags: SmallVec<[FlagOp; 8]>,
+        _flags: Vec<FlagOp>,
     ) -> ResultFuture<()> {
         Err(
             Error::new("Setting flags is currently unimplemented for mbox backend")

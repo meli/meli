@@ -336,7 +336,7 @@ impl Component for MailView {
                     if let Err(err) = account.set_flags(
                         coordinates.2.into(),
                         coordinates.1,
-                        smallvec::smallvec![FlagOp::Set(Flag::SEEN)],
+                        vec![FlagOp::Set(Flag::SEEN)],
                     ) {
                         context.replies.push_back(UIEvent::StatusEvent(
                             StatusEvent::DisplayMessage(format!(

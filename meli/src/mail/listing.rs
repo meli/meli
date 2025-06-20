@@ -688,44 +688,36 @@ pub trait MailListingTrait: ListingTrait {
             let account = &mut context.accounts[&account_hash];
             match a {
                 ListingAction::Flag(FlagAction::Set(Flag::SEEN)) | ListingAction::SetSeen => {
-                    if let Err(err) = account.set_flags(
-                        env_hashes,
-                        mailbox_hash,
-                        smallvec::smallvec![FlagOp::Set(Flag::SEEN)],
-                    ) {
+                    if let Err(err) =
+                        account.set_flags(env_hashes, mailbox_hash, vec![FlagOp::Set(Flag::SEEN)])
+                    {
                         context.replies.push_back(UIEvent::StatusEvent(
                             StatusEvent::DisplayMessage(err.to_string()),
                         ));
                     }
                 }
                 ListingAction::Flag(FlagAction::Unset(Flag::SEEN)) | ListingAction::SetUnseen => {
-                    if let Err(err) = account.set_flags(
-                        env_hashes,
-                        mailbox_hash,
-                        smallvec::smallvec![FlagOp::UnSet(Flag::SEEN)],
-                    ) {
+                    if let Err(err) =
+                        account.set_flags(env_hashes, mailbox_hash, vec![FlagOp::UnSet(Flag::SEEN)])
+                    {
                         context.replies.push_back(UIEvent::StatusEvent(
                             StatusEvent::DisplayMessage(err.to_string()),
                         ));
                     }
                 }
                 ListingAction::Flag(FlagAction::Set(flag)) => {
-                    if let Err(err) = account.set_flags(
-                        env_hashes,
-                        mailbox_hash,
-                        smallvec::smallvec![FlagOp::Set(*flag)],
-                    ) {
+                    if let Err(err) =
+                        account.set_flags(env_hashes, mailbox_hash, vec![FlagOp::Set(*flag)])
+                    {
                         context.replies.push_back(UIEvent::StatusEvent(
                             StatusEvent::DisplayMessage(err.to_string()),
                         ));
                     }
                 }
                 ListingAction::Flag(FlagAction::Unset(flag)) => {
-                    if let Err(err) = account.set_flags(
-                        env_hashes,
-                        mailbox_hash,
-                        smallvec::smallvec![FlagOp::UnSet(*flag)],
-                    ) {
+                    if let Err(err) =
+                        account.set_flags(env_hashes, mailbox_hash, vec![FlagOp::UnSet(*flag)])
+                    {
                         context.replies.push_back(UIEvent::StatusEvent(
                             StatusEvent::DisplayMessage(err.to_string()),
                         ));
@@ -735,7 +727,7 @@ pub trait MailListingTrait: ListingTrait {
                     if let Err(err) = account.set_flags(
                         env_hashes,
                         mailbox_hash,
-                        smallvec::smallvec![FlagOp::SetTag(tag_str.into())],
+                        vec![FlagOp::SetTag(tag_str.into())],
                     ) {
                         context.replies.push_back(UIEvent::StatusEvent(
                             StatusEvent::DisplayMessage(err.to_string()),
@@ -746,7 +738,7 @@ pub trait MailListingTrait: ListingTrait {
                     if let Err(err) = account.set_flags(
                         env_hashes,
                         mailbox_hash,
-                        smallvec::smallvec![FlagOp::UnSetTag(tag_str.into())],
+                        vec![FlagOp::UnSetTag(tag_str.into())],
                     ) {
                         context.replies.push_back(UIEvent::StatusEvent(
                             StatusEvent::DisplayMessage(err.to_string()),

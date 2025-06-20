@@ -594,10 +594,10 @@ pub mod server {
             responses
         }
 
-        pub fn insert_email(&mut self, new: Mail) {
+        pub fn insert_email(&mut self, new: Box<Mail>) {
             let id: Id<email::EmailObject> = Id::new_random();
             let old_state = std::mem::replace(&mut self.email_state, State::new_random());
-            self.envelopes.insert(id.clone(), new);
+            self.envelopes.insert(id.clone(), *new);
             self.email_state_changes
                 .insert(old_state, StateChange::Created(id));
         }
@@ -612,7 +612,7 @@ pub mod server {
 
     #[derive(Debug)]
     pub enum ServerEvent {
-        New(Mail),
+        New(Box<Mail>),
         Destroy(Id<email::EmailObject>),
         Quit,
     }
@@ -851,8 +851,9 @@ mod tests {
             "Add new e-mail on server store and assert that a refresh results in a Refresh Create \
              event."
         );
-        let new_mail = Mail::new(
-            br#"From: "some name" <some@example.com>
+        let new_mail = Box::new(
+            Mail::new(
+                br#"From: "some name" <some@example.com>
 To: "me" <myself@example.com>
 Cc:
 Subject: RE: your e-mail
@@ -861,10 +862,11 @@ Content-Type: text/plain
 
 hello world.
 "#
-            .to_vec(),
-            None,
-        )
-        .unwrap();
+                .to_vec(),
+                None,
+            )
+            .unwrap(),
+        );
         let fetch_result: Vec<_> = block_on(jmap.fetch(inbox_hash).unwrap().collect::<Vec<_>>());
         for res in fetch_result {
             let res = res.unwrap();

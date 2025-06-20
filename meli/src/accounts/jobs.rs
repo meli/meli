@@ -23,7 +23,6 @@
 use std::{borrow::Cow, collections::HashMap};
 
 use melib::{backends::prelude::*, error::Result, LogLevel};
-use smallvec::SmallVec;
 
 use crate::{is_variant, jobs::JoinHandle, StatusEvent};
 
@@ -131,7 +130,7 @@ pub enum JobRequest {
     SetFlags {
         env_hashes: EnvelopeHashBatch,
         mailbox_hash: MailboxHash,
-        flags: SmallVec<[FlagOp; 8]>,
+        flags: Vec<FlagOp>,
         handle: JoinHandle<Result<()>>,
     },
     SaveMessage {

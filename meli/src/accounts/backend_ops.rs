@@ -28,7 +28,7 @@ impl Account {
         &mut self,
         env_hashes: EnvelopeHashBatch,
         mailbox_hash: MailboxHash,
-        flags: SmallVec<[FlagOp; 8]>,
+        flags: Vec<FlagOp>,
     ) -> Result<JobId> {
         let fut = self.backend.write().unwrap().set_flags(
             env_hashes.clone(),

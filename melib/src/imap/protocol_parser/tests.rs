@@ -243,7 +243,7 @@ fn test_imap_untagged_responses() {
             .map(|(_, v, _)| v)
             .unwrap()
             .unwrap(),
-        Fetch(FetchResponse {
+        Fetch(Box::new(FetchResponse {
             uid: Some(1103),
             message_sequence_number: 1079,
             modseq: Some(ModSequence(std::num::NonZeroU64::new(1365_u64).unwrap())),
@@ -253,14 +253,14 @@ fn test_imap_untagged_responses() {
             envelope: None,
             bodystructure: false,
             raw_fetch_value: &b"* 1079 FETCH (UID 1103 MODSEQ (1365) FLAGS (\\Seen))\r\n"[..],
-        })
+        }))
     );
     assert_eq!(
         untagged_responses(b"* 1 FETCH (FLAGS (\\Seen))\r\n")
             .map(|(_, v, _)| v)
             .unwrap()
             .unwrap(),
-        Fetch(FetchResponse {
+        Fetch(Box::new(FetchResponse {
             uid: None,
             message_sequence_number: 1,
             modseq: None,
@@ -270,7 +270,7 @@ fn test_imap_untagged_responses() {
             envelope: None,
             bodystructure: false,
             raw_fetch_value: &b"* 1 FETCH (FLAGS (\\Seen))\r\n"[..],
-        })
+        }))
     );
 }
 

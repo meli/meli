@@ -725,7 +725,7 @@ impl MailBackend for ImapType {
         &mut self,
         env_hashes: EnvelopeHashBatch,
         mailbox_hash: MailboxHash,
-        flags: SmallVec<[FlagOp; 8]>,
+        flags: Vec<FlagOp>,
     ) -> ResultFuture<()> {
         let connection = self.connection.clone();
         let uids: SmallVec<[UID; 64]> = {
@@ -926,7 +926,7 @@ impl MailBackend for ImapType {
         let flag_future = self.set_flags(
             env_hashes.clone(),
             mailbox_hash,
-            smallvec::smallvec![FlagOp::Set(Flag::TRASHED)],
+            vec![FlagOp::Set(Flag::TRASHED)],
         )?;
         let uid_store = self.uid_store.clone();
         let connection = self.connection.clone();

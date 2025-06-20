@@ -374,7 +374,7 @@ impl MailBackend for MaildirType {
         &mut self,
         env_hashes: EnvelopeHashBatch,
         mailbox_hash: MailboxHash,
-        flag_ops: SmallVec<[FlagOp; 8]>,
+        flag_ops: Vec<FlagOp>,
     ) -> ResultFuture<()> {
         if flag_ops.iter().any(|op| op.is_tag()) {
             return Err(Error::new("Maildir doesn't support tags."));
