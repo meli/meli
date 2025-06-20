@@ -10,7 +10,7 @@ CARGO_REGISTRIES_CRATES_IO_PROTOCOL ?= sparse
 RUSTFLAGS ?= -D warnings -W unreachable-pub -W rust-2021-compatibility -C debuginfo=0
 RUSTUP_MAX_RETRIES ?= 10
 RUST_BACKTRACE ?= short
-NIGHTLY_EXISTS=`((cargo +nightly 2> /dev/null 1> /dev/null) && echo 0)|| echo 1)`
+NIGHTLY_EXISTS=`((cargo +nightly 2> /dev/null 1> /dev/null) && echo 0) || echo 1`
 GIT=env GIT_CONFIG_GLOBAL="" GIT_CONFIG_SYSTEM="" GIT_CONFIG_NOSYSTEM=1 git
 
 .PHONY: all
@@ -28,8 +28,8 @@ cargo-msrv:
 .PHONY: rustfmt
 rustfmt:
 	@printf "rustfmt\n"
-	@((if [ "${NIGHTLY_EXISTS}" -eq 0 ]; then printf "running rustfmt with nightly toolchain\n"; else printf "running rustfmt with active toolchain\n"; fi))
-	@((if [ "${NIGHTLY_EXISTS}" -eq 0 ]; then cargo +nightly fmt --check --all; else cargo fmt --check --all; fi))
+	@(sh -c '(if [ "${NIGHTLY_EXISTS}" -eq 0 ]; then printf "running rustfmt with nightly toolchain\n"; else printf "running rustfmt with active toolchain\n"; fi)')
+	@(sh -c '(if [ ${NIGHTLY_EXISTS} -eq 0 ]; then cargo +nightly fmt --check --all; else cargo fmt --check --all; fi)')
 
 .PHONY: clippy
 clippy:
