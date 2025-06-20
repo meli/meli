@@ -157,7 +157,7 @@ pub type Length = usize;
 
 /// Type alias for parsing result with next input and value on success and error
 /// with error position on failure.
-pub type ParsingResult<'a, T> = std::result::Result<(&'a [u8], T), (&'a [u8], Error)>;
+pub type ParsingResult<'a, T> = std::result::Result<(&'a [u8], T), (&'a [u8], Box<Error>)>;
 
 #[derive(Debug)]
 pub struct MboxMailbox {
@@ -454,7 +454,7 @@ impl MboxFormat {
                         }
                         Err(err) => {
                             log::debug!("Could not parse mail {:?}", err);
-                            Err((&input[start..], err))
+                            Err((&input[start..], Box::new(err)))
                         }
                     }
                 } else {
@@ -503,7 +503,7 @@ impl MboxFormat {
                         }
                         Err(err) => {
                             log::debug!("Could not parse mail at {:?}", err);
-                            Err((&input[start..], err))
+                            Err((&input[start..], Box::new(err)))
                         }
                     }
                 }
@@ -561,7 +561,7 @@ impl MboxFormat {
                         }
                         Err(err) => {
                             log::debug!("Could not parse mail {:?}", err);
-                            Err((&input[start..len], err))
+                            Err((&input[start..len], Box::new(err)))
                         }
                     }
                 } else {
@@ -610,7 +610,7 @@ impl MboxFormat {
                         }
                         Err(err) => {
                             log::debug!("Could not parse mail {:?}", err);
-                            Err((&input[start..], err))
+                            Err((&input[start..], Box::new(err)))
                         }
                     }
                 }
@@ -654,20 +654,20 @@ impl MboxFormat {
                 }
 
                 let Some(bytes) = find_content_length(&input[..headers_end])
-                    .map_err(|err| (&input[..headers_end], err))?
+                    .map_err(|err| (&input[..headers_end], Box::new(err)))?
                 else {
                     return Err((
                         input,
-                        Error::new(format!(
+                        Box::new(Error::new(format!(
                             "mbox does not appear to be in {} format because it lacks a \
                              `Content-Length` header. Try setting the format to `mboxrd` or \
                              `mboxo`",
                             self
-                        )),
+                        ))),
                     ));
                 };
                 let mut env = Envelope::from_bytes(&input[..headers_end + bytes], None)
-                    .map_err(|err| (input, err))?;
+                    .map_err(|err| (input, Box::new(err)))?;
                 let mut flags = Flag::empty();
                 if env.other_headers().contains_key("Status") {
                     if env.other_headers()["Status"].contains('F') {
