@@ -78,7 +78,7 @@ pub struct StatusBar {
     display_buffer: String,
     mode: UIMode,
     mouse: bool,
-    status_bar_height: usize,
+    height: usize,
     dirty: bool,
     id: ComponentId,
     progress_spinner: ProgressSpinner,
@@ -123,7 +123,7 @@ impl StatusBar {
             dirty: true,
             mode: UIMode::Normal,
             mouse: context.settings.terminal.use_mouse.is_true(),
-            status_bar_height: 1,
+            height: 1,
             id: ComponentId::default(),
             auto_complete: AutoComplete::new(Vec::new()),
             progress_spinner,
@@ -254,13 +254,13 @@ impl StatusBar {
 impl Component for StatusBar {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let total_rows = area.height();
-        if total_rows <= self.status_bar_height {
+        if total_rows <= self.height {
             return;
         }
 
         self.container.draw(
             grid,
-            area.take_rows(total_rows.saturating_sub(self.status_bar_height)),
+            area.take_rows(total_rows.saturating_sub(self.height)),
             context,
         );
 
@@ -273,7 +273,7 @@ impl Component for StatusBar {
         match self.mode {
             UIMode::Normal => {}
             UIMode::Command => {
-                let area = area.nth_row(total_rows.saturating_sub(self.status_bar_height));
+                let area = area.nth_row(total_rows.saturating_sub(self.height));
                 self.draw_command_bar(grid, area, context);
                 /* don't autocomplete for less than 3 characters */
                 if self.ex_buffer.as_str().split_graphemes().len() <= 2 {
@@ -570,7 +570,7 @@ impl Component for StatusBar {
                 self.mode = *m;
                 match m {
                     UIMode::Normal => {
-                        self.status_bar_height = 1;
+                        self.height = 1;
                         if !self.ex_buffer.is_empty() {
                             context
                                 .replies
@@ -587,10 +587,10 @@ impl Component for StatusBar {
                         self.ex_buffer_cmd_history_pos.take();
                     }
                     UIMode::Command => {
-                        self.status_bar_height = 2;
+                        self.height = 2;
                     }
                     _ => {
-                        self.status_bar_height = 1;
+                        self.height = 1;
                     }
                 };
             }
