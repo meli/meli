@@ -604,14 +604,12 @@ impl private::Sealed for usize {}
 impl private::Sealed for Pos {}
 
 impl IntoColumns for usize {
-    #[must_use]
     fn into(self) -> usize {
         self
     }
 }
 
 impl IntoColumns for Pos {
-    #[must_use]
     fn into(self) -> usize {
         get_x(self)
     }
