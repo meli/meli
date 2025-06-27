@@ -293,13 +293,11 @@ mod tests {
         let err_msg = PASTDATEWARN(&mut ctx, &mut draft).unwrap_err().to_string();
         assert!(
             err_msg.starts_with("Value of Date header is "),
-            "PASTDATEWARN should complain about Date value being in the past: {}",
-            err_msg
+            "PASTDATEWARN should complain about Date value being in the past: {err_msg}"
         );
         assert!(
             err_msg.ends_with(" minutes in the past."),
-            "PASTDATEWARN should complain about Date value being in the past: {}",
-            err_msg
+            "PASTDATEWARN should complain about Date value being in the past: {err_msg}"
         );
     }
 
@@ -320,8 +318,7 @@ mod tests {
             err_msg,
             "From header value is invalid\nCaused by:\n[2] Error when parsing: \"\"\nAlternative, \
              Many1, Alternative, atom(): starts with whitespace or empty",
-            "HEADERWARN should complain about From value being empty: {}",
-            err_msg
+            "HEADERWARN should complain about From value being empty: {err_msg}"
         );
         draft.set_header(HeaderName::FROM, "user <user@example.com>".into());
 
@@ -331,8 +328,7 @@ mod tests {
             err_msg,
             "To header value is invalid\nCaused by:\n[2] Error when parsing: \"\"\nAlternative, \
              Many1, Alternative, atom(): starts with whitespace or empty",
-            "HEADERWARN should complain about To value being empty: {}",
-            err_msg
+            "HEADERWARN should complain about To value being empty: {err_msg}"
         );
         draft.set_header(HeaderName::TO, "other user <user@example.com>".into());
 
@@ -340,8 +336,7 @@ mod tests {
         let err_msg = hook(&mut ctx, &mut draft).unwrap_err().to_string();
         assert_eq!(
             err_msg, "Date header value is invalid.",
-            "HEADERWARN should complain about Date value being invalid: {}",
-            err_msg
+            "HEADERWARN should complain about Date value being invalid: {err_msg}"
         );
 
         println!("Check that valid header values produces no errors…");
@@ -360,8 +355,7 @@ mod tests {
             err_msg,
             "From header value is invalid\nCaused by:\n[2] Error when parsing: \"user \
              user@example.com>\"\nAlternative, Tag",
-            "HEADERWARN should complain about From value being invalid: {}",
-            err_msg
+            "HEADERWARN should complain about From value being invalid: {err_msg}"
         );
     }
 
@@ -384,8 +378,7 @@ mod tests {
         let err_msg = hook(&mut ctx, &mut draft).unwrap_err().to_string();
         assert_eq!(
             err_msg, "Subject mentions attachments but attachments are empty.",
-            "MISSINGATTACHMENTWARN should complain about missing attachments: {}",
-            err_msg
+            "MISSINGATTACHMENTWARN should complain about missing attachments: {err_msg}"
         );
 
         draft
@@ -398,8 +391,7 @@ mod tests {
         let err_msg = hook(&mut ctx, &mut draft).unwrap_err().to_string();
         assert_eq!(
             err_msg, "Draft body mentions attachments but attachments are empty.",
-            "MISSINGATTACHMENTWARN should complain about missing attachments: {}",
-            err_msg
+            "MISSINGATTACHMENTWARN should complain about missing attachments: {err_msg}"
         );
 
         println!(
@@ -433,8 +425,7 @@ mod tests {
         let err_msg = hook(&mut ctx, &mut draft).unwrap_err().to_string();
         assert_eq!(
             err_msg, "Both Subject and body are empty.",
-            "EMPTYDRAFTWARN should complain about empty draft: {}",
-            err_msg
+            "EMPTYDRAFTWARN should complain about empty draft: {err_msg}"
         );
 
         println!("Check that non-empty draft produces no warning…");

@@ -74,9 +74,9 @@ use crate::conf::{*, data_types::*};
     let cfg_attr_feature_regex = Regex::new(r"[(](?:not[(]\s*)?feature").unwrap();
 
     'file_loop: for (filename, ident) in filenames {
-        println!("cargo:rerun-if-changed={}", filename);
+        println!("cargo:rerun-if-changed={filename}");
         let mut file = File::open(filename)
-            .unwrap_or_else(|err| panic!("Unable to open file `{}` {}", filename, err));
+            .unwrap_or_else(|err| panic!("Unable to open file `{filename}` {err}"));
 
         let mut src = String::new();
         file.read_to_string(&mut src).expect("Unable to read file");
@@ -85,7 +85,7 @@ use crate::conf::{*, data_types::*};
         if syntax.items.iter().any(|item| {
             if let syn::Item::Struct(s) = item {
                 if s.ident.to_string().ends_with("Override") {
-                    println!("ident {} exists, skipping {}", ident, filename);
+                    println!("ident {ident} exists, skipping {filename}");
                     return true;
                 }
             }
@@ -228,7 +228,7 @@ use crate::conf::{*, data_types::*};
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .map_err(|err| format!("failed to execute rustfmt {}", err))?;
+            .map_err(|err| format!("failed to execute rustfmt {err}"))?;
 
         {
             // limited borrow of stdin
@@ -238,12 +238,12 @@ use crate::conf::{*, data_types::*};
                 .ok_or("failed to get rustfmt stdin")?;
             stdin
                 .write_all(output_string.as_bytes())
-                .map_err(|err| format!("failed to write to rustfmt stdin {}", err))?;
+                .map_err(|err| format!("failed to write to rustfmt stdin {err}"))?;
         }
 
         let output = rustfmt
             .wait_with_output()
-            .map_err(|err| format!("failed to wait on rustfmt child {}", err))?;
+            .map_err(|err| format!("failed to wait on rustfmt child {err}"))?;
         if !output.stderr.is_empty() {
             return Err(format!(
                 "rustfmt invocation replied with: `{}`",
@@ -257,7 +257,7 @@ use crate::conf::{*, data_types::*};
         Ok(())
     };
     if let Err(err) = rustfmt_closure(&mut output_file, &output_string) {
-        println!("Tried rustfmt on overrides module, got error: {}", err);
+        println!("Tried rustfmt on overrides module, got error: {err}");
         output_file.write_all(output_string.as_bytes()).unwrap();
     }
 }

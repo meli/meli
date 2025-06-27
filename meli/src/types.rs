@@ -312,7 +312,7 @@ impl std::fmt::Display for NotificationType {
         match *self {
             Self::Info => write!(f, "info"),
             Self::Error(melib::error::ErrorKind::None) => write!(f, "error"),
-            Self::Error(kind) => write!(f, "error: {}", kind),
+            Self::Error(kind) => write!(f, "error: {kind}"),
             Self::NewMail => write!(f, "new mail"),
             Self::SentMail => write!(f, "sent mail"),
             Self::Saved => write!(f, "saved"),

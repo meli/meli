@@ -244,8 +244,7 @@ fn test_accounts_mailbox_by_path_error_msg() {
                 if !account.process_event(&job_id) {
                     assert!(
                         ctx.accounts[0].process_event(&job_id),
-                        "unclaimed job id: {:?}",
-                        job_id
+                        "unclaimed job id: {job_id:?}"
                     );
                 }
             }
@@ -426,8 +425,7 @@ fn test_accounts_mailbox_by_path_error_msg() {
         eprint_step!("Assert that created account has no mailboxes at all...");
         assert!(
             ref_mailboxes.is_empty(),
-            "ref_mailboxes were not empty: {:?}",
-            ref_mailboxes
+            "ref_mailboxes were not empty: {ref_mailboxes:?}"
         );
         eprintln_ok();
         let contacts = melib::contacts::Contacts::new(name.to_string());
@@ -455,8 +453,7 @@ fn test_accounts_mailbox_by_path_error_msg() {
                 if !account.process_event(&job_id) {
                     assert!(
                         ctx.accounts[0].process_event(&job_id),
-                        "unclaimed job id: {:?}",
-                        job_id
+                        "unclaimed job id: {job_id:?}"
                     );
                 }
             }

@@ -275,7 +275,7 @@ impl std::fmt::Display for EscCode<'_> {
                 write!(f, "{} as char: {} Normal", c, *c as char)
             }
             EscCode(unknown, c) => {
-                write!(f, "{:?}{} [UNKNOWN]", unknown, c)
+                write!(f, "{unknown:?}{c} [UNKNOWN]")
             }
         }
     }

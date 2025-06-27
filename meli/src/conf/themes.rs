@@ -485,7 +485,7 @@ impl Serialize for ThemeValue<Attr> {
     {
         match self {
             Self::Value(s) => s.serialize(serializer),
-            Self::Alias(s) => format!("${}", s).serialize(serializer),
+            Self::Alias(s) => format!("${s}").serialize(serializer),
             Self::Link(s, ()) => serializer.serialize_str(s.as_ref()),
         }
     }
@@ -498,10 +498,10 @@ impl Serialize for ThemeValue<Color> {
     {
         match self {
             Self::Value(s) => s.serialize(serializer),
-            Self::Alias(s) => format!("${}", s).serialize(serializer),
+            Self::Alias(s) => format!("${s}").serialize(serializer),
             Self::Link(s, ColorField::LikeSelf) => serializer.serialize_str(s.as_ref()),
-            Self::Link(s, ColorField::Fg) => serializer.serialize_str(format!("{}.fg", s).as_ref()),
-            Self::Link(s, ColorField::Bg) => serializer.serialize_str(format!("{}.bg", s).as_ref()),
+            Self::Link(s, ColorField::Fg) => serializer.serialize_str(format!("{s}.fg").as_ref()),
+            Self::Link(s, ColorField::Bg) => serializer.serialize_str(format!("{s}.bg").as_ref()),
         }
     }
 }
@@ -1022,9 +1022,9 @@ impl Themes {
                 name,
                 keys.into_iter()
                     .map(|(key_opt, desc, kind, link)| if let Some(key) = key_opt {
-                        format!("{} {}: {} \"{}\"", key, desc, kind, link)
+                        format!("{key} {desc}: {kind} \"{link}\"")
                     } else {
-                        format!("{}: {} \"{}\"", desc, kind, link)
+                        format!("{desc}: {kind} \"{link}\"")
                     })
                     .collect::<SmallVec<[String; 128]>>()
                     .join(", ")
@@ -1041,14 +1041,14 @@ impl Themes {
             Self::validate_keys(name, t, &hash_set)?;
         }
         if let Err(err) = is_cyclic(&self.light) {
-            return Err(Error::new(format!("light theme contains a cycle: {}", err)));
+            return Err(Error::new(format!("light theme contains a cycle: {err}")));
         }
         if let Err(err) = is_cyclic(&self.dark) {
-            return Err(Error::new(format!("dark theme contains a cycle: {}", err)));
+            return Err(Error::new(format!("dark theme contains a cycle: {err}")));
         }
         for (k, t) in self.other_themes.iter() {
             if let Err(err) = is_cyclic(t) {
-                return Err(Error::new(format!("{} theme contains a cycle: {}", k, err)));
+                return Err(Error::new(format!("{k} theme contains a cycle: {err}")));
             }
         }
         Ok(())
@@ -1061,7 +1061,7 @@ impl Themes {
             t => self.other_themes.get(t).unwrap_or(&self.dark),
         };
         let mut ret = String::new();
-        let _ = writeln!(ret, "[terminal.themes.{}]", key);
+        let _ = writeln!(ret, "[terminal.themes.{key}]");
         if unlink {
             for k in theme.keys() {
                 let _ = writeln!(
@@ -1103,7 +1103,7 @@ impl std::fmt::Display for Themes {
             ret.push_str("\n\n");
             ret.push_str(&self.key_to_string(name, true));
         }
-        write!(fmt, "{}", ret)
+        write!(fmt, "{ret}")
     }
 }
 
@@ -1885,12 +1885,12 @@ pub fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                 let path = path
                     .into_iter()
                     .map(|(k, c)| match c {
-                        Course::Fg => format!("{}.fg", k,),
-                        Course::Bg => format!("{}.fg", k,),
-                        Course::Attrs => format!("{}.attrs", k,),
-                        Course::ColorAliasFg => format!("(Color fg) ${}", k),
-                        Course::ColorAliasBg => format!("(Color bg) ${}", k),
-                        Course::AttrAlias => format!("(Attr) ${}", k),
+                        Course::Fg => format!("{k}.fg",),
+                        Course::Bg => format!("{k}.fg",),
+                        Course::Attrs => format!("{k}.attrs",),
+                        Course::ColorAliasFg => format!("(Color fg) ${k}"),
+                        Course::ColorAliasBg => format!("(Color bg) ${k}"),
+                        Course::AttrAlias => format!("(Attr) ${k}"),
                     })
                     .collect::<Vec<String>>();
                 return Err(format!(

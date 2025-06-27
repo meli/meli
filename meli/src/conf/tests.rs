@@ -45,7 +45,7 @@ impl ConfigFile {
     ) -> std::result::Result<Self, std::io::Error> {
         let mut filename = String::with_capacity(2 * 16);
         for byte in melib::utils::random::random_u64().to_be_bytes() {
-            write!(&mut filename, "{:02X}", byte).unwrap();
+            write!(&mut filename, "{byte:02X}").unwrap();
         }
         let mut path = dir.path().to_path_buf();
         path.push(&*filename);
@@ -160,7 +160,7 @@ fn test_conf_config_parse() {
     }
 
     if let Err(err) = tempdir.close() {
-        eprintln!("Could not cleanup tempdir: {}", err);
+        eprintln!("Could not cleanup tempdir: {err}");
     }
 }
 

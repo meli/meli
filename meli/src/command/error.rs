@@ -62,19 +62,19 @@ impl std::fmt::Display for CommandError {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::Parsing { inner, kind: _ } => {
-                write!(fmt, "Could not parse command: {}", inner)
+                write!(fmt, "Could not parse command: {inner}")
             }
             Self::BadValue {
                 inner,
                 suggestions: Some(suggs),
             } => {
-                write!(fmt, "Bad value/argument: {}. Possible values are: ", inner)?;
+                write!(fmt, "Bad value/argument: {inner}. Possible values are: ")?;
                 let len = suggs.len();
                 for (i, val) in suggs.iter().enumerate() {
                     if i == len.saturating_sub(1) {
-                        write!(fmt, "{}", val)?;
+                        write!(fmt, "{val}")?;
                     } else {
-                        write!(fmt, "{}, ", val)?;
+                        write!(fmt, "{val}, ")?;
                     }
                 }
                 write!(fmt, "")
@@ -83,7 +83,7 @@ impl std::fmt::Display for CommandError {
                 inner,
                 suggestions: None,
             } => {
-                write!(fmt, "Bad value/argument: {}", inner)
+                write!(fmt, "Bad value/argument: {inner}")
             }
             Self::WrongNumberOfArguments {
                 too_many,
@@ -97,17 +97,15 @@ impl std::fmt::Display for CommandError {
                         (min, None) => {
                             write!(
                                 fmt,
-                                "{}: Too many arguments. Command takes {} arguments, but {} were \
-                                 given.",
-                                __func__, min, given
+                                "{__func__}: Too many arguments. Command takes {min} arguments, \
+                                 but {given} were given."
                             )
                         }
                         (min, Some(max)) => {
                             write!(
                                 fmt,
-                                "{}: Too many arguments. Command takes from {} to {} arguments, \
-                                 but {} were given.",
-                                __func__, min, max, given
+                                "{__func__}: Too many arguments. Command takes from {min} to \
+                                 {max} arguments, but {given} were given."
                             )
                         }
                     }
@@ -116,24 +114,22 @@ impl std::fmt::Display for CommandError {
                         (min, None) => {
                             write!(
                                 fmt,
-                                "{}: Not enough arguments. Command takes {} arguments, but {} \
-                                 were given.",
-                                __func__, min, given
+                                "{__func__}: Not enough arguments. Command takes {min} arguments, \
+                                 but {given} were given."
                             )
                         }
                         (min, Some(max)) => {
                             write!(
                                 fmt,
-                                "{}: Not enough arguments. Command takes from {} to {} arguments, \
-                                 but {} were given.",
-                                __func__, min, max, given
+                                "{__func__}: Not enough arguments. Command takes from {min} to \
+                                 {max} arguments, but {given} were given."
                             )
                         }
                     }
                 }
             }
             Self::Other { inner } => {
-                write!(fmt, "Error: {}", inner)
+                write!(fmt, "Error: {inner}")
             }
         }
     }

@@ -146,13 +146,13 @@ impl std::fmt::Display for Key {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         use crate::Key::*;
         match self {
-            F(n) => write!(f, "F{}", n),
+            F(n) => write!(f, "F{n}"),
             Char(' ') => write!(f, "Space"),
             Char('\t') => write!(f, "Tab"),
             Char('\n') => write!(f, "Enter"),
-            Char(c) => write!(f, "{}", c),
-            Alt(c) => write!(f, "M-{}", c),
-            Ctrl(c) => write!(f, "C-{}", c),
+            Char(c) => write!(f, "{c}"),
+            Alt(c) => write!(f, "M-{c}"),
+            Ctrl(c) => write!(f, "C-{c}"),
             Paste(_) => write!(f, "Pasted buf"),
             Null => write!(f, "Null byte"),
             Esc => write!(f, "Esc"),
@@ -538,9 +538,8 @@ impl<'de> Deserialize<'de> for Key {
                         )))
                     }
                     _ => Err(de::Error::custom(format!(
-                        "Cannot derive shortcut from `{}`. Please consult the manual for valid \
-                         key inputs.",
-                        value
+                        "Cannot derive shortcut from `{value}`. Please consult the manual for \
+                         valid key inputs."
                     ))),
                 }
             }
@@ -571,9 +570,9 @@ impl Serialize for Key {
             Self::Char('\n') => serializer.serialize_str("Enter"),
             Self::Char('\t') => serializer.serialize_str("Tab"),
             Self::Char(c) => serializer.serialize_char(*c),
-            Self::F(n) => serializer.serialize_str(&format!("F{}", n)),
-            Self::Alt(c) => serializer.serialize_str(&format!("M-{}", c)),
-            Self::Ctrl(c) => serializer.serialize_str(&format!("C-{}", c)),
+            Self::F(n) => serializer.serialize_str(&format!("F{n}")),
+            Self::Alt(c) => serializer.serialize_str(&format!("M-{c}")),
+            Self::Ctrl(c) => serializer.serialize_str(&format!("C-{c}")),
             Self::Null => serializer.serialize_str("Null"),
             Self::Mouse(mev) => mev.serialize(serializer),
             Self::Paste(s) => serializer.serialize_str(s),

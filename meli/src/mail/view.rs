@@ -162,7 +162,7 @@ impl MailView {
                     }
                     Err(err) => {
                         context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(format!("Could not get message: {}", err)),
+                            StatusEvent::DisplayMessage(format!("Could not get message: {err}")),
                         ));
                     }
                 }
@@ -288,7 +288,7 @@ impl MailView {
             if let Some(display_name) = addr.get_display_name() {
                 new_card.set_name(display_name);
             }
-            entries.insert(new_card.clone(), (new_card, format!("{}", addr)));
+            entries.insert(new_card.clone(), (new_card, format!("{addr}")));
         }
         drop(envelope);
         self.contact_selector = Some(Box::new(Selector::new(
@@ -704,8 +704,7 @@ impl Component for MailView {
                                             ) {
                                                 context.replies.push_back(UIEvent::StatusEvent(
                                                     StatusEvent::DisplayMessage(format!(
-                                                        "Couldn't send unsubscribe e-mail: {}",
-                                                        err
+                                                        "Couldn't send unsubscribe e-mail: {err}"
                                                     )),
                                                 ));
                                             }
@@ -749,8 +748,7 @@ impl Component for MailView {
                                             Err(err) => {
                                                 context.replies.push_back(UIEvent::StatusEvent(
                                                     StatusEvent::DisplayMessage(format!(
-                                                        "Couldn't launch {}: {}",
-                                                        url_launcher, err
+                                                        "Couldn't launch {url_launcher}: {err}"
                                                     )),
                                                 ));
                                             }
@@ -792,8 +790,7 @@ impl Component for MailView {
                                 Err(err) => {
                                     context.replies.push_back(UIEvent::StatusEvent(
                                         StatusEvent::DisplayMessage(format!(
-                                            "Couldn't launch {}: {}",
-                                            url_launcher, err
+                                            "Couldn't launch {url_launcher}: {err}"
                                         )),
                                     ));
                                 }

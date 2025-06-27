@@ -298,7 +298,7 @@ impl Draft {
         }
 
         for (k, v) in self.headers.deref() {
-            ret.push_str(&format!("{}: {}\n", k, v));
+            ret.push_str(&format!("{k}: {v}\n"));
         }
 
         if let Some((_, post)) = self.wrap_header_preamble.as_ref() {
@@ -344,7 +344,7 @@ impl Draft {
         }
         for (k, v) in self.headers.deref() {
             if v.is_ascii() {
-                ret.push_str(&format!("{}: {}\r\n", k, v));
+                ret.push_str(&format!("{k}: {v}\r\n"));
             } else {
                 ret.push_str(&format!("{}: {}\r\n", k, mime::encode_header(v)));
             }
@@ -359,13 +359,11 @@ impl Draft {
                 let content_transfer_encoding: ContentTransferEncoding =
                     ContentTransferEncoding::_8Bit;
                 ret.push_str(&format!(
-                    "Content-Type: {}; charset=\"utf-8\"\r\n",
-                    content_type
+                    "Content-Type: {content_type}; charset=\"utf-8\"\r\n"
                 ));
                 if !has_cte {
                     ret.push_str(&format!(
-                        "Content-Transfer-Encoding: {}\r\n",
-                        content_transfer_encoding
+                        "Content-Transfer-Encoding: {content_transfer_encoding}\r\n"
                     ));
                 }
             }
@@ -401,8 +399,7 @@ fn build_multipart(
 ) {
     let boundary = ContentType::make_boundary(&parts);
     ret.push_str(&format!(
-        r#"Content-Type: {}; charset="utf-8"; boundary="{}""#,
-        kind, boundary
+        r#"Content-Type: {kind}; charset="utf-8"; boundary="{boundary}""#
     ));
     if kind == MultipartType::Encrypted {
         ret.push_str(r#"; protocol="application/pgp-encrypted""#);
@@ -543,8 +540,7 @@ fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
             }
             ret.push_str("Content-Disposition: attachment\r\n");
             ret.push_str(&format!(
-                "Content-Transfer-Encoding: {}\r\n",
-                content_transfer_encoding
+                "Content-Transfer-Encoding: {content_transfer_encoding}\r\n"
             ));
             ret.push_str("\r\n");
             let mut pop_crlf = false;

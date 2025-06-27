@@ -790,7 +790,7 @@ impl Attachment {
                     parameters,
                 } => {
                     let boundary = String::from_utf8_lossy(boundary);
-                    ret.push_str(&format!("Content-Type: {}; boundary={}", kind, boundary));
+                    ret.push_str(&format!("Content-Type: {kind}; boundary={boundary}"));
                     if *kind == MultipartType::Signed {
                         ret.push_str("; micalg=pgp-sha512; protocol=\"application/pgp-signature\"");
                     }
@@ -808,7 +808,7 @@ impl Attachment {
                     }
                     ret.push_str("\r\n");
 
-                    let boundary_start = format!("\r\n--{}\r\n", boundary);
+                    let boundary_start = format!("\r\n--{boundary}\r\n");
                     for p in parts {
                         ret.push_str(&boundary_start);
                         into_raw_helper(p, ret);
@@ -816,7 +816,7 @@ impl Attachment {
                     if !ret.ends_with("\r\n") {
                         ret.push_str("\r\n");
                     }
-                    ret.push_str(&format!("--{}--\r\n\r\n", boundary));
+                    ret.push_str(&format!("--{boundary}--\r\n\r\n"));
                 }
                 ContentType::MessageRfc822 => {
                     ret.push_str(&format!("Content-Type: {}\r\n\r\n", a.content_type));

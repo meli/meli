@@ -81,7 +81,7 @@ impl Account {
             self.insert_job(
                 handle.job_id,
                 JobRequest::Generic {
-                    name: format!("Update envelope {} in sqlite3 cache", msg_id).into(),
+                    name: format!("Update envelope {msg_id} in sqlite3 cache").into(),
                     handle,
                     log_level: LogLevel::TRACE,
                     on_finish: None,

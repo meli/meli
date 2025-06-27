@@ -48,7 +48,7 @@ fn test_terminal_osc8_print() {
     ];
 
     for (input, output) in TEST_CASES {
-        println!("{}", input);
+        println!("{input}");
         assert_eq!(&input.to_string(), output);
     }
 }

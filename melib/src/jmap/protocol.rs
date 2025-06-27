@@ -105,7 +105,7 @@ impl Request {
     pub async fn add_call<M: Method<O>, O: Object>(&mut self, call: &M) -> usize {
         let seq = get_request_no!(self.request_no);
         self.method_calls
-            .push(serde_json::to_value((M::NAME, call, &format!("m{}", seq))).unwrap());
+            .push(serde_json::to_value((M::NAME, call, &format!("m{seq}"))).unwrap());
         seq
     }
 

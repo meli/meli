@@ -801,8 +801,7 @@ impl MailBackend for ImapType {
                                     );
                                     return Err(Error::new(format!(
                                         "Application error: more than one flag bit set in \
-                                         set_flags: {:?}",
-                                        flags
+                                         set_flags: {flags:?}"
                                     ))
                                     .set_kind(crate::ErrorKind::Bug));
                                 }
@@ -872,8 +871,7 @@ impl MailBackend for ImapType {
                                     );
                                     return Err(Error::new(format!(
                                         "Application error: more than one flag bit set in \
-                                         set_flags: {:?}",
-                                        flags
+                                         set_flags: {flags:?}"
                                     )));
                                 }
                                 FlagOp::UnSetTag(tag) => {
@@ -1039,8 +1037,7 @@ impl MailBackend for ImapType {
 
                 if mailboxes.values().any(|f| f.path == path) {
                     return Err(Error::new(format!(
-                        "Mailbox named `{}` already exists.",
-                        path,
+                        "Mailbox named `{path}` already exists.",
                     )));
                 }
                 for root_mailbox in mailboxes.values().filter(|f| f.parent.is_none()) {
@@ -1473,7 +1470,7 @@ impl ImapType {
                     */
                     println!("S: {}", String::from_utf8_lossy(&res));
                 }
-                Err(error) => println!("error: {}", error),
+                Err(error) => println!("error: {error}"),
             }
         }
     }

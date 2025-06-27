@@ -66,7 +66,7 @@ impl MailcapEntry {
                 .place_config_file("mailcap")?;
             if !mailcap_path.exists() {
                 if let Ok(home) = std::env::var("HOME") {
-                    mailcap_path = PathBuf::from(format!("{}/.mailcap", home));
+                    mailcap_path = PathBuf::from(format!("{home}/.mailcap"));
                 }
                 if !mailcap_path.exists() {
                     mailcap_path = PathBuf::from("/etc/mailcap");

@@ -659,10 +659,9 @@ impl MboxFormat {
                     return Err((
                         input,
                         Box::new(Error::new(format!(
-                            "mbox does not appear to be in {} format because it lacks a \
+                            "mbox does not appear to be in {self} format because it lacks a \
                              `Content-Length` header. Try setting the format to `mboxrd` or \
-                             `mboxo`",
-                            self
+                             `mboxo`"
                         ))),
                     ));
                 };
@@ -781,8 +780,7 @@ impl Iterator for MessageIterator<'_> {
                     .lines()
                     .count();
                 return Some(Err(err.set_details(format!(
-                    "Location: line {}\n{:?}",
-                    line_number,
+                    "Location: line {line_number}\n{:?}",
                     String::from_utf8_lossy(error_location)
                         .as_ref()
                         .trim_at_boundary(150)
@@ -1331,11 +1329,9 @@ macro_rules! get_conf_val {
             .map(|v| {
                 <_>::from_str(v).map_err(|e| {
                     Error::new(format!(
-                        "Configuration error ({}): Invalid value for field `{}`: {}\n{}",
+                        "Configuration error ({}): Invalid value for field `{}`: {v}\n{e}",
                         $s.name.as_str(),
-                        $var,
-                        v,
-                        e
+                        $var
                     ))
                 })
             })
@@ -1367,8 +1363,8 @@ impl MboxType {
             } else {
                 MboxFormat::from_str(&prefer_mbox_type).wrap_err(|| {
                     format!(
-                        "{} invalid `prefer_mbox_type` value: `{}`",
-                        s.name, prefer_mbox_type,
+                        "{} invalid `prefer_mbox_type` value: `{prefer_mbox_type}`",
+                        s.name
                     )
                 })?
             },
@@ -1421,9 +1417,8 @@ impl MboxType {
         for (k, f) in s.mailboxes.iter() {
             let Some(path_str) = f.extra.get("path") else {
                 return Err(Error::new(format!(
-                    "mbox mailbox configuration entry \"{}\" should have a \"path\" value set \
-                     pointing to an mbox file.",
-                    k
+                    "mbox mailbox configuration entry \"{k}\" should have a \"path\" value set \
+                     pointing to an mbox file."
                 )));
             };
             let format = if let Some(format_str) = f.extra.get("format") {
@@ -1432,8 +1427,8 @@ impl MboxType {
                 } else {
                     MboxFormat::from_str(format_str).wrap_err(|| {
                         format!(
-                            "{}, mailbox {}: invalid `format` value: `{}`",
-                            s.name, k, format_str,
+                            "{}, mailbox {k}: invalid `format` value: `{format_str}`",
+                            s.name
                         )
                     })?
                 }
@@ -1445,8 +1440,7 @@ impl MboxType {
             let pathbuf: PathBuf = Path::new(path_str).expand();
             if !pathbuf.try_exists().unwrap_or(false) || pathbuf.is_dir() {
                 return Err(Error::new(format!(
-                    "mbox mailbox configuration entry \"{}\" path value {} is not a file.",
-                    k, path_str
+                    "mbox mailbox configuration entry \"{k}\" path value {path_str} is not a file."
                 )));
             }
             let read_only = if let Ok(metadata) = std::fs::metadata(&pathbuf) {
@@ -1504,11 +1498,9 @@ impl MboxType {
                     .map(|v| {
                         <_>::from_str(&v).map_err(|e| {
                             Error::new(format!(
-                                "Configuration error ({}): Invalid value for field `{}`: {}\n{}",
+                                "Configuration error ({}): Invalid value for field `{}`: {v}\n{e}",
                                 $s.name.as_str(),
-                                $var,
-                                v,
-                                e
+                                $var
                             ))
                         })
                     })
@@ -1531,8 +1523,8 @@ impl MboxType {
         } else {
             MboxFormat::from_str(&prefer_mbox_type).wrap_err(|| {
                 format!(
-                    "{} invalid `prefer_mbox_type` value: `{}`",
-                    s.name, prefer_mbox_type,
+                    "{} invalid `prefer_mbox_type` value: `{prefer_mbox_type}`",
+                    s.name
                 )
             })?;
         }

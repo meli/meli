@@ -237,7 +237,7 @@ pub fn eprint_step_fn() -> Box<dyn FnMut(std::fmt::Arguments) -> usize> {
     let mut counter = 1;
     Box::new(move |args: std::fmt::Arguments| {
         let step = counter;
-        eprint!("{step}. {}", args);
+        eprint!("{step}. {args}");
         counter += 1;
         step
     })

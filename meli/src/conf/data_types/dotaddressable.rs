@@ -85,8 +85,7 @@ impl DotAddressable for LogSettings {
                     "maximum_level" => self.maximum_level.lookup(field, tail),
 
                     other => Err(Error::new(format!(
-                        "{} has no field named {}",
-                        parent_field, other
+                        "{parent_field} has no field named {other}"
                     ))),
                 }
             }
@@ -115,8 +114,7 @@ impl DotAddressable for Settings {
                     "log" => self.log.lookup(field, tail),
 
                     other => Err(Error::new(format!(
-                        "{} has no field named {}",
-                        parent_field, other
+                        "{parent_field} has no field named {other}"
                     ))),
                 }
             }
@@ -138,8 +136,7 @@ impl DotAddressable for AccountConf {
                     "conf_override" => self.conf_override.lookup(field, tail),
                     "mailbox_confs" => self.mailbox_confs.lookup(field, tail),
                     other => Err(Error::new(format!(
-                        "{} has no field named {}",
-                        parent_field, other
+                        "{parent_field} has no field named {other}"
                     ))),
                 }
             }
@@ -177,8 +174,7 @@ impl DotAddressable for MailUIConf {
                     "pgp" => Err(Error::new("unimplemented")), //self.pgp.lookup(field, tail),
 
                     other => Err(Error::new(format!(
-                        "{} has no field named {}",
-                        parent_field, other
+                        "{parent_field} has no field named {other}"
                     ))),
                 }
             }
@@ -198,8 +194,7 @@ impl DotAddressable for FileMailboxConf {
                     "conf_override" => self.conf_override.lookup(field, tail),
                     "mailbox_conf" => self.mailbox_conf.lookup(field, tail),
                     other => Err(Error::new(format!(
-                        "{} has no field named {}",
-                        parent_field, other
+                        "{parent_field} has no field named {other}"
                     ))),
                 }
             }
@@ -230,8 +225,7 @@ impl DotAddressable for FileAccount {
                     "extra" => self.extra.lookup(field, tail),
                     "order" => self.order.lookup(field, tail),
                     other => Err(Error::new(format!(
-                        "{} has no field named {}",
-                        parent_field, other
+                        "{parent_field} has no field named {other}"
                     ))),
                 }
             }
@@ -259,8 +253,7 @@ impl DotAddressable for melib::AccountSettings {
                     "manual_refresh" => self.manual_refresh.lookup(field, tail),
                     "extra" => self.extra.lookup(field, tail),
                     other => Err(Error::new(format!(
-                        "{} has no field named {}",
-                        parent_field, other
+                        "{parent_field} has no field named {other}"
                     ))),
                 }
             }
@@ -284,8 +277,7 @@ impl DotAddressable for melib::MailboxConf {
                     "usage" => self.usage.lookup(field, tail),
                     "extra" => self.extra.lookup(field, tail),
                     other => Err(Error::new(format!(
-                        "{} has no field named {}",
-                        parent_field, other
+                        "{parent_field} has no field named {other}"
                     ))),
                 }
             }

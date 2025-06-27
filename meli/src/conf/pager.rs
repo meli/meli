@@ -171,8 +171,7 @@ impl DotAddressable for PagerSettings {
                     "url_launcher" => self.html_filter.lookup(field, tail),
                     "show_extra_headers" => self.show_extra_headers.lookup(field, tail),
                     other => Err(Error::new(format!(
-                        "{} has no field named {}",
-                        parent_field, other
+                        "{parent_field} has no field named {other}"
                     ))),
                 }
             }

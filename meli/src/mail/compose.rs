@@ -160,7 +160,7 @@ impl std::fmt::Display for Composer {
         let subject = self.draft.headers().get(HeaderName::SUBJECT);
         if let Some(ref val) = subject.filter(|s| !s.is_empty()) {
             val.trim_at_boundary(4);
-            write!(f, "{}", val)
+            write!(f, "{val}")
         } else if let Some(ref val) = self
             .draft
             .headers()
@@ -168,7 +168,7 @@ impl std::fmt::Display for Composer {
             .filter(|s| !s.is_empty())
         {
             val.trim_at_boundary(4);
-            write!(f, "to {}", val)
+            write!(f, "to {val}")
         } else {
             write!(f, "draft")
         }
@@ -328,7 +328,7 @@ impl Composer {
             let prefix =
                 account_settings!(context[ret.account_hash].composing.reply_prefix).as_str();
             if subject_stripped {
-                format!("{prefix} {subject}", prefix = prefix, subject = subject)
+                format!("{prefix} {subject}")
             } else {
                 subject.to_string()
             }
@@ -746,7 +746,7 @@ To: {}
             };
             if attachments_no == 0 {
                 grid.write_string(
-                    &format!("No attachments [edit: {}]", edit_shortcut),
+                    &format!("No attachments [edit: {edit_shortcut}]"),
                     theme_attr.fg,
                     theme_attr.bg,
                     theme_attr.attrs,
@@ -833,8 +833,8 @@ To: {}
                 )
             } else {
                 format!(
-                    "{toggle_unchecked} Don't sign [toggle: {}, edit: {}]",
-                    toggle_shortcut, edit_shortcut,
+                    "{toggle_unchecked} Don't sign [toggle: {toggle_shortcut}, edit: \
+                     {edit_shortcut}]",
                 )
             };
             grid.write_string(
@@ -897,8 +897,8 @@ To: {}
                 )
             } else {
                 format!(
-                    "{toggle_unchecked} Don't encrypt [toggle: {}, edit: {}]",
-                    toggle_shortcut, edit_shortcut,
+                    "{toggle_unchecked} Don't encrypt [toggle: {toggle_shortcut}, edit: \
+                     {edit_shortcut}]",
                 )
             };
             grid.write_string(
@@ -2051,7 +2051,7 @@ impl Component for Composer {
                         Err(err) => {
                             context.replies.push_back(UIEvent::Notification {
                                 title: Some(
-                                    format!("Failed to create pseudoterminal: {}", err).into(),
+                                    format!("Failed to create pseudoterminal: {err}").into(),
                                 ),
                                 source: None,
                                 body: err.to_string().into(),
@@ -2085,7 +2085,7 @@ impl Component for Composer {
                     }
                     Err(err) => {
                         context.replies.push_back(UIEvent::Notification {
-                            title: Some(format!("Failed to execute {}: {}", editor, err).into()),
+                            title: Some(format!("Failed to execute {editor}: {err}").into()),
                             source: None,
                             body: err.to_string().into(),
                             kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
@@ -2279,9 +2279,7 @@ impl Component for Composer {
                         Err(err) => {
                             let command = command.to_string();
                             context.replies.push_back(UIEvent::Notification {
-                                title: Some(
-                                    format!("Failed to execute {}: {}", command, err).into(),
-                                ),
+                                title: Some(format!("Failed to execute {command}: {err}").into()),
                                 source: None,
                                 body: err.to_string().into(),
                                 kind: Some(NotificationType::Error(

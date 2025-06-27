@@ -344,8 +344,7 @@ pub mod config_field_types {
             Ok(
                 match s.map_err(|err| {
                     serde::de::Error::custom(format!(
-                        r#"expected one of "true", "false", found `{}`"#,
-                        err
+                        r#"expected one of "true", "false", found `{err}`"#
                     ))
                 })? {
                     InnerToggleFlag::Bool(true) => Self::True,
@@ -422,8 +421,7 @@ pub mod config_field_types {
             Ok(
                 match s.map_err(|err| {
                     serde::de::Error::custom(format!(
-                        r#"expected one of "true", "false", "ask", found `{}`"#,
-                        err
+                        r#"expected one of "true", "false", "ask", found `{err}`"#
                     ))
                 })? {
                     InnerActionFlag::Bool(true) => Self::True,

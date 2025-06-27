@@ -164,7 +164,7 @@ mod dbus {
                         || (0x86..=0x9f).contains(&i)
                     {
                         use std::fmt::Write;
-                        let _ = write!(ret, "&#{:x}%{:x};", i, i);
+                        let _ = write!(ret, "&#{i:x}%{i:x};");
                     } else {
                         ret.push(c);
                     }

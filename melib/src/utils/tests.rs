@@ -428,7 +428,7 @@ fn test_fnmatch() {
         "Something/with/separator",
         "local.group.name",
     ] {
-        assert!(n.fnmatches("*"), "`*` should match with {:?}", n);
+        assert!(n.fnmatches("*"), "`*` should match with {n:?}");
     }
 
     assert!(!".leading.period".fnmatches("*"));
@@ -444,15 +444,13 @@ fn test_fnmatch() {
     for n in ["Archives/2012", "Archives/2015"] {
         assert!(
             n.fnmatches("Archives/201?"),
-            "`Archives/201?` should match with {:?}",
-            n
+            "`Archives/201?` should match with {n:?}"
         );
     }
     for n in ["Archives/2005", "Archives/2021"] {
         assert!(
             !n.fnmatches("Archives/201?"),
-            "`Archives/201?` should not match with {:?}",
-            n
+            "`Archives/201?` should not match with {n:?}"
         );
     }
 }

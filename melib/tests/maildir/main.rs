@@ -120,7 +120,7 @@ fn test_maildir_watch() {
         let backend_event_queue = Arc::clone(&backend_event_queue);
 
         BackendEventConsumer::new(Arc::new(move |ah, be| {
-            eprintln!("BackendEventConsumer: ah {:?} be {:?}", ah, be);
+            eprintln!("BackendEventConsumer: ah {ah:?} be {be:?}");
             backend_event_queue.lock().unwrap().push_back((ah, be));
         }))
     };
@@ -161,10 +161,10 @@ hello world.
     let inbox_env: Envelope = {
         let backend_event = value1.unwrap().unwrap();
         let BackendEvent::Refresh(refresh_event) = backend_event else {
-            panic!("Expected Refresh event, got: {:?}", backend_event);
+            panic!("Expected Refresh event, got: {backend_event:?}");
         };
         let RefreshEventKind::Create(env) = refresh_event.kind else {
-            panic!("Expected Create event, got: {:?}", refresh_event);
+            panic!("Expected Create event, got: {refresh_event:?}");
         };
         assert_eq!(env.subject(), "RE: your e-mail");
         assert_eq!(env.message_id(), "h2g7f.z0gy2pgaen5m@example.com");
@@ -177,10 +177,7 @@ hello world.
     );
     let (trash_hash, _mailboxes) =
         block_on(maildir.create_mailbox("Trash".into()).unwrap()).unwrap();
-    eprintln!(
-        "trash_hash = {:?} inbox_hash = {:?}",
-        trash_hash, inbox_hash
-    );
+    eprintln!("trash_hash = {trash_hash:?} inbox_hash = {inbox_hash:?}");
     block_on(
         maildir
             .copy_messages(inbox_env.hash().into(), inbox_hash, trash_hash, true)
@@ -194,37 +191,35 @@ hello world.
     backend_events.push(value1.unwrap().unwrap());
     {
         let Some(pos) = backend_events.iter().position(|be| matches!(be, BackendEvent::Refresh(ref refresh_event) if matches!(refresh_event.kind, RefreshEventKind::Remove(_)))) else {
-        panic!("No Remove event for Inbox found in received backend events: {:?}", backend_events);
+        panic!("No Remove event for Inbox found in received backend events: {backend_events:?}");
     };
         let backend_event = backend_events.remove(pos);
         let BackendEvent::Refresh(refresh_event) = backend_event else {
-            panic!("Expected Refresh event, got: {:?}", backend_event);
+            panic!("Expected Refresh event, got: {backend_event:?}");
         };
         let RefreshEventKind::Remove(old_hash) = refresh_event.kind else {
-            panic!("Expected Remove event, got: {:?}", refresh_event);
+            panic!("Expected Remove event, got: {refresh_event:?}");
         };
         assert_eq!(old_hash, inbox_env.hash());
         assert_eq!(
             refresh_event.mailbox_hash, inbox_hash,
-            "Expected Remove event in Inbox folder, got: {:?}",
-            refresh_event
+            "Expected Remove event in Inbox folder, got: {refresh_event:?}"
         );
     }
     let trash_env_hash: EnvelopeHash = {
         let Some(pos) = backend_events.iter().position(|be| matches!(be, BackendEvent::Refresh(ref refresh_event) if matches!(refresh_event.kind, RefreshEventKind::Create(_)))) else {
-        panic!("No Create event for Trash found in received backend events: {:?}", backend_events);
+        panic!("No Create event for Trash found in received backend events: {backend_events:?}");
     };
         let backend_event = backend_events.remove(pos);
         let BackendEvent::Refresh(refresh_event) = backend_event else {
-            panic!("Expected Refresh event, got: {:?}", backend_event);
+            panic!("Expected Refresh event, got: {backend_event:?}");
         };
         let RefreshEventKind::Create(ref trash_env) = refresh_event.kind else {
-            panic!("Expected Create event, got: {:?}", refresh_event);
+            panic!("Expected Create event, got: {refresh_event:?}");
         };
         assert_eq!(
             refresh_event.mailbox_hash, trash_hash,
-            "Expected Create event in Trash folder, got: {:?}",
-            refresh_event
+            "Expected Create event in Trash folder, got: {refresh_event:?}"
         );
         assert_eq!(trash_env.message_id(), inbox_env.message_id());
         trash_env.hash()
@@ -256,15 +251,14 @@ hello world.
         }
     };
     let BackendEvent::Refresh(refresh_event) = backend_event else {
-        panic!("Expected Refresh event, got: {:?}", backend_event);
+        panic!("Expected Refresh event, got: {backend_event:?}");
     };
     let RefreshEventKind::Remove(old_hash) = refresh_event.kind else {
-        panic!("Expected Remove event, got: {:?}", refresh_event);
+        panic!("Expected Remove event, got: {refresh_event:?}");
     };
     assert_eq!(
         refresh_event.mailbox_hash, trash_hash,
-        "Expected Remove event in Trash folder, got: {:?}",
-        refresh_event
+        "Expected Remove event in Trash folder, got: {refresh_event:?}"
     );
     assert_eq!(old_hash, trash_env_hash);
 }

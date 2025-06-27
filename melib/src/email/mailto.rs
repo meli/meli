@@ -149,7 +149,7 @@ impl TryFrom<&[u8]> for Mailto {
                     String::from_utf8_lossy(value),
                     &err,
                 );
-                format!("{:?}", err)
+                format!("{err:?}")
             })
     }
 }
@@ -166,7 +166,7 @@ impl TryFrom<&str> for Mailto {
                     value,
                     &err
                 );
-                format!("{:?}", err)
+                format!("{err:?}")
             })
     }
 }

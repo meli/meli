@@ -112,7 +112,7 @@ fn encode_modified_utf7(text: &str) -> String {
     let text_u16 = base64::encode(input);
     let text_u16 = text_u16.trim_end_matches('=');
     let result = text_u16.replace('/', ",");
-    format!("&{}-", result)
+    format!("&{result}-")
 }
 
 /// Decode UTF-7 IMAP mailbox name

@@ -94,8 +94,7 @@ impl CardDeserializer {
         {
             return Err(Error::new(format!(
                 "Error while parsing vcard: input does not start or end with correct header and \
-                 footer: {:?}",
-                input
+                 footer: {input:?}"
             ))
             .set_kind(ErrorKind::ValueError)
             .set_details(
@@ -163,15 +162,14 @@ impl CardDeserializer {
             }
             if !has_colon {
                 return Err(Error::new(format!(
-                    "Error while parsing vcard: error at line {}, no colon. {:?}",
-                    l, el
+                    "Error while parsing vcard: error at line {l}, no colon. {el:?}"
                 ))
                 .set_kind(ErrorKind::ValueError));
             }
             if name.is_empty() {
                 return Err(Error::new(format!(
-                    "Error while parsing vcard: error at line {}, no name for content line. {:?}",
-                    l, el
+                    "Error while parsing vcard: error at line {l}, no name for content line. \
+                     {el:?}"
                 ))
                 .set_kind(ErrorKind::ValueError));
             }

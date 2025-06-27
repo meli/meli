@@ -302,7 +302,7 @@ impl Context {
         self.replies
             .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
                 if let Some(modf) = modifier_command {
-                    format!("{} {}", modf, cmd_buf)
+                    format!("{modf} {cmd_buf}")
                 } else {
                     cmd_buf.to_string()
                 },
@@ -326,7 +326,7 @@ impl Context {
         self.replies
             .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
                 if let Some(modf) = modifier_command {
-                    format!("{} {}", modf, cmd_buf)
+                    format!("{modf} {cmd_buf}")
                 } else {
                     cmd_buf.to_string()
                 },
@@ -840,8 +840,7 @@ impl State {
                 } else {
                     self.context.replies.push_back(UIEvent::StatusEvent(
                         StatusEvent::DisplayMessage(format!(
-                            "Account with name `{}` not found.",
-                            account_name
+                            "Account with name `{account_name}` not found."
                         )),
                     ));
                 }
@@ -1073,8 +1072,7 @@ impl State {
                                 Err(err) => {
                                     self.context.replies.push_back(UIEvent::StatusEvent(
                                         StatusEvent::DisplayMessage(format!(
-                                            "Could not load configuration: {}",
-                                            err
+                                            "Could not load configuration: {err}"
                                         )),
                                     ));
                                 }

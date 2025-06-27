@@ -192,7 +192,7 @@ impl ViewOptions {
                     start += 1;
                 }
                 if start < text.len() {
-                    text.insert_str(start, &format!("[{}]", lidx));
+                    text.insert_str(start, &format!("[{lidx}]"));
                 }
             }
         }

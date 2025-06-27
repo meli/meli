@@ -402,9 +402,8 @@ pub const LINE_BREAK_RULES: &[(u32, u32, LineBreakClass)] = &[
             file.write_all(
                 format!(
                     r#"
-pub const {}: &[(u32, u32)] = &[
-"#,
-                    name
+pub const {name}: &[(u32, u32)] = &[
+"#
                 )
                 .as_bytes(),
             )
@@ -415,13 +414,13 @@ pub const {}: &[(u32, u32)] = &[
                 let mut a = prev;
                 for cp in iter {
                     if prev + 1 != cp.raw {
-                        file.write_all(format!("    (0x{:X}, 0x{:X}),\n", a, prev).as_bytes())
+                        file.write_all(format!("    (0x{a:X}, 0x{prev:X}),\n").as_bytes())
                             .unwrap();
                         a = cp.raw;
                     }
                     prev = cp.raw;
                 }
-                file.write_all(format!("    (0x{:X}, 0x{:X}),\n", a, prev).as_bytes())
+                file.write_all(format!("    (0x{a:X}, 0x{prev:X}),\n").as_bytes())
                     .unwrap();
             }
             file.write_all(b"];\n").unwrap();

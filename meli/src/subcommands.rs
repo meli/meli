@@ -192,11 +192,11 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
     };
     if !conf.accounts.contains_key(&account.clone()) {
         println!(
-            "The configuration file does not contain the account `{}`. It contains the following:",
-            account
+            "The configuration file does not contain the account `{account}`. It contains the \
+             following:"
         );
         for a in conf.accounts.keys() {
-            println!("{}", a);
+            println!("{a}");
         }
         return Err("Try again with a valid account name.".into());
     }
@@ -209,10 +209,7 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
 
             let send_mail = file_account_conf.send_mail;
             let SendMail::Smtp(smtp_conf) = send_mail else {
-                panic!(
-                    "smtp shell requires an smtp configuration for account {}",
-                    account
-                );
+                panic!("smtp shell requires an smtp configuration for account {account}");
             };
             std::thread::spawn(move || {
                 let ex = melib::smol::Executor::new();
@@ -245,12 +242,12 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
                             .unwrap()
                             .unwrap();
                         println!("\rC: {}", input.trim());
-                        print!("S: {}", res);
+                        print!("S: {res}");
                         if input.trim().eq_ignore_ascii_case("quit") {
                             break;
                         }
                     }
-                    Err(error) => println!("error: {}", error),
+                    Err(error) => println!("error: {error}"),
                 }
             }
         }
@@ -322,7 +319,7 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
                         println!("\rC: {}", input.trim());
                         print!("S: {}", String::from_utf8_lossy(&res));
                     }
-                    Err(error) => println!("error: {}", error),
+                    Err(error) => println!("error: {error}"),
                 }
             }
         }

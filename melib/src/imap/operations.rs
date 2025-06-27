@@ -90,7 +90,7 @@ impl ImapOp {
             let mut results = protocol_parser::fetch_responses(&response)?.1;
             if results.len() > 1 {
                 return Err(
-                    Error::new(format!("Invalid/unexpected response: {:?}", response))
+                    Error::new(format!("Invalid/unexpected response: {response:?}"))
                         .set_summary(format!("Message with UID {} was not found.", self.uid))
                         .set_kind(ErrorKind::ProtocolError),
                 );
@@ -119,7 +119,7 @@ impl ImapOp {
                 }
                 return Err(Error::new("Invalid/unexpected response from server")
                     .set_summary(format!("Message with UID {} was not found.", self.uid))
-                    .set_details(format!("Full response: {:?}", fetch_response))
+                    .set_details(format!("Full response: {fetch_response:?}"))
                     .set_kind(ErrorKind::ProtocolError));
             };
             break (_uid, _flags, body);

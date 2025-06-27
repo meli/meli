@@ -218,7 +218,7 @@ impl std::fmt::Display for BytesDisplay {
         if bytes == 0.0 {
             write!(fmt, "0")
         } else if bytes < Self::KILOBYTE {
-            write!(fmt, "{:.2} bytes", bytes)
+            write!(fmt, "{bytes:.2} bytes")
         } else if bytes < Self::MEGABYTE {
             write!(fmt, "{:.2} KiB", bytes / Self::KILOBYTE)
         } else if bytes < Self::GIGABYTE {

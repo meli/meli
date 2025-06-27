@@ -86,8 +86,7 @@ impl DotAddressable for TagsSettings {
                     "colors" => self.colors.lookup(field, tail),
                     "ignore_tags" => self.ignore_tags.lookup(field, tail),
                     other => Err(Error::new(format!(
-                        "{} has no field named {}",
-                        parent_field, other
+                        "{parent_field} has no field named {other}"
                     ))),
                 }
             }

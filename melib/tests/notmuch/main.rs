@@ -190,7 +190,7 @@ other_email=test2@example.com;test3@example.com
             let backend_event_queue = Arc::clone(&backend_event_queue);
 
             BackendEventConsumer::new(Arc::new(move |ah, be| {
-                eprintln!("BackendEventConsumer: ah {:?} be {:?}", ah, be);
+                eprintln!("BackendEventConsumer: ah {ah:?} be {be:?}");
                 backend_event_queue.lock().unwrap().push_back((ah, be));
             }))
         };
@@ -274,8 +274,7 @@ hello world.
         assert_eq!(
             backend_events.len(),
             2,
-            "Expected two events total; backend_events was: {:?}",
-            backend_events
+            "Expected two events total; backend_events was: {backend_events:?}"
         );
         block_on(notmuch.refresh(inbox_hash).unwrap()).unwrap();
         backend_events.extend(
@@ -288,8 +287,7 @@ hello world.
         assert_eq!(
             backend_events.len(),
             2,
-            "Expected two events total; backend_events was: {:?}",
-            backend_events
+            "Expected two events total; backend_events was: {backend_events:?}"
         );
 
         let env = {
@@ -297,7 +295,7 @@ hello world.
                 panic!("Expected Refresh event, got: {:#?}", &backend_events[0]);
             };
             let RefreshEventKind::Create(ref env) = refresh_event.kind else {
-                panic!("Expected Create event, got: {:#?}", refresh_event);
+                panic!("Expected Create event, got: {refresh_event:#?}");
             };
             assert_eq!(env.subject(), "RE: your e-mail");
             assert_eq!(env.message_id(), "h2g7f.z0gy2pgaen5m@example.com");
@@ -309,12 +307,11 @@ hello world.
                 panic!("Expected Refresh event, got: {:#?}", &backend_events[1]);
             };
             let RefreshEventKind::Remove(old_hash) = refresh_event.kind else {
-                panic!("Expected Remove event, got: {:#?}", refresh_event);
+                panic!("Expected Remove event, got: {refresh_event:#?}");
             };
             assert_eq!(
                 refresh_event.mailbox_hash, inbox_hash,
-                "Expected Remove event in Inbox folder, got: {:#?}",
-                refresh_event
+                "Expected Remove event in Inbox folder, got: {refresh_event:#?}"
             );
             assert_eq!(old_hash, env.hash());
         }
@@ -335,7 +332,7 @@ hello world.
             let backend_event_queue = Arc::clone(&backend_event_queue);
 
             BackendEventConsumer::new(Arc::new(move |ah, be| {
-                eprintln!("BackendEventConsumer: ah {:?} be {:?}", ah, be);
+                eprintln!("BackendEventConsumer: ah {ah:?} be {be:?}");
                 backend_event_queue.lock().unwrap().push_back((ah, be));
             }))
         };
@@ -417,8 +414,7 @@ hello world.
         assert_eq!(
             backend_events.len(),
             2,
-            "Expected two events total; backend_events was: {:?}",
-            backend_events
+            "Expected two events total; backend_events was: {backend_events:?}"
         );
 
         let env = {
@@ -426,7 +422,7 @@ hello world.
                 panic!("Expected Refresh event, got: {:#?}", &backend_events[0]);
             };
             let RefreshEventKind::Create(ref env) = refresh_event.kind else {
-                panic!("Expected Create event, got: {:#?}", refresh_event);
+                panic!("Expected Create event, got: {refresh_event:#?}");
             };
             assert_eq!(env.subject(), "RE: your e-mail");
             assert_eq!(env.message_id(), "h2g7f.z0gy2pgaen5m@example.com");
@@ -439,12 +435,11 @@ hello world.
                 panic!("Expected Refresh event, got: {:#?}", &backend_events[1]);
             };
             let RefreshEventKind::Remove(old_hash) = refresh_event.kind else {
-                panic!("Expected Remove event, got: {:#?}", refresh_event);
+                panic!("Expected Remove event, got: {refresh_event:#?}");
             };
             assert_eq!(
                 refresh_event.mailbox_hash, inbox_hash,
-                "Expected Remove event in Inbox folder, got: {:#?}",
-                refresh_event
+                "Expected Remove event in Inbox folder, got: {refresh_event:#?}"
             );
             assert_eq!(old_hash, env.hash());
         }

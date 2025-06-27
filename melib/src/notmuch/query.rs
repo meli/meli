@@ -82,8 +82,8 @@ impl<'s> Query<'s> {
         };
         if status != 0 {
             return Err(Error::new(format!(
-                "Search for {} returned {}",
-                self.query_str, status,
+                "Search for {} returned {status}",
+                self.query_str
             )));
         }
         let messages = Some(NonNull::new(messages).ok_or_else(|| {
@@ -294,7 +294,7 @@ impl MelibQueryToNotmuchQuery for crate::search::Query {
             }
             Answered | AnsweredBy { .. } | Larger { .. } | Smaller { .. } => {
                 return Err(
-                    Error::new(format!("{:?} query is not implemented for notmuch", self))
+                    Error::new(format!("{self:?} query is not implemented for notmuch"))
                         .set_kind(ErrorKind::NotImplemented),
                 );
             }

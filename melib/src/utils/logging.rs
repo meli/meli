@@ -318,7 +318,7 @@ impl Log for StderrLogger {
                                 writeln!(writer, "<REDACTED>").ok()?;
                             }
                         }
-                        Cow::Owned(s) => writeln!(writer, "{}", s).ok()?,
+                        Cow::Owned(s) => writeln!(writer, "{s}").ok()?,
                     }
                     writer.flush().ok()?;
                     Some(())

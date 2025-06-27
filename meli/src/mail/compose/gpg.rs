@@ -215,8 +215,7 @@ impl Component for KeySelection {
                                 } else if !*local && allow_remote_lookup.is_ask() {
                                     *self = Self::Error {
                                         err: Error::new(format!(
-                                            "No keys found for {}, perform remote lookup?",
-                                            pattern
+                                            "No keys found for {pattern}, perform remote lookup?"
                                         )),
                                         id,
                                     }
@@ -225,7 +224,7 @@ impl Component for KeySelection {
                                         err: if pattern.is_empty() {
                                             Error::new("No keys found.")
                                         } else {
-                                            Error::new(format!("No keys found for {}.", pattern))
+                                            Error::new(format!("No keys found for {pattern}."))
                                         },
                                         id,
                                     }
@@ -537,8 +536,7 @@ mod tests {
                             ref err
                         } if *id == component_id && err.to_string() == melib::Error::new("No keys found.").to_string(),
                     ),
-                    "key_sel should have been an error but is: {:?}",
-                    key_sel
+                    "key_sel should have been an error but is: {key_sel:?}"
                 );
                 gpgme_ctx.import_key(pubkey_data).unwrap();
             } else {
@@ -564,8 +562,7 @@ mod tests {
                             widget: _,
                         } if keys.len() == 1 && assert_key(&keys[0]),
                     ),
-                    "key_sel should have been an error but is: {:?}",
-                    key_sel
+                    "key_sel should have been an error but is: {key_sel:?}"
                 );
             }
         }

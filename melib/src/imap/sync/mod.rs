@@ -143,10 +143,7 @@ impl ImapConnection {
             self.uid_store
                 .insert_envelopes(mailbox_hash, &v)
                 .chain_err_summary(|| {
-                    format!(
-                        "Could not save envelopes in cache for mailbox {}",
-                        mailbox_path
-                    )
+                    format!("Could not save envelopes in cache for mailbox {mailbox_path}")
                 })?;
         }
 
@@ -449,10 +446,7 @@ impl ImapConnection {
                 self.uid_store
                     .insert_envelopes(mailbox_hash, &v)
                     .chain_err_summary(|| {
-                        format!(
-                            "Could not save envelopes in cache for mailbox {}",
-                            mailbox_path
-                        )
+                        format!("Could not save envelopes in cache for mailbox {mailbox_path}")
                     })?;
             }
 
@@ -509,19 +503,14 @@ impl ImapConnection {
             if cached_max_uid == 0 {
                 // [ref:TODO]: (#222) imap-codec does not support "CONDSTORE/QRESYNC" currently.
                 self.send_command_raw(
-                    format!(
-                        "UID FETCH 1:* FLAGS (CHANGEDSINCE {})",
-                        cached_highestmodseq
-                    )
-                    .as_bytes(),
+                    format!("UID FETCH 1:* FLAGS (CHANGEDSINCE {cached_highestmodseq})").as_bytes(),
                 )
                 .await?;
             } else {
                 // [ref:TODO]: (#222) imap-codec does not support "CONDSTORE/QRESYNC" currently.
                 self.send_command_raw(
                     format!(
-                        "UID FETCH 1:{} FLAGS (CHANGEDSINCE {})",
-                        cached_max_uid, cached_highestmodseq
+                        "UID FETCH 1:{cached_max_uid} FLAGS (CHANGEDSINCE {cached_highestmodseq})"
                     )
                     .as_bytes(),
                 )

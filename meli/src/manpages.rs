@@ -136,7 +136,7 @@ impl ManPages {
                     .filter(|p| path_valid(p, &mut tries))
             })
         else {
-            return Err(format!("Could not write to any of these paths: {:?}", tries).into());
+            return Err(format!("Could not write to any of these paths: {tries:?}").into());
         };
         path = path.expand();
 
@@ -185,7 +185,7 @@ impl ManPages {
             str::parse::<usize>(unsafe {
                 std::str::from_utf8_unchecked(gz.header().unwrap().comment().unwrap())
             })
-            .unwrap_or_else(|_| panic!("{:?} was not compressed with size comment header", self)),
+            .unwrap_or_else(|_| panic!("{self:?} was not compressed with size comment header")),
         );
         gz.read_to_string(&mut v)?;
 

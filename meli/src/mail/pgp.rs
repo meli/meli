@@ -92,8 +92,7 @@ pub fn sign_filter(
                 let keys = ctx.keylist(false, Some(default_key.clone()))?.await?;
                 if keys.is_empty() {
                     return Err(Error::new(format!(
-                        "Could not locate sign key with ID `{}`",
-                        default_key
+                        "Could not locate sign key with ID `{default_key}`"
                     )));
                 }
                 sign_keys.extend(keys);
@@ -146,8 +145,7 @@ pub fn encrypt_filter(
                 let keys = ctx.keylist(true, Some(default_key.clone()))?.await?;
                 if keys.is_empty() {
                     return Err(Error::new(format!(
-                        "Could not locate sign key with ID `{}`",
-                        default_key
+                        "Could not locate sign key with ID `{default_key}`"
                     )));
                 }
                 if let Some(ref mut sign_keys) = sign_keys {
@@ -169,8 +167,7 @@ pub fn encrypt_filter(
                 let keys = ctx.keylist(false, Some(default_key.clone()))?.await?;
                 if keys.is_empty() {
                     return Err(Error::new(format!(
-                        "Could not locate encryption key with ID `{}`",
-                        default_key
+                        "Could not locate encryption key with ID `{default_key}`"
                     )));
                 }
                 encrypt_keys.extend(keys);
@@ -188,8 +185,7 @@ pub fn encrypt_filter(
                     .await?;
                 if keys.is_empty() {
                     return Err(Error::new(format!(
-                        "Could not locate personal encryption key for address `{}`",
-                        encrypt_for_self
+                        "Could not locate personal encryption key for address `{encrypt_for_self}`"
                     )));
                 }
                 for key in keys {

@@ -128,9 +128,9 @@ impl DbConnection {
         };
         if status != 0 {
             return Err(Error::new(format!(
-                "Could not open notmuch database at path {}. notmuch_database_open returned {}.",
-                path.display(),
-                status
+                "Could not open notmuch database at path {}. notmuch_database_open returned \
+                 {status}.",
+                path.display()
             )));
         }
         #[cfg(debug_assertions)]
@@ -419,14 +419,14 @@ impl Drop for DbConnection {
                 self.lib,
                 call!(self.lib, notmuch_database_close)(inner.as_mut())
             ) {
-                log::error!("Could not call C notmuch_database_close: {}", err);
+                log::error!("Could not call C notmuch_database_close: {err}");
                 return;
             }
             if let Err(err) = try_call!(
                 self.lib,
                 call!(self.lib, notmuch_database_destroy)(inner.as_mut())
             ) {
-                log::error!("Could not call C notmuch_database_destroy: {}", err);
+                log::error!("Could not call C notmuch_database_destroy: {err}");
             }
         }
     }
@@ -482,9 +482,9 @@ impl NotmuchDb {
                     Err(err) => {
                         if custom_dlpath {
                             return Err(Error::new(format!(
-                                "Notmuch `library_file_path` setting value `{}` for account {} \
-                                 does not exist or is a directory or not a valid library file.",
-                                dlpath, s.name
+                                "Notmuch `library_file_path` setting value `{dlpath}` for account \
+                                 {} does not exist or is a directory or not a valid library file.",
+                                s.name
                             ))
                             .set_kind(ErrorKind::Configuration)
                             .set_source(Some(Arc::new(err))));
@@ -551,9 +551,9 @@ impl NotmuchDb {
                 );
             } else {
                 return Err(Error::new(format!(
-                    "notmuch mailbox configuration entry `{}` for account {} should have a \
+                    "notmuch mailbox configuration entry `{k}` for account {} should have a \
                      `query` value set.",
-                    k, s.name,
+                    s.name,
                 ))
                 .set_kind(ErrorKind::Configuration));
             }
@@ -572,10 +572,9 @@ impl NotmuchDb {
                 mailboxes.entry(hash).or_default().parent = Some(parent_hash);
             } else {
                 return Err(Error::new(format!(
-                    "Mailbox configuration for `{}` defines its parent mailbox as `{}` but no \
-                     mailbox exists with this exact name.",
-                    mailboxes[&hash].name(),
-                    parent
+                    "Mailbox configuration for `{}` defines its parent mailbox as `{parent}` but \
+                     no mailbox exists with this exact name.",
+                    mailboxes[&hash].name()
                 ))
                 .set_kind(ErrorKind::Configuration));
             }
@@ -644,9 +643,9 @@ impl NotmuchDb {
                 || Path::new(&expanded_path).is_dir()
             {
                 return Err(Error::new(format!(
-                    "Notmuch `library_file_path` setting value `{}` for account {} does not exist \
-                     or is a directory.",
-                    &lib_path, s.name
+                    "Notmuch `library_file_path` setting value `{lib_path}` for account {} does \
+                     not exist or is a directory.",
+                    s.name
                 ))
                 .set_kind(ErrorKind::Configuration));
             }
@@ -655,9 +654,8 @@ impl NotmuchDb {
         for (k, f) in s.mailboxes.iter_mut() {
             if f.extra.swap_remove("query").is_none() {
                 return Err(Error::new(format!(
-                    "notmuch mailbox configuration entry `{}` for account {} should have a \
-                     `query` value set.",
-                    k, account_name,
+                    "notmuch mailbox configuration entry `{k}` for account {account_name} should \
+                     have a `query` value set."
                 ))
                 .set_kind(ErrorKind::Configuration));
             }
@@ -669,9 +667,8 @@ impl NotmuchDb {
         for (mbox, parent) in parents.iter() {
             if !s.mailboxes.contains_key(parent) {
                 return Err(Error::new(format!(
-                    "Mailbox configuration for `{}` defines its parent mailbox as `{}` but no \
-                     mailbox exists with this exact name.",
-                    mbox, parent
+                    "Mailbox configuration for `{mbox}` defines its parent mailbox as `{parent}` \
+                     but no mailbox exists with this exact name."
                 ))
                 .set_kind(ErrorKind::Configuration));
             }
@@ -980,7 +977,7 @@ impl MailBackend for NotmuchDb {
                 let message = match Message::find_message(&database, &index_lck[&env_hash]) {
                     Ok(v) => v,
                     Err(err) => {
-                        log::debug!("not found {}", err);
+                        log::debug!("not found {err}");
                         continue;
                     }
                 };
@@ -1106,11 +1103,10 @@ impl MailBackend for NotmuchDb {
                     s.push(' ');
                     s
                 } else {
-                    return Err(Error::new(format!(
-                        "Mailbox with hash {} not found!",
-                        mailbox_hash
-                    ))
-                    .set_kind(ErrorKind::NotFound));
+                    return Err(
+                        Error::new(format!("Mailbox with hash {mailbox_hash} not found!"))
+                            .set_kind(ErrorKind::NotFound),
+                    );
                 }
             } else {
                 String::new()

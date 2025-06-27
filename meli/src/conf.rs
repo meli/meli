@@ -349,8 +349,7 @@ impl FileSettings {
             }
             #[cfg(not(test))]
             let ask = crate::terminal::Ask::new(format!(
-                "No configuration found. Would you like to generate one in {}?",
-                path_string
+                "No configuration found. Would you like to generate one in {path_string}?"
             ));
             #[cfg(not(test))]
             let mut stdout = std::io::stdout();
@@ -424,7 +423,7 @@ impl FileSettings {
             themes::DARK | themes::LIGHT => {}
             t if s.terminal.themes.other_themes.contains_key(t) => {}
             t => {
-                return Err(Error::new(format!("Theme `{}` was not found.", t))
+                return Err(Error::new(format!("Theme `{t}` was not found."))
                     .set_kind(ErrorKind::Configuration));
             }
         }
@@ -528,7 +527,7 @@ impl FileSettings {
             themes::DARK | themes::LIGHT => {}
             t if s.terminal.themes.other_themes.contains_key(t) => {}
             t => {
-                return Err(Error::new(format!("Theme `{}` was not found.", t))
+                return Err(Error::new(format!("Theme `{t}` was not found."))
                     .set_kind(ErrorKind::Configuration));
             }
         }

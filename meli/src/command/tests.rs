@@ -115,7 +115,7 @@ fn test_command_parser_interactive() {
                     break;
                 }
             }
-            Err(error) => println!("error: {}", error),
+            Err(error) => println!("error: {error}"),
         }
     }
     println!("alright");
@@ -135,7 +135,7 @@ fn test_command_parser_all() {
         "close  ",
         "go 5",
     ] {
-        parse_command(cmd.as_bytes()).unwrap_or_else(|err| panic!("{} failed {}", cmd, err));
+        parse_command(cmd.as_bytes()).unwrap_or_else(|err| panic!("{cmd} failed {err}"));
     }
 
     assert_eq!(

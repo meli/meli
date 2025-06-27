@@ -248,16 +248,15 @@ impl std::fmt::Display for ResponseCode {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         use ResponseCode::*;
         match self {
-            Alert(s) => write!(fmt, "ALERT: {}", s),
+            Alert(s) => write!(fmt, "ALERT: {s}"),
             Badcharset(None) => write!(fmt, "Given charset is not supported by this server."),
             Badcharset(Some(s)) => write!(
                 fmt,
-                "Given charset is not supported by this server. Supported ones are: {}",
-                s
+                "Given charset is not supported by this server. Supported ones are: {s}"
             ),
             Capability => write!(fmt, "Capability response"),
-            Parse(s) => write!(fmt, "Server error in parsing message headers: {}", s),
-            Permanentflags(s) => write!(fmt, "Mailbox supports these flags: {}", s),
+            Parse(s) => write!(fmt, "Server error in parsing message headers: {s}"),
+            Permanentflags(s) => write!(fmt, "Mailbox supports these flags: {s}"),
             ReadOnly => write!(fmt, "This mailbox is selected read-only."),
             ReadWrite => write!(fmt, "This mailbox is selected with read-write permissions."),
             Trycreate => write!(
@@ -265,9 +264,9 @@ impl std::fmt::Display for ResponseCode {
                 "Failed to operate on the target mailbox because it doesn't exist. Try creating \
                  it first."
             ),
-            Uidnext(uid) => write!(fmt, "Next UID value is {}", uid),
-            Uidvalidity(uid) => write!(fmt, "Next UIDVALIDITY value is {}", uid),
-            Unseen(uid) => write!(fmt, "First message without the \\Seen flag is {}", uid),
+            Uidnext(uid) => write!(fmt, "Next UID value is {uid}"),
+            Uidvalidity(uid) => write!(fmt, "Next UIDVALIDITY value is {uid}"),
+            Unseen(uid) => write!(fmt, "First message without the \\Seen flag is {uid}"),
         }
     }
 }
@@ -380,9 +379,9 @@ impl From<ImapResponse> for Result<()> {
             ImapResponse::Ok(_) | ImapResponse::Preauth(_) | ImapResponse::Bye(_) => Ok(()),
             ImapResponse::No(ResponseCode::Alert(msg))
             | ImapResponse::Bad(ResponseCode::Alert(msg)) => Err(Error::new(msg)),
-            ImapResponse::No(err) => Err(Error::new(format!("{:?}", err)))
+            ImapResponse::No(err) => Err(Error::new(format!("{err:?}")))
                 .chain_err_summary(|| "IMAP NO Response.".to_string()),
-            ImapResponse::Bad(err) => Err(Error::new(format!("{:?}", err)))
+            ImapResponse::Bad(err) => Err(Error::new(format!("{err:?}")))
                 .chain_err_summary(|| "IMAP BAD Response.".to_string()),
         }
     }

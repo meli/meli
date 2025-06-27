@@ -55,7 +55,7 @@ impl RegexValue {
         }
         let pattern = b
             .build()
-            .wrap_err(|| format!("Could not compile regular expression `{}`", pattern))?;
+            .wrap_err(|| format!("Could not compile regular expression `{pattern}`"))?;
         Ok(Self::Builder {
             pattern,
             options: o,
@@ -137,15 +137,13 @@ impl<'de> Deserialize<'de> for RegexValue {
         Ok(
             match s.map_err(|err| {
                 serde::de::Error::custom(format!(
-                    r#"expected one of "true", "false", "ask", found `{}`"#,
-                    err
+                    r#"expected one of "true", "false", "ask", found `{err}`"#
                 ))
             })? {
                 Inner::Default { pattern } => Self::Default {
                     pattern: regex::Regex::new(pattern).map_err(|err| {
                         serde::de::Error::custom(format!(
-                            "Could not compile regular expression `{}`: {}",
-                            pattern, err
+                            "Could not compile regular expression `{pattern}`: {err}"
                         ))
                     })?,
                 },
@@ -165,8 +163,7 @@ impl<'de> Deserialize<'de> for RegexValue {
                     }
                     let pattern = b.build().map_err(|err| {
                         serde::de::Error::custom(format!(
-                            "Could not compile regular expression `{}`: {}",
-                            pattern, err
+                            "Could not compile regular expression `{pattern}`: {err}"
                         ))
                     })?;
                     Self::Builder {

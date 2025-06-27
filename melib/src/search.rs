@@ -525,7 +525,7 @@ impl<'de> Deserialize<'de> for Query {
         let ret = query()
             .parse(&s)
             .map(|(_, q)| q)
-            .map_err(|err| de::Error::custom(format!("invalid query value: {}", err)));
+            .map_err(|err| de::Error::custom(format!("invalid query value: {err}")));
         ret
     }
 }

@@ -47,7 +47,7 @@ impl<T: Clone + PartialEq + Eq + Hash> Argument<T> {
         OBJ: Object,
     {
         Self::ResultReference {
-            result_of: format!("m{}", result_of),
+            result_of: format!("m{result_of}"),
             name: M::NAME.to_string(),
             path: path.field.to_string(),
         }

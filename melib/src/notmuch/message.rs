@@ -57,8 +57,7 @@ impl<'m> Message<'m> {
             lib,
             message: NonNull::new(message).ok_or_else(|| {
                 Error::new(format!(
-                    "Message with message id {:?} not found in notmuch database.",
-                    msg_id
+                    "Message with message id {msg_id:?} not found in notmuch database.",
                 ))
             })?,
             is_from_thread: false,

@@ -132,7 +132,7 @@ impl std::fmt::Display for Key {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(fmt, "{} ", self.fingerprint())?;
         if let Some(uid) = self.primary_uid() {
-            write!(fmt, "{}", uid)?;
+            write!(fmt, "{uid}")?;
         } else {
             write!(fmt, "(missing primary uid)")?;
         }

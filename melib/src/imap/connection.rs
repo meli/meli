@@ -292,7 +292,7 @@ impl ConnectionMutex {
             if guard.is_none() {
                 let mut new_pool_entry = ImapConnection::new_connection(
                     &mutex.server_conf,
-                    format!("imap-connection-pool-{}", i).into(),
+                    format!("imap-connection-pool-{i}").into(),
                     mutex.uid_store.clone(),
                     false,
                 );
@@ -466,8 +466,7 @@ impl ImapStream {
                 }
                 if !broken {
                     return Err(Error::new(format!(
-                        "Could not initiate STARTTLS negotiation to {}.",
-                        path
+                        "Could not initiate STARTTLS negotiation to {path}."
                     )));
                 }
             }
@@ -505,9 +504,9 @@ impl ImapStream {
                     }
                 })
                 .await
-                .chain_err_summary(|| format!("Could not initiate TLS negotiation to {}.", path))?;
+                .chain_err_summary(|| format!("Could not initiate TLS negotiation to {path}."))?;
                 AsyncWrapper::new(Connection::new_tls(conn))
-                    .chain_err_summary(|| format!("{} connection failed.", path))
+                    .chain_err_summary(|| format!("{path} connection failed."))
                     .chain_err_kind(ErrorKind::External)?
             }
         } else {
@@ -1175,8 +1174,7 @@ impl ImapConnection {
                     match r {
                         ImapResponse::Bye(ref response_code) => {
                             self.stream = Err(Error::new(format!(
-                                "Offline: received BYE: {:?}",
-                                response_code
+                                "Offline: received BYE: {response_code:?}"
                             )));
                             ret.extend_from_slice(&response);
                             return r.into();
@@ -1374,7 +1372,7 @@ impl ImapConnection {
             String::from_utf8_lossy(ret)
         );
         let select_response = protocol_parser::select_response(ret).chain_err_summary(|| {
-            format!("Could not parse select response for mailbox {}", imap_path)
+            format!("Could not parse select response for mailbox {imap_path}")
         })?;
         self.uid_store
             .mailboxes
@@ -1451,7 +1449,7 @@ impl ImapConnection {
             String::from_utf8_lossy(ret)
         );
         let select_response = protocol_parser::select_response(ret).chain_err_summary(|| {
-            format!("Could not parse select response for mailbox {}", imap_path)
+            format!("Could not parse select response for mailbox {imap_path}")
         })?;
         self.stream.as_mut()?.current_mailbox = MailboxSelection::Examine {
             mailbox_hash,
@@ -1673,7 +1671,7 @@ impl ImapConnection {
             let mailboxes = self.uid_store.mailboxes.lock().await;
 
             let mailbox = mailboxes.get(&mailbox_hash).ok_or_else(|| {
-                Error::new(format!("Mailbox with hash {} not found.", mailbox_hash))
+                Error::new(format!("Mailbox with hash {mailbox_hash} not found."))
             })?;
             if !mailbox.permissions.lock().unwrap().create_messages {
                 return Err(Error::new(format!(

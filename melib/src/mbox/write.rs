@@ -133,7 +133,7 @@ impl MboxFormat {
                         Some((HeaderName::X_KEYWORDS, tags.as_slice().join(" ")))
                     })
                 } {
-                    writer.write_fmt(format_args!("{}: ", h))?;
+                    writer.write_fmt(format_args!("{h}: "))?;
                     writer.write_all(v.as_bytes())?;
                     writer.write_all(line_ending)?;
                 }
@@ -171,7 +171,7 @@ impl MboxFormat {
                     .into_iter()
                     .chain(Some((HeaderName::CONTENT_LENGTH, len.as_bytes())))
                 {
-                    writer.write_fmt(format_args!("{}: ", h))?;
+                    writer.write_fmt(format_args!("{h}: "))?;
                     write_header_val_fn(writer, v)?;
                     writer.write_all(line_ending)?;
                 }
@@ -226,7 +226,7 @@ impl MboxFormat {
                     .into_iter()
                     .chain(Some((HeaderName::CONTENT_LENGTH, len.as_bytes())))
                 {
-                    writer.write_fmt(format_args!("{}: ", h))?;
+                    writer.write_fmt(format_args!("{h}: "))?;
                     write_header_val_fn(writer, v)?;
                     writer.write_all(line_ending)?;
                 }

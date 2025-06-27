@@ -895,19 +895,19 @@ impl std::fmt::Display for SetError {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         use SetError::*;
         match self {
-            Forbidden(Some(description)) => write!(fmt, "Forbidden: {}", description),
+            Forbidden(Some(description)) => write!(fmt, "Forbidden: {description}"),
             Forbidden(None) => write!(fmt, "Forbidden"),
-            OverQuota(Some(description)) => write!(fmt, "OverQuota: {}", description),
+            OverQuota(Some(description)) => write!(fmt, "OverQuota: {description}"),
             OverQuota(None) => write!(fmt, "OverQuota"),
-            TooLarge(Some(description)) => write!(fmt, "TooLarge: {}", description),
+            TooLarge(Some(description)) => write!(fmt, "TooLarge: {description}"),
             TooLarge(None) => write!(fmt, "TooLarge"),
-            RateLimit(Some(description)) => write!(fmt, "RateLimit: {}", description),
+            RateLimit(Some(description)) => write!(fmt, "RateLimit: {description}"),
             RateLimit(None) => write!(fmt, "RateLimit"),
-            NotFound(Some(description)) => write!(fmt, "NotFound: {}", description),
+            NotFound(Some(description)) => write!(fmt, "NotFound: {description}"),
             NotFound(None) => write!(fmt, "NotFound"),
-            InvalidPatch(Some(description)) => write!(fmt, "InvalidPatch: {}", description),
+            InvalidPatch(Some(description)) => write!(fmt, "InvalidPatch: {description}"),
             InvalidPatch(None) => write!(fmt, "InvalidPatch"),
-            WillDestroy(Some(description)) => write!(fmt, "WillDestroy: {}", description),
+            WillDestroy(Some(description)) => write!(fmt, "WillDestroy: {description}"),
             WillDestroy(None) => write!(fmt, "WillDestroy"),
             InvalidProperties {
                 description: Some(description),
@@ -922,11 +922,11 @@ impl std::fmt::Display for SetError {
                 description: None,
                 properties,
             } => write!(fmt, "InvalidProperties: {}", properties.join(",")),
-            Singleton(Some(description)) => write!(fmt, "Singleton: {}", description),
+            Singleton(Some(description)) => write!(fmt, "Singleton: {description}"),
             Singleton(None) => write!(fmt, "Singleton"),
-            RequestTooLarge(Some(description)) => write!(fmt, "RequestTooLarge: {}", description),
+            RequestTooLarge(Some(description)) => write!(fmt, "RequestTooLarge: {description}"),
             RequestTooLarge(None) => write!(fmt, "RequestTooLarge"),
-            StateMismatch(Some(description)) => write!(fmt, "StateMismatch: {}", description),
+            StateMismatch(Some(description)) => write!(fmt, "StateMismatch: {description}"),
             StateMismatch(None) => write!(fmt, "StateMismatch"),
         }
     }
@@ -968,7 +968,7 @@ impl<'de> ::serde::de::Deserialize<'de> for RequestUrlTemplate {
                 E: Error,
             {
                 let url = Url::parse(s).map_err(|err| {
-                    let err_s = format!("{}", err);
+                    let err_s = format!("{err}");
                     Error::invalid_value(Unexpected::Str(s), &err_s.as_str())
                 })?;
                 let text = s.to_string();

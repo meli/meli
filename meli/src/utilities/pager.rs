@@ -351,8 +351,7 @@ impl Pager {
                     context
                         .replies
                         .push_back(UIEvent::StatusEvent(StatusEvent::UpdateSubStatus(format!(
-                            "{}: {}",
-                            cmd, err
+                            "{cmd}: {err}"
                         ))));
                 }
             }
@@ -755,10 +754,7 @@ impl Component for Pager {
                     Ok(o) => o,
                     Err(e) => {
                         context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(format!(
-                                "Could not pipe to {}: {}",
-                                bin, e
-                            )),
+                            StatusEvent::DisplayMessage(format!("Could not pipe to {bin}: {e}")),
                         ));
                         return true;
                     }

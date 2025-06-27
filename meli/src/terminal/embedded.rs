@@ -84,8 +84,8 @@ pub fn create_pty(width: usize, height: usize, command: &str) -> Result<Arc<Mute
         .chain_err_kind(ErrorKind::ValueError)
         .chain_err_summary(|| {
             format!(
-                "Could not convert command `{}` into a C string; it should contain no NUL bytes.",
-                command
+                "Could not convert command `{command}` into a C string; it should contain no NUL \
+                 bytes."
             )
         })?;
 

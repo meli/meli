@@ -59,7 +59,7 @@ impl std::fmt::Debug for MailboxJobRequest {
         match self {
             Self::CreateMailbox { .. } => write!(f, "JobRequest::CreateMailbox"),
             Self::DeleteMailbox { mailbox_hash, .. } => {
-                write!(f, "JobRequest::DeleteMailbox({})", mailbox_hash)
+                write!(f, "JobRequest::DeleteMailbox({mailbox_hash})")
             }
             Self::RenameMailbox {
                 mailbox_hash,
@@ -83,7 +83,7 @@ impl std::fmt::Display for MailboxJobRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::Mailboxes { .. } => write!(f, "Get mailbox list"),
-            Self::CreateMailbox { path, .. } => write!(f, "Create mailbox {}", path),
+            Self::CreateMailbox { path, .. } => write!(f, "Create mailbox {path}"),
             Self::DeleteMailbox { .. } => write!(f, "Delete mailbox"),
             Self::RenameMailbox { new_path, .. } => write!(f, "Rename mailbox to {new_path}"),
             Self::SetMailboxPermissions { .. } => write!(f, "Set mailbox permissions"),
@@ -159,10 +159,10 @@ pub enum JobRequest {
 impl std::fmt::Debug for JobRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::Generic { name, .. } => write!(f, "JobRequest::Generic({})", name),
+            Self::Generic { name, .. } => write!(f, "JobRequest::Generic({name})"),
             Self::Mailbox(inner) => std::fmt::Debug::fmt(inner, f),
             Self::Fetch { mailbox_hash, .. } => {
-                write!(f, "JobRequest::Fetch({})", mailbox_hash)
+                write!(f, "JobRequest::Fetch({mailbox_hash})")
             }
             Self::IsOnline { .. } => write!(f, "JobRequest::IsOnline"),
             Self::Refresh { .. } => write!(f, "JobRequest::Refresh"),
@@ -191,7 +191,7 @@ impl std::fmt::Debug for JobRequest {
 impl std::fmt::Display for JobRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::Generic { name, .. } => write!(f, "{}", name),
+            Self::Generic { name, .. } => write!(f, "{name}"),
             Self::Mailbox(inner) => std::fmt::Display::fmt(inner, f),
             Self::Fetch { .. } => write!(f, "Mailbox fetch"),
             Self::IsOnline { .. } => write!(f, "Online status check"),

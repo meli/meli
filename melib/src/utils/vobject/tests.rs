@@ -377,9 +377,7 @@ fn test_ical_parse() {
     let cal = ICalendar::build(VCALENDAR_TEST_ENTRY);
     assert!(
         cal.is_ok(),
-        "Not okay: {:?}\n in '{}'",
-        cal,
-        VCALENDAR_TEST_ENTRY
+        "Not okay: {cal:?}\n in '{VCALENDAR_TEST_ENTRY}'"
     );
 }
 

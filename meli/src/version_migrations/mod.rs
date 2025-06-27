@@ -562,13 +562,13 @@ pub fn version_setup(
         }
         let mut perform_history: Vec<Box<dyn Migration + 'static>> = vec![];
         for (vers, migrs) in migrations {
-            writeln!(writer, "Updating to {}...", vers)?;
+            writeln!(writer, "Updating to {vers}...")?;
             writer.flush()?;
             'migrations: for m in migrs {
                 let ask = Ask::new(m.question());
                 if ask.run(writer, reader) {
                     if let Err(err) = m.perform(config, false, true) {
-                        writeln!(writer, "\nCould not perform migration: {}", err)?;
+                        writeln!(writer, "\nCould not perform migration: {err}")?;
                         writer.flush()?;
                         let ask = Ask::new("Continue?");
                         if ask.run(writer, reader) {
@@ -584,8 +584,7 @@ pub fn version_setup(
                                     if let Err(err) = m.revert(config, false, true) {
                                         writeln!(
                                             writer,
-                                            " [ERROR] could not revert migration: {}",
-                                            err
+                                            " [ERROR] could not revert migration: {err}"
                                         )?;
                                     } else {
                                         writeln!(writer, " [OK]")?;

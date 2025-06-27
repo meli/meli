@@ -117,8 +117,8 @@ impl NntpStream {
                     .await?;
                 if !res.starts_with("101 ") {
                     return Err(Error::new(format!(
-                        "Could not connect to {}: expected CAPABILITIES response but got: {}",
-                        &server_conf.server_hostname, res
+                        "Could not connect to {}: expected CAPABILITIES response but got: {res}",
+                        &server_conf.server_hostname
                     ))
                     .set_kind(ErrorKind::ProtocolError));
                 }
@@ -151,8 +151,8 @@ impl NntpStream {
                     .await?;
                 if !res.starts_with("382 ") {
                     return Err(Error::new(format!(
-                        "Could not connect to {}: could not begin TLS negotiation, got: {}",
-                        &server_conf.server_hostname, res
+                        "Could not connect to {}: could not begin TLS negotiation, got: {res}",
+                        &server_conf.server_hostname
                     )));
                 }
             }
@@ -190,7 +190,7 @@ impl NntpStream {
                     }
                 })
                 .await
-                .chain_err_summary(|| format!("Could not initiate TLS negotiation to {}.", path))?;
+                .chain_err_summary(|| format!("Could not initiate TLS negotiation to {path}."))?;
                 ret.stream = AsyncWrapper::new({
                     let conn = Connection::new_tls(conn);
                     #[cfg(feature = "nntp-trace")]
@@ -202,7 +202,7 @@ impl NntpStream {
                         conn
                     }
                 })
-                .chain_err_summary(|| format!("Could not initiate TLS negotiation to {}.", path))?;
+                .chain_err_summary(|| format!("Could not initiate TLS negotiation to {path}."))?;
             }
         }
         //ret.send_command(
@@ -218,7 +218,7 @@ impl NntpStream {
             .get_ref()
             .set_keepalive(Some(std::time::Duration::new(60 * 30, 0)))
         {
-            log::warn!("Could not set TCP keepalive in NNTP connection: {}", err);
+            log::warn!("Could not set TCP keepalive in NNTP connection: {err}");
         }
 
         ret.read_response(&mut res, false, &["200 ", "201 "])
@@ -229,8 +229,8 @@ impl NntpStream {
             .await?;
         if !res.starts_with("101 ") {
             return Err(Error::new(format!(
-                "Could not connect to {}: expected CAPABILITIES response but got:{}",
-                &server_conf.server_hostname, res
+                "Could not connect to {}: expected CAPABILITIES response but got: {res}",
+                &server_conf.server_hostname
             )));
         }
         let capabilities: HashSet<String> =
@@ -259,7 +259,7 @@ impl NntpStream {
                 .await?;
                 ret.read_response(&mut res, false, command_to_replycodes("AUTHINFO USER"))
                     .await
-                    .chain_err_summary(|| format!("Authentication state error: {}", res))
+                    .chain_err_summary(|| format!("Authentication state error: {res}"))
                     .chain_err_kind(ErrorKind::Authentication)?;
                 if res.starts_with("381 ") {
                     ret.send_command(
@@ -268,13 +268,13 @@ impl NntpStream {
                     .await?;
                     ret.read_response(&mut res, false, command_to_replycodes("AUTHINFO PASS"))
                         .await
-                        .chain_err_summary(|| format!("Authentication state error: {}", res))
+                        .chain_err_summary(|| format!("Authentication state error: {res}"))
                         .chain_err_kind(ErrorKind::Authentication)?;
                 }
             } else {
                 return Err(Error::new(format!(
-                    "Could not connect: no supported auth mechanisms in server capabilities: {:?}",
-                    capabilities
+                    "Could not connect: no supported auth mechanisms in server capabilities: \
+                     {capabilities:?}"
                 ))
                 .set_kind(ErrorKind::Authentication));
             }
@@ -286,8 +286,9 @@ impl NntpStream {
                 .await
                 .chain_err_summary(|| {
                     format!(
-                        "Could not use COMPRESS DEFLATE in account `{}`: server replied with `{}`",
-                        server_conf.server_hostname, res
+                        "Could not use COMPRESS DEFLATE in account `{}`: server replied with \
+                         `{res}`",
+                        server_conf.server_hostname
                     )
                 })?;
             let Self {
@@ -337,20 +338,20 @@ impl NntpStream {
                     ret.push_str(unsafe { std::str::from_utf8_unchecked(&buf[0..b]) });
                     if ret.len() > 4 {
                         if ret.starts_with("205 ") {
-                            return Err(Error::new(format!("Disconnected: {}", ret)));
+                            return Err(Error::new(format!("Disconnected: {ret}")));
                         } else if ret.starts_with("501 ") || ret.starts_with("500 ") {
-                            return Err(Error::new(format!("Syntax error: {}", ret)));
+                            return Err(Error::new(format!("Syntax error: {ret}")));
                         } else if ret.starts_with("403 ") {
-                            return Err(Error::new(format!("Internal error: {}", ret)));
+                            return Err(Error::new(format!("Internal error: {ret}")));
                         } else if ret.starts_with("502 ")
                             || ret.starts_with("480 ")
                             || ret.starts_with("483 ")
                             || ret.starts_with("401 ")
                         {
-                            return Err(Error::new(format!("Connection state error: {}", ret))
+                            return Err(Error::new(format!("Connection state error: {ret}"))
                                 .set_kind(ErrorKind::Authentication));
                         } else if !expected_reply_code.iter().any(|r| ret.starts_with(r)) {
-                            return Err(Error::new(format!("Unexpected reply code: {}", ret)));
+                            return Err(Error::new(format!("Unexpected reply code: {ret}")));
                         }
                     }
                     if let Some(mut pos) = ret[last_line_idx..].rfind("\r\n") {
@@ -385,7 +386,7 @@ impl NntpStream {
             .next()
             .map(str::parse)
             .and_then(std::result::Result::ok)
-            .ok_or_else(|| Error::new(format!("Internal error: {}", ret)))
+            .ok_or_else(|| Error::new(format!("Internal error: {ret}")))
     }
 
     pub async fn send_command(&mut self, command: &[u8]) -> Result<()> {
@@ -398,7 +399,7 @@ impl NntpStream {
         })
         .await
         {
-            log::debug!("stream send_command err {:?}", err);
+            log::debug!("stream send_command err {err:?}");
             Err(err)
         } else {
             Ok(())
@@ -431,7 +432,7 @@ impl NntpStream {
         })
         .await
         {
-            log::debug!("stream send_multiline_data_block err {:?}", err);
+            log::debug!("stream send_multiline_data_block err {err:?}");
             Err(err)
         } else {
             Ok(())
@@ -511,16 +512,15 @@ impl NntpConnection {
             log::error!(
                 "{}: Sending a command to the NNTP server that is over 511 bytes: this is invalid \
                  and should be fixed. Please report this as a bug to the melib bugtracker. The \
-                 command line is `{:?}\\r\\n`",
-                &self.uid_store.account_name,
-                command
+                 command line is `{command:?}\\r\\n`",
+                &self.uid_store.account_name
             );
         }
         if let Err(err) =
             try_await(async { self.stream.as_mut()?.send_command(command).await }).await
         {
             self.stream = Err(err.clone());
-            log::debug!("NNTP send command error {:?} {}", err.kind, err);
+            log::debug!("NNTP send command error {:?} {err}", err.kind);
             if err.kind.is_network() {
                 self.connect().await?;
             }
@@ -569,14 +569,14 @@ impl NntpConnection {
                 _ => {}
             }
         }
-        self.send_command(format!("GROUP {}", path).as_bytes())
+        self.send_command(format!("GROUP {path}").as_bytes())
             .await?;
         self.read_response(res, false, command_to_replycodes("GROUP"))
             .await
             .chain_err_summary(|| {
                 format!(
-                    "{} Could not select newsgroup {}: expected GROUP response but got: {}",
-                    &self.uid_store.account_name, path, res
+                    "{} Could not select newsgroup {path}: expected GROUP response but got: {res}",
+                    &self.uid_store.account_name
                 )
             })?;
         self.stream.as_mut()?.current_mailbox = MailboxSelection::Select(mailbox_hash);

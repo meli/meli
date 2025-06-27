@@ -400,7 +400,7 @@ impl std::fmt::Display for ErrorChainDisplay<'_> {
             }
             if let Some(ref inner) = cur.current.inner {
                 if cur.current.summary.is_empty() {
-                    write!(fmt, "{}", inner)?;
+                    write!(fmt, "{inner}")?;
                 } else {
                     write!(fmt, "{} ({})", inner, cur.current.summary)?;
                 };
@@ -408,7 +408,7 @@ impl std::fmt::Display for ErrorChainDisplay<'_> {
                 write!(fmt, "{}", cur.current.summary)?;
                 if let Some(details) = cur.current.details.as_ref() {
                     if !details.trim().is_empty() {
-                        write!(fmt, "\n{}", details)?;
+                        write!(fmt, "\n{details}")?;
                     }
                 }
                 if let Some(ref path) = cur.current.related_path {

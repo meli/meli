@@ -145,7 +145,7 @@ impl Drop for Account {
                 let f = match std::fs::File::create(data) {
                     Ok(f) => f,
                     Err(e) => {
-                        eprintln!("{}", e);
+                        eprintln!("{e}");
                         return;
                     }
                 };
@@ -156,7 +156,7 @@ impl Drop for Account {
                 f.set_permissions(permissions).unwrap();
                 let writer = std::io::BufWriter::new(f);
                 if let Err(err) = serde_json::to_writer(writer, &self.contacts) {
-                    eprintln!("{}", err);
+                    eprintln!("{err}");
                 };
             };
             /*
@@ -279,8 +279,8 @@ impl Account {
                 Err(err) => {
                     main_loop_handler.send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
                         StatusEvent::DisplayMessage(format!(
-                            "Error with setting up an sqlite3 search database for account `{}`: {}",
-                            name, err
+                            "Error with setting up an sqlite3 search database for account \
+                             `{name}`: {err}"
                         )),
                     )));
                     None
@@ -786,7 +786,7 @@ impl Account {
                 .spawn()?;
             self.main_loop_handler
                 .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
-                    StatusEvent::DisplayMessage(format!("Running command {}", refresh_command)),
+                    StatusEvent::DisplayMessage(format!("Running command {refresh_command}")),
                 )));
             self.main_loop_handler
                 .send(ThreadEvent::UIEvent(UIEvent::Fork(
@@ -1061,13 +1061,12 @@ impl Account {
                 } else {
                     let error_message = if let Some(exit_code) = output.code() {
                         format!(
-                            "Could not send e-mail using `{}`: Process exited with {}",
-                            command, exit_code
+                            "Could not send e-mail using `{command}`: Process exited with \
+                             {exit_code}"
                         )
                     } else {
                         format!(
-                            "Could not send e-mail using `{}`: Process was killed by signal",
-                            command
+                            "Could not send e-mail using `{command}`: Process was killed by signal"
                         )
                     };
                     log::error!("{}", error_message);
@@ -1155,14 +1154,13 @@ impl Account {
                         } else {
                             let error_message = if let Some(exit_code) = output.code() {
                                 format!(
-                                    "Could not send e-mail using `{}`: Process exited with {}",
-                                    command, exit_code
+                                    "Could not send e-mail using `{command}`: Process exited with \
+                                     {exit_code}"
                                 )
                             } else {
                                 format!(
-                                    "Could not send e-mail using `{}`: Process was killed by \
-                                     signal",
-                                    command
+                                    "Could not send e-mail using `{command}`: Process was killed \
+                                     by signal"
                                 )
                             };
                             log::error!("{}", error_message);

@@ -199,7 +199,7 @@ impl std::fmt::Display for LocateKey {
             is_set!(Self::KEYSERVER_URL, "keyserver-url");
             is_set!(Self::LOCAL, "local");
             accum.pop();
-            write!(fmt, "{}", accum)
+            write!(fmt, "{accum}")
         }
     }
 }
@@ -1337,7 +1337,7 @@ fn gpgme_error_try(lib: &libloading::Library, error_code: gpgme_error_t) -> Resu
         return Ok(());
     }
     Err(Error::from(gpgme_error_to_string(lib, error_code))
-        .set_summary(format!("libgpgme error {}", error_code)))
+        .set_summary(format!("libgpgme error {error_code}")))
 }
 
 #[derive(Debug)]

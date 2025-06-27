@@ -143,7 +143,7 @@ impl AccountStatus {
             total -= 1;
             let area = self.content.area().skip(1, line);
             self.content.grid_mut().write_string(
-                &format!("{} {}", req, job_id),
+                &format!("{req} {job_id}"),
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
@@ -160,9 +160,9 @@ impl AccountStatus {
                 &if a.active_jobs.is_empty() && total == 0 {
                     Cow::Borrowed("None.")
                 } else if total == a.active_jobs.len() {
-                    Cow::Owned(format!("{} tasks", total))
+                    Cow::Owned(format!("{total} tasks"))
                 } else {
-                    Cow::Owned(format!("and other {} tasks", total))
+                    Cow::Owned(format!("and other {total} tasks"))
                 },
                 self.theme_default.fg,
                 self.theme_default.bg,

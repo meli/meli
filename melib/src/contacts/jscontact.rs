@@ -154,8 +154,7 @@ pub mod json_types {
             let s = <&'de str>::deserialize(deserializer)?;
             if s != "1.0" {
                 return Err(serde::de::Error::custom(format!(
-                    r#"expected version value "1.0", found `{}`"#,
-                    s
+                    r#"expected version value "1.0", found `{s}`"#
                 )));
             }
             Ok(Self::_1_0)
@@ -192,8 +191,7 @@ pub mod json_types {
             let s = <&'de str>::deserialize(deserializer)?;
             let Ok((_, val)) = parse_timestamp_from_string(s, RFC3339_DATETIME_Z) else {
                 return Err(serde::de::Error::custom(format!(
-                    r#"expected UTCDateTime value, found `{}`"#,
-                    s
+                    r#"expected UTCDateTime value, found `{s}`"#
                 )));
             };
             Ok(Self(val))

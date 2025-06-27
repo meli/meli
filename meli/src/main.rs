@@ -37,7 +37,7 @@ fn main() {
     ::std::process::exit(match run_app(opt) {
         Ok(()) => 0,
         Err(err) => {
-            eprintln!("{}", err);
+            eprintln!("{err}");
             1
         }
     });

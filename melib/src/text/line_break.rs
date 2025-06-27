@@ -1150,7 +1150,7 @@ fn split(ret: &mut Vec<String>, mut line: &str, width: usize) {
             chop_index -= 1;
         }
         if chop_index == 0 {
-            ret.push(format!("⤷{}", line));
+            ret.push(format!("⤷{line}"));
             return;
         } else {
             ret.push(format!("⤷{}", &line[..chop_index]));
@@ -1634,7 +1634,7 @@ impl Iterator for LineBreakText {
                                 chop_index -= 1;
                             }
                             if chop_index == 0 {
-                                self.paragraph.push_back(format!("⤷{}", line));
+                                self.paragraph.push_back(format!("⤷{line}"));
                                 *cur_index += line.len();
                                 break;
                             } else {
@@ -1793,11 +1793,11 @@ I can't take more.'
 `You mean you can't take LESS,' said the Hatter: `it's very 
 easy to take MORE than nothing.'"#;
         for l in split_lines_reflow(text, Reflow::FormatFlowed, Some(30)) {
-            println!("{}", l);
+            println!("{l}");
         }
         println!();
         for l in split_lines_reflow(text, Reflow::No, Some(30)) {
-            println!("{}", l);
+            println!("{l}");
         }
         println!();
         let text = r#">>>Take some more tea.
@@ -1805,16 +1805,16 @@ easy to take MORE than nothing.'"#;
 >You mean you can't take LESS, it's very easy to take 
 >MORE than nothing."#;
         for l in split_lines_reflow(text, Reflow::FormatFlowed, Some(20)) {
-            println!("{}", l);
+            println!("{l}");
         }
         println!();
         for l in split_lines_reflow(text, Reflow::No, Some(20)) {
-            println!("{}", l);
+            println!("{l}");
         }
         println!();
         use crate::text::_ALICE_CHAPTER_1;
         for l in split_lines_reflow(_ALICE_CHAPTER_1, Reflow::FormatFlowed, Some(72)) {
-            println!("{}", l);
+            println!("{l}");
         }
     }
 }

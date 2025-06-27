@@ -356,8 +356,7 @@ fn test_maildir_mailbox_paths() {
         // Assert that backend has no mailboxes at all");
         assert!(
             ref_mailboxes.is_empty(),
-            "ref_mailboxes were not empty: {:?}",
-            ref_mailboxes
+            "ref_mailboxes were not empty: {ref_mailboxes:?}"
         );
         let (new_hash, ref_mailboxes) =
             smol::block_on(backend.create_mailbox("Archive".into()).unwrap()).unwrap();
@@ -394,8 +393,7 @@ fn test_maildir_mailbox_paths() {
         assert_eq!(
             ref_mailboxes.len(),
             2,
-            "mailboxes() return value content not what expected: {:?}",
-            ref_mailboxes
+            "mailboxes() return value content not what expected: {ref_mailboxes:?}"
         );
         // Assert that giving an absolute path returns an error
         assert_eq!(
@@ -464,8 +462,7 @@ fn test_maildir_mailbox_paths() {
         assert_eq!(
             ref_mailboxes.len(),
             1,
-            "ref_mailboxes is not just INBOX: {:?}",
-            ref_mailboxes
+            "ref_mailboxes is not just INBOX: {ref_mailboxes:?}"
         );
         // Assert that creating a mailbox without the root mailbox as a prefix does the
         // correct thing.
@@ -518,8 +515,7 @@ fn test_maildir_mailbox_paths() {
         assert_eq!(
             ref_mailboxes.len(),
             4,
-            "mailboxes() return value content not what expected: {:?}",
-            ref_mailboxes
+            "mailboxes() return value content not what expected: {ref_mailboxes:?}",
         );
         // Assert that giving an absolute path returns an error
         assert_eq!(

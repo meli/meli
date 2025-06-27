@@ -243,8 +243,7 @@ fn test_sqlite3_reindex() {
     assert_eq!(
         mailboxes.len(),
         1,
-        "Only one mailbox was expected but got: {:?}",
-        mailboxes
+        "Only one mailbox was expected but got: {mailboxes:?}"
     );
     let root_mailbox_hash: MailboxHash = *mailboxes.keys().next().unwrap();
     let mailbox = mailboxes.remove(&root_mailbox_hash).unwrap();
@@ -314,8 +313,7 @@ fn test_sqlite3_reindex() {
             }
             other => {
                 panic!(
-                    "Got unexpected BackendEvent from maildir backend: {:?}",
-                    other
+                    "Got unexpected BackendEvent from maildir backend: {other:?}"
                 );
             }
         }
@@ -375,8 +373,7 @@ fn test_sqlite3_reindex() {
         search_results.len(),
         collection.len(),
         "Expected search results to return all envelopes, but the results size do not match the \
-         envelopes we have in total. Search results were: {:?}",
-        search_results
+         envelopes we have in total. Search results were: {search_results:?}"
     );
     assert_eq!(
         search_results
@@ -409,8 +406,7 @@ fn test_sqlite3_reindex() {
     assert_eq!(
         search_results.len(),
         2,
-        "Expected search results to return 2 envelopes but the results were: {:?}",
-        search_results
+        "Expected search results to return 2 envelopes but the results were: {search_results:?}"
     );
     assert_eq!(
         search_results

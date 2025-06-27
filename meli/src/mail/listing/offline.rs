@@ -209,7 +209,7 @@ impl Component for OfflineListing {
             jobs.sort_by_key(|(j, _)| *j);
             for (i, (job_id, j)) in jobs.into_iter().enumerate() {
                 grid.write_string(
-                    &format!("{}: {:?}", job_id, j),
+                    &format!("{job_id}: {j:?}"),
                     text_unfocused.fg,
                     text_unfocused.bg,
                     text_unfocused.attrs,

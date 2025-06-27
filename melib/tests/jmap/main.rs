@@ -212,34 +212,33 @@ pub mod server {
                     "copy" => MethodCallType::Copy,
                     "query" => MethodCallType::Query,
                     "queryChanges" => MethodCallType::QueryChanges,
-                    other => panic!("Unexpected method call type: {}", other),
+                    other => panic!("Unexpected method call type: {other}"),
                 };
                 (name, r#type)
             }
 
-            eprintln!("Received API call request {:?}", request);
+            eprintln!("Received API call request {request:?}");
             for [r#type, body, id] in request.method_calls {
                 let r#type: String = serde_json::value::from_value(r#type).unwrap();
                 let id: String = serde_json::value::from_value(id).unwrap();
                 let (object_type_name, method_type) = parse_type(&r#type);
                 eprintln!(
-                    "Processing method call {}: object_type_name = {:?}, method_type ={:?}, id = \
-                     {:?}",
-                    r#type, object_type_name, method_type, id
+                    "Processing method call {type}: object_type_name = {object_type_name:?}, \
+                     method_type ={method_type:?}, id = {id:?}"
                 );
                 match method_type {
                     MethodCallType::Get => match object_type_name.as_str() {
                         "Identity" => {
                             let get: Get<identity::Identity> =
                                 serde_json::value::from_value(body).unwrap();
-                            eprintln!("Parsed Identity/get object {:?}", get);
+                            eprintln!("Parsed Identity/get object {get:?}");
                             let response: GetResponse<identity::Identity> = GetResponse {
                                 account_id: get.account_id,
                                 state: self.identity_state.clone(),
                                 list: self.identities.values().cloned().collect(),
                                 not_found: vec![],
                             };
-                            eprintln!("Sending {id} {} response: {:?}", r#type, response);
+                            eprintln!("Sending {id} {type} response: {response:?}");
                             responses
                                 .method_responses
                                 .insert(id.clone(), serde_json::json! {[r#type, response, id]});
@@ -247,14 +246,14 @@ pub mod server {
                         "Mailbox" => {
                             let get: Get<mailbox::MailboxObject> =
                                 serde_json::value::from_value(body).unwrap();
-                            eprintln!("Parsed Mailbox/get object {:?}", get);
+                            eprintln!("Parsed Mailbox/get object {get:?}");
                             let response: GetResponse<mailbox::MailboxObject> = GetResponse {
                                 account_id: get.account_id,
                                 state: self.mailbox_state.clone(),
                                 list: self.mailboxes.values().cloned().collect(),
                                 not_found: vec![],
                             };
-                            eprintln!("Sending {id} {} response: {:?}", r#type, response);
+                            eprintln!("Sending {id} {type} response: {response:?}");
                             responses
                                 .method_responses
                                 .insert(id.clone(), serde_json::json! {[r#type, response, id]});
@@ -262,7 +261,7 @@ pub mod server {
                         "Email" => {
                             let get: Get<email::EmailObject> =
                                 serde_json::value::from_value(body).unwrap();
-                            eprintln!("Parsed Email/get object {:?}", get);
+                            eprintln!("Parsed Email/get object {get:?}");
                             let mut not_found = vec![];
                             eprintln!("get.ids = {:?}", &get.ids);
                             let list = match get.ids {
@@ -351,18 +350,18 @@ pub mod server {
                                 list,
                                 not_found,
                             };
-                            eprintln!("Sending {id} {} response: {:?}", r#type, response);
+                            eprintln!("Sending {id} {type} response: {response:?}");
                             responses
                                 .method_responses
                                 .insert(id.clone(), serde_json::json! {[r#type, response, id]});
                         }
-                        other => panic!("other type name {}", other),
+                        other => panic!("other type name {other}"),
                     },
                     MethodCallType::Changes => match object_type_name.as_str() {
                         "Email" => {
                             let changes: Changes<email::EmailObject> =
                                 serde_json::value::from_value(body).unwrap();
-                            eprintln!("Parsed Email/changes object {:?}", changes);
+                            eprintln!("Parsed Email/changes object {changes:?}");
                             let Some(pos) = self
                                 .email_state_changes
                                 .keys()
@@ -404,17 +403,17 @@ pub mod server {
                                 destroyed: destroyed.into_iter().collect(),
                                 _ph: std::marker::PhantomData,
                             };
-                            eprintln!("Sending {id} {} response: {:?}", r#type, response);
+                            eprintln!("Sending {id} {type} response: {response:?}");
                             responses
                                 .method_responses
                                 .insert(id.clone(), serde_json::json! {[r#type, response, id]});
                         }
-                        other => panic!("other type name {}", other),
+                        other => panic!("other type name {other}"),
                     },
                     MethodCallType::Set => match object_type_name.as_str() {
                         "Identity" => {
                             let set = serde_json::value::from_value(body).unwrap();
-                            eprintln!("Parsed Identity/set object {:?}", set);
+                            eprintln!("Parsed Identity/set object {set:?}");
                             let Set {
                                 account_id,
                                 if_in_state,
@@ -480,14 +479,14 @@ pub mod server {
                                 not_updated: None,
                                 not_destroyed: None,
                             };
-                            eprintln!("Sending {id} {} response: {:?}", r#type, response);
+                            eprintln!("Sending {id} {type} response: {response:?}");
                             responses
                                 .method_responses
                                 .insert(id.clone(), serde_json::json! {[r#type, response, id]});
                         }
                         "Mailbox" => {
                             let set = serde_json::value::from_value(body).unwrap();
-                            eprintln!("Parsed Mailbox/set object {:?}", set);
+                            eprintln!("Parsed Mailbox/set object {set:?}");
                             let Set {
                                 account_id,
                                 if_in_state,
@@ -553,19 +552,19 @@ pub mod server {
                                 not_updated: None,
                                 not_destroyed: None,
                             };
-                            eprintln!("Sending {id} {} response: {:?}", r#type, response);
+                            eprintln!("Sending {id} {type} response: {response:?}");
                             responses
                                 .method_responses
                                 .insert(id.clone(), serde_json::json! {[r#type, response, id]});
                         }
-                        other => panic!("other type name {}", other),
+                        other => panic!("other type name {other}"),
                     },
                     MethodCallType::Copy => unimplemented!(),
                     MethodCallType::Query => match object_type_name.as_str() {
                         "Email" => {
                             let query: email::EmailQuery =
                                 serde_json::value::from_value(body).unwrap();
-                            eprintln!("Parsed Email/query object {:?}", query);
+                            eprintln!("Parsed Email/query object {query:?}");
                             let response: QueryResponse<email::EmailObject> = QueryResponse {
                                 account_id: query.query_call.account_id,
                                 query_state: String::new(),
@@ -580,17 +579,17 @@ pub mod server {
                                 limit: None,
                                 _ph: std::marker::PhantomData,
                             };
-                            eprintln!("Sending {id} {} response: {:?}", r#type, response);
+                            eprintln!("Sending {id} {type} response: {response:?}");
                             responses
                                 .method_responses
                                 .insert(id.clone(), serde_json::json! {[r#type, response, id]});
                         }
-                        other => panic!("other type name {}", other),
+                        other => panic!("other type name {other}"),
                     },
                     MethodCallType::QueryChanges => unimplemented!(),
                 }
             }
-            eprintln!("Sending API call responses: {:?}", responses);
+            eprintln!("Sending API call responses: {responses:?}");
             responses
         }
 
@@ -657,7 +656,7 @@ pub mod server {
                         let (mut tcp_stream, _socket_addr) = request?;
                         let bytes = tcp_stream.read(&mut buf).await?;
                         let lossy = String::from_utf8_lossy(&buf[..bytes]);
-                        eprintln!("loop_handler read:\n{}", lossy);
+                        eprintln!("loop_handler read:\n{lossy}");
                         tcp_stream.write_all(b"HTTP/1.1 200 OK\r\n").await?;
                         let response = if lossy.starts_with("GET /.well-known/jmap") {
                             // Respond with Session resource.
@@ -739,7 +738,7 @@ mod tests {
             let backend_event_queue = Arc::clone(&backend_event_queue);
 
             BackendEventConsumer::new(Arc::new(move |ah, be| {
-                eprintln!("BackendEventConsumer: ah {:?} be {:?}", ah, be);
+                eprintln!("BackendEventConsumer: ah {ah:?} be {be:?}");
                 backend_event_queue.lock().unwrap().push_back((ah, be));
             }))
         };
@@ -813,11 +812,10 @@ mod tests {
         assert_eq!(
             mailboxes.len(),
             1,
-            "Expected one mailbox, Inbox. Got: {:?}",
-            mailboxes
+            "Expected one mailbox, Inbox. Got: {mailboxes:?}"
         );
         let inbox_hash = *mailboxes.keys().next().unwrap();
-        eprintln!("Inbox hash: {:?}", inbox_hash);
+        eprintln!("Inbox hash: {inbox_hash:?}");
         {
             let events = backend_event_queue
                 .lock()
@@ -827,8 +825,7 @@ mod tests {
             assert_eq!(
                 events.len(),
                 0,
-                "Unexpected events without having performed any changes: {:?}",
-                events
+                "Unexpected events without having performed any changes: {events:?}"
             );
         }
         eprintln!("Refresh account and assert that no events arrive.");
@@ -842,8 +839,8 @@ mod tests {
             assert_eq!(
                 events.len(),
                 0,
-                "Unexpected events after refreshing without having performed any changes: {:?}",
-                events
+                "Unexpected events after refreshing without having performed any changes: \
+                 {events:?}"
             );
         }
 
@@ -885,15 +882,14 @@ hello world.
             assert_eq!(
                 events.len(),
                 1,
-                "Expected one Refresh Create event: {:?}",
-                events
+                "Expected one Refresh Create event: {events:?}"
             );
             let backend_event = events.into_iter().next().unwrap().1;
             let BackendEvent::Refresh(refresh_event) = backend_event else {
-                panic!("Expected Refresh event, got: {:?}", backend_event);
+                panic!("Expected Refresh event, got: {backend_event:?}");
             };
             let RefreshEventKind::Create(env) = refresh_event.kind else {
-                panic!("Expected Create event, got: {:?}", refresh_event);
+                panic!("Expected Create event, got: {refresh_event:?}");
             };
             env
         };
@@ -928,15 +924,14 @@ hello world.
             assert_eq!(
                 events.len(),
                 1,
-                "Expected one Refresh Remove event: {:?}",
-                events
+                "Expected one Refresh Remove event: {events:?}"
             );
             let backend_event = events.into_iter().next().unwrap().1;
             let BackendEvent::Refresh(refresh_event) = backend_event else {
-                panic!("Expected Refresh event, got: {:?}", backend_event);
+                panic!("Expected Refresh event, got: {backend_event:?}");
             };
             let RefreshEventKind::Remove(env_hash) = refresh_event.kind else {
-                panic!("Expected Remove event, got: {:?}", refresh_event);
+                panic!("Expected Remove event, got: {refresh_event:?}");
             };
             assert_eq!(env_hash, env_1.hash());
         }

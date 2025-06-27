@@ -586,8 +586,7 @@ impl MailBackend for JmapType {
                     mailbox.id.clone()
                 } else {
                     return Err(Error::new(format!(
-                        "Mailbox with hash {} not found",
-                        mailbox_hash
+                        "Mailbox with hash {mailbox_hash} not found"
                     )));
                 }
             };
@@ -631,7 +630,7 @@ impl MailBackend for JmapType {
                 |err| {
                     let ierr: Result<email::EmailImportError> = deserialize_from_str(&res_text);
                     if let Ok(err) = ierr {
-                        Error::new(format!("Could not save message: {:?}", err))
+                        Error::new(format!("Could not save message: {err:?}"))
                     } else {
                         err
                     }
@@ -639,7 +638,7 @@ impl MailBackend for JmapType {
             )?;
 
             if let Some(err) = m.not_created.and_then(|m| m.get(&creation_id).cloned()) {
-                return Err(Error::new(format!("Could not save message: {:?}", err)));
+                return Err(Error::new(format!("Could not save message: {err:?}")));
             }
             Ok(())
         }))
@@ -723,7 +722,7 @@ impl MailBackend for JmapType {
             let mailboxes_lck = store.mailboxes.read().unwrap();
             let Some(id) = mailboxes_lck.get(&mailbox_hash).map(|m| m.id.clone()) else {
                 return Err(
-                    Error::new(format!("Mailbox with hash {} not found", mailbox_hash))
+                    Error::new(format!("Mailbox with hash {mailbox_hash} not found"))
                         .set_kind(ErrorKind::NotFound),
                 );
             };
@@ -822,7 +821,7 @@ impl MailBackend for JmapType {
             let mailboxes_lck = self.store.mailboxes.read().unwrap();
             let Some(id) = mailboxes_lck.get(&mailbox_hash).map(|m| m.id.clone()) else {
                 return Err(
-                    Error::new(format!("Mailbox with hash {} not found", mailbox_hash))
+                    Error::new(format!("Mailbox with hash {mailbox_hash} not found"))
                         .set_kind(ErrorKind::NotFound),
                 );
             };
@@ -907,7 +906,7 @@ impl MailBackend for JmapType {
             let mailboxes_lck = store.mailboxes.read().unwrap();
             let Some(id) = mailboxes_lck.get(&mailbox_hash).map(|m| m.id.clone()) else {
                 return Err(
-                    Error::new(format!("Mailbox with hash {} not found", mailbox_hash))
+                    Error::new(format!("Mailbox with hash {mailbox_hash} not found"))
                         .set_kind(ErrorKind::NotFound),
                 );
             };
@@ -985,14 +984,12 @@ impl MailBackend for JmapType {
                 let mailboxes_lck = store.mailboxes.read().unwrap();
                 if !mailboxes_lck.contains_key(&source_mailbox_hash) {
                     return Err(Error::new(format!(
-                        "Could not find source mailbox with hash {}",
-                        source_mailbox_hash
+                        "Could not find source mailbox with hash {source_mailbox_hash}"
                     )));
                 }
                 if !mailboxes_lck.contains_key(&destination_mailbox_hash) {
                     return Err(Error::new(format!(
-                        "Could not find destination mailbox with hash {}",
-                        destination_mailbox_hash
+                        "Could not find destination mailbox with hash {destination_mailbox_hash}"
                     )));
                 }
 
@@ -1128,10 +1125,10 @@ impl MailBackend for JmapType {
                         );
                     }
                     FlagOp::SetTag(t) => {
-                        update_keywords.insert(format!("keywords/{}", t), serde_json::json!(true));
+                        update_keywords.insert(format!("keywords/{t}"), serde_json::json!(true));
                     }
                     FlagOp::UnSetTag(t) => {
-                        update_keywords.insert(format!("keywords/{}", t), serde_json::json!(null));
+                        update_keywords.insert(format!("keywords/{t}"), serde_json::json!(null));
                     }
                 }
             }
@@ -1255,8 +1252,7 @@ impl MailBackend for JmapType {
             let mailboxes_lck = self.store.mailboxes.read().unwrap();
             if !mailboxes_lck.contains_key(&mailbox_hash) {
                 return Err(Error::new(format!(
-                    "Could not find source mailbox with hash {}",
-                    mailbox_hash
+                    "Could not find source mailbox with hash {mailbox_hash}"
                 )));
             };
         }

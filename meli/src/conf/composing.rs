@@ -213,8 +213,7 @@ impl DotAddressable for ComposingSettings {
                     "signature_delimiter" => self.signature_delimiter.lookup(field, tail),
                     "allow_reply_to_self" => self.allow_reply_to_self.lookup(field, tail),
                     other => Err(Error::new(format!(
-                        "{} has no field named {}",
-                        parent_field, other
+                        "{parent_field} has no field named {other}"
                     ))),
                 }
             }

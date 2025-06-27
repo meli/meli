@@ -1249,11 +1249,11 @@ pub struct Listing {
 impl std::fmt::Display for Listing {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self.component {
-            Compact(ref l) => write!(f, "{}", l),
-            Conversations(ref l) => write!(f, "{}", l),
-            Offline(ref l) => write!(f, "{}", l),
-            Plain(ref l) => write!(f, "{}", l),
-            Threaded(ref l) => write!(f, "{}", l),
+            Compact(ref l) => write!(f, "{l}"),
+            Conversations(ref l) => write!(f, "{l}"),
+            Offline(ref l) => write!(f, "{l}"),
+            Plain(ref l) => write!(f, "{l}"),
+            Threaded(ref l) => write!(f, "{l}"),
         }
     }
 }
@@ -2078,7 +2078,7 @@ impl Component for Listing {
                                 .replies
                                 .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
                                     if let Some(modf) = self.component.modifier_command() {
-                                        format!("{} {}", modf, cmd_buf)
+                                        format!("{modf} {cmd_buf}")
                                     } else {
                                         cmd_buf.to_string()
                                     },
@@ -2098,7 +2098,7 @@ impl Component for Listing {
                                 .replies
                                 .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
                                     if let Some(modf) = self.component.modifier_command() {
-                                        format!("{} {}", modf, cmd_buf)
+                                        format!("{modf} {cmd_buf}")
                                     } else {
                                         cmd_buf.to_string()
                                     },
@@ -2120,7 +2120,7 @@ impl Component for Listing {
                                 .replies
                                 .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
                                     if let Some(modf) = self.component.modifier_command() {
-                                        format!("{} {}", modf, cmd_buf)
+                                        format!("{modf} {cmd_buf}")
                                     } else {
                                         cmd_buf.to_string()
                                     },
@@ -3317,11 +3317,11 @@ impl Listing {
                 (None, None) => "…".into(),
                 (Some(0), None) => "".into(),
                 (Some(0), Some(0)) | (None, Some(0)) => "v".into(),
-                (Some(0), Some(coll)) => format!("({}) v", coll).into(),
-                (Some(c), Some(0)) => format!("{} v", c).into(),
-                (Some(c), Some(coll)) => format!("{} ({}) v", c, coll).into(),
-                (Some(c), None) => format!("{}", c).into(),
-                (None, Some(coll)) => format!("({}) v", coll).into(),
+                (Some(0), Some(coll)) => format!("({coll}) v").into(),
+                (Some(c), Some(0)) => format!("{c} v").into(),
+                (Some(c), Some(coll)) => format!("{c} ({coll}) v").into(),
+                (Some(c), None) => format!("{c}").into(),
+                (None, Some(coll)) => format!("({coll}) v").into(),
             };
 
             let skip_cols = {

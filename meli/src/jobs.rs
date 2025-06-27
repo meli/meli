@@ -276,7 +276,7 @@ impl JobExecutor {
             let global = ret.global_queue.clone();
             let stealers = ret.workers.clone();
             thread::Builder::new()
-                .name(format!("meli-executor-{}", i))
+                .name(format!("meli-executor-{i}"))
                 .spawn(move || loop {
                     parker.park_timeout(Duration::from_millis(100));
                     let task = find_task(&local, &global, stealers.as_slice());

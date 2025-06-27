@@ -112,7 +112,7 @@ impl Address {
     pub fn new(display_name: Option<String>, address: String) -> Self {
         Self::Mailbox(if let Some(d) = display_name {
             MailboxAddress {
-                raw: format!("{} <{}>", d, address).into_bytes(),
+                raw: format!("{d} <{address}>").into_bytes(),
                 display_name: StrBuilder {
                     offset: 0,
                     length: d.len(),
@@ -430,7 +430,7 @@ impl std::fmt::Display for Address {
             Self::Mailbox(m) => write!(f, "{}", m.address_spec.display(&m.raw)),
             Self::Group(g) => {
                 let attachment_strings: Vec<String> =
-                    g.mailbox_list.iter().map(|a| format!("{}", a)).collect();
+                    g.mailbox_list.iter().map(|a| format!("{a}")).collect();
                 write!(
                     f,
                     "{}: {}",
@@ -452,7 +452,7 @@ impl std::fmt::Debug for Address {
                 .finish(),
             Self::Group(g) => {
                 let attachment_strings: Vec<String> =
-                    g.mailbox_list.iter().map(|a| format!("{}", a)).collect();
+                    g.mailbox_list.iter().map(|a| format!("{a}")).collect();
 
                 f.debug_struct(stringify!(Address::Group))
                     .field("display_name", &g.display_name.display(&g.raw))

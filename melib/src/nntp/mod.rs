@@ -80,7 +80,7 @@ macro_rules! get_conf_val {
                     ))
                     .set_kind(ErrorKind::Configuration)
                     .set_source(Some(Arc::new(
-                        Error::new(format!("Invalid value for field `{}`: {}\n{}", $var, v, e))
+                        Error::new(format!("Invalid value for field `{v}`: {e}\n{}", $var))
                             .set_kind(ErrorKind::ValueError),
                     )))
                 })
@@ -275,9 +275,8 @@ impl MailBackend for NntpType {
                 .cloned()
                 .ok_or_else(|| {
                     Error::new(format!(
-                        "Mailbox with hash {} not found in NNTP connection, this could possibly \
-                         be a bug or it was deleted.",
-                        mailbox_hash
+                        "Mailbox with hash {mailbox_hash} not found in NNTP connection, this \
+                         could possibly be a bug or it was deleted."
                     ))
                 })?;
             let latest_article: Option<crate::UnixTimestamp> = *mbox.latest_article.lock().unwrap();
@@ -302,7 +301,7 @@ impl MailBackend for NntpType {
 
                 if newnews_support {
                     conn.send_command(
-                        format!("NEWNEWS {} {}", &mbox.nntp_path, datetime_str).as_bytes(),
+                        format!("NEWNEWS {} {datetime_str}", &mbox.nntp_path).as_bytes(),
                     )
                     .await?;
                     conn.read_response(&mut res, true, &["230 "]).await?;
@@ -325,7 +324,7 @@ impl MailBackend for NntpType {
                     }
                     let mut env_hash_set: BTreeSet<EnvelopeHash> = Default::default();
                     for msg_id in message_ids {
-                        conn.send_command(format!("OVER {}", msg_id).as_bytes())
+                        conn.send_command(format!("OVER {msg_id}").as_bytes())
                             .await?;
                         conn.read_response(&mut res, true, &["224 "]).await?;
                         let mut message_id_lck = uid_store.message_id_index.lock().await;
@@ -652,7 +651,7 @@ impl MailBackend for NntpType {
                     })
                     .is_some()
                 {
-                    let newsgroups_hdr = format!("Newsgroups: {}\r\n", path);
+                    let newsgroups_hdr = format!("Newsgroups: {path}\r\n");
                     let len = newsgroups_hdr.len();
                     bytes.extend(newsgroups_hdr.into_bytes());
                     bytes.rotate_right(len);
@@ -744,7 +743,7 @@ impl NntpType {
         }
         if mailboxes.is_empty() {
             return Err(
-                Error::new(format!("{} has no newsgroups configured.", account_name))
+                Error::new(format!("{account_name} has no newsgroups configured."))
                     .set_kind(ErrorKind::Configuration),
             );
         }
@@ -787,10 +786,9 @@ impl NntpType {
                 // first check if the group name itself is too big for `LIST ACTIVE`.
                 if "LIST ACTIVE ".len() + m.len() + "\r\n".len() >= 512 {
                     log::warn!(
-                        "{}: Newsgroup named {} has a name that exceeds RFC 3977 limits of \
+                        "{}: Newsgroup named {m} has a name that exceeds RFC 3977 limits of \
                          maximum command lines (512 octets) with LIST ACTIVE. Skipping it.",
-                        &conn.uid_store.account_name,
-                        m
+                        &conn.uid_store.account_name
                     );
                     continue 'batch;
                 }
@@ -816,8 +814,8 @@ impl NntpType {
                 .await
                 .chain_err_summary(|| {
                     format!(
-                        "Could not get newsgroups {}: expected LIST ACTIVE response but got: {}",
-                        &conn.uid_store.account_name, res
+                        "Could not get newsgroups {}: expected LIST ACTIVE response but got: {res}",
+                        &conn.uid_store.account_name
                     )
                 })
                 .chain_err_kind(ErrorKind::ProtocolError)?;
@@ -841,8 +839,8 @@ impl NntpType {
             .await
             .chain_err_summary(|| {
                 format!(
-                    "Could not get newsgroups {}: expected LIST ACTIVE response but got: {}",
-                    &conn.uid_store.account_name, res
+                    "Could not get newsgroups {}: expected LIST ACTIVE response but got: {res}",
+                    &conn.uid_store.account_name
                 )
             })
             .chain_err_kind(ErrorKind::ProtocolError)?;
@@ -894,11 +892,8 @@ impl NntpType {
                             ))
                             .set_kind(ErrorKind::Configuration)
                             .set_source(Some(Arc::new(
-                                Error::new(format!(
-                                    "Invalid value for field `{}`: {}\n{}",
-                                    $var, v, e
-                                ))
-                                .set_kind(ErrorKind::ValueError),
+                                Error::new(format!("Invalid value for field `{}`: {v}\n{e}", $var))
+                                    .set_kind(ErrorKind::ValueError),
                             )))
                         })
                     })
@@ -951,9 +946,8 @@ impl NntpType {
         let diff = extra_keys.difference(&keys).collect::<Vec<&&str>>();
         if !diff.is_empty() {
             return Err(Error::new(format!(
-                "{} the following flags are set but are not recognized: {:?}.",
-                s.name.as_str(),
-                diff
+                "{} the following flags are set but are not recognized: {diff:?}.",
+                s.name.as_str()
             ))
             .set_kind(ErrorKind::Configuration));
         }
@@ -989,8 +983,8 @@ impl NntpType {
                 .await
                 .chain_err_summary(|| {
                     format!(
-                        "{} Could not select newsgroup: expected ARTICLE response but got: {}",
-                        &conn.uid_store.account_name, res
+                        "{} Could not select newsgroup: expected ARTICLE response but got: {res}",
+                        &conn.uid_store.account_name
                     )
                 })
                 .chain_err_kind(ErrorKind::ProtocolError)?;
@@ -1039,8 +1033,8 @@ impl FetchState {
                 .to_string();
             if s.len() != 5 {
                 let err = Error::new(format!(
-                    "{} Could not select newsgroup {}: expected GROUP response but got: {}",
-                    &uid_store.account_name, path, res
+                    "{} Could not select newsgroup {path}: expected GROUP response but got: {res}",
+                    &uid_store.account_name
                 ))
                 .set_kind(ErrorKind::ProtocolError);
                 conn.stream = Err(err.clone());
@@ -1069,15 +1063,15 @@ impl FetchState {
             total_low_high.as_mut().unwrap().1 = new_low;
 
             // [ref:FIXME]: server might not implement OVER capability
-            conn.send_command(format!("OVER {}-{}", low, new_low).as_bytes())
+            conn.send_command(format!("OVER {low}-{new_low}").as_bytes())
                 .await?;
             let reply_code = conn
                 .read_response(&mut res, true, command_to_replycodes("OVER"))
                 .await
                 .chain_err_summary(|| {
                     format!(
-                        "{} Could not select newsgroup: expected OVER response but got: {}",
-                        &uid_store.account_name, res
+                        "{} Could not select newsgroup: expected OVER response but got: {res}",
+                        &uid_store.account_name
                     )
                 })
                 .chain_err_kind(ErrorKind::ProtocolError)?;

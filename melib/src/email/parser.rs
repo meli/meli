@@ -1082,7 +1082,7 @@ pub mod generic {
         if !address.is_empty() {
             let mut full_address = String::new();
             for address in &address {
-                write!(&mut full_address, "{}, ", address)
+                write!(&mut full_address, "{address}, ")
                     .expect("Could not write into a String, are you out of memory?");
             }
             if full_address.ends_with(", ") {
@@ -2136,7 +2136,7 @@ pub mod encodings {
                     Err(nom::Err::Error(
                         (
                             input,
-                            format!("encoded_word(): unknown charset {:?}", charset),
+                            format!("encoded_word(): unknown charset {charset:?}"),
                         )
                             .into(),
                     ))

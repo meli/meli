@@ -94,8 +94,7 @@ impl DotAddressable for NotificationsSettings {
                         self.ui_notifications.lookup(field, tail)
                     }
                     other => Err(Error::new(format!(
-                        "{} has no field named {}",
-                        parent_field, other
+                        "{parent_field} has no field named {other}"
                     ))),
                 }
             }

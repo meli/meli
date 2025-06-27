@@ -263,8 +263,7 @@ impl ViewFilter {
             match run(cmd, &borrowed_args, &bytes) {
                 Err(err) => Err((
                     Error::new(format!(
-                        "Failed to start html filter process `{}`",
-                        filter_invocation,
+                        "Failed to start html filter process `{filter_invocation}`",
                     ))
                     .set_source(Some(Arc::new(err)))
                     .set_kind(ErrorKind::External),
@@ -281,8 +280,8 @@ impl ViewFilter {
         let open_html_shortcut = settings.shortcuts.envelope_view.open_html.clone();
         let on_success_notice_cb = Arc::new(move || {
             format!(
-                "Text piped through `{}` Press `{}` to open in web browser.",
-                filter_invocation2, open_html_shortcut
+                "Text piped through `{filter_invocation2}` Press `{open_html_shortcut}` to open \
+                 in web browser."
             )
             .into()
         });

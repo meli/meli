@@ -108,8 +108,7 @@ impl DotAddressable for TerminalSettings {
                         self.progress_spinner_sequence.lookup(field, tail)
                     }
                     other => Err(Error::new(format!(
-                        "{} has no field named {}",
-                        parent_field, other
+                        "{parent_field} has no field named {other}"
                     ))),
                 }
             }

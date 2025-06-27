@@ -96,7 +96,7 @@ impl MailboxEntry {
             MailboxStatus::Failed(ref e) => e.to_string(),
             MailboxStatus::None => "Retrieving mailbox.".to_string(),
             MailboxStatus::Parsing(done, total) => {
-                format!("Parsing messages. [{}/{}]", done, total)
+                format!("Parsing messages. [{done}/{total}]")
             }
         }
     }

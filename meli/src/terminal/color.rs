@@ -750,9 +750,7 @@ impl Serialize for Color {
             Self::Byte(253) => serializer.serialize_str("Grey85"),
             Self::Byte(254) => serializer.serialize_str("Grey89"),
             Self::Byte(255) => serializer.serialize_str("Grey93"),
-            Self::Rgb(r, g, b) => {
-                serializer.serialize_str(&format!("#{:02x}{:02x}{:02x}", r, g, b))
-            }
+            Self::Rgb(r, g, b) => serializer.serialize_str(&format!("#{r:02x}{g:02x}{b:02x}")),
             Self::Default => serializer.serialize_str("Default"),
         }
     }

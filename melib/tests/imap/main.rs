@@ -296,7 +296,7 @@ pub mod server {
                         }
                         command_sender.unbounded_send(command).unwrap();
                     }
-                    eprintln!("{name} loop_handler 'main received: {:?}", input);
+                    eprintln!("{name} loop_handler 'main received: {input:?}");
                     if !input.ends_with("\r\n") {
                         buf_cursor += read_bytes;
                         continue 'main;
@@ -541,7 +541,7 @@ pub mod server {
                                 .unwrap()
                                 .parse::<usize>()
                                 .unwrap();
-                            eprintln!("{name} loop_handler got FETCH for msn {}", msn_to_fetch);
+                            eprintln!("{name} loop_handler got FETCH for msn {msn_to_fetch}");
                             let (uid, mail) = state
                                 .lock()
                                 .unwrap()
@@ -594,7 +594,7 @@ pub mod server {
                                 .unwrap();
                             tcp_stream.flush().await.unwrap();
                         }
-                        other => panic!("Unexpected cmd: {} {:?}", id, other),
+                        other => panic!("Unexpected cmd: {id} {other:?}"),
                     }
                 };
                 eprintln!("{name} loop_handler is now idling");
@@ -612,7 +612,7 @@ pub mod server {
                                         let mut state_lck = state.lock().unwrap();
                                         let new_uid = state_lck.insert(new_mail);
                                         let msn = state_lck.envelopes.len();
-                                        eprintln!("{name} EXISTS uid = {} msn = {}", new_uid, msn);
+                                        eprintln!("{name} EXISTS uid = {new_uid} msn = {msn}");
                                         msn
                                     };
                                     tcp_stream
@@ -655,7 +655,7 @@ pub mod server {
                         }
                     };
                     let input = String::from_utf8_lossy(&buf[..(buf_cursor + read_bytes)]);
-                    eprintln!("{name} loop_handler 'idle received: {:?}", input);
+                    eprintln!("{name} loop_handler 'idle received: {input:?}");
                     if !input.ends_with("\r\n") {
                         buf_cursor += read_bytes;
                         continue 'idle;
@@ -713,7 +713,7 @@ mod tests {
                 if matches!(be, BackendEvent::Refresh(_)) {
                     panic!("Unexpected Refresh event received via BackendEventConsumer");
                 }
-                eprintln!("BackendEventConsumer: ah {:?} be {:?}", ah, be);
+                eprintln!("BackendEventConsumer: ah {ah:?} be {be:?}");
                 backend_event_queue.lock().unwrap().push_back((ah, be));
             }))
         };
@@ -835,10 +835,10 @@ hello world.
             let (value1, rest) = block_on(watch_fut);
             let backend_event = value1.unwrap().unwrap();
             let BackendEvent::Refresh(refresh_event) = backend_event else {
-                panic!("Expected Refresh event, got: {:?}", backend_event);
+                panic!("Expected Refresh event, got: {backend_event:?}");
             };
             let RefreshEventKind::Create(ref env) = refresh_event.kind else {
-                panic!("Expected Create event, got: {:?}", refresh_event);
+                panic!("Expected Create event, got: {refresh_event:?}");
             };
             assert_eq!(env.subject(), "RE: your e-mail");
             assert_eq!(env.message_id(), "h2g7f.z0gy2pgaen5m@example.com");
@@ -873,10 +873,10 @@ hello world.
             let (value1, rest) = block_on(watch_fut);
             let backend_event = value1.unwrap().unwrap();
             let BackendEvent::Refresh(refresh_event) = backend_event else {
-                panic!("Expected Refresh event, got: {:?}", backend_event);
+                panic!("Expected Refresh event, got: {backend_event:?}");
             };
             let RefreshEventKind::Remove(ref env_hash) = refresh_event.kind else {
-                panic!("Expected Remove event, got: {:?}", refresh_event);
+                panic!("Expected Remove event, got: {refresh_event:?}");
             };
             assert_eq!(*env_hash, hash);
             rest.into_future()
@@ -895,8 +895,7 @@ hello world.
             if !matches!(val, Err(ref err) if err.kind == ErrorKind::OSError(nix::errno::Errno::EPIPE))
             {
                 panic!(
-                    "Expected watch TCP connection to have disconnected with EPIPE, got: {:?}",
-                    val
+                    "Expected watch TCP connection to have disconnected with EPIPE, got: {val:?}"
                 );
             }
         }

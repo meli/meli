@@ -231,20 +231,20 @@ impl Backends {
     pub fn get(&self, key: &str) -> BackendCreator {
         if !self.map.contains_key(key) {
             if key == "notmuch" {
-                eprint!("{}", NOTMUCH_ERROR_MSG);
+                eprint!("{NOTMUCH_ERROR_MSG}");
                 #[cfg(feature = "notmuch")]
                 {
-                    eprint!("{}", NOTMUCH_ERROR_DETAILS);
+                    eprint!("{NOTMUCH_ERROR_DETAILS}");
                 }
             }
-            panic!("{} is not a valid mail backend", key);
+            panic!("{key} is not a valid mail backend");
         }
         (self.map[key].create_fn)()
     }
 
     pub fn register(&mut self, key: String, backend: Backend) {
         if self.map.contains_key(&key) {
-            panic!("{} is an already registered backend", key);
+            panic!("{key} is an already registered backend");
         }
         self.map.insert(key, backend);
     }
@@ -676,7 +676,7 @@ impl Default for MailboxPermissions {
 
 impl std::fmt::Display for MailboxPermissions {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(fmt, "{:#?}", self)
+        write!(fmt, "{self:#?}")
     }
 }
 

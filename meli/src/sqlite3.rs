@@ -341,7 +341,7 @@ impl AccountCache {
                     .envelope_bytes_by_hash(env_hash)?;
                 let bytes = op
                     .await
-                    .chain_err_summary(|| format!("Failed to open envelope {}", env_hash))?;
+                    .chain_err_summary(|| format!("Failed to open envelope {env_hash}"))?;
                 chunk_bytes.push((env_hash, bytes));
             }
             {
@@ -412,9 +412,8 @@ impl AccountCache {
 
         if !db_desc.exists().unwrap_or(false) {
             return Err(Error::new(format!(
-                "Database hasn't been initialised for account `{}`. Run `reindex` command to \
-                 build an index.",
-                acc_name
+                "Database hasn't been initialised for account `{acc_name}`. Run `reindex` command \
+                 to build an index."
             )));
         }
         let query = query_to_sql(&query);
@@ -435,8 +434,7 @@ impl AccountCache {
             let tx = conn.transaction()?;
             let mut stmt = tx
                 .prepare(&format!(
-                    "SELECT hash FROM envelopes WHERE {} ORDER BY {} {};",
-                    query, sort_field, sort_order
+                    "SELECT hash FROM envelopes WHERE {query} ORDER BY {sort_field} {sort_order};"
                 ))
                 .map_err(|e| Error::new(e.to_string()))?;
 

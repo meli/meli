@@ -439,7 +439,7 @@ impl MaildirFilePathExt for Path {
             .ok_or_else(|| format!("Could not get filename of `{}`", self.display()))?
             .to_string_lossy();
         if !filename.contains(":2,") {
-            filename = Cow::Owned(format!("{}:2,", filename));
+            filename = Cow::Owned(format!("{filename}:2,"));
         }
         let mut new_path = dest_dir.to_path_buf();
         if let Some(ref rename_regex) = config.rename_regex {

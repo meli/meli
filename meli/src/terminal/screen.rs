@@ -392,7 +392,7 @@ impl Screen<Tty> {
             disable_wraparound = DisableWraparoundMode,
             save_title_to_stack = SaveWindowTitleIconToStack,
             window_title = if let Some(ref title) = context.settings.terminal.window_title {
-                format!("\x1b]2;{}\x07", title)
+                format!("\x1b]2;{title}\x07")
             } else {
                 String::new()
             },

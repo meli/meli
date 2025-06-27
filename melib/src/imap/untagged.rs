@@ -368,9 +368,8 @@ impl ImapConnection {
                                 accum.push_str(to_str!(ms).trim());
                             }
                             format!(
-                                "UID FETCH {} (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS \
-                                 (REFERENCES)] BODYSTRUCTURE)",
-                                accum
+                                "UID FETCH {accum} (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS \
+                                 (REFERENCES)] BODYSTRUCTURE)"
                             )
                         };
                         try_fail!(

@@ -263,8 +263,7 @@ impl DotAddressable for ListingSettings {
                     "mail_view_divider" => self.mail_view_divider.lookup(field, tail),
                     "thread_layout" => self.thread_layout.lookup(field, tail),
                     other => Err(Error::new(format!(
-                        "{} has no field named {}",
-                        parent_field, other
+                        "{parent_field} has no field named {other}"
                     ))),
                 }
             }

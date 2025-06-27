@@ -124,8 +124,7 @@ fn run_gpgme_verify_sig() {
             assert_eq!(
                 &keylist,
                 &[],
-                "keylist should have been empty but is: {:?}",
-                keylist
+                "keylist should have been empty but is: {keylist:?}"
             );
             gpgme_ctx.import_key(pubkey_data).unwrap();
         } else {

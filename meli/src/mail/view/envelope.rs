@@ -152,7 +152,7 @@ impl EnvelopeView {
                 Err(err) => {
                     main_loop_handler.send(ThreadEvent::UIEvent(UIEvent::Notification {
                         title: Some(
-                            format!("Failed to start html filter process: {}", filter_invocation,)
+                            format!("Failed to start html filter process: {filter_invocation}",)
                                 .into(),
                         ),
                         body: err.to_string().into(),
@@ -161,9 +161,8 @@ impl EnvelopeView {
                     }));
                     // [ref:FIXME]: add `v` configurable shortcut
                     let comment = Some(format!(
-                        "Failed to start html filter process: `{}`. Press `v` to open in web \
-                         browser. \n\n",
-                        filter_invocation
+                        "Failed to start html filter process: `{filter_invocation}`. Press `v` to \
+                         open in web browser. \n\n"
                     ));
                     let text = String::from_utf8_lossy(&bytes).to_string();
                     acc.push(AttachmentDisplay::InlineText {
@@ -175,8 +174,8 @@ impl EnvelopeView {
                 Ok(text) => {
                     // [ref:FIXME]: add `v` configurable shortcut
                     let comment = Some(format!(
-                        "Text piped through `{}`. Press `v` to open in web browser. \n\n",
-                        filter_invocation
+                        "Text piped through `{filter_invocation}`. Press `v` to open in web \
+                         browser. \n\n"
                     ));
                     acc.push(AttachmentDisplay::InlineText {
                         inner: Box::new(a.clone()),
@@ -441,7 +440,7 @@ impl EnvelopeView {
                     description: _,
                 } => (inner, display.as_slice()),
             };
-            s.extend(format!("\n[{}]", idx).chars());
+            s.extend(format!("\n[{idx}]").chars());
             for &b in branches.iter() {
                 if b {
                     s.push('|');
@@ -594,8 +593,7 @@ impl EnvelopeView {
         context
             .replies
             .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(format!(
-                "Attachment `{}` not found.",
-                lidx
+                "Attachment `{lidx}` not found."
             ))));
         None
     }
@@ -1176,7 +1174,7 @@ impl Component for EnvelopeView {
                                             ),
                                             plaintext,
                                             plaintext_display,
-                                            description: format!("{:?}", metadata),
+                                            description: format!("{metadata:?}"),
                                         };
                                     }
                                     Ok(Some(Err(error))) => {
@@ -1506,8 +1504,7 @@ impl Component for EnvelopeView {
                     context
                         .replies
                         .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(format!(
-                            "Attachment `{}` not found.",
-                            a_i
+                            "Attachment `{a_i}` not found."
                         ))));
                 }
                 return true;
@@ -1522,7 +1519,7 @@ impl Component for EnvelopeView {
                         Cow::Borrowed(&self.mail.bytes)
                     } else {
                         context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(format!("Attachment `{}` not found.", a_i)),
+                            StatusEvent::DisplayMessage(format!("Attachment `{a_i}` not found.")),
                         ));
                         return true;
                     };
@@ -1558,9 +1555,7 @@ impl Component for EnvelopeView {
                     }
                     Err(err) => {
                         context.replies.push_back(UIEvent::Notification {
-                            title: Some(
-                                format!("Failed to execute {}: {}", pipe_command, err).into(),
-                            ),
+                            title: Some(format!("Failed to execute {pipe_command}: {err}").into()),
                             source: None,
                             body: err.to_string().into(),
                             kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
@@ -1597,7 +1592,7 @@ impl Component for EnvelopeView {
                                 }
                                 Err(e) => {
                                     context.replies.push_back(UIEvent::StatusEvent(
-                                        StatusEvent::DisplayMessage(format!("{}", e)),
+                                        StatusEvent::DisplayMessage(format!("{e}")),
                                     ));
                                 }
                             }
@@ -1664,14 +1659,13 @@ impl Component for EnvelopeView {
                                     StatusEvent::DisplayMessage(
                                         if let Some(filename) = filename.as_ref() {
                                             format!(
-                                                "Couldn't find a default application for file {} \
-                                                 (type {})",
-                                                filename, attachment_type
+                                                "Couldn't find a default application for file \
+                                                 {filename} (type {attachment_type})"
                                             )
                                         } else {
                                             format!(
-                                                "Couldn't find a default application for type {}",
-                                                attachment_type
+                                                "Couldn't find a default application for type \
+                                                 {attachment_type}"
                                             )
                                         },
                                     ),
@@ -1718,7 +1712,7 @@ impl Component for EnvelopeView {
                         l
                     } else {
                         context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(format!("Link `{}` not found.", lidx)),
+                            StatusEvent::DisplayMessage(format!("Link `{lidx}` not found.")),
                         ));
                         return true;
                     }
@@ -1750,7 +1744,7 @@ impl Component for EnvelopeView {
                     }
                     Err(err) => {
                         context.replies.push_back(UIEvent::Notification {
-                            title: Some(format!("Failed to launch {:?}", url_launcher).into()),
+                            title: Some(format!("Failed to launch {url_launcher:?}").into()),
                             body: err.to_string().into(),
                             source: Some(err.into()),
                             kind: Some(NotificationType::Error(melib::ErrorKind::External)),

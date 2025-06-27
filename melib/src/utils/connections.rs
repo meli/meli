@@ -639,7 +639,7 @@ pub fn lookup_ip(host: &str, port: u16) -> crate::Result<std::net::SocketAddr> {
     }
 
     Err(
-        Error::new(format!("Could not lookup address {}:{}", host, port))
+        Error::new(format!("Could not lookup address {host}:{port}"))
             .set_kind(ErrorKind::Network(NetworkErrorKind::HostLookupFailed)),
     )
 }

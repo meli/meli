@@ -88,13 +88,13 @@ pub mod server {
 
     impl ServerState {
         fn helo(&mut self, ip: IpAddr, domain: &str) -> ReplyCode {
-            eprintln!("helo ip {:?} domain {:?}", ip, domain);
+            eprintln!("helo ip {ip:?} domain {domain:?}");
             self.mails.push(((ip, domain.to_string()), Message::Helo));
             ReplyCode::_250
         }
 
         fn mail(&mut self, ip: IpAddr, domain: &str, from: &str) -> ReplyCode {
-            eprintln!("mail() ip {:?} domain {:?} from {:?}", ip, domain, from);
+            eprintln!("mail() ip {ip:?} domain {domain:?} from {from:?}");
             if let Some((_, message)) = self
                 .mails
                 .iter_mut()
@@ -113,7 +113,7 @@ pub mod server {
         }
 
         fn rcpt(&mut self, _to: &str) -> ReplyCode {
-            eprintln!("rcpt() to {:?}", _to);
+            eprintln!("rcpt() to {_to:?}");
             if let Some((_, message)) = self.mails.last_mut() {
                 eprintln!("rcpt mail is {:?}", &message);
                 if let Message::Mail { from } = message {
@@ -126,7 +126,7 @@ pub mod server {
                     to.push(_to.to_string());
                     return ReplyCode::_250;
                 } else {
-                    panic!("unexpected mail {:?}", message);
+                    panic!("unexpected mail {message:?}");
                 }
             }
             ReplyCode::_451
@@ -174,7 +174,7 @@ pub mod server {
                             self.stored.push((to.clone(), env));
                         }
                         Err(err) => {
-                            eprintln!("envelope parse error {}", err);
+                            eprintln!("envelope parse error {err}");
                         }
                     }
                 }
@@ -243,7 +243,7 @@ pub mod server {
                     if input.is_empty() {
                         return Ok(());
                     }
-                    eprintln!("received: {:?}", input);
+                    eprintln!("received: {input:?}");
                     if !input.ends_with("\r\n") {
                         buf_cursor += read_bytes;
                         continue 'command_loop;
@@ -292,7 +292,7 @@ pub mod server {
                                 break 'command_loop;
                             }
                         }
-                        other => panic!("Unexpected cmd: {} {:?}", other, rest),
+                        other => panic!("Unexpected cmd: {other} {rest:?}"),
                     }
                 }
                 'data_loop: loop {
@@ -306,7 +306,7 @@ pub mod server {
                         continue 'data_loop;
                     }
                     let input = String::from_utf8_lossy(&buf[..(buf_cursor + read_bytes)]);
-                    eprintln!("received DATA: {:?}", input);
+                    eprintln!("received DATA: {input:?}");
                     state
                         .lock()
                         .unwrap()

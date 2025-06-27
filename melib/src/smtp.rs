@@ -144,12 +144,11 @@ impl Password {
                         .output()
                 })
                 .await
-                .chain_err_summary(|| format!("Could not execute CommandEval value: {}", command))
+                .chain_err_summary(|| format!("Could not execute CommandEval value: {command}"))
                 .chain_err_kind(ErrorKind::External)?;
                 if !output.status.success() {
                     return Err(Error::new(format!(
-                        "SMTP password evaluation command `{}` returned {}: {}",
-                        command,
+                        "SMTP password evaluation command `{command}` returned {}: {}",
                         output.status,
                         String::from_utf8_lossy(&output.stderr)
                     ))
@@ -471,8 +470,7 @@ impl SmtpConnection {
             {
                 return Err(Error::new(format!(
                     "SMTP Server doesn't advertise Authentication support. Server response was: \
-                     {:?}",
-                    pre_auth_extensions_reply
+                     {pre_auth_extensions_reply:?}"
                 ))
                 .set_kind(ErrorKind::Authentication));
             }
@@ -1051,7 +1049,7 @@ impl TryFrom<&'_ str> for ReplyCode {
             "553" => Ok(_553),
             "554" => Ok(_554),
             "555" => Ok(_555),
-            _ => Err(Error::new(format!("Unknown SMTP reply code: {}", val))),
+            _ => Err(Error::new(format!("Unknown SMTP reply code: {val}"))),
         }
     }
 }
@@ -1104,13 +1102,13 @@ async fn read_lines<'r>(
                     .take(3)
                     .all(|c| c.is_ascii_digit())
             {
-                return Err(Error::new(format!("Invalid SMTP reply: {}", ret)));
+                return Err(Error::new(format!("Invalid SMTP reply: {ret}")));
             }
             if let Some(ref returned_code) = returned_code {
                 if ReplyCode::try_from(ret[last_line_idx..].get(..3).unwrap())? != *returned_code {
                     buffer.extend(ret.drain(last_line_idx..));
                     if ret.lines().last().unwrap().chars().nth(4).unwrap() != ' ' {
-                        return Err(Error::new(format!("Invalid SMTP reply: {}", ret)));
+                        return Err(Error::new(format!("Invalid SMTP reply: {ret}")));
                     }
                     break 'read_loop;
                 }
@@ -1138,7 +1136,7 @@ async fn read_lines<'r>(
         }
     }
     if ret.len() < 3 {
-        return Err(Error::new(format!("Invalid SMTP reply: {}", ret)));
+        return Err(Error::new(format!("Invalid SMTP reply: {ret}")));
     }
     let code = ReplyCode::try_from(&ret[..3])?;
     let reply = Reply::new(ret, code);

@@ -54,12 +54,12 @@ pub fn desktop_exec_to_command(command: &str, path: String, is_url: bool) -> Str
         } else {
             command.replacen(
                 from_pattern,
-                &format!("file://{}", path).replace(' ', "\\ "),
+                &format!("file://{path}").replace(' ', "\\ "),
                 1,
             )
         }
     } else if is_url {
-        format!("{} {}", command, path)
+        format!("{command} {path}")
     } else {
         format!("{} {}", command, path.replace(' ', "\\ "))
     }

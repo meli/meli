@@ -54,8 +54,7 @@ fn test_version_migrations_returns_correct_migration() {
     let migrations = calculate_migrations(Some("0.8.8"), &version_map);
     assert!(
         migrations.is_empty(),
-        "Calculated migrations between 0.8.8 and 0.8.9 are not empty: {:?}",
-        migrations
+        "Calculated migrations between 0.8.8 and 0.8.9 are not empty: {migrations:?}"
     );
     let migrations = calculate_migrations(None, &version_map);
     assert!(

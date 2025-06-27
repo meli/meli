@@ -82,7 +82,7 @@ impl Ini {
     }
 
     fn iter_section(&self, section: &str) -> impl Iterator<Item = (&str, &str)> {
-        let section = format!("[{}]", section);
+        let section = format!("[{section}]");
         let mut lines = self.0.lines();
 
         // Eat lines until we find the beginning of our section.
@@ -143,12 +143,12 @@ pub fn query_default_app<T: AsRef<str>>(query: T) -> Result<String> {
     // Insert defaults if variables are missing
     if xdg_vars.contains_key("HOME") && !xdg_vars.contains_key("XDG_DATA_HOME") {
         let h = xdg_vars["HOME"].clone();
-        xdg_vars.insert("XDG_DATA_HOME".to_string(), format!("{}/.local/share", h));
+        xdg_vars.insert("XDG_DATA_HOME".to_string(), format!("{h}/.local/share"));
     }
 
     if xdg_vars.contains_key("HOME") && !xdg_vars.contains_key("XDG_CONFIG_HOME") {
         let h = xdg_vars["HOME"].clone();
-        xdg_vars.insert("XDG_CONFIG_HOME".to_string(), format!("{}/.config", h));
+        xdg_vars.insert("XDG_CONFIG_HOME".to_string(), format!("{h}/.config"));
     }
 
     if !xdg_vars.contains_key("XDG_DATA_DIRS") {
@@ -182,11 +182,7 @@ pub fn query_default_app<T: AsRef<str>>(query: T) -> Result<String> {
     ) {
         if let Some(ref d) = desktops {
             for desktop in d {
-                let pb: PathBuf = PathBuf::from(format!(
-                    "{var_value}/{desktop_val}-mimeapps.list",
-                    var_value = p,
-                    desktop_val = desktop
-                ));
+                let pb: PathBuf = PathBuf::from(format!("{p}/{desktop}-mimeapps.list"));
                 if pb.exists() {
                     if let Some(ret) = check_mimeapps_list(&pb, &xdg_vars, &query)? {
                         return Ok(ret);
@@ -194,7 +190,7 @@ pub fn query_default_app<T: AsRef<str>>(query: T) -> Result<String> {
                 }
             }
         }
-        let pb: PathBuf = PathBuf::from(format!("{var_value}/mimeapps.list", var_value = p));
+        let pb: PathBuf = PathBuf::from(format!("{p}/mimeapps.list"));
         if pb.exists() {
             if let Some(ret) = check_mimeapps_list(&pb, &xdg_vars, &query)? {
                 return Ok(ret);
@@ -206,11 +202,8 @@ pub fn query_default_app<T: AsRef<str>>(query: T) -> Result<String> {
     for p in split_and_chain!(xdg_vars["XDG_DATA_HOME"], xdg_vars["XDG_DATA_DIRS"]) {
         if let Some(ref d) = desktops {
             for desktop in d {
-                let pb: PathBuf = PathBuf::from(format!(
-                    "{var_value}/applications/{desktop_val}-mimeapps.list",
-                    var_value = p,
-                    desktop_val = desktop
-                ));
+                let pb: PathBuf =
+                    PathBuf::from(format!("{p}/applications/{desktop}-mimeapps.list"));
                 if pb.exists() {
                     if let Some(ret) = check_mimeapps_list(&pb, &xdg_vars, &query)? {
                         return Ok(ret);
@@ -218,10 +211,7 @@ pub fn query_default_app<T: AsRef<str>>(query: T) -> Result<String> {
                 }
             }
         }
-        let pb: PathBuf = PathBuf::from(format!(
-            "{var_value}/applications/mimeapps.list",
-            var_value = p
-        ));
+        let pb: PathBuf = PathBuf::from(format!("{p}/applications/mimeapps.list"));
         if pb.exists() {
             if let Some(ret) = check_mimeapps_list(&pb, &xdg_vars, &query)? {
                 return Ok(ret);
@@ -275,24 +265,15 @@ pub fn desktop_file_to_command(
             let v: Vec<&str> = desktop_name.split('-').collect();
             let (vendor, app): (&str, &str) = (v[0], v[1]);
 
-            p = PathBuf::from(format!(
-                "{dir}/applications/{vendor}/{app}",
-                dir = dir,
-                vendor = vendor,
-                app = app
-            ));
+            p = PathBuf::from(format!("{dir}/applications/{vendor}/{app}"));
             if p.exists() {
                 file_path = Some(p);
             }
         }
 
         if file_path.is_none() {
-            'indir: for indir in &[format!("{}/applications", dir)] {
-                p = PathBuf::from(format!(
-                    "{indir}/{desktop}",
-                    indir = indir,
-                    desktop = desktop_name
-                ));
+            'indir: for indir in &[format!("{dir}/applications")] {
+                p = PathBuf::from(format!("{indir}/{desktop_name}"));
                 if p.exists() {
                     file_path = Some(p);
                     break 'indir;

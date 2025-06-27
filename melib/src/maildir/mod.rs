@@ -68,13 +68,14 @@ pub struct Configuration {
 
 impl Configuration {
     pub fn new(settings: &AccountSettings) -> Result<Self> {
-        let rename_regex = if let Some(v) = settings.extra.get("rename_regex").map(|v| {
+        const RENAME_REGEX_FIELDNAME: &str = "rename_regex";
+
+        let rename_regex = if let Some(v) = settings.extra.get(RENAME_REGEX_FIELDNAME).map(|v| {
             Regex::new(v).map_err(|e| {
                 Error::new(format!(
-                    "Configuration error ({}): Invalid value for field `{}`: {}",
+                    "Configuration error ({}): Invalid value for field \
+                     `{RENAME_REGEX_FIELDNAME}`: {v}",
                     settings.name.as_str(),
-                    "rename_regex",
-                    v,
                 ))
                 .set_source(Some(crate::src_err_arc_wrap!(e)))
                 .set_kind(ErrorKind::ValueError)
@@ -187,10 +188,8 @@ impl MailBackend for MaildirType {
                     }
                     Err(err) => {
                         debug!(
-                            "DEBUG: hash {}, path: {} couldn't be parsed, {}",
-                            env_hash,
-                            file.as_path().display(),
-                            err,
+                            "DEBUG: hash {env_hash}, path: {} couldn't be parsed, {err}",
+                            file.as_path().display()
                         );
                         continue;
                     }
@@ -216,7 +215,7 @@ impl MailBackend for MaildirType {
                 )
                 .await
                 .map_err(|err| {
-                    log::debug!("fetch err {:?}", &err);
+                    log::debug!("fetch err {err:?}");
                     err
                 })? {
                     emitter.emit(res).await;
@@ -238,7 +237,7 @@ impl MailBackend for MaildirType {
 
         Ok(Box::pin(async move {
             let thunk = move |sender: &BackendEventConsumer| {
-                log::trace!("refreshing {:?}", mailbox_hash);
+                log::trace!("refreshing {mailbox_hash:?}");
                 let mut buf = Vec::with_capacity(4096);
                 let files = Self::list_mail_in_maildir_fs(&config, path.clone(), false)?;
                 let mut removed_hashes = {
@@ -277,8 +276,7 @@ impl MailBackend for MaildirType {
                         );
                     } else {
                         log::trace!(
-                            "DEBUG: hash {}, path: {} couldn't be parsed",
-                            env_hash,
+                            "DEBUG: hash {env_hash}, path: {} couldn't be parsed",
                             file.as_path().display()
                         );
                         continue;
@@ -411,7 +409,7 @@ impl MailBackend for MaildirType {
                 hash_index.entry(env_hash).or_default().modified =
                     Some(PathMod::Path(new_name.clone()));
 
-                log::debug!("renaming {:?} to {:?}", path, new_name);
+                log::debug!("renaming {path:?} to {new_name:?}");
                 fs::rename(path, &new_name)?;
                 log::debug!("success in rename");
             }
@@ -488,7 +486,7 @@ impl MailBackend for MaildirType {
                 hash_index.entry(env_hash).or_default().modified =
                     Some(PathMod::Path(dest_path.clone()));
                 if move_ {
-                    log::trace!("renaming {:?} to {:?}", path_src, dest_path);
+                    log::trace!("renaming {path_src:?} to {dest_path:?}");
                     fs::rename(&path_src, &dest_path)
                         .chain_err_summary(|| {
                             format!(
@@ -500,7 +498,7 @@ impl MailBackend for MaildirType {
                         .chain_err_related_path(&path_src)?;
                     log::trace!("success in rename");
                 } else {
-                    log::trace!("copying {:?} to {:?}", path_src, dest_path);
+                    log::trace!("copying {path_src:?} to {dest_path:?}");
                     fs::copy(&path_src, &dest_path)
                         .chain_err_summary(|| {
                             format!(
@@ -559,7 +557,7 @@ impl MailBackend for MaildirType {
             {
                 while let Some(op) = undo_ops.pop_back() {
                     if let Err(err) = op() {
-                        log::error!("{}", err);
+                        log::error!("{err}");
                     }
                 }
                 return Ok(Box::pin(async move { Err(err) }));
@@ -572,7 +570,7 @@ impl MailBackend for MaildirType {
             Err(err) => {
                 while let Some(op) = undo_ops.pop_back() {
                     if let Err(err) = op() {
-                        log::error!("{}", err);
+                        log::error!("{err}");
                     }
                 }
                 return Ok(Box::pin(async move { Err(err) }));
@@ -975,17 +973,15 @@ impl MaildirType {
             .unwrap_or(false);
         if not_in_root {
             return Err(Error::new(format!(
-                "Path given, `{}`, is not included in the root mailbox path `{}`. A maildir \
+                "Path given, `{name}`, is not included in the root mailbox path `{}`. A maildir \
                  backend cannot contain mailboxes outside of its root path.",
-                name,
                 config.path.display()
             )));
         }
         if !fs_path.starts_with(&config.path) {
             return Err(Error::new(format!(
-                "Path given (`{}`) is absolute. Please provide a path relative to the account's \
-                 root mailbox.",
-                name
+                "Path given (`{name}`) is absolute. Please provide a path relative to the \
+                 account's root mailbox.",
             )));
         }
         Ok((fs_path, suffix))

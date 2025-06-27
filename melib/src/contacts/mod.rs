@@ -141,10 +141,7 @@ impl Contacts {
             match Command::new("sh")
                 .args([
                     "-c",
-                    &format!(
-                        "notmuch address --format=json {}",
-                        notmuch_addressbook_query
-                    ),
+                    &format!("notmuch address --format=json {notmuch_addressbook_query}"),
                 ])
                 .stdin(std::process::Stdio::null())
                 .stdout(std::process::Stdio::piped())

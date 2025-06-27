@@ -78,8 +78,7 @@ impl DotAddressable for Shortcuts {
                     "thread_view" | "thread-view" => self.thread_view.lookup(field, tail),
                     "pager" => self.pager.lookup(field, tail),
                     other => Err(Error::new(format!(
-                        "{} has no field named {}",
-                        parent_field, other
+                        "{parent_field} has no field named {other}"
                     ))),
                 }
             }

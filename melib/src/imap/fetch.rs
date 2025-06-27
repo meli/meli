@@ -267,10 +267,7 @@ impl FetchState {
                         conn.read_response(&mut response, required_responses)
                             .await
                             .chain_err_summary(|| {
-                                format!(
-                                    "Could not parse fetch response for mailbox {}",
-                                    mailbox_path
-                                )
+                                format!("Could not parse fetch response for mailbox {mailbox_path}")
                             })?;
                         let (_, mut v, _) = protocol_parser::fetch_responses(&response)?;
                         for FetchResponse {
@@ -336,8 +333,8 @@ impl FetchState {
                                 .insert_envelopes(mailbox_hash, &v)
                                 .chain_err_summary(|| {
                                     format!(
-                                        "Could not save envelopes in cache for mailbox {}",
-                                        mailbox_path
+                                        "Could not save envelopes in cache for mailbox \
+                                         {mailbox_path}"
                                     )
                                 })
                             {
@@ -408,7 +405,7 @@ impl FetchState {
         let mut uid_store = conn.uid_store.clone();
         if let Err(err) = uid_store
             .update_mailbox(mailbox_hash, &select_response)
-            .chain_err_summary(|| format!("Could not update cache for mailbox {}.", mailbox_hash))
+            .chain_err_summary(|| format!("Could not update cache for mailbox {mailbox_hash}."))
         {
             (uid_store.event_consumer)(uid_store.account_hash, err.into());
         }
