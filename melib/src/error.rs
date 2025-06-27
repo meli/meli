@@ -74,7 +74,7 @@ impl std::fmt::Display for ErrorKind {
             Self::ProtocolError => write!(fmt, "Protocol error"),
             Self::ProtocolNotSupported => write!(
                 fmt,
-                "Protocol is not supported. It could be the wrong type or version."
+                "Protocol is not supported. It could be the wrong type or version"
             ),
             Self::Platform => write!(fmt, "Platform/Runtime environment error (OS or hardware)"),
             Self::TimedOut => write!(fmt, "Timed out error"),
