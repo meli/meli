@@ -985,6 +985,7 @@ impl MailBackend for NotmuchDb {
 
                 let tags = message.tags().collect::<Vec<&CStr>>();
 
+                // [ref:msrv] c-str literals are introduced in 1.77.0
                 macro_rules! cstr {
                     ($l:literal) => {
                         &CStr::from_bytes_with_nul_unchecked($l)

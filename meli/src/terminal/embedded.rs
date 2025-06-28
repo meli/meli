@@ -186,6 +186,7 @@ pub fn create_pty(width: usize, height: usize, command: &str) -> Result<Arc<Mute
                     std::process::exit(-1);
                 }
             }
+            // [ref:msrv] c-str literals are introduced in 1.77.0
             // SAFETY: Value is NUL terminated.
             const SH: &CStr = unsafe { CStr::from_bytes_with_nul_unchecked(b"sh\0") };
             // SAFETY: Value is NUL terminated.

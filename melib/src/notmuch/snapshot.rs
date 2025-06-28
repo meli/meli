@@ -66,6 +66,7 @@ impl Snapshot {
                 env.tags_mut().insert(num);
             }
         }
+        // [ref:msrv] c-str literals are introduced in 1.77.0
         unsafe {
             use crate::email::parser::address::rfc2822address_list;
             env.set_message_id(message.msg_id())

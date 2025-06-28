@@ -48,6 +48,7 @@ use crate::error::{ErrorKind, Result, ResultIntoError};
 
 pub type UnixTimestamp = u64;
 
+// [ref:msrv] c-str literals are introduced in 1.77.0
 pub mod formats {
     //! Format string constants for use with `strftime`/`strptime`.
 

@@ -93,6 +93,7 @@ pub enum GpgmeFlag {
     AsciiArmor,
 }
 
+// [ref:msrv] c-str literals are introduced in 1.77.0
 impl GpgmeFlag {
     // SAFETY: Value is NUL terminated.
     const AUTO_KEY_RETRIEVE: &'static CStr =
@@ -345,6 +346,7 @@ impl Context {
                 return Ok(self);
             }
         };
+        // [ref:msrv] c-str literals are introduced in 1.77.0
         // SAFETY: Value is NUL terminated.
         const VALUE_ON: &CStr = unsafe { CStr::from_bytes_with_nul_unchecked(b"1\0") };
         // SAFETY: Value is NUL terminated.
@@ -385,6 +387,7 @@ impl Context {
         if val == LocateKey::NODEFAULT {
             self.set_flag_inner(
                 GpgmeFlag::AUTO_KEY_LOCATE,
+                // [ref:msrv] c-str literals are introduced in 1.77.0
                 // SAFETY: Value is NUL terminated.
                 unsafe { CStr::from_bytes_with_nul_unchecked(b"clear,nodefault\0") },
             )?;
