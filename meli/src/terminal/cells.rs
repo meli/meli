@@ -890,14 +890,15 @@ impl IndexMut<Pos> for CellBuffer {
 
 impl std::fmt::Display for CellBuffer {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        '_y: for y in 0..self.rows {
+        for y in 0..self.rows {
             for x in 0..self.cols {
                 let c: &char = &self[(x, y)].ch();
-                write!(f, "{}", *c).unwrap();
                 if *c == '\n' {
-                    continue '_y;
+                    break;
                 }
+                write!(f, "{}", *c)?;
             }
+            writeln!(f)?;
         }
         Ok(())
     }
