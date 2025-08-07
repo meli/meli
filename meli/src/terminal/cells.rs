@@ -1583,234 +1583,204 @@ pub mod boundaries {
     pub const _DOUBLE_UP_AND_LEFT: char = '╝';
     pub const _DOUBLE_UP_AND_RIGHT: char = '╚';
 
-    fn bin_to_ch(b: u32) -> char {
-        match b {
-            0b0001 => '╶',
-            0b0010 => '╵',
-            0b0011 => '└',
-            0b0100 => '╴',
-            0b0101 => '─',
-            0b0110 => '┘',
-            0b0111 => '┴',
-            0b1000 => '╷',
-            0b1001 => '┌',
-            0b1010 => '│',
-            0b1011 => '├',
-            0b1100 => '┐',
-            0b1101 => '┬',
-            0b1110 => '┤',
-            0b1111 => '┼',
-            _ => unsafe { std::hint::unreachable_unchecked() },
+    bitflags::bitflags! {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        pub struct Boundary: u8 {
+            const RIGHT_HORZ = 0b0001;
+            const LEFT_HORZ  = 0b0100;
+            const FULL_HORZ  = 0b0101;
+            const UP_VERT    = 0b0010;
+            const DOWN_VERT  = 0b1000;
+            const FULL_VERT  = 0b1010;
         }
     }
 
-    fn ch_to_bin(ch: char) -> Option<u32> {
-        match ch {
-            '└' => Some(0b0011),
-            '─' => Some(0b0101),
-            '┘' => Some(0b0110),
-            '┴' => Some(0b0111),
-            '┌' => Some(0b1001),
+    impl Boundary {
+        fn to_char(self, ascii_drawing: bool) -> char {
+            if ascii_drawing {
+                return match self.bits() {
+                    0 => ' ',
+                    0b0001 => '-',
+                    0b0010 => '|',
+                    0b0011 => '+',
+                    0b0100 => '-',
+                    0b0101 => '-',
+                    0b0110 => '+',
+                    0b0111 => '+',
+                    0b1000 => '|',
+                    0b1001 => '+',
+                    0b1010 => '|',
+                    0b1011 => '+',
+                    0b1100 => '+',
+                    0b1101 => '+',
+                    0b1110 => '+',
+                    0b1111 => '+',
+                    _ => unsafe { std::hint::unreachable_unchecked() },
+                };
+            }
+            match self.bits() {
+                0b0001 => '╶',
+                0b0010 => '╵',
+                0b0011 => '└',
+                0b0100 => '╴',
+                0b0101 => '─',
+                0b0110 => '┘',
+                0b0111 => '┴',
+                0b1000 => '╷',
+                0b1001 => '┌',
+                0b1010 => '│',
+                0b1011 => '├',
+                0b1100 => '┐',
+                0b1101 => '┬',
+                0b1110 => '┤',
+                0b1111 => '┼',
+                _ => unsafe { std::hint::unreachable_unchecked() },
+            }
+        }
 
-            '│' => Some(0b1010),
-
-            '├' => Some(0b1011),
-            '┐' => Some(0b1100),
-            '┬' => Some(0b1101),
-
-            '┤' => Some(0b1110),
-
-            '┼' => Some(0b1111),
-            '╷' => Some(0b1000),
-
-            '╵' => Some(0b0010),
-            '╴' => Some(0b0100),
-            '╶' => Some(0b0001),
-            _ => None,
+        const fn from_char(c: char) -> Option<Self> {
+            match c {
+                '╶' => Self::from_bits(0b0001),
+                '╵' => Self::from_bits(0b0010),
+                '└' => Self::from_bits(0b0011),
+                '╴' => Self::from_bits(0b0100),
+                '─' => Self::from_bits(0b0101),
+                '┘' => Self::from_bits(0b0110),
+                '┴' => Self::from_bits(0b0111),
+                '╷' => Self::from_bits(0b1000),
+                '┌' => Self::from_bits(0b1001),
+                '│' => Self::from_bits(0b1010),
+                '├' => Self::from_bits(0b1011),
+                '┐' => Self::from_bits(0b1100),
+                '┬' => Self::from_bits(0b1101),
+                '┤' => Self::from_bits(0b1110),
+                '┼' => Self::from_bits(0b1111),
+                _ => None,
+            }
         }
     }
 
-    #[allow(clippy::never_loop)]
-    fn set_and_join_vert(grid: &mut CellBuffer, idx: Pos) -> u32 {
+    fn set_and_join_vert(grid: &mut CellBuffer, idx: Pos) -> Boundary {
         let (x, y) = idx;
-        let mut bin_set = 0b1010;
-        /* Check left side
-         *
-         *        1
-         *   -> 2 │ 0
-         *        3
-         */
-        loop {
-            if x > 0 {
-                if let Some(cell) = grid.get_mut(x - 1, y) {
-                    if let Some(adj) = ch_to_bin(cell.ch()) {
-                        if (adj & 0b0001) > 0 {
-                            bin_set |= 0b0100;
-                            break;
-                        } else if adj == 0b0100 {
-                            cell.set_ch(bin_to_ch(0b0101));
-                            bin_set |= 0b0100;
-                            break;
-                        }
-                    }
+        let ascii_drawing = grid.ascii_drawing;
+        let mut bin_set: Boundary = Boundary::empty();
+        // Check left side
+        //
+        //        1
+        //   -> 2 │ 0
+        //        3
+        //
+        if x > 0 {
+            if let Some(cell) = grid.get_mut(x - 1, y) {
+                if let Some(adj) = Boundary::from_char(cell.ch()) {
+                    cell.set_ch((adj | Boundary::RIGHT_HORZ).to_char(ascii_drawing));
+                    bin_set |= Boundary::LEFT_HORZ;
                 }
             }
-            bin_set &= 0b1011;
-            break;
         }
 
-        /* Check right side
-         *
-         *        1
-         *      2 │ 0 <-
-         *        3
-         */
-        loop {
-            if let Some(cell) = grid.get_mut(x + 1, y) {
-                if let Some(adj) = ch_to_bin(cell.ch()) {
-                    if (adj & 0b0100) > 0 {
-                        bin_set |= 0b0001;
-                        break;
-                    }
+        // Check right side
+        //
+        //        1
+        //      2 │ 0 <-
+        //        3
+        //
+        if let Some(cell) = grid.get_mut(x + 1, y) {
+            if let Some(adj) = Boundary::from_char(cell.ch()) {
+                cell.set_ch((adj | Boundary::LEFT_HORZ).to_char(ascii_drawing));
+                bin_set |= Boundary::RIGHT_HORZ;
+            }
+        }
+
+        // Set upper side
+        //
+        //        1 <-
+        //      2 │ 0
+        //        3
+        //
+        if y > 0 {
+            if let Some(cell) = grid.get_mut(x, y - 1) {
+                if let Some(adj) = Boundary::from_char(cell.ch()) {
+                    cell.set_ch((adj | Boundary::DOWN_VERT).to_char(ascii_drawing));
+                    bin_set |= Boundary::UP_VERT;
                 }
             }
-            bin_set &= 0b1110;
-            break;
         }
 
-        /* Set upper side
-         *
-         *        1 <-
-         *      2 │ 0
-         *        3
-         */
-        loop {
-            if y > 0 {
-                if let Some(cell) = grid.get_mut(x, y - 1) {
-                    if let Some(adj) = ch_to_bin(cell.ch()) {
-                        cell.set_ch(bin_to_ch(adj | 0b1000));
-                    } else {
-                        bin_set &= 0b1101;
-                    }
-                }
+        // Set bottom side
+        //
+        //        1
+        //      2 │ 0
+        //        3 <-
+        //
+        if let Some(cell) = grid.get_mut(x, y + 1) {
+            if let Some(adj) = Boundary::from_char(cell.ch()) {
+                cell.set_ch((adj | Boundary::UP_VERT).to_char(ascii_drawing));
+                bin_set |= Boundary::DOWN_VERT;
             }
-            break;
-        }
-
-        /* Set bottom side
-         *
-         *        1
-         *      2 │ 0
-         *        3 <-
-         */
-        loop {
-            if let Some(cell) = grid.get_mut(x, y + 1) {
-                if let Some(adj) = ch_to_bin(cell.ch()) {
-                    cell.set_ch(bin_to_ch(adj | 0b0010));
-                } else {
-                    bin_set &= 0b0111;
-                }
-            }
-            break;
-        }
-
-        if bin_set == 0 {
-            bin_set = 0b1010;
         }
 
         bin_set
     }
 
-    #[allow(clippy::never_loop)]
-    fn set_and_join_horz(grid: &mut CellBuffer, idx: Pos) -> u32 {
+    fn set_and_join_horz(grid: &mut CellBuffer, idx: Pos) -> Boundary {
         let (x, y) = idx;
-        let mut bin_set = 0b0101;
-        /* Check upper side
-         *
-         *        1 <-
-         *      2 ─ 0
-         *        3
-         */
-        loop {
-            if y > 0 {
-                if let Some(cell) = grid.get_mut(x, y - 1) {
-                    if let Some(adj) = ch_to_bin(cell.ch()) {
-                        if (adj & 0b1000) > 0 {
-                            bin_set |= 0b0010;
-                            break;
-                        } else if adj == 0b0010 {
-                            bin_set |= 0b0010;
-                            cell.set_ch(bin_to_ch(0b1010));
-                            break;
-                        }
-                    }
+        let ascii_drawing = grid.ascii_drawing;
+        let mut bin_set: Boundary = Boundary::empty();
+        // Check upper side
+        //
+        //        1 <-
+        //      2 ─ 0
+        //        3
+        //
+        if y > 0 {
+            if let Some(cell) = grid.get_mut(x, y - 1) {
+                if let Some(adj) = Boundary::from_char(cell.ch()) {
+                    cell.set_ch((adj | Boundary::DOWN_VERT).to_char(ascii_drawing));
+                    bin_set |= Boundary::UP_VERT;
                 }
             }
-            bin_set &= 0b1101;
-            break;
         }
 
-        /* Check bottom side
-         *
-         *        1
-         *      2 ─ 0
-         *        3 <-
-         */
-        loop {
-            if let Some(cell) = grid.get_mut(x, y + 1) {
-                if let Some(adj) = ch_to_bin(cell.ch()) {
-                    if (adj & 0b0010) > 0 {
-                        bin_set |= 0b1000;
-                        break;
-                    } else if adj == 0b1000 {
-                        bin_set |= 0b1000;
-                        cell.set_ch(bin_to_ch(0b1010));
-                        break;
-                    }
+        // Check bottom side
+        //
+        //        1
+        //      2 ─ 0
+        //        3 <-
+        //
+        if let Some(cell) = grid.get_mut(x, y + 1) {
+            if let Some(adj) = Boundary::from_char(cell.ch()) {
+                cell.set_ch((adj | Boundary::UP_VERT).to_char(ascii_drawing));
+                bin_set |= Boundary::DOWN_VERT;
+            }
+        }
+
+        // Set left side
+        //
+        //        1
+        //   -> 2 ─ 0
+        //        3
+        //
+        if x > 0 {
+            if let Some(cell) = grid.get_mut(x - 1, y) {
+                if let Some(adj) = Boundary::from_char(cell.ch()) {
+                    cell.set_ch((adj | Boundary::RIGHT_HORZ).to_char(ascii_drawing));
+                    bin_set |= Boundary::LEFT_HORZ;
                 }
             }
-            bin_set &= 0b0111;
-            break;
         }
 
-        /* Set left side
-         *
-         *        1
-         *   -> 2 ─ 0
-         *        3
-         */
-        loop {
-            if x > 0 {
-                if let Some(cell) = grid.get_mut(x - 1, y) {
-                    if let Some(adj) = ch_to_bin(cell.ch()) {
-                        cell.set_ch(bin_to_ch(adj | 0b0001));
-                    } else {
-                        bin_set &= 0b1011;
-                    }
-                }
+        // Set right side
+        //
+        //        1
+        //      2 ─ 0 <-
+        //        3
+        //
+        if let Some(cell) = grid.get_mut(x + 1, y) {
+            if let Some(adj) = Boundary::from_char(cell.ch()) {
+                cell.set_ch((adj | Boundary::LEFT_HORZ).to_char(ascii_drawing));
+                bin_set |= Boundary::RIGHT_HORZ;
             }
-            break;
-        }
-
-        /* Set right side
-         *
-         *        1
-         *      2 ─ 0 <-
-         *        3
-         */
-        loop {
-            if let Some(cell) = grid.get_mut(x + 1, y) {
-                if let Some(adj) = ch_to_bin(cell.ch()) {
-                    cell.set_ch(bin_to_ch(adj | 0b0100));
-                } else {
-                    bin_set &= 0b1110;
-                }
-            }
-            break;
-        }
-
-        if bin_set == 0 {
-            bin_set = 0b0101;
         }
 
         bin_set
@@ -1821,31 +1791,28 @@ pub mod boundaries {
         Vertical,
     }
 
-    pub fn set_and_join_box(grid: &mut CellBuffer, idx: Pos, ch: BoxBoundary) {
-        /* Connected sides:
-         *
-         *        1
-         *      2 c 0
-         *        3
-         *
-         *     #3210
-         *    0b____
-         */
-
-        if grid.ascii_drawing {
-            grid[idx].set_ch(match ch {
-                BoxBoundary::Vertical => '|',
-                BoxBoundary::Horizontal => '-',
-            });
-            return;
-        }
+    #[inline]
+    fn set_and_join_box_corner(grid: &mut CellBuffer, idx: Pos, ch: BoxBoundary) {
+        // Connected sides:
+        //
+        //        1
+        //      2 c 0
+        //        3
+        //
+        //     #3210
+        //    0b____
+        //
 
         let bin_set = match ch {
             BoxBoundary::Vertical => set_and_join_vert(grid, idx),
             BoxBoundary::Horizontal => set_and_join_horz(grid, idx),
         };
 
-        grid[idx].set_ch(bin_to_ch(bin_set));
+        if grid.ascii_drawing {
+            grid[idx].set_ch('+');
+        } else {
+            grid[idx].set_ch(bin_set.to_char(false));
+        }
     }
 
     /// Puts boundaries in `area`.
@@ -1853,30 +1820,31 @@ pub mod boundaries {
     pub fn create_box(grid: &mut CellBuffer, area: Area) -> Area {
         debug_assert_eq!(grid.generation(), area.generation());
 
-        if !grid.ascii_drawing {
-            for (top, bottom) in grid
-                .bounds_iter(area.nth_row(0))
-                .zip(grid.bounds_iter(area.nth_row(area.height().saturating_sub(1))))
-            {
-                for c in top.chain(bottom) {
-                    grid[c].set_ch(HORZ_BOUNDARY);
-                }
+        let ascii_drawing = grid.ascii_drawing;
+        for (top, bottom) in grid
+            .bounds_iter(area.nth_row(0))
+            .zip(grid.bounds_iter(area.nth_row(area.height().saturating_sub(1))))
+        {
+            for c in top.chain(bottom) {
+                let bin_set = set_and_join_horz(grid, c) | Boundary::FULL_HORZ;
+                grid[c].set_ch(bin_set.to_char(ascii_drawing));
             }
-
-            for (left, right) in grid
-                .bounds_iter(area.nth_col(0))
-                .zip(grid.bounds_iter(area.nth_col(area.width().saturating_sub(1))))
-            {
-                for c in left.chain(right) {
-                    grid[c].set_ch(VERT_BOUNDARY);
-                }
-            }
-
-            set_and_join_box(grid, area.upper_left(), BoxBoundary::Horizontal);
-            set_and_join_box(grid, area.upper_right(), BoxBoundary::Horizontal);
-            set_and_join_box(grid, area.bottom_left(), BoxBoundary::Vertical);
-            set_and_join_box(grid, area.bottom_right(), BoxBoundary::Vertical);
         }
+
+        for (left, right) in grid
+            .bounds_iter(area.nth_col(0))
+            .zip(grid.bounds_iter(area.nth_col(area.width().saturating_sub(1))))
+        {
+            for c in left.chain(right) {
+                let bin_set = set_and_join_vert(grid, c) | Boundary::FULL_VERT;
+                grid[c].set_ch(bin_set.to_char(ascii_drawing));
+            }
+        }
+
+        set_and_join_box_corner(grid, area.upper_left(), BoxBoundary::Horizontal);
+        set_and_join_box_corner(grid, area.upper_right(), BoxBoundary::Horizontal);
+        set_and_join_box_corner(grid, area.bottom_left(), BoxBoundary::Vertical);
+        set_and_join_box_corner(grid, area.bottom_right(), BoxBoundary::Vertical);
 
         area.skip(1, 1).skip_rows_from_end(1).skip_cols_from_end(1)
     }
@@ -2062,5 +2030,142 @@ mod tests {
                     .collect::<Vec<(usize, usize)>>()
             );
         }
+    }
+
+    #[test]
+    fn test_create_box() {
+        macro_rules! assert_eq_grid {
+            ($left:expr, $right:expr) => {{
+                let left = $left;
+                let right = $right;
+                assert_eq!(&left, &right, "left:\n{left}\nright:\n{right}");
+            }};
+        }
+
+        let mut screen = Screen::<Virtual>::new(Default::default());
+        assert!(screen.resize(40, 20));
+        screen.grid_mut().ascii_drawing = false;
+        let area = screen.area();
+        let _ = super::create_box(screen.grid_mut(), area);
+        let inner = area.place_inside((30, 10), false, false);
+        let box_inner_area = super::create_box(screen.grid_mut(), inner);
+        assert_eq_grid!(
+            r#"
+┌──────────────────────────────────────┐
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│      ┌─────────────────────────────┐ │
+│      │                             │ │
+│      │                             │ │
+│      │                             │ │
+│      │                             │ │
+│      │                             │ │
+│      │                             │ │
+│      │                             │ │
+│      │                             │ │
+│      │                             │ │
+│      └─────────────────────────────┘ │
+│                                      │
+└──────────────────────────────────────┘
+"#
+            .trim_start(),
+            screen.grid().to_string()
+        );
+        assert_eq!(
+            (box_inner_area.width(), box_inner_area.height()),
+            (29, 9),
+            "{box_inner_area:?}"
+        );
+        let inner = area.place_inside((15, 10), false, true);
+        let _box_inner_area = super::create_box(screen.grid_mut(), inner);
+        assert_eq_grid!(
+            r#"
+┌──────────────────────────────────────┐
+│                                      │
+│                     ┌──────────────┐ │
+│                     │              │ │
+│                     │              │ │
+│                     │              │ │
+│                     │              │ │
+│      ┌──────────────┼──────────────┤ │
+│      │              │              │ │
+│      │              │              │ │
+│      │              │              │ │
+│      │              │              │ │
+│      │              └──────────────┤ │
+│      │                             │ │
+│      │                             │ │
+│      │                             │ │
+│      │                             │ │
+│      └─────────────────────────────┘ │
+│                                      │
+└──────────────────────────────────────┘
+"#
+            .trim_start(),
+            screen.grid().to_string()
+        );
+        let _box_inner_area = super::create_box(screen.grid_mut(), area.take(5, 5));
+        assert_eq_grid!(
+            r#"
+┌───┬──────────────────────────────────┐
+│   │                                  │
+│   │                 ┌──────────────┐ │
+│   │                 │              │ │
+├───┘                 │              │ │
+│                     │              │ │
+│                     │              │ │
+│      ┌──────────────┼──────────────┤ │
+│      │              │              │ │
+│      │              │              │ │
+│      │              │              │ │
+│      │              │              │ │
+│      │              └──────────────┤ │
+│      │                             │ │
+│      │                             │ │
+│      │                             │ │
+│      │                             │ │
+│      └─────────────────────────────┘ │
+│                                      │
+└──────────────────────────────────────┘
+"#
+            .trim_start(),
+            screen.grid().to_string()
+        );
+        screen.grid_mut().clear(None);
+        let area = screen.area();
+        screen.grid_mut().set_ascii_drawing(true);
+        let _ = super::create_box(screen.grid_mut(), area);
+        let inner = area.place_inside((30, 10), false, false);
+        _ = super::create_box(screen.grid_mut(), inner);
+        assert_eq_grid!(
+            r#"
++--------------------------------------+
+|                                      |
+|                                      |
+|                                      |
+|                                      |
+|                                      |
+|                                      |
+|      +-----------------------------+ |
+|      |                             | |
+|      |                             | |
+|      |                             | |
+|      |                             | |
+|      |                             | |
+|      |                             | |
+|      |                             | |
+|      |                             | |
+|      |                             | |
+|      +-----------------------------+ |
+|                                      |
++--------------------------------------+
+"#
+            .trim_start(),
+            screen.grid().to_string()
+        );
     }
 }
