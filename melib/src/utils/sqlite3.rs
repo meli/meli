@@ -229,7 +229,7 @@ impl DatabaseDescription {
 }
 
 impl ToSql for Envelope {
-    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput> {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
         let v: Vec<u8> = serde_json::to_vec(self).map_err(|e| {
             rusqlite::Error::ToSqlConversionFailure(Box::new(Error::new(e.to_string())))
         })?;

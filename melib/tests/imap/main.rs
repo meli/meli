@@ -83,7 +83,7 @@ pub mod server {
         fn as_envelope(&'_ self) -> imap_types::envelope::Envelope<'_>;
         fn as_flags(&'_ self) -> Vec<imap_types::flag::FlagFetch<'_>>;
         fn as_bodystructure(&'_ self) -> imap_types::body::BodyStructure<'_>;
-        fn as_body_peek_references(&self) -> imap_types::fetch::MessageDataItem;
+        fn as_body_peek_references(&self) -> imap_types::fetch::MessageDataItem<'_>;
     }
 
     impl AsImapResponseItem for Mail {
@@ -151,7 +151,7 @@ pub mod server {
             }
         }
 
-        fn as_body_peek_references(&self) -> imap_types::fetch::MessageDataItem {
+        fn as_body_peek_references(&self) -> imap_types::fetch::MessageDataItem<'_> {
             imap_types::fetch::MessageDataItem::BodyExt {
                 section: Some(imap_types::fetch::Section::HeaderFields(
                     None,

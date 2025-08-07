@@ -177,7 +177,7 @@ macro_rules! declare_u64_hash {
         }
         #[cfg(feature = "sqlite3")]
         impl rusqlite::types::ToSql for $type_name {
-            fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput> {
+            fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
                 Ok(rusqlite::types::ToSqlOutput::from(self.0 as i64))
             }
         }

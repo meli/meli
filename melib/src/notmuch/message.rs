@@ -213,7 +213,7 @@ impl<'m> Message<'m> {
         env
     }
 
-    pub fn replies_iter(&self) -> Option<MessageIterator> {
+    pub fn replies_iter(&self) -> Option<MessageIterator<'_>> {
         if self.is_from_thread {
             let messages = Some(NonNull::new(unsafe {
                 call!(self.lib, notmuch_message_get_replies)(self.message.as_ptr())

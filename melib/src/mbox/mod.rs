@@ -715,7 +715,7 @@ pub fn mbox_parse(
     file_offset: usize,
     format: MboxFormat,
     is_crlf: bool,
-) -> ParsingResult<Vec<Envelope>> {
+) -> ParsingResult<'_, Vec<Envelope>> {
     if input.is_empty() {
         return Ok((input, vec![]));
     }

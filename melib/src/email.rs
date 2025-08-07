@@ -551,7 +551,7 @@ impl Envelope {
             })
     }
 
-    pub fn subject(&self) -> Cow<str> {
+    pub fn subject(&self) -> Cow<'_, str> {
         match self.subject {
             Some(ref s) => Cow::from(s),
             _ => Cow::from(String::new()),

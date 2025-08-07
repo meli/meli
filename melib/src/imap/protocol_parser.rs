@@ -426,11 +426,11 @@ impl<'a> Iterator for ImapLineIterator<'a> {
 }
 
 pub trait ImapLineSplit {
-    fn split_rn(&self) -> ImapLineIterator;
+    fn split_rn(&self) -> ImapLineIterator<'_>;
 }
 
 impl ImapLineSplit for [u8] {
-    fn split_rn(&self) -> ImapLineIterator {
+    fn split_rn(&self) -> ImapLineIterator<'_> {
         ImapLineIterator { slice: self }
     }
 }
@@ -545,7 +545,7 @@ pub struct FetchResponse<'a> {
     pub raw_fetch_value: &'a [u8],
 }
 
-pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
+pub fn fetch_response(input: &[u8]) -> ImapParseResult<'_, FetchResponse<'_>> {
     macro_rules! should_start_with {
         ($input:expr, $tag:tt) => {
             if !$input.starts_with($tag) {
@@ -804,7 +804,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
     Ok((&input[i..], ret, None))
 }
 
-pub fn fetch_responses(mut input: &[u8]) -> ImapParseResult<Vec<FetchResponse<'_>>> {
+pub fn fetch_responses(mut input: &[u8]) -> ImapParseResult<'_, Vec<FetchResponse<'_>>> {
     let mut ret = Vec::new();
     let mut alert: Option<Alert> = None;
 
@@ -959,7 +959,7 @@ pub enum UntaggedResponse<'s> {
     },
 }
 
-pub fn untagged_responses(input: &[u8]) -> ImapParseResult<Option<UntaggedResponse<'_>>> {
+pub fn untagged_responses(input: &[u8]) -> ImapParseResult<'_, Option<UntaggedResponse<'_>>> {
     let orig_input = input;
     let (input, _) = tag::<_, &[u8], (&[u8], nom::error::ErrorKind)>(UNTAGGED_PREFIX)(input)?;
     let (input, num) = map_res::<_, _, _, (&[u8], nom::error::ErrorKind), _, _, _>(digit1, |s| {

@@ -71,16 +71,16 @@ impl Iterator for CodePointsIterator<'_> {
     }
 }
 pub trait CodePointsIter {
-    fn code_points(&self) -> CodePointsIterator;
+    fn code_points(&self) -> CodePointsIterator<'_>;
 }
 
 impl CodePointsIter for str {
-    fn code_points(&self) -> CodePointsIterator {
+    fn code_points(&self) -> CodePointsIterator<'_> {
         CodePointsIterator { rest: self.chars() }
     }
 }
 impl CodePointsIter for &str {
-    fn code_points(&self) -> CodePointsIterator {
+    fn code_points(&self) -> CodePointsIterator<'_> {
         CodePointsIterator { rest: self.chars() }
     }
 }

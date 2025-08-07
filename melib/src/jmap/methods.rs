@@ -432,7 +432,7 @@ where
         }
     }
     _impl!(
-        /// `accountId: `Id` The id of the account to use.
+        /// `accountId`: `Id` The id of the account to use.
         account_id: Id<Account>
     );
     _impl!(

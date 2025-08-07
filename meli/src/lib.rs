@@ -62,7 +62,8 @@
     clippy::multiple_crate_versions,
     clippy::significant_drop_in_scrutinee,
     clippy::cognitive_complexity,
-    clippy::manual_clamp
+    clippy::manual_clamp,
+    clippy::coerce_container_to_any
 )]
 /* Source Code Annotation Tags:
  *

@@ -384,7 +384,7 @@ where
     }
 }
 
-pub fn any_char(input: &str) -> Result<char> {
+pub fn any_char(input: &str) -> Result<'_, char> {
     input
         .chars()
         .next()

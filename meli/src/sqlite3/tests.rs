@@ -118,7 +118,7 @@ fn test_sqlite3_reindex() {
     mod helpers {
         use super::*;
 
-        /// Helper to convert a GZipped bytes string to text.
+        /// Helper to convert a gzipped byte-string to text.
         pub(super) fn gz_to_string(bytes: &'static [u8]) -> String {
             use flate2::bufread::GzDecoder;
 

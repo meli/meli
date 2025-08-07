@@ -186,11 +186,11 @@ pub trait TextPresentation {
     /// Return `input` string while trying to use text presentations of
     /// symbols and emoji as much as possible. Might not work on all
     /// non-text symbols and is experimental.
-    fn text_pr(&self) -> std::borrow::Cow<str>;
+    fn text_pr(&self) -> std::borrow::Cow<'_, str>;
 }
 
 impl TextPresentation for str {
-    fn text_pr(&self) -> std::borrow::Cow<str> {
+    fn text_pr(&self) -> std::borrow::Cow<'_, str> {
         use std::{borrow::Cow, str::FromStr};
 
         // [ref:FIXME]: add all relevant Unicode range/blocks to TextPresentation::text_pr()

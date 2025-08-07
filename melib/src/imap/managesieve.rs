@@ -322,7 +322,7 @@ pub mod parser {
         sieve_name(input)
     }
 
-    pub fn response_oknobye(input: &[u8]) -> IResult<&[u8], ManageSieveResponse> {
+    pub fn response_oknobye(input: &[u8]) -> IResult<&[u8], ManageSieveResponse<'_>> {
         alt((
             map(
                 terminated(

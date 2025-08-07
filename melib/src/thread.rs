@@ -699,7 +699,7 @@ impl Threads {
         }
     }
 
-    pub fn threads_iter(&self, root_tree: SmallVec<[ThreadNodeHash; 1024]>) -> ThreadsIterator {
+    pub fn threads_iter(&self, root_tree: SmallVec<[ThreadNodeHash; 1024]>) -> ThreadsIterator<'_> {
         ThreadsIterator {
             root_tree,
             pos: 0,
@@ -708,7 +708,7 @@ impl Threads {
         }
     }
 
-    pub fn thread_iter(&self, index: ThreadHash) -> ThreadIterator {
+    pub fn thread_iter(&self, index: ThreadHash) -> ThreadIterator<'_> {
         ThreadIterator {
             group: self.thread_ref(index).root(),
             pos: 0,

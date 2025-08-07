@@ -77,11 +77,11 @@ impl<'a> Iterator for NntpLineIterator<'a> {
 }
 
 pub trait NntpLineSplit {
-    fn split_rn(&self) -> NntpLineIterator;
+    fn split_rn(&self) -> NntpLineIterator<'_>;
 }
 
 impl NntpLineSplit for str {
-    fn split_rn(&self) -> NntpLineIterator {
+    fn split_rn(&self) -> NntpLineIterator<'_> {
         NntpLineIterator { slice: self }
     }
 }

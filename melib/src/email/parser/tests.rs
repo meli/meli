@@ -635,7 +635,7 @@ fn test_email_parser_msg_id() {
     let s = "References: <1234@local.machine.example>\r\n";
     let (rest, (_header_name, value)) = headers::header(s.as_bytes()).unwrap();
     assert!(rest.is_empty());
-    assert_eq!(&msg_id_list(value).unwrap().1, &[a.clone()]);
+    assert_eq!(&msg_id_list(value).unwrap().1, std::slice::from_ref(&a));
     let s = "References: <1234@local.machine.example> <3456@example.net>\r\n";
     let (rest, (_header_name, value)) = headers::header(s.as_bytes()).unwrap();
     assert!(rest.is_empty());

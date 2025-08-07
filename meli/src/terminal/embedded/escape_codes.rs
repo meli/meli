@@ -81,14 +81,14 @@ pub enum State {
 pub struct EscCode<'a>(pub &'a State, pub u8);
 
 impl<'a> From<(&'a mut State, u8)> for EscCode<'a> {
-    fn from(val: (&mut State, u8)) -> EscCode {
+    fn from(val: (&mut State, u8)) -> EscCode<'_> {
         let (s, b) = val;
         EscCode(s, b)
     }
 }
 
 impl<'a> From<(&'a State, u8)> for EscCode<'a> {
-    fn from(val: (&State, u8)) -> EscCode {
+    fn from(val: (&State, u8)) -> EscCode<'_> {
         let (s, b) = val;
         EscCode(s, b)
     }

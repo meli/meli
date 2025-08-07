@@ -507,7 +507,7 @@ pub mod query_parser {
 }
 
 #[inline(always)]
-pub fn escape_double_quote(w: &str) -> Cow<str> {
+pub fn escape_double_quote(w: &str) -> Cow<'_, str> {
     if w.contains('"') {
         Cow::from(w.replace('"', "\"\""))
     } else {

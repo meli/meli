@@ -92,7 +92,7 @@ impl From<EnvelopeHash> for Value {
 }
 
 impl ToSql for ModSequence {
-    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput> {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
         Ok(ToSqlOutput::from(self.0.get() as i64))
     }
 }

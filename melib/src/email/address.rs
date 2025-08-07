@@ -329,7 +329,7 @@ impl Address {
     ///     "Jörg T. Doe <joerg@example.com>"
     /// );
     /// ```
-    pub fn display(&self) -> UIAddress {
+    pub fn display(&self) -> UIAddress<'_> {
         UIAddress(self)
     }
 
@@ -351,7 +351,7 @@ impl Address {
     /// );
     /// assert_eq!(addr.display_name().to_string().as_str(), "Jörg T. Doe");
     /// ```
-    pub fn display_name(&self) -> UINameAddress {
+    pub fn display_name(&self) -> UINameAddress<'_> {
         UINameAddress(self)
     }
 

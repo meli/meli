@@ -76,6 +76,7 @@ macro_rules! call {
     // [ref:msrv] unnecessary_transmutes is introduced in 1.88.0
     unknown_lints,
     unnecessary_transmutes,
+    unpredictable_function_pointer_comparisons,
     clippy::useless_transmute,
     clippy::too_many_arguments,
     clippy::use_self
