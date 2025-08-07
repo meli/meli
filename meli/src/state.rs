@@ -708,18 +708,14 @@ impl State {
             if !self.message_box.is_empty() {
                 if !self.message_box.initialised {
                     {
-                        /* Clear area previously occupied by floating
-                         * notification box */
-                        if self.message_box.cached_area().generation()
-                            == self.screen.area().generation()
-                        {
-                            for row in self
-                                .screen
-                                .grid()
-                                .bounds_iter(self.message_box.cached_area())
-                            {
+                        let cached_area = self.message_box.cached_area();
+                        // Clear area previously occupied by floating notification box
+                        if cached_area.generation() == self.screen.area().generation() {
+                            for row in self.screen.grid().bounds_iter(cached_area) {
                                 self.screen.draw(row.cols(), row.row_index());
                             }
+                            let (grid, overlay_grid) = self.screen.grid_and_overlay_grid_mut();
+                            overlay_grid.copy_area(grid, cached_area, cached_area);
                         }
                     }
                 }
