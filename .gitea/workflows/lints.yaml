@@ -94,7 +94,7 @@ jobs:
         if: steps.cache-rustup.outputs.cache-hit != 'true'
         shell: bash
         run: |
-          cargo install --version 0.15.1 --target "${{ matrix.target }}" cargo-msrv
+          cargo install --version 0.18.4 --target "${{ matrix.target }}" cargo-msrv
           # "This package is currently implemented using rust-analyzer internals, so cannot be published on crates.io."
           RUSTFLAGS="" cargo install --locked --target "${{ matrix.target }}" --git https://github.com/dcchut/cargo-derivefmt --rev 95da8eee343de4adb25850893873b979258aed7f --bin cargo-derivefmt
       - name: Restore build artifacts cache in target dir
