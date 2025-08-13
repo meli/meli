@@ -97,6 +97,20 @@ jobs:
           cargo install --version 0.18.4 --target "${{ matrix.target }}" cargo-msrv
           # "This package is currently implemented using rust-analyzer internals, so cannot be published on crates.io."
           RUSTFLAGS="" cargo install --locked --target "${{ matrix.target }}" --git https://github.com/dcchut/cargo-derivefmt --rev 95da8eee343de4adb25850893873b979258aed7f --bin cargo-derivefmt
+      - if: steps.cache-rustup.outputs.cache-hit != 'true'
+        name: Save rust toolchains
+        id: save-cache-deps
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.rustup/
+            ~/.cargo/env
+            ~/.cargo/config.toml
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: lints-workflow-${{ matrix.build }}-rustup
       - name: Restore build artifacts cache in target dir
         id: cache-deps
         uses: actions/cache/restore@v4
