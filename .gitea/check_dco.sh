@@ -64,7 +64,7 @@ echo "---------------------------------------------------------------------"
 echo ""
 echo "Starting checks..."
 
-output=$(printf "%s" "${SHA_LIST}" | while read -r commit_sha; do
+output=$(printf "%s\n" "${SHA_LIST}" | while read -r commit_sha; do
   contains_signoff_result=""
 
   contains_signoff "${commit_sha}"; contains_signoff_result="$?"
