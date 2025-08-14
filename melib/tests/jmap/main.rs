@@ -317,7 +317,11 @@ pub mod server {
                                     // > method MUST return an "invalidArguments" error.
                                     let prev_response =
                                         responses.method_responses.get(&result_of).unwrap();
-                                    assert_eq!(prev_response[0].as_str().unwrap(), &name);
+                                    assert_eq!(
+                                        prev_response[0].as_str().unwrap(),
+                                        &name,
+                                        "{prev_response:?}"
+                                    );
                                     prev_response[1][path.trim_matches('/')]
                                         .as_array()
                                         .unwrap()
