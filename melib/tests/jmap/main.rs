@@ -771,7 +771,7 @@ mod tests {
             std::env::set_var(var, &dir);
         }
 
-        let listener = TcpListener::bind(("0.0.0.0", 0)).unwrap();
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let local_addr = listener.local_addr().unwrap();
         let account_conf = AccountSettings {
             name: "test".to_string(),

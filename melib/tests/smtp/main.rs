@@ -196,7 +196,7 @@ pub mod server {
     impl SmtpServer {
         pub fn new(event_receiver: UnboundedReceiver<ServerEvent>) -> Self {
             let tcp_listener =
-                smol::Async::new(TcpListener::bind(("0.0.0.0", 0)).unwrap()).unwrap();
+                smol::Async::new(TcpListener::bind(("127.0.0.1", 0)).unwrap()).unwrap();
             let addr = tcp_listener.as_ref().local_addr().unwrap();
             let state = Arc::new(Mutex::new(ServerState {
                 mails: vec![],
