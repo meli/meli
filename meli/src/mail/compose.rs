@@ -21,7 +21,6 @@
 
 use std::{
     borrow::Cow,
-    convert::TryInto,
     fmt::Write as _,
     future::Future,
     io::Write,
@@ -408,15 +407,15 @@ impl Composer {
             if let Some(reply_to) = envelope
                 .other_headers()
                 .get(HeaderName::MAIL_FOLLOWUP_TO)
-                .and_then(|v| v.try_into().ok())
+                .and_then(|v| Address::list_try_from(v).ok())
             {
-                to.insert(reply_to);
+                to.extend(reply_to);
             } else if let Some(reply_to) = envelope
                 .other_headers()
                 .get(HeaderName::REPLY_TO)
-                .and_then(|v| v.try_into().ok())
+                .and_then(|v| Address::list_try_from(v).ok())
             {
-                to.insert(reply_to);
+                to.extend(reply_to);
             } else {
                 to.extend(envelope.from().iter().cloned());
             }
