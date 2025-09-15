@@ -31,7 +31,7 @@ futures = { version = "0.3.30", default-features = false, features = ["async-awa
 imap-codec = { version = "2.0.0-alpha.4", features = ["ext_condstore_qresync", "ext_id"], optional = true }
 indexmap = { version = "^2.3", default-features = false, features = ["serde", "std"] }
 isahc = { version = "^1.7.2", optional = true, default-features = false, features = ["http2", "json", "text-decoding"] }
-libc = { version = "0.2.125", features = ["extra_traits"] }
+libc = { version = "0.2", features = ["extra_traits"] }
 libloading = { version = "^0.8" }
 log = { version = "0.4", features = ["std"] }
 native-tls = { version = "0.2", default-features = false, optional = true }

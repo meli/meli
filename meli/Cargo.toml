@@ -31,7 +31,7 @@ flate2 = { version = "1", optional = true }
 futures = { version = "0.3.30", default-features = false, features = ["async-await", "executor", "std"] }
 indexmap = { version = "^2.3", default-features = false, features = ["serde", "std"] }
 itoa = { version = "1.0.11", default-features = false }
-libc = { version = "0.2.125", default-features = false, features = ["extra_traits"] }
+libc = { version = "0.2", default-features = false, features = ["extra_traits"] }
 libz-sys = { version = "1.1", features = ["static"], optional = true }
 linkify = { version = "^0.10", default-features = false }
 melib = { path = "../melib", version = "0.8.12", features = [] }
