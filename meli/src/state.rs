@@ -37,7 +37,7 @@
 use std::{
     borrow::Cow,
     collections::BTreeSet,
-    os::fd::{AsRawFd, FromRawFd, OwnedFd},
+    os::fd::OwnedFd,
     path::{Path, PathBuf},
     sync::Arc,
     thread,
@@ -79,13 +79,12 @@ impl InputHandler {
          * thread will receive it and die. */
         //let _ = self.rx.try_iter().count();
         let rx = self.rx.clone();
-        let pipe = nix::unistd::dup(self.pipe.0.as_raw_fd())
+        let pipe = nix::unistd::dup(&self.pipe.0)
             .expect("Fatal: Could not dup() input pipe file descriptor");
         let tx = self.state_tx.clone();
         thread::Builder::new()
             .name("input-thread".to_string())
             .spawn(move || {
-                let pipe = unsafe { OwnedFd::from_raw_fd(pipe) };
                 get_events(
                     |i| {
                         tx.send(ThreadEvent::Input(i)).unwrap();

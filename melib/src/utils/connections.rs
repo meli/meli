@@ -294,7 +294,7 @@ impl Connection {
             Fd { inner, .. } => {
                 // [ref:VERIFY]
                 nix::fcntl::fcntl(
-                    inner.as_raw_fd(),
+                    inner.as_fd(),
                     nix::fcntl::FcntlArg::F_SETFL(if nonblocking {
                         nix::fcntl::OFlag::O_NONBLOCK
                     } else {

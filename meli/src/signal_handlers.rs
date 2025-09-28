@@ -22,10 +22,7 @@
 
 //! Signal handler setup.
 
-use std::os::{
-    fd::{AsFd, AsRawFd},
-    raw::c_int,
-};
+use std::os::{fd::AsFd, raw::c_int};
 
 use crate::*;
 
@@ -47,7 +44,7 @@ pub fn notify(
     let (s, r) = crossbeam::channel::bounded(100);
     let mut signals = signal_hook::iterator::Signals::new(signals)?;
     let _ = nix::fcntl::fcntl(
-        alarm_pipe_r.as_raw_fd(),
+        alarm_pipe_r.as_fd(),
         nix::fcntl::FcntlArg::F_SETFL(nix::fcntl::OFlag::O_NONBLOCK),
     );
     std::thread::spawn(move || {

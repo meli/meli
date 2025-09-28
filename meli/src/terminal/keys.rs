@@ -288,18 +288,22 @@ pub fn get_events(
 ) {
     let stdin = std::io::stdin();
     let stdin2 = std::io::stdin();
-    let stdin_fd = PollFd::new(stdin2.as_fd(), PollFlags::POLLIN);
-    let new_command_pollfd = PollFd::new(new_command_fd.as_fd(), PollFlags::POLLIN);
     let mut input_mode = InputMode::Normal;
     let mut esc_seq_buf = vec![];
     let mut palette = (None, None);
     let mut paste_buf = String::with_capacity(256);
     let mut stdin_iter = stdin.events_and_raw();
-    'poll_while: while let Ok(_n_raw) = poll(&mut [new_command_pollfd, stdin_fd], PollTimeout::NONE)
-    {
+    'poll_while: loop {
+        let mut poll_fds = [
+            PollFd::new(stdin2.as_fd(), PollFlags::POLLIN),
+            PollFd::new(new_command_fd.as_fd(), PollFlags::POLLIN),
+        ];
+        let Ok(_n_raw) = poll(&mut poll_fds, PollTimeout::NONE) else {
+            break 'poll_while;
+        };
         select! {
             default => {
-                if stdin_fd.revents().is_some() {
+                if poll_fds[0].revents().is_some() {
                     'stdin_while: for c in stdin_iter.by_ref() {
                         match (c, &mut input_mode) {
                             (Ok((TEvent::Key(TKey::Alt(']')), _)), InputMode::Normal)=> {
@@ -456,7 +460,7 @@ pub fn get_events(
                 if pselect_result.is_err() || error_fd_set.highest().map(|bfd| bfd.as_raw_fd()) == Some(new_command_fd.as_raw_fd()) || read_fd_set.highest().map(|bfd| bfd.as_raw_fd()) != Some(new_command_fd.as_raw_fd()) {
                     continue 'poll_while;
                 };
-                let _ = nix::unistd::read(new_command_fd.as_raw_fd(), buf.as_mut());
+                let _ = nix::unistd::read(new_command_fd, buf.as_mut());
                 match cmd.unwrap_or_default() {
                     InputCommand::Kill => return,
                 }

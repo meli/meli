@@ -237,14 +237,14 @@ pub mod impls {
         };
 
         let dir = match ::nix::dir::Dir::openat(
-            Some(::libc::AT_FDCWD),
+            nix::fcntl::AT_FDCWD,
             prefix,
             OFlag::O_DIRECTORY | OFlag::O_NOATIME | OFlag::O_RDONLY | OFlag::O_CLOEXEC,
             ::nix::sys::stat::Mode::S_IRUSR | ::nix::sys::stat::Mode::S_IXUSR,
         )
         .or_else(|_| {
             ::nix::dir::Dir::openat(
-                Some(::libc::AT_FDCWD),
+                nix::fcntl::AT_FDCWD,
                 prefix,
                 OFlag::O_DIRECTORY | OFlag::O_RDONLY | OFlag::O_CLOEXEC,
                 ::nix::sys::stat::Mode::S_IRUSR | ::nix::sys::stat::Mode::S_IXUSR,

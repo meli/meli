@@ -37,12 +37,7 @@ use nix::{
     pty::{grantpt, posix_openpt, ptsname, unlockpt},
     sys::stat,
 };
-use nix::{
-    ioctl_none_bad, ioctl_write_ptr_bad,
-    libc::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO},
-    pty::Winsize,
-    unistd::{dup2, fork, ForkResult},
-};
+use nix::{ioctl_none_bad, ioctl_write_ptr_bad, pty::Winsize};
 use smallvec::SmallVec;
 
 pub mod escape_codes;
@@ -159,16 +154,16 @@ pub fn create_pty(width: usize, height: usize, command: &str) -> Result<Arc<Mute
         )));
     };
 
-    let child_pid = match unsafe { fork()? } {
-        ForkResult::Child => {
+    let child_pid = match unsafe { nix::unistd::fork()? } {
+        nix::unistd::ForkResult::Child => {
             #[cfg(not(target_os = "macos"))]
             // Open backend end for pseudoterminal
             let backend_fd = open(Path::new(&backend_name), OFlag::O_RDWR, stat::Mode::empty())?;
 
             // assign stdin, stdout, stderr to the pty
-            dup2(backend_fd.as_raw_fd(), STDIN_FILENO).expect("could not dup2 STDIN");
-            dup2(backend_fd.as_raw_fd(), STDOUT_FILENO).expect("could not dup2 STDOUT");
-            dup2(backend_fd.as_raw_fd(), STDERR_FILENO).expect("could not dup2 STDERR");
+            nix::unistd::dup2_stdin(&backend_fd).expect("could not dup2 STDIN");
+            nix::unistd::dup2_stdout(&backend_fd).expect("could not dup2 STDOUT");
+            nix::unistd::dup2_stderr(&backend_fd).expect("could not dup2 STDERR");
             // Become session leader
             nix::unistd::setsid().expect("Forked terminal process could not become session leader");
             match unsafe { set_controlling_terminal(backend_fd.as_raw_fd()) } {
@@ -196,7 +191,7 @@ pub fn create_pty(width: usize, height: usize, command: &str) -> Result<Arc<Mute
             // process.
             std::process::exit(-1);
         }
-        ForkResult::Parent { child } => child,
+        nix::unistd::ForkResult::Parent { child } => child,
     };
 
     let stdin = unsafe { std::fs::File::from_raw_fd(frontend_fd.as_raw_fd()) };
