@@ -1073,8 +1073,6 @@ impl ImapConnection {
                                         capabilities: Vec1::from(CapabilityEnable::CondStore),
                                     })
                                     .await?;
-                                    self.read_response(&mut ret, RequiredResponses::empty())
-                                        .await?;
                                 } else {
                                     self.send_command(CommandBody::Status {
                                         mailbox: Mailbox::Inbox,
@@ -1088,9 +1086,9 @@ impl ImapConnection {
                                         .into(),
                                     })
                                     .await?;
-                                    self.read_response(&mut ret, RequiredResponses::empty())
-                                        .await?;
                                 }
+                                self.read_response(&mut ret, RequiredResponses::empty())
+                                    .await?;
                                 self.sync_policy = SyncPolicy::Condstore;
                             }
                         }

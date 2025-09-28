@@ -462,8 +462,7 @@ impl NotmuchDb {
         event_consumer: BackendEventConsumer,
     ) -> Result<Box<Self>> {
         let mut dlpath = Cow::Borrowed(Self::DEFAULT_DYLIB_NAME);
-        let mut custom_dlpath = false;
-        if let Some(lib_path) = s.extra.get("library_file_path") {
+        let custom_dlpath = if let Some(lib_path) = s.extra.get("library_file_path") {
             let expanded_path = Path::new(lib_path).expand();
             let expanded_path_string = expanded_path.display().to_string();
             dlpath = if &expanded_path_string != lib_path
@@ -473,8 +472,10 @@ impl NotmuchDb {
             } else {
                 Cow::Owned(lib_path.to_string())
             };
-            custom_dlpath = true;
-        }
+            true
+        } else {
+            false
+        };
         let lib = Arc::new(NotmuchLibrary {
             inner: unsafe {
                 match libloading::Library::new(dlpath.as_ref()) {

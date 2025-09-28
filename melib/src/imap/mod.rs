@@ -979,13 +979,11 @@ impl MailBackend for ImapType {
 
                 conn.send_command(CommandBody::ExpungeUid { sequence_set })
                     .await?;
-                conn.read_response(&mut response, RequiredResponses::empty())
-                    .await?;
             } else {
                 conn.send_command(CommandBody::Expunge).await?;
-                conn.read_response(&mut response, RequiredResponses::empty())
-                    .await?;
             }
+            conn.read_response(&mut response, RequiredResponses::empty())
+                .await?;
             imap_log!(
                 trace,
                 conn,

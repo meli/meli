@@ -456,7 +456,7 @@ pub mod server {
                                 .unwrap()
                                 .envelopes
                                 .iter()
-                                .map(|(u, _)| (*u))
+                                .map(|(u, _)| *u)
                                 .collect::<Vec<_>>();
                             if uids.is_empty() {
                                 tcp_stream.write_all(b"* SEARCH\r\n").await.unwrap();

@@ -259,13 +259,13 @@ impl<OBJ: Object> GetResponse<OBJ> {
     _impl!(get_mut  not_found_mut, not_found: Vec<Id<OBJ>>);
 }
 
-#[derive(Clone, Copy, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-enum JmapError {
-    RequestTooLarge,
-    InvalidArguments,
-    InvalidResultReference,
-}
+// #[derive(Clone, Copy, Debug, Deserialize)]
+// #[serde(rename_all = "camelCase")]
+// enum JmapError {
+//     RequestTooLarge,
+//     InvalidArguments,
+//     InvalidResultReference,
+// }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]

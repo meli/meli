@@ -1523,8 +1523,7 @@ impl Component for Listing {
                         index_style: previous_index_styles.get(&f.hash).copied(),
                     })
                     .collect::<_>();
-                let mut fallback = 0;
-                if let MenuEntryCursor::Mailbox(ref mut cur) = self.cursor_pos.menu {
+                let fallback = if let MenuEntryCursor::Mailbox(ref mut cur) = self.cursor_pos.menu {
                     *cur = std::cmp::min(
                         self.accounts[self.cursor_pos.account]
                             .entries
@@ -1532,8 +1531,10 @@ impl Component for Listing {
                             .saturating_sub(1),
                         *cur,
                     );
-                    fallback = *cur;
-                }
+                    *cur
+                } else {
+                    0
+                };
                 if self.component.coordinates() == (*account_hash, *mailbox_hash) {
                     self.component
                         .process_event(&mut UIEvent::VisibilityChange(false), context);
