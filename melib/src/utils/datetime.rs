@@ -554,9 +554,8 @@ where
 pub fn now() -> UnixTimestamp {
     use std::mem::MaybeUninit;
     let mut tv = MaybeUninit::<libc::timeval>::uninit();
-    let mut tz = MaybeUninit::<libc::timezone>::uninit();
     unsafe {
-        let ret = gettimeofday(tv.as_mut_ptr(), tz.as_mut_ptr());
+        let ret = gettimeofday(tv.as_mut_ptr(), std::ptr::null_mut());
         if ret == -1 {
             unreachable!("gettimeofday returned -1");
         }
