@@ -1721,6 +1721,11 @@ impl Component for CompactListing {
 
             if !self.rows.row_updates.is_empty() {
                 while let Some(env_hash) = self.rows.row_updates.pop() {
+                    if !self.rows.env_to_thread.contains_key(&env_hash) {
+                        self.refresh_mailbox(context, true);
+                        self.set_dirty(true);
+                        break;
+                    }
                     self.update_line(context, env_hash);
                     let row: usize = self.rows.env_order[&env_hash];
                     let page_no = (self.new_cursor_pos.2).wrapping_div(rows);

@@ -1563,6 +1563,11 @@ impl Component for ThreadListing {
                 let top_idx = page_no * rows;
 
                 while let Some(env_hash) = self.rows.row_updates.pop() {
+                    if !self.rows.env_to_thread.contains_key(&env_hash) {
+                        self.refresh_mailbox(context, true);
+                        self.set_dirty(true);
+                        break;
+                    }
                     self.update_line(context, env_hash);
                     let row: usize = self.rows.env_order[&env_hash];
                     let envelope: EnvelopeRef = context.accounts[&self.new_cursor_pos.0]

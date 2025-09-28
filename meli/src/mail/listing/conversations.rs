@@ -1245,10 +1245,14 @@ impl Component for ConversationsListing {
 
             if !self.rows.row_updates.is_empty() {
                 // certain rows need to be updated (eg an unseen message was just set seen)
-                while let Some(row) = self.rows.row_updates.pop() {
-                    self.update_line(context, row);
-                    let row: usize = self.rows.env_order[&row];
-
+                while let Some(env_hash) = self.rows.row_updates.pop() {
+                    if !self.rows.env_to_thread.contains_key(&env_hash) {
+                        self.refresh_mailbox(context, true);
+                        self.set_dirty(true);
+                        break;
+                    }
+                    self.update_line(context, env_hash);
+                    let row: usize = self.rows.env_order[&env_hash];
                     let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
 
                     let top_idx = page_no * rows;
