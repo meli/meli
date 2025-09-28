@@ -11,7 +11,7 @@ license = "EUPL-1.2 OR GPL-3.0-or-later"
 readme = "README.md"
 edition = "2021"
 build = "build.rs"
-rust-version = "1.70.0"
+rust-version = "1.80.0"
 
 [lib]
 name = "melib"

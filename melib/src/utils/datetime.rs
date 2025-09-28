@@ -244,7 +244,7 @@ fn timestamp_to_string_inner(
                 Locale::new(
                     LocaleCategoryMask::Time,
                     LocaleCategory::Time,
-                    b"C\0".as_ptr() as *const std::os::raw::c_char,
+                    c"C".as_ptr(),
                     std::ptr::null_mut(),
                 )
                 .chain_err_summary(|| "Could not set locale for datetime conversion")
@@ -404,7 +404,7 @@ where
             let _with_locale = Locale::new(
                 LocaleCategoryMask::Time,
                 LocaleCategory::Time,
-                b"C\0".as_ptr() as *const std::os::raw::c_char,
+                c"C".as_ptr(),
                 std::ptr::null_mut(),
             )
             .chain_err_summary(|| "Could not set locale for datetime conversion")
@@ -470,7 +470,7 @@ where
             let _with_locale = Locale::new(
                 LocaleCategoryMask::Time,
                 LocaleCategory::Time,
-                b"C\0".as_ptr() as *const std::os::raw::c_char,
+                c"C".as_ptr(),
                 std::ptr::null_mut(),
             )
             .chain_err_summary(|| "Could not set locale for datetime conversion")
@@ -806,9 +806,7 @@ mod tests {
 
     #[test]
     fn test_datetime_rfcs() {
-        if unsafe { libc::setlocale(libc::LC_ALL, b"\0".as_ptr() as *const core::ffi::c_char) }
-            .is_null()
-        {
+        if unsafe { libc::setlocale(libc::LC_ALL, c"".as_ptr()) }.is_null() {
             eprintln!("Unable to set locale.");
         }
         /* Some tests were lazily stolen from https://rachelbythebay.com/w/2013/06/11/time/ */

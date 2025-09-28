@@ -97,14 +97,9 @@ pub enum GpgmeFlag {
     AsciiArmor,
 }
 
-// [ref:msrv] c-str literals are introduced in 1.77.0
 impl GpgmeFlag {
-    // SAFETY: Value is NUL terminated.
-    const AUTO_KEY_RETRIEVE: &'static CStr =
-        unsafe { CStr::from_bytes_with_nul_unchecked(b"auto-key-retrieve\0") };
-    // SAFETY: Value is NUL terminated.
-    const AUTO_KEY_LOCATE: &'static CStr =
-        unsafe { CStr::from_bytes_with_nul_unchecked(b"auto-key-locate\0") };
+    const AUTO_KEY_RETRIEVE: &'static CStr = c"auto-key-retrieve";
+    const AUTO_KEY_LOCATE: &'static CStr = c"auto-key-locate";
 }
 
 bitflags! {
@@ -350,11 +345,8 @@ impl Context {
                 return Ok(self);
             }
         };
-        // [ref:msrv] c-str literals are introduced in 1.77.0
-        // SAFETY: Value is NUL terminated.
-        const VALUE_ON: &CStr = unsafe { CStr::from_bytes_with_nul_unchecked(b"1\0") };
-        // SAFETY: Value is NUL terminated.
-        const VALUE_OFF: &CStr = unsafe { CStr::from_bytes_with_nul_unchecked(b"0\0") };
+        const VALUE_ON: &CStr = c"1";
+        const VALUE_OFF: &CStr = c"0";
         let raw_flag = match flag {
             GpgmeFlag::AutoKeyRetrieve => GpgmeFlag::AUTO_KEY_RETRIEVE,
             GpgmeFlag::AsciiArmor | GpgmeFlag::OfflineMode => unreachable!(),
@@ -389,12 +381,7 @@ impl Context {
 
     pub fn set_auto_key_locate(&mut self, val: LocateKey) -> Result<&mut Self> {
         if val == LocateKey::NODEFAULT {
-            self.set_flag_inner(
-                GpgmeFlag::AUTO_KEY_LOCATE,
-                // [ref:msrv] c-str literals are introduced in 1.77.0
-                // SAFETY: Value is NUL terminated.
-                unsafe { CStr::from_bytes_with_nul_unchecked(b"clear,nodefault\0") },
-            )?;
+            self.set_flag_inner(GpgmeFlag::AUTO_KEY_LOCATE, c"clear,nodefault")?;
         } else {
             let mut accum = val.to_string();
             accum.push('\0');

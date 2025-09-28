@@ -417,14 +417,13 @@ impl MailBackend for ImapType {
                 }
             };
             loop {
-                let res = state.chunk().await.map_err(|err| {
+                let res = state.chunk().await.inspect_err(|err| {
                     log::trace!(
                         "{} fetch chunk at stage {:?} err {:?}",
                         id,
                         state.stage,
-                        &err
+                        err
                     );
-                    err
                 })?;
                 emitter.emit(res).await;
                 if state.stage == FetchStage::Finished {

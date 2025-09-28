@@ -595,9 +595,7 @@ pub struct _gpgme_op_query_swdb_result {
 pub struct _gpgme_op_assuan_result {
     pub err: gpgme_error_t,
 }
-#[allow(unsafe_code)]
-pub const GPGME_VERSION: &::core::ffi::CStr =
-    unsafe { ::core::ffi::CStr::from_bytes_with_nul_unchecked(b"1.24.0\0") };
+pub const GPGME_VERSION: &::core::ffi::CStr = c"1.24.0";
 pub const GPGME_VERSION_NUMBER: u32 = 71680;
 pub const GPGME_KEYLIST_MODE_LOCAL: u32 = 1;
 pub const GPGME_KEYLIST_MODE_EXTERN: u32 = 2;

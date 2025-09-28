@@ -22,7 +22,7 @@
 
 use std::{
     collections::{BTreeMap, HashMap},
-    ffi::{CStr, CString},
+    ffi::CString,
     sync::{Arc, RwLock},
 };
 
@@ -66,71 +66,35 @@ impl Snapshot {
                 env.tags_mut().insert(num);
             }
         }
-        // [ref:msrv] c-str literals are introduced in 1.77.0
-        unsafe {
-            use crate::email::parser::address::rfc2822address_list;
-            env.set_message_id(message.msg_id())
-                .set_date(
-                    message
-                        .header(CStr::from_bytes_with_nul_unchecked(b"Date\0"))
-                        .unwrap_or_default(),
-                )
-                .set_from(
-                    rfc2822address_list(
-                        message
-                            .header(CStr::from_bytes_with_nul_unchecked(b"From\0"))
-                            .unwrap_or_default(),
-                    )
+        use crate::email::parser::address::rfc2822address_list;
+        env.set_message_id(message.msg_id())
+            .set_date(message.header(c"Date").unwrap_or_default())
+            .set_from(
+                rfc2822address_list(message.header(c"From").unwrap_or_default())
                     .map(|(_, v)| v)
                     .unwrap_or_default(),
-                )
-                .set_to(
-                    rfc2822address_list(
-                        message
-                            .header(CStr::from_bytes_with_nul_unchecked(b"To\0"))
-                            .unwrap_or_default(),
-                    )
+            )
+            .set_to(
+                rfc2822address_list(message.header(c"To").unwrap_or_default())
                     .map(|(_, v)| v)
                     .unwrap_or_default(),
-                )
-                .set_cc(
-                    rfc2822address_list(
-                        message
-                            .header(CStr::from_bytes_with_nul_unchecked(b"Cc\0"))
-                            .unwrap_or_default(),
-                    )
+            )
+            .set_cc(
+                rfc2822address_list(message.header(c"Cc").unwrap_or_default())
                     .map(|(_, v)| v)
                     .unwrap_or_default(),
-                )
-                .set_bcc(
-                    rfc2822address_list(
-                        message
-                            .header(CStr::from_bytes_with_nul_unchecked(b"Bcc\0"))
-                            .unwrap_or_default(),
-                    )
+            )
+            .set_bcc(
+                rfc2822address_list(message.header(c"Bcc").unwrap_or_default())
                     .map(|(_, v)| v)
                     .unwrap_or_default()
                     .to_vec(),
-                )
-                .set_subject(
-                    message
-                        .header(CStr::from_bytes_with_nul_unchecked(b"Subject\0"))
-                        .unwrap_or_default()
-                        .to_vec(),
-                )
-                .set_references(
-                    message
-                        .header(CStr::from_bytes_with_nul_unchecked(b"References\0"))
-                        .unwrap_or_default(),
-                )
-                .set_in_reply_to(
-                    message
-                        .header(CStr::from_bytes_with_nul_unchecked(b"In-Reply-To\0"))
-                        .unwrap_or_default(),
-                )
-                .set_datetime(message.date())
-                .set_flags(flags);
-        }
+            )
+            .set_subject(message.header(c"Subject").unwrap_or_default().to_vec())
+            .set_references(message.header(c"References").unwrap_or_default())
+            .set_in_reply_to(message.header(c"In-Reply-To").unwrap_or_default())
+            .set_datetime(message.date())
+            .set_flags(flags);
         env
     }
 

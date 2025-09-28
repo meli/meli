@@ -949,9 +949,8 @@ impl MailBackend for MboxType {
         };
         Ok(Box::pin(try_fn_stream(|emitter| async move {
             loop {
-                if let Some(res) = state.fetch().await.map_err(|err| {
-                    debug!("fetch err {:?}", &err);
-                    err
+                if let Some(res) = state.fetch().await.inspect_err(|err| {
+                    debug!("fetch err {:?}", err);
                 })? {
                     emitter.emit(res).await;
                 } else {

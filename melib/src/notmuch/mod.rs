@@ -802,9 +802,8 @@ impl MailBackend for NotmuchDb {
             iter: v.into_iter(),
         };
         Ok(Box::pin(try_fn_stream(|emitter| async move {
-            while let Some(res) = state.fetch().await.map_err(|err| {
-                log::debug!("fetch err {:?}", &err);
-                err
+            while let Some(res) = state.fetch().await.inspect_err(|err| {
+                log::debug!("fetch err {:?}", err);
             })? {
                 emitter.emit(res).await;
             }

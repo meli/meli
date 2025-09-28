@@ -914,9 +914,8 @@ To: {}
 
     fn update_from_file(&mut self, file: File, context: &mut Context) -> bool {
         match file.read_to_string().and_then(|res| {
-            self.draft.update(res.as_str()).map_err(|err| {
+            self.draft.update(res.as_str()).inspect_err(|_| {
                 self.draft.set_body(res);
-                err
             })
         }) {
             Ok(has_changes) => {
@@ -2097,9 +2096,8 @@ impl Component for Composer {
                 }
                 context.replies.push_back(UIEvent::RestoreStandardIO);
                 match f.read_to_string().and_then(|res| {
-                    self.draft.update(res.as_str()).map_err(|err| {
+                    self.draft.update(res.as_str()).inspect_err(|_| {
                         self.draft.set_body(res);
-                        err
                     })
                 }) {
                     Ok(has_changes) => {
