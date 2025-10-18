@@ -32,6 +32,11 @@ pub struct TerminalSettings {
     /// light, dark
     pub theme: String,
     pub themes: Themes,
+    #[serde(default = "tab_width")]
+    /// How many cells a tab character occupies.
+    ///
+    /// Default: 4.
+    pub tab_width: u8,
     pub ascii_drawing: bool,
     pub use_color: ToggleFlag,
     /// Try forcing text presentations of symbols and emoji as much as possible.
@@ -56,11 +61,16 @@ pub struct TerminalSettings {
     pub progress_spinner_sequence: Option<ProgressSpinnerSequence>,
 }
 
+const fn tab_width() -> u8 {
+    4
+}
+
 impl Default for TerminalSettings {
     fn default() -> Self {
         Self {
             theme: "dark".to_string(),
             themes: Themes::default(),
+            tab_width: tab_width(),
             ascii_drawing: false,
             force_text_presentation: ToggleFlag::InternalVal(false),
             use_color: ToggleFlag::InternalVal(true),
@@ -97,6 +107,7 @@ impl DotAddressable for TerminalSettings {
                 match *field {
                     "theme" => self.theme.lookup(field, tail),
                     "themes" => Err(Error::new("unimplemented")),
+                    "tab_width" => self.tab_width.lookup(field, tail),
                     "ascii_drawing" => self.ascii_drawing.lookup(field, tail),
                     "force_text_presentation" => self.force_text_presentation.lookup(field, tail),
                     "use_color" => self.use_color.lookup(field, tail),

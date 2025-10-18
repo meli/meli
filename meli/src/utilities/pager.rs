@@ -199,7 +199,7 @@ impl Pager {
     }
 
     pub fn filter(&mut self, cmd: &str, context: &Context) {
-        async fn filter_fut(bin: String, text: String) -> Result<EmbeddedGrid> {
+        async fn filter_fut(bin: String, text: String, tab_width: u8) -> Result<EmbeddedGrid> {
             use std::{
                 io::Write,
                 process::{Command, Stdio},
@@ -220,6 +220,7 @@ impl Pager {
                 .stdout;
             let mut dev_null = std::fs::File::open("/dev/null")?;
             let mut embedded = EmbeddedGrid::new();
+            embedded.set_tab_width(tab_width);
             embedded.set_terminal_size((80, 20));
 
             for b in out {
@@ -227,7 +228,8 @@ impl Pager {
             }
             Ok(embedded)
         }
-        let fut = Box::pin(filter_fut(cmd.to_string(), self.text.clone()));
+        let tab_width = context.settings.terminal.tab_width;
+        let fut = Box::pin(filter_fut(cmd.to_string(), self.text.clone(), tab_width));
         let handle = context.main_loop_handler.job_executor.spawn(
             format!("Running pager filter {cmd}").into(),
             fut,

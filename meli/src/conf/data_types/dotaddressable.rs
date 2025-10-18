@@ -47,6 +47,7 @@ impl DotAddressable for data_types::IndexStyle {}
 impl DotAddressable for data_types::SearchBackend {}
 impl DotAddressable for data_types::ThreadLayout {}
 impl DotAddressable for data_types::UINotifications {}
+impl DotAddressable for u8 {}
 impl DotAddressable for u64 {}
 impl DotAddressable for TagHash {}
 impl DotAddressable for crate::terminal::Color {}

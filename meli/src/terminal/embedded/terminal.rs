@@ -210,6 +210,7 @@ pub struct EmbeddedGrid {
     codepoints: CodepointBuf,
     pub normal_screen: Box<Screen<Virtual>>,
     screen_buffer: ScreenBuffer,
+    tab_width: u8,
     dirty: bool,
 }
 
@@ -249,6 +250,7 @@ impl EmbeddedGrid {
             codepoints: CodepointBuf::None,
             normal_screen,
             screen_buffer: ScreenBuffer::Normal,
+            tab_width: 4,
             dirty: true,
         }
     }
@@ -311,6 +313,10 @@ impl EmbeddedGrid {
         self.wrap_next = false;
     }
 
+    pub fn set_tab_width(&mut self, new_val: u8) {
+        self.tab_width = new_val;
+    }
+
     #[inline]
     pub const fn terminal_size(&self) -> (usize, usize) {
         self.terminal_size
@@ -347,6 +353,7 @@ impl EmbeddedGrid {
             ref mut normal_screen,
             initialized: _,
             ref mut dirty,
+            ref tab_width,
         } = self;
         let mut screen = normal_screen;
 
@@ -603,30 +610,38 @@ impl EmbeddedGrid {
                     cursor.0 = 0;
                 }
 
-                //if c == '↪' {
-                //log::trace!("↪ cursor is {:?}", cursor_val!());
-                //}
-                screen.grid_mut()[cursor_val!()]
-                    .set_ch(c)
-                    .set_fg(*fg_color)
-                    .set_bg(*bg_color)
-                    .set_attrs(*attrs);
-                match wcwidth(u32::from(c)) {
-                    Some(0) | None => {
-                        /* Skip drawing zero width characters */
-                        screen.grid_mut()[cursor_val!()].set_empty(true);
+                if c == '\t' {
+                    for _ in 0..*tab_width {
+                        screen.grid_mut()[cursor_val!()]
+                            .set_ch(' ')
+                            .set_fg(*fg_color)
+                            .set_bg(*bg_color)
+                            .set_attrs(*attrs);
+                        increase_cursor_x!();
                     }
-                    Some(1) => {}
-                    Some(n) => {
-                        /* Grapheme takes more than one column, so the next cell will be
-                         * drawn over. Set it as empty to skip drawing it. */
-                        for _ in 1..n {
-                            increase_cursor_x!();
-                            screen.grid_mut()[cursor_val!()]
-                                .set_empty(true)
-                                .set_fg(*fg_color)
-                                .set_bg(*bg_color)
-                                .set_attrs(*attrs);
+                } else {
+                    screen.grid_mut()[cursor_val!()]
+                        .set_ch(c)
+                        .set_fg(*fg_color)
+                        .set_bg(*bg_color)
+                        .set_attrs(*attrs);
+                    match wcwidth(u32::from(c)) {
+                        Some(0) | None => {
+                            /* Skip drawing zero width characters */
+                            screen.grid_mut()[cursor_val!()].set_empty(true);
+                        }
+                        Some(1) => {}
+                        Some(n) => {
+                            /* Grapheme takes more than one column, so the next cell will be
+                             * drawn over. Set it as empty to skip drawing it. */
+                            for _ in 1..n {
+                                increase_cursor_x!();
+                                screen.grid_mut()[cursor_val!()]
+                                    .set_empty(true)
+                                    .set_fg(*fg_color)
+                                    .set_bg(*bg_color)
+                                    .set_attrs(*attrs);
+                            }
                         }
                     }
                 }

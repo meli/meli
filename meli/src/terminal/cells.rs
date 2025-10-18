@@ -71,6 +71,7 @@ pub struct CellBuffer {
     pub force_text_presentation: bool,
     /// Use color.
     pub use_color: bool,
+    pub tab_width: u8,
     /// If printing to this buffer and we run out of space, expand it.
     growable: bool,
     tag_table: HashMap<u64, FormatTag>,
@@ -88,6 +89,7 @@ impl std::fmt::Debug for CellBuffer {
             .field("ascii_drawing", &self.ascii_drawing)
             .field("force_text_presentation", &self.force_text_presentation)
             .field("use_color", &self.use_color)
+            .field("tab_width", &self.tab_width)
             .field("growable", &self.growable)
             .field("tag_table", &self.tag_table)
             .field("tag_associations", &self.tag_associations)
@@ -110,6 +112,7 @@ impl CellBuffer {
             ascii_drawing: false,
             force_text_presentation: false,
             use_color: false,
+            tab_width: 4,
             tag_table: Default::default(),
             tag_associations: SmallVec::new(),
             area,
@@ -134,6 +137,7 @@ impl CellBuffer {
             ascii_drawing: false,
             force_text_presentation: false,
             use_color: true,
+            tab_width: 4,
             tag_table: Default::default(),
             tag_associations: SmallVec::new(),
             area,
@@ -168,6 +172,10 @@ impl CellBuffer {
 
     pub fn set_use_color(&mut self, new_val: bool) {
         self.use_color = new_val;
+    }
+
+    pub fn set_tab_width(&mut self, new_val: u8) {
+        self.tab_width = new_val;
     }
 
     pub fn set_growable(&mut self, new_val: bool) {
@@ -729,7 +737,7 @@ impl CellBuffer {
         // Inner loop handles only one element at a time.
         // It might need to repeat itself if the end of a line is reached and line
         // breaking is permitted.
-        'char_loop: for c in input.chars() {
+        'char_loop: for mut c in input.chars() {
             'inner_loop: loop {
                 macro_rules! cell_mut {
                     ($x:expr, $y:expr) => {{
@@ -797,22 +805,25 @@ impl CellBuffer {
                 }
                 prev_coords = (x, y);
                 if c == '\t' {
-                    cell_mut!(x, y).set_ch(' ');
-                    x += 1;
-                    if let Some(c) = self.get_mut(x, y) {
-                        c.set_ch(' ');
-                    } else if let Some(_x) = line_break {
-                        if !(y > get_y(bottom_right) || y > get_y(bounds)) {
-                            x = if upper_left == og_upper_left {
-                                _x + get_x(upper_left)
+                    c = ' ';
+                    for _ in 0..self.tab_width {
+                        cell_mut!(x, y).set_ch(' ');
+                        x += 1;
+                        if let Some(c) = self.get_mut(x, y) {
+                            c.set_ch(' ');
+                        } else if let Some(_x) = line_break {
+                            if !(y > get_y(bottom_right) || y > get_y(bounds)) {
+                                x = if upper_left == og_upper_left {
+                                    _x + get_x(upper_left)
+                                } else {
+                                    upper_left = og_upper_left;
+                                    _x + get_x(og_upper_left)
+                                };
+                                y += 1;
+                                continue 'char_loop;
                             } else {
-                                upper_left = og_upper_left;
-                                _x + get_x(og_upper_left)
-                            };
-                            y += 1;
-                            continue 'char_loop;
-                        } else {
-                            break 'char_loop;
+                                break 'char_loop;
+                            }
                         }
                     }
                 } else {
