@@ -202,15 +202,25 @@ impl Mail {
     }
 
     pub fn bytes(&self) -> &[u8] {
-        &self.bytes
+        let mut bytes = self.bytes.as_slice();
+        if bytes.starts_with(b"From ") {
+            /* Attempt to recover if message includes the mbox From label as first line */
+            if let Some(offset) = bytes.find(b"\n") {
+                bytes = &bytes[offset + 1..];
+            }
+        }
+        bytes
     }
 
     pub fn body(&self) -> Attachment {
-        self.envelope.body_bytes(&self.bytes)
+        self.envelope.body_bytes(self.bytes())
     }
 
     pub fn as_mbox(&self) -> Vec<u8> {
         use crate::mbox::*;
+        if self.bytes.starts_with(b"From ") {
+            return self.bytes.to_vec();
+        }
         let mut out = std::io::BufWriter::new(Vec::with_capacity(self.bytes.len() + 120));
         let format = MboxFormat::MboxCl2;
         format
