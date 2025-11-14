@@ -42,7 +42,7 @@ serde_derive = { version = "1.0" }
 serde_json = { version = "1.0" }
 signal-hook = { version = "^0.3", default-features = false, features = ["iterator"] }
 signal-hook-registry = { version = "1.2.0", default-features = false }
-smallvec = { version = "^1.5.0", features = ["serde"] }
+smallvec = { version = "^1.15", features = ["serde"] }
 structopt = { version = "0.3.26", default-features = false }
 # svg_crate = { version = "^0.13", optional = true, package = "svg" }
 termion = { version = "1.5.1", default-features = false }
