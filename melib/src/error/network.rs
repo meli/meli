@@ -24,9 +24,10 @@
 
 use super::ErrorKind;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum NetworkErrorKind {
     /// Unspecified
+    #[default]
     None,
     /// Name lookup of host failed.
     HostLookupFailed,
@@ -264,12 +265,6 @@ impl NetworkErrorKind {
             self,
             ConnectionFailed | TLSConnectionFailed | InvalidTLSConnection
         )
-    }
-}
-
-impl Default for NetworkErrorKind {
-    fn default() -> Self {
-        Self::None
     }
 }
 
