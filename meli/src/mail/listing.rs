@@ -2743,6 +2743,11 @@ impl Component for Listing {
                     .count()
                     .ok()
                     .unwrap_or((0, 0));
+                let status_str = match account[&mailbox_hash].status {
+                    MailboxStatus::Parsing (doing, done) => format!("(Loading {}/{})", doing, done),
+                    MailboxStatus::Failed (..) => "Failed".to_string(),
+                    _ => "".to_string()
+                };
                 format!(
                     "Mailbox: {}, Messages: {}, New: {}{}",
                     account[&mailbox_hash].name(),
