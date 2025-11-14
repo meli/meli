@@ -6,6 +6,22 @@ members = [
     "melib",
 ]
 
+[workspace.dependencies]
+bitflags = { version = "2.10", features = ["serde"] }
+flate2 = { version = "1" }
+futures = { version = "0.3.30", default-features = false, features = ["async-await", "executor", "std"] }
+indexmap = { version = "^2.3", default-features = false, features = ["serde", "std"] }
+libc = { version = "0.2", features = ["extra_traits"] }
+nix = { version = "0.30", default-features = false }
+regex = { version = "1" }
+serde = { version = "1" }
+serde_derive = { version = "1" }
+serde_json = { version = "1" }
+smallvec = { version = "^1.15", features = ["serde"] }
+toml = { version = "0.8", default-features = false, features = ["display", "preserve_order", "parse"] }
+tempfile = { version = "3.3" }
+rusty-fork = { version = "0.3.0" }
+
 [profile.release]
 lto = "fat"
 codegen-units = 1
