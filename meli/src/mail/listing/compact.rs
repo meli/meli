@@ -544,11 +544,8 @@ impl MailListingTrait for CompactListing {
         self.data_columns.segment_tree[3] = row_widths.3.into();
         self.data_columns.segment_tree[4] = row_widths.4.into();
 
-        self.rows_drawn = SegmentTree::from(
-            std::iter::repeat(1)
-                .take(self.rows.len())
-                .collect::<SmallVec<_>>(),
-        );
+        self.rows_drawn =
+            SegmentTree::from(std::iter::repeat_n(1, self.rows.len()).collect::<SmallVec<_>>());
         debug_assert_eq!(self.rows_drawn.array.len(), self.rows.len());
         self.draw_rows(context, 0, 80.min(self.rows.len().saturating_sub(1)));
         if self.length == 0 && self.filter_term.is_empty() {

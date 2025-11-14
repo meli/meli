@@ -459,11 +459,8 @@ impl MailListingTrait for ThreadListing {
         _ = self.data_columns.columns[4].resize_with_context(min_width.4, self.rows.len(), context);
         self.data_columns.segment_tree[4] = row_widths.4.into();
 
-        self.rows_drawn = SegmentTree::from(
-            std::iter::repeat(1)
-                .take(self.rows.len())
-                .collect::<SmallVec<_>>(),
-        );
+        self.rows_drawn =
+            SegmentTree::from(std::iter::repeat_n(1, self.rows.len()).collect::<SmallVec<_>>());
         debug_assert_eq!(self.rows_drawn.array.len(), self.rows.len());
         self.draw_rows(
             context,

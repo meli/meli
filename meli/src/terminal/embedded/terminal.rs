@@ -128,7 +128,7 @@ impl Terminal {
             ws_ypixel: 0,
         };
         let frontend_fd = self.stdin.as_raw_fd();
-        let _ = unsafe { set_window_size(frontend_fd, &winsize) };
+        let _ = unsafe { set_window_size(frontend_fd, &raw const winsize) };
         let _ = nix::sys::signal::kill(self.child_pid, nix::sys::signal::SIGWINCH);
     }
 

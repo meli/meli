@@ -285,8 +285,8 @@ impl Context {
         });
 
         unsafe {
-            gpgme_error_try(&lib, call!(&lib, gpgme_new)(&mut ptr))?;
-            call!(&lib, gpgme_set_io_cbs)(ptr, &mut io_cbs);
+            gpgme_error_try(&lib, call!(&lib, gpgme_new)(&raw mut ptr))?;
+            call!(&lib, gpgme_set_io_cbs)(ptr, &raw mut io_cbs);
         }
         let mut ret = Self {
             inner: Arc::new(ContextInner {
@@ -436,7 +436,7 @@ impl Context {
             gpgme_error_try(
                 &self.inner.lib,
                 call!(&self.inner.lib, gpgme_data_new_from_mem)(
-                    &mut ptr,
+                    &raw mut ptr,
                     bytes.as_ptr() as *const ::std::os::raw::c_char,
                     bytes
                         .len()
@@ -470,7 +470,7 @@ impl Context {
         let mut ptr = std::ptr::null_mut();
         unsafe {
             let ret: gpgme_error_t = call!(&self.inner.lib, gpgme_data_new_from_file)(
-                &mut ptr,
+                &raw mut ptr,
                 bytes.as_ptr() as *const ::std::os::raw::c_char,
                 1,
             );
@@ -702,7 +702,7 @@ impl Context {
         unsafe {
             gpgme_error_try(
                 &self.inner.lib,
-                call!(&self.inner.lib, gpgme_data_new)(&mut sig),
+                call!(&self.inner.lib, gpgme_data_new)(&raw mut sig),
             )?;
             call!(&self.inner.lib, gpgme_signers_clear)(self.inner.ptr.as_ptr());
             for k in sign_keys {
@@ -816,7 +816,7 @@ impl Context {
         unsafe {
             gpgme_error_try(
                 &self.inner.lib,
-                call!(&self.inner.lib, gpgme_data_new)(&mut plain),
+                call!(&self.inner.lib, gpgme_data_new)(&raw mut plain),
             )?;
             gpgme_error_try(
                 &self.inner.lib,
@@ -985,7 +985,7 @@ impl Context {
         unsafe {
             gpgme_error_try(
                 &self.inner.lib,
-                call!(&self.inner.lib, gpgme_data_new)(&mut cipher),
+                call!(&self.inner.lib, gpgme_data_new)(&raw mut cipher),
             )?;
             if let Err(mut err) = gpgme_error_try(
                 &self.inner.lib,
@@ -1490,9 +1490,9 @@ mod wrapper {
             // uninit value.
             // let inner = unsafe { ManuallyDrop::take(&mut self.0) };
             // SAFETY: take add_priv reference
-            unsafe { Arc::decrement_strong_count(&self.0) };
+            unsafe { Arc::decrement_strong_count(&raw const self.0) };
             // SAFETY: take event_priv reference
-            unsafe { Arc::decrement_strong_count(&self.0) };
+            unsafe { Arc::decrement_strong_count(&raw const self.0) };
         }
     }
 

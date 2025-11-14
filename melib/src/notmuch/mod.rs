@@ -353,7 +353,7 @@ impl DbConnection {
                 call!(self.lib, ffi::notmuch_database_get_directory)(
                     self.inner.lock().unwrap().as_mut(),
                     path.as_ptr(),
-                    &mut ptr
+                    &raw mut ptr
                 )
             )
         }?;
@@ -377,7 +377,7 @@ impl DbConnection {
                 call!(self.lib, ffi::notmuch_database_get_directory)(
                     self.inner.lock().unwrap().as_mut(),
                     path.as_ptr(),
-                    &mut ptr
+                    &raw mut ptr
                 )
             )
         }?;
@@ -985,18 +985,9 @@ impl MailBackend for NotmuchDb {
 
                 let tags = message.tags().collect::<Vec<&CStr>>();
 
-                // [ref:msrv] c-str literals are introduced in 1.77.0
-                macro_rules! cstr {
-                    ($l:literal) => {
-                        &CStr::from_bytes_with_nul_unchecked($l)
-                    };
-                }
                 macro_rules! add_tag {
-                    ($l:literal) => {{
-                        add_tag!(unsafe { cstr!($l) })
-                    }};
                     ($l:expr) => {{
-                        let l = $l;
+                        let l = &$l;
                         if tags.contains(l) {
                             continue;
                         }
@@ -1004,11 +995,8 @@ impl MailBackend for NotmuchDb {
                     }};
                 }
                 macro_rules! remove_tag {
-                    ($l:literal) => {{
-                        remove_tag!(unsafe { cstr!($l) })
-                    }};
                     ($l:expr) => {{
-                        let l = $l;
+                        let l = &$l;
                         if !tags.contains(l) {
                             continue;
                         }
@@ -1021,18 +1009,18 @@ impl MailBackend for NotmuchDb {
                     has_seen_changes |=
                         matches!(op, FlagOp::Set(Flag::SEEN) | FlagOp::UnSet(Flag::SEEN));
                     match op {
-                        FlagOp::Set(Flag::DRAFT) => add_tag!(b"draft\0"),
-                        FlagOp::UnSet(Flag::DRAFT) => remove_tag!(b"draft\0"),
-                        FlagOp::Set(Flag::FLAGGED) => add_tag!(b"flagged\0"),
-                        FlagOp::UnSet(Flag::FLAGGED) => remove_tag!(b"flagged\0"),
-                        FlagOp::Set(Flag::PASSED) => add_tag!(b"passed\0"),
-                        FlagOp::UnSet(Flag::PASSED) => remove_tag!(b"passed\0"),
-                        FlagOp::Set(Flag::REPLIED) => add_tag!(b"replied\0"),
-                        FlagOp::UnSet(Flag::REPLIED) => remove_tag!(b"replied\0"),
-                        FlagOp::Set(Flag::SEEN) => remove_tag!(b"unread\0"),
-                        FlagOp::UnSet(Flag::SEEN) => add_tag!(b"unread\0"),
-                        FlagOp::Set(Flag::TRASHED) => add_tag!(b"trashed\0"),
-                        FlagOp::UnSet(Flag::TRASHED) => remove_tag!(b"trashed\0"),
+                        FlagOp::Set(Flag::DRAFT) => add_tag!(c"draft"),
+                        FlagOp::UnSet(Flag::DRAFT) => remove_tag!(c"draft"),
+                        FlagOp::Set(Flag::FLAGGED) => add_tag!(c"flagged"),
+                        FlagOp::UnSet(Flag::FLAGGED) => remove_tag!(c"flagged"),
+                        FlagOp::Set(Flag::PASSED) => add_tag!(c"passed"),
+                        FlagOp::UnSet(Flag::PASSED) => remove_tag!(c"passed"),
+                        FlagOp::Set(Flag::REPLIED) => add_tag!(c"replied"),
+                        FlagOp::UnSet(Flag::REPLIED) => remove_tag!(c"replied"),
+                        FlagOp::Set(Flag::SEEN) => remove_tag!(c"unread"),
+                        FlagOp::UnSet(Flag::SEEN) => add_tag!(c"unread"),
+                        FlagOp::Set(Flag::TRASHED) => add_tag!(c"trashed"),
+                        FlagOp::UnSet(Flag::TRASHED) => remove_tag!(c"trashed"),
                         FlagOp::SetTag(tag) => {
                             let c_tag = CString::new(tag.as_str()).unwrap();
                             add_tag!(&c_tag.as_ref());

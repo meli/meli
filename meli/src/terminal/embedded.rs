@@ -105,7 +105,7 @@ pub fn create_pty(width: usize, height: usize, command: &str) -> Result<Arc<Mute
             };
 
             let frontend_fd = frontend_fd.as_raw_fd();
-            unsafe { set_window_size(frontend_fd, &winsize)? };
+            unsafe { set_window_size(frontend_fd, &raw const winsize)? };
         }
         (frontend_fd, backend_name)
     };

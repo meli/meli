@@ -234,7 +234,7 @@ impl Iterator for NotmuchDirectories {
             call!(self.lib, ffi::notmuch_database_get_directory)(
                 self.db.lock().unwrap().as_mut(),
                 path.as_ptr(),
-                &mut directory_ptr,
+                &raw mut directory_ptr,
             )
         } != ffi::NOTMUCH_STATUS_SUCCESS
         {

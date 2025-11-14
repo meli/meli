@@ -471,7 +471,7 @@ impl Connection {
             opt,
             val,
             std::ptr::addr_of_mut!(slot) as *mut _,
-            &mut len,
+            &raw mut len,
         ))?;
         assert_eq!(len as usize, std::mem::size_of::<T>());
         Ok(slot)

@@ -88,7 +88,7 @@ impl EmbeddedPty {
         std::ops::Deref::deref(self)
             .try_lock()
             .ok()
-            .map_or(true, |e| e.grid.is_dirty())
+            .is_none_or(|e| e.grid.is_dirty())
     }
 }
 
