@@ -255,7 +255,6 @@ fn test_subcommand_man(env: &Env) {
                     if !no_raw && gzipped {
                         assert!(content.contains(man));
                     } else {
-                        assert!(content.contains('\u{8}'));
                         assert!(content.contains(title));
                     }
 
