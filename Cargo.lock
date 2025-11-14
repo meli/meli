@@ -149,7 +149,7 @@ dependencies = [
  "futures-io",
  "futures-lite 2.3.0",
  "parking",
- "polling 3.7.3",
+ "polling 3.7.4",
  "rustix",
  "slab",
  "tracing",
@@ -1219,7 +1219,7 @@ dependencies = [
  "nix",
  "nom",
  "notify",
- "polling 3.7.3",
+ "polling 3.7.4",
  "regex",
  "rusqlite",
  "rusty-fork",
@@ -1557,9 +1557,9 @@ dependencies = [
 
 [[package]]
 name = "polling"
-version = "3.7.3"
+version = "3.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc2790cd301dec6cd3b7a025e4815cf825724a51c98dccfe6a3e55f05ffb6511"
+checksum = "a604568c3202727d1507653cb121dbd627a58684eb09a820fd746bee38b4442f"
 dependencies = [
  "cfg-if",
  "concurrent-queue",
