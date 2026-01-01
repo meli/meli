@@ -189,6 +189,7 @@ pub fn create_pty(width: usize, height: usize, command: &str) -> Result<Arc<Mute
                 .expect("Infallible");
             // We are in a separate process, so doing exit(-1) here won't affect the parent
             // process.
+            #[allow(unreachable_code)]
             std::process::exit(-1);
         }
         nix::unistd::ForkResult::Parent { child } => child,
