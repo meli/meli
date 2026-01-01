@@ -630,8 +630,8 @@ mod test {
             Number(f64),
             Bool(bool),
             Null,
-            Object(HashMap<String, JsonValue>),
-            Array(Vec<JsonValue>),
+            Object(HashMap<String, Self>),
+            Array(Vec<Self>),
         }
 
         fn parse_value<'a>() -> impl Parser<'a, JsonValue> {

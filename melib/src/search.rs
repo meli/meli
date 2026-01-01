@@ -51,9 +51,9 @@ pub enum Query {
     AllText(String),
     Flags(Vec<String>),
     HasAttachment,
-    And(Box<Query>, Box<Query>),
-    Or(Box<Query>, Box<Query>),
-    Not(Box<Query>),
+    And(Box<Self>, Box<Self>),
+    Or(Box<Self>, Box<Self>),
+    Not(Box<Self>),
     /// By us.
     Answered,
     /// By an address/name.

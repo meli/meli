@@ -206,7 +206,7 @@ pub enum AttachmentDisplay {
     Alternative {
         inner: Box<Attachment>,
         shown_display: usize,
-        display: Vec<AttachmentDisplay>,
+        display: Vec<Self>,
     },
     InlineText {
         inner: Box<Attachment>,
@@ -221,22 +221,22 @@ pub enum AttachmentDisplay {
     },
     SignedPending {
         inner: Box<Attachment>,
-        display: Vec<AttachmentDisplay>,
+        display: Vec<Self>,
         handle: JoinHandle<Result<()>>,
         job_id: JobId,
     },
     SignedFailed {
         inner: Box<Attachment>,
-        display: Vec<AttachmentDisplay>,
+        display: Vec<Self>,
         error: Error,
     },
     SignedUnverified {
         inner: Box<Attachment>,
-        display: Vec<AttachmentDisplay>,
+        display: Vec<Self>,
     },
     SignedVerified {
         inner: Box<Attachment>,
-        display: Vec<AttachmentDisplay>,
+        display: Vec<Self>,
         description: String,
     },
     EncryptedPending {
@@ -250,7 +250,7 @@ pub enum AttachmentDisplay {
     EncryptedSuccess {
         inner: Box<Attachment>,
         plaintext: Box<Attachment>,
-        plaintext_display: Vec<AttachmentDisplay>,
+        plaintext_display: Vec<Self>,
         description: String,
     },
 }

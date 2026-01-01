@@ -161,7 +161,7 @@ impl Id<EmailObject> {
 #[serde(rename_all = "camelCase")]
 pub struct EmailObject {
     #[serde(default)]
-    pub id: Id<EmailObject>,
+    pub id: Id<Self>,
     #[serde(default)]
     pub blob_id: Id<BlobObject>,
     #[serde(default)]

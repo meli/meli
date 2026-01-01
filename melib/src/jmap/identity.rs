@@ -36,7 +36,7 @@ pub struct Identity {
     ///  id: `Id` (immutable; server-set)
     /// The id of the `Identity`.
     #[serde(default)]
-    pub id: Id<Identity>,
+    pub id: Id<Self>,
 
     ///  name: `String` (default: "")
     /// The "From" name the client SHOULD use when creating a new

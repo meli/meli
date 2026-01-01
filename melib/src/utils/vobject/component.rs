@@ -35,7 +35,7 @@ pub struct Component {
     /// The component's properties.
     pub props: IndexMap<String, Vec<Property>>,
     /// The component's child- or sub-components.
-    pub subcomponents: Vec<Component>,
+    pub subcomponents: Vec<Self>,
 }
 
 impl Component {

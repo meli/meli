@@ -31,7 +31,7 @@ pub trait FilterTrait<T>: Default + Send + Sync {}
 pub enum Filter<F: FilterTrait<OBJ>, OBJ: Object> {
     Operator {
         operator: FilterOperator,
-        conditions: Vec<Filter<F, OBJ>>,
+        conditions: Vec<Self>,
         #[serde(skip)]
         _ph: PhantomData<fn() -> OBJ>,
     },

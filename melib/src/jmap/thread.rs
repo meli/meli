@@ -32,7 +32,7 @@ use crate::jmap::{
 #[serde(rename_all = "camelCase")]
 pub struct ThreadObject {
     #[serde(default)]
-    pub id: Id<ThreadObject>,
+    pub id: Id<Self>,
     #[serde(default)]
     pub email_ids: Vec<Id<EmailObject>>,
 }

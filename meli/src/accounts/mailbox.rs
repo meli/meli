@@ -116,7 +116,7 @@ pub struct MailboxNode {
     pub depth: usize,
     pub indentation: u32,
     pub has_sibling: bool,
-    pub children: Vec<MailboxNode>,
+    pub children: Vec<Self>,
 }
 
 pub fn build_mailboxes_order(

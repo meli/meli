@@ -165,9 +165,9 @@ pub enum ZoneRule {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ConditionRule {
     /// Logical OR operation.
-    AnyOf(Vec<ConditionRule>),
+    AnyOf(Vec<Self>),
     /// Logical AND operation.
-    AllOf(Vec<ConditionRule>),
+    AllOf(Vec<Self>),
     /// Header values exist.
     Exists(Vec<String>),
     Header {
@@ -191,7 +191,7 @@ pub enum ConditionRule {
         header_list: Vec<String>,
         key_list: Vec<String>,
     },
-    Not(Box<ConditionRule>),
+    Not(Box<Self>),
     Size {
         operator: IntegerOperator,
         limit: u64,

@@ -40,7 +40,7 @@ use crate::ThreadEvent;
 #[derive(Debug)]
 pub struct EnvelopeView {
     pub pager: Pager,
-    pub subview: Option<Box<EnvelopeView>>,
+    pub subview: Option<Box<Self>>,
     pub dirty: bool,
     pub initialised: bool,
     pub force_draw_headers: bool,

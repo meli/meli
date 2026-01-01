@@ -45,7 +45,7 @@ pub struct Session {
     pub download_url: Arc<RequestUrlTemplate>,
     pub upload_url: Arc<RequestUrlTemplate>,
     pub event_source_url: Arc<RequestUrlTemplate>,
-    pub state: State<Session>,
+    pub state: State<Self>,
     #[serde(flatten)]
     pub extra_properties: IndexMap<String, Value>,
 }

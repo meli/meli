@@ -37,11 +37,11 @@ impl Id<MailboxObject> {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MailboxObject {
-    pub id: Id<MailboxObject>,
+    pub id: Id<Self>,
     pub is_subscribed: bool,
     pub my_rights: JmapRights,
     pub name: String,
-    pub parent_id: Option<Id<MailboxObject>>,
+    pub parent_id: Option<Id<Self>>,
     pub role: Option<String>,
     pub sort_order: u64,
     pub total_emails: u64,
