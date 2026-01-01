@@ -325,13 +325,13 @@ impl AccountCache {
             .await?
         };
         let mut ctr = 0;
-        log::trace!(
-            "Rebuilding {} index. {}/{}",
-            acc_name,
-            ctr,
-            env_hashes.len()
-        );
         for chunk in env_hashes.chunks(200) {
+            log::trace!(
+                "Rebuilding {} index. {}/{}",
+                acc_name,
+                ctr,
+                env_hashes.len()
+            );
             ctr += chunk.len();
             let mut chunk_bytes = Vec::with_capacity(chunk.len());
             for &env_hash in chunk {
