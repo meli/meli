@@ -14,13 +14,45 @@ categories = ["command-line-utilities", "email"]
 default-run = "meli"
 exclude = ["/docs/historical-manpages"]
 
+[lib]
+name = "meli"
+path = "src/lib.rs"
+
 [[bin]]
 name = "meli"
 path = "src/main.rs"
 
-[lib]
-name = "meli"
-path = "src/lib.rs"
+[features]
+default = [
+    "sqlite3",
+    "notmuch",
+    "smtp",
+    "dbus-notifications",
+    "gpgme",
+    "cli-docs",
+    "jmap",
+    "static",
+]
+notmuch = ["melib/notmuch"]
+jmap = ["melib/jmap"]
+sqlite3 = ["melib/sqlite3"]
+smtp = ["melib/smtp"]
+smtp-trace = ["smtp", "melib/smtp-trace"]
+dbus-notifications = ["dep:notify-rust"]
+cli-docs = ["dep:flate2"]
+# svgscreenshot = ["dep:svg_crate"]
+gpgme = ["melib/gpgme"]
+# Static / vendoring features.
+tls-static = ["melib/tls-static"]
+http-static = ["melib/http-static"]
+sqlite3-static = ["melib/sqlite3-static"]
+dbus-static = ["dep:notify-rust", "notify-rust?/d_vendored"]
+libz-static = ["dep:libz-sys", "libz-sys?/static"]
+static = ["tls-static", "http-static", "sqlite3-static", "dbus-static", "libz-static"]
+
+# Print tracing logs as meli runs in stderr
+# enable for debug tracing logs: build with --features=debug-tracing and export MELI_DEBUG_STDERR
+debug-tracing = ["melib/debug-tracing"]
 
 [dependencies]
 aho-corasick = { version = "1.1.3" }
@@ -49,28 +81,8 @@ termion = { version = "1.5.1", default-features = false }
 toml = { workspace = true }
 xdg = { version = "2.1.0" }
 
-[features]
-default = ["sqlite3", "notmuch", "smtp", "dbus-notifications", "gpgme", "cli-docs", "jmap", "static"]
-notmuch = ["melib/notmuch"]
-jmap = ["melib/jmap"]
-sqlite3 = ["melib/sqlite3"]
-smtp = ["melib/smtp"]
-smtp-trace = ["smtp", "melib/smtp-trace"]
-dbus-notifications = ["dep:notify-rust"]
-cli-docs = ["dep:flate2"]
-# svgscreenshot = ["dep:svg_crate"]
-gpgme = ["melib/gpgme"]
-# Static / vendoring features.
-tls-static = ["melib/tls-static"]
-http-static = ["melib/http-static"]
-sqlite3-static = ["melib/sqlite3-static"]
-dbus-static = ["dep:notify-rust", "notify-rust?/d_vendored"]
-libz-static = ["dep:libz-sys", "libz-sys?/static"]
-static = ["tls-static", "http-static", "sqlite3-static", "dbus-static", "libz-static"]
-
-# Print tracing logs as meli runs in stderr
-# enable for debug tracing logs: build with --features=debug-tracing and export MELI_DEBUG_STDERR
-debug-tracing = ["melib/debug-tracing"]
+[target.'cfg(target_os="linux")'.dependencies]
+notify-rust = { version = "^4", default-features = false, features = ["dbus"], optional = true }
 
 [build-dependencies]
 flate2 = { workspace = true, optional = true }
@@ -86,6 +98,3 @@ predicates = { version = "3" }
 regex = { workspace = true }
 rusty-fork = { workspace = true }
 tempfile = { workspace = true }
-
-[target.'cfg(target_os="linux")'.dependencies]
-notify-rust = { version = "^4", default-features = false, features = ["dbus"], optional = true }

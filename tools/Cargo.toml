@@ -9,6 +9,10 @@ homepage = "https://meli-email.org"
 repository = "https://git.meli-email.org/meli/meli.git"
 publish = false
 
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
 [[bin]]
 name = "emailparse"
 path = "src/email_parse.rs"
@@ -26,6 +30,12 @@ name = "managesieve-client"
 path = "src/managesieve.rs"
 required-features = ["melib/imap"]
 
+[features]
+default = ["debug-tracing"]
+
+# Print tracing logs as meli runs
+debug-tracing = ["meli/debug-tracing"]
+
 [dependencies]
 crossbeam = { version = "^0.8" }
 meli = { path = "../meli", version = "0.8" }
@@ -33,13 +43,3 @@ melib = { path = "../melib", version = "0.8", features = ["debug-tracing" ] }
 nix = { version = "0.29", default-features = false, features = ["signal", "poll", "term", "ioctl", "process"] }
 signal-hook = { version = "^0.3", default-features = false, features = ["iterator"] }
 signal-hook-registry = { version = "1.2.0", default-features = false }
-
-[features]
-default = ["debug-tracing"]
-
-# Print tracing logs as meli runs
-debug-tracing = ["meli/debug-tracing"]
-
-# Prevent this from interfering with workspaces
-[workspace]
-members = ["."]

@@ -18,9 +18,9 @@ all: cargo-sort check-debian-changelog
 .PHONY: cargo-sort
 cargo-sort:
 	@printf "cargo-sort\n"
-	cargo-sort --check --check-format --grouped --order package,bin,lib,dependencies,features,build-dependencies,dev-dependencies,workspace fuzz
-	cargo-sort --check --check-format --grouped --order package,bin,lib,dependencies,features,build-dependencies,dev-dependencies,workspace tools
-	cargo-sort --check --check-format --grouped --order package,bin,lib,dependencies,features,build-dependencies,dev-dependencies,workspace --workspace
+	cargo-sort --check --check-format --grouped fuzz
+	cargo-sort --check --check-format --grouped tools
+	cargo-sort --check --check-format --grouped --workspace
 
 .PHONY: check-debian-changelog
 check-debian-changelog:
