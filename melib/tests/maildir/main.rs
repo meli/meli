@@ -112,7 +112,7 @@ fn new_maildir_backend(
 /// Test that `MaildirType::watch` `Stream` returns the expected `Refresh`
 /// events when altering the mail store in the filesystem.
 fn test_maildir_watch() {
-    let mut _logger = StderrLogger::new(LogLevel::TRACE);
+    let mut _logger = StderrLogger::new_with(LogLevel::TRACE, true);
     let temp_dir = TempDir::new().unwrap();
     let backend_event_queue = Arc::new(Mutex::new(VecDeque::with_capacity(16)));
 

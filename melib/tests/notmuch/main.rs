@@ -178,7 +178,7 @@ other_email=test2@example.com;test3@example.com
     /// Test that `NotmuchDb::watch` `Stream` returns the expected `Refresh`
     /// events when altering the mail store in the filesystem.
     pub(crate) fn run_notmuch_watch() {
-        let mut _logger = StderrLogger::new(LogLevel::TRACE);
+        let mut _logger = StderrLogger::new_with(LogLevel::TRACE, true);
         skip_test_if_notmuch_binary_is_missing!();
         let temp_dir = TempDir::new().unwrap();
         // Store all events in a vector, and compare them at the end with the expected
@@ -320,7 +320,7 @@ hello world.
     /// Test that `NotmuchDb::refresh` returns the expected `Refresh` events
     /// when altering the mail store in the filesystem.
     pub(crate) fn run_notmuch_refresh() {
-        let mut _logger = StderrLogger::new(LogLevel::TRACE);
+        let mut _logger = StderrLogger::new_with(LogLevel::TRACE, true);
         skip_test_if_notmuch_binary_is_missing!();
         let temp_dir = TempDir::new().unwrap();
         // Store all events in a vector, and compare them at the end with the expected

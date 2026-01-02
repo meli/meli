@@ -369,7 +369,7 @@ pub mod tests {
 
     /// Run a simple SMTP transaction without credential authentication.
     pub fn run_smtp_transaction() {
-        let mut _logger = StderrLogger::new(LogLevel::TRACE);
+        let mut _logger = StderrLogger::new_with(LogLevel::TRACE, true);
         let (server_event_sender, server_event_receiver) = unbounded();
         let server = SmtpServer::new(server_event_receiver);
         let server_state = server.state.clone();

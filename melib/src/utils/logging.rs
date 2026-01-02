@@ -19,10 +19,10 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#[cfg(not(test))]
-use std::fs::{File, OpenOptions};
 use std::{
+    fs::{File, OpenOptions},
     io::{BufWriter, Write},
+    ops::DerefMut,
     path::PathBuf,
     sync::{
         atomic::{AtomicU8, Ordering},
@@ -134,11 +134,35 @@ pub enum Destination {
     None,
 }
 
+enum Writer {
+    Stderr(BufWriter<std::io::Stderr>),
+    File(BufWriter<std::fs::File>),
+}
+
+impl std::ops::Deref for Writer {
+    type Target = dyn std::io::Write;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Stderr(ref inner) => inner,
+            Self::File(ref inner) => inner,
+        }
+    }
+}
+
+impl std::ops::DerefMut for Writer {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            Self::Stderr(ref mut inner) => inner,
+            Self::File(ref mut inner) => inner,
+        }
+    }
+}
+
 struct FileOutput {
-    #[cfg(test)]
-    writer: BufWriter<std::io::Stderr>,
-    #[cfg(not(test))]
-    writer: BufWriter<std::fs::File>,
+    writer: Writer,
     path: PathBuf,
 }
 
@@ -169,13 +193,23 @@ impl Default for StderrLogger {
 }
 
 impl StderrLogger {
-    pub fn new(level: LogLevel) -> Self {
+    pub fn new_with(level: LogLevel, test: bool) -> Self {
         use std::sync::Once;
 
         static INIT_STDERR_LOGGING: Once = Once::new();
 
-        #[cfg(not(test))]
-        let logger = {
+        let logger = if test {
+            Self {
+                dest: Arc::new(Mutex::new(FileOutput {
+                    writer: Writer::Stderr(BufWriter::new(std::io::stderr())),
+                    path: PathBuf::new(),
+                })),
+                level: Arc::new(AtomicU8::new(level as u8)),
+                print_level: true,
+                print_module_names: true,
+                debug_dest: Destination::Stderr,
+            }
+        } else {
             #[inline(always)]
             fn __inline_err_wrap() -> Result<(PathBuf, File), Box<dyn std::error::Error>> {
                 let data_dir = xdg::BaseDirectories::with_prefix("meli")?;
@@ -190,7 +224,7 @@ impl StderrLogger {
                 __inline_err_wrap().expect("Could not create log file in XDG_DATA_DIR");
             Self {
                 dest: Arc::new(Mutex::new(FileOutput {
-                    writer: BufWriter::new(log_file),
+                    writer: Writer::File(BufWriter::new(log_file)),
                     path,
                 })),
                 level: Arc::new(AtomicU8::new(level as u8)),
@@ -203,30 +237,18 @@ impl StderrLogger {
                 },
             }
         };
-        #[cfg(test)]
-        let logger = {
-            Self {
-                dest: Arc::new(Mutex::new(FileOutput {
-                    writer: BufWriter::new(std::io::stderr()),
-                    path: PathBuf::new(),
-                })),
-                level: Arc::new(AtomicU8::new(level as u8)),
-                print_level: true,
-                print_module_names: true,
-                debug_dest: Destination::Stderr,
-            }
-        };
 
-        #[cfg(feature = "debug-tracing")]
-        log::set_max_level(
-            if matches!(LevelFilter::from(logger.log_level()), LevelFilter::Off) {
-                LevelFilter::Off
-            } else {
-                LevelFilter::Trace
-            },
-        );
-        #[cfg(not(feature = "debug-tracing"))]
-        log::set_max_level(LevelFilter::from(logger.log_level()));
+        if cfg!(feature = "debug-tracing") {
+            log::set_max_level(
+                if matches!(LevelFilter::from(logger.log_level()), LevelFilter::Off) {
+                    LevelFilter::Off
+                } else {
+                    LevelFilter::Trace
+                },
+            )
+        } else {
+            log::set_max_level(LevelFilter::from(logger.log_level()));
+        }
 
         INIT_STDERR_LOGGING.call_once(|| {
             log::set_boxed_logger(Box::new(logger.clone())).unwrap();
@@ -234,22 +256,31 @@ impl StderrLogger {
         logger
     }
 
+    pub fn new(level: LogLevel) -> Self {
+        Self::new_with(level, cfg!(test))
+    }
+
     pub fn log_level(&self) -> LogLevel {
         self.level.load(Ordering::SeqCst).into()
     }
 
-    #[cfg(not(test))]
     pub fn change_log_dest(&self, path: PathBuf) {
         use crate::utils::shellexpand::ShellExpandTrait;
 
         let path = path.expand(); // expand shell stuff
         let mut dest = self.dest.lock().unwrap();
         *dest = FileOutput {
-            writer: BufWriter::new(OpenOptions::new().append(true) /* writes will append to a file instead of overwriting previous contents */
-                         .create(true) /* a new file will be created if the file does not yet already exist.*/
-                         .read(true)
-                         .open(&path).unwrap()),
-            path
+            writer: Writer::File(BufWriter::new(
+                OpenOptions::new()
+                    /* writes will append to a file instead of overwriting previous contents */
+                    .append(true)
+                    /* a new file will be created if the file does not yet already exist. */
+                    .create(true)
+                    .read(true)
+                    .open(&path)
+                    .unwrap(),
+            )),
+            path,
         };
     }
 
@@ -275,7 +306,7 @@ impl Log for StderrLogger {
         }
 
         fn write(
-            writer: &mut impl Write,
+            writer: &mut (impl Write + ?Sized),
             record: &Record,
             (print_level, print_module_names): (bool, bool),
         ) -> Option<()> {
@@ -299,7 +330,10 @@ impl Log for StderrLogger {
             if matches!(record.metadata(), m if (m.target().starts_with("isahc::handler") || m.target().starts_with("isahc::wire")) && m.level() >= Level::Debug)
                 && matches!(record.args().to_string(), s if s.contains("Bearer") || s.contains("Basic"))
             {
-                fn redact_http_auth(writer: &mut impl Write, record: &Record) -> Option<()> {
+                fn redact_http_auth(
+                    writer: &mut (impl Write + ?Sized),
+                    record: &Record,
+                ) -> Option<()> {
                     use std::borrow::Cow;
 
                     use regex::Regex;
@@ -341,7 +375,7 @@ impl Log for StderrLogger {
             (Destination::None | Destination::File, _) => {
                 _ = self.dest.lock().ok().and_then(|mut d| {
                     write(
-                        &mut d.writer,
+                        d.writer.deref_mut(),
                         record,
                         (self.print_level, self.print_module_names),
                     )
@@ -350,7 +384,7 @@ impl Log for StderrLogger {
             (Destination::Stderr, true) => {
                 _ = self.dest.lock().ok().and_then(|mut d| {
                     write(
-                        &mut d.writer,
+                        d.writer.deref_mut(),
                         record,
                         (self.print_level, self.print_module_names),
                     )

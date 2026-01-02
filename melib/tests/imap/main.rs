@@ -701,7 +701,7 @@ mod tests {
     /// Test that `ImapType::watch` `Stream` returns the expected `Refresh`
     /// events when altering the mail store in the IMAP server.
     pub(crate) fn run_imap_watch() {
-        let mut _logger = StderrLogger::new(LogLevel::TRACE);
+        let mut _logger = StderrLogger::new_with(LogLevel::TRACE, true);
         let temp_dir = TempDir::new().unwrap();
         let backend_event_queue =
             Arc::new(Mutex::new(std::collections::VecDeque::with_capacity(16)));

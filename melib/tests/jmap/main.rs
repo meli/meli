@@ -733,7 +733,7 @@ mod tests {
     /// Test that `JmapType::refresh` returns the expected `Refresh` events when
     /// altering the mail store in the jmap server.
     pub(crate) fn run_jmap_refresh() {
-        let mut _logger = StderrLogger::new(LogLevel::TRACE);
+        let mut _logger = StderrLogger::new_with(LogLevel::TRACE, true);
         let temp_dir = TempDir::new().unwrap();
         let backend_event_queue =
             Arc::new(Mutex::new(std::collections::VecDeque::with_capacity(16)));
