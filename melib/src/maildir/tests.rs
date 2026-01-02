@@ -351,6 +351,8 @@ fn test_maildir_mailbox_paths() {
         assert_eq!(new_mailbox.name, "Archive");
         assert_eq!(&new_mailbox.path, &Path::new("Archive"));
         assert_eq!(&new_mailbox.fs_path, &root_mailbox.join("Archive"));
+        std::fs::remove_dir_all(&new_mailbox.fs_path).unwrap();
+
         let mut backend = maildir as Box<dyn MailBackend>;
         let ref_mailboxes = smol::block_on(backend.mailboxes().unwrap()).unwrap();
         // Assert that backend has no mailboxes at all");
@@ -456,6 +458,8 @@ fn test_maildir_mailbox_paths() {
         assert_eq!(new_mailbox.name, "Archive");
         assert_eq!(&new_mailbox.path, &Path::new("INBOX/Archive"));
         assert_eq!(&new_mailbox.fs_path, &root_mailbox.join("Archive"));
+        std::fs::remove_dir_all(&new_mailbox.fs_path).unwrap();
+
         let mut backend = maildir as Box<dyn MailBackend>;
         let ref_mailboxes = smol::block_on(backend.mailboxes().unwrap()).unwrap();
         // Assert that backend has only INBOX as a mailbox

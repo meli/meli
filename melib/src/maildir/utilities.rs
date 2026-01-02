@@ -31,7 +31,7 @@ use std::{
 use super::Configuration;
 use crate::{
     backends::prelude::*,
-    error::{Error, Result},
+    error::{Error, Result, ResultIntoError},
     utils::shellexpand::ShellExpandTrait,
 };
 
@@ -166,12 +166,6 @@ impl MaildirMailbox {
             (fs_path, suffix)
         };
 
-        let hash = {
-            let mut h = DefaultHasher::new();
-            fs_path.hash(&mut h);
-            MailboxHash(h.finish())
-        };
-
         let path = if config.is_root_a_mailbox {
             let mut path = PathBuf::from(&config.root_mailbox_name);
             path.push(suffix);
@@ -184,6 +178,16 @@ impl MaildirMailbox {
             metadata.permissions().readonly()
         } else {
             true
+        };
+
+        if matches!(std::fs::exists(&fs_path), Ok(false)) {
+            std::fs::create_dir(&fs_path).chain_err_related_path(&fs_path)?;
+        }
+        let hash = {
+            let canonical_path = fs_path.canonicalize().chain_err_related_path(&fs_path)?;
+            let mut h = DefaultHasher::new();
+            canonical_path.hash(&mut h);
+            MailboxHash(h.finish())
         };
 
         let ret = Self {
@@ -225,7 +229,8 @@ impl MaildirMailbox {
         let fs_path = PathBuf::from(&given_path).expand();
         let hash = {
             let mut h = DefaultHasher::new();
-            fs_path.hash(&mut h);
+            let canonical_path = fs_path.canonicalize().chain_err_related_path(&fs_path)?;
+            canonical_path.hash(&mut h);
             MailboxHash(h.finish())
         };
 
@@ -477,7 +482,11 @@ impl MaildirFilePathExt for Path {
             }
         }
         let mut hasher = DefaultHasher::default();
-        self.hash(&mut hasher);
+        if let Ok(canonical_path) = self.canonicalize() {
+            canonical_path.hash(&mut hasher);
+        } else {
+            self.hash(&mut hasher);
+        }
         EnvelopeHash(hasher.finish())
     }
 
@@ -527,6 +536,7 @@ impl MaildirMailboxPathExt for Path {
         if is_dir && (path.ends_with("cur") || path.ends_with("tmp") | path.ends_with("new")) {
             path.pop();
         }
+        path = path.canonicalize().ok()?;
 
         let mut hasher = DefaultHasher::new();
         path.hash(&mut hasher);
