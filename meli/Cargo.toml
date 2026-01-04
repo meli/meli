@@ -1,6 +1,6 @@
 [package]
 name = "meli"
-version = "0.8.12"
+version = "0.8.13"
 authors = ["Manos Pitsidianakis <manos@pitsidianak.is>"]
 edition = "2021"
 rust-version = "1.85.0"
@@ -66,7 +66,7 @@ itoa = { version = "1", default-features = false }
 libc = { workspace = true }
 libz-sys = { version = "1.1", features = ["static"], optional = true }
 linkify = { version = "^0.10", default-features = false }
-melib = { path = "../melib", version = "0.8.12", features = [] }
+melib = { path = "../melib", version = "0.8.13", features = [] }
 nix = { workspace = true, default-features = false, features = ["signal", "poll", "term", "ioctl", "process"] }
 regex = { workspace = true }
 serde = { workspace = true }

@@ -21,6 +21,117 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- ### Miscellaneous Tasks -->
 
+## [v0.8.13] - 2026-01-04
+
+This release:
+
+- fixes severe issue when calling gettimeofday with a tz arg that may result in segfaults
+- fixes AUTHENTICATE use in imap backend when SASL-IR is not available
+- adds other misc fixes
+- updates various dependencies to newer versions
+- adds tab_width option to specify how many spaces a tab character should occupy
+- adds support for mbox files with meli view /path/to/file command
+
+Contributors in alphabetical order:
+
+- Manos Pitsidianakis
+- nrxr
+* [@nrxr](https://git.meli-email.org/nrxr) made their first contribution in [#639](https://git.meli-email.org/meli/meli/pulls/639)
+
+### Added
+
+- [**`d668e98d`**](https://git.meli-email.org/meli/meli/commit/d668e98d726691ea2b663b721c53863d73a3de4c) `Add tab_width option for terminal drawing`
+- [**`a588a4a3`**](https://git.meli-email.org/meli/meli/commit/a588a4a3b37ff72411a5c8b7a3bdc0d7203efff8) `melib/email: allow mbox byte content in Mail` in PR [`#645` "tab chars"](https://git.meli-email.org/meli/meli/pulls/645)
+
+### Bug Fixes
+
+- [**`800f751c`**](https://git.meli-email.org/meli/meli/commit/800f751ccf164a93371fd512e16ad0d643cb1bb6) `melib/utils: remove tz arg in gettimeofday` in PR [`#639` "melib/utils: remove tz arg in gettimeofday"](https://git.meli-email.org/meli/meli/pulls/639)
+- [**`faac9f13`**](https://git.meli-email.org/meli/meli/commit/faac9f137ffda31fdf3fc60f06a5a6f29934c26b) `melib/imap: fix AUTHENTICATE when lacking SASL-IR` in PR [`#628` "melib/imap: fix AUTHENTICATE when lacking SASL-IR"](https://git.meli-email.org/meli/meli/pulls/628)
+- [**`a4386827`**](https://git.meli-email.org/meli/meli/commit/a4386827b0dc754816c80a80930d1af4bc846e96) `meli/terminal/cells: Fix Display impl`
+- [**`d5916c77`**](https://git.meli-email.org/meli/meli/commit/d5916c7750d16645a696ba4d32a77e24f4fffb83) `meli/terminal/cells: fix box drawing logic`
+- [**`cdb02110`**](https://git.meli-email.org/meli/meli/commit/cdb021102fb3f36e00191799d1e49a8957dfdd94) `compose: fix reply-to-all + multiple Reply-To` in PR [`#636` "compose: fix reply-to-all + multiple Reply-To"](https://git.meli-email.org/meli/meli/pulls/636)
+- [**`5d538da7`**](https://git.meli-email.org/meli/meli/commit/5d538da745d8bbb3c1952baae93f4ea055b8b762) `melib/imap/parser: unescape quoted strings` in PR [`#623` "fix-imap-unescaping-quoted-strings"](https://git.meli-email.org/meli/meli/pulls/623)
+- [**`e35c6304`**](https://git.meli-email.org/meli/meli/commit/e35c6304abdf236cf6fbe707f6f85d49b0d087ae) `listing: don't panic if updated env was deleted`
+- [**`c5fcd7b1`**](https://git.meli-email.org/meli/meli/commit/c5fcd7b1ffdaf1549f11add04d17e66522ba9283) `melib/maildir: use canonical paths for hashes`
+- [**`401f774c`**](https://git.meli-email.org/meli/meli/commit/401f774c3b5da980c4102e253b9d314a4030b112) `meli/state: properly clean float message box area`
+- [**`5aecd639`**](https://git.meli-email.org/meli/meli/commit/5aecd63977b40d1bcd3fd99667ca6f31858171e7) `melib/email/parser: fix BytesExt::replace`
+
+### Changes
+
+- [**`2ad65c0f`**](https://git.meli-email.org/meli/meli/commit/2ad65c0f17ac1d91d79757ceaf957e24e00adc28) `melib/email/parser: inline BytesExt methods`
+- [**`7d057ae0`**](https://git.meli-email.org/meli/meli/commit/7d057ae03703afcf14f77bc77935fda71972eac9) `Update MSRV to 1.80.0`
+- [**`01217f51`**](https://git.meli-email.org/meli/meli/commit/01217f51fe1dfcf6c96e50747d135c9594249f22) `Update "notify" crate to 8.x.x`
+- [**`33929949`**](https://git.meli-email.org/meli/meli/commit/33929949da82847651fafbbbc74528f8bbaa6bdd) `Update bitflags to 2.9.x`
+- [**`d4d0f64d`**](https://git.meli-email.org/meli/meli/commit/d4d0f64d100dc7bb92d79b9440997d4b621cef2d) `Update native-tls to 0.2.14`
+- [**`c8a78303`**](https://git.meli-email.org/meli/meli/commit/c8a783036763a1d29dda4d677a7cd27ef77eb5c5) `Use minor version for libc dependency`
+- [**`f36c81df`**](https://git.meli-email.org/meli/meli/commit/f36c81dff4a7f1097370a6969043e97173ebd1cd) `Use minor versions for serde dependencies`
+- [**`0f3214aa`**](https://git.meli-email.org/meli/meli/commit/0f3214aa20e07cd176bba3564d451c09d61e6fbd) `Update nix to 0.30`
+- [**`db13f163`**](https://git.meli-email.org/meli/meli/commit/db13f1638102e31196b01341ce7ea4f87e6c88c0) `melib: derive Default for NetworkErrorKind` in PR [`#651` "test_cli_subcommands: remove backspace assert"](https://git.meli-email.org/meli/meli/pulls/651)
+- [**`bef124af`**](https://git.meli-email.org/meli/meli/commit/bef124afe33e380b28ddc8cb3d7033b91bb5c0e4) `Update smallvec to v1.15.1`
+- [**`044e11d5`**](https://git.meli-email.org/meli/meli/commit/044e11d56c68c8103fe6a39c6cfd446deea9278a) `Update smol to v2.0.2`
+- [**`97d9c4f3`**](https://git.meli-email.org/meli/meli/commit/97d9c4f3a964a4ff20140f038187e48ad7a27715) `Update serde to v1.0.228`
+- [**`0f8bc91f`**](https://git.meli-email.org/meli/meli/commit/0f8bc91faf3ad23a0619d3354d6bed7053ff1dc3) `Update polling to v3.7.4`
+- [**`574afcd1`**](https://git.meli-email.org/meli/meli/commit/574afcd122b7f500472574774b721448310ae37e) `Update socket to v0.6.1`
+- [**`b75b1145`**](https://git.meli-email.org/meli/meli/commit/b75b1145e5a3033c65329e38c30e0c936650266d) `Update indexmap to v2.12.0`
+- [**`f5622537`**](https://git.meli-email.org/meli/meli/commit/f5622537738609bb256bceaeef766a000ebe1613) `Update rusqlite to v0.37.0`
+- [**`5a29a611`**](https://git.meli-email.org/meli/meli/commit/5a29a6110238569e57299de75f3f4d7665e4b23e) `Update itoa to v1.0.15`
+- [**`1465b93f`**](https://git.meli-email.org/meli/meli/commit/1465b93f9a77600f5cc8afca5327ee122212db61) `Update libc to v0.2.177`
+- [**`dc3d7a29`**](https://git.meli-email.org/meli/meli/commit/dc3d7a293bef944b0d2affe84b48f0c10c7df831) `Update flate2 to v1.1.5`
+- [**`240639c5`**](https://git.meli-email.org/meli/meli/commit/240639c53a973d83d9aaf273ab4b12c86ee20a9e) `Update futures to v0.3.31`
+- [**`c1c29b5e`**](https://git.meli-email.org/meli/meli/commit/c1c29b5ec9367008ec025264d7f8ff6f1ef86167) `Update uuid to v1.16.0`
+- [**`c0346875`**](https://git.meli-email.org/meli/meli/commit/c0346875637627e084e02e6dc6d1722178cdb403) `Update async-fn-stream and async-io`
+- [**`86416099`**](https://git.meli-email.org/meli/meli/commit/8641609926321d322536389e965045a5fb606820) `Update msrv to 1.85.0` in PR [`#652` "Update a bunch of dependencies"](https://git.meli-email.org/meli/meli/pulls/652)
+- [**`90b580af`**](https://git.meli-email.org/meli/meli/commit/90b580afe03d2e0b23ecaa0469aec72ff164aa04) `meli/Cargo.toml: Relax assert_cmd version dep` in PR [`#654` "meli/Cargo.toml: Relax assert_cmd version dep"](https://git.meli-email.org/meli/meli/pulls/654)
+
+### Refactoring
+
+- [**`d2c16678`**](https://git.meli-email.org/meli/meli/commit/d2c16678961713b3772a559b44700865903e44b1) `Remove unused_attributes`
+- [**`2df58d5d`**](https://git.meli-email.org/meli/meli/commit/2df58d5dadaa4d1d934e55acbf59fec57400e47f) `melib/mbox: fix clippy::result_large_err lint`
+- [**`5dae3733`**](https://git.meli-email.org/meli/meli/commit/5dae373306d647b01e013ba84245d8a1d65c3415) `Fix clippy::uninlined_format_args warnings`
+- [**`46808e0d`**](https://git.meli-email.org/meli/meli/commit/46808e0d029fddc733637e03a961603ab7ed1e2a) `melib/gpgme: allow unnecessary_transmutes lint in bindings`
+- [**`e5a7276e`**](https://git.meli-email.org/meli/meli/commit/e5a7276e50ecc22d6dcb29e94d85769953732ee8) `melib/error: homogenize error messages` in PR [`#631` "Minor fixups"](https://git.meli-email.org/meli/meli/pulls/631)
+- [**`cd42abe3`**](https://git.meli-email.org/meli/meli/commit/cd42abe33fec679e1c728cfef6b16e551deb0447) `Fix 1.89.0 lints`
+- [**`29fd4acb`**](https://git.meli-email.org/meli/meli/commit/29fd4acbd9b94ee3784f576f8c36b91a82dbde08) `Move common deps to workspace Cargo.toml`
+- [**`da53143d`**](https://git.meli-email.org/meli/meli/commit/da53143de51dc14b8e06dfc6f47792c80e40ca15) `melib/jmap: silence clippy::struct_field_names`
+- [**`65024d13`**](https://git.meli-email.org/meli/meli/commit/65024d13c0d7b56ec60f114beebdcef5c2dfaed6) `meli/terminal: allow unreachable_code after fork`
+- [**`1fc0c78a`**](https://git.meli-email.org/meli/meli/commit/1fc0c78a0653340d06d1e2f9a5c6863b28e66a4c) `Fix clippy::large_enum_variant`
+- [**`e9c567cd`**](https://git.meli-email.org/meli/meli/commit/e9c567cdc37606ffe7412e5aba36398c940f0199) `Fix clippy::struct_field_names`
+- [**`91e64685`**](https://git.meli-email.org/meli/meli/commit/91e64685fc0deb7f80264e80d35a27e97c3ba045) `Fix clippy::unbuffered_bytes`
+- [**`a1e15157`**](https://git.meli-email.org/meli/meli/commit/a1e15157ea36bcf2ba3f2381c52b8b477995f5ba) `Fix 1.90.0 Clippy warnings` in PR [`#638` "update-deps"](https://git.meli-email.org/meli/meli/pulls/638)
+- [**`2978f7bb`**](https://git.meli-email.org/meli/meli/commit/2978f7bbac7308f3d7938fe4ed25b7e38e3392b7) `Fix clippy::use_self`
+- [**`1ec27b8e`**](https://git.meli-email.org/meli/meli/commit/1ec27b8eaf0027f4133a8cd9f1c1ee75682abc44) `meli/sqlite3: fix rebuilding trace message`
+
+### Documentation
+
+- [**`2acee637`**](https://git.meli-email.org/meli/meli/commit/2acee637ce1ce244ae97dd0a16cf1fb6d4f23d3f) `docs: correct sample configs for send_mail option` in PR [`#622` "docs: correct sample configs for send_mail option"](https://git.meli-email.org/meli/meli/pulls/622)
+- [**`fe94c08b`**](https://git.meli-email.org/meli/meli/commit/fe94c08b974e46b9bb27ebf2805fdf708d53f7e4) `docs/meli.conf.5: fix .It without preceding .Bl`
+- [**`2de6e1ae`**](https://git.meli-email.org/meli/meli/commit/2de6e1aedb58827c8b2ae4913f6f798eda4d4864) `docs: remove empty input line in manpages`
+- [**`17d3b564`**](https://git.meli-email.org/meli/meli/commit/17d3b5641b5a92b860d54c7b930868d126603989) `docs: fix meli.conf.examples.5 Nm value` in PR [`#634` "man-fixes"](https://git.meli-email.org/meli/meli/pulls/634)
+
+### Testing
+
+- [**`0500b33f`**](https://git.meli-email.org/meli/meli/commit/0500b33f5d656ea2920dcc7e5d685b97da496500) `melib: log to stderr for binary tests`
+- [**`e6c63c02`**](https://git.meli-email.org/meli/meli/commit/e6c63c02ecf827c5d29a8887c8b277db59c2b950) `melib/imap: fix test_imap_watch`
+- [**`490d4042`**](https://git.meli-email.org/meli/meli/commit/490d4042fb364e41f998e1c19b028167e3aa73cd) `melib/tests: use 127.0.0.1` in PR [`#635` "melib/tests: use 127.0.0.1"](https://git.meli-email.org/meli/meli/pulls/635)
+- [**`4e83b9d9`**](https://git.meli-email.org/meli/meli/commit/4e83b9d9857047ebd7e354fd81a262d688f89de6) `melib/tests/jmap: add debug print in assert` in PR [`#632` "fix-box-rendering"](https://git.meli-email.org/meli/meli/pulls/632)
+- [**`d53046d9`**](https://git.meli-email.org/meli/meli/commit/d53046d9b77666ae4c73429ce7a6b38dd69710bb) `melib/email/parser: add test for BytesExt trait`
+- [**`89a17103`**](https://git.meli-email.org/meli/meli/commit/89a17103fdcd85bf4660d511a5200dd5c0aeeb3a) `test_cli_subcommands: remove backspace assert`
+
+### Miscellaneous Tasks
+
+- [**`9577c10b`**](https://git.meli-email.org/meli/meli/commit/9577c10b414cf594711ee6e7371c248b45562619) `Add [tag:msrv] annotation`
+- [**`975ef5fb`**](https://git.meli-email.org/meli/meli/commit/975ef5fbb0c9a430e845bb95681ee20c4a01fcc9) `Annotate cstr literal use with [ref:msrv]`
+- [**`e7c0948a`**](https://git.meli-email.org/meli/meli/commit/e7c0948a0a399aa6eeab16dc4056edb4733d4dea) `Run cargo-sort` in PR [`#653` "fixes"](https://git.meli-email.org/meli/meli/pulls/653)
+
+### Continuous Integration
+
+- [**`5fa7a24d`**](https://git.meli-email.org/meli/meli/commit/5fa7a24d0f2b89ed78c3f38f4f856422256cb237) `ci: update cargo-nextest version to 0.9.99`
+- [**`6310ac90`**](https://git.meli-email.org/meli/meli/commit/6310ac9018118239840abcd62454a30f1baa7218) `ci: fix Makefile.lint` in PR [`#629` "ci: update cargo-nextest version to 0.9.99"](https://git.meli-email.org/meli/meli/pulls/629)
+- [**`d9201664`**](https://git.meli-email.org/meli/meli/commit/d92016647cfc5c6127b2a26c8bb4d856f82dbd58) `CI: check melib MSRV before meli`
+- [**`b58c3080`**](https://git.meli-email.org/meli/meli/commit/b58c3080979a0a39c6a1960bde9ca8cae5ed5c39) `ci: bump cargo-msrv to 0.18.4`
+- [**`ed8b8576`**](https://git.meli-email.org/meli/meli/commit/ed8b857614552feffc61bf90b4bf7e450bb68d7c) `ci: save rust toolchain cache on lints workflow`
+- [**`c7790ea4`**](https://git.meli-email.org/meli/meli/commit/c7790ea44facc72f165a7287e117501e9edcf2d9) `ci: fix off-by-one error in check_dco.sh` in PR [`#633` "ci: fix off-by-one error in check_dco.sh"](https://git.meli-email.org/meli/meli/pulls/633)
+
 ## [v0.8.12] - 2025-04-21
 
 This release fixes compilation under macos which was broken with the previous release, [v0.8.11].
@@ -1673,3 +1784,4 @@ Notable changes:
 [v0.8.10]: https://git.meli-email.org/meli/meli/releases/tag/v0.8.10
 [v0.8.11]: https://git.meli-email.org/meli/meli/releases/tag/v0.8.11
 [v0.8.12]: https://git.meli-email.org/meli/meli/releases/tag/v0.8.12
+[v0.8.13]: https://git.meli-email.org/meli/meli/releases/tag/v0.8.13
