@@ -1000,7 +1000,8 @@ pub fn untagged_responses(input: &[u8]) -> ImapParseResult<'_, Option<UntaggedRe
                 b"EXISTS" => Some(Exists(num)),
                 b"RECENT" => Some(Recent(num)),
                 _ if _tag.starts_with(b"FETCH ") => {
-                    Some(Fetch(Box::new(fetch_response(orig_input)?.1)))
+                    let (rest, resp, alert) = fetch_response(orig_input)?;
+                    return Ok((rest, Some(Fetch(Box::new(resp))), alert));
                 }
                 _ => {
                     log::error!(
