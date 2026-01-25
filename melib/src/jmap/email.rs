@@ -290,8 +290,8 @@ impl From<EmailAddress> for crate::email::Address {
 
 impl std::fmt::Display for EmailAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if self.name.is_some() {
-            write!(f, "{} <{}>", self.name.as_ref().unwrap(), &self.email)
+        if let Some(name) = self.name.as_ref() {
+            write!(f, "{} <{}>", name, &self.email)
         } else {
             write!(f, "{}", &self.email)
         }
