@@ -532,7 +532,7 @@ pub fn list_mailbox_result(input: &[u8]) -> IResult<&[u8], ImapMailbox> {
     ))
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct FetchResponse<'a> {
     pub uid: Option<UID>,
     pub message_sequence_number: MessageSequenceNumber,
@@ -543,6 +543,25 @@ pub struct FetchResponse<'a> {
     pub envelope: Option<Envelope>,
     pub bodystructure: bool,
     pub raw_fetch_value: &'a [u8],
+}
+
+impl<'a> std::fmt::Debug for FetchResponse<'a> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fmt.debug_struct("FetchResponse")
+            .field("uid", &self.uid)
+            .field("message_sequence_number", &self.message_sequence_number)
+            .field("modseq", &self.modseq)
+            .field("flags", &self.flags)
+            .field("body", &self.body.map(String::from_utf8_lossy))
+            .field("references", &self.references.map(String::from_utf8_lossy))
+            .field("envelope", &self.envelope)
+            .field("bodystructure", &self.bodystructure)
+            .field(
+                "raw_fetch_value",
+                &String::from_utf8_lossy(self.raw_fetch_value),
+            )
+            .finish()
+    }
 }
 
 pub fn fetch_response(input: &[u8]) -> ImapParseResult<'_, FetchResponse<'_>> {
