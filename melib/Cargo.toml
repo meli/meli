@@ -51,7 +51,7 @@ data-encoding = { version = "2.9" }
 encoding_rs = { version = "^0.8" }
 flate2 = { workspace = true }
 futures = { workspace = true }
-imap-codec = { version = "2.0.0-alpha.4", features = ["ext_condstore_qresync", "ext_id"], optional = true }
+imap-codec = { version = "=2.0.0-alpha.4", features = ["ext_condstore_qresync", "ext_id"], optional = true }
 indexmap = { workspace = true }
 isahc = { version = "^1.7.2", optional = true, default-features = false, features = ["http2", "json", "text-decoding"] }
 libc = { workspace = true }
