@@ -161,6 +161,7 @@ impl MailViewState {
                 auto_decrypt: *mailbox_settings!(
                     context[coordinates.0][&coordinates.1].pgp.auto_decrypt
                 ),
+                charset: None,
             }),
             context.main_loop_handler.clone(),
         ));

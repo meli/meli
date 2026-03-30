@@ -249,7 +249,7 @@ impl ViewFilter {
                 smallvec::smallvec!["-I".into(), "utf-8".into(), "-T".into(), "text/html".into()],
             )
         };
-        let bytes: Vec<u8> = att.decode(Default::default());
+        let bytes: Vec<u8> = att.decode(view_settings.charset.into());
 
         let filter_invocation2 = filter_invocation.to_string();
         let bytes2 = bytes.clone();
@@ -355,7 +355,7 @@ impl ViewFilter {
                     filter_invocation: String::new(),
                     content_type: att.content_type.clone(),
                     notice: None,
-                    unfiltered: att.decode(Default::default()),
+                    unfiltered: att.decode(view_settings.charset.into()),
                     body_text: ViewFilterContent::Filtered {
                         inner: String::new(),
                     },
@@ -390,7 +390,7 @@ impl ViewFilter {
                 Self::new_attachment(&parts[chosen_attachment_idx], view_settings, context)
             {
                 v.event_handler = Some(Self::html_process_event);
-                v.unfiltered = parts[html_attachment_idx].decode(Default::default());
+                v.unfiltered = parts[html_attachment_idx].decode(view_settings.charset.into());
                 return Ok(v);
             }
             if let Some(Ok(v)) = parts
@@ -416,7 +416,7 @@ impl ViewFilter {
                         .filter_map(|p| Self::new_attachment(p, view_settings, context).ok())
                         .collect::<Vec<Self>>(),
                 },
-                unfiltered: att.decode(Default::default()),
+                unfiltered: att.decode(view_settings.charset.into()),
                 event_handler: None,
                 id: ComponentId::default(),
             });
@@ -722,7 +722,7 @@ impl ViewFilter {
             body_text: ViewFilterContent::Filtered {
                 inner: att.text(Text::Plain),
             },
-            unfiltered: att.decode(Default::default()),
+            unfiltered: att.decode(view_settings.charset.into()),
             event_handler: None,
             id: ComponentId::default(),
         })

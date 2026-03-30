@@ -56,7 +56,7 @@ pub struct EnvelopeView {
     pub attachment_paths: Vec<Vec<usize>>,
     pub headers_no: usize,
     pub headers_cursor: usize,
-    pub force_charset: ForceCharset,
+    pub force_charset: Option<Box<UIDialog<Option<Charset>>>>,
     pub view_settings: ViewSettings,
     pub active_jobs: HashSet<JobId>,
     pub main_loop_handler: MainLoopHandler,
@@ -98,7 +98,7 @@ impl EnvelopeView {
             initialised: false,
             force_draw_headers: false,
             options: ViewOptions::default(),
-            force_charset: ForceCharset::None,
+            force_charset: None,
             attachment_tree: String::new(),
             attachment_paths: vec![],
             body,
@@ -127,14 +127,13 @@ impl EnvelopeView {
         active_jobs: &mut HashSet<JobId>,
         acc: &mut Vec<AttachmentDisplay>,
         view_settings: &ViewSettings,
-        force_charset: Option<Charset>,
     ) {
         if a.content_disposition.kind.is_attachment() || a.content_type == "message/rfc822" {
             acc.push(AttachmentDisplay::Attachment {
                 inner: Box::new(a.clone()),
             });
         } else if a.content_type().is_text_html() {
-            let bytes = a.decode(force_charset.into());
+            let bytes = a.decode(view_settings.charset.into());
             let filter_invocation = view_settings
                 .html_filter
                 .as_deref()
@@ -185,7 +184,7 @@ impl EnvelopeView {
                 }
             }
         } else if a.is_text() {
-            let bytes = a.decode(force_charset.into());
+            let bytes = a.decode(view_settings.charset.into());
             acc.push(AttachmentDisplay::InlineText {
                 inner: Box::new(a.clone()),
                 comment: None,
@@ -207,7 +206,8 @@ impl EnvelopeView {
                     if let Some(text_attachment_pos) =
                         parts.iter().position(|a| a.content_type == "text/plain")
                     {
-                        let bytes = &parts[text_attachment_pos].decode(force_charset.into());
+                        let bytes =
+                            &parts[text_attachment_pos].decode(view_settings.charset.into());
                         if bytes.trim().is_empty()
                             && view_settings.auto_choose_multipart_alternative
                         {
@@ -229,7 +229,6 @@ impl EnvelopeView {
                             active_jobs,
                             &mut display,
                             view_settings,
-                            force_charset,
                         );
                     }
                     acc.push(AttachmentDisplay::Alternative {
@@ -251,7 +250,6 @@ impl EnvelopeView {
                                     active_jobs,
                                     &mut v,
                                     view_settings,
-                                    force_charset,
                                 );
                                 v
                             },
@@ -281,7 +279,6 @@ impl EnvelopeView {
                                         active_jobs,
                                         &mut v,
                                         view_settings,
-                                        force_charset,
                                     );
                                     v
                                 },
@@ -298,7 +295,6 @@ impl EnvelopeView {
                                         active_jobs,
                                         &mut v,
                                         view_settings,
-                                        force_charset,
                                     );
                                     v
                                 },
@@ -354,7 +350,6 @@ impl EnvelopeView {
                             active_jobs,
                             acc,
                             view_settings,
-                            force_charset,
                         );
                     }
                 }
@@ -370,7 +365,6 @@ impl EnvelopeView {
             &mut self.active_jobs,
             &mut display,
             &self.view_settings,
-            (&self.force_charset).into(),
         );
         let (attachment_paths, attachment_tree) = self.attachment_displays_to_tree(&display);
         self.display = display;
@@ -1047,7 +1041,7 @@ impl Component for EnvelopeView {
         } else {
             self.pager.draw(grid, area.skip_rows(y), context);
         }
-        if let ForceCharset::Dialog(ref mut s) = self.force_charset {
+        if let Some(ref mut s) = self.force_charset {
             s.draw(grid, area, context);
         }
 
@@ -1165,7 +1159,6 @@ impl Component for EnvelopeView {
                                             &mut self.active_jobs,
                                             &mut plaintext_display,
                                             &self.view_settings,
-                                            (&self.force_charset).into(),
                                         );
                                         *d = AttachmentDisplay::EncryptedSuccess {
                                             inner: std::mem::replace(
@@ -1236,39 +1229,32 @@ impl Component for EnvelopeView {
             }
         }
         match (&mut self.force_charset, &event) {
-            (ForceCharset::Dialog(selector), UIEvent::FinishedUIDialog(id, results))
-                if *id == selector.id() =>
-            {
+            (Some(selector), UIEvent::FinishedUIDialog(id, results)) if *id == selector.id() => {
+                self.force_charset = None;
                 if let Some(results) = results.downcast_ref::<Vec<Option<Charset>>>() {
                     if results.len() != 1 {
-                        self.force_charset = ForceCharset::None;
+                        self.view_settings.charset = None;
                         self.set_dirty(true);
                         return true;
                     }
                     if let Some(charset) = results[0] {
-                        self.force_charset = ForceCharset::Forced(charset);
-                    } else {
-                        self.force_charset = ForceCharset::None;
+                        self.view_settings.charset = Some(charset);
                     }
-                } else {
-                    self.force_charset = ForceCharset::None;
                 }
                 self.set_dirty(true);
                 return true;
             }
-            (ForceCharset::Dialog(selector), UIEvent::ComponentUnrealize(id))
-                if *id == selector.id() =>
-            {
-                self.force_charset = ForceCharset::None;
+            (Some(selector), UIEvent::ComponentUnrealize(id)) if *id == selector.id() => {
+                self.force_charset = None;
                 self.set_dirty(true);
                 return true;
             }
-            (ForceCharset::Dialog(selector), _) => {
+            (Some(selector), _) => {
                 if selector.process_event(event, context) {
                     return true;
                 }
             }
-            _ => {}
+            (None, _) => {}
         }
 
         let shortcuts = &self.shortcuts(context);
@@ -1447,7 +1433,7 @@ impl Component for EnvelopeView {
                     if path.is_relative() {
                         path = context.current_dir().join(&path);
                     }
-                    match save_attachment(&path, &u.decode(Default::default())) {
+                    match save_attachment(&path, &u.decode(self.view_settings.charset.into())) {
                         Err(err) => {
                             log::error!("Failed to create file at {}: {err}", path.display());
                             context.replies.push_back(UIEvent::Notification {
@@ -1514,7 +1500,7 @@ impl Component for EnvelopeView {
 
                 let bytes =
                     if let Some(u) = self.open_attachment(a_i, context) {
-                        Cow::Owned(u.decode(Default::default()))
+                        Cow::Owned(u.decode(self.view_settings.charset.into()))
                     } else if a_i == 0 {
                         Cow::Borrowed(&self.mail.bytes)
                     } else {
@@ -1614,7 +1600,7 @@ impl Component for EnvelopeView {
                             let filename = attachment.filename();
                             if let Ok(command) = query_default_app(&attachment_type) {
                                 let res = File::create_temp_file(
-                                    &attachment.decode(Default::default()),
+                                    &attachment.decode(self.view_settings.charset.into()),
                                     filename.as_deref(),
                                     None,
                                     None,
@@ -1795,7 +1781,7 @@ impl Component for EnvelopeView {
                     (Some(Charset::KOI8R), Charset::KOI8R.to_string()),
                     (Some(Charset::KOI8U), Charset::KOI8U.to_string()),
                 ];
-                self.force_charset = ForceCharset::Dialog(Box::new(Selector::new(
+                self.force_charset = Some(Box::new(Selector::new(
                     "select charset to force",
                     entries,
                     true,
@@ -1842,7 +1828,7 @@ impl Component for EnvelopeView {
         self.dirty
             || self.pager.is_dirty()
             || self.subview.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
-            || matches!(self.force_charset, ForceCharset::Dialog(ref s) if s.is_dirty())
+            || matches!(self.force_charset, Some(ref s) if s.is_dirty())
     }
 
     fn set_dirty(&mut self, value: bool) {
@@ -1851,7 +1837,7 @@ impl Component for EnvelopeView {
         if let Some(ref mut s) = self.subview {
             s.set_dirty(value);
         }
-        if let ForceCharset::Dialog(ref mut s) = self.force_charset {
+        if let Some(ref mut s) = self.force_charset {
             s.set_dirty(value);
         }
     }

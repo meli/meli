@@ -29,7 +29,7 @@ use melib::{
 use crate::{
     conf::shortcuts::EnvelopeViewShortcuts,
     jobs::{JobId, JoinHandle},
-    ShortcutMap, ThemeAttribute, UIDialog,
+    ShortcutMap, ThemeAttribute,
 };
 
 #[derive(Clone, Debug)]
@@ -48,6 +48,7 @@ pub struct ViewSettings {
     pub show_extra_headers: Vec<String>,
     pub auto_verify_signatures: ActionFlag,
     pub auto_decrypt: ActionFlag,
+    pub charset: Option<Charset>,
 }
 
 impl Default for ViewSettings {
@@ -66,6 +67,7 @@ impl Default for ViewSettings {
             show_extra_headers: vec![],
             auto_verify_signatures: ActionFlag::InternalVal(true),
             auto_decrypt: ActionFlag::InternalVal(true),
+            charset: None,
         }
     }
 }
@@ -82,23 +84,6 @@ pub struct Link {
     pub end: usize,
     pub value: String,
     pub kind: LinkKind,
-}
-
-#[derive(Debug, Default)]
-pub enum ForceCharset {
-    #[default]
-    None,
-    Dialog(Box<UIDialog<Option<Charset>>>),
-    Forced(Charset),
-}
-
-impl From<&ForceCharset> for Option<Charset> {
-    fn from(val: &ForceCharset) -> Self {
-        match val {
-            ForceCharset::Forced(val) => Some(*val),
-            ForceCharset::None | ForceCharset::Dialog(_) => None,
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
