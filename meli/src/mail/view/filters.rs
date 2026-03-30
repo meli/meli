@@ -350,6 +350,49 @@ impl ViewFilter {
             ..
         } = att.content_type
         {
+            if parts.is_empty() {
+                return Ok(Self {
+                    filter_invocation: String::new(),
+                    content_type: att.content_type.clone(),
+                    notice: None,
+                    unfiltered: att.decode(Default::default()),
+                    body_text: ViewFilterContent::Filtered {
+                        inner: String::new(),
+                    },
+                    event_handler: Some(Self::job_process_event),
+                    id: ComponentId::default(),
+                });
+            }
+            let mut chosen_attachment_idx = 0;
+            let html_attachment_idx = parts
+                .iter()
+                .position(|a| a.content_type == "text/html")
+                .unwrap_or(0);
+            if view_settings.auto_choose_multipart_alternative {
+                if let Some(text_attachment_pos) =
+                    parts.iter().position(|a| a.content_type == "text/plain")
+                {
+                    let bytes = parts[text_attachment_pos].body();
+                    if bytes.trim().is_empty() {
+                        if let Some(html_attachment_pos) =
+                            parts.iter().position(|a| a.content_type == "text/html")
+                        {
+                            // Select html alternative since text/plain is empty
+                            chosen_attachment_idx = html_attachment_pos;
+                        }
+                    } else {
+                        // Select text/plain alternative
+                        chosen_attachment_idx = text_attachment_pos;
+                    }
+                }
+            }
+            if let Ok(mut v) =
+                Self::new_attachment(&parts[chosen_attachment_idx], view_settings, context)
+            {
+                v.event_handler = Some(Self::html_process_event);
+                v.unfiltered = parts[html_attachment_idx].decode(Default::default());
+                return Ok(v);
+            }
             if let Some(Ok(v)) = parts
                 .iter()
                 .find(|p| p.is_text() && !p.body().trim().is_empty())
