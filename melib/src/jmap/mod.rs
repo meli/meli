@@ -389,7 +389,7 @@ pub struct JmapType {
 }
 
 impl MailBackend for JmapType {
-    fn capabilities(&self) -> MailBackendCapabilities {
+    fn capabilities(&mut self) -> MailBackendCapabilities {
         const CAPABILITIES: MailBackendCapabilities = MailBackendCapabilities {
             is_async: true,
             is_remote: true,
@@ -445,7 +445,7 @@ impl MailBackend for JmapType {
         }
     }
 
-    fn is_online(&self) -> ResultFuture<()> {
+    fn is_online(&mut self) -> ResultFuture<()> {
         let online = self.store.online_status.clone();
         let connection = self.connection.clone();
         let timeout_dur = self.server_conf.timeout;
@@ -493,7 +493,7 @@ impl MailBackend for JmapType {
         }))
     }
 
-    fn watch(&self) -> ResultStream<BackendEvent> {
+    fn watch(&mut self) -> ResultStream<BackendEvent> {
         let connection = self.connection.clone();
         let store = self.store.clone();
         Ok(Box::pin(try_fn_stream(|emitter| async move {
@@ -524,7 +524,7 @@ impl MailBackend for JmapType {
         })))
     }
 
-    fn mailboxes(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
+    fn mailboxes(&mut self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
         let store = self.store.clone();
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
@@ -547,13 +547,13 @@ impl MailBackend for JmapType {
         }))
     }
 
-    fn envelope_bytes_by_hash(&self, hash: EnvelopeHash) -> ResultFuture<Vec<u8>> {
+    fn envelope_bytes_by_hash(&mut self, hash: EnvelopeHash) -> ResultFuture<Vec<u8>> {
         let op = JmapOp::new(hash, self.connection.clone(), self.store.clone());
         Ok(Box::pin(async move { op.as_bytes().await }))
     }
 
     fn save(
-        &self,
+        &mut self,
         bytes: Vec<u8>,
         mailbox_hash: MailboxHash,
         _flags: Option<Flag>,
@@ -657,7 +657,7 @@ impl MailBackend for JmapType {
     }
 
     fn search(
-        &self,
+        &mut self,
         q: crate::search::Query,
         mailbox_hash: Option<MailboxHash>,
     ) -> ResultFuture<Vec<EnvelopeHash>> {
@@ -1337,7 +1337,7 @@ impl MailBackend for JmapType {
 
     // [ref:TODO] add support for BLOB extension
     fn submit(
-        &self,
+        &mut self,
         bytes: Vec<u8>,
         mailbox_hash: Option<MailboxHash>,
         _flags: Option<Flag>,

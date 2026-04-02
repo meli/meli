@@ -217,7 +217,7 @@ fn test_accounts_mailbox_by_path_error_msg() {
         eprintln_ok();
         let name = maildir.account_name.to_string();
         let account_hash = maildir.account_hash;
-        let backend = maildir as Box<dyn MailBackend>;
+        let mut backend = maildir as Box<dyn MailBackend>;
         let ref_mailboxes = smol::block_on(backend.mailboxes().unwrap()).unwrap();
         let contacts = melib::contacts::Contacts::new(name.to_string());
 
@@ -236,7 +236,7 @@ fn test_accounts_mailbox_by_path_error_msg() {
             active_job_instants: std::collections::BTreeMap::default(),
             event_queue: IndexMap::default(),
             backend_capabilities: backend.capabilities(),
-            backend: Arc::new(std::sync::RwLock::new(backend)),
+            backend: Arc::new(std::sync::Mutex::new(backend)),
         };
         account.init(ref_mailboxes).unwrap();
         while let Ok(thread_event) = ctx.receiver.try_recv() {
@@ -420,7 +420,7 @@ fn test_accounts_mailbox_by_path_error_msg() {
         eprintln_ok();
         let name = maildir.account_name.to_string();
         let account_hash = maildir.account_hash;
-        let backend = maildir as Box<dyn MailBackend>;
+        let mut backend = maildir as Box<dyn MailBackend>;
         let ref_mailboxes = smol::block_on(backend.mailboxes().unwrap()).unwrap();
         eprint_step!("Assert that created account has no mailboxes at all...");
         assert!(
@@ -445,7 +445,7 @@ fn test_accounts_mailbox_by_path_error_msg() {
             active_job_instants: std::collections::BTreeMap::default(),
             event_queue: IndexMap::default(),
             backend_capabilities: backend.capabilities(),
-            backend: Arc::new(std::sync::RwLock::new(backend)),
+            backend: Arc::new(std::sync::Mutex::new(backend)),
         };
         account.init(ref_mailboxes).unwrap();
         while let Ok(thread_event) = ctx.receiver.try_recv() {

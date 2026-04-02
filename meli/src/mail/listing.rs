@@ -760,7 +760,7 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                         return;
                     };
-                    let job = account.backend.write().unwrap().copy_messages(
+                    let job = account.backend.lock().unwrap().copy_messages(
                         env_hashes,
                         mailbox_hash,
                         trash_mbox_hash,
@@ -793,7 +793,7 @@ pub trait MailListingTrait: ListingTrait {
                 ListingAction::Delete => {
                     let job = account
                         .backend
-                        .write()
+                        .lock()
                         .unwrap()
                         .delete_messages(env_hashes.clone(), mailbox_hash);
                     match job {
@@ -818,7 +818,7 @@ pub trait MailListingTrait: ListingTrait {
                 ListingAction::CopyTo(ref mailbox_path) => {
                     match account.mailbox_by_path(mailbox_path).and_then(
                         |destination_mailbox_hash| {
-                            account.backend.write().unwrap().copy_messages(
+                            account.backend.lock().unwrap().copy_messages(
                                 env_hashes,
                                 mailbox_hash,
                                 destination_mailbox_hash,
@@ -859,7 +859,7 @@ pub trait MailListingTrait: ListingTrait {
                 ListingAction::MoveTo(ref mailbox_path) => {
                     match account.mailbox_by_path(mailbox_path).and_then(
                         |destination_mailbox_hash| {
-                            account.backend.write().unwrap().copy_messages(
+                            account.backend.lock().unwrap().copy_messages(
                                 env_hashes,
                                 mailbox_hash,
                                 destination_mailbox_hash,

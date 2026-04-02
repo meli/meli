@@ -170,7 +170,7 @@ fn test_sqlite3_reindex() {
         pub(super) fn perform_reindex(
             acc_name: Arc<str>,
             collection: melib::Collection,
-            backend_mutex: Arc<RwLock<Box<dyn MailBackend>>>,
+            backend_mutex: Arc<Mutex<Box<dyn MailBackend>>>,
         ) {
             let reindex_fut = AccountCache::index(acc_name, collection, Arc::clone(&backend_mutex));
             smol::block_on(reindex_fut).unwrap();
@@ -321,7 +321,7 @@ fn test_sqlite3_reindex() {
 
     eprintln_ok();
     eprint_step!("Backend setup over, we're now finally ready to test sqlite3 indexing...");
-    let backend_mutex = Arc::new(RwLock::new(maildir as Box<dyn MailBackend>));
+    let backend_mutex = Arc::new(Mutex::new(maildir as Box<dyn MailBackend>));
 
     assert_eq!(
         list_xdg_data_home_dir_entries(),

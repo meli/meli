@@ -169,7 +169,7 @@ pub struct NntpType {
 }
 
 impl MailBackend for NntpType {
-    fn capabilities(&self) -> MailBackendCapabilities {
+    fn capabilities(&mut self) -> MailBackendCapabilities {
         let mut metadata = None;
         let mut extensions = self
             .uid_store
@@ -373,7 +373,7 @@ impl MailBackend for NntpType {
         }))
     }
 
-    fn mailboxes(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
+    fn mailboxes(&mut self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
         let is_online_fut = self.is_online()?;
         let uid_store = self.uid_store.clone();
         let connection = self.connection.clone();
@@ -390,7 +390,7 @@ impl MailBackend for NntpType {
         }))
     }
 
-    fn is_online(&self) -> ResultFuture<()> {
+    fn is_online(&mut self) -> ResultFuture<()> {
         let connection = self.connection.clone();
         let timeout_dur = self.server_conf.timeout_dur;
         Ok(Box::pin(async move {
@@ -405,14 +405,14 @@ impl MailBackend for NntpType {
         }))
     }
 
-    fn watch(&self) -> ResultStream<BackendEvent> {
+    fn watch(&mut self) -> ResultStream<BackendEvent> {
         Err(
             Error::new("Watching is currently unimplemented for nntp backend")
                 .set_kind(ErrorKind::NotImplemented),
         )
     }
 
-    fn envelope_bytes_by_hash(&self, hash: EnvelopeHash) -> ResultFuture<Vec<u8>> {
+    fn envelope_bytes_by_hash(&mut self, hash: EnvelopeHash) -> ResultFuture<Vec<u8>> {
         let is_online_fut = self.is_online()?;
         let (uid, mailbox_hash) =
             if let Some(v) = self.uid_store.hash_index.lock().unwrap().get(&hash) {
@@ -437,7 +437,7 @@ impl MailBackend for NntpType {
     }
 
     fn save(
-        &self,
+        &mut self,
         _bytes: Vec<u8>,
         _mailbox_hash: MailboxHash,
         _flags: Option<Flag>,
@@ -586,7 +586,7 @@ impl MailBackend for NntpType {
     }
 
     fn search(
-        &self,
+        &mut self,
         _query: crate::search::Query,
         _mailbox_hash: Option<MailboxHash>,
     ) -> ResultFuture<Vec<EnvelopeHash>> {
@@ -595,7 +595,7 @@ impl MailBackend for NntpType {
     }
 
     fn submit(
-        &self,
+        &mut self,
         mut bytes: Vec<u8>,
         mailbox_hash: Option<MailboxHash>,
         _flags: Option<Flag>,

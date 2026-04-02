@@ -30,7 +30,7 @@ impl Account {
         mailbox_hash: MailboxHash,
         flags: Vec<FlagOp>,
     ) -> Result<JobId> {
-        let fut = self.backend.write().unwrap().set_flags(
+        let fut = self.backend.lock().unwrap().set_flags(
             env_hashes.clone(),
             mailbox_hash,
             flags.clone(),

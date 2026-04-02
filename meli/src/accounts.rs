@@ -29,7 +29,7 @@ use std::{
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     pin::Pin,
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
@@ -128,7 +128,7 @@ pub struct Account {
     pub collection: Collection,
     pub contacts: Contacts,
     pub settings: AccountConf,
-    pub backend: Arc<RwLock<Box<dyn MailBackend>>>,
+    pub backend: Arc<Mutex<Box<dyn MailBackend>>>,
 
     pub main_loop_handler: MainLoopHandler,
     pub active_jobs: HashMap<JobId, JobRequest>,
@@ -199,7 +199,7 @@ impl Account {
     ) -> Result<Self> {
         let name: Arc<str> = name.into();
         let s = settings.clone();
-        let backend = map.get(&settings.account().format)(
+        let mut backend = map.get(&settings.account().format)(
             settings.account(),
             (Box::new(move |path: &str| {
                 // disjoint-capture-in-closures
@@ -320,12 +320,12 @@ impl Account {
             active_job_instants,
             event_queue: IndexMap::default(),
             backend_capabilities: backend.capabilities(),
-            backend: Arc::new(RwLock::new(backend)),
+            backend: Arc::new(Mutex::new(backend)),
         })
     }
 
     fn init(&mut self, mut ref_mailboxes: HashMap<MailboxHash, Mailbox>) -> Result<()> {
-        self.backend_capabilities = self.backend.read().unwrap().capabilities();
+        self.backend_capabilities = self.backend.lock().unwrap().capabilities();
         let mut mailbox_entries: IndexMap<MailboxHash, MailboxEntry> =
             IndexMap::with_capacity_and_hasher(ref_mailboxes.len(), Default::default());
         let mut mailboxes_order: Vec<MailboxHash> = Vec::with_capacity(ref_mailboxes.len());
@@ -478,7 +478,7 @@ impl Account {
                 {
                     let total = entry.ref_mailbox.count().ok().unwrap_or((0, 0)).1;
                     entry.status = MailboxStatus::Parsing(0, total);
-                    if let Ok(mailbox_job) = self.backend.write().unwrap().fetch(*h) {
+                    if let Ok(mailbox_job) = self.backend.lock().unwrap().fetch(*h) {
                         let handle = self.main_loop_handler.job_executor.spawn(
                             "fetch-mailbox".into(),
                             mailbox_job.into_future(),
@@ -797,7 +797,7 @@ impl Account {
                     },
                 )));
         }
-        let refresh_job = self.backend.write().unwrap().refresh(mailbox_hash);
+        let refresh_job = self.backend.lock().unwrap().refresh(mailbox_hash);
         if let Ok(refresh_job) = refresh_job {
             let handle = self.main_loop_handler.job_executor.spawn(
                 "refresh".into(),
@@ -823,7 +823,7 @@ impl Account {
         }
 
         if !self.active_jobs.values().any(|j| j.is_watch()) {
-            match self.backend.read().unwrap().watch() {
+            match self.backend.lock().unwrap().watch() {
                 Ok(fut) => {
                     let fut = async move {
                         if let Some(wait) = wait {
@@ -919,7 +919,7 @@ impl Account {
                         .and_modify(|entry| {
                             entry.status = MailboxStatus::Parsing(0, 0);
                         });
-                    let mailbox_job = self.backend.write().unwrap().fetch(mailbox_hash);
+                    let mailbox_job = self.backend.lock().unwrap().fetch(mailbox_hash);
                     match mailbox_job {
                         Ok(mailbox_job) => {
                             let handle = self.main_loop_handler.job_executor.spawn(
@@ -1005,7 +1005,7 @@ impl Account {
         }
         let job = self
             .backend
-            .write()
+            .lock()
             .unwrap()
             .save(bytes.to_vec(), mailbox_hash, flags)?;
 
@@ -1097,7 +1097,7 @@ impl Account {
                 if self.backend_capabilities.supports_submission {
                     let job =
                         self.backend
-                            .write()
+                            .lock()
                             .unwrap()
                             .submit(message.into_bytes(), None, None)?;
 
@@ -1178,7 +1178,7 @@ impl Account {
                     }
                     SendMail::ServerSubmission => {
                         if capabilities.supports_submission {
-                            let fut = backend.write().unwrap().submit(
+                            let fut = backend.lock().unwrap().submit(
                                 message.as_bytes().to_vec(),
                                 None,
                                 None,
@@ -1201,7 +1201,7 @@ impl Account {
 
     #[inline]
     pub fn envelope_bytes_by_hash(&self, h: EnvelopeHash) -> ResultFuture<Vec<u8>> {
-        self.backend.read().unwrap().envelope_bytes_by_hash(h)
+        self.backend.lock().unwrap().envelope_bytes_by_hash(h)
     }
 
     pub fn special_use_mailbox(&self, special_use: SpecialUsageMailbox) -> Option<MailboxHash> {
@@ -1246,7 +1246,7 @@ impl Account {
             }
         };
         if force || !self.active_jobs.values().any(JobRequest::is_online) {
-            let online_fut = self.backend.read().unwrap().is_online();
+            let online_fut = self.backend.lock().unwrap().is_online();
             if let Ok(online_fut) = online_fut {
                 let handle = match wait {
                     Some(wait) => self.main_loop_handler.job_executor.spawn(
@@ -1286,7 +1286,7 @@ impl Account {
             SearchBackend::Auto | SearchBackend::None => {
                 if self.backend_capabilities.supports_search {
                     self.backend
-                        .read()
+                        .lock()
                         .unwrap()
                         .search(query, Some(mailbox_hash))
                 } else {
@@ -1542,7 +1542,7 @@ impl Account {
                             }
                         }
                     }
-                    let online_job = self.backend.read().unwrap().is_online();
+                    let online_job = self.backend.lock().unwrap().is_online();
                     if let Ok(online_job) = online_job {
                         let handle = self.main_loop_handler.job_executor.spawn(
                             "is-online".into(),

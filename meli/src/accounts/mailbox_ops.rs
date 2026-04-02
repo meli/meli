@@ -34,7 +34,7 @@ impl Account {
             MailboxOperation::Create(path) => {
                 let job = self
                     .backend
-                    .write()
+                    .lock()
                     .unwrap()
                     .create_mailbox(path.to_string())?;
                 let handle = self.main_loop_handler.job_executor.spawn(
@@ -55,7 +55,7 @@ impl Account {
                 }
 
                 let mailbox_hash = self.mailbox_by_path(&path)?;
-                let job = self.backend.write().unwrap().delete_mailbox(mailbox_hash)?;
+                let job = self.backend.lock().unwrap().delete_mailbox(mailbox_hash)?;
                 let handle = self.main_loop_handler.job_executor.spawn(
                     "delete-mailbox".into(),
                     job,
@@ -75,7 +75,7 @@ impl Account {
                 let mailbox_hash = self.mailbox_by_path(&path)?;
                 let job = self
                     .backend
-                    .write()
+                    .lock()
                     .unwrap()
                     .set_mailbox_subscription(mailbox_hash, true)?;
                 let handle = self.main_loop_handler.job_executor.spawn(
@@ -98,7 +98,7 @@ impl Account {
                 let mailbox_hash = self.mailbox_by_path(&path)?;
                 let job = self
                     .backend
-                    .write()
+                    .lock()
                     .unwrap()
                     .set_mailbox_subscription(mailbox_hash, false)?;
                 let handle = self.main_loop_handler.job_executor.spawn(
@@ -121,7 +121,7 @@ impl Account {
                 let mailbox_hash = self.mailbox_by_path(&path)?;
                 let job = self
                     .backend
-                    .write()
+                    .lock()
                     .unwrap()
                     .rename_mailbox(mailbox_hash, new_path.clone())?;
                 let handle = self.main_loop_handler.job_executor.spawn(
@@ -208,7 +208,7 @@ impl Account {
                                 .set_job_success(job_id, false);
                             return;
                         }
-                        let mailboxes_job = self.backend.read().unwrap().mailboxes();
+                        let mailboxes_job = self.backend.lock().unwrap().mailboxes();
                         if let Ok(mailboxes_job) = mailboxes_job {
                             let handle = self.main_loop_handler.job_executor.spawn(
                                 "list-mailboxes".into(),

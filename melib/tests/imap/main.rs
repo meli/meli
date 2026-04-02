@@ -774,7 +774,7 @@ mod tests {
             },
         };
 
-        let imap =
+        let mut imap =
             ImapType::new(&account_conf, Default::default(), backend_event_consumer).unwrap();
         let listener = smol::Async::new(listener).unwrap();
         let mut is_online_fut = imap.is_online().unwrap();

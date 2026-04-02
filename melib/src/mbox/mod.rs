@@ -829,7 +829,7 @@ pub struct MboxType {
 }
 
 impl MailBackend for MboxType {
-    fn capabilities(&self) -> MailBackendCapabilities {
+    fn capabilities(&mut self) -> MailBackendCapabilities {
         const CAPABILITIES: MailBackendCapabilities = MailBackendCapabilities {
             is_async: false,
             is_remote: false,
@@ -843,7 +843,7 @@ impl MailBackend for MboxType {
         CAPABILITIES
     }
 
-    fn is_online(&self) -> ResultFuture<()> {
+    fn is_online(&mut self) -> ResultFuture<()> {
         Ok(Box::pin(async { Ok(()) }))
     }
 
@@ -968,7 +968,7 @@ impl MailBackend for MboxType {
     }
 
     #[cfg(feature = "mbox-notify")]
-    fn watch(&self) -> ResultStream<BackendEvent> {
+    fn watch(&mut self) -> ResultStream<BackendEvent> {
         use std::sync::mpsc::channel;
 
         use crate::error::IntoError;
@@ -1158,14 +1158,14 @@ impl MailBackend for MboxType {
     }
 
     #[cfg(not(feature = "mbox-notify"))]
-    fn watch(&self) -> ResultStream<BackendEvent> {
+    fn watch(&mut self) -> ResultStream<BackendEvent> {
         Err(Error::new(
             "Notifications for mbox backend require the `mbox-notify` build-time feature.",
         )
         .set_kind(ErrorKind::NotSupported))
     }
 
-    fn mailboxes(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
+    fn mailboxes(&mut self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
         let ret = Ok(self
             .mailboxes
             .lock()
@@ -1176,7 +1176,7 @@ impl MailBackend for MboxType {
         Ok(Box::pin(async { ret }))
     }
 
-    fn envelope_bytes_by_hash(&self, hash: EnvelopeHash) -> ResultFuture<Vec<u8>> {
+    fn envelope_bytes_by_hash(&mut self, hash: EnvelopeHash) -> ResultFuture<Vec<u8>> {
         let mailbox_hash = self.mailbox_index.lock().unwrap()[&hash];
         let mailboxes_lck = self.mailboxes.lock().unwrap();
         let (offset, length) = {
@@ -1226,7 +1226,7 @@ impl MailBackend for MboxType {
     }
 
     fn save(
-        &self,
+        &mut self,
         _bytes: Vec<u8>,
         _mailbox_hash: MailboxHash,
         _flags: Option<Flag>,
@@ -1293,7 +1293,7 @@ impl MailBackend for MboxType {
     }
 
     fn search(
-        &self,
+        &mut self,
         _query: crate::search::Query,
         _mailbox_hash: Option<MailboxHash>,
     ) -> ResultFuture<Vec<EnvelopeHash>> {

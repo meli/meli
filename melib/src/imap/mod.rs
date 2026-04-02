@@ -256,7 +256,7 @@ pub struct ImapType {
 }
 
 impl MailBackend for ImapType {
-    fn capabilities(&self) -> MailBackendCapabilities {
+    fn capabilities(&mut self) -> MailBackendCapabilities {
         let mut extensions = self
             .uid_store
             .capabilities
@@ -441,7 +441,7 @@ impl MailBackend for ImapType {
         }))
     }
 
-    fn mailboxes(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
+    fn mailboxes(&mut self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
         let uid_store = self.uid_store.clone();
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
@@ -499,7 +499,7 @@ impl MailBackend for ImapType {
         }))
     }
 
-    fn is_online(&self) -> ResultFuture<()> {
+    fn is_online(&mut self) -> ResultFuture<()> {
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
             let mut conn = connection.lock().await?;
@@ -507,7 +507,7 @@ impl MailBackend for ImapType {
         }))
     }
 
-    fn watch(&self) -> ResultStream<BackendEvent> {
+    fn watch(&mut self) -> ResultStream<BackendEvent> {
         let server_conf = self.server_conf.clone();
         let main_conn = self.connection.clone();
         let uid_store = self.uid_store.clone();
@@ -621,7 +621,7 @@ impl MailBackend for ImapType {
         })))
     }
 
-    fn envelope_bytes_by_hash(&self, hash: EnvelopeHash) -> ResultFuture<Vec<u8>> {
+    fn envelope_bytes_by_hash(&mut self, hash: EnvelopeHash) -> ResultFuture<Vec<u8>> {
         let (uid, mailbox_hash) =
             if let Some(v) = self.uid_store.hash_index.lock().unwrap().get(&hash) {
                 *v
@@ -641,7 +641,7 @@ impl MailBackend for ImapType {
     }
 
     fn save(
-        &self,
+        &mut self,
         bytes: Vec<u8>,
         mailbox_hash: MailboxHash,
         flags: Option<Flag>,
@@ -1284,7 +1284,7 @@ impl MailBackend for ImapType {
     }
 
     fn search(
-        &self,
+        &mut self,
         query: Query,
         mailbox_hash: Option<MailboxHash>,
     ) -> ResultFuture<Vec<EnvelopeHash>> {

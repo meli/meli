@@ -693,7 +693,7 @@ impl NotmuchDb {
 }
 
 impl MailBackend for NotmuchDb {
-    fn capabilities(&self) -> MailBackendCapabilities {
+    fn capabilities(&mut self) -> MailBackendCapabilities {
         const CAPABILITIES: MailBackendCapabilities = MailBackendCapabilities {
             is_async: false,
             is_remote: false,
@@ -707,7 +707,7 @@ impl MailBackend for NotmuchDb {
         CAPABILITIES
     }
 
-    fn is_online(&self) -> ResultFuture<()> {
+    fn is_online(&mut self) -> ResultFuture<()> {
         Ok(Box::pin(async { Ok(()) }))
     }
 
@@ -835,7 +835,7 @@ impl MailBackend for NotmuchDb {
         }))
     }
 
-    fn watch(&self) -> ResultStream<BackendEvent> {
+    fn watch(&mut self) -> ResultStream<BackendEvent> {
         let account_hash = self.account_hash;
         let snapshot = self.snapshot.clone();
         let path = self.path.clone();
@@ -903,7 +903,7 @@ impl MailBackend for NotmuchDb {
         })))
     }
 
-    fn mailboxes(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
+    fn mailboxes(&mut self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
         let ret = Ok(self
             .mailboxes
             .read()
@@ -914,7 +914,7 @@ impl MailBackend for NotmuchDb {
         Ok(Box::pin(async { ret }))
     }
 
-    fn envelope_bytes_by_hash(&self, hash: EnvelopeHash) -> ResultFuture<Vec<u8>> {
+    fn envelope_bytes_by_hash(&mut self, hash: EnvelopeHash) -> ResultFuture<Vec<u8>> {
         let op = NotmuchOp {
             database: Arc::new(DbConnection::new(
                 self.path.as_path(),
@@ -930,7 +930,7 @@ impl MailBackend for NotmuchDb {
     }
 
     fn save(
-        &self,
+        &mut self,
         bytes: Vec<u8>,
         _mailbox_hash: MailboxHash,
         flags: Option<Flag>,
@@ -1079,7 +1079,7 @@ impl MailBackend for NotmuchDb {
     }
 
     fn search(
-        &self,
+        &mut self,
         melib_query: crate::search::Query,
         mailbox_hash: Option<MailboxHash>,
     ) -> ResultFuture<Vec<EnvelopeHash>> {

@@ -22,7 +22,7 @@
 //! Use an sqlite3 database for fast searching.
 use std::{
     path::PathBuf,
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex},
 };
 
 use melib::{
@@ -151,7 +151,7 @@ impl AccountCache {
 
     pub async fn insert(
         envelope: Envelope,
-        backend: Arc<RwLock<Box<dyn MailBackend>>>,
+        backend: Arc<Mutex<Box<dyn MailBackend>>>,
         acc_name: Arc<str>,
     ) -> Result<()> {
         let db_desc = DatabaseDescription {
@@ -166,7 +166,7 @@ impl AccountCache {
         }
 
         let op = backend
-            .read()
+            .lock()
             .unwrap()
             .envelope_bytes_by_hash(envelope.hash())?;
 
@@ -280,7 +280,7 @@ impl AccountCache {
     pub async fn index(
         acc_name: Arc<str>,
         collection: melib::Collection,
-        backend_mutex: Arc<RwLock<Box<dyn MailBackend>>>,
+        backend_mutex: Arc<Mutex<Box<dyn MailBackend>>>,
     ) -> Result<()> {
         let acc_mutex = collection.envelopes.clone();
         let db_desc = Arc::new(DatabaseDescription {
@@ -336,7 +336,7 @@ impl AccountCache {
             let mut chunk_bytes = Vec::with_capacity(chunk.len());
             for &env_hash in chunk {
                 let op = backend_mutex
-                    .read()
+                    .lock()
                     .unwrap()
                     .envelope_bytes_by_hash(env_hash)?;
                 let bytes = op

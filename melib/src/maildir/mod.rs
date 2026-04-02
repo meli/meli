@@ -109,7 +109,7 @@ pub struct MaildirType {
 }
 
 impl MailBackend for MaildirType {
-    fn capabilities(&self) -> MailBackendCapabilities {
+    fn capabilities(&mut self) -> MailBackendCapabilities {
         const CAPABILITIES: MailBackendCapabilities = MailBackendCapabilities {
             is_async: false,
             is_remote: false,
@@ -123,11 +123,11 @@ impl MailBackend for MaildirType {
         CAPABILITIES
     }
 
-    fn is_online(&self) -> ResultFuture<()> {
+    fn is_online(&mut self) -> ResultFuture<()> {
         Ok(Box::pin(async { Ok(()) }))
     }
 
-    fn mailboxes(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
+    fn mailboxes(&mut self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
         let res = Ok(self
             .mailboxes
             .iter()
@@ -307,7 +307,7 @@ impl MailBackend for MaildirType {
         }))
     }
 
-    fn watch(&self) -> ResultStream<BackendEvent> {
+    fn watch(&mut self) -> ResultStream<BackendEvent> {
         let root_mailbox = self.config.path.to_path_buf();
         let (mut tx, rx) = mpsc::channel(16);
         let watcher = {
@@ -345,7 +345,7 @@ impl MailBackend for MaildirType {
         Ok(Box::pin(stream))
     }
 
-    fn envelope_bytes_by_hash(&self, hash: EnvelopeHash) -> ResultFuture<Vec<u8>> {
+    fn envelope_bytes_by_hash(&mut self, hash: EnvelopeHash) -> ResultFuture<Vec<u8>> {
         let op = MaildirOp::new(
             hash,
             self.hash_indexes.clone(),
@@ -356,7 +356,7 @@ impl MailBackend for MaildirType {
     }
 
     fn save(
-        &self,
+        &mut self,
         bytes: Vec<u8>,
         mailbox_hash: MailboxHash,
         flags: Option<Flag>,
@@ -624,7 +624,7 @@ impl MailBackend for MaildirType {
     }
 
     fn search(
-        &self,
+        &mut self,
         _query: crate::search::Query,
         _mailbox_hash: Option<MailboxHash>,
     ) -> ResultFuture<Vec<EnvelopeHash>> {

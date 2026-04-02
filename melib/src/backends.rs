@@ -442,24 +442,25 @@ pub enum MailBackendExtensionStatus {
 }
 
 pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
-    fn capabilities(&self) -> MailBackendCapabilities;
-    fn is_online(&self) -> ResultFuture<()> {
+    fn capabilities(&mut self) -> MailBackendCapabilities;
+    fn is_online(&mut self) -> ResultFuture<()> {
         Ok(Box::pin(async { Ok(()) }))
     }
     fn fetch(&mut self, mailbox_hash: MailboxHash) -> ResultStream<Vec<Envelope>>;
     fn refresh(&mut self, mailbox_hash: MailboxHash) -> ResultFuture<()>;
-    fn watch(&self) -> ResultStream<BackendEvent>;
-    fn mailboxes(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>>;
-    fn envelope_bytes_by_hash(&self, hash: EnvelopeHash) -> ResultFuture<Vec<u8>>;
+    fn watch(&mut self) -> ResultStream<BackendEvent>;
+    fn mailboxes(&mut self) -> ResultFuture<HashMap<MailboxHash, Mailbox>>;
+    fn envelope_bytes_by_hash(&mut self, hash: EnvelopeHash) -> ResultFuture<Vec<u8>>;
 
     fn save(
-        &self,
+        &mut self,
         bytes: Vec<u8>,
         mailbox_hash: MailboxHash,
         flags: Option<Flag>,
     ) -> ResultFuture<()>;
+
     fn save_batch(
-        &self,
+        &mut self,
         batch: Vec<(Vec<u8>, MailboxHash, Option<Flag>)>,
     ) -> ResultStream<Result<()>> {
         let mut futures = batch
@@ -530,13 +531,13 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     ) -> ResultFuture<()>;
 
     fn search(
-        &self,
+        &mut self,
         query: crate::search::Query,
         mailbox_hash: Option<MailboxHash>,
     ) -> ResultFuture<Vec<EnvelopeHash>>;
 
     fn submit(
-        &self,
+        &mut self,
         _bytes: Vec<u8>,
         _mailbox_hash: Option<MailboxHash>,
         _flags: Option<Flag>,
@@ -544,8 +545,9 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         Err(Error::new("Submission not supported in this backend.")
             .set_kind(ErrorKind::NotSupported))
     }
+
     fn submit_batch(
-        &self,
+        &mut self,
         batch: Vec<(Vec<u8>, Option<MailboxHash>, Option<Flag>)>,
     ) -> ResultStream<Result<()>> {
         let mut futures = batch
