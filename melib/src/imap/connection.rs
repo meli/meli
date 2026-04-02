@@ -1573,7 +1573,10 @@ impl ImapBlockingConnection {
         self.err.as_ref()
     }
 
-    pub fn as_stream(&mut self) -> impl Future<Output = Option<Vec<u8>>> + '_ {
+    /// Returns a future for a read line (including CRLF)
+    ///
+    /// The return value is `None` if connection has dropped.
+    pub fn read_line(&mut self) -> impl Future<Output = Option<Vec<u8>>> + '_ {
         self.result.drain(0..self.prev_res_length);
         self.prev_res_length = 0;
         let mut break_flag = false;
