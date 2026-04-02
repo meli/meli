@@ -375,8 +375,10 @@ impl MailBackend for MaildirType {
             return Err(Error::new("Invalid mailbox hash").set_kind(ErrorKind::ValueError));
         };
         let path = mailbox.fs_path.clone();
+        let refresh_fut = self.refresh(mailbox_hash)?;
         Ok(Box::pin(async move {
             _ = Self::save_to_mailbox(path, bytes, flags)?;
+            refresh_fut.await?;
             Ok(())
         }))
     }
