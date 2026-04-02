@@ -1547,7 +1547,6 @@ impl ImapConnection {
 pub struct ImapBlockingConnection {
     buf: Vec<u8>,
     result: Vec<u8>,
-    prev_res_length: usize,
     pub conn: ImapConnection,
     err: Option<Error>,
 }
@@ -1557,7 +1556,6 @@ impl From<ImapConnection> for ImapBlockingConnection {
         Self {
             buf: vec![0; Connection::IO_BUF_SIZE],
             conn,
-            prev_res_length: 0,
             result: Vec::with_capacity(8 * 1024),
             err: None,
         }
@@ -1577,8 +1575,6 @@ impl ImapBlockingConnection {
     ///
     /// The return value is `None` if connection has dropped.
     pub fn read_line(&mut self) -> impl Future<Output = Option<Vec<u8>>> + '_ {
-        self.result.drain(0..self.prev_res_length);
-        self.prev_res_length = 0;
         let mut break_flag = false;
         let mut prev_failure = None;
         async move {
@@ -1603,23 +1599,25 @@ async fn read(
     prev_failure: &mut Option<SystemTime>,
 ) -> Option<Vec<u8>> {
     let ImapBlockingConnection {
-        ref mut prev_res_length,
         ref mut result,
         ref mut conn,
         ref mut buf,
         ref mut err,
     } = conn;
 
+    if let Some(pos) = result.find(b"\r\n") {
+        let len = pos + b"\r\n".len();
+        let retval = result[0..len].to_vec();
+        result.drain(0..len);
+        return Some(retval);
+    }
     match conn.stream.as_mut().unwrap().stream.read(buf).await {
         Ok(0) => {
             *break_flag = true;
         }
         Ok(b) => {
             result.extend_from_slice(&buf[0..b]);
-            if let Some(pos) = result.find(b"\r\n") {
-                *prev_res_length = pos + b"\r\n".len();
-                return Some(result[0..*prev_res_length].to_vec());
-            }
+            *break_flag = false;
             *prev_failure = None;
         }
         Err(_err) => {
