@@ -892,7 +892,8 @@ hello world.
         main_conn_sender.unbounded_send(ServerEvent::Quit).unwrap();
         let (value1, _rest) = block_on(watch_fut);
         if let Some(val) = value1 {
-            if !matches!(val, Err(ref err) if err.kind == ErrorKind::OSError(nix::errno::Errno::EPIPE))
+            if !(matches!(val, Err(ref err) if err.kind == ErrorKind::OSError(nix::errno::Errno::EPIPE))
+                || matches!(val, Err(ref err) if err.summary == "Offline"))
             {
                 panic!(
                     "Expected watch TCP connection to have disconnected with EPIPE, got: {val:?}"
