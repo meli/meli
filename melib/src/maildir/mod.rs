@@ -481,57 +481,78 @@ impl MailBackend for MaildirType {
         } else if !self.mailboxes.contains_key(&destination_mailbox_hash) {
             return Err(Error::new("Invalid destination mailbox hash").set_kind(ErrorKind::Bug));
         }
+        let refresh_fut: BoxFuture<'static, crate::Result<()>> = {
+            if move_ {
+                let source_refresh_fut = self.refresh(source_mailbox_hash)?;
+                let dest_refresh_fut = self.refresh(destination_mailbox_hash)?;
+                Box::pin(async move {
+                    source_refresh_fut.await?;
+                    dest_refresh_fut.await?;
+                    Ok(())
+                })
+            } else {
+                let dest_refresh_fut = self.refresh(destination_mailbox_hash)?;
+                Box::pin(async move {
+                    dest_refresh_fut.await?;
+                    Ok(())
+                })
+            }
+        };
         let hash_index = self.hash_indexes.clone();
         let config = self.config.clone();
         let mut dest_dir: PathBuf = self.mailboxes[&destination_mailbox_hash].fs_path().into();
         dest_dir.push("cur");
         Ok(Box::pin(async move {
-            let mut hash_indexes_lck = hash_index.lock().unwrap();
-            let hash_index = hash_indexes_lck.entry(source_mailbox_hash).or_default();
+            {
+                let mut hash_indexes_lck = hash_index.lock().unwrap();
+                let hash_index = hash_indexes_lck.entry(source_mailbox_hash).or_default();
 
-            for env_hash in env_hashes.iter() {
-                let path_src = {
-                    if !hash_index.contains_key(&env_hash) {
-                        continue;
-                    }
-                    if let Some(modif) = &hash_index[&env_hash].modified {
-                        match modif {
-                            PathMod::Path(ref path) => path.clone(),
-                            PathMod::Hash(hash) => hash_index[hash].to_path_buf(),
+                for env_hash in env_hashes.iter() {
+                    let path_src = {
+                        if !hash_index.contains_key(&env_hash) {
+                            continue;
                         }
+                        if let Some(modif) = &hash_index[&env_hash].modified {
+                            match modif {
+                                PathMod::Path(ref path) => path.clone(),
+                                PathMod::Hash(hash) => hash_index[hash].to_path_buf(),
+                            }
+                        } else {
+                            hash_index[&env_hash].to_path_buf()
+                        }
+                    };
+                    let dest_path = path_src.place_in_dir(&dest_dir, &config)?;
+                    hash_index.entry(env_hash).or_default().modified =
+                        Some(PathMod::Path(dest_path.clone()));
+                    if move_ {
+                        log::trace!("renaming {path_src:?} to {dest_path:?}");
+                        fs::rename(&path_src, &dest_path)
+                            .chain_err_summary(|| {
+                                format!(
+                                    "Could not rename {} to {}",
+                                    path_src.display(),
+                                    dest_path.display()
+                                )
+                            })
+                            .chain_err_related_path(&path_src)?;
+                        log::trace!("success in rename");
                     } else {
-                        hash_index[&env_hash].to_path_buf()
+                        log::trace!("copying {path_src:?} to {dest_path:?}");
+                        fs::copy(&path_src, &dest_path)
+                            .chain_err_summary(|| {
+                                format!(
+                                    "Could not copy {} to {}",
+                                    path_src.display(),
+                                    dest_path.display()
+                                )
+                            })
+                            .chain_err_related_path(&path_src)?;
+                        log::trace!("success in copy");
                     }
-                };
-                let dest_path = path_src.place_in_dir(&dest_dir, &config)?;
-                hash_index.entry(env_hash).or_default().modified =
-                    Some(PathMod::Path(dest_path.clone()));
-                if move_ {
-                    log::trace!("renaming {path_src:?} to {dest_path:?}");
-                    fs::rename(&path_src, &dest_path)
-                        .chain_err_summary(|| {
-                            format!(
-                                "Could not rename {} to {}",
-                                path_src.display(),
-                                dest_path.display()
-                            )
-                        })
-                        .chain_err_related_path(&path_src)?;
-                    log::trace!("success in rename");
-                } else {
-                    log::trace!("copying {path_src:?} to {dest_path:?}");
-                    fs::copy(&path_src, &dest_path)
-                        .chain_err_summary(|| {
-                            format!(
-                                "Could not copy {} to {}",
-                                path_src.display(),
-                                dest_path.display()
-                            )
-                        })
-                        .chain_err_related_path(&path_src)?;
-                    log::trace!("success in copy");
                 }
             }
+            refresh_fut.await?;
+
             Ok(())
         }))
     }
