@@ -352,7 +352,14 @@ impl MailBackend for MaildirType {
         let op = MaildirOp::new(
             hash,
             self.hash_indexes.clone(),
-            self.mailbox_index.lock().unwrap()[&hash],
+            self.mailbox_index
+                .lock()
+                .unwrap()
+                .get(&hash)
+                .copied()
+                .ok_or_else(|| {
+                    Error::new("Invalid envelope hash").set_kind(ErrorKind::ValueError)
+                })?,
         );
 
         Ok(Box::pin(async move { op.as_bytes().await }))
