@@ -102,8 +102,8 @@ meli (0.8.13-1) trixie; urgency=high
   Miscellaneous Tasks
   ===================
 
-  - 9577c10b Add [tag:msrv] annotation
-  - 975ef5fb Annotate cstr literal use with [ref:msrv]
+  - 9577c10b Add tag:msrv annotation
+  - 975ef5fb Annotate cstr literal use with ref:msrv
   - e7c0948a Run cargo-sort
 
   Continuous Integration

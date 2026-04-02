@@ -119,8 +119,8 @@ Contributors in alphabetical order:
 
 ### Miscellaneous Tasks
 
-- [**`9577c10b`**](https://git.meli-email.org/meli/meli/commit/9577c10b414cf594711ee6e7371c248b45562619) `Add [tag:msrv] annotation`
-- [**`975ef5fb`**](https://git.meli-email.org/meli/meli/commit/975ef5fbb0c9a430e845bb95681ee20c4a01fcc9) `Annotate cstr literal use with [ref:msrv]`
+- [**`9577c10b`**](https://git.meli-email.org/meli/meli/commit/9577c10b414cf594711ee6e7371c248b45562619) `Add tag:msrv annotation`
+- [**`975ef5fb`**](https://git.meli-email.org/meli/meli/commit/975ef5fbb0c9a430e845bb95681ee20c4a01fcc9) `Annotate cstr literal use with ref:msrv`
 - [**`e7c0948a`**](https://git.meli-email.org/meli/meli/commit/e7c0948a0a399aa6eeab16dc4056edb4733d4dea) `Run cargo-sort` in PR [`#653` "fixes"](https://git.meli-email.org/meli/meli/pulls/653)
 
 ### Continuous Integration
