@@ -137,7 +137,9 @@ impl MailBackend for MaildirType {
     }
 
     fn fetch(&mut self, mailbox_hash: MailboxHash) -> ResultStream<Vec<Envelope>> {
-        let mailbox: &MaildirMailbox = &self.mailboxes[&mailbox_hash];
+        let Some(mailbox) = self.mailboxes.get(&mailbox_hash) else {
+            return Err(Error::new("Invalid mailbox hash").set_kind(ErrorKind::ValueError));
+        };
         let unseen = mailbox.unseen.clone();
         let total = mailbox.total.clone();
         let mut path: PathBuf = mailbox.fs_path().into();
@@ -226,10 +228,11 @@ impl MailBackend for MaildirType {
     }
 
     fn refresh(&mut self, mailbox_hash: MailboxHash) -> ResultFuture<()> {
+        let Some(mailbox) = self.mailboxes.get(&mailbox_hash) else {
+            return Err(Error::new("Invalid mailbox hash").set_kind(ErrorKind::ValueError));
+        };
         let account_hash = self.account_hash;
         let sender = self.event_consumer.clone();
-
-        let mailbox: &MaildirMailbox = &self.mailboxes[&mailbox_hash];
         let path: PathBuf = mailbox.fs_path().into();
         let hash_indexes = self.hash_indexes.clone();
         let mailbox_index = self.mailbox_index.clone();
@@ -361,7 +364,10 @@ impl MailBackend for MaildirType {
         mailbox_hash: MailboxHash,
         flags: Option<Flag>,
     ) -> ResultFuture<()> {
-        let path = self.mailboxes[&mailbox_hash].fs_path.clone();
+        let Some(mailbox) = self.mailboxes.get(&mailbox_hash) else {
+            return Err(Error::new("Invalid mailbox hash").set_kind(ErrorKind::ValueError));
+        };
+        let path = mailbox.fs_path.clone();
         Ok(Box::pin(async move {
             _ = Self::save_to_mailbox(path, bytes, flags)?;
             Ok(())
@@ -374,6 +380,9 @@ impl MailBackend for MaildirType {
         mailbox_hash: MailboxHash,
         flag_ops: Vec<FlagOp>,
     ) -> ResultFuture<()> {
+        if !self.mailboxes.contains_key(&mailbox_hash) {
+            return Err(Error::new("Invalid mailbox hash").set_kind(ErrorKind::ValueError));
+        }
         if flag_ops.iter().any(|op| op.is_tag()) {
             return Err(Error::new("Maildir doesn't support tags."));
         }
@@ -422,6 +431,9 @@ impl MailBackend for MaildirType {
         env_hashes: EnvelopeHashBatch,
         mailbox_hash: MailboxHash,
     ) -> ResultFuture<()> {
+        if !self.mailboxes.contains_key(&mailbox_hash) {
+            return Err(Error::new("Invalid mailbox hash").set_kind(ErrorKind::ValueError));
+        }
         let hash_index = self.hash_indexes.clone();
         Ok(Box::pin(async move {
             let mut hash_indexes_lck = hash_index.lock().unwrap();
