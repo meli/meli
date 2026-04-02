@@ -1569,8 +1569,8 @@ impl ImapBlockingConnection {
         self.conn
     }
 
-    pub fn err(&mut self) -> Option<Error> {
-        self.err.take()
+    pub fn err(&self) -> Option<&Error> {
+        self.err.as_ref()
     }
 
     pub fn as_stream(&mut self) -> impl Future<Output = Option<Vec<u8>>> + '_ {
