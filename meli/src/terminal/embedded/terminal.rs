@@ -625,7 +625,7 @@ impl EmbeddedGrid {
                         .set_fg(*fg_color)
                         .set_bg(*bg_color)
                         .set_attrs(*attrs);
-                    match wcwidth(u32::from(c)) {
+                    match wcwidth(c) {
                         Some(0) | None => {
                             /* Skip drawing zero width characters */
                             screen.grid_mut()[cursor_val!()].set_empty(true);

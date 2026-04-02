@@ -29,64 +29,8 @@
 
 // Update to Unicode 12
 
-#[macro_export]
-macro_rules! big_if_true {
-    ($a:expr) => {
-        if $a {
-            1
-        } else {
-            0
-        }
-    };
-}
-
-type WChar = u32;
-type Interval = (WChar, WChar);
-
-pub struct CodePointsIterator<'a> {
-    rest: std::str::Chars<'a>,
-}
-
-/*
- * UTF-8 uses a system of binary prefixes, in which the high bits of each
- * byte mark whether it’s a single byte, the beginning of a multi-byte
- * sequence, or a continuation byte; the remaining bits, concatenated, give
- * the code point index. This table shows how it works:
- *
- * ```text
- * UTF-8 (binary)                      |Code point (binary)    |Range
- * ------------------------------------+-----------------------+-------
- * 0xxxxxxx                            |xxxxxxx                |U+0000–U+007F
- * 110xxxxx 10yyyyyy                   |xxxxxyyyyyy            |U+0080–U+07FF
- * 1110xxxx 10yyyyyy 10zzzzzz          |xxxxyyyyyyzzzzzz       |U+0800–U+FFFF
- * 11110xxx 10yyyyyy 10zzzzzz 10wwwwww |xxxyyyyyyzzzzzzwwwwww  |U+10000–U+10FFFF
- * ```
- *
- */
-impl Iterator for CodePointsIterator<'_> {
-    type Item = WChar;
-
-    fn next(&mut self) -> Option<WChar> {
-        self.rest.next().map(|c| c as WChar)
-    }
-}
-pub trait CodePointsIter {
-    fn code_points(&self) -> CodePointsIterator<'_>;
-}
-
-impl CodePointsIter for str {
-    fn code_points(&self) -> CodePointsIterator<'_> {
-        CodePointsIterator { rest: self.chars() }
-    }
-}
-impl CodePointsIter for &str {
-    fn code_points(&self) -> CodePointsIterator<'_> {
-        CodePointsIterator { rest: self.chars() }
-    }
-}
-
-/* auxiliary function for binary search in Interval table */
-fn bisearch(ucs: WChar, table: &'static [Interval]) -> bool {
+/// Auxiliary function for binary search in interval table
+const fn bisearch(ucs: u32, table: &'static [(u32, u32)]) -> bool {
     let mut min = 0;
     let mut mid;
 
@@ -112,7 +56,9 @@ fn bisearch(ucs: WChar, table: &'static [Interval]) -> bool {
     false
 }
 
-pub fn wcwidth(ucs: WChar) -> Option<usize> {
+/// Determine columns needed for a character.
+pub const fn wcwidth(ucs: char) -> Option<usize> {
+    let ucs = ucs as u32;
     if bisearch(ucs, super::tables::ASCII) {
         Some(1)
     } else if bisearch(ucs, super::tables::PRIVATE)
@@ -131,58 +77,38 @@ pub fn wcwidth(ucs: WChar) -> Option<usize> {
     }
 }
 
-pub fn wcswidth(mut pwcs: WChar, mut n: usize) -> Option<usize> {
+/// Determine columns needed for a fixed-size character array.
+pub const fn wcswidth(pwcs: &[char]) -> Option<usize> {
     let mut width = 0;
+    let mut n = pwcs.len();
 
-    while pwcs > 0 && n > 0 {
-        if let Some(w) = wcwidth(pwcs) {
-            width += w;
-        } else {
-            return None;
-        }
-
-        pwcs += 1;
+    while n > 0 {
         n -= 1;
+        let c = pwcs[n];
+        if let Some(w) = wcwidth(c) {
+            width += w;
+        }
     }
 
-    Some(width)
+    if width > 0 {
+        Some(width)
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::text::{grapheme_clusters::TextProcessing, TextPresentation};
 
     #[test]
     fn test_wcwidth() {
-        assert_eq!(
-            &"abc\0".code_points().collect::<Vec<_>>(),
-            &[0x61, 0x62, 0x63, 0x0]
-        );
-        assert_eq!(&"●".code_points().collect::<Vec<_>>(), &[0x25cf]);
-        assert_eq!(&"📎".code_points().collect::<Vec<_>>(), &[0x1f4ce]);
-        assert_eq!(
-            &"𐼹𐼺𐼻𐼼𐼽".code_points().collect::<Vec<_>>(),
-            &[0x10F39, 0x10F3A, 0x10F3B, 0x10F3C, 0x10F3D]
-        ); // Sogdian alphabet
-        assert_eq!(
-            &"𐼹a𐼽b".code_points().collect::<Vec<_>>(),
-            &[0x10F39, 0x61, 0x10F3D, 0x62]
-        ); // Sogdian alphabet
-        assert_eq!(
-            &"📎\u{FE0E}".code_points().collect::<Vec<_>>(),
-            &[0x1f4ce, 0xfe0e]
-        );
-        assert_eq!("●".grapheme_width(), 1);
-        assert_eq!("●📎".grapheme_width(), 3);
-        assert_eq!("●📎︎".grapheme_width(), 3);
-        assert_eq!("●\u{FE0E}📎\u{FE0E}".grapheme_width(), 3);
-        assert_eq!("🎃".grapheme_width(), 2);
-        assert_eq!("👻".grapheme_width(), 2);
-        assert_eq!("🛡︎".grapheme_width(), 2);
-        assert_eq!("🛡︎".text_pr().grapheme_width(), 2);
-
-        assert_eq!("こんにちわ世界".grapheme_width(), 14);
-        assert_eq!("こ★ん■に●ち▲わ☆世◆界".grapheme_width(), 20);
+        assert_eq!(wcswidth(&"abc\0".chars().collect::<Vec<_>>()), Some(3));
+        assert_eq!(wcswidth(&"●".chars().collect::<Vec<_>>()), Some(1));
+        assert_eq!(wcswidth(&"📎".chars().collect::<Vec<_>>()), Some(2));
+        // Sogdian alphabet
+        assert_eq!(wcswidth(&"𐼹𐼺𐼻𐼼𐼽".chars().collect::<Vec<_>>()), Some(5));
+        // Sogdian alphabet
+        assert_eq!(wcswidth(&"𐼹a𐼽b".chars().collect::<Vec<_>>()), Some(4));
     }
 }

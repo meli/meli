@@ -25,12 +25,9 @@
 
 use unicode_segmentation::UnicodeSegmentation;
 
-use super::{
-    types::Reflow,
-    wcwidth::{wcwidth, CodePointsIter},
-};
+use super::{types::Reflow, wcwidth::wcwidth};
 
-pub trait TextProcessing: UnicodeSegmentation + CodePointsIter {
+pub trait TextProcessing: UnicodeSegmentation + AsRef<str> {
     /// Returns a vector containg each grapheme as a slice.
     fn split_graphemes(&self) -> Vec<&str> {
         UnicodeSegmentation::graphemes(self, true).collect::<Vec<&str>>()
@@ -56,7 +53,8 @@ pub trait TextProcessing: UnicodeSegmentation + CodePointsIter {
     /// code-point.
     fn grapheme_width(&self) -> usize {
         let mut count = 0;
-        for c in self.code_points() {
+        let s: &str = self.as_ref();
+        for c in s.chars() {
             count += wcwidth(c).unwrap_or(0);
         }
 
@@ -91,5 +89,26 @@ impl TextProcessing for str {
             return vec![];
         }
         super::line_break::split_lines_reflow(self, reflow, width)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::text::TextPresentation;
+
+    #[test]
+    fn test_grapheme_width() {
+        assert_eq!("●".grapheme_width(), 1);
+        assert_eq!("●📎".grapheme_width(), 3);
+        assert_eq!("●📎︎".grapheme_width(), 3);
+        assert_eq!("●\u{FE0E}📎\u{FE0E}".grapheme_width(), 3);
+        assert_eq!("🎃".grapheme_width(), 2);
+        assert_eq!("👻".grapheme_width(), 2);
+        assert_eq!("🛡︎".grapheme_width(), 2);
+        assert_eq!("🛡︎".text_pr().grapheme_width(), 2);
+
+        assert_eq!("こんにちわ世界".grapheme_width(), 14);
+        assert_eq!("こ★ん■に●ち▲わ☆世◆界".grapheme_width(), 20);
     }
 }
