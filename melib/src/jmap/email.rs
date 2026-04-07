@@ -317,11 +317,38 @@ impl From<EmailObject> for crate::Envelope {
         }
         if let Some(v) = t.headers.get(HeaderName::REFERENCES.as_str()) {
             env.set_references(v.as_bytes());
+        } else if let Some(r) = t.references.take() {
+            use crate::email::address::{MessageID, References, StrBuild};
+
+            let r = r
+                .into_iter()
+                .map(|m| MessageID::new(m.as_bytes(), m.as_bytes()))
+                .collect::<Vec<_>>();
+
+            env.other_headers_mut().insert(
+                HeaderName::REFERENCES,
+                MessageID::display_slice(&r, Some(" ")),
+            );
+            if let Some(refs) = References::new(r) {
+                env.push_references(&refs);
+            }
         }
-        if let Some(ref in_reply_to) = t.in_reply_to {
-            env.set_in_reply_to(in_reply_to[0].as_bytes());
-            if let Some(in_reply_to) = env.in_reply_to().map(|r| r.as_ref().clone()) {
-                env.push_references(&in_reply_to);
+        if let Some(in_reply_to) = t.in_reply_to.take() {
+            use crate::email::address::{MessageID, References, StrBuild};
+
+            let in_reply_to = in_reply_to
+                .into_iter()
+                .map(|m| MessageID::new(m.as_bytes(), m.as_bytes()))
+                .collect::<Vec<_>>();
+            for m in &in_reply_to {
+                env.push_in_reply_to(m.clone());
+            }
+            env.other_headers_mut().insert(
+                HeaderName::IN_REPLY_TO,
+                MessageID::display_slice(&in_reply_to, Some(" ")),
+            );
+            if let Some(refs) = References::new(in_reply_to) {
+                env.push_references(&refs);
             }
         }
         if let Some(v) = t.headers.get(HeaderName::DATE.as_str()) {
