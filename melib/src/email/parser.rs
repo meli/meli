@@ -667,17 +667,21 @@ pub mod dates {
         Ok((input, ret))
     }
 
+    /// Parses an `RFC822`/`RFC5322` `Date` value as a Unix timestamp.
     pub fn rfc5322_date(input: &[u8]) -> Result<crate::UnixTimestamp> {
         date_time(input)
             .or_else(|_| {
-                //let (_, mut parsed_result) = encodings::phrase(&eat_comments(input), false)?;
                 let (rest, parsed_result) = encodings::phrase(input, false)?;
                 let (_, ret) = match date_time(&parsed_result) {
                     Ok(v) => v,
                     Err(_) => {
-                        return Err(nom::Err::Error(
-                            (rest, "rfc5322_date(): invalid input").into(),
-                        ));
+                        if let Ok(v) = crate::utils::datetime::rfc822_to_timestamp(parsed_result) {
+                            (&[][..], v)
+                        } else {
+                            return Err(nom::Err::Error(
+                                (rest, "rfc5322_date(): invalid input").into(),
+                            ));
+                        }
                     }
                 };
                 Ok((rest, ret))
@@ -695,14 +699,6 @@ pub mod dates {
             })
             .map(|(_, r)| r)
             .map_err(|err: nom::Err<ParsingError<_>>| err.into())
-        /*
-        }
-        if let Some(pos) = parsed_result.find(b"-0000") {
-            parsed_result[pos] = b'+';
-        }
-
-        crate::utils::datetime::rfc822_to_timestamp(parsed_result.trim())
-            */
     }
 }
 
