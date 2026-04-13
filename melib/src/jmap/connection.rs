@@ -727,13 +727,29 @@ impl JmapConnection {
     }
 
     pub async fn get_async(&self, url: &Url) -> Result<isahc::Response<isahc::AsyncBody>> {
-        if cfg!(feature = "jmap-trace") {
+        let mut resp = if cfg!(feature = "jmap-trace") {
             let res = self.client.get_async(url.as_str()).await;
             log::trace!("get_async(): url `{}` response {:?}", url, res);
-            Ok(res?)
+            res?
         } else {
-            Ok(self.client.get_async(url.as_str()).await?)
+            self.client.get_async(url.as_str()).await?
+        };
+        if !resp.status().is_success() {
+            let kind: crate::error::NetworkErrorKind = resp.status().into();
+            let res_text = resp.text().await.unwrap_or_default();
+            let err = Error::new(format!(
+                "Could not connect to JMAP server endpoint for {}. Reply from server: {}",
+                &self.server_conf.server_url, res_text
+            ))
+            .set_kind(kind.into());
+            _ = self
+                .store
+                .online_status
+                .set(Some(Instant::now()), Err(err.clone()))
+                .await;
+            return Err(err);
         }
+        Ok(resp)
     }
 
     pub async fn post_async<T: Into<Vec<u8>> + Send + Sync>(
@@ -748,11 +764,27 @@ impl JmapConnection {
                 String::from_utf8_lossy(&request)
             );
         }
-        if let Some(api_url) = api_url {
-            Ok(self.client.post_async(api_url.as_str(), request).await?)
+        let mut resp = if let Some(api_url) = api_url {
+            self.client.post_async(api_url.as_str(), request).await?
         } else {
             let api_url = self.session_guard().await?.api_url.clone();
-            Ok(self.client.post_async(api_url.as_str(), request).await?)
+            self.client.post_async(api_url.as_str(), request).await?
+        };
+        if !resp.status().is_success() {
+            let kind: crate::error::NetworkErrorKind = resp.status().into();
+            let res_text = resp.text().await.unwrap_or_default();
+            let err = Error::new(format!(
+                "Could not connect to JMAP server endpoint for {}. Reply from server: {}",
+                &self.server_conf.server_url, res_text
+            ))
+            .set_kind(kind.into());
+            _ = self
+                .store
+                .online_status
+                .set(Some(Instant::now()), Err(err.clone()))
+                .await;
+            return Err(err);
         }
+        Ok(resp)
     }
 }
