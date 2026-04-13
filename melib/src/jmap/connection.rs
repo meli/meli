@@ -132,7 +132,7 @@ impl JmapConnection {
 
         let mut jmap_session_resource_url = to_well_known(&self.server_conf.server_url);
 
-        let mut req = match self.get_async(&jmap_session_resource_url).await {
+        let mut resp = match self.get_async(&jmap_session_resource_url).await {
             Err(err) => 'block: {
                 if matches!(err.kind, ErrorKind::Network(NetworkErrorKind::ProtocolViolation) if self.server_conf.server_url.scheme() == "http")
                 {
@@ -168,18 +168,22 @@ impl JmapConnection {
         };
         let req_instant = Instant::now();
 
-        if !req.status().is_success() {
-            let kind: crate::error::NetworkErrorKind = req.status().into();
-            let res_text = req.text().await.unwrap_or_default();
+        if !resp.status().is_success() {
+            let kind: crate::error::NetworkErrorKind = resp.status().into();
+            let res_text = resp.text().await.unwrap_or_default();
             let mut err = Error::new(format!(
                 "Could not connect to JMAP server endpoint for {}. Reply from server: {}",
                 &self.server_conf.server_url, res_text
             ))
             .set_kind(kind.into());
-            if req.status() == 401 {
+            if resp.status() == 401 {
                 let mut supports_bearer = false;
                 let mut supports_basic = false;
-                for val in req.headers().get_all(http::header::WWW_AUTHENTICATE).iter() {
+                for val in resp
+                    .headers()
+                    .get_all(http::header::WWW_AUTHENTICATE)
+                    .iter()
+                {
                     supports_bearer |= val.as_bytes().contains_subsequence(b"Bearer".as_slice());
                     supports_basic |= val.as_bytes().contains_subsequence(b"Basic".as_slice());
                 }
@@ -201,7 +205,7 @@ impl JmapConnection {
                         );
                     }
                     (_, false, false) => {
-                        let schemes = req
+                        let schemes = resp
                             .headers()
                             .get_all(http::header::WWW_AUTHENTICATE)
                             .iter()
@@ -241,7 +245,7 @@ impl JmapConnection {
             return Err(err);
         }
 
-        let res_text = match req.text().await {
+        let res_text = match resp.text().await {
             Err(err) => {
                 let err = Error::new(format!(
                     "Could not connect to JMAP server endpoint for {}. Is your server url setting \
