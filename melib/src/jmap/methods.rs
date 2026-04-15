@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{marker::PhantomData, sync::Arc};
+use std::marker::PhantomData;
 
 use indexmap::IndexMap;
 use serde::{
@@ -27,11 +27,9 @@ use serde::{
     ser::{Serialize, SerializeStruct, Serializer},
 };
 use serde_json::{value::RawValue, Value};
-use url::Url;
 
 use crate::{
-    email::parser::BytesExt,
-    error::{Error, ErrorKind, Result},
+    error::Result,
     jmap::{
         argument::Argument,
         comparator::Comparator,
@@ -930,169 +928,6 @@ impl std::fmt::Display for SetError {
             StateMismatch(None) => write!(fmt, "StateMismatch"),
         }
     }
-}
-
-#[derive(Clone, Debug)]
-pub struct RequestUrlTemplate {
-    pub text: String,
-    pub url: Url,
-}
-
-impl Serialize for RequestUrlTemplate {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(&self.text)
-    }
-}
-
-impl<'de> ::serde::de::Deserialize<'de> for RequestUrlTemplate {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: ::serde::de::Deserializer<'de>,
-    {
-        use serde::de::{Error, Unexpected, Visitor};
-
-        struct _Visitor;
-
-        impl Visitor<'_> for _Visitor {
-            type Value = RequestUrlTemplate;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("a string representing an URL")
-            }
-
-            fn visit_str<E>(self, s: &str) -> std::result::Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                let url = Url::parse(s).map_err(|err| {
-                    let err_s = format!("{err}");
-                    Error::invalid_value(Unexpected::Str(s), &err_s.as_str())
-                })?;
-                let text = s.to_string();
-                Ok(RequestUrlTemplate { text, url })
-            }
-        }
-
-        deserializer.deserialize_str(_Visitor)
-    }
-}
-
-#[allow(clippy::literal_string_with_formatting_args)]
-const ACCOUNT_ID_URL_FORMAT_ARG: &str = "{accountId}";
-#[allow(clippy::literal_string_with_formatting_args)]
-const BLOB_ID_URL_FORMAT_ARG: &str = "{blobId}";
-#[allow(clippy::literal_string_with_formatting_args)]
-const NAME_URL_FORMAT_ARG: &str = "{name}";
-#[allow(clippy::literal_string_with_formatting_args)]
-const TYPE_URL_FORMAT_ARG: &str = "{type}";
-
-pub fn download_request_format(
-    download_url: &RequestUrlTemplate,
-    account_id: &Id<Account>,
-    blob_id: &Id<BlobObject>,
-    name: Option<String>,
-) -> Result<Url> {
-    let mut ret = String::with_capacity(
-        download_url.text.len()
-            + blob_id.len()
-            + name.as_ref().map(|n| n.len()).unwrap_or(0)
-            + account_id.len(),
-    );
-    let mut prev_pos = 0;
-
-    while let Some(pos) = download_url.text.as_bytes()[prev_pos..].find(b"{") {
-        ret.push_str(&download_url.text[prev_pos..prev_pos + pos]);
-        prev_pos += pos;
-        if download_url.text[prev_pos..].starts_with(ACCOUNT_ID_URL_FORMAT_ARG) {
-            ret.push_str(account_id.as_str());
-            prev_pos += ACCOUNT_ID_URL_FORMAT_ARG.len();
-        } else if download_url.text[prev_pos..].starts_with(BLOB_ID_URL_FORMAT_ARG) {
-            ret.push_str(blob_id.as_str());
-            prev_pos += BLOB_ID_URL_FORMAT_ARG.len();
-        } else if download_url.text[prev_pos..].starts_with(NAME_URL_FORMAT_ARG) {
-            ret.push_str(name.as_deref().unwrap_or(""));
-            prev_pos += NAME_URL_FORMAT_ARG.len();
-        } else if download_url.text[prev_pos..].starts_with(TYPE_URL_FORMAT_ARG) {
-            ret.push_str("application/octet-stream");
-            prev_pos += TYPE_URL_FORMAT_ARG.len();
-        } else {
-            log::error!(
-                "BUG: unknown parameter in download_url: {}",
-                &download_url.text[prev_pos..]
-            );
-            return Err(Error::new(
-                "Could not instantiate URL from JMAP server's URL template value",
-            )
-            .set_details(format!(
-                "`download_url` template returned by server in session object could not be \
-                 instantiated with `accountId`:\ndownload_url: {}\naccountId: {}\nblobId: \
-                 {}\nUnknown parameter found {}\n\nIf you believe these values are correct and \
-                 should have been accepted, please report it as a bug! Otherwise inform the \
-                 server administrator for this protocol violation.",
-                download_url.text,
-                account_id,
-                blob_id,
-                &download_url.text[prev_pos..]
-            ))
-            .set_kind(ErrorKind::ProtocolError));
-        }
-    }
-    if prev_pos != download_url.text.len() {
-        ret.push_str(&download_url.text[prev_pos..]);
-    }
-    Url::parse(&ret).map_err(|err| {
-        Error::new("Could not instantiate URL from JMAP server's URL template value")
-            .set_details(format!(
-                "`download_url` template returned by server in session object could not be \
-                 instantiated with `accountId`:\ndownload_url: {}\naccountId: {}\nblobId: \
-                 {}\nresult: {ret}\n\nIf you believe these values are correct and should have \
-                 been accepted, please report it as a bug! Otherwise inform the server \
-                 administrator for this protocol violation.",
-                download_url.text, account_id, blob_id
-            ))
-            .set_kind(ErrorKind::ProtocolError)
-            .set_source(Some(Arc::new(err)))
-    })
-}
-
-pub fn upload_request_format(
-    upload_url: &RequestUrlTemplate,
-    account_id: &Id<Account>,
-) -> Result<Url> {
-    let mut ret = String::with_capacity(upload_url.text.len() + account_id.len());
-    let mut prev_pos = 0;
-
-    while let Some(pos) = upload_url.text.as_bytes()[prev_pos..].find(b"{") {
-        ret.push_str(&upload_url.text[prev_pos..prev_pos + pos]);
-        prev_pos += pos;
-        if upload_url.text[prev_pos..].starts_with(ACCOUNT_ID_URL_FORMAT_ARG) {
-            ret.push_str(account_id.as_str());
-            prev_pos += ACCOUNT_ID_URL_FORMAT_ARG.len();
-            break;
-        } else {
-            ret.push('{');
-            prev_pos += 1;
-        }
-    }
-    if prev_pos != upload_url.text.len() {
-        ret.push_str(&upload_url.text[prev_pos..]);
-    }
-    Url::parse(&ret).map_err(|err| {
-        Error::new("Could not instantiate URL from JMAP server's URL template value")
-            .set_details(format!(
-                "`upload_url` template returned by server in session object could not be \
-                 instantiated with `accountId`:\nupload_url: {}\naccountId: {}\nresult: \
-                 {ret}\n\nIf you believe these values are correct and should have been accepted, \
-                 please report it as a bug! Otherwise inform the server administrator for this \
-                 protocol violation.",
-                upload_url.text, account_id
-            ))
-            .set_kind(ErrorKind::ProtocolError)
-            .set_source(Some(Arc::new(err)))
-    })
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

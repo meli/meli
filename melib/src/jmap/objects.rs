@@ -144,6 +144,12 @@ impl<OBJ> Id<OBJ> {
     }
 }
 
+impl<'a, OBJ> From<&'a Id<OBJ>> for &'a str {
+    fn from(id: &'a Id<OBJ>) -> Self {
+        id.inner.as_str()
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct State<OBJ> {

@@ -26,7 +26,7 @@ use isahc::AsyncReadResponseExt;
 
 use crate::{
     error::Result,
-    jmap::{connection::JmapConnection, methods::download_request_format, Store},
+    jmap::{connection::JmapConnection, url_template::download_request_format, Store},
     EnvelopeHash,
 };
 

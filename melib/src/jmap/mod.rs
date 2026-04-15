@@ -86,8 +86,7 @@ use objects::{BlobObject, Id, State};
 
 pub mod methods;
 use methods::{
-    upload_request_format, Get, GetResponse, MethodResponse, Query, QueryResponse, Set,
-    SetResponse, UploadResponse,
+    Get, GetResponse, MethodResponse, Query, QueryResponse, Set, SetResponse, UploadResponse,
 };
 
 pub mod backend_mailbox;
@@ -102,6 +101,7 @@ pub mod identity;
 pub mod mailbox;
 pub mod submission;
 pub mod thread;
+pub mod url_template;
 
 use argument::Argument;
 use capabilities::JmapCoreCapability;
@@ -568,7 +568,10 @@ impl MailBackend for JmapType {
             };
             let res_text = conn
                 .post_async(
-                    Some(&upload_request_format(&upload_url, &mail_account_id)?),
+                    Some(&url_template::upload_request_format(
+                        &upload_url,
+                        &mail_account_id,
+                    )?),
                     bytes,
                 )
                 .await?
@@ -1399,7 +1402,10 @@ impl MailBackend for JmapType {
             let upload_url = { conn.session_guard().await?.upload_url.clone() };
             let res_text = conn
                 .post_async(
-                    Some(&upload_request_format(&upload_url, &mail_account_id)?),
+                    Some(&url_template::upload_request_format(
+                        &upload_url,
+                        &mail_account_id,
+                    )?),
                     bytes,
                 )
                 .await?

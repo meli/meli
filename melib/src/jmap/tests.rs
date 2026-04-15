@@ -477,61 +477,6 @@ fn test_jmap_argument_serde() {
 }
 
 #[test]
-fn test_jmap_request_url_template() {
-    use serde_json::json;
-    use url::Url;
-
-    use crate::jmap::{
-        methods::{download_request_format, upload_request_format, RequestUrlTemplate},
-        objects::{Account, BlobObject, Id},
-    };
-
-    const DOWNLOAD_TEMPLATE: &str = "https://jmap.example.com/download/{accountId}/{blobId}/{name}";
-    const UPLOAD_TEMPLATE: &str = "https://jmap.example.com/upload/{accountId}/";
-
-    let account_id: Id<Account> = "blahblah".into();
-    let blob_id: Id<BlobObject> = Id::from("683f9246-56d4-4d7d-bd0c-3d4de6db7cbf");
-    let download_template_url: RequestUrlTemplate =
-        serde_json::from_value(json!(DOWNLOAD_TEMPLATE)).unwrap();
-    assert_eq!(
-        download_request_format(
-            &download_template_url,
-            &account_id,
-            &blob_id,
-            Some("attachment.txt".into())
-        )
-        .unwrap(),
-        serde_json::from_str::<Url>(
-            &json!("https://jmap.example.com/download/blahblah/683f9246-56d4-4d7d-bd0c-3d4de6db7cbf/attachment.txt").to_string()
-        )
-        .unwrap()
-    );
-    assert_eq!(
-        download_request_format(
-            &download_template_url,
-            &account_id,
-            &blob_id,
-            Some("attachment filename.txt".into()),
-        )
-        .unwrap(),
-        serde_json::from_str::<Url>(
-            &json!("https://jmap.example.com/download/blahblah/683f9246-56d4-4d7d-bd0c-3d4de6db7cbf/attachment%20filename.txt").to_string()
-        )
-        .unwrap()
-    );
-
-    let upload_template_url: RequestUrlTemplate =
-        serde_json::from_value(json!(UPLOAD_TEMPLATE)).unwrap();
-    assert_eq!(
-        upload_request_format(&upload_template_url, &account_id).unwrap(),
-        serde_json::from_str::<Url>(
-            &json!("https://jmap.example.com/upload/blahblah/").to_string()
-        )
-        .unwrap()
-    );
-}
-
-#[test]
 fn test_jmap_session_serde() {
     use serde_json::json;
 

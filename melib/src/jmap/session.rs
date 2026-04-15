@@ -27,9 +27,10 @@ use url::Url;
 
 use crate::jmap::{
     identity::Identity,
-    methods::{u64_zero, RequestUrlTemplate},
+    methods::u64_zero,
     objects::{Account, Id, Object, State},
     protocol::JmapMailCapability,
+    url_template::RequestUrlTemplate,
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
