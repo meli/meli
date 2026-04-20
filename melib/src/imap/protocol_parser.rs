@@ -396,7 +396,9 @@ impl<'a> Iterator for ImapLineIterator<'a> {
         }
         let mut i = 0;
         loop {
-            let cur_slice = &self.slice[i..];
+            // If we are in the middle of reading a literal but the buffer is not filled
+            // yet, we should return None.
+            let cur_slice = self.slice.get(i..)?;
             if let Some(pos) = cur_slice.find(CRLF) {
                 // Skip literal continuation line
                 if let Some(literal_start) = cur_slice[..pos].find(b"{") {
@@ -410,6 +412,9 @@ impl<'a> Iterator for ImapLineIterator<'a> {
                         )(&cur_slice[literal_start..])
                     {
                         i += pos + 2 + len;
+                        continue;
+                    } else {
+                        i += literal_start + 1;
                         continue;
                     }
                 }

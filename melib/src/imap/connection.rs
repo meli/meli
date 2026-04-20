@@ -1605,9 +1605,9 @@ async fn read(
         ref mut err,
     } = conn;
 
-    if let Some(pos) = result.find(b"\r\n") {
-        let len = pos + b"\r\n".len();
-        let retval = result[0..len].to_vec();
+    if let Some(line) = result.split_rn().next() {
+        let len = line.len();
+        let retval = line.to_vec();
         result.drain(0..len);
         return Some(retval);
     }
