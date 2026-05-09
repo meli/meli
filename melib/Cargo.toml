@@ -75,9 +75,6 @@ url = { version = "2.5", optional = true }
 uuid = { version = "^1", features = ["serde", "v4", "v5"] }
 xdg = { version = "2.1.0" }
 
-[build-dependencies]
-flate2 = { workspace = true }
-
 [dev-dependencies]
 rusty-fork = { workspace = true }
 tempfile = { workspace = true }
