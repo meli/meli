@@ -8,7 +8,6 @@ description = "library for e-mail clients and other e-mail applications"
 keywords = ["mail", "mua", "maildir", "imap", "jmap"]
 categories = ["email", "parser-implementations"]
 license = "EUPL-1.2 OR GPL-3.0-or-later"
-readme = "README.md"
 edition = "2021"
 build = "build.rs"
 rust-version = "1.85.0"

@@ -5,7 +5,6 @@ authors = ["Manos Pitsidianakis <manos@pitsidianak.is>"]
 edition = "2021"
 rust-version = "1.85.0"
 license = "EUPL-1.2 OR GPL-3.0-or-later"
-readme = "README.md"
 description = "terminal e-mail client"
 homepage = "https://meli-email.org"
 repository = "https://git.meli-email.org/meli/meli.git"
