@@ -303,9 +303,6 @@ impl From<EmailObject> for crate::Envelope {
         use crate::email::parser::{address::rfc2822address_list, dates::rfc5322_date};
 
         let mut env = Self::new(t.id.into_hash());
-        if let Ok(d) = rfc5322_date(env.date_as_str().as_bytes()) {
-            env.set_datetime(d);
-        }
         if let Some(sent_at) = t.sent_at.take() {
             let unix = datetime::rfc3339_to_timestamp(sent_at.as_bytes()).unwrap_or(0);
             env.set_datetime(unix);
@@ -356,7 +353,7 @@ impl From<EmailObject> for crate::Envelope {
             if let Ok(d) = rfc5322_date(v.as_bytes()) {
                 env.set_datetime(d);
             }
-        } else if let Ok(d) = rfc5322_date(t.received_at.as_bytes()) {
+        } else if let Ok(d) = datetime::rfc3339_to_timestamp(t.received_at.as_bytes()) {
             env.set_datetime(d);
         }
         env.set_has_attachments(t.has_attachment);
