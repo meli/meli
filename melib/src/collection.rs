@@ -302,7 +302,7 @@ impl Collection {
             .map(|f| f == mailbox_hash)
             .unwrap_or(false)
         {
-            for (_, t) in threads_lck.iter_mut() {
+            for t in threads_lck.values_mut() {
                 _ = t.update_envelope(&self.envelopes, old_hash, new_hash);
             }
         }
@@ -338,7 +338,7 @@ impl Collection {
             .map(|f| f == mailbox_hash)
             .unwrap_or(false)
         {
-            for (_, t) in threads_lck.iter_mut() {
+            for t in threads_lck.values_mut() {
                 _ = t.update_envelope(&self.envelopes, env_hash, env_hash);
             }
         }
@@ -400,7 +400,7 @@ impl Collection {
     pub fn insert_reply(&self, env_hash: EnvelopeHash) {
         debug_assert!(self.envelopes.read().unwrap().contains_key(&env_hash));
         let mut iter = self.threads.write().unwrap();
-        for (_, t) in iter.iter_mut() {
+        for t in iter.values_mut() {
             t.insert_reply(&self.envelopes, env_hash);
         }
     }
