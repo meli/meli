@@ -299,12 +299,10 @@ impl<const N: usize> DataColumns<N> {
             }
             TableTheme::EvenOdd { even, odd } => {
                 grid.change_theme(total_area, even);
-                let mut top_idx = top_idx;
-                for row in 0..total_area.height() {
+                for (top_idx, row) in (top_idx..).zip(0..total_area.height()) {
                     if top_idx % 2 != 0 {
                         grid.change_theme(total_area.nth_row(row), odd);
                     }
-                    top_idx += 1;
                 }
             }
         }
