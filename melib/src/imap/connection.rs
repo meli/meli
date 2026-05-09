@@ -750,8 +750,7 @@ impl ImapStream {
             for l in res.split_rn() {
                 if l.starts_with(b"* CAPABILITY") {
                     got_new_capabilities = true;
-                    capabilities
-                        .extend(parse_capabilities(l, &server_conf.server_hostname)?.into_iter());
+                    capabilities.extend(parse_capabilities(l, &server_conf.server_hostname)?);
                 }
 
                 if l.starts_with(tag_start.as_bytes()) {
@@ -775,8 +774,7 @@ impl ImapStream {
             // check for lazy servers.
             ret.send_command(CommandBody::Capability).await?;
             ret.read_response(&mut res).await?;
-            capabilities
-                .extend(parse_capabilities(&res, &server_conf.server_hostname)?.into_iter());
+            capabilities.extend(parse_capabilities(&res, &server_conf.server_hostname)?);
         }
 
         if matches!(

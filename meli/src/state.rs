@@ -1283,7 +1283,7 @@ impl State {
             }) {
                 to_delete.insert(*desc);
             }
-            self.context.unrealized.extend(to_delete.into_iter());
+            self.context.unrealized.extend(to_delete);
             self.component_tree.shift_remove(&id);
             self.components.shift_remove(&id);
             self.overlay.shift_remove(&id);

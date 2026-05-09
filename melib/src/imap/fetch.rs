@@ -149,7 +149,7 @@ impl FetchState {
                                 cached_payload.iter().map(|env| env.hash()).collect::<_>(),
                             );
                             if let Some(mut resync_payload) = resync_payload.take() {
-                                resync_payload.extend(cached_payload.into_iter());
+                                resync_payload.extend(cached_payload);
                                 return Ok(resync_payload);
                             }
                             return Ok(cached_payload);

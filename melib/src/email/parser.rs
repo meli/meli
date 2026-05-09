@@ -1131,7 +1131,7 @@ pub mod generic {
                     Ok(hdr) if hdr == HeaderName::TO => {
                         if !headers.contains_key(&hdr) {
                             if let Ok(address_val) = Address::list_try_from(value.as_str()) {
-                                address.extend(address_val.into_iter());
+                                address.extend(address_val);
                             }
                             headers.insert(HeaderName::TO, value);
                         }
