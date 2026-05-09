@@ -243,11 +243,11 @@ pub mod server {
                     if input.is_empty() {
                         return Ok(());
                     }
-                    eprintln!("received: {input:?}");
                     if !input.ends_with("\r\n") {
                         buf_cursor += read_bytes;
                         continue 'command_loop;
                     }
+                    eprintln!("received: {input:?}");
                     buf_cursor = 0;
                     let (cmd, rest) = input.split_once(' ').unwrap_or((&input, ""));
                     match cmd {
@@ -392,21 +392,53 @@ Content-Type: text/plain
 
 hello world.
 "#;
-        let mut connection = block_on(SmtpConnection::new_connection(smtp_server_conf)).unwrap();
-        block_on(connection.mail_transaction(
-            new_mail,
-            /* tos */
-            Some(&[
-                Address::new(None, "user2@example.com".to_string()),
-                Address::new(None, "postmaster@example.com".to_string()),
-            ]),
-        ))
-        .unwrap();
-        block_on(connection.quit()).unwrap();
-        let stored = std::mem::take(&mut server_state.lock().unwrap().stored);
-        assert_eq!(stored.len(), 2);
-        assert_eq!(stored[0].0, "user2@example.com");
-        assert_eq!(stored[1].0, "postmaster@example.com");
+        {
+            let mut connection =
+                block_on(SmtpConnection::new_connection(smtp_server_conf.clone())).unwrap();
+            block_on(connection.mail_transaction(
+                new_mail,
+                /* tos */
+                Some(&[
+                    Address::new(None, "user2@example.com".to_string()),
+                    Address::new(None, "postmaster@example.com".to_string()),
+                ]),
+            ))
+            .unwrap();
+            block_on(connection.quit()).unwrap();
+            let stored = std::mem::take(&mut server_state.lock().unwrap().stored);
+            assert_eq!(stored.len(), 2);
+            assert_eq!(stored[0].0, "user2@example.com");
+            assert_eq!(stored[1].0, "postmaster@example.com");
+        }
+        {
+            let mut connection =
+                block_on(SmtpConnection::new_connection(smtp_server_conf.clone())).unwrap();
+            block_on(connection.mail_transaction(new_mail, /* tos */ None)).unwrap();
+            block_on(connection.quit()).unwrap();
+            let stored = std::mem::take(&mut server_state.lock().unwrap().stored);
+            assert_eq!(stored.len(), 1);
+            assert_eq!(stored[0].0, "myself@example.com");
+        }
+        let new_mail = r#"From: "some name" <some@example.com>
+To: "first m. name" <myself@example.com>
+Cc: "first m. name" <myself@example.com>, "Bj=?UTF-8?B?w7Y=?=rn" <bjorn@example.com>
+Subject: RE: your e-mail
+Message-ID: <h2g7f.z0gy2pgaen5m@example.com>
+Content-Type: text/plain
+
+hello world.
+"#;
+        {
+            let mut connection =
+                block_on(SmtpConnection::new_connection(smtp_server_conf)).unwrap();
+            block_on(connection.mail_transaction(new_mail, /* tos */ None)).unwrap();
+            block_on(connection.quit()).unwrap();
+            let stored = std::mem::take(&mut server_state.lock().unwrap().stored);
+            assert_eq!(stored.len(), 3);
+            assert_eq!(stored[0].0, "myself@example.com");
+            assert_eq!(stored[1].0, "myself@example.com");
+            assert_eq!(stored[2].0, "bjorn@example.com");
+        }
         server_event_sender
             .unbounded_send(ServerEvent::Quit)
             .unwrap();
