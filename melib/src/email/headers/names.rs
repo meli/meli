@@ -241,7 +241,7 @@ impl Borrow<str> for HeaderName {
 impl std::fmt::Display for HeaderName {
     #[inline]
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(fmt, "{}", &self.inner)
+        write!(fmt, "{}", self.inner)
     }
 }
 

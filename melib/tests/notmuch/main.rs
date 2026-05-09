@@ -292,7 +292,7 @@ hello world.
 
         let env = {
             let BackendEvent::Refresh(refresh_event) = &backend_events[0] else {
-                panic!("Expected Refresh event, got: {:#?}", &backend_events[0]);
+                panic!("Expected Refresh event, got: {:#?}", backend_events[0]);
             };
             let RefreshEventKind::Create(ref env) = refresh_event.kind else {
                 panic!("Expected Create event, got: {refresh_event:#?}");
@@ -304,7 +304,7 @@ hello world.
         };
         {
             let BackendEvent::Refresh(refresh_event) = &backend_events[1] else {
-                panic!("Expected Refresh event, got: {:#?}", &backend_events[1]);
+                panic!("Expected Refresh event, got: {:#?}", backend_events[1]);
             };
             let RefreshEventKind::Remove(old_hash) = refresh_event.kind else {
                 panic!("Expected Remove event, got: {refresh_event:#?}");
@@ -419,7 +419,7 @@ hello world.
 
         let env = {
             let BackendEvent::Refresh(refresh_event) = &backend_events[0] else {
-                panic!("Expected Refresh event, got: {:#?}", &backend_events[0]);
+                panic!("Expected Refresh event, got: {:#?}", backend_events[0]);
             };
             let RefreshEventKind::Create(ref env) = refresh_event.kind else {
                 panic!("Expected Create event, got: {refresh_event:#?}");
@@ -432,7 +432,7 @@ hello world.
 
         {
             let BackendEvent::Refresh(refresh_event) = &backend_events[1] else {
-                panic!("Expected Refresh event, got: {:#?}", &backend_events[1]);
+                panic!("Expected Refresh event, got: {:#?}", backend_events[1]);
             };
             let RefreshEventKind::Remove(old_hash) = refresh_event.kind else {
                 panic!("Expected Remove event, got: {refresh_event:#?}");

@@ -42,7 +42,7 @@ impl TryFrom<i64> for ModSequence {
 
 impl std::fmt::Display for ModSequence {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(fmt, "{}", &self.0)
+        write!(fmt, "{}", self.0)
     }
 }
 

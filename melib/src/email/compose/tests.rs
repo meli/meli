@@ -29,7 +29,7 @@ const GREEK_FOOBAR: &str = "αδφαφσαφασ";
 #[test]
 fn test_email_compose_random() {
     let msg_id = random::gen_message_id("example.com");
-    assert!(msg_id.ends_with("@example.com>"), "{:?}", &msg_id);
+    assert!(msg_id.ends_with("@example.com>"), "{:?}", msg_id);
     let (bytes, parsed_msg_id) = crate::email::parser::address::msg_id(msg_id.as_bytes()).unwrap();
     assert_eq!(bytes, b"");
     assert_eq!(&parsed_msg_id.display_brackets().to_string(), &msg_id);

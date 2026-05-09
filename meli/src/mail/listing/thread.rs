@@ -1248,10 +1248,8 @@ impl ThreadListing {
             Err(err) => {
                 self.cursor_pos.2 = 0;
                 self.new_cursor_pos.2 = 0;
-                let message = format!(
-                    "Encountered an error while searching for `{}`: {}.",
-                    search_term, &err
-                );
+                let message =
+                    format!("Encountered an error while searching for `{search_term}`: {err}.");
                 log::error!("{}", message);
                 context.replies.push_back(UIEvent::Notification {
                     title: Some("Could not perform search".into()),

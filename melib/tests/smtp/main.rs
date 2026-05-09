@@ -101,7 +101,7 @@ pub mod server {
                 .rev()
                 .find(|((i, d), _)| (i, d.as_str()) == (&ip, domain))
             {
-                eprintln!("mail is {:?}", &message);
+                eprintln!("mail is {:?}", message);
                 if matches!(message, Message::Helo) {
                     *message = Message::Mail {
                         from: from.to_string(),
@@ -115,7 +115,7 @@ pub mod server {
         fn rcpt(&mut self, _to: &str) -> ReplyCode {
             eprintln!("rcpt() to {_to:?}");
             if let Some((_, message)) = self.mails.last_mut() {
-                eprintln!("rcpt mail is {:?}", &message);
+                eprintln!("rcpt mail is {:?}", message);
                 if let Message::Mail { from } = message {
                     *message = Message::Rcpt {
                         from: from.clone(),
@@ -134,7 +134,7 @@ pub mod server {
 
         fn data_start(&mut self) -> ReplyCode {
             if let Some(((_, _), ref mut message)) = self.mails.last_mut() {
-                eprintln!("data_start mail is {:?}", &message);
+                eprintln!("data_start mail is {:?}", message);
                 if let Message::Rcpt { from, to } = message {
                     *message = Message::DataStart {
                         from: from.to_string(),
@@ -169,7 +169,7 @@ pub mod server {
                 for to in to {
                     match Envelope::from_bytes(&buf, None) {
                         Ok(env) => {
-                            eprintln!("data_end env is {:?}", &env);
+                            eprintln!("data_end env is {:?}", env);
                             eprintln!("data_end env.other_headers is {:?}", env.other_headers());
                             self.stored.push((to.clone(), env));
                         }

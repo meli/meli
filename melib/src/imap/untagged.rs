@@ -320,7 +320,7 @@ impl ImapConnection {
                         .chain_err_summary(|| {
                             format!(
                                 "Could not save envelopes in cache for mailbox {}",
-                                &mailbox.imap_path()
+                                mailbox.imap_path()
                             )
                         })
                     {
@@ -437,7 +437,7 @@ impl ImapConnection {
                                 .chain_err_summary(|| {
                                     format!(
                                         "Could not save envelopes in cache for mailbox {}",
-                                        &mailbox.imap_path()
+                                        mailbox.imap_path()
                                     )
                                 })
                             {

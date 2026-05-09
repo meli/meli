@@ -415,9 +415,9 @@ impl Account {
             self.main_loop_handler
                 .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
                     StatusEvent::DisplayMessage(format!(
-                        "Account `{}` mailbox `{}` configured but not present in account's \
-                         mailboxes. Is it misspelled?",
-                        &self.name, missing_mailbox,
+                        "Account `{}` mailbox `{missing_mailbox}` configured but not present in \
+                         account's mailboxes. Is it misspelled?",
+                        self.name
                     )),
                 )));
         }
@@ -442,8 +442,9 @@ impl Account {
             self.main_loop_handler
                 .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
                     StatusEvent::DisplayMessage(format!(
-                        "Account `{}` has the following mailboxes: [{}]",
-                        &self.name, mailbox_comma_sep_list_string,
+                        "Account `{}` has the following mailboxes: \
+                         [{mailbox_comma_sep_list_string}]",
+                        self.name,
                     )),
                 )));
         }
@@ -451,8 +452,8 @@ impl Account {
         match self.settings.conf.default_mailbox {
             Some(ref v) if !default_mailbox.is_empty() => {
                 let err = Error::new(format!(
-                    "Account `{}` has default mailbox set as `{}` but it doesn't exist.",
-                    &self.name, v
+                    "Account `{}` has default mailbox set as `{v}` but it doesn't exist.",
+                    self.name
                 ))
                 .set_kind(ErrorKind::Configuration);
                 self.is_online.set_err(err.clone());
@@ -695,9 +696,8 @@ impl Account {
                         .send(ThreadEvent::UIEvent(UIEvent::Notification {
                             title: Some(subject.into()),
                             body: format!(
-                                "{}\n{} | {}",
-                                from,
-                                &self.name,
+                                "{from}\n{} | {}",
+                                self.name,
                                 self.mailbox_entries[&mailbox_hash].name()
                             )
                             .into(),
@@ -839,15 +839,15 @@ impl Account {
                     self.active_jobs
                         .insert(handle.job_id, JobRequest::Watch { handle });
                 }
-                Err(e)
-                    if e.kind == ErrorKind::NotSupported || e.kind == ErrorKind::NotImplemented => {
-                }
-                Err(e) => {
+                Err(err)
+                    if err.kind == ErrorKind::NotSupported
+                        || err.kind == ErrorKind::NotImplemented => {}
+                Err(err) => {
                     self.main_loop_handler
                         .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
                             StatusEvent::DisplayMessage(format!(
-                                "Account `{}` watch action returned error: {}",
-                                &self.name, e
+                                "Account `{}` watch action returned error: {err}",
+                                self.name
                             )),
                         )));
                 }
@@ -1001,7 +1001,7 @@ impl Account {
         flags: Option<Flag>,
     ) -> Result<()> {
         if self.settings.account.read_only {
-            return Err(Error::new(format!("Account {} is read-only.", &self.name)));
+            return Err(Error::new(format!("Account {} is read-only.", self.name)));
         }
         let job = self
             .backend
@@ -1454,7 +1454,7 @@ impl Account {
                             self.main_loop_handler.send(ThreadEvent::UIEvent(
                                 UIEvent::Notification {
                                     title: Some(
-                                        format!("{}: could not fetch mailbox", &self.name).into(),
+                                        format!("{}: could not fetch mailbox", self.name).into(),
                                     ),
                                     source: None,
                                     body: err.to_string().into(),
@@ -1597,7 +1597,7 @@ impl Account {
                             self.main_loop_handler.send(ThreadEvent::UIEvent(
                                 UIEvent::Notification {
                                     title: Some(
-                                        format!("{}: could not set flag", &self.name).into(),
+                                        format!("{}: could not set flag", self.name).into(),
                                     ),
                                     source: None,
                                     body: err.to_string().into(),
@@ -1679,8 +1679,7 @@ impl Account {
                                 self.main_loop_handler.send(ThreadEvent::UIEvent(
                                     UIEvent::Notification {
                                         title: Some(
-                                            format!("{}: could not save message", &self.name)
-                                                .into(),
+                                            format!("{}: could not save message", self.name).into(),
                                         ),
                                         source: None,
                                         body: format!(
@@ -1722,7 +1721,7 @@ impl Account {
                         self.main_loop_handler
                             .send(ThreadEvent::UIEvent(UIEvent::Notification {
                                 title: Some(
-                                    format!("{}: could not delete message", &self.name).into(),
+                                    format!("{}: could not delete message", self.name).into(),
                                 ),
                                 source: None,
                                 body: err.to_string().into(),
@@ -1772,7 +1771,7 @@ impl Account {
                                         self.main_loop_handler.send(ThreadEvent::UIEvent(
                                             UIEvent::Notification {
                                                 title: Some(
-                                                    format!("{}: watch thread failed", &self.name)
+                                                    format!("{}: watch thread failed", self.name)
                                                         .into(),
                                                 ),
                                                 source: None,
@@ -1805,7 +1804,7 @@ impl Account {
                                 .set_job_success(job_id, false);
                             self.main_loop_handler.send(ThreadEvent::UIEvent(
                                 UIEvent::Notification {
-                                    title: Some(format!("{}: {} failed", &self.name, name,).into()),
+                                    title: Some(format!("{}: {} failed", self.name, name).into()),
                                     source: None,
                                     body: err.to_string().into(),
                                     kind: Some(NotificationType::Error(err.kind)),
@@ -1817,7 +1816,7 @@ impl Account {
                                 self.main_loop_handler.send(ThreadEvent::UIEvent(
                                     UIEvent::Notification {
                                         title: Some(
-                                            format!("{}: {} succeeded", &self.name, name,).into(),
+                                            format!("{}: {} succeeded", self.name, name).into(),
                                         ),
                                         source: None,
                                         body: "".into(),

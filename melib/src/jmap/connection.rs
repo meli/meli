@@ -98,7 +98,7 @@ impl JmapConnection {
                 .authentication(isahc::auth::Authentication::none())
                 .default_header(
                     http::header::AUTHORIZATION,
-                    format!("Bearer {}", &server_conf.server_password),
+                    format!("Bearer {}", server_conf.server_password),
                 )
         } else {
             client
@@ -157,8 +157,8 @@ impl JmapConnection {
                     "Could not connect to JMAP server endpoint for {}. Is your server url setting \
                      correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource \
                      discovery via /.well-known/jmap is supported. DNS SRV records are not \
-                     supported)\n\nError connecting to server: {}",
-                    &self.server_conf.server_url, &err
+                     supported)\n\nError connecting to server: {err}",
+                    self.server_conf.server_url
                 ))
                 .set_source(Some(Arc::new(err)));
                 _ = self.store.online_status.set(None, Err(err.clone())).await;
@@ -172,8 +172,8 @@ impl JmapConnection {
             let kind: crate::error::NetworkErrorKind = resp.status().into();
             let res_text = resp.text().await.unwrap_or_default();
             let mut err = Error::new(format!(
-                "Could not connect to JMAP server endpoint for {}. Reply from server: {}",
-                &self.server_conf.server_url, res_text
+                "Could not connect to JMAP server endpoint for {}. Reply from server: {res_text}",
+                self.server_conf.server_url
             ))
             .set_kind(kind.into());
             if resp.status() == 401 {
@@ -251,8 +251,8 @@ impl JmapConnection {
                     "Could not connect to JMAP server endpoint for {}. Is your server url setting \
                      correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource \
                      discovery via /.well-known/jmap is supported. DNS SRV records are not \
-                     supported)\n\nReply from server: {}",
-                    &self.server_conf.server_url, &err
+                     supported)\n\nReply from server: {err}",
+                    self.server_conf.server_url
                 ))
                 .set_source(Some(Arc::new(err)));
                 _ = self
@@ -271,8 +271,8 @@ impl JmapConnection {
                     "Could not connect to JMAP server endpoint for {}. Is your server url setting \
                      correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource \
                      discovery via /.well-known/jmap is supported. DNS SRV records are not \
-                     supported)\n\nReply from server: {}",
-                    &self.server_conf.server_url, &res_text
+                     supported)\n\nReply from server: {res_text}",
+                    self.server_conf.server_url
                 ))
                 .set_source(Some(Arc::new(err)));
                 _ = self
@@ -289,7 +289,7 @@ impl JmapConnection {
                 if !session.capabilities.contains_key($cap::URI) {
                     let err = Error::new(format!(
                         "Server {} did not return {name} ({uri}). Returned capabilities were: {}",
-                        &self.server_conf.server_url,
+                        self.server_conf.server_url,
                         session
                             .capabilities
                             .keys()
@@ -738,8 +738,8 @@ impl JmapConnection {
             let kind: crate::error::NetworkErrorKind = resp.status().into();
             let res_text = resp.text().await.unwrap_or_default();
             let err = Error::new(format!(
-                "Could not connect to JMAP server endpoint for {}. Reply from server: {}",
-                &self.server_conf.server_url, res_text
+                "Could not connect to JMAP server endpoint for {}. Reply from server: {res_text}",
+                self.server_conf.server_url
             ))
             .set_kind(kind.into());
             _ = self
@@ -774,8 +774,8 @@ impl JmapConnection {
             let kind: crate::error::NetworkErrorKind = resp.status().into();
             let res_text = resp.text().await.unwrap_or_default();
             let err = Error::new(format!(
-                "Could not connect to JMAP server endpoint for {}. Reply from server: {}",
-                &self.server_conf.server_url, res_text
+                "Could not connect to JMAP server endpoint for {}. Reply from server: {res_text}",
+                self.server_conf.server_url
             ))
             .set_kind(kind.into());
             _ = self

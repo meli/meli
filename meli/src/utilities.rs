@@ -218,13 +218,13 @@ impl StatusBar {
             } else {
                 ""
             },
-            &self.status_message,
+            self.status_message,
             if !self.substatus_message.is_empty() {
                 " | "
             } else {
                 ""
             },
-            &self.substatus_message,
+            self.substatus_message,
         );
     }
 

@@ -62,7 +62,7 @@ impl NntpOp {
                 .to_string();
             return Err(Error::new(format!(
                 "{} Could not select article {}: expected ARTICLE response but got: {}",
-                &self.uid_store.account_name, path, res
+                self.uid_store.account_name, path, res
             )));
         }
         let pos = res.find("\r\n").unwrap_or(0) + 2;

@@ -263,7 +263,7 @@ pub mod server {
                                 serde_json::value::from_value(body).unwrap();
                             eprintln!("Parsed Email/get object {get:?}");
                             let mut not_found = vec![];
-                            eprintln!("get.ids = {:?}", &get.ids);
+                            eprintln!("get.ids = {:?}", get.ids);
                             let list = match get.ids {
                                 None => {
                                     // Return all.

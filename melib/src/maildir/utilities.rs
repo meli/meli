@@ -159,7 +159,7 @@ impl MaildirMailbox {
             if !fs_path.starts_with(&config.path) && fs_path != config.path {
                 return Err(Error::new(format!(
                     "Path given, `{}`, is is not included in the root mailbox path `{}`.",
-                    &given_path,
+                    given_path,
                     config.path.display()
                 )));
             }

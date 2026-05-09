@@ -636,7 +636,7 @@ impl Component for Pager {
                 let status_message = format!(
                     "{results_str}{search_pattern}: {current_pos}/{total_results}{has_more_lines}",
                     results_str = RESULTS_STR,
-                    search_pattern = &search.pattern,
+                    search_pattern = search.pattern,
                     current_pos = if search.positions.is_empty() {
                         0
                     } else {
@@ -769,8 +769,7 @@ impl Component for Pager {
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(format!(
-                        "Pager text piped to '{}{}{}'",
-                        &bin,
+                        "Pager text piped to '{bin}{}{}'",
                         if args.is_empty() { "" } else { " " },
                         args.join(" ")
                     ))));

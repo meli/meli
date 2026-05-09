@@ -1170,20 +1170,20 @@ fn reflow_helper(
         let quotes: String = ">".repeat(quote_depth);
         let paragraph = paragraph
             .trim_start_matches(&quotes)
-            .replace(&format!("\n{}", &quotes), "")
+            .replace(&format!("\n{}", quotes), "")
             .replace(['\n', '\r'], "");
         if in_paragraph {
             if let Some(width) = width {
                 ret.extend(
                     linear(&paragraph, width.saturating_sub(quote_depth))
                         .into_iter()
-                        .map(|l| format!("{}{}", &quotes, l)),
+                        .map(|l| format!("{quotes}{l}")),
                 );
             } else {
-                ret.push(format!("{}{}", &quotes, &paragraph));
+                ret.push(format!("{quotes}{paragraph}"));
             }
         } else {
-            ret.push(format!("{}{}", &quotes, &paragraph));
+            ret.push(format!("{quotes}{paragraph}"));
         }
     } else {
         let paragraph = paragraph.replace(['\n', '\r'], "");
@@ -1677,7 +1677,7 @@ impl Iterator for LineBreakText {
                             } else {
                                 let ret = format!(
                                     "⤷{}",
-                                    &line[*within_line_index..end_offset]
+                                    line[*within_line_index..end_offset]
                                         .trim_end_matches(['\r', '\n'])
                                 );
                                 *within_line_index = end_offset;
@@ -1724,20 +1724,20 @@ fn reflow_helper2(
         let quotes: String = ">".repeat(quote_depth);
         let paragraph = paragraph
             .trim_start_matches(&quotes)
-            .replace(&format!("\n{}", &quotes), "")
+            .replace(&format!("\n{quotes}"), "")
             .replace(['\n', '\r'], "");
         if in_paragraph {
             if let Some(width) = width {
                 ret.extend(
                     linear(&paragraph, width.saturating_sub(quote_depth))
                         .into_iter()
-                        .map(|l| format!("{}{}", &quotes, l)),
+                        .map(|l| format!("{quotes}{l}")),
                 );
             } else {
-                ret.push_back(format!("{}{}", &quotes, &paragraph));
+                ret.push_back(format!("{quotes}{paragraph}"));
             }
         } else {
-            ret.push_back(format!("{}{}", &quotes, &paragraph));
+            ret.push_back(format!("{quotes}{paragraph}"));
         }
     } else {
         let paragraph = paragraph.replace(['\n', '\r'], "");

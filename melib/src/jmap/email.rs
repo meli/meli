@@ -291,9 +291,9 @@ impl From<EmailAddress> for crate::email::Address {
 impl std::fmt::Display for EmailAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         if let Some(name) = self.name.as_ref() {
-            write!(f, "{} <{}>", name, &self.email)
+            write!(f, "{} <{}>", name, self.email)
         } else {
-            write!(f, "{}", &self.email)
+            write!(f, "{}", self.email)
         }
     }
 }

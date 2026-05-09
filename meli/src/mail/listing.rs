@@ -2731,7 +2731,7 @@ impl Component for Listing {
                 }
             }
             MenuEntryCursor::Status => {
-                return format!("{} status", &self.accounts[self.cursor_pos.account].name)
+                return format!("{} status", self.accounts[self.cursor_pos.account].name)
             }
         };
 

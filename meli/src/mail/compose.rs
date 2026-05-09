@@ -2662,7 +2662,7 @@ pub fn save_draft(
                 source: None,
                 body: format!(
                     "Message saved in `{}`",
-                    &context.accounts[&account_hash].mailbox_entries[&mailbox_hash].name
+                    context.accounts[&account_hash].mailbox_entries[&mailbox_hash].name
                 )
                 .into(),
                 kind: Some(NotificationType::Info),

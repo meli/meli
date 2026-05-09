@@ -545,7 +545,7 @@ impl ImapStream {
             ret.read_response(&mut res).await?;
             let credentials = format!(
                 "\0{}\0{}",
-                &server_conf.server_username, &server_conf.server_password
+                server_conf.server_username, server_conf.server_password
             );
             ret.send_command(CommandBody::authenticate(AuthMechanism::Plain))
                 .await?;
@@ -615,7 +615,7 @@ impl ImapStream {
         {
             return Err(Error::new(format!(
                 "Could not connect to {}: server is not IMAP4rev1 compliant",
-                &server_conf.server_hostname
+                server_conf.server_hostname
             ))
             .set_kind(ErrorKind::ProtocolNotSupported));
         }
@@ -643,7 +643,7 @@ impl ImapStream {
                     return Err(Error::new(format!(
                         "Could not connect to {}: OAUTH2 is enabled but server did not return \
                          AUTH=XOAUTH2 capability. Returned capabilities were: {}",
-                        &server_conf.server_hostname,
+                        server_conf.server_hostname,
                         capabilities
                             .iter()
                             .map(|capability| String::from_utf8_lossy(capability).to_string())
@@ -682,7 +682,7 @@ impl ImapStream {
                     return Err(Error::new(format!(
                         "Could not connect to {}: AUTH=ANONYMOUS is enabled but server did not \
                          return AUTH=ANONYMOUS capability. Returned capabilities were: {}",
-                        &server_conf.server_hostname,
+                        server_conf.server_hostname,
                         capabilities
                             .iter()
                             .map(|capability| String::from_utf8_lossy(capability).to_string())
@@ -701,7 +701,7 @@ impl ImapStream {
             {
                 let credentials = format!(
                     "\0{}\0{}",
-                    &server_conf.server_username, &server_conf.server_password
+                    server_conf.server_username, server_conf.server_password
                 );
                 if has_sasl_ir {
                     ret.send_command(CommandBody::authenticate_with_ir(
@@ -725,7 +725,7 @@ impl ImapStream {
                     return Err(Error::new(format!(
                         "Could not connect to {}: server does not accept the LOGIN command \
                          [LOGINDISABLED]",
-                        &server_conf.server_hostname
+                        server_conf.server_hostname
                     ))
                     .set_kind(ErrorKind::Authentication));
                 }
@@ -1355,7 +1355,7 @@ impl ImapConnection {
         if no_select {
             return Err(Error::new(format!(
                 "Trying to select a \\NoSelect mailbox: {}",
-                &imap_path
+                imap_path
             ))
             .set_kind(ErrorKind::Bug));
         }
@@ -1432,7 +1432,7 @@ impl ImapConnection {
         if no_select {
             return Err(Error::new(format!(
                 "Trying to examine a \\NoSelect mailbox: {}",
-                &imap_path
+                imap_path
             ))
             .set_kind(ErrorKind::Bug));
         }

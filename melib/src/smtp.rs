@@ -563,7 +563,7 @@ impl SmtpConnection {
                         if !output.status.success() {
                             return Err(Error::new(format!(
                                 "SMTP XOAUTH2 token evaluation command `{}` returned {}: {}",
-                                &token_command,
+                                token_command,
                                 output.status,
                                 String::from_utf8_lossy(&output.stderr)
                             )));

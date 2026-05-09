@@ -118,7 +118,7 @@ impl NntpStream {
                 if !res.starts_with("101 ") {
                     return Err(Error::new(format!(
                         "Could not connect to {}: expected CAPABILITIES response but got: {res}",
-                        &server_conf.server_hostname
+                        server_conf.server_hostname
                     ))
                     .set_kind(ErrorKind::ProtocolError));
                 }
@@ -130,7 +130,7 @@ impl NntpStream {
                 {
                     return Err(Error::new(format!(
                         "Could not connect to {}: server is not NNTP VERSION 2 compliant",
-                        &server_conf.server_hostname
+                        server_conf.server_hostname
                     ))
                     .set_kind(ErrorKind::ProtocolNotSupported));
                 }
@@ -141,7 +141,7 @@ impl NntpStream {
                     return Err(Error::new(format!(
                         "Could not connect to {}: server does not support STARTTLS but it was \
                          required by user configuration",
-                        &server_conf.server_hostname
+                        server_conf.server_hostname
                     ))
                     .set_kind(ErrorKind::NotSupported));
                 }
@@ -152,7 +152,7 @@ impl NntpStream {
                 if !res.starts_with("382 ") {
                     return Err(Error::new(format!(
                         "Could not connect to {}: could not begin TLS negotiation, got: {res}",
-                        &server_conf.server_hostname
+                        server_conf.server_hostname
                     )));
                 }
             }
@@ -230,7 +230,7 @@ impl NntpStream {
         if !res.starts_with("101 ") {
             return Err(Error::new(format!(
                 "Could not connect to {}: expected CAPABILITIES response but got: {res}",
-                &server_conf.server_hostname
+                server_conf.server_hostname
             )));
         }
         let capabilities: HashSet<String> =
@@ -241,7 +241,7 @@ impl NntpStream {
         {
             return Err(Error::new(format!(
                 "Could not connect to {}: server is not NNTP compliant",
-                &server_conf.server_hostname
+                server_conf.server_hostname
             )));
         }
         if !capabilities
@@ -513,7 +513,7 @@ impl NntpConnection {
                 "{}: Sending a command to the NNTP server that is over 511 bytes: this is invalid \
                  and should be fixed. Please report this as a bug to the melib bugtracker. The \
                  command line is `{command:?}\\r\\n`",
-                &self.uid_store.account_name
+                self.uid_store.account_name
             );
         }
         if let Err(err) =
@@ -576,7 +576,7 @@ impl NntpConnection {
             .chain_err_summary(|| {
                 format!(
                     "{} Could not select newsgroup {path}: expected GROUP response but got: {res}",
-                    &self.uid_store.account_name
+                    self.uid_store.account_name
                 )
             })?;
         self.stream.as_mut()?.current_mailbox = MailboxSelection::Select(mailbox_hash);

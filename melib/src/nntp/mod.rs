@@ -301,7 +301,7 @@ impl MailBackend for NntpType {
 
                 if newnews_support {
                     conn.send_command(
-                        format!("NEWNEWS {} {datetime_str}", &mbox.nntp_path).as_bytes(),
+                        format!("NEWNEWS {} {datetime_str}", mbox.nntp_path).as_bytes(),
                     )
                     .await?;
                     conn.read_response(&mut res, true, &["230 "]).await?;
@@ -686,7 +686,7 @@ impl NntpType {
             return Err(Error::new(format!(
                 "{}: store_flags_locally is on but this copy of melib isn't built with sqlite3 \
                  support.",
-                &s.name
+                s.name
             )));
         }
 
@@ -788,7 +788,7 @@ impl NntpType {
                     log::warn!(
                         "{}: Newsgroup named {m} has a name that exceeds RFC 3977 limits of \
                          maximum command lines (512 octets) with LIST ACTIVE. Skipping it.",
-                        &conn.uid_store.account_name
+                        conn.uid_store.account_name
                     );
                     continue 'batch;
                 }
@@ -815,7 +815,7 @@ impl NntpType {
                 .chain_err_summary(|| {
                     format!(
                         "Could not get newsgroups {}: expected LIST ACTIVE response but got: {res}",
-                        &conn.uid_store.account_name
+                        conn.uid_store.account_name
                     )
                 })
                 .chain_err_kind(ErrorKind::ProtocolError)?;
@@ -840,7 +840,7 @@ impl NntpType {
             .chain_err_summary(|| {
                 format!(
                     "Could not get newsgroups {}: expected LIST ACTIVE response but got: {res}",
-                    &conn.uid_store.account_name
+                    conn.uid_store.account_name
                 )
             })
             .chain_err_kind(ErrorKind::ProtocolError)?;
@@ -907,7 +907,7 @@ impl NntpType {
             return Err(Error::new(format!(
                 "{}: store_flags_locally is on but this copy of melib isn't built with sqlite3 \
                  support.",
-                &s.name
+                s.name
             ))
             .set_kind(ErrorKind::Configuration));
         }
@@ -984,7 +984,7 @@ impl NntpType {
                 .chain_err_summary(|| {
                     format!(
                         "{} Could not select newsgroup: expected ARTICLE response but got: {res}",
-                        &conn.uid_store.account_name
+                        conn.uid_store.account_name
                     )
                 })
                 .chain_err_kind(ErrorKind::ProtocolError)?;
@@ -1034,7 +1034,7 @@ impl FetchState {
             if s.len() != 5 {
                 let err = Error::new(format!(
                     "{} Could not select newsgroup {path}: expected GROUP response but got: {res}",
-                    &uid_store.account_name
+                    uid_store.account_name
                 ))
                 .set_kind(ErrorKind::ProtocolError);
                 conn.stream = Err(err.clone());
@@ -1071,7 +1071,7 @@ impl FetchState {
                 .chain_err_summary(|| {
                     format!(
                         "{} Could not select newsgroup: expected OVER response but got: {res}",
-                        &uid_store.account_name
+                        uid_store.account_name
                     )
                 })
                 .chain_err_kind(ErrorKind::ProtocolError)?;

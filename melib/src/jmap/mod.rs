@@ -116,10 +116,8 @@ pub fn deserialize_from_str<'de, T: serde::de::Deserialize<'de>>(s: &'de str) ->
         Ok(v) => Ok(v),
         Err(err) => Err(Error::new(format!(
             "BUG: Could not deserialize server JSON response properly, please report this!\nError \
-             {} at {}. Reply from server: {}",
-            err,
-            err.path(),
-            &s
+             {err} at {path}. Reply from server: {s}",
+            path = err.path(),
         ))
         .set_source(Some(Arc::new(err)))
         .set_kind(ErrorKind::Bug)),
@@ -1002,12 +1000,12 @@ impl MailBackend for JmapType {
                 IndexMap::default();
             let mut update_keywords: IndexMap<String, Value> = IndexMap::default();
             update_keywords.insert(
-                format!("mailboxIds/{}", &destination_mailbox_id),
+                format!("mailboxIds/{}", destination_mailbox_id),
                 serde_json::json!(true),
             );
             if move_ {
                 update_keywords.insert(
-                    format!("mailboxIds/{}", &source_mailbox_id),
+                    format!("mailboxIds/{}", source_mailbox_id),
                     serde_json::json!(null),
                 );
             }

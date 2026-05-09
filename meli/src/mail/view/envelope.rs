@@ -1408,7 +1408,7 @@ impl Component for EnvelopeView {
                         context.replies.push_back(UIEvent::Notification {
                             title: None,
                             source: None,
-                            body: format!("Saved at {}", &path.display()).into(),
+                            body: format!("Saved at {}", path.display()).into(),
                             kind: Some(NotificationType::Info),
                         });
                     }
@@ -1479,7 +1479,7 @@ impl Component for EnvelopeView {
                             context.replies.push_back(UIEvent::Notification {
                                 title: None,
                                 source: None,
-                                body: format!("Saved at {}", &path.display()).into(),
+                                body: format!("Saved at {}", path.display()).into(),
                                 kind: Some(NotificationType::Info),
                             });
                         }

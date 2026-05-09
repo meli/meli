@@ -154,7 +154,7 @@ impl Account {
                     self.main_loop_handler
                         .send(ThreadEvent::UIEvent(UIEvent::Notification {
                             title: None,
-                            body: format!("{}: {} failed", &self.name, job).into(),
+                            body: format!("{}: {job} failed", self.name).into(),
                             kind: Some(NotificationType::Error(err.kind)),
                             source: Some(err),
                         }));
@@ -342,7 +342,7 @@ impl Account {
                     self.main_loop_handler
                         .send(ThreadEvent::UIEvent(UIEvent::Notification {
                             title: Some(
-                                       format!("{}: mailbox deleted successfully", &self.name).into(),
+                                       format!("{}: mailbox deleted successfully", self.name).into(),
                                    ),
                                    source: None,
                                    body: "".into(),
@@ -392,7 +392,7 @@ impl Account {
                     self.main_loop_handler
                         .send(ThreadEvent::UIEvent(UIEvent::Notification {
                             title: Some(
-                                       format!("{}: mailbox permissions set successfully", &self.name)
+                                       format!("{}: mailbox permissions set successfully", self.name)
                                        .into(),
                                    ),
                                    source: None,
@@ -421,7 +421,7 @@ impl Account {
                                 title: Some(
                                     format!(
                                         "{}: `{}` has been {}subscribed.",
-                                        &self.name,
+                                        self.name,
                                         self.mailbox_entries[mailbox_hash].name(),
                                         if *new_value { "" } else { "un" }
                                     )
