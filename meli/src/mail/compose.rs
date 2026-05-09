@@ -867,18 +867,18 @@ To: {}
                     .join(", ");
 
                 format!(
-                    "{}{}{}{}",
-                    if self.gpg_state.encrypt_keys.is_empty() {
+                    "{toggle_state}{description}{shortcut}{key_list}",
+                    toggle_state = if self.gpg_state.encrypt_keys.is_empty() {
                         toggle_unchecked
                     } else {
                         toggle_checked
                     },
-                    if self.gpg_state.encrypt_keys.is_empty() {
+                    description = if self.gpg_state.encrypt_keys.is_empty() {
                         " No keys selected to encrypt with"
                     } else {
                         " Encrypt with"
                     },
-                    &format!(
+                    shortcut = format_args!(
                         " [toggle: {}, edit: {}]{}",
                         toggle_shortcut,
                         edit_shortcut,
@@ -888,7 +888,7 @@ To: {}
                             " "
                         }
                     ),
-                    if self.gpg_state.encrypt_keys.is_empty() {
+                    key_list = if self.gpg_state.encrypt_keys.is_empty() {
                         ""
                     } else {
                         key_list.as_str()
