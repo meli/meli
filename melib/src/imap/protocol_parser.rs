@@ -412,11 +412,10 @@ impl<'a> Iterator for ImapLineIterator<'a> {
                         )(&cur_slice[literal_start..])
                     {
                         i += pos + 2 + len;
-                        continue;
                     } else {
                         i += literal_start + 1;
-                        continue;
                     }
+                    continue;
                 }
                 let ret = self.slice.get(..i + pos + 2).unwrap_or_default();
                 self.slice = self.slice.get(i + pos + 2..).unwrap_or_default();
