@@ -2244,7 +2244,7 @@ impl Component for Composer {
                     {
                         Ok(stdout) => {
                             for path in stdout
-                                .split(|c| [b'\0', b'\t', b'\n'].contains(c))
+                                .split(|c| b"\0\t\n".contains(c))
                                 .filter(|p| !p.trim().is_empty())
                             {
                                 match melib::email::compose::attachment_from_file(

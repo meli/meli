@@ -1388,13 +1388,7 @@ pub mod generic {
         if input.is_empty() {
             return Err(nom::Err::Error((input, "atext(): empty input").into()));
         }
-        if input[0].is_ascii_alphanumeric()
-            || [
-                b'!', b'#', b'$', b'%', b'&', b'\'', b'*', b'+', b'-', b'/', b'=', b'?', b'^',
-                b'_', b'`', b'{', b'|', b'}', b'~', b'\\',
-            ]
-            .contains(&input[0])
-        {
+        if input[0].is_ascii_alphanumeric() || b"!#$%&'*+-/=?^_`{|}~\\".contains(&input[0]) {
             Ok((&input[1..], input[0..1].into()))
         } else {
             Err(nom::Err::Error((input, "atext(): invalid byte").into()))
@@ -2621,12 +2615,7 @@ pub mod address {
         if let Some((full, [display_name, addr_spec])) =
             re.captures(input).map(|cap| cap.extract::<2>())
         {
-            if [
-                b'(', b')', b'<', b'>', b'[', b']', b':', b';', b'@', b'\\', b',', b'.', b'"',
-            ]
-            .iter()
-            .any(|b| display_name.contains(b))
-            {
+            if b"()<>[]:;@\\,.\"".iter().any(|b| display_name.contains(b)) {
                 return Err(nom::Err::Error(ParsingError::<&[u8]>::new(
                     full,
                     Cow::Owned(format!(

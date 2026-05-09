@@ -67,7 +67,7 @@ fn ws_inner<'a>() -> impl Parser<'a, ()> {
         let mut offset = 0;
         let input_b = input.as_bytes();
         while offset < input_b.len() {
-            while offset < input_b.len() && [b' ', b'\t', b'\n', b'\r'].contains(&input_b[offset]) {
+            while offset < input_b.len() && b" \t\n\r".contains(&input_b[offset]) {
                 offset += 1;
             }
             if offset >= input_b.len() {
@@ -155,7 +155,7 @@ pub fn string<'a>() -> impl Parser<'a, String> {
                     }
                 }
                 // a single octet other ; than NUL, CR, LF, double-quote, or backslash
-                if [b'\x00', b'\r', b'\n', b'"', b'\\'].contains(&input.as_bytes()[offset]) {
+                if b"\x00\r\n\"\\".contains(&input.as_bytes()[offset]) {
                     break;
                 }
                 offset += 1;
