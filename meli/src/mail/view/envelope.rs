@@ -505,13 +505,11 @@ impl EnvelopeView {
         lidx: usize,
         context: &mut Context,
     ) -> Option<&'_ melib::Attachment> {
-        if let Some(path) = self.attachment_paths.get(lidx).and_then(|path| {
-            if !path.is_empty() {
-                Some(path)
-            } else {
-                None
-            }
-        }) {
+        if let Some(path) = self
+            .attachment_paths
+            .get(lidx)
+            .filter(|path| !path.is_empty())
+        {
             let first = path[0];
             use AttachmentDisplay::*;
             let root_attachment = match &self.display[first] {
@@ -571,14 +569,8 @@ impl EnvelopeView {
 
             let ret = find_attachment(root_attachment, &path[1..]);
             if lidx == 0 {
-                return ret.and_then(|a| {
-                    if a.content_disposition.kind.is_attachment()
-                        || a.content_type == "message/rfc822"
-                    {
-                        Some(a)
-                    } else {
-                        None
-                    }
+                return ret.filter(|a| {
+                    a.content_disposition.kind.is_attachment() || a.content_type == "message/rfc822"
                 });
             } else {
                 return ret;
