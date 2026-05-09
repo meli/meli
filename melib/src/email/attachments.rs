@@ -927,7 +927,6 @@ impl Attachment {
             ContentType::Multipart {
                 ref kind,
                 ref parts,
-                parameters: _,
                 ..
             } => match kind {
                 MultipartType::Alternative => {
