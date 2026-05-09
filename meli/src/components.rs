@@ -331,7 +331,7 @@ pub mod prelude {
         command::*,
         components::{
             Component, ComponentAttr, ComponentId, ComponentPath, ExtendShortcutsMaps,
-            ScrollContext, *,
+            PageMovement, ScrollContext, ScrollUpdate, ShortcutMaps,
         },
         jobs::{JobId, JobMetadata},
         melib::{text::TextProcessing, utils::datetime, SortOrder},
