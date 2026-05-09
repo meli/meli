@@ -55,11 +55,7 @@ impl Iterator for ThreadsIterator<'_> {
                 tree = &self.thread_nodes[&tree[*i]].children;
             }
             if self.pos == tree.len() {
-                if let Some(p) = self.stack.pop() {
-                    self.pos = p + 1;
-                } else {
-                    return None;
-                }
+                self.pos = self.stack.pop()? + 1;
             } else {
                 debug_assert!(self.pos < tree.len());
                 let ret = (
