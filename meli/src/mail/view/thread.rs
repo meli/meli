@@ -711,11 +711,7 @@ impl ThreadView {
         if self.entries.is_empty() {
             return;
         }
-        if self
-            .entries
-            .iter_mut()
-            .fold(false, |flag, e| e.dirty || flag)
-        {
+        if self.entries.iter().any(|e| e.dirty) {
             self.visible_entries = self
                 .entries
                 .iter()
