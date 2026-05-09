@@ -1248,17 +1248,16 @@ impl Component for Tabbed {
                                     self.help_view.cursor.1 = search.positions[search.cursor].0;
                                 }
                             }
-                            SearchMovement::Previous => {
-                                if self.help_view.cursor.1 > search.positions[search.cursor].0 {
-                                    self.help_view.cursor.1 = search.positions[search.cursor].0;
-                                }
+                            SearchMovement::Previous
+                                if self.help_view.cursor.1 > search.positions[search.cursor].0 =>
+                            {
+                                self.help_view.cursor.1 = search.positions[search.cursor].0;
                             }
-                            SearchMovement::Next => {
+                            SearchMovement::Next
                                 if self.help_view.cursor.1 + rows
-                                    < search.positions[search.cursor].0
-                                {
-                                    self.help_view.cursor.1 = search.positions[search.cursor].0;
-                                }
+                                    < search.positions[search.cursor].0 =>
+                            {
+                                self.help_view.cursor.1 = search.positions[search.cursor].0;
                             }
                             _ => {}
                         }

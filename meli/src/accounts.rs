@@ -367,10 +367,8 @@ impl Account {
                     Some(SpecialUsageMailbox::Sent) => {
                         self.settings.sent_mailbox = Some(f.hash());
                     }
-                    None => {
-                        if f.special_usage() == SpecialUsageMailbox::Sent {
-                            self.settings.sent_mailbox = Some(f.hash());
-                        }
+                    None if f.special_usage() == SpecialUsageMailbox::Sent => {
+                        self.settings.sent_mailbox = Some(f.hash());
                     }
                     _ => {}
                 }

@@ -1633,19 +1633,17 @@ impl Component for Listing {
                 from,
                 to,
                 ref content,
-            } => {
-                if *from == self.component.id() || *to == self.id() {
-                    log::debug!(
-                        "BUG intracomm event: {:?} downcast content {:?}",
-                        event,
-                        content.downcast_ref::<ListingMessage>().copied()
-                    );
-                    log::debug!(
-                        "BUG component is {} and self id is {}",
-                        self.component.id(),
-                        self.id()
-                    );
-                }
+            } if *from == self.component.id() || *to == self.id() => {
+                log::debug!(
+                    "BUG intracomm event: {:?} downcast content {:?}",
+                    event,
+                    content.downcast_ref::<ListingMessage>().copied()
+                );
+                log::debug!(
+                    "BUG component is {} and self id is {}",
+                    self.component.id(),
+                    self.id()
+                );
             }
             _ => {}
         }
