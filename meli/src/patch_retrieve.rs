@@ -70,7 +70,6 @@ pub trait PublicInbox {
             extra_identities: vec![],
             read_only: true,
             display_name: None,
-            order: Default::default(),
             subscribed_mailboxes: vec![self.groupname().to_string()],
             mailboxes: vec![(self.groupname().to_string(), Default::default())]
                 .into_iter()

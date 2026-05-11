@@ -135,7 +135,6 @@ pub struct CompactListing {
     new_cursor_pos: (AccountHash, MailboxHash, usize),
     length: usize,
     sort: (SortField, SortOrder),
-    sortcmd: bool,
     subsort: (SortField, SortOrder),
     /// Cache current view.
     data_columns: DataColumns<5>,
@@ -296,11 +295,6 @@ impl MailListingTrait for CompactListing {
         let account = &context.accounts[&self.cursor_pos.0];
         let threads = account.collection.get_threads(self.cursor_pos.1);
 
-        self.length = 0;
-        // Use account settings only if no sortcmd has been used
-        if !self.sortcmd {
-            self.sort = context.accounts[&self.cursor_pos.0].settings.account.order
-        }
         self.length = 0;
         let mut min_width = (0, 0, 0, 0, 0);
         #[allow(clippy::type_complexity)]
@@ -723,7 +717,7 @@ impl ListingTrait for CompactListing {
             self.cursor_pos.2 = self.new_cursor_pos.2;
         }
 
-        if !self.force_draw {
+        if self.force_draw {
             grid.clear_area(area, self.color_cache.theme_default);
         }
         /* Page_no has changed, so draw new page */
@@ -907,12 +901,12 @@ impl CompactListing {
         context: &Context,
     ) -> Box<Self> {
         let color_cache = ColorCache::new(context, IndexStyle::Compact);
+        let sort = *mailbox_settings!(context[coordinates.0][&coordinates.1].listing.sort);
         Box::new(Self {
             cursor_pos: (AccountHash::default(), MailboxHash::default(), 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
             length: 0,
-            sort: (Default::default(), Default::default()),
-            sortcmd: false,
+            sort,
             subsort: (SortField::Date, SortOrder::Desc),
             search_job: None,
             select_job: None,
@@ -1842,14 +1836,22 @@ impl Component for CompactListing {
                 UIEvent::Action(ref action) => {
                     match action {
                         Action::Sort(field, order) if !self.unfocused() => {
-                            self.sort = (*field, *order);
-                            self.sortcmd = true;
-                            if !self.filtered_selection.is_empty() {
-                                // [ref:FIXME]: perform sort
+                            let new_order = (*field, *order);
+                            if new_order != self.sort {
+                                // "Keep it coming"
+                                self.sort = (*field, *order);
+                                self.refresh_mailbox(context, true);
                                 self.set_dirty(true);
-                            } else {
-                                self.refresh_mailbox(context, false);
+                                self.force_draw = true;
                             }
+                            return true;
+                        }
+                        Action::Sort(field, order) if !self.unfocused() => {
+                            self.sort = (*field, *order);
+                            if !self.filtered_selection.is_empty() {
+                                self.set_dirty(true);
+                            }
+                            self.refresh_mailbox(context, false);
                             return true;
                         }
                         Action::SubSort(field, order) if !self.unfocused() => {

@@ -224,7 +224,6 @@ impl DotAddressable for FileAccount {
                     "refresh_command" => self.refresh_command.lookup(field, tail),
                     "conf_override" => self.conf_override.lookup(field, tail),
                     "extra" => self.extra.lookup(field, tail),
-                    "order" => self.order.lookup(field, tail),
                     other => Err(Error::new(format!(
                         "{parent_field} has no field named {other}"
                     ))),

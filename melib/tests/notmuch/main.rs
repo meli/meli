@@ -164,7 +164,6 @@ other_email=test2@example.com;test3@example.com
             extra_identities: vec![],
             read_only: false,
             display_name: None,
-            order: Default::default(),
             subscribed_mailboxes,
             mailboxes,
             manual_refresh: true,

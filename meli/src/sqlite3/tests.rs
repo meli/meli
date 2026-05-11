@@ -75,7 +75,6 @@ fn new_maildir_backend(
         extra_identities: vec![],
         read_only: true,
         display_name: None,
-        order: Default::default(),
         subscribed_mailboxes: vec!["inbox".into()],
         mailboxes: vec![(
             "inbox".into(),

@@ -758,7 +758,6 @@ mod tests {
             extra_identities: vec![],
             read_only: false,
             display_name: None,
-            order: Default::default(),
             subscribed_mailboxes: vec![],
             mailboxes: indexmap::indexmap! {},
             manual_refresh: false,

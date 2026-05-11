@@ -32,7 +32,6 @@ use crate::{
     error::{Error, ErrorKind, Result},
     ShellExpandTrait,
 };
-pub use crate::{SortField, SortOrder};
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct AccountSettings {
@@ -50,8 +49,6 @@ pub struct AccountSettings {
     pub read_only: bool,
     #[serde(default)]
     pub display_name: Option<String>,
-    #[serde(default)]
-    pub order: (SortField, SortOrder),
     #[serde(default)]
     pub subscribed_mailboxes: Vec<String>,
     #[serde(default)]
@@ -87,10 +84,6 @@ impl AccountSettings {
             .iter()
             .map(|i| Address::new(None, i.clone()))
             .collect()
-    }
-
-    pub fn order(&self) -> Option<(SortField, SortOrder)> {
-        Some(self.order)
     }
 
     pub fn vcard_folder(&self) -> Option<&str> {

@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use melib::{search::Query, Error, Result, ToggleFlag};
+use melib::{search::Query, Error, Result, SortField, SortOrder, ToggleFlag};
 
 use crate::conf::{
     data_types::{IndexStyle, ThreadLayout},
@@ -179,6 +179,10 @@ pub struct ListingSettings {
     /// Default: "auto"
     #[serde(default)]
     pub thread_layout: ThreadLayout,
+
+    /// Default: "date, desc"
+    #[serde(default, alias = "order")]
+    pub sort: (SortField, SortOrder),
 }
 
 const fn default_divider() -> char {
@@ -217,6 +221,7 @@ impl Default for ListingSettings {
             hide_sidebar_on_launch: false,
             mail_view_divider: default_divider(),
             thread_layout: ThreadLayout::default(),
+            sort: Default::default(),
         }
     }
 }
@@ -262,6 +267,7 @@ impl DotAddressable for ListingSettings {
                     "hide_sidebar_on_launch" => self.hide_sidebar_on_launch.lookup(field, tail),
                     "mail_view_divider" => self.mail_view_divider.lookup(field, tail),
                     "thread_layout" => self.thread_layout.lookup(field, tail),
+                    "sort" | "order" => self.sort.lookup(field, tail),
                     other => Err(Error::new(format!(
                         "{parent_field} has no field named {other}"
                     ))),

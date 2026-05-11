@@ -207,15 +207,19 @@ macro_rules! declare_u64_hash {
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub enum SortOrder {
+    #[serde(alias = "asc")]
     Asc,
     #[default]
+    #[serde(alias = "desc")]
     Desc,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub enum SortField {
+    #[serde(alias = "subject")]
     Subject,
     #[default]
+    #[serde(alias = "date")]
     Date,
 }
 

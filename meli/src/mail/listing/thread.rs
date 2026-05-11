@@ -814,11 +814,12 @@ impl ThreadListing {
         context: &Context,
     ) -> Box<Self> {
         let color_cache = ColorCache::new(context, IndexStyle::Threaded);
+        let sort = *mailbox_settings!(context[coordinates.0][&coordinates.1].listing.sort);
         Box::new(Self {
             cursor_pos: (coordinates.0, MailboxHash::default(), 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
             length: 0,
-            sort: (Default::default(), Default::default()),
+            sort,
             subsort: (Default::default(), Default::default()),
             data_columns: DataColumns::new(color_cache.theme_default),
             color_cache,
@@ -1743,16 +1744,24 @@ impl Component for ThreadListing {
                 return true;
             }
             UIEvent::Action(ref action) => match action {
-                Action::SubSort(field, order) => {
-                    self.subsort = (*field, *order);
-                    self.set_dirty(true);
-                    self.refresh_mailbox(context, false);
+                Action::Sort(field, order) if !self.unfocused() => {
+                    let new_order = (*field, *order);
+                    if new_order != self.sort {
+                        // "Keep it coming"
+                        self.sort = (*field, *order);
+                        self.refresh_mailbox(context, false);
+                        self.set_dirty(true);
+                    }
                     return true;
                 }
-                Action::Sort(field, order) => {
-                    self.sort = (*field, *order);
-                    self.set_dirty(true);
-                    self.refresh_mailbox(context, false);
+                Action::SubSort(field, order) => {
+                    let new_order = (*field, *order);
+                    if new_order != self.subsort {
+                        // "Keep it coming"
+                        self.subsort = (*field, *order);
+                        self.refresh_mailbox(context, false);
+                        self.set_dirty(true);
+                    }
                     return true;
                 }
                 Action::Listing(Search(ref filter_term)) if !self.unfocused() => {

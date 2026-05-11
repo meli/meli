@@ -191,8 +191,6 @@ pub struct FileAccount {
     pub mailboxes: IndexMap<String, FileMailboxConf>,
     #[serde(default)]
     pub search_backend: data_types::SearchBackend,
-    #[serde(default)]
-    pub order: (SortField, SortOrder),
     #[serde(default = "false_val")]
     pub manual_refresh: bool,
     #[serde(default = "none", skip_serializing_if = "Option::is_none")]
@@ -285,7 +283,6 @@ impl From<FileAccount> for AccountConf {
         let root_mailbox = x.root_mailbox.clone();
         let identity = x.identity.clone();
         let display_name = x.display_name.clone();
-        let order = x.order;
         let mailboxes = x
             .mailboxes
             .iter()
@@ -300,7 +297,6 @@ impl From<FileAccount> for AccountConf {
             extra_identities: x.extra_identities.clone(),
             read_only: x.read_only,
             display_name,
-            order,
             subscribed_mailboxes: x.subscribed_mailboxes.clone(),
             mailboxes,
             manual_refresh: x.manual_refresh,
@@ -438,7 +434,6 @@ impl FileSettings {
                 extra_identities,
                 read_only,
                 display_name,
-                order,
                 subscribed_mailboxes,
                 mailboxes,
                 extra,
@@ -458,7 +453,6 @@ impl FileSettings {
                 extra_identities,
                 read_only,
                 display_name,
-                order,
                 subscribed_mailboxes,
                 manual_refresh,
                 mailboxes: mailboxes
@@ -542,7 +536,6 @@ impl FileSettings {
                 extra_identities,
                 read_only,
                 display_name,
-                order,
                 subscribed_mailboxes,
                 mailboxes,
                 extra,
@@ -562,7 +555,6 @@ impl FileSettings {
                 extra_identities,
                 read_only,
                 display_name,
-                order,
                 subscribed_mailboxes,
                 manual_refresh,
                 mailboxes: mailboxes

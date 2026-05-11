@@ -638,11 +638,12 @@ impl PlainListing {
         context: &Context,
     ) -> Box<Self> {
         let color_cache = ColorCache::new(context, IndexStyle::Plain);
+        let sort = *mailbox_settings!(context[coordinates.0][&coordinates.1].listing.sort);
         Box::new(Self {
             cursor_pos: (AccountHash::default(), MailboxHash::default(), 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
             length: 0,
-            sort: (Default::default(), Default::default()),
+            sort,
             subsort: (SortField::Date, SortOrder::Desc),
             rows: RowsState::default(),
             local_collection: Vec::new(),
@@ -1753,19 +1754,19 @@ impl Component for PlainListing {
                     return true;
                 }
                 UIEvent::Action(ref action) => match action {
-                    Action::SubSort(field, order) if !self.unfocused() => {
-                        self.subsort = (*field, *order);
-                        //if !self.filtered_selection.is_empty() {
-                        //    let threads = &account.collection.threads[&self.cursor_pos.1];
-                        //    threads.vec_inner_sort_by(&mut self.filtered_selection, self.sort,
-                        // &account.collection);
-                        //} else {
-                        //    self.refresh_mailbox(context, false);
-                        //}
+                    Action::Sort(field, order) if !self.unfocused() => {
+                        let new_order = (*field, *order);
+                        if new_order != self.sort {
+                            // "Keep it coming"
+                            self.sort = (*field, *order);
+                            self.refresh_mailbox(context, false);
+                            self.set_dirty(true);
+                        }
                         return true;
                     }
-                    Action::Sort(field, order) if !self.unfocused() => {
-                        self.sort = (*field, *order);
+                    Action::SubSort(field, order) if !self.unfocused() => {
+                        // Plain listing has no subsort semantics.
+                        self.subsort = (*field, *order);
                         return true;
                     }
 

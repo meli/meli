@@ -96,7 +96,6 @@ fn new_maildir_backend(
         extra_identities: vec![],
         read_only: false,
         display_name: None,
-        order: Default::default(),
         subscribed_mailboxes,
         mailboxes,
         manual_refresh: true,

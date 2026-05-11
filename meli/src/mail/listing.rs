@@ -3543,7 +3543,7 @@ impl Listing {
                 let coordinates = self.component.coordinates();
                 std::mem::replace(
                     &mut self.component,
-                    Conversations(ConversationsListing::new(self.id, coordinates)),
+                    Conversations(ConversationsListing::new(self.id, coordinates, context)),
                 )
             }
         };
