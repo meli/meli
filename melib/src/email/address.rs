@@ -507,6 +507,11 @@ impl StrBuilder {
 pub struct MessageID(pub Vec<u8>, pub StrBuilder);
 
 impl MessageID {
+    pub fn as_str(&self) -> &str {
+        // SAFETY: MessageIDs are always valid UTF-8 (ascii)
+        unsafe { std::str::from_utf8_unchecked(self.raw()) }
+    }
+
     pub fn display_brackets(&self) -> impl std::fmt::Display + '_ {
         MessageIDBracket(self)
     }
