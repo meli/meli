@@ -330,6 +330,119 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
             let _ = get_account(path, account)?;
             return Err(Error::new("Sorry, no JMAP shell yet.").set_kind(ErrorKind::NotImplemented));
         }
+        #[cfg(feature = "http")]
+        ToolOpt::PublicInbox(opt) => {
+            use std::fs::OpenOptions;
+
+            use melib::{
+                utils::patch_retrieve::{PatchSource, PublicInboxHTTP},
+                MessageID, StrBuild,
+            };
+
+            use crate::args::PublicInboxOpt;
+
+            match opt {
+                PublicInboxOpt::Mbox {
+                    ref url,
+                    ref list,
+                    thread,
+                    output,
+                    message_id,
+                } => {
+                    let lore = PublicInboxHTTP::new(url.as_str()).unwrap();
+                    let msg_id = MessageID::new(message_id.as_bytes(), message_id.as_bytes());
+                    std::thread::spawn(move || {
+                        let ex = melib::smol::Executor::new();
+                        futures::executor::block_on(ex.run(futures::future::pending::<()>()));
+                    });
+
+                    if thread {
+                        use std::io::{BufWriter, Write};
+
+                        use melib::{mbox::*, Address};
+
+                        let msgs = futures::executor::block_on(
+                            lore.fetch_thread(list.as_str(), msg_id.clone())?,
+                        )?;
+                        let address = Address::new(None, "mboxrd@z".into());
+                        let (mut file, path): (BufWriter<Box<dyn Write>>, _) = match output {
+                            Some(PathOrStdio::Stdio) => {
+                                (BufWriter::new(Box::new(std::io::stdout())), None)
+                            }
+                            Some(PathOrStdio::Path(path)) => {
+                                let file = OpenOptions::new()
+                                    .read(false)
+                                    .write(true)
+                                    .create_new(true)
+                                    .open(&path)?;
+                                (std::io::BufWriter::new(Box::new(file)), Some(path))
+                            }
+                            None => {
+                                let mut path = PathBuf::from("./");
+                                path.push(msg_id.as_str());
+                                path.set_extension("mbox");
+                                let file = OpenOptions::new()
+                                    .read(false)
+                                    .write(true)
+                                    .create_new(true)
+                                    .open(&path)?;
+                                (std::io::BufWriter::new(Box::new(file)), Some(path))
+                            }
+                        };
+                        let format = MboxFormat::MboxCl2;
+                        for m in msgs {
+                            format.append(
+                                &mut file,
+                                &m.bytes,
+                                Some(&address),
+                                Some(0),
+                                Default::default(), // Flags and tags
+                                MboxMetadata::None,
+                                true,
+                                false,
+                            )?;
+                        }
+                        file.flush()?;
+                        if let Some(path) = path {
+                            println!("Saved to {}", path.display());
+                        }
+                    } else {
+                        let msg = futures::executor::block_on(
+                            lore.fetch(list.as_str(), msg_id.clone())?,
+                        )?;
+                        match output {
+                            Some(PathOrStdio::Stdio) => {
+                                std::io::stdout().write_all(&msg.bytes)?;
+                            }
+                            Some(PathOrStdio::Path(path)) => {
+                                let mut file = OpenOptions::new()
+                                    .read(false)
+                                    .write(true)
+                                    .create_new(true)
+                                    .open(&path)?;
+                                file.write_all(&msg.bytes)?;
+                                file.flush()?;
+                                println!("Saved to {}", path.display());
+                            }
+                            None => {
+                                let mut path = PathBuf::from("./");
+                                path.push(msg_id.as_str());
+                                path.set_extension("mbox");
+
+                                let mut file = OpenOptions::new()
+                                    .read(false)
+                                    .write(true)
+                                    .create_new(true)
+                                    .open(&path)?;
+                                file.write_all(&msg.bytes)?;
+                                file.flush()?;
+                                println!("Saved to {}", path.display());
+                            }
+                        };
+                    }
+                }
+            }
+        }
     }
     Ok(())
 }

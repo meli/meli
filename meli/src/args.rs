@@ -144,6 +144,30 @@ pub enum ToolOpt {
         #[structopt(value_name = "CONFIG_TOML_ACCOUNT_NAME")]
         account: String,
     },
+    #[cfg(feature = "http")]
+    /// Interract with a public-inbox server (e.g. lore.kernel.org)
+    PublicInbox(PublicInboxOpt),
+}
+
+#[derive(Debug, StructOpt)]
+pub enum PublicInboxOpt {
+    /// Download a single e-mail or a thread as an mbox file from a public-inbox
+    /// server
+    Mbox {
+        #[structopt(long, default_value = "https://lore.kernel.org")]
+        url: String,
+        #[structopt(long, default_value = "all")]
+        list: String,
+        /// If set, the whole thread containing the given Message-ID will be
+        /// fetched.
+        #[structopt(short, long)]
+        thread: bool,
+        /// Default: save to mbox in current directory. Use `-` for stdout.
+        #[structopt(long, value_name = "OUTPUT", parse(from_os_str = try_path_or_stdio))]
+        output: Option<PathOrStdio>,
+        #[structopt(value_name = "MESSAGE_ID")]
+        message_id: String,
+    },
 }
 
 fn print_path(path: &std::path::Path) {

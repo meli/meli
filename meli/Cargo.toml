@@ -26,12 +26,14 @@ default = [
     "sqlite3",
     "notmuch",
     "smtp",
+    "http",
     "dbus-notifications",
     "gpgme",
     "cli-docs",
     "jmap",
     "static",
 ]
+http = ["melib/http"]
 notmuch = ["melib/notmuch"]
 jmap = ["melib/jmap"]
 sqlite3 = ["melib/sqlite3"]
