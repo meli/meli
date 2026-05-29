@@ -757,6 +757,17 @@ pub struct MessageIterator<'a> {
     pub format: MboxFormat,
 }
 
+impl MessageIterator<'_> {
+    /// Returns the bytes of a specific envelope.
+    ///
+    /// This function will panic if the hash is not included in the index, check
+    /// for its presence before you call it if you are not sure.
+    pub fn env_bytes(&'_ self, hash: &EnvelopeHash) -> &'_ [u8] {
+        let (offset, length) = self.index.lock().unwrap()[hash];
+        &self.input[offset..][..length]
+    }
+}
+
 impl Iterator for MessageIterator<'_> {
     type Item = Result<Envelope>;
 
