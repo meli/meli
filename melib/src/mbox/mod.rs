@@ -803,7 +803,6 @@ impl Iterator for MessageIterator<'_> {
                             .saturating_sub(2)
                     })
             })
-            .map(|v| v + if self.is_crlf { 2 } else { 1 })
             .unwrap_or(0);
         let len = self.input.len() - next_input.len() - self.offset - self.file_offset - start;
         self.index
