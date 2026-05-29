@@ -177,36 +177,37 @@ pub fn view(
 }
 
 pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
-    let config_path = if let Some(path) = path {
-        path.expand()
-    } else {
-        conf::get_config_file()?
-    };
-    let conf = conf::FileSettings::validate(config_path, false)?;
-    let account = match opt {
-        ToolOpt::ImapShell { ref account } => account,
-        #[cfg(feature = "smtp")]
-        ToolOpt::SmtpShell { ref account } => account,
-        #[cfg(feature = "jmap")]
-        ToolOpt::JmapShell { ref account } => account,
-    };
-    if !conf.accounts.contains_key(&account.clone()) {
-        println!(
-            "The configuration file does not contain the account `{account}`. It contains the \
-             following:"
-        );
-        for a in conf.accounts.keys() {
-            println!("{a}");
+    fn get_account(
+        path: Option<PathBuf>,
+        account: &str,
+    ) -> Result<(conf::FileAccount, conf::AccountConf)> {
+        let config_path = if let Some(path) = path {
+            path.expand()
+        } else {
+            conf::get_config_file()?
+        };
+        let conf = conf::FileSettings::validate(config_path, false)?;
+        if !conf.accounts.contains_key(&account.to_string()) {
+            println!(
+                "The configuration file does not contain the account `{account}`. It contains the \
+                 following:"
+            );
+            for a in conf.accounts.keys() {
+                println!("{a}");
+            }
+            return Err("Try again with a valid account name.".into());
         }
-        return Err("Try again with a valid account name.".into());
+        let file_account_conf = conf.accounts[account].clone();
+        let account_conf: conf::AccountConf = file_account_conf.clone().into();
+        Ok((file_account_conf, account_conf))
     }
-    let file_account_conf = conf.accounts[account].clone();
-    let account_conf: conf::AccountConf = file_account_conf.clone().into();
+
     match opt {
         #[cfg(feature = "smtp")]
-        ToolOpt::SmtpShell { .. } => {
+        ToolOpt::SmtpShell { ref account } => {
             use crate::conf::composing::SendMail;
 
+            let (file_account_conf, _) = get_account(path, account)?;
             let send_mail = file_account_conf.send_mail;
             let SendMail::Smtp(smtp_conf) = send_mail else {
                 panic!("smtp shell requires an smtp configuration for account {account}");
@@ -251,9 +252,10 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
                 }
             }
         }
-        ToolOpt::ImapShell { .. } => {
+        ToolOpt::ImapShell { ref account } => {
             use melib::imap::{imap_codec::imap_types::command::CommandBody, RequiredResponses};
 
+            let (_, account_conf) = get_account(path, account)?;
             let imap = melib::imap::ImapType::new(
                 &account_conf.account,
                 Default::default(),
@@ -324,8 +326,9 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
             }
         }
         #[cfg(feature = "jmap")]
-        ToolOpt::JmapShell { .. } => {
-            unimplemented!("Sorry, no JMAP shell yet.");
+        ToolOpt::JmapShell { ref account } => {
+            let _ = get_account(path, account)?;
+            return Err(Error::new("Sorry, no JMAP shell yet.").set_kind(ErrorKind::NotImplemented));
         }
     }
     Ok(())
