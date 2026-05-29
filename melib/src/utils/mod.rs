@@ -31,6 +31,7 @@ pub mod vobject;
 pub mod logging;
 pub mod lock;
 pub mod parsec;
+pub mod patch_retrieve;
 pub mod percent_encoding;
 pub mod shellexpand;
 #[cfg(feature = "sqlite3")]
