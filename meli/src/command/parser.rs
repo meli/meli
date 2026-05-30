@@ -22,7 +22,10 @@
 //! Command parsing.
 
 use super::*;
-use crate::command::{argcheck::*, error::*};
+use crate::{
+    actions::FileAction,
+    command::{argcheck::*, error::*},
+};
 
 const FLAG_SUGGESTIONS: &[&str] = &[
     "passed",
@@ -686,7 +689,7 @@ pub fn add_attachment<'a>(input: &'a [u8]) -> IResult<&'a [u8], Result<Action, C
             Ok((
                 input,
                 Ok(Tab(ComposerAction(ComposerTabAction::AddAttachment(
-                    path.to_string(),
+                    FileAction::Path(path.to_string()),
                 )))),
             ))
         },
@@ -704,9 +707,9 @@ pub fn add_attachment<'a>(input: &'a [u8]) -> IResult<&'a [u8], Result<Action, C
                 let (input, _) = eof(input)?;
                 Ok((
                     input,
-                    Ok(Tab(ComposerAction(
-                        ComposerTabAction::AddAttachmentFilePicker(Some(shell.to_string())),
-                    ))),
+                    Ok(Tab(ComposerAction(ComposerTabAction::AddAttachment(
+                        FileAction::FilePicker(Some(shell.to_string())),
+                    )))),
                 ))
             },
             |input: &'a [u8]| -> IResult<&'a [u8], Result<Action, CommandError>> {
@@ -717,9 +720,9 @@ pub fn add_attachment<'a>(input: &'a [u8]) -> IResult<&'a [u8], Result<Action, C
                 let (input, _) = eof(input)?;
                 Ok((
                     input,
-                    Ok(Tab(ComposerAction(
-                        ComposerTabAction::AddAttachmentFilePicker(None),
-                    ))),
+                    Ok(Tab(ComposerAction(ComposerTabAction::AddAttachment(
+                        FileAction::FilePicker(None),
+                    )))),
                 ))
             },
         )),

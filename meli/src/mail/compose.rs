@@ -41,6 +41,7 @@ use nix::sys::wait::WaitStatus;
 use super::*;
 use crate::{
     accounts::JobRequest,
+    command::actions::{ComposerTabAction, FileAction},
     jobs::{IsAsync, JoinHandle},
     terminal::embedded::Terminal,
     types::{sanitize_filename, File},
@@ -2190,7 +2191,7 @@ impl Component for Composer {
                         }
                     }
                 }
-                ComposerTabAction::AddAttachment(ref path) => {
+                ComposerTabAction::AddAttachment(FileAction::Path(ref path)) => {
                     let attachment = match melib::email::compose::attachment_from_file(path) {
                         Ok(a) => a,
                         Err(err) => {
@@ -2209,7 +2210,7 @@ impl Component for Composer {
                     self.set_dirty(true);
                     return true;
                 }
-                ComposerTabAction::AddAttachmentFilePicker(ref command) => {
+                ComposerTabAction::AddAttachment(FileAction::FilePicker(ref command)) => {
                     let command = if let Some(cmd) =
                         command
                             .as_ref()
@@ -2220,8 +2221,10 @@ impl Component for Composer {
                         context.replies.push_back(UIEvent::Notification {
                             title: None,
                             source: None,
-                            body: "You haven't defined any command to launch in \
-                                   [terminal.file_picker_command]."
+                            body: "You did not specify a file picker command, and you haven't \
+                                   defined any command to launch in \
+                                   [terminal.file_picker_command] as a fallback. Try re-executing \
+                                   the command with a file picker command appended."
                                 .into(),
                             kind: Some(NotificationType::Error(melib::error::ErrorKind::None)),
                         });
@@ -2283,6 +2286,7 @@ impl Component for Composer {
                                     melib::error::ErrorKind::External,
                                 )),
                             });
+                            context.replies.push_back(UIEvent::RestoreStandardIO);
                             context.restore_input();
                             self.set_dirty(true);
                             return true;

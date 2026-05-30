@@ -65,6 +65,12 @@ pub enum ListingAction {
 }
 
 #[derive(Debug, Eq, PartialEq)]
+pub enum FileAction {
+    Path(String),
+    FilePicker(Option<String>),
+}
+
+#[derive(Debug, Eq, PartialEq)]
 pub enum ComposerTabAction {
     DiscardDraft,
     SaveDraft,
@@ -72,8 +78,7 @@ pub enum ComposerTabAction {
     ToggleSign,
     #[cfg(feature = "gpgme")]
     ToggleEncrypt,
-    AddAttachment(String),
-    AddAttachmentFilePicker(Option<String>),
+    AddAttachment(FileAction),
     AddAttachmentPipe(String),
     RemoveAttachment(usize),
 }
