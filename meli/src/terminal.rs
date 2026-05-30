@@ -176,6 +176,23 @@ impl<
     pub fn fmt_end(f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "\x1b]8;;\x07")
     }
+
+    #[inline]
+    pub fn write_start<W: std::io::Write>(&self, f: &mut W) -> std::io::Result<()> {
+        let id: &dyn std::fmt::Display = if let Some(ref id) = self.id { id } else { &"" };
+        write!(
+            f,
+            "\x1b]8;{ideq}{id};{url}\x07",
+            url = self.url,
+            ideq = if self.id.is_some() { "id=" } else { "" },
+            id = id
+        )
+    }
+
+    #[inline]
+    pub fn write_end<W: std::io::Write>(f: &mut W) -> std::io::Result<()> {
+        write!(f, "\x1b]8;;\x07")
+    }
 }
 
 /// Create an OSC-introduced sequence.
