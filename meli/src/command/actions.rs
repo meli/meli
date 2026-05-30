@@ -106,7 +106,7 @@ pub enum MailingListAction {
 pub enum ViewAction {
     Pipe(String, Vec<String>),
     Filter(Option<String>),
-    SaveAttachment(usize, String),
+    SaveAttachment(usize, FileAction),
     PipeAttachment(usize, String, Vec<String>),
     ExportMail(String),
     AddAddressesToContacts,

@@ -216,6 +216,7 @@ See
 for the location of the mailcap files and
 .Xr mailcap 5
 for their syntax.
+.Ss viewing mail commands
 You can save individual attachments with the following command:
 .Command save\-attachment Ar INDEX Ar path\-to\-file
 .Ar INDEX
@@ -225,6 +226,18 @@ is the attachment's index in the listing.
 .It If the 0th index is provided, the entire message is saved.
 .It If the path provided is a directory, the message is saved as an eml file with its filename set to the messages message\-id.
 .El
+You can save an attachment using an external file picker with the following command:
+.Command save\-attachment\-picker Ar INDEX Ar CMD Ar ARGS
+
+If
+.Ar CMD
+is not provided, the
+.Ic terminal.file_picker_command
+configuration setting, if it exists.
+Example usage with
+.Xr vifm 1 Ns
+:
+.D1 save-attachment-picker 3 vifm --choose-dir - --delimiter ''
 .Pp
 You can pipe individual attachments to binaries with the following command:
 .Command pipe\-attachment Ar INDEX Ar binary Ar ARGS

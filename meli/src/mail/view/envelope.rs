@@ -29,7 +29,7 @@ use melib::utils::{shellexpand::ShellExpandTrait, xdg::query_default_app};
 use super::*;
 #[cfg(feature = "gpgme")]
 use crate::jobs::IsAsync;
-use crate::ThreadEvent;
+use crate::{command::actions::FileAction, ThreadEvent};
 
 /// Envelope view, with sticky headers, a pager for the body, and
 /// subviews for more menus.
@@ -586,6 +586,78 @@ impl EnvelopeView {
 
     pub fn body_text(&self) -> &str {
         &self.body_text
+    }
+
+    fn save_attachment(&self, a_i: usize, path: &str, context: &mut Context) {
+        let mut path = std::path::Path::new(path).to_path_buf().expand();
+
+        if let Some(u) = self.open_attachment(a_i, context) {
+            if path.is_dir() {
+                if let Some(filename) = u.filename() {
+                    path.push(filename);
+                } else {
+                    path.push(format!(
+                        "meli_attachment_{a_i}_{}",
+                        Uuid::new_v4().as_simple()
+                    ));
+                }
+            }
+            if path.is_relative() {
+                path = context.current_dir().join(&path);
+            }
+            match save_attachment(&path, &u.decode(self.view_settings.charset.into())) {
+                Err(err) => {
+                    log::error!("Failed to create file at {}: {err}", path.display());
+                    context.replies.push_back(UIEvent::Notification {
+                        title: Some(format!("Failed to create file at {}", path.display()).into()),
+                        body: err.to_string().into(),
+                        source: Some(err),
+                        kind: Some(NotificationType::Error(melib::ErrorKind::External)),
+                    });
+                }
+                Ok(()) => {
+                    context.replies.push_back(UIEvent::Notification {
+                        title: None,
+                        source: None,
+                        body: format!("Saved at {}", path.display()).into(),
+                        kind: Some(NotificationType::Info),
+                    });
+                }
+            }
+        } else if a_i == 0 {
+            // Save entire message as eml
+            if path.is_dir() {
+                path.push(format!("{}.eml", self.mail.message_id()));
+            }
+            if path.is_relative() {
+                path = context.current_dir().join(&path);
+            }
+            match save_attachment(&path, &self.mail.bytes) {
+                Err(err) => {
+                    log::error!("Failed to create file at {}: {err}", path.display());
+                    context.replies.push_back(UIEvent::Notification {
+                        title: Some(format!("Failed to create file at {}", path.display()).into()),
+                        body: err.to_string().into(),
+                        source: Some(err),
+                        kind: Some(NotificationType::Error(melib::ErrorKind::External)),
+                    });
+                }
+                Ok(()) => {
+                    context.replies.push_back(UIEvent::Notification {
+                        title: None,
+                        source: None,
+                        body: format!("Saved at {}", path.display()).into(),
+                        kind: Some(NotificationType::Info),
+                    });
+                }
+            }
+        } else {
+            context
+                .replies
+                .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(format!(
+                    "Attachment `{a_i}` not found."
+                ))));
+        }
     }
 }
 
@@ -1408,83 +1480,94 @@ impl Component for EnvelopeView {
 
                 return true;
             }
-            UIEvent::Action(View(ViewAction::SaveAttachment(a_i, ref path))) => {
-                let mut path = std::path::Path::new(path).to_path_buf().expand();
+            UIEvent::Action(View(ViewAction::SaveAttachment(a_i, FileAction::Path(ref path)))) => {
+                self.save_attachment(a_i, path, context);
+                return true;
+            }
+            UIEvent::Action(View(ViewAction::SaveAttachment(
+                a_i,
+                FileAction::FilePicker(ref command),
+            ))) => {
+                let command = if let Some(cmd) =
+                    command
+                        .as_ref()
+                        .or(context.settings.terminal.file_picker_command.as_ref())
+                {
+                    cmd.as_str()
+                } else {
+                    context.replies.push_back(UIEvent::Notification {
+                        title: None,
+                        source: None,
+                        body: "You did not specify a file picker command, and you haven't defined \
+                               any command to launch in [terminal.file_picker_command] as a \
+                               fallback. Try re-executing the command with a file picker command \
+                               appended."
+                            .into(),
+                        kind: Some(NotificationType::Error(melib::error::ErrorKind::None)),
+                    });
+                    self.set_dirty(true);
+                    return true;
+                };
+                /* Kill input thread so that spawned command can be sole receiver of stdin */
+                {
+                    context.input_kill();
+                }
 
-                if let Some(u) = self.open_attachment(a_i, context) {
-                    if path.is_dir() {
-                        if let Some(filename) = u.filename() {
-                            path.push(filename);
-                        } else {
-                            path.push(format!(
-                                "meli_attachment_{a_i}_{}",
-                                Uuid::new_v4().as_simple()
-                            ));
-                        }
-                    }
-                    if path.is_relative() {
-                        path = context.current_dir().join(&path);
-                    }
-                    match save_attachment(&path, &u.decode(self.view_settings.charset.into())) {
-                        Err(err) => {
-                            log::error!("Failed to create file at {}: {err}", path.display());
-                            context.replies.push_back(UIEvent::Notification {
-                                title: Some(
-                                    format!("Failed to create file at {}", path.display()).into(),
-                                ),
-                                body: err.to_string().into(),
-                                source: Some(err),
-                                kind: Some(NotificationType::Error(melib::ErrorKind::External)),
-                            });
-                        }
-                        Ok(()) => {
+                log::trace!("Executing: sh -c \"{}\"", command.replace('"', "\\\""));
+                match Command::new("sh")
+                    .args(["-c", command])
+                    .stdin(Stdio::inherit())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn()
+                    .and_then(|child| Ok(child.wait_with_output()?.stdout))
+                {
+                    Ok(stdout) => {
+                        log::trace!("picker output:\n{:?}", String::from_utf8_lossy(&stdout));
+                        let paths = stdout
+                            .split(|c| b"\0\t\n".contains(c))
+                            .filter(|p| !p.trim().is_empty())
+                            .collect::<Vec<_>>();
+                        if paths.len() != 1 {
                             context.replies.push_back(UIEvent::Notification {
                                 title: None,
                                 source: None,
-                                body: format!("Saved at {}", path.display()).into(),
-                                kind: Some(NotificationType::Info),
+                                body: if paths.is_empty() {
+                                    "Expected 1 path from file picker, got none".into()
+                                } else {
+                                    format!("Expected 1 path from file picker, got {}", paths.len())
+                                        .into()
+                                },
+                                kind: Some(NotificationType::Error(
+                                    melib::error::ErrorKind::ValueError,
+                                )),
                             });
-                        }
-                    }
-                } else if a_i == 0 {
-                    // Save entire message as eml
-                    if path.is_dir() {
-                        path.push(format!("{}.eml", self.mail.message_id()));
-                    }
-                    if path.is_relative() {
-                        path = context.current_dir().join(&path);
-                    }
-                    match save_attachment(&path, &self.mail.bytes) {
-                        Err(err) => {
-                            log::error!("Failed to create file at {}: {err}", path.display());
-                            context.replies.push_back(UIEvent::Notification {
-                                title: Some(
-                                    format!("Failed to create file at {}", path.display()).into(),
-                                ),
-                                body: err.to_string().into(),
-                                source: Some(err),
-                                kind: Some(NotificationType::Error(melib::ErrorKind::External)),
-                            });
+                            context.replies.push_back(UIEvent::RestoreStandardIO);
+                            context.restore_input();
+                            self.set_dirty(true);
                             return true;
                         }
-                        Ok(()) => {
-                            context.replies.push_back(UIEvent::Notification {
-                                title: None,
-                                source: None,
-                                body: format!("Saved at {}", path.display()).into(),
-                                kind: Some(NotificationType::Info),
-                            });
-                        }
+                        let path = String::from_utf8_lossy(paths[0]);
+                        log::trace!("saving to {path:?}");
+                        self.save_attachment(a_i, &path, context);
                     }
-
-                    return true;
-                } else {
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(format!(
-                            "Attachment `{a_i}` not found."
-                        ))));
+                    Err(err) => {
+                        let command = command.to_string();
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some(format!("Failed to execute {command}: {err}").into()),
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
+                        });
+                        context.replies.push_back(UIEvent::RestoreStandardIO);
+                        context.restore_input();
+                        self.set_dirty(true);
+                        return true;
+                    }
                 }
+                context.replies.push_back(UIEvent::RestoreStandardIO);
+                self.set_dirty(true);
+
                 return true;
             }
             UIEvent::Action(View(ViewAction::PipeAttachment(a_i, ref bin, ref args))) => {

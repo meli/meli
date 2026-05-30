@@ -885,20 +885,66 @@ pub fn open_in_new_tab(input: &[u8]) -> IResult<&[u8], Result<Action, CommandErr
     let (input, _) = eof(input)?;
     Ok((input, Ok(Listing(OpenInNewTab))))
 }
-pub fn save_attachment(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
-    let mut check = arg_init! { min_arg:2, max_arg: 2, save_attachment};
-    let (input, _) = tag("save-attachment")(input.trim())?;
-    arg_chk!(start check, input);
-    let (input, _) = is_a(" ")(input)?;
-    arg_chk!(inc check, input);
-    let (input, idx) = map_res(quoted_argument, usize::from_str)(input)?;
-    let (input, _) = is_a(" ")(input)?;
-    arg_chk!(inc check, input);
-    let (input, path) = quoted_argument(input.trim())?;
-    arg_chk!(finish check, input);
-    let (input, _) = eof(input)?;
-    Ok((input, Ok(View(SaveAttachment(idx, path.to_string())))))
+
+pub fn save_attachment<'a>(input: &'a [u8]) -> IResult<&'a [u8], Result<Action, CommandError>> {
+    alt((
+        |input: &'a [u8]| -> IResult<&'a [u8], Result<Action, CommandError>> {
+            let mut check = arg_init! { min_arg:2, max_arg: 2, save_attachment};
+            let (input, _) = tag("save-attachment")(input.trim())?;
+            arg_chk!(start check, input);
+            let (input, _) = is_a(" ")(input)?;
+            arg_chk!(inc check, input);
+            let (input, idx) = map_res(quoted_argument, usize::from_str)(input)?;
+            let (input, _) = is_a(" ")(input)?;
+            arg_chk!(inc check, input);
+            let (input, path) = quoted_argument(input.trim())?;
+            arg_chk!(finish check, input);
+            let (input, _) = eof(input)?;
+            Ok((
+                input,
+                Ok(View(SaveAttachment(
+                    idx,
+                    FileAction::Path(path.to_string()),
+                ))),
+            ))
+        },
+        |input: &'a [u8]| -> IResult<&'a [u8], Result<Action, CommandError>> {
+            let mut check = arg_init! { min_arg:2, max_arg: 2, save_attachment_picker};
+            let (input, _) = tag("save-attachment-picker")(input.trim())?;
+            arg_chk!(start check, input);
+            let (input, _) = is_a(" ")(input)?;
+            arg_chk!(inc check, input);
+            let (input, idx) = map_res(quoted_argument, usize::from_str)(input)?;
+            let (input, _) = is_a(" ")(input)?;
+            arg_chk!(inc check, input);
+            let (input, shell) = map_res(not_line_ending, std::str::from_utf8)(input)?;
+            arg_chk!(finish check, input);
+            let (input, _) = eof(input)?;
+            Ok((
+                input,
+                Ok(View(SaveAttachment(
+                    idx,
+                    FileAction::FilePicker(Some(shell.to_string())),
+                ))),
+            ))
+        },
+        |input: &'a [u8]| -> IResult<&'a [u8], Result<Action, CommandError>> {
+            let mut check = arg_init! { min_arg:1, max_arg: 1, save_attachment_picker};
+            let (input, _) = tag("save-attachment-picker")(input.trim())?;
+            arg_chk!(start check, input);
+            let (input, _) = is_a(" ")(input)?;
+            arg_chk!(inc check, input);
+            let (input, idx) = map_res(quoted_argument, usize::from_str)(input)?;
+            arg_chk!(finish check, input);
+            let (input, _) = eof(input)?;
+            Ok((
+                input,
+                Ok(View(SaveAttachment(idx, FileAction::FilePicker(None)))),
+            ))
+        },
+    ))(input)
 }
+
 pub fn pipe_attachment<'a>(input: &'a [u8]) -> IResult<&'a [u8], Result<Action, CommandError>> {
     let mut check = arg_init! { min_arg:2, max_arg:{u8::MAX}, pipe_attachment};
     let (input, _) = tag("pipe-attachment")(input.trim())?;
