@@ -23,7 +23,7 @@
 //! foreground/background colors and attributes.
 
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
     convert::From,
     ops::{Deref, DerefMut, Index, IndexMut},
 };
@@ -74,7 +74,7 @@ pub struct CellBuffer {
     pub tab_width: u8,
     /// If printing to this buffer and we run out of space, expand it.
     growable: bool,
-    tag_table: HashMap<u64, FormatTag>,
+    tag_table: BTreeMap<u64, FormatTag>,
     tag_associations: SmallVec<[(u64, (usize, usize)); 128]>,
     pub(super) area: Area,
 }
@@ -481,11 +481,11 @@ impl CellBuffer {
         ret
     }
 
-    pub fn tag_table(&self) -> &HashMap<u64, FormatTag> {
+    pub fn tag_table(&self) -> &BTreeMap<u64, FormatTag> {
         &self.tag_table
     }
 
-    pub fn tag_table_mut(&mut self) -> &mut HashMap<u64, FormatTag> {
+    pub fn tag_table_mut(&mut self) -> &mut BTreeMap<u64, FormatTag> {
         &mut self.tag_table
     }
 
