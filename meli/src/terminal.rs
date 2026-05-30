@@ -122,15 +122,9 @@ impl<
     > std::fmt::Display for Hyperlink<'_, '_, '_, T, U, I>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let id: &dyn std::fmt::Display = if let Some(ref id) = self.id { id } else { &"" };
-        write!(
-            f,
-            "\x1b]8;{ideq}{id};{url}\x07{text}\x1b]8;;\x07",
-            url = self.url,
-            text = self.text,
-            ideq = if self.id.is_some() { "id=" } else { "" },
-            id = id
-        )
+        self.fmt_start(f)?;
+        self.text.fmt(f)?;
+        Self::fmt_end(f)
     }
 }
 
@@ -161,6 +155,23 @@ impl<
             text,
             url,
         }
+    }
+
+    #[inline]
+    pub fn fmt_start(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let id: &dyn std::fmt::Display = if let Some(ref id) = self.id { id } else { &"" };
+        write!(
+            f,
+            "\x1b]8;{ideq}{id};{url}\x07",
+            url = self.url,
+            ideq = if self.id.is_some() { "id=" } else { "" },
+            id = id
+        )
+    }
+
+    #[inline]
+    pub fn fmt_end(f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "\x1b]8;;\x07")
     }
 }
 
