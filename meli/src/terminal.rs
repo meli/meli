@@ -121,6 +121,7 @@ impl<
         I: std::fmt::Display + ?Sized,
     > std::fmt::Display for Hyperlink<'_, '_, '_, T, U, I>
 {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         self.fmt_start(f)?;
         self.text.fmt(f)?;
@@ -131,6 +132,7 @@ impl<
 impl<'a, 'b, T: std::fmt::Display + ?Sized, U: std::fmt::Display + ?Sized>
     Hyperlink<'a, 'b, 'static, T, U, str>
 {
+    #[inline]
     pub const fn new(text: &'a T, url: &'b U) -> Self {
         Self {
             id: None,
@@ -149,6 +151,7 @@ impl<
         I: std::fmt::Display + ?Sized,
     > Hyperlink<'a, 'b, 'i, T, U, I>
 {
+    #[inline]
     pub const fn with_id(id: &'i I, text: &'a T, url: &'b U) -> Self {
         Self {
             id: Some(id),
