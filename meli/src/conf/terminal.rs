@@ -39,6 +39,9 @@ pub struct TerminalSettings {
     pub tab_width: u8,
     pub ascii_drawing: bool,
     pub use_color: ToggleFlag,
+    /// Draw `OSC8` hyperlinks.
+    /// Default: True
+    pub draw_hyperlinks: ToggleFlag,
     /// Try forcing text presentations of symbols and emoji as much as possible.
     /// Might not work on all non-text symbols and is experimental.
     pub force_text_presentation: ToggleFlag,
@@ -73,6 +76,7 @@ impl Default for TerminalSettings {
             tab_width: tab_width(),
             ascii_drawing: false,
             force_text_presentation: ToggleFlag::InternalVal(false),
+            draw_hyperlinks: ToggleFlag::InternalVal(true),
             use_color: ToggleFlag::InternalVal(true),
             use_mouse: ToggleFlag::InternalVal(false),
             mouse_flag: Some("🖱️ ".to_string()),
@@ -97,6 +101,11 @@ impl TerminalSettings {
     pub fn use_text_presentation(&self) -> bool {
         self.force_text_presentation.is_true() || !self.use_color()
     }
+
+    #[inline]
+    pub fn draw_hyperlinks(&self) -> bool {
+        self.draw_hyperlinks.is_true()
+    }
 }
 
 impl DotAddressable for TerminalSettings {
@@ -109,6 +118,7 @@ impl DotAddressable for TerminalSettings {
                     "themes" => Err(Error::new("unimplemented")),
                     "tab_width" => self.tab_width.lookup(field, tail),
                     "ascii_drawing" => self.ascii_drawing.lookup(field, tail),
+                    "draw_hyperlinks" => self.draw_hyperlinks.lookup(field, tail),
                     "force_text_presentation" => self.force_text_presentation.lookup(field, tail),
                     "use_color" => self.use_color.lookup(field, tail),
                     "use_mouse" => self.use_mouse.lookup(field, tail),

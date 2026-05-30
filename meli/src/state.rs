@@ -539,6 +539,10 @@ impl State {
                 .overlay_grid_mut()
                 .set_force_text_presentation(true);
         }
+        if s.context.settings.terminal.draw_hyperlinks() {
+            s.screen.grid_mut().set_draw_hyperlinks(true);
+            s.screen.overlay_grid_mut().set_draw_hyperlinks(true);
+        }
 
         s.screen.switch_to_alternate_screen(&s.context);
         s.screen.do_background_query();

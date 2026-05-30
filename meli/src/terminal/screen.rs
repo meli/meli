@@ -441,9 +441,25 @@ impl Screen<Tty> {
         let mut current_fg = Color::Default;
         let mut current_bg = Color::Default;
         let mut current_attrs = Attr::DEFAULT;
+        let mut current_uri = None;
+        let draw_hyperlinks = grid.draw_hyperlinks;
         write!(stdout, "\x1B[m").unwrap();
         for x in xs {
             let c = &grid[(x, y)];
+            if draw_hyperlinks {
+                if let Some((uri, end)) = grid.hyperlinks_associations.get(&(x, y)) {
+                    if current_uri.take().is_some() {
+                        crate::terminal::Hyperlink::<str, str, str>::write_end(stdout).unwrap();
+                    }
+                    crate::terminal::Hyperlink::with_id(uri, "", &*grid.hyperlinks_table[uri])
+                        .write_start(stdout)
+                        .unwrap();
+                    current_uri = Some(end);
+                } else if current_uri == Some(&(x, y)) {
+                    current_uri = None;
+                    crate::terminal::Hyperlink::<str, str, str>::write_end(stdout).unwrap();
+                }
+            }
             if c.attrs() != current_attrs {
                 c.attrs().write(current_attrs, stdout).unwrap();
                 current_attrs = c.attrs();
