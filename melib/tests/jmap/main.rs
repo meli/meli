@@ -50,17 +50,17 @@ pub mod server {
         smol::Async,
         Mail,
     };
-    use serde::{Deserialize, Serialize};
+    use serde::Serialize;
     use serde_json::Value;
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Debug, serde_derive::Deserialize)]
     #[serde(rename_all = "camelCase")]
     pub struct ClientRequest {
         pub using: Vec<String>,
         pub method_calls: Vec<[Value; 3]>,
     }
 
-    #[derive(Clone, Debug, Serialize)]
+    #[derive(Clone, Debug, serde_derive::Serialize)]
     #[serde(rename_all = "camelCase")]
     pub struct ClientMethodResponse {
         #[serde(serialize_with = "method_response_ser")]
