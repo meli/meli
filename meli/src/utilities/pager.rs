@@ -364,6 +364,24 @@ impl Pager {
 
         {
             let mut area2 = area;
+
+            let finder = linkify::LinkFinder::new();
+            let links = finder
+                .links(&self.text)
+                .filter_map(|l| {
+                    Some(Link {
+                        start: l.start(),
+                        end: l.end(),
+                        value: l.as_str().into(),
+                        kind: match l.kind() {
+                            linkify::LinkKind::Url => LinkKind::Url,
+                            linkify::LinkKind::Email => LinkKind::Email,
+                            _ => return None,
+                        },
+                    })
+                })
+                .collect::<Vec<Link<'_>>>();
+            let mut cur_link_idx = 0;
             for l in self
                 .text_lines
                 .iter()
@@ -372,6 +390,76 @@ impl Pager {
             {
                 if area2.is_empty() {
                     break;
+                }
+                // Perform a simple scan pass over `links`, by keeping current link index to
+                // consider in `cur_link_idx`.
+                //
+                // There are 4 comparison cases for a link span and a line span:
+                //
+                // 1. Link starts after current line.
+                //
+                //    ```text
+                //                                    Link.start.......Link.end
+                //    Start.....................end
+                //    ```
+                //
+                //    Stop loop.
+                // 2. Link starts within current line.
+                //
+                //    ```text
+                //            Link.start.......Link.end
+                //    Start.....................end
+                //    ```
+                //
+                //    Set link and if there are no other links in this line, break.
+                // 3. Link starts before this line but ends within this line.
+                //
+                //    ```text
+                //    Link.start.......Link.end
+                //             Start.....................end
+                //    ```
+                //
+                //    Same as 2.
+                // 4. Link ends before this current line.
+                //
+                //    ```text
+                //    Link.start.......Link.end
+                //                       Start.....................end
+                //    ```
+                //
+                //    Continue loop.
+                while let Some(link) = links.get(cur_link_idx) {
+                    if link.start >= l.end {
+                        // 1.
+                        break;
+                    } else if (l.start..l.end).contains(&link.start)
+                        || (l.start..l.end).contains(&link.end)
+                    {
+                        // 2. or 3.
+                        {
+                            let skip_x = link.start.saturating_sub(l.start);
+                            let start = area2.skip_cols(skip_x).upper_left();
+                            let end = if link.end > l.end {
+                                area2.skip_cols(skip_x + l.content.len()).upper_left()
+                            } else {
+                                let skip_x = skip_x + link.value.len();
+                                area2.skip_cols(skip_x).upper_left()
+                            };
+                            let uri = grid.insert_uri(&link.value);
+                            grid.set_uri(uri, start, end);
+                        }
+                        if link.end < l.end {
+                            // In this case, there is more than one link in this line, so continue
+                            // the scan.
+                            cur_link_idx += 1;
+                            continue;
+                        }
+                        break;
+                    } else if l.start >= link.end {
+                        // 4.
+                        cur_link_idx += 1;
+                        continue;
+                    }
                 }
                 grid.write_string(
                     &l.content,
