@@ -51,7 +51,7 @@ pub struct EnvelopeView {
     pub body_text: String,
     pub html_filter: Option<Result<ViewFilter>>,
     pub filters: Vec<ViewFilter>,
-    pub links: Vec<Link>,
+    pub links: Vec<Link<'static>>,
     pub attachment_tree: String,
     pub attachment_paths: Vec<Vec<usize>>,
     pub headers_no: usize,
@@ -1769,7 +1769,7 @@ impl Component for EnvelopeView {
                 };
                 let links = &self.links;
                 let (_kind, url) = {
-                    if let Some(l) = links.get(lidx).map(|l| (l.kind, l.value.as_str())) {
+                    if let Some(l) = links.get(lidx).map(|l| (l.kind, l.value.as_ref())) {
                         l
                     } else {
                         context.replies.push_back(UIEvent::StatusEvent(

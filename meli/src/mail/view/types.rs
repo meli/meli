@@ -29,6 +29,7 @@ use melib::{
 use crate::{
     conf::shortcuts::EnvelopeViewShortcuts,
     jobs::{JobId, JoinHandle},
+    types::{Link, LinkKind},
     ShortcutMap, ThemeAttribute,
 };
 
@@ -73,20 +74,6 @@ impl Default for ViewSettings {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum LinkKind {
-    Url,
-    Email,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Link {
-    pub start: usize,
-    pub end: usize,
-    pub value: String,
-    pub kind: LinkKind,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Source {
     Decoded,
     Raw,
@@ -111,7 +98,7 @@ impl Default for ViewOptions {
 impl ViewOptions {
     pub fn convert(
         &self,
-        links: &mut Vec<Link>,
+        links: &mut Vec<Link<'static>>,
         attachment: &melib::Attachment,
         text: &str,
     ) -> String {
@@ -161,7 +148,7 @@ impl ViewOptions {
                         Some(Link {
                             start: l.start(),
                             end: l.end(),
-                            value: l.as_str().to_string(),
+                            value: l.as_str().to_string().into(),
                             kind: match l.kind() {
                                 linkify::LinkKind::Url => LinkKind::Url,
                                 linkify::LinkKind::Email => LinkKind::Email,

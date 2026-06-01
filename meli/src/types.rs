@@ -588,6 +588,20 @@ pub enum ComposeEvent {
     SetRecipients(Vec<melib::Address>),
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LinkKind {
+    Url,
+    Email,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Link<'a> {
+    pub start: usize,
+    pub end: usize,
+    pub value: Cow<'a, str>,
+    pub kind: LinkKind,
+}
+
 #[cfg(test)]
 mod tests {
     //use super::*;
