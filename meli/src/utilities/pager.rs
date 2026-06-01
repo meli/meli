@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use melib::text::{LineBreakText, Truncate};
+use melib::text::{Line, LineBreakText, Truncate};
 
 use super::*;
 use crate::{
@@ -55,7 +55,7 @@ pub struct Pager {
     rows_lt_height: bool,
     filtered_content: Option<(String, Result<EmbeddedGrid>)>,
     filter_job: Option<(String, JoinHandle<Result<EmbeddedGrid>>)>,
-    text_lines: Vec<String>,
+    text_lines: Vec<Line>,
     line_breaker: LineBreakText,
     movement: Option<PageMovement>,
     id: ComponentId,
@@ -269,7 +269,8 @@ impl Pager {
                 search.positions.clear();
                 for (y, l) in self.text_lines.iter().enumerate() {
                     search.positions.extend(
-                        l.kmp_search(&search.pattern)
+                        l.content
+                            .kmp_search(&search.pattern)
                             .into_iter()
                             .map(|offset| (y, offset)),
                     );
@@ -318,7 +319,8 @@ impl Pager {
             use melib::text::search::KMP;
             for (y, l) in self.text_lines.iter().enumerate().skip(old_lines_no) {
                 search.positions.extend(
-                    l.kmp_search(&search.pattern)
+                    l.content
+                        .kmp_search(&search.pattern)
                         .into_iter()
                         .map(|offset| (y, offset)),
                 );
@@ -372,7 +374,7 @@ impl Pager {
                     break;
                 }
                 grid.write_string(
-                    l,
+                    &l.content,
                     self.colors.fg,
                     self.colors.bg,
                     Attr::DEFAULT,
@@ -380,7 +382,7 @@ impl Pager {
                     None,
                     None,
                 );
-                if l.starts_with('⤷') {
+                if l.content.starts_with('⤷') {
                     grid[area2.upper_left()]
                         .set_fg(crate::conf::value(context, "highlight").fg)
                         .set_attrs(crate::conf::value(context, "highlight").attrs);
@@ -408,7 +410,7 @@ impl Pager {
                         .take(area3.height() + 1)
                     {
                         let i = i + area3.upper_left().1;
-                        for (start, end) in text_formatter.regexp.find_iter(l) {
+                        for (start, end) in text_formatter.regexp.find_iter(&l.content) {
                             let start = start + area3.upper_left().0;
                             let end = end + area3.upper_left().0;
                             grid.set_tag(t, (start, i), (end, i));

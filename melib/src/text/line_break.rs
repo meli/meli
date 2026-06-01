@@ -38,7 +38,7 @@ pub enum LineBreakCandidate {
     NoBreak, // Not used.
 }
 
-pub use alg::linear;
+pub use alg::{linear, linear_lines};
 use LineBreakCandidate::*;
 
 pub struct LineBreakCandidateIter<'a> {
@@ -1001,6 +1001,108 @@ mod alg {
         lines.reverse();
         lines
     }
+
+    pub fn linear_lines(text: &str, width: usize, mut start: usize) -> Vec<Line> {
+        let mut words = Vec::new();
+        let breaks =
+            LineBreakCandidateIter::new(text).collect::<Vec<(usize, LineBreakCandidate)>>();
+        {
+            let mut prev = 0;
+            for b in breaks {
+                if text[prev..b.0].ends_with('\n') && text[b.0..].starts_with('\n') {
+                    words.push(text[prev..b.0].trim_end_matches('\n'));
+                    words.push("\n\n");
+                } else if &text[prev..b.0] != "\n" {
+                    words.push(text[prev..b.0].trim_end_matches('\n'));
+                    if text[prev..b.0].ends_with('\n') {
+                        words.push(" ");
+                    }
+                }
+                prev = b.0;
+            }
+            if &text[prev..] != "\n" {
+                words.push(text[prev..].trim_end_matches('\n'));
+            }
+        }
+        let count = words.len();
+        let mut minima = vec![usize::MAX - 1; count + 1];
+        minima[0] = 0;
+        let mut offsets = Vec::with_capacity(words.len());
+        offsets.push(0);
+        for w in words.iter() {
+            if *w == "\n\n" {
+                offsets.push(offsets.iter().last().unwrap() + width - 1);
+            } else {
+                offsets.push(offsets.iter().last().unwrap() + w.grapheme_len().saturating_sub(1));
+            }
+        }
+
+        let mut breaks = vec![0; count + 1];
+
+        let mut n = count + 1;
+        let mut i = 1;
+        let mut offset = 0;
+        loop {
+            let r = std::cmp::min(n, 2 * i);
+            let edge = i + offset;
+            smawk(
+                &(offset..edge).collect::<Vec<_>>(),
+                &mut (edge..(r + offset)).collect::<Vec<_>>(),
+                &mut minima,
+                &mut breaks,
+                width,
+                &offsets,
+            );
+            let x = minima[r - 1 + offset];
+            let mut for_was_broken = false;
+            let i_copy = i;
+            for j in i_copy..(r - 1) {
+                let y = cost(j + offset, r - 1 + offset, width, &minima, &offsets);
+                if y <= x {
+                    n -= j;
+                    i = 1;
+                    offset += j;
+                    for_was_broken = true;
+                    break;
+                }
+            }
+
+            if !for_was_broken {
+                if r == n {
+                    break;
+                }
+                i *= 2;
+            }
+        }
+        let paragraphs = text.split("\n\n").count();
+        let mut lines = Vec::new();
+        let mut j = count;
+        let mut p_i = 0;
+        while j > 0 {
+            let mut line = String::new();
+            for word in words.iter().take(j).skip(breaks[j]) {
+                line.push_str(word);
+            }
+            let end = start + line.len();
+            lines.push(Line {
+                content: line,
+                start,
+                end,
+            });
+            start = end;
+            if p_i + 1 < paragraphs {
+                lines.push(Line {
+                    content: String::new(),
+                    start,
+                    end: start,
+                });
+                p_i += 1;
+            }
+            j = breaks[j];
+        }
+        lines.reverse();
+        lines
+    }
 }
 
 pub fn split_lines_reflow(text: &str, reflow: Reflow, width: Option<usize>) -> Vec<String> {
@@ -1290,7 +1392,7 @@ mod segment_tree {
 pub struct LineBreakText {
     text: String,
     reflow: Reflow,
-    paragraph: VecDeque<String>,
+    paragraph: VecDeque<Line>,
     paragraph_start_index: usize,
     width: Option<usize>,
     state: ReflowState,
@@ -1407,8 +1509,16 @@ impl LineBreakText {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct Line {
+    pub content: String,
+    pub start: usize,
+    pub end: usize,
+}
+
 impl Iterator for LineBreakText {
-    type Item = String;
+    type Item = Line;
+
     fn next(&mut self) -> Option<Self::Item> {
         if !self.paragraph.is_empty() {
             return self.paragraph.pop_front();
@@ -1475,6 +1585,7 @@ impl Iterator for LineBreakText {
                                 prev_quote_depth,
                                 in_paragraph,
                                 self.width,
+                                paragraph_start,
                             );
 
                             paragraph_start = prev_index;
@@ -1488,6 +1599,7 @@ impl Iterator for LineBreakText {
                                 quote_depth,
                                 in_paragraph,
                                 self.width,
+                                paragraph_start,
                             );
                         } else {
                             /* Malformed line, different quote depths can't be in the same
@@ -1499,6 +1611,7 @@ impl Iterator for LineBreakText {
                                 prev_quote_depth,
                                 in_paragraph,
                                 self.width,
+                                paragraph_start,
                             );
                             let paragraph_s = &self.text[prev_index..i];
                             reflow_helper2(
@@ -1507,6 +1620,7 @@ impl Iterator for LineBreakText {
                                 quote_depth,
                                 false,
                                 self.width,
+                                prev_index,
                             );
                         }
                         *cur_index = i;
@@ -1528,6 +1642,7 @@ impl Iterator for LineBreakText {
                         prev_quote_depth,
                         in_paragraph,
                         self.width,
+                        paragraph_start,
                     );
                     self.paragraph = paragraph;
                 }
@@ -1622,25 +1737,42 @@ impl Iterator for LineBreakText {
                     }
 
                     if segment_tree.get_sum(0, line.len()) <= width {
+                        let start = *cur_index;
+                        let end = start + line.len();
+                        let content = line.trim_end_matches(['\r', '\n']).to_string();
                         *state = LineBreakTextState::AtLine {
                             cur_index: *cur_index + line.len() + 1,
                         };
-                        return Some(line.trim_end_matches(['\r', '\n']).to_string());
+                        return Some(Line {
+                            content,
+                            start,
+                            end,
+                        });
                     }
                     if breaks.len() < 2 {
                         let mut line = line;
                         while !line.is_empty() {
+                            let start = *cur_index;
                             let mut chop_index = std::cmp::min(line.len().saturating_sub(1), width);
                             while chop_index > 0 && !line.is_char_boundary(chop_index) {
                                 chop_index -= 1;
                             }
                             if chop_index == 0 {
-                                self.paragraph.push_back(format!("⤷{line}"));
+                                let end = start + line.len();
+                                self.paragraph.push_back(Line {
+                                    content: format!("⤷{line}"),
+                                    start,
+                                    end,
+                                });
                                 *cur_index += line.len();
                                 break;
                             } else {
-                                self.paragraph
-                                    .push_back(format!("⤷{}", &line[..chop_index]));
+                                let end = start + chop_index;
+                                self.paragraph.push_back(Line {
+                                    content: format!("⤷{}", &line[..chop_index]),
+                                    start,
+                                    end,
+                                });
                                 *cur_index += chop_index;
                             }
                             line = &line[chop_index..];
@@ -1669,11 +1801,17 @@ impl Iterator for LineBreakText {
                             breaks[new_off].0
                         };
                         if !line[*within_line_index..end_offset].is_empty() {
+                            let start = *cur_index + *within_line_index;
+                            let end = *cur_index + end_offset;
                             if *within_line_index == 0 {
                                 let ret = line[*within_line_index..end_offset]
                                     .trim_end_matches(['\r', '\n']);
                                 *within_line_index = end_offset;
-                                return Some(ret.to_string());
+                                return Some(Line {
+                                    content: ret.to_string(),
+                                    start,
+                                    end,
+                                });
                             } else {
                                 let ret = format!(
                                     "⤷{}",
@@ -1681,7 +1819,11 @@ impl Iterator for LineBreakText {
                                         .trim_end_matches(['\r', '\n'])
                                 );
                                 *within_line_index = end_offset;
-                                return Some(ret);
+                                return Some(Line {
+                                    content: ret,
+                                    start,
+                                    end,
+                                });
                             }
                         }
                         if *within_line_index == end_offset && *prev_break == new_off {
@@ -1697,6 +1839,8 @@ impl Iterator for LineBreakText {
             }
             ReflowState::No { ref mut cur_index } | ReflowState::All { ref mut cur_index } => {
                 if let Some(line) = self.text[*cur_index..].split('\n').next() {
+                    let start = *cur_index;
+                    let end = start + line.len();
                     let ret = line.to_string();
                     let mut chop_index = line.len() + 1;
                     while *cur_index + chop_index < self.text.len()
@@ -1705,7 +1849,11 @@ impl Iterator for LineBreakText {
                         chop_index += 1;
                     }
                     *cur_index += chop_index;
-                    return Some(ret);
+                    return Some(Line {
+                        content: ret,
+                        start,
+                        end,
+                    });
                 }
                 None
             }
@@ -1714,11 +1862,12 @@ impl Iterator for LineBreakText {
 }
 
 fn reflow_helper2(
-    ret: &mut VecDeque<String>,
+    ret: &mut VecDeque<Line>,
     paragraph: &str,
     quote_depth: usize,
     in_paragraph: bool,
     width: Option<usize>,
+    paragraph_start: usize,
 ) {
     if quote_depth > 0 {
         let quotes: String = ">".repeat(quote_depth);
@@ -1729,28 +1878,66 @@ fn reflow_helper2(
         if in_paragraph {
             if let Some(width) = width {
                 ret.extend(
-                    linear(&paragraph, width.saturating_sub(quote_depth))
-                        .into_iter()
-                        .map(|l| format!("{quotes}{l}")),
+                    linear_lines(
+                        &paragraph,
+                        width.saturating_sub(quote_depth),
+                        paragraph_start,
+                    )
+                    .into_iter()
+                    .map(
+                        |Line {
+                             content,
+                             start,
+                             end,
+                         }| Line {
+                            content: format!("{quotes}{content}"),
+                            start,
+                            end,
+                        },
+                    ),
                 );
             } else {
-                ret.push_back(format!("{quotes}{paragraph}"));
+                let content = format!("{quotes}{paragraph}");
+                let start = paragraph_start;
+                let end = start + content.len();
+                ret.push_back(Line {
+                    content,
+                    start,
+                    end,
+                });
             }
         } else {
-            ret.push_back(format!("{quotes}{paragraph}"));
+            let content = format!("{quotes}{paragraph}");
+            let start = paragraph_start;
+            let end = start + content.len();
+            ret.push_back(Line {
+                content,
+                start,
+                end,
+            });
         }
     } else {
+        let start = paragraph_start;
+        let end = start + paragraph.len();
         let paragraph = paragraph.replace(['\n', '\r'], "");
 
         if in_paragraph {
             if let Some(width) = width {
-                let ex = linear(&paragraph, width);
+                let ex = linear_lines(&paragraph, width, start);
                 ret.extend(ex);
             } else {
-                ret.push_back(paragraph);
+                ret.push_back(Line {
+                    content: paragraph,
+                    start,
+                    end,
+                });
             }
         } else {
-            ret.push_back(paragraph);
+            ret.push_back(Line {
+                content: paragraph,
+                start,
+                end,
+            });
         }
     }
 }
