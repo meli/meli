@@ -121,6 +121,105 @@ impl ViewSettings {
             val.into()
         }
     }
+
+    /// Check if `header` should be displayed to the user or not.
+    #[inline]
+    fn filter_header(&self, header: &HeaderName) -> bool {
+        match header {
+            &HeaderName::DATE
+            | &HeaderName::FROM
+            | &HeaderName::TO
+            | &HeaderName::SUBJECT
+            | &HeaderName::CC
+            | &HeaderName::MESSAGE_ID => true,
+            &HeaderName::IN_REPLY_TO | &HeaderName::REFERENCES => self.expand_headers,
+            other => self.show_extra_headers.contains(other),
+        }
+    }
+
+    pub fn header_iter<'a, 'b>(
+        &'a self,
+        env: &'b melib::Envelope,
+    ) -> ViewSettingsHeaderIterator<'a, 'b> {
+        ViewSettingsHeaderIterator {
+            index: 0,
+            settings: self,
+            env,
+        }
+    }
+}
+
+pub struct ViewSettingsHeaderIterator<'a, 'b> {
+    index: usize,
+    settings: &'a ViewSettings,
+    env: &'b melib::Envelope,
+}
+
+impl<'a, 'b> Iterator for ViewSettingsHeaderIterator<'a, 'b> {
+    type Item = (&'a HeaderName, Cow<'b, str>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        const HEADERS: &[HeaderName] = &[
+            HeaderName::DATE,
+            HeaderName::FROM,
+            HeaderName::TO,
+            HeaderName::SUBJECT,
+            HeaderName::CC,
+            HeaderName::MESSAGE_ID,
+            HeaderName::IN_REPLY_TO,
+            HeaderName::REFERENCES,
+        ];
+        fn get_header<'env>(
+            envelope: &'env melib::Envelope,
+            view_settings: &ViewSettings,
+            hdr: &HeaderName,
+        ) -> Option<Cow<'env, str>> {
+            Some(match hdr {
+                &HeaderName::DATE => {
+                    view_settings.format_date_value(envelope.timestamp, envelope.date_as_str())
+                }
+                &HeaderName::FROM => envelope.field_from_to_string().into(),
+                &HeaderName::TO => envelope.field_to_to_string().into(),
+                &HeaderName::CC => {
+                    if envelope.other_headers().contains_key(HeaderName::CC)
+                        && !envelope.other_headers()[HeaderName::CC].is_empty()
+                    {
+                        envelope.field_cc_to_string().into()
+                    } else {
+                        return None;
+                    }
+                }
+                &HeaderName::SUBJECT => envelope.subject(),
+                &HeaderName::MESSAGE_ID => {
+                    envelope.message_id().display_brackets().to_string().into()
+                }
+                &HeaderName::IN_REPLY_TO => {
+                    let val = envelope.in_reply_to()?;
+                    melib::MessageID::display_slice(val.refs(), Some(" ")).into()
+                }
+                &HeaderName::REFERENCES => {
+                    _ = envelope.in_reply_to()?;
+                    melib::MessageID::display_slice(envelope.references(), Some(" ")).into()
+                }
+                other
+                    if envelope.other_headers().contains_key(other)
+                        && !envelope.other_headers()[other].is_empty() =>
+                {
+                    envelope.other_headers().get(other)?.into()
+                }
+                _ => return None,
+            })
+        }
+        while let Some(hdr) = HEADERS.get(self.index) {
+            self.index += 1;
+            if self.settings.filter_header(hdr) {
+                if let Some(val) = get_header(self.env, self.settings, hdr) {
+                    return Some((hdr, val));
+                }
+            }
+        }
+        None
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
