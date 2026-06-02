@@ -1034,6 +1034,7 @@ impl Component for EnvelopeView {
                         filter_invocation,
                         body_text,
                         notice,
+                        headers,
                         ..
                     }) = stack.pop()
                     {
@@ -1055,6 +1056,15 @@ impl Component for EnvelopeView {
                         }
                         if !self.body_text.is_empty() {
                             self.body_text.push('\n');
+                        }
+                        for (hdr, val) in headers.iter() {
+                            text.push_str(hdr.as_str());
+                            text.push_str(": ");
+                            text.push_str(val);
+                            text.push('\n');
+                        }
+                        if !headers.is_empty() {
+                            text.push('\n');
                         }
                         match body_text {
                             ViewFilterContent::Filtered { inner } => {

@@ -30,6 +30,7 @@ type ProcessEventFn = fn(&mut ViewFilter, &mut UIEvent, &mut Context) -> bool;
 
 use melib::{
     attachment_types::{ContentType, MultipartType, Text},
+    email::headers::HeaderName,
     error::*,
     log,
     parser::BytesExt,
@@ -105,6 +106,7 @@ impl std::fmt::Debug for ViewFilterContent {
 pub struct ViewFilter {
     pub filter_invocation: String,
     pub content_type: ContentType,
+    pub headers: Vec<(HeaderName, String)>,
     pub notice: Option<Cow<'static, str>>,
     pub body_text: ViewFilterContent,
     pub unfiltered: Vec<u8>,
@@ -117,6 +119,7 @@ impl std::fmt::Debug for ViewFilter {
         fmt.debug_struct(melib::identify!(ViewFilter))
             .field("filter_invocation", &self.filter_invocation)
             .field("content_type", &self.content_type)
+            .field("headers", &self.headers)
             .field("notice", &self.notice)
             .field("body_text", &self.body_text)
             .field("event_handler", &self.event_handler.is_some())
@@ -294,6 +297,7 @@ impl ViewFilter {
             filter_invocation: filter_invocation.to_string(),
             content_type: att.content_type.clone(),
             notice: None,
+            headers: vec![],
             unfiltered: bytes,
             body_text: ViewFilterContent::Filtered {
                 inner: String::new(),
@@ -355,6 +359,7 @@ impl ViewFilter {
                     filter_invocation: String::new(),
                     content_type: att.content_type.clone(),
                     notice: None,
+                    headers: vec![],
                     unfiltered: att.decode(view_settings.charset.into()),
                     body_text: ViewFilterContent::Filtered {
                         inner: String::new(),
@@ -410,6 +415,7 @@ impl ViewFilter {
                 filter_invocation: String::new(),
                 content_type: att.content_type.clone(),
                 notice: None,
+                headers: vec![],
                 body_text: ViewFilterContent::InlineAttachments {
                     parts: parts
                         .iter()
@@ -435,6 +441,7 @@ impl ViewFilter {
                 filter_invocation: String::new(),
                 content_type: att.content_type.clone(),
                 notice: None,
+                headers: vec![],
                 body_text: ViewFilterContent::Filtered {
                     inner: String::new(),
                 },
@@ -475,6 +482,7 @@ impl ViewFilter {
                         "Cannot verify signature: meli must be compiled with libgpgme support."
                             .into(),
                     ),
+                    headers: vec![],
                     body_text: ViewFilterContent::InlineAttachments {
                         parts: parts
                             .iter()
@@ -520,6 +528,7 @@ impl ViewFilter {
                             filter_invocation: "gpg::verify".into(),
                             content_type: att.content_type.clone(),
                             notice: None,
+                            headers: vec![],
                             body_text: ViewFilterContent::Filtered {
                                 inner: String::new(),
                             },
@@ -613,6 +622,7 @@ impl ViewFilter {
                             filter_invocation: "gpg::decrypt".into(),
                             content_type: att.content_type.clone(),
                             notice: None,
+                            headers: vec![],
                             body_text: ViewFilterContent::Filtered {
                                 inner: String::new(),
                             },
@@ -680,6 +690,7 @@ impl ViewFilter {
                     filter_invocation: "gpg::decrypt".into(),
                     content_type: att.content_type.clone(),
                     notice: None,
+                    headers: vec![],
                     body_text: ViewFilterContent::Filtered {
                         inner: String::new(),
                     },
@@ -719,6 +730,7 @@ impl ViewFilter {
             filter_invocation: String::new(),
             content_type: att.content_type.clone(),
             notice: None,
+            headers: vec![],
             body_text: ViewFilterContent::Filtered {
                 inner: att.text(Text::Plain),
             },
