@@ -745,6 +745,44 @@ impl ViewFilter {
                 });
             }
         }
+        if matches!(att.content_type, ContentType::MessageRfc822) {
+            let unfiltered = att.decode(view_settings.charset.into());
+            if let Ok((env, vf)) = melib::Envelope::from_bytes(&unfiltered, None).and_then(|env| {
+                let root_attachment = env.body_bytes(unfiltered.as_slice());
+                Ok((
+                    env,
+                    Self::new_attachment(&root_attachment, view_settings, context)?,
+                ))
+            }) {
+                return Ok(Self {
+                    filter_invocation: String::new(),
+                    content_type: att.content_type.clone(),
+                    notice: None,
+                    size: att.size(),
+                    headers: view_settings
+                        .header_iter(&env)
+                        .map(|(hdr, val)| (hdr.clone(), val.into()))
+                        .collect::<Vec<_>>(),
+                    body_text: ViewFilterContent::InlineAttachments { parts: vec![vf] },
+                    unfiltered,
+                    event_handler: Some(Self::job_process_event),
+                    id: ComponentId::default(),
+                });
+            }
+            let filtered = String::from_utf8_lossy(unfiltered.as_slice()).into();
+            return Ok(Self {
+                filter_invocation: String::new(),
+                content_type: att.content_type.clone(),
+                size: att.size(),
+                notice: None,
+                headers: vec![],
+                body_text: ViewFilterContent::Filtered { inner: filtered },
+                unfiltered,
+                event_handler: None,
+                id: ComponentId::default(),
+            });
+        }
+
         Ok(Self {
             filter_invocation: String::new(),
             content_type: att.content_type.clone(),

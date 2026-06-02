@@ -338,6 +338,13 @@ pub enum AttachmentDisplay {
         comment: Option<String>,
         text: String,
     },
+    /// `message/rfc822` with inline content disposition
+    InlineRfc822 {
+        inner: Box<Attachment>,
+        raw: Box<Attachment>,
+        display: Vec<Self>,
+        text: String,
+    },
     InlineOther {
         inner: Box<Attachment>,
     },
@@ -395,6 +402,12 @@ impl AttachmentDisplay {
                 text: _,
                 comment: _,
             }
+            | Self::InlineRfc822 {
+                raw: inner,
+                inner: _,
+                display: _,
+                text: _,
+            }
             | Self::InlineOther { inner }
             | Self::Attachment { inner }
             | Self::SignedPending {
@@ -434,6 +447,12 @@ impl AttachmentDisplay {
                 display,
             }
             | Self::Mixed { inner: _, display }
+            | Self::InlineRfc822 {
+                raw: _,
+                inner: _,
+                display,
+                text: _,
+            }
             | Self::SignedPending {
                 inner: _,
                 display,

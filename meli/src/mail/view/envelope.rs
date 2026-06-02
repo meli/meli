@@ -139,7 +139,7 @@ impl EnvelopeView {
         acc: &mut Vec<AttachmentDisplay>,
         view_settings: &ViewSettings,
     ) {
-        if a.content_disposition.kind.is_attachment() || a.content_type == "message/rfc822" {
+        if a.content_disposition.kind.is_attachment() {
             acc.push(AttachmentDisplay::Attachment {
                 inner: Box::new(a.clone()),
             });
@@ -201,6 +201,34 @@ impl EnvelopeView {
                 comment: None,
                 text: String::from_utf8_lossy(&bytes).to_string(),
             });
+        } else if a.content_type == "message/rfc822" {
+            let bytes = a.decode(view_settings.charset.into());
+            let text = String::from_utf8_lossy(&bytes).to_string();
+            if let Ok(mail) = Mail::new(bytes, None) {
+                let raw = Box::new(a.clone());
+                let inner = Box::new(mail.body());
+                let display = {
+                    let mut v = vec![];
+                    Self::attachment_to_display_helper(
+                        &inner,
+                        main_loop_handler,
+                        active_jobs,
+                        &mut v,
+                        view_settings,
+                    );
+                    v
+                };
+                acc.push(AttachmentDisplay::InlineRfc822 {
+                    raw,
+                    inner,
+                    display,
+                    text,
+                });
+            } else {
+                acc.push(AttachmentDisplay::Attachment {
+                    inner: Box::new(a.clone()),
+                });
+            }
         } else if let ContentType::Multipart {
             ref kind,
             ref parts,
@@ -921,15 +949,44 @@ impl Component for EnvelopeView {
                 let mut text = String::new();
                 self.body_text.clear();
                 if let Some(last) = self.filters.last() {
-                    let mut stack = vec![last];
+                    let mut scan_stack = VecDeque::from([last]);
+                    let mut render_stack = VecDeque::new();
+                    while let Some(filter @ ViewFilter { body_text, .. }) = scan_stack.pop_front() {
+                        if let ViewFilterContent::InlineAttachments { parts } = body_text {
+                            for p in parts.iter().rev() {
+                                scan_stack.push_front(p);
+                            }
+                        }
+                        render_stack.push_back(filter);
+                    }
+                    let show_attachment_idx = render_stack.len() > 1;
+
+                    let mut idx = 0;
                     while let Some(ViewFilter {
+                        content_type,
+                        size,
                         filter_invocation,
                         body_text,
                         notice,
                         headers,
                         ..
-                    }) = stack.pop()
+                    }) = render_stack.pop_front()
                     {
+                        if show_attachment_idx {
+                            if !text.is_empty() && !text.ends_with('\n') {
+                                text.push('\n');
+                            }
+                            text.push_str(&format!(
+                                "[-- #{idx} {content_type} {size} --]{sep}",
+                                size = melib::BytesDisplay(*size),
+                                sep = if notice.is_some() || !filter_invocation.is_empty() {
+                                    " "
+                                } else {
+                                    ""
+                                }
+                            ));
+                            idx += 1;
+                        }
                         text.push_str(
                             &notice
                                 .as_ref()
@@ -969,9 +1026,7 @@ impl Component for EnvelopeView {
                             ViewFilterContent::Running { .. } => {
                                 text.push_str("Filter job running in background.")
                             }
-                            ViewFilterContent::InlineAttachments { parts } => {
-                                stack.extend(parts.iter().rev());
-                            }
+                            ViewFilterContent::InlineAttachments { .. } => {}
                         }
                     }
                 }
