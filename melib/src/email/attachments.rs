@@ -1018,4 +1018,9 @@ impl Attachment {
     pub fn decode(&self, mut options: DecodeOptions<'_>) -> Vec<u8> {
         self.decode_helper(&mut options)
     }
+
+    #[inline]
+    pub fn size(&self) -> usize {
+        self.raw.len()
+    }
 }
