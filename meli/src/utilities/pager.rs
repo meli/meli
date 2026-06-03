@@ -428,6 +428,7 @@ impl Pager {
                 //    ```
                 //
                 //    Continue loop.
+                // 5. Set link if link contains entire line and break.
                 while let Some(link) = links.get(cur_link_idx) {
                     if link.start >= l.end {
                         // 1.
@@ -460,6 +461,16 @@ impl Pager {
                         cur_link_idx += 1;
                         continue;
                     }
+                    // 5.
+                    if (link.start..link.end).contains(&l.start)
+                        && (link.start..link.end).contains(&l.end)
+                    {
+                        let start = area2.upper_left();
+                        let end = area2.skip_cols(l.content.len()).upper_left();
+                        let uri = grid.insert_uri(&link.value);
+                        grid.set_uri(uri, start, end);
+                    }
+                    break;
                 }
                 grid.write_string(
                     &l.content,
