@@ -739,48 +739,12 @@ impl Component for EnvelopeView {
                         })+
                     };
                 }
-                let find_offset = |s: &str| -> (bool, (i64, i64)) {
-                    let mut diff = (true, (0, 0));
-                    if let Some(pos) = s.as_bytes().iter().position(|b| *b == b'+' || *b == b'-') {
-                        let offset = &s[pos..];
-                        diff.0 = offset.starts_with('+');
-                        if let (Some(hr_offset), Some(min_offset)) = (
-                            offset.get(1..3).and_then(|slice| slice.parse::<i64>().ok()),
-                            offset.get(3..5).and_then(|slice| slice.parse::<i64>().ok()),
-                        ) {
-                            diff.1 .0 = hr_offset;
-                            diff.1 .1 = min_offset;
-                        }
-                    }
-                    diff
-                };
-                let orig_date = envelope.date_as_str();
-                let date_str: std::borrow::Cow<str> = if self.view_settings.show_date_in_my_timezone
-                {
-                    let local_date = datetime::timestamp_to_string(
-                        envelope.timestamp,
-                        Some(datetime::formats::RFC822_DATE),
-                        false,
-                    );
-                    let orig_offset = find_offset(orig_date);
-                    let local_offset = find_offset(&local_date);
-                    if orig_offset == local_offset {
-                        orig_date.into()
-                    } else {
-                        format!(
-                            "{} [actual timezone: {}{:02}{:02}]",
-                            local_date,
-                            if orig_offset.0 { '+' } else { '-' },
-                            orig_offset.1 .0,
-                            orig_offset.1 .1
-                        )
-                        .into()
-                    }
-                } else {
-                    orig_date.into()
-                };
                 print_header!(
-                    (HeaderName::DATE, date_str),
+                    (
+                        HeaderName::DATE,
+                        self.view_settings
+                            .format_date_value(envelope.timestamp, envelope.date_as_str())
+                    ),
                     (HeaderName::FROM, envelope.field_from_to_string()),
                     (HeaderName::TO, envelope.field_to_to_string()),
                 );

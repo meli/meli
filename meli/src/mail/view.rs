@@ -28,8 +28,8 @@ use std::{
 
 use indexmap::IndexSet;
 use melib::{
-    email::attachment_types::ContentType, list_management, mailto::Mailto, parser::BytesExt,
-    utils::datetime, Card, Draft, FlagOp, HeaderName, SpecialUsageMailbox,
+    email::attachment_types::ContentType, list_management, mailto::Mailto, parser::BytesExt, Card,
+    Draft, FlagOp, HeaderName, SpecialUsageMailbox,
 };
 use smallvec::SmallVec;
 

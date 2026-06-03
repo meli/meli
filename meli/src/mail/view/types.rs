@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::fmt::Write as IoWrite;
+use std::{borrow::Cow, fmt::Write as IoWrite};
 
 use melib::{
     attachment_types::Charset, conf::ActionFlag, email::headers::HeaderName, error::*,
@@ -69,6 +69,56 @@ impl Default for ViewSettings {
             auto_verify_signatures: ActionFlag::InternalVal(true),
             auto_decrypt: ActionFlag::InternalVal(true),
             charset: None,
+        }
+    }
+}
+
+impl ViewSettings {
+    /// Format a `Date` header value according to
+    /// [`Self::show_date_in_my_timezone`] setting.
+    pub fn format_date_value<'hdr>(
+        &self,
+        timestamp: melib::UnixTimestamp,
+        val: &'hdr str,
+    ) -> Cow<'hdr, str> {
+        let find_offset = |s: &str| -> (bool, (i64, i64)) {
+            let mut diff = (true, (0, 0));
+            if let Some(pos) = s.as_bytes().iter().position(|b| *b == b'+' || *b == b'-') {
+                let offset = &s[pos..];
+                diff.0 = offset.starts_with('+');
+                if let (Some(hr_offset), Some(min_offset)) = (
+                    offset.get(1..3).and_then(|slice| slice.parse::<i64>().ok()),
+                    offset.get(3..5).and_then(|slice| slice.parse::<i64>().ok()),
+                ) {
+                    diff.1 .0 = hr_offset;
+                    diff.1 .1 = min_offset;
+                }
+            }
+            diff
+        };
+        if self.show_date_in_my_timezone {
+            use melib::utils::datetime;
+            let local_date = datetime::timestamp_to_string(
+                timestamp,
+                Some(datetime::formats::RFC822_DATE),
+                false,
+            );
+            let orig_offset = find_offset(val);
+            let local_offset = find_offset(&local_date);
+            if orig_offset == local_offset {
+                val.into()
+            } else {
+                format!(
+                    "{} [actual timezone: {}{:02}{:02}]",
+                    local_date,
+                    if orig_offset.0 { '+' } else { '-' },
+                    orig_offset.1 .0,
+                    orig_offset.1 .1
+                )
+                .into()
+            }
+        } else {
+            val.into()
         }
     }
 }
