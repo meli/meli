@@ -811,10 +811,7 @@ impl Component for EnvelopeView {
                     }
                 }
                 for hdr in &self.view_settings.show_extra_headers {
-                    if let Some((val, hdr)) = HeaderName::try_from(hdr)
-                        .ok()
-                        .and_then(|hdr| Some((envelope.other_headers().get(&hdr)?, hdr)))
-                    {
+                    if let Some(val) = envelope.other_headers().get(hdr) {
                         print_header!((hdr, val));
                     }
                 }

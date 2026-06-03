@@ -22,8 +22,8 @@
 use std::fmt::Write as IoWrite;
 
 use melib::{
-    attachment_types::Charset, conf::ActionFlag, error::*, pgp::DecryptionMetadata, Attachment,
-    Result,
+    attachment_types::Charset, conf::ActionFlag, email::headers::HeaderName, error::*,
+    pgp::DecryptionMetadata, Attachment, Result,
 };
 
 use crate::{
@@ -46,7 +46,7 @@ pub struct ViewSettings {
     pub auto_choose_multipart_alternative: bool,
     pub sticky_headers: bool,
     pub show_date_in_my_timezone: bool,
-    pub show_extra_headers: Vec<String>,
+    pub show_extra_headers: Vec<HeaderName>,
     pub auto_verify_signatures: ActionFlag,
     pub auto_decrypt: ActionFlag,
     pub charset: Option<Charset>,

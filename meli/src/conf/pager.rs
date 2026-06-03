@@ -22,7 +22,7 @@
 //! Settings for the pager function.
 
 use indexmap::IndexMap;
-use melib::{Error, Result, ToggleFlag};
+use melib::{email::headers::HeaderName, Error, Result, ToggleFlag};
 
 use crate::conf::{default_values::*, deserializers::*, DotAddressable};
 
@@ -122,7 +122,7 @@ pub struct PagerSettings {
     /// Extra headers to display, if present, in the default header preamble.
     /// Default: []
     #[serde(default = "Vec::new", alias = "show-extra-headers")]
-    pub show_extra_headers: Vec<String>,
+    pub show_extra_headers: Vec<HeaderName>,
 }
 
 impl Default for PagerSettings {
