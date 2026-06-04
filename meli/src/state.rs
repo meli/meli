@@ -295,8 +295,9 @@ impl Context {
         if !c.is_ascii_digit() {
             return;
         }
-        let mut cmd_buf = self.cmd_buf.unwrap_or(0);
-        cmd_buf *= 10;
+        let Some(mut cmd_buf) = self.cmd_buf.unwrap_or(0).checked_mul(10) else {
+            return;
+        };
         cmd_buf += (c as u32 - '0' as u32) as usize;
         self.replies
             .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
