@@ -376,12 +376,12 @@ pub fn get_events(
                                 // CSI ? Pd ; Ps $ y
                                 match (k, report_state) {
                                     (d, DECRPMReport::WaitingForSemicolon { mode }) if d.is_ascii_digit() => {
-                                        let mut mode = *mode;
-                                        mode *= 10;
-                                        // SAFETY: we performed an char::is_ascii_digit() check in
-                                        // the guard above.
-                                        mode += (d as u8 - b'0') as u16;
-                                        input_mode = InputMode::DECRPM(DECRPMReport::WaitingForSemicolon { mode });
+                                        if let Some(mut mode) = mode.checked_mul(10) {
+                                            // SAFETY: we performed an char::is_ascii_digit() check in
+                                            // the guard above.
+                                            mode += (d as u8 - b'0') as u16;
+                                            input_mode = InputMode::DECRPM(DECRPMReport::WaitingForSemicolon { mode });
+                                        }
                                     },
                                     (';', DECRPMReport::WaitingForSemicolon { mode }) => {
                                         input_mode = InputMode::DECRPM(DECRPMReport::Semicolon { mode: *mode });
