@@ -1000,6 +1000,7 @@ impl ThreadListing {
             self.rows.row_attr_cache.insert(idx, row_attr);
             {
                 let mut area_col_0 = columns[0].area().nth_row(idx);
+                columns[0].grid_mut().clear_area(area_col_0, row_attr);
                 if !*account_settings!(context[self.cursor_pos.0].listing.relative_list_indices) {
                     area_col_0 = area_col_0.skip_cols(columns[0].grid_mut().write_string(
                         itoa_buffer.format(idx),
@@ -1019,6 +1020,7 @@ impl ThreadListing {
             }
             {
                 let mut area_col_1 = columns[1].area().nth_row(idx);
+                columns[1].grid_mut().clear_area(area_col_1, row_attr);
                 area_col_1 = area_col_1.skip_cols(columns[1].grid_mut().write_string(
                     &strings.date,
                     row_attr.fg,
@@ -1036,6 +1038,7 @@ impl ThreadListing {
             }
             {
                 let area_col_2 = columns[2].area().nth_row(idx);
+                columns[2].grid_mut().clear_area(area_col_2, row_attr);
                 let (skip_cols, _) = columns[2].grid_mut().write_string(
                     &strings.from,
                     row_attr.fg,
@@ -1069,6 +1072,7 @@ impl ThreadListing {
             }
             {
                 let mut area_col_3 = columns[3].area().nth_row(idx);
+                columns[3].grid_mut().clear_area(area_col_3, row_attr);
                 area_col_3 = area_col_3.skip_cols(columns[3].grid_mut().write_string(
                     &strings.flag,
                     row_attr.fg,
@@ -1108,6 +1112,7 @@ impl ThreadListing {
             }
             {
                 let mut area_col_4 = columns[4].area().nth_row(idx);
+                columns[4].grid_mut().clear_area(area_col_4, row_attr);
                 area_col_4 = area_col_4.skip_cols(columns[4].grid_mut().write_string(
                     &strings.subject,
                     row_attr.fg,
@@ -1209,11 +1214,6 @@ impl ThreadListing {
             &mut self.rows.entries.get_mut(idx).unwrap().1.subject,
             &mut entry_strings.subject,
         );
-        let columns = &mut self.data_columns.columns;
-        for n in 0..=4 {
-            let area = columns[n].area().nth_row(idx);
-            columns[n].grid_mut().clear_area(area, row_attr);
-        }
         self.rows_drawn.update(idx, 1);
 
         *self.rows.entries.get_mut(idx).unwrap() = ((thread_hash, env_hash), entry_strings);
