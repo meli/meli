@@ -1181,8 +1181,9 @@ impl ThreadListing {
             even: idx % 2 == 0,
             unseen: !envelope.is_seen(),
             highlighted: false,
-            selected: self.selection()[&env_hash]
+            selected: self.selection().get(&env_hash).copied().unwrap_or(false),
         );
+        self.rows.row_attr_cache.insert(idx, row_attr);
         self.seen_cache.insert(env_hash, envelope.is_seen());
 
         let should_highlight_self = mailbox_settings!(
@@ -1214,9 +1215,10 @@ impl ThreadListing {
             &mut self.rows.entries.get_mut(idx).unwrap().1.subject,
             &mut entry_strings.subject,
         );
+        // Set row as undrawn so that it gets updated when we call `self.draw_rows`
         self.rows_drawn.update(idx, 1);
-
         *self.rows.entries.get_mut(idx).unwrap() = ((thread_hash, env_hash), entry_strings);
+        self.draw_rows(context, idx, idx);
     }
 
     fn select(
