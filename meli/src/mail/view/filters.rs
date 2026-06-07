@@ -449,7 +449,7 @@ impl ViewFilter {
                         .collect::<Vec<Self>>(),
                 },
                 unfiltered: att.decode(view_settings.charset.into()),
-                event_handler: None,
+                event_handler: Some(Self::job_process_event),
                 id: ComponentId::default(),
             });
         }
