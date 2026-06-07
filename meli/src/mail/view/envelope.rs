@@ -678,6 +678,7 @@ impl Component for EnvelopeView {
                 let envelope = &self.mail;
                 let height_p = self.pager.size().1;
 
+                grid.clear_area(area.take_rows(self.headers_no), hdr_area_theme);
                 let height = area
                     .height()
                     .saturating_sub(self.headers_no)
@@ -716,6 +717,10 @@ impl Component for EnvelopeView {
                                             Some(_x + 1),
                                             Some(2)
                                         );
+                                    grid.clear_area(
+                                        area.skip_rows(y + _y + __y).skip_cols(_x + 1 + __x).take_rows(1),
+                                        hdr_area_theme,
+                                    );
                                     if __y > 0 {
                                         if __y > 3 && !self.view_settings.expand_headers {
                                             __y = 3;
