@@ -425,7 +425,11 @@ impl ViewFilter {
                 body_text: ViewFilterContent::InlineAttachments {
                     parts: parts
                         .iter()
-                        .filter_map(|p| Self::new_attachment(p, view_settings, context).ok())
+                        .map(|p| {
+                            Self::new_attachment(p, view_settings, context)
+                                .ok()
+                                .unwrap_or_else(|| Self::new_placeholder(p, view_settings))
+                        })
                         .collect::<Vec<Self>>(),
                 },
                 unfiltered: att.decode(view_settings.charset.into()),
@@ -494,7 +498,11 @@ impl ViewFilter {
                     body_text: ViewFilterContent::InlineAttachments {
                         parts: parts
                             .iter()
-                            .filter_map(|p| Self::new_attachment(p, view_settings, context).ok())
+                            .map(|p| {
+                                Self::new_attachment(p, view_settings, context)
+                                    .ok()
+                                    .unwrap_or_else(|| Self::new_placeholder(p, view_settings))
+                            })
                             .collect::<Vec<Self>>(),
                     },
                     unfiltered: bytes,
@@ -750,6 +758,26 @@ impl ViewFilter {
             event_handler: None,
             id: ComponentId::default(),
         })
+    }
+
+    /// For attachments that are part of other filters'
+    /// [`ViewFilterContent::InlineAttachments`] we want to show an empty,
+    /// placeholder value.
+    #[inline]
+    fn new_placeholder(att: &Attachment, view_settings: &ViewSettings) -> Self {
+        Self {
+            filter_invocation: String::new(),
+            content_type: att.content_type.clone(),
+            size: att.size(),
+            notice: None,
+            headers: vec![],
+            unfiltered: att.decode(view_settings.charset.into()),
+            body_text: ViewFilterContent::Filtered {
+                inner: String::new(),
+            },
+            event_handler: None,
+            id: ComponentId::default(),
+        }
     }
 
     fn html_process_event(self_: &mut Self, event: &mut UIEvent, context: &mut Context) -> bool {
