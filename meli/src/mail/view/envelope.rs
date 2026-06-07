@@ -116,7 +116,18 @@ impl EnvelopeView {
             id: ComponentId::default(),
         };
 
-        ret.parse_attachments();
+        let mut display = vec![];
+        Self::attachment_to_display_helper(
+            &ret.body,
+            &ret.main_loop_handler,
+            &mut ret.active_jobs,
+            &mut display,
+            &ret.view_settings,
+        );
+        let (attachment_paths, attachment_tree) = ret.attachment_displays_to_tree(&display);
+        ret.display = display;
+        ret.attachment_tree = attachment_tree;
+        ret.attachment_paths = attachment_paths;
 
         ret
     }
@@ -355,21 +366,6 @@ impl EnvelopeView {
                 }
             }
         }
-    }
-
-    pub fn parse_attachments(&mut self) {
-        let mut display = vec![];
-        Self::attachment_to_display_helper(
-            &self.body,
-            &self.main_loop_handler,
-            &mut self.active_jobs,
-            &mut display,
-            &self.view_settings,
-        );
-        let (attachment_paths, attachment_tree) = self.attachment_displays_to_tree(&display);
-        self.display = display;
-        self.attachment_tree = attachment_tree;
-        self.attachment_paths = attachment_paths;
     }
 
     fn attachment_displays_to_tree(
