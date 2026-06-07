@@ -255,13 +255,15 @@ impl EnvelopeView {
                             inner: Box::new(a.clone()),
                             display: {
                                 let mut v = vec![];
-                                Self::attachment_to_display_helper(
-                                    &parts[0],
-                                    main_loop_handler,
-                                    active_jobs,
-                                    &mut v,
-                                    view_settings,
-                                );
+                                for p in parts {
+                                    Self::attachment_to_display_helper(
+                                        p,
+                                        main_loop_handler,
+                                        active_jobs,
+                                        &mut v,
+                                        view_settings,
+                                    );
+                                }
                                 v
                             },
                         });
@@ -284,13 +286,15 @@ impl EnvelopeView {
                                 job_id: handle.job_id,
                                 display: {
                                     let mut v = vec![];
-                                    Self::attachment_to_display_helper(
-                                        &parts[0],
-                                        main_loop_handler,
-                                        active_jobs,
-                                        &mut v,
-                                        view_settings,
-                                    );
+                                    for p in parts {
+                                        Self::attachment_to_display_helper(
+                                            p,
+                                            main_loop_handler,
+                                            active_jobs,
+                                            &mut v,
+                                            view_settings,
+                                        );
+                                    }
                                     v
                                 },
                                 handle,
@@ -300,13 +304,15 @@ impl EnvelopeView {
                                 inner: Box::new(a.clone()),
                                 display: {
                                     let mut v = vec![];
-                                    Self::attachment_to_display_helper(
-                                        &parts[0],
-                                        main_loop_handler,
-                                        active_jobs,
-                                        &mut v,
-                                        view_settings,
-                                    );
+                                    for p in parts {
+                                        Self::attachment_to_display_helper(
+                                            p,
+                                            main_loop_handler,
+                                            active_jobs,
+                                            &mut v,
+                                            view_settings,
+                                        );
+                                    }
                                     v
                                 },
                             });
@@ -370,6 +376,10 @@ impl EnvelopeView {
                     });
                 }
             }
+        } else {
+            acc.push(AttachmentDisplay::Attachment {
+                inner: Box::new(a.clone()),
+            });
         }
     }
 
