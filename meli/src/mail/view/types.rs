@@ -379,3 +379,99 @@ pub enum AttachmentDisplay {
         description: String,
     },
 }
+
+impl AttachmentDisplay {
+    #[inline]
+    pub const fn attachment(&self) -> &Attachment {
+        match self {
+            Self::Alternative {
+                inner,
+                shown_display: _,
+                display: _,
+            }
+            | Self::Mixed { inner, display: _ }
+            | Self::InlineText {
+                inner,
+                text: _,
+                comment: _,
+            }
+            | Self::InlineOther { inner }
+            | Self::Attachment { inner }
+            | Self::SignedPending {
+                inner,
+                display: _,
+                handle: _,
+                job_id: _,
+            }
+            | Self::SignedFailed {
+                inner,
+                display: _,
+                error: _,
+            }
+            | Self::SignedVerified {
+                inner,
+                display: _,
+                description: _,
+            }
+            | Self::SignedUnverified { inner, display: _ }
+            | Self::EncryptedPending { inner, handle: _ }
+            | Self::EncryptedFailed { inner, error: _ }
+            | Self::EncryptedSuccess {
+                inner: _,
+                plaintext: inner,
+                plaintext_display: _,
+                description: _,
+            } => inner,
+        }
+    }
+
+    #[inline]
+    pub fn as_multipart(&self) -> Option<&[Self]> {
+        match self {
+            Self::Alternative {
+                inner: _,
+                shown_display: _,
+                display,
+            }
+            | Self::Mixed { inner: _, display }
+            | Self::SignedPending {
+                inner: _,
+                display,
+                handle: _,
+                job_id: _,
+            }
+            | Self::SignedFailed {
+                inner: _,
+                display,
+                error: _,
+            }
+            | Self::SignedVerified {
+                inner: _,
+                display,
+                description: _,
+            }
+            | Self::SignedUnverified { inner: _, display }
+            | Self::EncryptedSuccess {
+                inner: _,
+                plaintext: _,
+                plaintext_display: display,
+                description: _,
+            } => Some(display.as_slice()),
+            _ => None,
+        }
+    }
+
+    #[inline]
+    pub const fn default_alternative(&self) -> Option<usize> {
+        if let Self::Alternative {
+            inner: _,
+            shown_display,
+            display: _,
+        } = self
+        {
+            Some(*shown_display)
+        } else {
+            None
+        }
+    }
+}

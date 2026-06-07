@@ -391,51 +391,6 @@ impl EnvelopeView {
             has_sibling: bool,
             s: &mut String,
         ) {
-            use AttachmentDisplay::*;
-            let mut default_alternative: Option<usize> = None;
-            let (att, sub_att_display_vec) = match att_display {
-                Alternative {
-                    inner,
-                    shown_display,
-                    display,
-                } => {
-                    default_alternative = Some(*shown_display);
-                    (inner, display.as_slice())
-                }
-                Mixed { inner, display } => (inner, display.as_slice()),
-                InlineText {
-                    inner,
-                    text: _,
-                    comment: _,
-                }
-                | InlineOther { inner }
-                | Attachment { inner }
-                | EncryptedPending { inner, handle: _ }
-                | EncryptedFailed { inner, error: _ } => (inner, &[][..]),
-                SignedPending {
-                    inner,
-                    display,
-                    handle: _,
-                    job_id: _,
-                }
-                | SignedUnverified { inner, display }
-                | SignedFailed {
-                    inner,
-                    display,
-                    error: _,
-                }
-                | SignedVerified {
-                    inner,
-                    display,
-                    description: _,
-                }
-                | EncryptedSuccess {
-                    inner: _,
-                    plaintext: inner,
-                    plaintext_display: display,
-                    description: _,
-                } => (inner, display.as_slice()),
-            };
             s.extend(format!("\n[{idx}]").chars());
             for &b in branches.iter() {
                 if b {
@@ -457,9 +412,9 @@ impl EnvelopeView {
                 s.push(' ');
             }
 
-            s.push_str(&att.to_string());
+            s.push_str(&att_display.attachment().to_string());
             paths.push(cur_path.clone());
-            if matches!(att.content_type, ContentType::Multipart { .. }) {
+            if let Some(sub_att_display_vec) = att_display.as_multipart() {
                 let mut iter = (0..sub_att_display_vec.len()).peekable();
                 if has_sibling {
                     branches.push(true);
@@ -477,7 +432,7 @@ impl EnvelopeView {
                         iter.peek().is_some(),
                         s,
                     );
-                    if Some(i) == default_alternative {
+                    if Some(i) == att_display.default_alternative() {
                         s.push_str(" (displayed by default)");
                     }
                     cur_path.pop();
@@ -513,55 +468,15 @@ impl EnvelopeView {
             .filter(|path| !path.is_empty())
         {
             let first = path[0];
-            use AttachmentDisplay::*;
-            let root_attachment = match &self.display[first] {
-                Alternative {
-                    inner,
-                    shown_display: _,
-                    display: _,
-                }
-                | Mixed { inner, display: _ }
-                | InlineText {
-                    inner,
-                    text: _,
-                    comment: _,
-                }
-                | InlineOther { inner }
-                | Attachment { inner }
-                | SignedPending {
-                    inner,
-                    display: _,
-                    handle: _,
-                    job_id: _,
-                }
-                | SignedFailed {
-                    inner,
-                    display: _,
-                    error: _,
-                }
-                | SignedVerified {
-                    inner,
-                    display: _,
-                    description: _,
-                }
-                | SignedUnverified { inner, display: _ }
-                | EncryptedPending { inner, handle: _ }
-                | EncryptedFailed { inner, error: _ }
-                | EncryptedSuccess {
-                    inner: _,
-                    plaintext: inner,
-                    plaintext_display: _,
-                    description: _,
-                } => inner,
-            };
+            let root_attachment = &self.display[first];
             fn find_attachment<'a>(
-                a: &'a melib::Attachment,
+                a: &'a AttachmentDisplay,
                 path: &[usize],
             ) -> Option<&'a melib::Attachment> {
                 if path.is_empty() {
-                    return Some(a);
+                    return Some(a.attachment());
                 }
-                if let ContentType::Multipart { ref parts, .. } = a.content_type {
+                if let Some(parts) = a.as_multipart() {
                     let first = path[0];
                     if first < parts.len() {
                         return find_attachment(&parts[first], &path[1..]);
