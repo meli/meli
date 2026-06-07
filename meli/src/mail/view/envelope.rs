@@ -1674,6 +1674,12 @@ impl Component for EnvelopeView {
                                         ));
                                     }
                                 }
+                            } else if let Ok(filter) =
+                                ViewFilter::new_attachment(attachment, &self.view_settings, context)
+                            {
+                                self.filters.push(filter);
+                                self.initialised = false;
+                                self.set_dirty(true);
                             } else {
                                 context.replies.push_back(UIEvent::StatusEvent(
                                     StatusEvent::DisplayMessage(

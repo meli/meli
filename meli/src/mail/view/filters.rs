@@ -346,6 +346,22 @@ impl ViewFilter {
             att.content_type,
             ContentType::Other { .. } | ContentType::OctetStream { .. }
         ) {
+            if att.size() <= 1024 * 1024 * 20 {
+                let bytes = att.decode(view_settings.charset.into());
+                if let Ok(text) = String::from_utf8(bytes) {
+                    return Ok(Self {
+                        filter_invocation: String::new(),
+                        content_type: att.content_type.clone(),
+                        size: att.size(),
+                        notice: None,
+                        headers: vec![],
+                        unfiltered: text.as_bytes().to_vec(),
+                        body_text: ViewFilterContent::Filtered { inner: text },
+                        event_handler: None,
+                        id: ComponentId::default(),
+                    });
+                }
+            }
             return Err(Error::new(format!(
                 "Cannot view {} attachment as text.",
                 att.content_type,
