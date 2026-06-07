@@ -329,6 +329,10 @@ pub enum AttachmentDisplay {
         shown_display: usize,
         display: Vec<Self>,
     },
+    Mixed {
+        inner: Box<Attachment>,
+        display: Vec<Self>,
+    },
     InlineText {
         inner: Box<Attachment>,
         comment: Option<String>,

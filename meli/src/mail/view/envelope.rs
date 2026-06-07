@@ -354,15 +354,20 @@ impl EnvelopeView {
                     }
                 }
                 _ => {
+                    let mut display = vec![];
                     for a in parts {
                         Self::attachment_to_display_helper(
                             a,
                             main_loop_handler,
                             active_jobs,
-                            acc,
+                            &mut display,
                             view_settings,
                         );
                     }
+                    acc.push(AttachmentDisplay::Mixed {
+                        inner: Box::new(a.clone()),
+                        display,
+                    });
                 }
             }
         }
@@ -397,6 +402,7 @@ impl EnvelopeView {
                     default_alternative = Some(*shown_display);
                     (inner, display.as_slice())
                 }
+                Mixed { inner, display } => (inner, display.as_slice()),
                 InlineText {
                     inner,
                     text: _,
@@ -514,6 +520,7 @@ impl EnvelopeView {
                     shown_display: _,
                     display: _,
                 }
+                | Mixed { inner, display: _ }
                 | InlineText {
                     inner,
                     text: _,
