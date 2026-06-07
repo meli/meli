@@ -108,6 +108,8 @@ pub struct ViewFilter {
     pub content_type: ContentType,
     pub headers: Vec<(HeaderName, String)>,
     pub notice: Option<Cow<'static, str>>,
+    /// Size of viewed attachment in bytes.
+    pub size: usize,
     pub body_text: ViewFilterContent,
     pub unfiltered: Vec<u8>,
     pub event_handler: Option<ProcessEventFn>,
@@ -121,6 +123,7 @@ impl std::fmt::Debug for ViewFilter {
             .field("content_type", &self.content_type)
             .field("headers", &self.headers)
             .field("notice", &self.notice)
+            .field("size", &self.size)
             .field("body_text", &self.body_text)
             .field("event_handler", &self.event_handler.is_some())
             .field("id", &self.id)
@@ -296,6 +299,7 @@ impl ViewFilter {
         let mut retval = Self {
             filter_invocation: filter_invocation.to_string(),
             content_type: att.content_type.clone(),
+            size: att.size(),
             notice: None,
             headers: vec![],
             unfiltered: bytes,
@@ -358,6 +362,7 @@ impl ViewFilter {
                 return Ok(Self {
                     filter_invocation: String::new(),
                     content_type: att.content_type.clone(),
+                    size: att.size(),
                     notice: None,
                     headers: vec![],
                     unfiltered: att.decode(view_settings.charset.into()),
@@ -414,6 +419,7 @@ impl ViewFilter {
             return Ok(Self {
                 filter_invocation: String::new(),
                 content_type: att.content_type.clone(),
+                size: att.size(),
                 notice: None,
                 headers: vec![],
                 body_text: ViewFilterContent::InlineAttachments {
@@ -440,6 +446,7 @@ impl ViewFilter {
             return Ok(Self {
                 filter_invocation: String::new(),
                 content_type: att.content_type.clone(),
+                size: att.size(),
                 notice: None,
                 headers: vec![],
                 body_text: ViewFilterContent::Filtered {
@@ -478,6 +485,7 @@ impl ViewFilter {
                 return Ok(Self {
                     filter_invocation: String::new(),
                     content_type: att.content_type.clone(),
+                    size: att.size(),
                     notice: Some(
                         "Cannot verify signature: meli must be compiled with libgpgme support."
                             .into(),
@@ -527,6 +535,7 @@ impl ViewFilter {
                         let mut retval = Self {
                             filter_invocation: "gpg::verify".into(),
                             content_type: att.content_type.clone(),
+                            size: att.size(),
                             notice: None,
                             headers: vec![],
                             body_text: ViewFilterContent::Filtered {
@@ -621,6 +630,7 @@ impl ViewFilter {
                         let mut retval = Self {
                             filter_invocation: "gpg::decrypt".into(),
                             content_type: att.content_type.clone(),
+                            size: att.size(),
                             notice: None,
                             headers: vec![],
                             body_text: ViewFilterContent::Filtered {
@@ -689,6 +699,7 @@ impl ViewFilter {
                 let mut retval = Self {
                     filter_invocation: "gpg::decrypt".into(),
                     content_type: att.content_type.clone(),
+                    size: att.size(),
                     notice: None,
                     headers: vec![],
                     body_text: ViewFilterContent::Filtered {
@@ -729,6 +740,7 @@ impl ViewFilter {
         Ok(Self {
             filter_invocation: String::new(),
             content_type: att.content_type.clone(),
+            size: att.size(),
             notice: None,
             headers: vec![],
             body_text: ViewFilterContent::Filtered {
