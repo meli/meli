@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use melib::text::{Line, LineBreakText, Truncate};
+use melib::text::{Line, LineBreakText};
 
 use super::*;
 use crate::{
@@ -53,7 +53,7 @@ pub struct Pager {
     /// total height? Used to decide whether to accept `scroll_down` key
     /// events.
     rows_lt_height: bool,
-    filtered_content: Option<(String, Result<EmbeddedGrid>)>,
+    filtered_content: Option<(String, EmbeddedGrid)>,
     filter_job: Option<(String, JoinHandle<Result<EmbeddedGrid>>)>,
     text_lines: Vec<Line>,
     line_breaker: LineBreakText,
@@ -208,6 +208,7 @@ impl Pager {
                 .args(["-c", &bin])
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
                 .spawn()
                 .chain_err_summary(|| "Failed to start pager filter process")?;
             let stdin = filter_child.stdin.as_mut().ok_or("failed to open stdin")?;
@@ -216,14 +217,21 @@ impl Pager {
                 .chain_err_summary(|| "Failed to write to stdin")?;
             let out = filter_child
                 .wait_with_output()
-                .chain_err_summary(|| "Failed to wait on filter")?
-                .stdout;
+                .chain_err_summary(|| "Failed to wait on filter")?;
+            if !out.status.success() {
+                let mut err = Error::new("Failed to wait on filter").set_kind(ErrorKind::External);
+                if !out.stderr.is_empty() {
+                    err = err.set_summary(String::from_utf8_lossy(&out.stderr).to_string());
+                }
+                return Err(err);
+            }
+            let stdout = out.stdout;
             let mut dev_null = std::fs::File::open("/dev/null")?;
             let mut embedded = EmbeddedGrid::new();
             embedded.set_tab_width(tab_width);
             embedded.set_terminal_size((80, 20));
 
-            for b in out {
+            for b in stdout {
                 embedded.process_byte(&mut dev_null, b);
             }
             Ok(embedded)
@@ -330,35 +338,22 @@ impl Pager {
     }
 
     fn draw_page(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if let Some((ref cmd, ref filtered_content)) = self.filtered_content {
-            match filtered_content {
-                Ok(ref content) => {
-                    grid.copy_area(
-                        content.buffer(),
-                        area,
-                        content
-                            .area()
-                            .skip_cols(self.cursor.0)
-                            .skip_rows(self.cursor.1)
-                            .take_cols(content.terminal_size().0.min(area.width()))
-                            .take_rows(content.terminal_size().1.min(area.height())),
-                    );
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::UpdateSubStatus(
-                            cmd.to_string(),
-                        )));
-                }
-                Err(ref err) => {
-                    let mut cmd = cmd.as_str();
-                    cmd.truncate_at_boundary(4);
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::UpdateSubStatus(format!(
-                            "{cmd}: {err}"
-                        ))));
-                }
-            }
+        if let Some((ref cmd, ref content)) = self.filtered_content {
+            grid.copy_area(
+                content.buffer(),
+                area,
+                content
+                    .area()
+                    .skip_cols(self.cursor.0)
+                    .skip_rows(self.cursor.1)
+                    .take_cols(content.terminal_size().0.min(area.width()))
+                    .take_rows(content.terminal_size().1.min(area.height())),
+            );
+            context
+                .replies
+                .push_back(UIEvent::StatusEvent(StatusEvent::UpdateSubStatus(
+                    cmd.to_string(),
+                )));
             return;
         }
 
@@ -926,20 +921,22 @@ impl Component for Pager {
             {
                 let (cmd, mut handle) = self.filter_job.take().unwrap();
                 match handle.chan.try_recv() {
-                    Err(_) => { /* search was canceled */ }
+                    Err(_) => { /* filter was canceled */ }
                     Ok(None) => { /* something happened, perhaps a worker thread panicked */ }
-                    Ok(Some(buf)) => {
-                        if let Some((width, height)) =
-                            buf.as_ref().ok().map(EmbeddedGrid::terminal_size)
-                        {
-                            self.width = width;
-                            self.height = height;
-                        }
+                    Ok(Some(Ok(buf))) => {
+                        let (width, height) = buf.terminal_size();
+                        self.width = width;
+                        self.height = height;
                         self.filtered_content = Some((cmd, buf));
+                        self.initialised = false;
+                        self.set_dirty(true);
+                    }
+                    Ok(Some(Err(err))) => {
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(err.to_string()),
+                        ));
                     }
                 }
-                self.initialised = false;
-                self.set_dirty(true);
             }
             UIEvent::Action(Action::Listing(ListingAction::Search(pattern))) => {
                 self.search = Some(SearchPattern {
