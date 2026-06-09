@@ -887,7 +887,13 @@ impl Component for Pager {
                     .iter()
                     .map(|(k, v)| (v.to_string(), k.to_string()))
                     .collect::<Vec<_>>();
-                if !filters.is_empty() {
+                if filters.is_empty() {
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
+                            "No filters set in [pager.named_filters].".into(),
+                        )));
+                } else {
                     context.replies.push_back(UIEvent::GlobalUIDialog {
                         value: Box::new(UIDialog::new(
                             "select filter",
