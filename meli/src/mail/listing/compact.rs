@@ -1158,7 +1158,7 @@ impl CompactListing {
             self.data_columns.columns[1].area().width(),
             self.data_columns.columns[2].area().width(),
             self.data_columns.columns[3].area().width(),
-            self.data_columns.columns[3].area().width(),
+            self.data_columns.columns[4].area().width(),
         );
 
         let columns = &mut self.data_columns.columns;
