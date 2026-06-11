@@ -1411,7 +1411,7 @@ impl CompactListing {
         top_idx: usize,
         context: &Context,
     ) {
-        let width = self.data_columns.columns[0].area().width();
+        let width = self.data_columns.widths[0];
         let area = area.take_cols(width);
         let account = &context.accounts[&self.cursor_pos.0];
         let threads = account.collection.get_threads(self.cursor_pos.1);

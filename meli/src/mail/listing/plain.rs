@@ -1329,7 +1329,7 @@ impl PlainListing {
     }
 
     fn draw_relative_numbers(&self, grid: &mut CellBuffer, area: Area, top_idx: usize) {
-        let width = self.data_columns.columns[0].area().width();
+        let width = self.data_columns.widths[0];
         let area = area.take_cols(width);
         for i in 0..area.height() {
             if top_idx + i >= self.length {
