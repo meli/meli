@@ -306,7 +306,7 @@ impl ViewFilter {
             body_text: ViewFilterContent::Filtered {
                 inner: String::new(),
             },
-            event_handler: Some(Self::job_process_event),
+            event_handler: None,
             id: ComponentId::default(),
         };
         if let Ok(Some(job_result)) = try_recv_timeout!(&mut job_handle.chan) {
@@ -317,8 +317,7 @@ impl ViewFilter {
                 view_settings: view_settings.clone(),
             };
             retval.event_handler = Some(Self::html_process_event);
-            Self::process_job_result(
-                &mut retval,
+            retval.process_job_result(
                 Ok(Some(job_result)),
                 on_success_notice_cb,
                 view_settings,
@@ -385,7 +384,7 @@ impl ViewFilter {
                     body_text: ViewFilterContent::Filtered {
                         inner: String::new(),
                     },
-                    event_handler: Some(Self::job_process_event),
+                    event_handler: None,
                     id: ComponentId::default(),
                 });
             }
@@ -449,7 +448,7 @@ impl ViewFilter {
                         .collect::<Vec<Self>>(),
                 },
                 unfiltered: att.decode(view_settings.charset.into()),
-                event_handler: Some(Self::job_process_event),
+                event_handler: None,
                 id: ComponentId::default(),
             });
         }
@@ -566,7 +565,7 @@ impl ViewFilter {
                                 inner: String::new(),
                             },
                             unfiltered: att.raw().to_vec(),
-                            event_handler: Some(Self::job_process_event),
+                            event_handler: None,
                             id: ComponentId::default(),
                         };
                         if let Ok(Some(job_result)) = try_recv_timeout!(&mut job_handle.chan) {
@@ -577,8 +576,7 @@ impl ViewFilter {
                                 view_settings: view_settings.clone(),
                             };
                             retval.event_handler = None;
-                            Self::process_job_result(
-                                &mut retval,
+                            retval.process_job_result(
                                 Ok(Some(job_result)),
                                 on_success_notice_cb,
                                 view_settings,
@@ -661,7 +659,7 @@ impl ViewFilter {
                                 inner: String::new(),
                             },
                             unfiltered: a.raw().to_vec(),
-                            event_handler: Some(Self::job_process_event),
+                            event_handler: None,
                             id: ComponentId::default(),
                         };
                         if let Ok(Some(job_result)) = try_recv_timeout!(&mut job_handle.chan) {
@@ -672,8 +670,7 @@ impl ViewFilter {
                                 view_settings: view_settings.clone(),
                             };
                             retval.event_handler = None;
-                            Self::process_job_result(
-                                &mut retval,
+                            retval.process_job_result(
                                 Ok(Some(job_result)),
                                 on_success_notice_cb,
                                 view_settings,
@@ -730,7 +727,7 @@ impl ViewFilter {
                         inner: String::new(),
                     },
                     unfiltered: content.into_bytes(),
-                    event_handler: Some(Self::job_process_event),
+                    event_handler: None,
                     id: ComponentId::default(),
                 };
                 if let Ok(Some(job_result)) = try_recv_timeout!(&mut job_handle.chan) {
@@ -741,8 +738,7 @@ impl ViewFilter {
                         view_settings: view_settings.clone(),
                     };
                     retval.event_handler = None;
-                    Self::process_job_result(
-                        &mut retval,
+                    retval.process_job_result(
                         Ok(Some(job_result)),
                         on_success_notice_cb,
                         view_settings,
@@ -781,7 +777,7 @@ impl ViewFilter {
                         .collect::<Vec<_>>(),
                     body_text: ViewFilterContent::InlineAttachments { parts: vec![vf] },
                     unfiltered,
-                    event_handler: Some(Self::job_process_event),
+                    event_handler: None,
                     id: ComponentId::default(),
                 });
             }
@@ -913,30 +909,24 @@ impl ViewFilter {
         false
     }
 
-    fn job_process_event(self_: &mut Self, event: &mut UIEvent, context: &mut Context) -> bool {
-        log::trace!(
-            "job_process_event: self_ = {:?}, event = {:?}",
-            self_,
-            event
-        );
-        if matches!(event, UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id)) if self_.contains_job_id(*job_id))
+    fn job_process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        if matches!(event, UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id)) if self.contains_job_id(*job_id))
         {
-            if matches!(self_.body_text, ViewFilterContent::Running { .. }) {
+            if matches!(self.body_text, ViewFilterContent::Running { .. }) {
                 if let ViewFilterContent::Running {
                     job_id: _,
                     mut job_handle,
                     on_success_notice_cb,
                     view_settings,
                 } = std::mem::replace(
-                    &mut self_.body_text,
+                    &mut self.body_text,
                     ViewFilterContent::Filtered {
                         inner: String::new(),
                     },
                 ) {
                     log::trace!("job_process_event: inside if let ");
                     let job_result = job_handle.chan.try_recv();
-                    Self::process_job_result(
-                        self_,
+                    self.process_job_result(
                         job_result,
                         on_success_notice_cb,
                         &view_settings,
@@ -945,17 +935,17 @@ impl ViewFilter {
                 }
                 return true;
             }
-            if let ViewFilterContent::InlineAttachments { ref mut parts, .. } = self_.body_text {
+            if let ViewFilterContent::InlineAttachments { ref mut parts, .. } = self.body_text {
                 return parts
                     .iter_mut()
-                    .any(|p| Self::job_process_event(p, event, context));
+                    .any(|p| p.job_process_event(event, context));
             }
         }
         false
     }
 
     fn process_job_result(
-        self_: &mut Self,
+        &mut self,
         result: std::result::Result<Option<FilterResult>, ::futures::channel::oneshot::Canceled>,
         on_success_notice_cb: OnSuccessNoticeCb,
         view_settings: &ViewSettings,
@@ -963,48 +953,48 @@ impl ViewFilter {
     ) {
         match result {
             Err(err) => {
-                self_.event_handler = None;
+                self.event_handler = None;
                 /* Job was cancelled */
-                self_.body_text = ViewFilterContent::Error {
+                self.body_text = ViewFilterContent::Error {
                     inner: Error::new("Job was cancelled.").set_source(Some(Arc::new(err))),
                 };
-                self_.notice = Some(format!("{} cancelled", self_.filter_invocation).into());
+                self.notice = Some(format!("{} cancelled", self.filter_invocation).into());
             }
             Ok(None) => {
-                self_.event_handler = None;
+                self.event_handler = None;
                 // something happened, perhaps a worker thread panicked
-                self_.body_text = ViewFilterContent::Error {
+                self.body_text = ViewFilterContent::Error {
                     inner: Error::new(
                         "Unknown error. Maybe some process panicked in the background?",
                     ),
                 };
-                self_.notice = Some(format!("{} failed", self_.filter_invocation).into());
+                self.notice = Some(format!("{} failed", self.filter_invocation).into());
             }
             Ok(Some(Ok((att, bytes)))) => {
-                self_.event_handler = None;
+                self.event_handler = None;
                 log::trace!("job_process_event: OK ");
                 match Self::new_attachment(&att, view_settings, context) {
                     Ok(mut new_self) => {
-                        if self_.content_type.is_text_html() {
+                        if self.content_type.is_text_html() {
                             new_self.event_handler = Some(Self::html_process_event);
                         }
                         new_self.unfiltered = bytes;
                         new_self.notice = Some(on_success_notice_cb());
-                        *self_ = new_self;
+                        *self = new_self;
                     }
                     Err(err) => {
-                        self_.body_text = ViewFilterContent::Error { inner: err };
-                        self_.notice = Some(
-                            format!("decoding result of {} failed", self_.filter_invocation).into(),
+                        self.body_text = ViewFilterContent::Error { inner: err };
+                        self.notice = Some(
+                            format!("decoding result of {} failed", self.filter_invocation).into(),
                         );
                     }
                 }
             }
             Ok(Some(Err((error, bytes)))) => {
-                self_.event_handler = None;
-                self_.body_text = ViewFilterContent::Error { inner: error };
-                self_.unfiltered = bytes;
-                self_.notice = Some(format!("{} failed", self_.filter_invocation).into());
+                self.event_handler = None;
+                self.body_text = ViewFilterContent::Error { inner: error };
+                self.unfiltered = bytes;
+                self.notice = Some(format!("{} failed", self.filter_invocation).into());
             }
         }
     }
@@ -1013,8 +1003,13 @@ impl ViewFilter {
 impl Component for ViewFilter {
     fn draw(&mut self, _: &mut CellBuffer, _: Area, _: &mut Context) {}
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        if Self::job_process_event(self, event, context) {
+            return true;
+        }
         if let Some(ref mut f) = self.event_handler {
-            return f(self, event, context);
+            if f(self, event, context) {
+                return true;
+            }
         }
         if let ViewFilterContent::InlineAttachments { ref mut parts, .. } = self.body_text {
             return parts.iter_mut().any(|p| p.process_event(event, context));
