@@ -26,9 +26,9 @@ use melib::{AccountHash, Card};
 
 use crate::{
     terminal::*,
+    types::NotificationType,
     utilities::{FormButtonAction, FormWidget},
-    CellBuffer, Component, ComponentId, Context, Field, Key, StatusEvent, ThemeAttribute, UIDialog,
-    UIEvent,
+    CellBuffer, Component, ComponentId, Context, Field, Key, ThemeAttribute, UIDialog, UIEvent,
 };
 
 #[derive(Debug)]
@@ -235,12 +235,15 @@ impl Component for ContactManager {
                                 .collect();
                             let mut new_card = Card::from(fields);
                             new_card.set_id(*self.card.id());
+                            context.replies.push_back(UIEvent::Notification {
+                                title: Some("Contact saved.".into()),
+                                source: None,
+                                body: format!("{new_card} was saved.").into(),
+                                kind: Some(NotificationType::Info),
+                            });
                             context.accounts[&self.account_hash]
                                 .contacts
                                 .add_card(new_card);
-                            context.replies.push_back(UIEvent::StatusEvent(
-                                StatusEvent::DisplayMessage("Saved.".into()),
-                            ));
                             self.unrealize(context);
                         }
                         Some(FormButtonAction::Cancel) => {

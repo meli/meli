@@ -47,7 +47,7 @@ use crate::{
     mail::view::ViewSettings,
     terminal::{Area, CellBuffer},
     try_recv_timeout,
-    types::ForkedProcess,
+    types::{ForkedProcess, NotificationType},
     Context, ErrorKind, File, StatusEvent, UIEvent,
 };
 
@@ -880,19 +880,21 @@ impl ViewFilter {
                         );
                     }
                     Err(err) => {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(format!(
-                                "Failed to start `{command}`: {err}",
-                            )),
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some(format!("Failed to start `{command}`",).into()),
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(NotificationType::Error(err.kind)),
+                        });
                     }
                 }
             } else {
-                context
-                    .replies
-                    .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
-                        "Couldn't find a default application for html files.".to_string(),
-                    )));
+                context.replies.push_back(UIEvent::Notification {
+                    title: None,
+                    source: None,
+                    body: "Couldn't find a default application for html files.".into(),
+                    kind: None,
+                });
             }
             return true;
         }

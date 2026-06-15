@@ -277,12 +277,18 @@ impl Account {
         if settings.conf.search_backend == SearchBackend::Sqlite3 {
             let db_path = match crate::sqlite3::AccountCache::db_path(&name) {
                 Err(err) => {
-                    main_loop_handler.send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
-                        StatusEvent::DisplayMessage(format!(
-                            "Error with setting up an sqlite3 search database for account \
-                             `{name}`: {err}"
-                        )),
-                    )));
+                    main_loop_handler.send(ThreadEvent::UIEvent(UIEvent::Notification {
+                        title: Some(
+                            format!(
+                                "Error with setting up an sqlite3 search database for account \
+                                 `{name}`"
+                            )
+                            .into(),
+                        ),
+                        source: None,
+                        body: err.to_string().into(),
+                        kind: Some(NotificationType::Error(err.kind)),
+                    }));
                     None
                 }
                 Ok(path) => path,
@@ -403,22 +409,6 @@ impl Account {
             }
         }
 
-        for missing_mailbox in &mailbox_conf_hash_set {
-            log::warn!(
-                "Account `{}` mailbox `{}` configured but not present in account's mailboxes. Is \
-                 it misspelled?",
-                &self.name,
-                missing_mailbox,
-            );
-            self.main_loop_handler
-                .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
-                    StatusEvent::DisplayMessage(format!(
-                        "Account `{}` mailbox `{missing_mailbox}` configured but not present in \
-                         account's mailboxes. Is it misspelled?",
-                        self.name
-                    )),
-                )));
-        }
         if !mailbox_conf_hash_set.is_empty() {
             let mut mailbox_comma_sep_list_string = mailbox_entries
                 .values()
@@ -433,18 +423,24 @@ impl Account {
             mailbox_comma_sep_list_string
                 .drain(mailbox_comma_sep_list_string.len().saturating_sub(2)..);
             log::warn!(
-                "Account `{}` has the following mailboxes: [{}]",
-                &self.name,
-                mailbox_comma_sep_list_string,
+                "Account `{name}` mailboxes `{mailbox_conf_hash_set:?}` configured but not \
+                 present in account's mailboxes. Are they misspelled? Account `{name}` has the \
+                 following mailboxes: [{mailbox_comma_sep_list_string}]",
+                name = &self.name,
             );
             self.main_loop_handler
-                .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
-                    StatusEvent::DisplayMessage(format!(
-                        "Account `{}` has the following mailboxes: \
-                         [{mailbox_comma_sep_list_string}]",
-                        self.name,
-                    )),
-                )));
+                .send(ThreadEvent::UIEvent(UIEvent::Notification {
+                    title: None,
+                    source: None,
+                    body: format!(
+                        "Account `{name}` mailboxes `{mailbox_conf_hash_set:?}` configured but \
+                         not present in account's mailboxes. Are they misspelled? Account \
+                         `{name}` has the following mailboxes: [{mailbox_comma_sep_list_string}]",
+                        name = &self.name,
+                    )
+                    .into(),
+                    kind: None,
+                }));
         }
 
         match self.settings.conf.default_mailbox {
@@ -783,10 +779,6 @@ impl Account {
                 .stderr(std::process::Stdio::piped())
                 .spawn()?;
             self.main_loop_handler
-                .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
-                    StatusEvent::DisplayMessage(format!("Running command {refresh_command}")),
-                )));
-            self.main_loop_handler
                 .send(ThreadEvent::UIEvent(UIEvent::Fork(
                     ForkedProcess::Generic {
                         id: refresh_command.to_string().into(),
@@ -842,12 +834,15 @@ impl Account {
                         || err.kind == ErrorKind::NotImplemented => {}
                 Err(err) => {
                     self.main_loop_handler
-                        .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(format!(
-                                "Account `{}` watch action returned error: {err}",
-                                self.name
-                            )),
-                        )));
+                        .send(ThreadEvent::UIEvent(UIEvent::Notification {
+                            title: Some(
+                                format!("Account `{}` watch action returned error", self.name)
+                                    .into(),
+                            ),
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(NotificationType::Error(err.kind)),
+                        }));
                 }
             }
         }

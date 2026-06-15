@@ -161,9 +161,12 @@ impl MailView {
                         }
                     }
                     Err(err) => {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(format!("Could not get message: {err}")),
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some("Could not get message".into()),
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(NotificationType::Error(err.kind)),
+                        });
                     }
                 }
             }
@@ -252,11 +255,12 @@ impl MailView {
         };
         let account = &context.accounts[&coordinates.0];
         if !account.contains_key(coordinates.2) {
-            context
-                .replies
-                .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
-                    "Email not found".into(),
-                )));
+            context.replies.push_back(UIEvent::Notification {
+                title: None,
+                source: None,
+                body: "Email not found".into(),
+                kind: None,
+            });
             return;
         }
         // First retrieve user's identities, and remove them from the final address
@@ -338,11 +342,12 @@ impl Component for MailView {
                         coordinates.1,
                         vec![FlagOp::Set(Flag::SEEN)],
                     ) {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(format!(
-                                "Could not set message as seen: {err}",
-                            )),
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some("Could not set message as seen".into()),
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(NotificationType::Error(err.kind)),
+                        });
                     }
                 }
             }
@@ -664,11 +669,12 @@ impl Component for MailView {
                                 }
                             }
                             if failure {
-                                context.replies.push_back(UIEvent::StatusEvent(
-                                    StatusEvent::DisplayMessage(String::from(
-                                        "Couldn't parse List-Post header value",
-                                    )),
-                                ));
+                                context.replies.push_back(UIEvent::Notification {
+                                    title: None,
+                                    source: None,
+                                    body: "Couldn't parse List-Post header value".into(),
+                                    kind: None,
+                                });
                             }
                             return true;
                         }
@@ -702,11 +708,14 @@ impl Component for MailView {
                                                 Flag::SEEN,
                                                 true,
                                             ) {
-                                                context.replies.push_back(UIEvent::StatusEvent(
-                                                    StatusEvent::DisplayMessage(format!(
-                                                        "Couldn't send unsubscribe e-mail: {err}"
-                                                    )),
-                                                ));
+                                                context.replies.push_back(UIEvent::Notification {
+                                                    title: Some(
+                                                        "Couldn't send unsubscribe e-mail".into(),
+                                                    ),
+                                                    source: None,
+                                                    body: err.to_string().into(),
+                                                    kind: Some(NotificationType::Error(err.kind)),
+                                                });
                                             }
                                             return true;
                                         }
@@ -746,11 +755,17 @@ impl Component for MailView {
                                                     });
                                             }
                                             Err(err) => {
-                                                context.replies.push_back(UIEvent::StatusEvent(
-                                                    StatusEvent::DisplayMessage(format!(
-                                                        "Couldn't launch {url_launcher}: {err}"
+                                                context.replies.push_back(UIEvent::Notification {
+                                                    title: Some(
+                                                        format!("Couldn't launch {url_launcher}")
+                                                            .into(),
+                                                    ),
+                                                    source: None,
+                                                    body: err.to_string().into(),
+                                                    kind: Some(NotificationType::Error(
+                                                        err.kind().into(),
                                                     )),
-                                                ));
+                                                });
                                             }
                                         }
                                         return true;
@@ -788,11 +803,14 @@ impl Component for MailView {
                                         child,
                                     }),
                                 Err(err) => {
-                                    context.replies.push_back(UIEvent::StatusEvent(
-                                        StatusEvent::DisplayMessage(format!(
-                                            "Couldn't launch {url_launcher}: {err}"
-                                        )),
-                                    ));
+                                    context.replies.push_back(UIEvent::Notification {
+                                        title: Some(
+                                            format!("Couldn't launch {url_launcher}").into(),
+                                        ),
+                                        source: None,
+                                        body: err.to_string().into(),
+                                        kind: Some(NotificationType::Error(err.kind().into())),
+                                    });
                                 }
                             }
                             return true;

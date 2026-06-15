@@ -494,13 +494,12 @@ impl Component for JobManager {
                     3 => Column::_3,
                     4 => Column::_4,
                     other => {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(format!(
-                                "Invalid column index `{}`: there are {} columns.",
-                                other,
-                                Self::HEADERS.len()
-                            )),
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some(format!("Invalid column index `{other}`").into()),
+                            source: None,
+                            body: format!("There are {} columns.", Self::HEADERS.len()).into(),
+                            kind: None,
+                        });
 
                         return true;
                     }

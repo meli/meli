@@ -58,7 +58,6 @@ pub type UIMessage = Box<dyn 'static + std::any::Any + Send + Sync>;
 
 #[derive(Debug)]
 pub enum StatusEvent {
-    DisplayMessage(String),
     BufClear,
     BufSet(String),
     UpdateStatus(String),

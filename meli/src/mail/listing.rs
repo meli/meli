@@ -691,36 +691,48 @@ pub trait MailListingTrait: ListingTrait {
                     if let Err(err) =
                         account.set_flags(env_hashes, mailbox_hash, vec![FlagOp::Set(Flag::SEEN)])
                     {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(err.to_string()),
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some("Could not set seen flag".into()),
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(NotificationType::Error(err.kind)),
+                        });
                     }
                 }
                 ListingAction::Flag(FlagAction::Unset(Flag::SEEN)) | ListingAction::SetUnseen => {
                     if let Err(err) =
                         account.set_flags(env_hashes, mailbox_hash, vec![FlagOp::UnSet(Flag::SEEN)])
                     {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(err.to_string()),
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some("Could not unset seen flag".into()),
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(NotificationType::Error(err.kind)),
+                        });
                     }
                 }
                 ListingAction::Flag(FlagAction::Set(flag)) => {
                     if let Err(err) =
                         account.set_flags(env_hashes, mailbox_hash, vec![FlagOp::Set(*flag)])
                     {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(err.to_string()),
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some("Could not set flag".into()),
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(NotificationType::Error(err.kind)),
+                        });
                     }
                 }
                 ListingAction::Flag(FlagAction::Unset(flag)) => {
                     if let Err(err) =
                         account.set_flags(env_hashes, mailbox_hash, vec![FlagOp::UnSet(*flag)])
                     {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(err.to_string()),
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some("Could not unset flag".into()),
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(NotificationType::Error(err.kind)),
+                        });
                     }
                 }
                 ListingAction::Tag(TagAction::Add(ref tag_str)) => {
@@ -729,9 +741,12 @@ pub trait MailListingTrait: ListingTrait {
                         mailbox_hash,
                         vec![FlagOp::SetTag(tag_str.into())],
                     ) {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(err.to_string()),
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some("Could not add tag".into()),
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(NotificationType::Error(err.kind)),
+                        });
                     }
                 }
                 ListingAction::Tag(TagAction::Remove(ref tag_str)) => {
@@ -740,9 +755,12 @@ pub trait MailListingTrait: ListingTrait {
                         mailbox_hash,
                         vec![FlagOp::UnSetTag(tag_str.into())],
                     ) {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(err.to_string()),
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some("Could not remove tag".into()),
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(NotificationType::Error(err.kind)),
+                        });
                     }
                 }
                 ListingAction::SendToTrash => {
@@ -752,12 +770,14 @@ pub trait MailListingTrait: ListingTrait {
                         .special_use_mailbox(SpecialUsageMailbox::Trash)
                         .or_else(|| account.special_use_mailbox(SpecialUsageMailbox::Junk))
                     else {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(
-                                "Cannot send mail to trash because no Trash folder is configured."
-                                    .to_string(),
-                            ),
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some("Could not send mail to trash".into()),
+                            source: None,
+                            body: "Cannot send mail to trash because no Trash folder is \
+                                   configured."
+                                .into(),
+                            kind: Some(NotificationType::Info),
+                        });
                         return;
                     };
                     let job = account.backend.lock().unwrap().copy_messages(
@@ -768,9 +788,12 @@ pub trait MailListingTrait: ListingTrait {
                     );
                     match job {
                         Err(err) => {
-                            context.replies.push_back(UIEvent::StatusEvent(
-                                StatusEvent::DisplayMessage(err.to_string()),
-                            ));
+                            context.replies.push_back(UIEvent::Notification {
+                                title: Some("Could not send mail to trash".into()),
+                                source: None,
+                                body: err.to_string().into(),
+                                kind: Some(NotificationType::Error(err.kind)),
+                            });
                         }
                         Ok(fut) => {
                             let handle = account.main_loop_handler.job_executor.spawn(
@@ -798,9 +821,12 @@ pub trait MailListingTrait: ListingTrait {
                         .delete_messages(env_hashes.clone(), mailbox_hash);
                     match job {
                         Err(err) => {
-                            context.replies.push_back(UIEvent::StatusEvent(
-                                StatusEvent::DisplayMessage(err.to_string()),
-                            ));
+                            context.replies.push_back(UIEvent::Notification {
+                                title: Some("Could not delete mail".into()),
+                                source: None,
+                                body: err.to_string().into(),
+                                kind: Some(NotificationType::Error(err.kind)),
+                            });
                         }
                         Ok(fut) => {
                             let handle = account.main_loop_handler.job_executor.spawn(
@@ -827,9 +853,12 @@ pub trait MailListingTrait: ListingTrait {
                         },
                     ) {
                         Err(err) => {
-                            context.replies.push_back(UIEvent::StatusEvent(
-                                StatusEvent::DisplayMessage(err.to_string()),
-                            ));
+                            context.replies.push_back(UIEvent::Notification {
+                                title: Some("Could not copy mail".into()),
+                                source: None,
+                                body: err.to_string().into(),
+                                kind: Some(NotificationType::Error(err.kind)),
+                            });
                         }
                         Ok(fut) => {
                             let handle = account.main_loop_handler.job_executor.spawn(
@@ -850,11 +879,12 @@ pub trait MailListingTrait: ListingTrait {
                     }
                 }
                 ListingAction::CopyToOtherAccount(ref _account_name, ref _mailbox_path) => {
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
-                            "Copying to another account is currently unimplemented".into(),
-                        )));
+                    context.replies.push_back(UIEvent::Notification {
+                        title: Some("Could not copy mail".into()),
+                        source: None,
+                        body: "Copying to another account is currently unimplemented".into(),
+                        kind: Some(NotificationType::Error(ErrorKind::NotImplemented)),
+                    });
                 }
                 ListingAction::MoveTo(ref mailbox_path) => {
                     match account.mailbox_by_path(mailbox_path).and_then(
@@ -868,9 +898,12 @@ pub trait MailListingTrait: ListingTrait {
                         },
                     ) {
                         Err(err) => {
-                            context.replies.push_back(UIEvent::StatusEvent(
-                                StatusEvent::DisplayMessage(err.to_string()),
-                            ));
+                            context.replies.push_back(UIEvent::Notification {
+                                title: Some("Could not move mail".into()),
+                                source: None,
+                                body: err.to_string().into(),
+                                kind: Some(NotificationType::Error(err.kind)),
+                            });
                         }
                         Ok(fut) => {
                             let handle = account.main_loop_handler.job_executor.spawn(
@@ -1018,11 +1051,12 @@ pub trait MailListingTrait: ListingTrait {
                     );
                 }
                 ListingAction::MoveToOtherAccount(ref _account_name, ref _mailbox_path) => {
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
-                            "Moving to another account is currently unimplemented".into(),
-                        )));
+                    context.replies.push_back(UIEvent::Notification {
+                        title: Some("Could not move mail".into()),
+                        source: None,
+                        body: "Moving to another account is currently unimplemented".into(),
+                        kind: Some(NotificationType::Error(ErrorKind::NotImplemented)),
+                    });
                 }
                 _ => unreachable!(),
             }
@@ -1896,9 +1930,12 @@ impl Component for Listing {
                                     account.save(&bytes, mailbox_hash, None)
                                 })
                             {
-                                context.replies.push_back(UIEvent::StatusEvent(
-                                    StatusEvent::DisplayMessage(err.to_string()),
-                                ));
+                                context.replies.push_back(UIEvent::Notification {
+                                    title: Some("Could not import mail".into()),
+                                    source: None,
+                                    body: err.to_string().into(),
+                                    kind: Some(NotificationType::Error(err.kind)),
+                                });
                             }
                             return true;
                         }

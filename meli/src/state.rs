@@ -804,26 +804,16 @@ impl State {
                 std::env::set_var(key.as_str(), val.as_str());
             }
             PrintEnv(key) => {
-                self.context
-                    .replies
-                    .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
-                        std::env::var(key.as_str()).unwrap_or_else(|e| e.to_string()),
-                    )));
+                self.show_display_message(
+                    std::env::var(key.as_str()).unwrap_or_else(|e| e.to_string()),
+                );
             }
             ChangeCurrentDirectory(dir) => {
                 self.context.current_dir = dir;
-                self.context
-                    .replies
-                    .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
-                        self.context.current_dir.display().to_string(),
-                    )));
+                self.show_display_message(self.context.current_dir.display().to_string());
             }
             CurrentDirectory => {
-                self.context
-                    .replies
-                    .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
-                        self.context.current_dir.display().to_string(),
-                    )));
+                self.show_display_message(self.context.current_dir.display().to_string());
             }
             Mailbox(account_name, op) => {
                 if let Some(account) = self
@@ -833,16 +823,20 @@ impl State {
                     .find(|a| a.name() == account_name)
                 {
                     if let Err(err) = account.mailbox_operation(op) {
-                        self.context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(err.to_string()),
-                        ));
+                        self.context.replies.push_back(UIEvent::Notification {
+                            title: None,
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(NotificationType::Error(err.kind)),
+                        });
                     }
                 } else {
-                    self.context.replies.push_back(UIEvent::StatusEvent(
-                        StatusEvent::DisplayMessage(format!(
-                            "Account with name `{account_name}` not found."
-                        )),
-                    ));
+                    self.context.replies.push_back(UIEvent::Notification {
+                        title: None,
+                        source: None,
+                        body: format!("Account with name `{account_name}` not found.").into(),
+                        kind: Some(NotificationType::Info),
+                    });
                 }
             }
             #[cfg(feature = "sqlite3")]
@@ -1070,11 +1064,12 @@ impl State {
                                     self.context.replies.push_back(UIEvent::Resize);
                                 }
                                 Err(err) => {
-                                    self.context.replies.push_back(UIEvent::StatusEvent(
-                                        StatusEvent::DisplayMessage(format!(
-                                            "Could not load configuration: {err}"
-                                        )),
-                                    ));
+                                    self.context.replies.push_back(UIEvent::Notification {
+                                        title: Some("Could not load configuration".into()),
+                                        source: None,
+                                        body: err.to_string().into(),
+                                        kind: Some(NotificationType::Error(err.kind)),
+                                    });
                                 }
                             }
                         } else {
@@ -1082,9 +1077,12 @@ impl State {
                         }
                     }
                     Err(err) => {
-                        self.context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(format!("Invalid command `{cmd}`: {err}")),
-                        ));
+                        self.context.replies.push_back(UIEvent::Notification {
+                            title: Some(format!("Invalid command `{cmd}`").into()),
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(NotificationType::Error(ErrorKind::ValueError)),
+                        });
                     }
                 }
                 return;
@@ -1130,17 +1128,15 @@ impl State {
                     level,
                 },
             ) => {
-                log::log!(
-                    level.into(),
+                let msg = format!(
                     "{}: {}{}{}",
                     self.context.accounts[&account_hash].name(),
                     description.as_str(),
                     if content.is_some() { ": " } else { "" },
                     content.as_ref().map(|s| s.as_str()).unwrap_or("")
                 );
-                self.rcv_event(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
-                    description.to_string(),
-                )));
+                log::log!(level.into(), "{msg}");
+                self.show_display_message(msg);
                 return;
             }
             UIEvent::BackendEvent(account_hash, BackendEvent::AccountStateChange { message }) => {
@@ -1188,16 +1184,18 @@ impl State {
                 self.message_box.show_next();
                 return;
             }
-            UIEvent::StatusEvent(StatusEvent::DisplayMessage(ref mut msg)) => {
-                if self
-                    .message_box
-                    .try_push(std::mem::take(msg), datetime::now())
-                {
-                    self.message_box.arm(&mut self.context);
-                    if self.message_box.is_dirty() {
-                        self.redraw();
-                    }
-                }
+            UIEvent::Notification {
+                ref title,
+                source: _,
+                ref body,
+                kind: _,
+            } if self.context.settings.notifications.enable.ui_enabled() => {
+                self.show_display_message(format!(
+                    "{title}{}{body}",
+                    if title.is_some() { " " } else { "" },
+                    title = title.as_deref().unwrap_or_default(),
+                    body = body,
+                ));
             }
             UIEvent::FinishedUIDialog(ref id, ref mut results) if self.overlay.contains_key(id) => {
                 if let Some(ref mut action @ Some(_)) = results.downcast_mut::<Option<Action>>() {
@@ -1240,6 +1238,16 @@ impl State {
                 self.context.replies.drain(0..).collect();
             // Pass replies to self and call count on the map iterator to force evaluation
             replies.into_iter().map(|r| self.rcv_event(r)).count();
+        }
+    }
+
+    #[inline]
+    fn show_display_message(&mut self, msg: String) {
+        if self.message_box.try_push(msg, datetime::now()) {
+            self.message_box.arm(&mut self.context);
+            if self.message_box.is_dirty() {
+                self.redraw();
+            }
         }
     }
 

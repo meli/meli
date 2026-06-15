@@ -230,9 +230,12 @@ impl Component for KeySelection {
                                     }
                                 }
                                 if let Self::Error { ref err, .. } = self {
-                                    context.replies.push_back(UIEvent::StatusEvent(
-                                        StatusEvent::DisplayMessage(err.to_string()),
-                                    ));
+                                    context.replies.push_back(UIEvent::Notification {
+                                        title: Some("Could not load keys".into()),
+                                        source: None,
+                                        body: err.to_string().into(),
+                                        kind: Some(NotificationType::Error(err.kind)),
+                                    });
                                     // Even in case of error, we should send a FinishedUIDialog
                                     // event so that the component parent knows we're done.
                                     let res: Option<Vec<melib::gpgme::Key>> = None;
@@ -292,9 +295,12 @@ impl Component for KeySelection {
                             }
                         }
                         Ok(Some(Err(err))) => {
-                            context.replies.push_back(UIEvent::StatusEvent(
-                                StatusEvent::DisplayMessage(err.to_string()),
-                            ));
+                            context.replies.push_back(UIEvent::Notification {
+                                title: Some("Could not load keys".into()),
+                                source: None,
+                                body: err.to_string().into(),
+                                kind: Some(NotificationType::Error(err.kind)),
+                            });
                             // Even in case of error, we should send a FinishedUIDialog
                             // event so that the component parent knows we're done.
                             let res: Option<Vec<melib::gpgme::Key>> = None;

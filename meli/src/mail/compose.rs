@@ -2148,12 +2148,10 @@ impl Component for Composer {
                     match res {
                         Ok((f, stderr)) => {
                             if !stderr.is_empty() {
-                                context.replies.push_back(UIEvent::StatusEvent(
-                                    StatusEvent::DisplayMessage(format!(
-                                        "Command stderr output: `{}`.",
-                                        String::from_utf8_lossy(&stderr)
-                                    )),
-                                ));
+                                log::warn!(
+                                    "Command stderr output: `{}`.",
+                                    String::from_utf8_lossy(&stderr)
+                                );
                             }
                             let attachment =
                                 match melib::email::compose::attachment_from_file(&f.path()) {
@@ -2298,20 +2296,22 @@ impl Component for Composer {
                 }
                 ComposerTabAction::RemoveAttachment(idx) => {
                     if *idx + 1 > self.draft.attachments().len() {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(
-                                "attachment with given index does not exist".to_string(),
-                            ),
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: None,
+                            source: None,
+                            body: "attachment with given index does not exist".into(),
+                            kind: None,
+                        });
                         self.set_dirty(true);
                         return true;
                     }
                     self.draft.attachments_mut().remove(*idx);
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
-                            "attachment removed".to_string(),
-                        )));
+                    context.replies.push_back(UIEvent::Notification {
+                        title: None,
+                        source: None,
+                        body: "attachment removed".into(),
+                        kind: None,
+                    });
                     self.set_dirty(true);
                     return true;
                 }

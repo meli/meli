@@ -532,11 +532,12 @@ impl EnvelopeView {
                 return ret;
             }
         }
-        context
-            .replies
-            .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(format!(
-                "Attachment `{lidx}` not found."
-            ))));
+        context.replies.push_back(UIEvent::Notification {
+            title: None,
+            source: None,
+            body: format!("Attachment `{lidx}` not found.").into(),
+            kind: None,
+        });
         None
     }
 
@@ -608,11 +609,12 @@ impl EnvelopeView {
                 }
             }
         } else {
-            context
-                .replies
-                .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(format!(
-                    "Attachment `{a_i}` not found."
-                ))));
+            context.replies.push_back(UIEvent::Notification {
+                title: None,
+                source: None,
+                body: format!("Attachment `{a_i}` not found.").into(),
+                kind: None,
+            });
         }
     }
 }
@@ -1394,12 +1396,16 @@ impl Component for EnvelopeView {
                     if crate::mailcap::MailcapEntry::execute(attachment, context).is_ok() {
                         self.set_dirty(true);
                     } else {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(format!(
+                        context.replies.push_back(UIEvent::Notification {
+                            title: None,
+                            source: None,
+                            body: format!(
                                 "no mailcap entry found for {}",
                                 attachment.content_type()
-                            )),
-                        ));
+                            )
+                            .into(),
+                            kind: None,
+                        });
                     }
                 }
                 return true;
@@ -1532,17 +1538,19 @@ impl Component for EnvelopeView {
             UIEvent::Action(View(ViewAction::PipeAttachment(a_i, ref bin, ref args))) => {
                 use std::borrow::Cow;
 
-                let bytes =
-                    if let Some(u) = self.open_attachment(a_i, context) {
-                        Cow::Owned(u.decode(self.view_settings.charset.into()))
-                    } else if a_i == 0 {
-                        Cow::Borrowed(&self.mail.bytes)
-                    } else {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(format!("Attachment `{a_i}` not found.")),
-                        ));
-                        return true;
-                    };
+                let bytes = if let Some(u) = self.open_attachment(a_i, context) {
+                    Cow::Owned(u.decode(self.view_settings.charset.into()))
+                } else if a_i == 0 {
+                    Cow::Borrowed(&self.mail.bytes)
+                } else {
+                    context.replies.push_back(UIEvent::Notification {
+                        title: None,
+                        source: None,
+                        body: format!("Attachment `{a_i}` not found.").into(),
+                        kind: None,
+                    });
+                    return true;
+                };
                 // Kill input thread so that spawned command can be sole receiver of stdin
                 {
                     context.input_kill();
@@ -1610,10 +1618,13 @@ impl Component for EnvelopeView {
                                     )));
                                     self.set_dirty(true);
                                 }
-                                Err(e) => {
-                                    context.replies.push_back(UIEvent::StatusEvent(
-                                        StatusEvent::DisplayMessage(format!("{e}")),
-                                    ));
+                                Err(err) => {
+                                    context.replies.push_back(UIEvent::Notification {
+                                        title: Some("Could not open attachment".into()),
+                                        source: None,
+                                        body: err.to_string().into(),
+                                        kind: Some(NotificationType::Error(err.kind)),
+                                    });
                                 }
                             }
                         }
@@ -1667,11 +1678,12 @@ impl Component for EnvelopeView {
                                             });
                                     }
                                     Err(err) => {
-                                        context.replies.push_back(UIEvent::StatusEvent(
-                                            StatusEvent::DisplayMessage(format!(
-                                                "Failed to execute command: {err}"
-                                            )),
-                                        ));
+                                        context.replies.push_back(UIEvent::Notification {
+                                            title: Some("Failed to execute command".into()),
+                                            source: None,
+                                            body: err.to_string().into(),
+                                            kind: Some(NotificationType::Error(err.kind)),
+                                        });
                                     }
                                 }
                             } else if let Ok(filter) =
@@ -1681,35 +1693,42 @@ impl Component for EnvelopeView {
                                 self.initialised = false;
                                 self.set_dirty(true);
                             } else {
-                                context.replies.push_back(UIEvent::StatusEvent(
-                                    StatusEvent::DisplayMessage(
-                                        if let Some(filename) = filename.as_ref() {
-                                            format!(
-                                                "Couldn't find a default application for file \
-                                                 {filename} (type {attachment_type})"
-                                            )
-                                        } else {
-                                            format!(
-                                                "Couldn't find a default application for type \
-                                                 {attachment_type}"
-                                            )
-                                        },
-                                    ),
-                                ));
+                                context.replies.push_back(UIEvent::Notification {
+                                    title: None,
+                                    source: None,
+                                    body: if let Some(filename) = filename.as_ref() {
+                                        format!(
+                                            "Couldn't find a default application for file \
+                                             {filename} (type {attachment_type})"
+                                        )
+                                        .into()
+                                    } else {
+                                        format!(
+                                            "Couldn't find a default application for type \
+                                             {attachment_type}"
+                                        )
+                                        .into()
+                                    },
+                                    kind: None,
+                                });
                             }
                         }
                         ContentType::OctetStream {
                             ref name,
                             parameters: _,
                         } => {
-                            context.replies.push_back(UIEvent::StatusEvent(
-                                StatusEvent::DisplayMessage(format!(
+                            context.replies.push_back(UIEvent::Notification {
+                                title: None,
+                                source: None,
+                                body: format!(
                                     "Failed to open {}. application/octet-stream is a stream of \
                                      bytes of unknown type. Try saving it as a file and opening \
                                      it manually.",
                                     name.as_ref().map(|n| n.as_str()).unwrap_or("file")
-                                )),
-                            ));
+                                )
+                                .into(),
+                                kind: None,
+                            });
                         }
                     }
                 }
@@ -1737,9 +1756,12 @@ impl Component for EnvelopeView {
                     if let Some(l) = links.get(lidx).map(|l| (l.kind, l.value.as_ref())) {
                         l
                     } else {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(format!("Link `{lidx}` not found.")),
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: None,
+                            source: None,
+                            body: format!("Link `{lidx}` not found.").into(),
+                            kind: None,
+                        });
                         return true;
                     }
                 };

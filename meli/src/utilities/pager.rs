@@ -850,10 +850,13 @@ impl Component for Pager {
                     .spawn()
                 {
                     Ok(o) => o,
-                    Err(e) => {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(format!("Could not pipe to {bin}: {e}")),
-                        ));
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some(format!("Could not pipe to {bin}").into()),
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(NotificationType::Error(err.kind().into())),
+                        });
                         return true;
                     }
                 };
@@ -862,13 +865,17 @@ impl Component for Pager {
                     .write_all(self.text.as_bytes())
                     .expect("Failed to write to stdin");
 
-                context
-                    .replies
-                    .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(format!(
+                context.replies.push_back(UIEvent::Notification {
+                    title: None,
+                    source: None,
+                    body: format!(
                         "Pager text piped to '{bin}{}{}'",
                         if args.is_empty() { "" } else { " " },
                         args.join(" ")
-                    ))));
+                    )
+                    .into(),
+                    kind: Some(NotificationType::Info),
+                });
                 return true;
             }
             ev if matches!(ev, UIEvent::Action(View(Filter(None))))
@@ -883,11 +890,12 @@ impl Component for Pager {
                     .map(|(k, v)| (v.to_string(), k.to_string()))
                     .collect::<Vec<_>>();
                 if filters.is_empty() {
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
-                            "No filters set in [pager.named_filters].".into(),
-                        )));
+                    context.replies.push_back(UIEvent::Notification {
+                        title: None,
+                        source: None,
+                        body: "No filters set in [pager.named_filters].".into(),
+                        kind: Some(NotificationType::Info),
+                    });
                 } else {
                     context.replies.push_back(UIEvent::GlobalUIDialog {
                         value: Box::new(UIDialog::new(
@@ -932,9 +940,12 @@ impl Component for Pager {
                         self.set_dirty(true);
                     }
                     Ok(Some(Err(err))) => {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(err.to_string()),
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some("Could not run filter".into()),
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(NotificationType::Error(err.kind)),
+                        });
                     }
                 }
             }
