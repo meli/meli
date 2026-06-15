@@ -88,16 +88,10 @@ fn run_app(mut opt: Opt) -> Result<()> {
             &state.context,
         ));
 
-        let status_bar = Box::new(StatusBar::new(&state.context, window));
-        state.register_component(status_bar);
-
-        #[cfg(all(target_os = "linux", feature = "dbus-notifications"))]
-        {
-            let dbus_notifications =
-                Box::new(notifications::DbusNotifications::new(&state.context));
-            state.register_component(dbus_notifications);
-        }
-        state.register_component(Box::new(notifications::NotificationCommand::new()));
+        state.register_component(Box::new(StatusBar::new(&state.context, window)));
+        state.register_component(Box::new(notifications::NotificationRouter::new(
+            &state.context,
+        )));
     }
     let enter_command_mode: Key = state
         .context

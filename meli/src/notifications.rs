@@ -22,32 +22,31 @@
 //! Notification handling components
 use std::process::{Command, Stdio};
 
-#[cfg(all(target_os = "linux", feature = "dbus-notifications"))]
-pub use dbus::*;
 use melib::{utils::datetime, UnixTimestamp};
+pub use system::*;
 
 use super::*;
-use crate::conf::data_types::UINotifications;
 
-#[cfg(all(target_os = "linux", feature = "dbus-notifications"))]
-mod dbus {
+mod system {
+    use std::borrow::Cow;
+
     use super::*;
     use crate::types::RateLimit;
 
-    /// Passes notifications to the OS using Dbus
+    /// Passes notifications to the OS using `notify-rust` crate.
     #[derive(Debug)]
-    pub struct DbusNotifications {
+    pub struct SystemNotifications {
         rate_limit: RateLimit,
         id: ComponentId,
     }
 
-    impl std::fmt::Display for DbusNotifications {
+    impl std::fmt::Display for SystemNotifications {
         fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
             write!(f, "")
         }
     }
 
-    impl DbusNotifications {
+    impl SystemNotifications {
         pub fn new(context: &Context) -> Self {
             Self {
                 rate_limit: RateLimit::new(
@@ -60,14 +59,20 @@ mod dbus {
         }
     }
 
-    impl Component for DbusNotifications {
+    impl Component for SystemNotifications {
         fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
 
         fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-            if !context.settings.notifications.enable {
+            if !context.settings.notifications.enable.system_enabled()
+                || context.settings.notifications.script.is_some()
+            {
                 return false;
             }
 
+            #[cfg(any(
+                all(target_os = "linux", feature = "dbus-notifications"),
+                target_os = "macos"
+            ))]
             if let UIEvent::Notification {
                 ref title,
                 source: _,
@@ -79,7 +84,6 @@ mod dbus {
                     return false;
                 }
 
-                let settings = &context.settings.notifications;
                 let mut notification = notify_rust::Notification::new();
                 notification
                     .appname("meli")
@@ -87,11 +91,13 @@ mod dbus {
                     .body(&escape_str(body));
                 match *kind {
                     Some(NotificationType::NewMail) => {
+                        #[cfg(all(unix, not(target_os = "macos")))]
                         notification.hint(notify_rust::Hint::Category("email".to_owned()));
                         notification.icon("mail-message-new");
                         notification.sound_name("message-new-email");
                     }
                     Some(NotificationType::SentMail) => {
+                        #[cfg(all(unix, not(target_os = "macos")))]
                         notification.hint(notify_rust::Hint::Category("email".to_owned()));
                         notification.icon("mail-send");
                         notification.sound_name("message-sent-email");
@@ -120,8 +126,9 @@ mod dbus {
                     }
                     _ => {}
                 }
-                if settings.play_sound.is_true() {
-                    if let Some(ref sound_path) = settings.sound_file {
+                #[cfg(all(unix, not(target_os = "macos")))]
+                if context.settings.notifications.play_sound.is_true() {
+                    if let Some(ref sound_path) = context.settings.notifications.sound_file {
                         notification.hint(notify_rust::Hint::SoundFile(sound_path.to_owned()));
                     }
                 } else {
@@ -129,7 +136,7 @@ mod dbus {
                 }
 
                 if let Err(err) = notification.show() {
-                    log::error!("Could not show dbus notification: {err}");
+                    log::error!("Could not show system notification: {err}");
                 }
             }
             false
@@ -146,7 +153,20 @@ mod dbus {
         }
     }
 
-    fn escape_str(s: &str) -> String {
+    #[cfg(all(target_os = "linux", feature = "dbus-notifications"))]
+    #[inline]
+    fn escape_str(s: &'_ str) -> Cow<'_, str> {
+        if !s.chars().any(|c| {
+            let i = c as u32;
+            ['&', '<', '>', '\'', '"'].contains(&c)
+                || (0x1..=0x8).contains(&i)
+                || (0xb..=0xc).contains(&i)
+                || (0xe..=0x1f).contains(&i)
+                || (0x7f..=0x84).contains(&i)
+                || (0x86..=0x9f).contains(&i)
+        }) {
+            return Cow::Borrowed(s);
+        }
         let mut ret: String = String::with_capacity(s.len());
         for c in s.chars() {
             match c {
@@ -171,21 +191,31 @@ mod dbus {
                 }
             }
         }
-        ret
+        Cow::Owned(ret)
+    }
+
+    #[cfg(target_os = "macos")]
+    #[inline]
+    fn escape_str(s: &'_ str) -> Cow<'_, str> {
+        Cow::Borrowed(s)
     }
 }
 
 /// Passes notifications to a user defined shell command
-#[derive(Debug, Default)]
-pub struct NotificationCommand {
+#[derive(Debug)]
+pub struct NotificationRouter {
+    system: SystemNotifications,
     /// Identifier of component.
     id: ComponentId,
 }
 
-impl NotificationCommand {
-    /// Create a new [`NotificationCommand`] component.
-    pub fn new() -> Self {
-        Self::default()
+impl NotificationRouter {
+    /// Create a new [`NotificationRouter`] component.
+    pub fn new(context: &Context) -> Self {
+        Self {
+            system: SystemNotifications::new(context),
+            id: ComponentId::default(),
+        }
     }
 
     /// Update an `xbiff` file at `path`.
@@ -204,18 +234,71 @@ impl NotificationCommand {
         }
         Ok(())
     }
+
+    fn show_notification(
+        &self,
+        context: &mut Context,
+        title: Option<&str>,
+        body: &str,
+        kind: Option<&NotificationType>,
+    ) -> Result<()> {
+        if matches!(kind, Some(NotificationType::NewMail)) {
+            if let Some(ref path) = context.settings.notifications.xbiff_file_path {
+                Self::update_xbiff(path).chain_err_details(|| "Could not update xbiff file")?;
+            }
+        }
+
+        let script = if matches!(kind, Some(NotificationType::NewMail))
+            && context.settings.notifications.new_mail_script.is_some()
+        {
+            context.settings.notifications.new_mail_script.as_ref()
+        } else {
+            context.settings.notifications.script.as_ref()
+        };
+
+        if let Some(ref bin) = script {
+            let child = Command::new(bin)
+                .arg(kind.map(|k| k.to_string()).unwrap_or_default())
+                .arg(title.as_ref().map(<_>::as_ref).unwrap_or("meli"))
+                .arg(body)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .chain_err_details(|| "Could not run notification script")?;
+            context
+                .children
+                .entry(melib::identify!(NotificationRouter).into())
+                .or_default()
+                .push(ForkedProcess::Generic {
+                    id: melib::identify!(NotificationRouter).into(),
+                    command: Some(
+                        format!(
+                            "{bin} {kind} {title} {body}",
+                            kind = kind.map(|k| k.to_string()).unwrap_or_default(),
+                            title = title.as_ref().map(<_>::as_ref).unwrap_or("meli"),
+                        )
+                        .into(),
+                    ),
+                    child,
+                });
+        }
+        Ok(())
+    }
 }
 
-impl std::fmt::Display for NotificationCommand {
+impl std::fmt::Display for NotificationRouter {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "")
     }
 }
 
-impl Component for NotificationCommand {
+impl Component for NotificationRouter {
     fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        _ = self.system.process_event(event, context);
+
         if let UIEvent::Notification {
             ref title,
             source: _,
@@ -223,108 +306,11 @@ impl Component for NotificationCommand {
             ref kind,
         } = event
         {
-            if context.settings.notifications.enable {
-                if *kind == Some(NotificationType::NewMail) {
-                    if let Some(ref path) = context.settings.notifications.xbiff_file_path {
-                        if let Err(err) = Self::update_xbiff(path) {
-                            log::error!("Could not update xbiff file: {err}.");
-                        }
-                    }
-                }
-
-                let script = if *kind == Some(NotificationType::NewMail)
-                    && context.settings.notifications.new_mail_script.is_some()
+            if context.settings.notifications.enable.system_enabled() {
+                if let Err(err) =
+                    self.show_notification(context, title.as_deref(), body, kind.as_ref())
                 {
-                    context.settings.notifications.new_mail_script.as_ref()
-                } else {
-                    context.settings.notifications.script.as_ref()
-                };
-
-                if let Some(ref bin) = script {
-                    match Command::new(bin)
-                        .arg(kind.map(|k| k.to_string()).unwrap_or_default())
-                        .arg(title.as_ref().map(<_>::as_ref).unwrap_or("meli"))
-                        .arg(body.as_ref())
-                        .stdin(Stdio::piped())
-                        .stdout(Stdio::piped())
-                        .spawn()
-                    {
-                        Ok(child) => {
-                            context
-                                .children
-                                .entry(melib::identify!(NotificationCommand).into())
-                                .or_default()
-                                .push(ForkedProcess::Generic {
-                                    id: melib::identify!(NotificationCommand).into(),
-                                    command: Some(
-                                        format!(
-                                            "{bin} {kind} {title} {body}",
-                                            kind = kind.map(|k| k.to_string()).unwrap_or_default(),
-                                            title =
-                                                title.as_ref().map(<_>::as_ref).unwrap_or("meli"),
-                                            body = body.as_ref()
-                                        )
-                                        .into(),
-                                    ),
-                                    child,
-                                });
-                        }
-                        Err(err) => {
-                            log::error!("Could not run notification script: {err}.");
-                        }
-                    }
-                } else {
-                    #[cfg(target_os = "macos")]
-                    {
-                        let applescript = format!(
-                            "display notification \"{message}\" with title \"{title}\" subtitle \
-                             \"{subtitle}\"",
-                            message = body.replace('"', "'"),
-                            title = title
-                                .as_ref()
-                                .map(<_>::as_ref)
-                                .unwrap_or("meli")
-                                .replace('"', "'"),
-                            subtitle = kind
-                                .map(|k| k.to_string())
-                                .unwrap_or_default()
-                                .replace('"', "'")
-                        );
-                        match Command::new("osascript")
-                            .arg("-e")
-                            .arg(&applescript)
-                            .stdin(Stdio::piped())
-                            .stdout(Stdio::piped())
-                            .spawn()
-                        {
-                            Ok(child) => {
-                                context
-                                    .children
-                                    .entry(melib::identify!(NotificationCommand).into())
-                                    .or_default()
-                                    .push(ForkedProcess::Generic {
-                                        id: melib::identify!(NotificationCommand).into(),
-                                        command: Some(
-                                            format!("osascript -e {applescript}",).into(),
-                                        ),
-                                        child,
-                                    });
-                                return false;
-                            }
-                            Err(err) => {
-                                log::error!("Could not run notification script: {err}.");
-                            }
-                        }
-                    }
-
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(format!(
-                            "{title}{}{body}",
-                            if title.is_some() { " " } else { "" },
-                            title = title.as_deref().unwrap_or_default(),
-                            body = body,
-                        ))));
+                    log::error!("{err}");
                 }
             }
         }
@@ -438,22 +424,11 @@ impl DisplayMessageBox {
             return;
         }
         self.pos = self.messages.len().saturating_sub(1);
-        match context.settings.notifications.ui_notifications {
-            UINotifications::Show => {
-                self.active = true;
-                self.initialised = false;
-                self.set_dirty(true);
-                self.expiration_start = None;
-            }
-            UINotifications::Hide => {}
-            UINotifications::System => {
-                context.replies.push_back(UIEvent::Notification {
-                    title: None,
-                    source: None,
-                    body: self.messages[self.pos].msg.clone().into(),
-                    kind: Some(NotificationType::Info),
-                });
-            }
+        if context.settings.notifications.enable.ui_enabled() {
+            self.active = true;
+            self.initialised = false;
+            self.set_dirty(true);
+            self.expiration_start = None;
         }
     }
 

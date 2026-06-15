@@ -164,43 +164,64 @@ impl Serialize for ThreadLayout {
 
 /// How to handle UI notifications.
 #[derive(Clone, Copy, Debug, Default)]
-pub enum UINotifications {
-    /// Always show (default).
+pub enum NotificationEnable {
+    /// Always show as both system and in-UI(default).
     #[default]
-    Show,
-    /// Hide from UI.
-    Hide,
-    /// Show them as system notifications.
-    System,
+    SystemAndUI,
+    /// Do not show any notifications.
+    None,
+    /// Show them only as system notifications.
+    SystemOnly,
+    /// Show them only as UI notifications.
+    UIOnly,
 }
 
-impl<'de> Deserialize<'de> for UINotifications {
+impl NotificationEnable {
+    #[inline(always)]
+    pub const fn enabled(&self) -> bool {
+        !matches!(self, Self::None)
+    }
+
+    #[inline(always)]
+    pub const fn ui_enabled(&self) -> bool {
+        matches!(self, Self::SystemAndUI | Self::UIOnly)
+    }
+
+    #[inline(always)]
+    pub const fn system_enabled(&self) -> bool {
+        matches!(self, Self::SystemAndUI | Self::SystemOnly)
+    }
+}
+
+impl<'de> Deserialize<'de> for NotificationEnable {
     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
         let s = <String>::deserialize(deserializer)?;
         match s.as_str() {
-            show if show.eq_ignore_ascii_case("show") => Ok(Self::Show),
-            hide if hide.eq_ignore_ascii_case("hide") => Ok(Self::Hide),
-            system if system.eq_ignore_ascii_case("system") => Ok(Self::System),
+            v if v.eq_ignore_ascii_case("system_and_ui") => Ok(Self::SystemAndUI),
+            v if v.eq_ignore_ascii_case("system_only") => Ok(Self::SystemOnly),
+            v if v.eq_ignore_ascii_case("ui_only") => Ok(Self::UIOnly),
+            v if v.eq_ignore_ascii_case("none") => Ok(Self::None),
             _ => Err(de::Error::custom(
-                "invalid `ui_notifications` value, expected one of: \"show\", \"hide\" or \
-                 \"system\".",
+                "invalid `ui_notifications` value, expected one of: \"system_and_ui\", \"none\", \
+                 \"system_only\" or \"ui_only\".",
             )),
         }
     }
 }
 
-impl Serialize for UINotifications {
+impl Serialize for NotificationEnable {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
         match self {
-            Self::Show => serializer.serialize_str("show"),
-            Self::Hide => serializer.serialize_str("hide"),
-            Self::System => serializer.serialize_str("system"),
+            Self::SystemAndUI => serializer.serialize_str("system_and_ui"),
+            Self::None => serializer.serialize_str("none"),
+            Self::SystemOnly => serializer.serialize_str("system_only"),
+            Self::UIOnly => serializer.serialize_str("ui_only"),
         }
     }
 }

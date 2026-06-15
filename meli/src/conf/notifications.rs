@@ -22,8 +22,8 @@
 use melib::{Error, Result, ToggleFlag};
 
 use crate::conf::{
-    data_types::UINotifications,
-    default_values::{internal_value_false, none, true_val},
+    data_types::NotificationEnable,
+    default_values::{internal_value_false, none},
     DotAddressable,
 };
 
@@ -32,9 +32,9 @@ use crate::conf::{
 #[serde(deny_unknown_fields)]
 pub struct NotificationsSettings {
     /// Enable notifications.
-    /// Default: True
-    #[serde(default = "true_val")]
-    pub enable: bool,
+    /// Default: [`NotificationEnable::SystemAndUI`]
+    #[serde(default)]
+    pub enable: NotificationEnable,
 
     /// A command to pipe notifications through.
     /// Default: None
@@ -57,23 +57,17 @@ pub struct NotificationsSettings {
 
     #[serde(default = "none", alias = "sound-file")]
     pub sound_file: Option<String>,
-
-    /// How to handle UI notifications.
-    /// Default: [`UINotifications::Show`]
-    #[serde(default, alias = "ui-notifications")]
-    pub ui_notifications: UINotifications,
 }
 
 impl Default for NotificationsSettings {
     fn default() -> Self {
         Self {
-            enable: true,
+            enable: NotificationEnable::SystemAndUI,
             script: None,
             new_mail_script: None,
             xbiff_file_path: None,
             play_sound: ToggleFlag::InternalVal(false),
             sound_file: None,
-            ui_notifications: UINotifications::default(),
         }
     }
 }
@@ -90,9 +84,6 @@ impl DotAddressable for NotificationsSettings {
                     "xbiff_file_path" => self.xbiff_file_path.lookup(field, tail),
                     "play_sound" => self.play_sound.lookup(field, tail),
                     "sound_file" => self.sound_file.lookup(field, tail),
-                    "ui-notifications" | "ui_notifications" => {
-                        self.ui_notifications.lookup(field, tail)
-                    }
                     other => Err(Error::new(format!(
                         "{parent_field} has no field named {other}"
                     ))),
