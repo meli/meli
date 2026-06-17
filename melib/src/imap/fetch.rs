@@ -26,8 +26,10 @@ use super::*;
 pub enum FetchStage {
     #[default]
     InitialFresh,
-    InitialCache {
-        max_uid: Option<UID>,
+    InitialCache,
+    FromCache {
+        max_uid: UID,
+        batch: usize,
     },
     ResyncCache,
     FreshFetch {
@@ -71,7 +73,7 @@ impl FetchState {
                     };
                     continue;
                 }
-                FetchStage::InitialCache { max_uid: None } => {
+                FetchStage::InitialCache => {
                     let select_response = self
                         .connection
                         .lock()
@@ -89,9 +91,7 @@ impl FetchState {
                     }
                     match self.max_uid() {
                         Ok(Some(max_uid)) => {
-                            self.stage = FetchStage::InitialCache {
-                                max_uid: Some(max_uid),
-                            };
+                            self.stage = FetchStage::FromCache { max_uid, batch: 0 };
                             continue;
                         }
                         Ok(None) => {}
@@ -118,21 +118,33 @@ impl FetchState {
                     self.stage = FetchStage::InitialFresh;
                     continue;
                 }
-                FetchStage::InitialCache {
-                    max_uid: Some(max_uid),
-                } => {
-                    match self.cached_envs(max_uid).await {
+                FetchStage::FromCache { max_uid, batch } => {
+                    let cache_batch_size = if batch == 0 {
+                        500
+                    } else {
+                        self.cache_batch_size
+                    };
+                    let res = self.cached_envs(max_uid, cache_batch_size).await;
+                    match res {
                         Ok(Some(cached_payload)) => {
-                            self.stage = match max_uid.saturating_sub(self.cache_batch_size) {
+                            self.stage = match max_uid.saturating_sub(cache_batch_size) {
                                 0 => FetchStage::Finished,
-                                other => FetchStage::InitialCache {
-                                    max_uid: Some(other),
+                                max_uid => FetchStage::FromCache {
+                                    max_uid,
+                                    batch: batch + 1,
                                 },
                             };
                             let (mailbox_exists, unseen) = {
                                 let f = &self.uid_store.mailboxes.lock().await[&self.mailbox_hash];
                                 (Arc::clone(&f.exists), Arc::clone(&f.unseen))
                             };
+                            let cached_payload =
+                                if let Some(mut resync_payload) = resync_payload.take() {
+                                    resync_payload.extend(cached_payload);
+                                    resync_payload
+                                } else {
+                                    cached_payload
+                                };
                             unseen.lock().unwrap().insert_existing_set(
                                 cached_payload
                                     .iter()
@@ -148,10 +160,6 @@ impl FetchState {
                             mailbox_exists.lock().unwrap().insert_existing_set(
                                 cached_payload.iter().map(|env| env.hash()).collect::<_>(),
                             );
-                            if let Some(mut resync_payload) = resync_payload.take() {
-                                resync_payload.extend(cached_payload);
-                                return Ok(resync_payload);
-                            }
                             return Ok(cached_payload);
                         }
                         Err(err) => {
@@ -207,7 +215,7 @@ impl FetchState {
                             let mailbox_hash = self.mailbox_hash;
                             let res = conn.resync(mailbox_hash).await;
                             if let Ok(Some(payload)) = res {
-                                self.stage = FetchStage::InitialCache { max_uid: None };
+                                self.stage = FetchStage::InitialCache;
                                 resync_payload = Some(payload);
                                 continue;
                             }
@@ -383,7 +391,7 @@ impl FetchState {
                         *stage = FetchStage::Finished;
                     } else {
                         *stage = FetchStage::FreshFetch {
-                            max_uid: std::cmp::max(max_uid_left.saturating_sub(*batch_size + 1), 1),
+                            max_uid: max_uid_left.saturating_sub(*batch_size + 1).max(1),
                         };
                     }
                     return Ok(envelopes);
@@ -423,14 +431,18 @@ impl FetchState {
         }
     }
 
-    async fn cached_envs(&mut self, max_uid: UID) -> Result<Option<Vec<Envelope>>> {
+    async fn cached_envs(
+        &mut self,
+        max_uid: UID,
+        batch_size: usize,
+    ) -> Result<Option<Vec<Envelope>>> {
         let Self {
             stage: _,
             ref mut connection,
             mailbox_hash,
             ref uid_store,
             batch_size: _,
-            cache_batch_size,
+            cache_batch_size: _,
         } = self;
         let mailbox_hash = *mailbox_hash;
         if !uid_store.keep_offline_cache.load(Ordering::SeqCst) {
@@ -439,13 +451,7 @@ impl FetchState {
         {
             let mut conn = connection.lock().await?;
             let select_response = conn.init_mailbox(mailbox_hash).await?;
-            match Self::load_cache(
-                &conn,
-                mailbox_hash,
-                max_uid,
-                *cache_batch_size,
-                select_response,
-            ) {
+            match Self::load_cache(&conn, mailbox_hash, max_uid, batch_size, select_response) {
                 None => Ok(None),
                 Some(Ok(env_hashes)) => {
                     let env_lck = uid_store.envelopes.lock().unwrap();

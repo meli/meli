@@ -392,8 +392,8 @@ impl MailBackend for ImapType {
             connection: self.connection.clone(),
             mailbox_hash,
             uid_store: self.uid_store.clone(),
-            batch_size: 1500,
-            cache_batch_size: 25000,
+            batch_size: 2_500,
+            cache_batch_size: 95_000,
         };
 
         Ok(Box::pin(try_fn_stream(|emitter| async move {
