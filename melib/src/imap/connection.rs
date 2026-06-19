@@ -22,6 +22,7 @@
 use std::{
     borrow::Cow,
     convert::TryFrom,
+    fmt::Write,
     future::Future,
     pin::Pin,
     str::FromStr,
@@ -161,6 +162,7 @@ impl Default for ImapExtensionUse {
 #[derive(Debug)]
 pub struct ImapStream {
     pub cmd_id: usize,
+    pub last_cmd: String,
     pub id: Cow<'static, str>,
     pub stream: AsyncWrapper<Connection>,
     pub protocol: ImapProtocol,
@@ -535,6 +537,7 @@ impl ImapStream {
         let mut res = Vec::with_capacity(8 * 1024);
         let mut ret = Self {
             cmd_id: 1,
+            last_cmd: String::with_capacity(128),
             id,
             stream,
             protocol: server_conf.protocol,
@@ -880,16 +883,6 @@ impl ImapStream {
 
                 Command { tag, body }
             };
-            match self.protocol {
-                ImapProtocol::IMAP { .. } => {
-                    if matches!(command.body, CommandBody::Login { .. }) {
-                        imap_log!(trace, self, "sent: M{} LOGIN ..", self.cmd_id);
-                    } else {
-                        imap_log!(trace, self, "sent: M{} {:?}", self.cmd_id, command.body);
-                    }
-                }
-                ImapProtocol::ManageSieve => {}
-            }
 
             for action in CommandCodec::default().encode(&command) {
                 match action {
@@ -909,6 +902,18 @@ impl ImapStream {
                 self.stream.flush().await?;
             }
 
+            match self.protocol {
+                ImapProtocol::IMAP { .. } => {
+                    self.last_cmd.clear();
+                    _ = write!(&mut self.last_cmd, "M{} {:?}", self.cmd_id, command.body);
+                    if matches!(command.body, CommandBody::Login { .. }) {
+                        imap_log!(trace, self, "sent: M{} LOGIN ..", self.cmd_id);
+                    } else {
+                        imap_log!(trace, self, "sent: M{} {:?}", self.cmd_id, command.body);
+                    }
+                }
+                ImapProtocol::ManageSieve => {}
+            }
             self.cmd_id += 1;
 
             Ok(())
@@ -928,7 +933,6 @@ impl ImapStream {
                             .write_all(self.cmd_id.to_string().as_bytes())
                             .await?;
                         self.stream.write_all(b" ").await?;
-                        self.cmd_id += 1;
                     }
                     ImapProtocol::ManageSieve => {}
                 }
@@ -938,16 +942,19 @@ impl ImapStream {
                 self.stream.flush().await?;
                 match self.protocol {
                     ImapProtocol::IMAP { .. } => {
+                        self.last_cmd.clear();
                         if !command.starts_with(b"LOGIN") {
-                            imap_log!(trace, self, "sent: M{} {}", self.cmd_id - 1, unsafe {
-                                std::str::from_utf8_unchecked(command)
-                            });
+                            let command = String::from_utf8_lossy(command);
+                            imap_log!(trace, self, "sent: M{} {}", self.cmd_id, command);
+                            _ = write!(&mut self.last_cmd, "M{} {command}", self.cmd_id);
                         } else {
-                            imap_log!(trace, self, "sent: M{} LOGIN ..", self.cmd_id - 1);
+                            imap_log!(trace, self, "sent: M{} LOGIN ..", self.cmd_id);
+                            _ = write!(&mut self.last_cmd, "M{} LOGIN ..", self.cmd_id);
                         }
                     }
                     ImapProtocol::ManageSieve => {}
                 }
+                self.cmd_id += 1;
                 Ok(())
             }),
         )
@@ -1111,6 +1118,7 @@ impl ImapConnection {
                             ImapResponse::Ok(_) => {
                                 let ImapStream {
                                     cmd_id,
+                                    last_cmd,
                                     id,
                                     stream,
                                     protocol,
@@ -1120,6 +1128,7 @@ impl ImapConnection {
                                 let stream = stream.into_inner()?;
                                 self.stream = Ok(ImapStream {
                                     cmd_id,
+                                    last_cmd,
                                     id,
                                     stream: AsyncWrapper::new(stream.deflate())?,
                                     protocol,
@@ -1186,45 +1195,35 @@ impl ImapConnection {
                                 String::from_utf8_lossy(&response)
                             );
                         }
-                        ImapResponse::No(ref response_code) => {
+                        ImapResponse::Bad(ref response_code)
+                        | ImapResponse::No(ref response_code) => {
+                            let last_cmd = self
+                                .stream
+                                .as_ref()
+                                .ok()
+                                .map(|s| format!("Last sent command was: {}", s.last_cmd));
                             imap_log!(
                                 trace,
                                 self,
-                                "Received NO response: {:?} {:?}",
+                                "Received BAD/NO response: {:?} {:?}",
                                 response_code,
                                 String::from_utf8_lossy(&response)
                             );
+                            if let Some(ref last_cmd) = last_cmd {
+                                imap_log!(trace, self, "{}", last_cmd);
+                            }
                             (self.uid_store.event_consumer)(
                                 self.uid_store.account_hash,
                                 BackendEvent::Notice {
                                     description: response_code.to_string(),
-                                    content: None,
+                                    content: last_cmd,
                                     level: LogLevel::ERROR,
                                 },
                             );
                             ret.extend_from_slice(&response);
                             return r.into();
                         }
-                        ImapResponse::Bad(ref response_code) => {
-                            imap_log!(
-                                trace,
-                                self,
-                                "Received BAD response: {:?} {:?}",
-                                response_code,
-                                String::from_utf8_lossy(&response)
-                            );
-                            (self.uid_store.event_consumer)(
-                                self.uid_store.account_hash,
-                                BackendEvent::Notice {
-                                    description: response_code.to_string(),
-                                    content: None,
-                                    level: LogLevel::ERROR,
-                                },
-                            );
-                            ret.extend_from_slice(&response);
-                            return r.into();
-                        }
-                        _ => {}
+                        ImapResponse::Ok(_) | ImapResponse::Preauth(_) => {}
                     }
                     for l in response.split_rn() {
                         if required_responses.check(l) {
