@@ -33,7 +33,7 @@ use nom::{
     bytes::complete::{is_a, is_not, tag, take, take_until, take_while},
     character::{complete::digit1, is_digit},
     combinator::{map, map_res, opt},
-    multi::{fold_many1, length_data, many0, many1, separated_list1},
+    multi::{length_data, many0, many1, separated_list1},
     sequence::{delimited, preceded},
 };
 
@@ -1331,74 +1331,141 @@ macro_rules! str_builder {
     };
 }
 
-// Parse a list of addresses in the format of the ENVELOPE structure
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AddressValue {
+    Address(Address),
+    GroupStart(Vec<u8>),
+    GroupEnd,
+}
+
+/// Parse a list of addresses in the format of the `ENVELOPE` structure
+///
+/// e.g `("Name" NIL "user" "example.com")`
 pub fn envelope_addresses<'a>(
     input: &'a [u8],
 ) -> IResult<&'a [u8], Option<SmallVec<[Address; 1]>>> {
     alt((
         map(tag("NIL"), |_| None),
+        map(tag("\"\""), |_| None),
         |input: &'a [u8]| -> IResult<&'a [u8], Option<SmallVec<[Address; 1]>>> {
             let (input, _) = tag("(")(input)?;
-            let (input, envelopes) = fold_many1(
-                delimited(tag("("), envelope_address, alt((tag(") "), tag(")")))),
-                SmallVec::new,
-                |mut acc, item| {
-                    acc.push(item);
-                    acc
-                },
-            )(input.ltrim())?;
+
+            // Scan addresses in `AddressValue` tokens; since there might be a group in
+            // there.
+            let (input, addresses) = many1(delimited(
+                tag("("),
+                envelope_address,
+                alt((tag(") "), tag(")"))),
+            ))(input.ltrim())?;
             let (input, _) = tag(")")(input)?;
-            Ok((input, Some(envelopes)))
+
+            let mut ret = SmallVec::new();
+
+            // Store the current group while we scan the tokens in `addresses`.
+            let mut group_accum: Option<(Vec<u8>, Vec<Address>)> = None;
+
+            for item in addresses {
+                match item {
+                    AddressValue::Address(val) => {
+                        if let Some((_, accum)) = group_accum.as_mut() {
+                            accum.push(val);
+                        } else {
+                            ret.push(val);
+                        }
+                    }
+                    AddressValue::GroupStart(group_name) => {
+                        if let Some((_, mailbox_list)) = group_accum.take() {
+                            // There was no end-of-group marker, so treat the start-of-group
+                            // marker as a regular address with empty hostname and ignore it.
+                            ret.extend(mailbox_list);
+                        };
+                        group_accum = Some((group_name, vec![]));
+                    }
+                    AddressValue::GroupEnd => {
+                        if let Some((group_name, mailbox_list)) = group_accum.take() {
+                            ret.push(Address::new_group(
+                                String::from_utf8_lossy(&group_name).to_string(),
+                                mailbox_list,
+                            ));
+                        };
+                    }
+                }
+            }
+            if let Some((_, mailbox_list)) = group_accum {
+                // There was no end-of-group marker, so treat the start-of-group
+                // marker as a regular address with empty hostname and ignore it.
+                ret.extend(mailbox_list);
+            }
+            Ok((input, Some(ret)))
         },
-        map(tag("\"\""), |_| None),
     ))(input)
 }
 
-// Parse an address in the format of the ENVELOPE structure eg
-// ("Terry Gray" NIL "gray" "cac.washington.edu")
-pub fn envelope_address(input: &[u8]) -> IResult<&[u8], Address> {
+/// Parse an address value in the format of the `ENVELOPE` structure without the
+/// enclosing parentheses.
+///
+/// e.g `"Name" NIL "user" "example.com"`
+///
+/// Syntax (with the parentheses):
+///
+/// ```text
+/// address = "(" addr-name SP addr-adl SP addr-mailbox SP addr-host ")"
+/// ```
+///
+/// The return value is either a regular mailbox address, a start-of-group
+/// marker, or an end-of-group marker.
+pub fn envelope_address(input: &[u8]) -> IResult<&[u8], AddressValue> {
     const WS: &[u8] = b"\r\n\t ";
-    let (input, name) = utils::nil_to_default(quoted)(input)?;
+
+    // If non-NIL, holds phrase from [RFC5322] mailbox after removing [RFC5322]
+    // quoting
+    let (input, addr_name) = utils::nil_to_default(quoted)(input)?;
     let (input, _) = is_a(WS)(input)?;
-    let (input, _) = utils::nil_to_default(quoted)(input)?;
+
+    // Holds route from [RFC5322] obs-route if non-NIL (we ignore this)
+    let (input, _addr_adl) = utils::nil_to_none(quoted)(input)?;
     let (input, _) = is_a(WS)(input)?;
-    let (input, mailbox_name) = utils::nil_to_default(quoted)(input)?;
-    let (input, host_name) = opt(preceded(is_a(WS), utils::nil_to_default(quoted)))(input)?;
-    Ok((
-        input,
-        Address::Mailbox(MailboxAddress {
-            raw: if let Some(host_name) = host_name.as_ref() {
-                format!(
+
+    // NIL indicates end of [RFC5322] group; if non-NIL and addr-host is NIL, holds
+    // [RFC5322] group name. Otherwise, holds [RFC5322] local-part after
+    // removing [RFC5322] quoting
+    let (input, addr_mailbox) = utils::nil_to_none(quoted)(input)?;
+    let (input, _) = is_a(WS)(input)?;
+
+    // NIL indicates [RFC5322] group syntax. Otherwise, holds [RFC5322] domain name.
+    let (input, addr_host) = utils::nil_to_none(quoted)(input)?;
+
+    let Some(addr_mailbox) = addr_mailbox else {
+        return Ok((input, AddressValue::GroupEnd));
+    };
+
+    if let Some(addr_host) = addr_host {
+        Ok((
+            input,
+            AddressValue::Address(Address::Mailbox(MailboxAddress {
+                raw: format!(
                     "{}{}<{}@{}>",
-                    to_str!(&name),
-                    if name.is_empty() { "" } else { " " },
-                    to_str!(&mailbox_name),
-                    to_str!(host_name)
+                    to_str!(&addr_name),
+                    if addr_name.is_empty() { "" } else { " " },
+                    to_str!(&addr_mailbox),
+                    to_str!(&addr_host)
                 )
-                .into_bytes()
-            } else {
-                format!(
-                    "{}{}{}",
-                    to_str!(&name),
-                    if name.is_empty() { "" } else { " " },
-                    to_str!(&mailbox_name),
-                )
-                .into_bytes()
-            },
-            display_name: str_builder!(0, name.len()),
-            address_spec: if let Some(host_name) = host_name.as_ref() {
-                str_builder!(
-                    if name.is_empty() { 1 } else { name.len() + 2 },
-                    mailbox_name.len() + host_name.len() + 1
-                )
-            } else {
-                str_builder!(
-                    if name.is_empty() { 0 } else { name.len() + 1 },
-                    mailbox_name.len()
-                )
-            },
-        }),
-    ))
+                .into_bytes(),
+                display_name: str_builder!(0, addr_name.len()),
+                address_spec: str_builder!(
+                    if addr_name.is_empty() {
+                        1
+                    } else {
+                        addr_name.len() + 2
+                    },
+                    addr_mailbox.len() + addr_host.len() + 1
+                ),
+            })),
+        ))
+    } else {
+        // Group syntax.
+        Ok((input, AddressValue::GroupStart(addr_mailbox)))
+    }
 }
 
 // Read a literal ie a byte sequence prefixed with a tag containing its length

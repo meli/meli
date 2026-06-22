@@ -397,3 +397,106 @@ fn test_imap_envelope() {
     let input: &[u8] = b"(\"Fri, 24 Jun 2011 10:09:10 +0000\" \"xxxx/xxxx\" ((\"xx@xx.com\" NIL \"xx\" \"xx.com\")) NIL NIL ((\"xx@xx\" NIL \"xx\" \"xx.com\")) ((\"'xx, xx'\" NIL \"xx.xx\" \"xx.com\") (\"xx.xx@xx.com\" NIL \"xx.xx\" \"xx.com\") (\"'xx'\" NIL \"xx.xx\" \"xx.com\") (\"'xx xx'\" NIL \"xx.xx\" \"xx.com\") (\"xx.xx@xx.com\" NIL \"xx.xx\" \"xx.com\")) NIL NIL \"<xx@xx.com>\")";
     _ = envelope(input).unwrap();
 }
+
+#[test]
+fn test_imap_envelope_address() {
+    assert_eq!(
+        envelope_address(b"\"=?UTF-8?Q?=CE=A6_Info_Dr=2E_Grifter_=26_Associates?=\" NIL \"info\" \"example.com\"").unwrap(),
+        (
+            &[][..],
+            AddressValue::Address(Address::new(
+                Some("Φ Info Dr. Grifter & Associates".to_string()),
+                "info@example.com".to_string()
+            ))
+        )
+    );
+
+    assert_eq!(
+        envelope_address(br#"NIL NIL "undisclosed-recipients" NIL"#).unwrap(),
+        (
+            &[][..],
+            AddressValue::GroupStart(b"undisclosed-recipients".to_vec()),
+        )
+    );
+
+    assert_eq!(
+        envelope_address(b"NIL NIL NIL NIL").unwrap(),
+        (&[][..], AddressValue::GroupEnd,)
+    );
+
+    assert_eq!(
+        envelope_addresses(br#"((NIL NIL "undisclosed-recipients" NIL)(NIL NIL NIL NIL))"#)
+            .unwrap(),
+        (
+            &[][..],
+            Some(smallvec::smallvec![Address::new_group(
+                "undisclosed-recipients".to_string(),
+                vec![]
+            )])
+        )
+    );
+
+    assert_eq!(
+        envelope_addresses(br#"((NIL NIL "undisclosed-recipients" NIL))"#).unwrap(),
+        (&[][..], Some(smallvec::smallvec![]))
+    );
+
+    assert_eq!(
+        envelope_addresses(br#"((NIL NIL "undisclosed-recipients" NIL)(NIL NIL "undisclosed-recipients2" NIL)(NIL NIL NIL NIL)(NIL NIL NIL NIL))"#).unwrap(),
+        (
+            &[][..],
+            Some(smallvec::smallvec![Address::new_group(
+                "undisclosed-recipients2".to_string(),
+                vec![]
+            )])
+        )
+    );
+
+    assert_eq!(
+        envelope_addresses(
+            br#"(("Pete" NIL "silly" "example.com")(NIL NIL NIL NIL)(NIL NIL NIL NIL))"#,
+        )
+        .unwrap(),
+        (
+            &[][..],
+            Some(smallvec::smallvec![Address::new(
+                Some("Pete".to_string()),
+                "silly@example.com".to_string()
+            )])
+        )
+    );
+
+    // Adapted from Appendix A.1.3.  Group Addresses in RFC5322:
+    assert_eq!(
+        envelope_addresses(br#"((NIL NIL "A Group" NIL)("Ed Jones" NIL "c" "example.com")(NIL NIL "joe" "example.com")("John" NIL "jdoe" "example.com")(NIL NIL NIL NIL))"#).unwrap(),
+        (
+            &[][..],
+            Some(smallvec::smallvec![Address::new_group(
+                "A Group".to_string(),
+                vec![
+                    Address::new(Some("Ed Jones".to_string()), "c@example.com".to_string()),
+                    Address::new(None, "joe@example.com".to_string()),
+                    Address::new(Some("John".to_string()), "jdoe@example.com".to_string()),
+                ]
+            )])
+        )
+    );
+
+    assert_eq!(envelope_addresses(br#"NIL"#).unwrap(), (&[][..], None));
+    assert_eq!(envelope_addresses(br#""""#).unwrap(), (&[][..], None));
+
+    assert_eq!(
+            envelope_addresses(b"((NIL NIL \"Mohamed\" NIL)(\"Mohamed\" NIL \"moh\" \"example.com\")(\"markus\" NIL \"mark\" \"example.com\"))").unwrap(),
+            (
+                &[][..],
+                Some(smallvec::smallvec![
+                    Address::new(Some("Mohamed".to_string()), "moh@example.com".to_string()),
+                    Address::new(Some("markus".to_string()), "mark@example.com".to_string()),
+                ])
+            )
+        );
+    assert_eq!(
+        envelope_addresses(b"((NIL NIL \"Mohamed\" NIL))").unwrap(),
+        (&[][..], Some(smallvec::smallvec![]))
+    );
+}
