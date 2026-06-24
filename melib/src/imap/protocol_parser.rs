@@ -186,37 +186,40 @@ pub struct ImapLineIterator<'a> {
     slice: &'a [u8],
 }
 
+/// Server Responses Generic Status Response Codes
+///
+/// Defined in "7.1. Server Responses - Generic Status Responses".
 #[derive(Debug, Eq, PartialEq)]
 pub enum ResponseCode {
     ///The human-readable text contains a special alert that MUST be presented
     /// to the user in a fashion that calls the user's attention to the message.
     Alert(String),
 
-    ///Optionally followed by a parenthesized list of charsets.  A SEARCH
+    /// Optionally followed by a parenthesized list of charsets. A `SEARCH`
     /// failed because the given charset is not supported by this
-    /// implementation.  If the optional list of charsets is given, this lists
+    /// implementation. If the optional list of charsets is given, this lists
     /// the charsets that are supported by this implementation.
     Badcharset(Option<String>),
 
-    /// Followed by a list of capabilities.  This can appear in the initial OK
-    /// or PREAUTH response to transmit an initial capabilities list.  This
-    /// makes it unnecessary for a client to send a separate CAPABILITY command
-    /// if it recognizes this response.
+    /// Followed by a list of capabilities. This can appear in the initial `OK`
+    /// or `PREAUTH` response to transmit an initial capabilities list. This
+    /// makes it unnecessary for a client to send a separate `CAPABILITY`
+    /// command if it recognizes this response.
     Capability,
 
-    /// The human-readable text represents an error in parsing the [RFC-2822]
-    /// header or [MIME-IMB] headers of a message in the mailbox.
+    /// The human-readable text represents an error in parsing the `[RFC-2822]`
+    /// header or `[MIME-IMB]` headers of a message in the mailbox.
     Parse(String),
 
     /// Followed by a parenthesized list of flags, indicates which of the known
-    /// flags the client can change permanently.  Any flags that are in the
-    /// FLAGS untagged response, but not the PERMANENTFLAGS list, can not be set
-    /// permanently.  If the client attempts to STORE a flag that is not in the
-    /// PERMANENTFLAGS list, the server will either ignore the change or store
-    /// the state change for the remainder of the current session only.  The
-    /// PERMANENTFLAGS list can also include the special flag \*, which
-    /// indicates that it is possible to create new keywords by attempting to
-    /// store those flags in the mailbox.
+    /// flags the client can change permanently. Any flags that are in the
+    /// `FLAGS` untagged response, but not the `PERMANENTFLAGS` list, can not be
+    /// set permanently. If the client attempts to `STORE` a flag that is
+    /// not in the `PERMANENTFLAGS` list, the server will either ignore the
+    /// change or store the state change for the remainder of the current
+    /// session only. The `PERMANENTFLAGS` list can also include the special
+    /// flag `\*`, which indicates that it is possible to create new
+    /// keywords by attempting to store those flags in the mailbox.
     Permanentflags(String),
 
     /// The mailbox is selected read-only, or its access while selected has
@@ -227,20 +230,20 @@ pub enum ResponseCode {
     /// changed from read-only to read-write.
     ReadWrite,
 
-    /// An APPEND or COPY attempt is failing because the target mailbox does not
-    /// exist (as opposed to some other reason).  This is a hint to the client
-    /// that the operation can succeed if the mailbox is first created by the
-    /// CREATE command.
+    /// An `APPEND` or `COPY` attempt is failing because the target mailbox does
+    /// not exist (as opposed to some other reason). This is a hint to the
+    /// client that the operation can succeed if the mailbox is first
+    /// created by the `CREATE` command.
     Trycreate,
 
     /// Followed by a decimal number, indicates the next unique identifier
-    /// value.  Refer to section 2.3.1.1 for more information.
+    /// value. Refer to section "2.3.1.1" for more information.
     Uidnext(UID),
     /// Followed by a decimal number, indicates the unique identifier validity
-    /// value.  Refer to section 2.3.1.1 for more information.
+    /// value. Refer to section "2.3.1.1" for more information.
     Uidvalidity(UID),
     /// Followed by a decimal number, indicates the number of the first message
-    /// without the \Seen flag set.
+    /// without the `\Seen` flag set.
     Unseen(ImapNum),
 }
 
