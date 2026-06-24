@@ -397,13 +397,28 @@ impl Hash for Address {
 
 impl std::fmt::Display for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        // [ref:FIXME]: do proper string escaping; we need a string escaping trait
         match self {
-            Self::Mailbox(m) if m.display_name.length > 0 => match m.display_name.display(&m.raw) {
-                d if d.contains('.') || d.contains(',') => {
-                    write!(f, "\"{}\" <{}>", d, m.address_spec.display(&m.raw))
+            Self::Mailbox(m) if m.display_name.length > 0 => {
+                let address_spec = m.address_spec.display(&m.raw);
+                let display_name = m.display_name.display(&m.raw);
+                let display_name = display_name
+                    .strip_prefix('"')
+                    .and_then(|d| d.strip_suffix('"'))
+                    .unwrap_or(&display_name);
+                let must_be_quoted = b"()<>[]:;@\\,.\""
+                    .iter()
+                    .any(|b| display_name.as_bytes().contains(b));
+                let must_be_escaped = display_name.as_bytes().contains(&b'"');
+                if must_be_escaped {
+                    let display_name = display_name.replace("\"", "\\\"");
+                    write!(f, "\"{display_name}\" <{address_spec}>")
+                } else if must_be_quoted {
+                    write!(f, "\"{display_name}\" <{address_spec}>")
+                } else {
+                    write!(f, "{display_name} <{address_spec}>")
                 }
-                d => write!(f, "{} <{}>", d, m.address_spec.display(&m.raw)),
-            },
+            }
             Self::Mailbox(m) => write!(f, "{}", m.address_spec.display(&m.raw)),
             Self::Group(g) => {
                 let attachment_strings: Vec<String> =
