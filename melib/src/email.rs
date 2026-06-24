@@ -276,6 +276,7 @@ impl std::fmt::Debug for Envelope {
             .field("Date", &self.date)
             .field("From", &self.from)
             .field("To", &self.to)
+            .field("Cc", &self.cc)
             .field("Message-ID", &self.message_id)
             .field("In-Reply-To", &self.in_reply_to)
             .field("References", &self.references)
