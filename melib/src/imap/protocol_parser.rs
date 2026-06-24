@@ -742,22 +742,25 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<'_, FetchResponse<'_>> {
             }
         } else if input[i..].starts_with(b"ENVELOPE (") {
             i += b"ENVELOPE ".len();
-            if let Ok((rest, envelope)) = envelope(&input[i..]) {
-                ret.envelope = Some(envelope);
-                i += input.len() - i - rest.len();
-            } else {
-                log::debug!(
-                    "Unexpected input while parsing UID FETCH response. Could not parse ENVELOPE: \
-                     {}",
-                    String::from_utf8_lossy(&input[i..])
-                );
-                return Err(Error::new(format!(
-                    "Unexpected input while parsing UID FETCH response. Could not parse ENVELOPE: \
-                     {}",
-                    String::from_utf8_lossy(&input[i..])
-                        .as_ref()
-                        .trim_at_boundary(40)
-                )));
+            match envelope(&input[i..]) {
+                Ok((rest, envelope)) => {
+                    ret.envelope = Some(envelope);
+                    i += input.len() - i - rest.len();
+                }
+                Err(err) => {
+                    log::debug!(
+                        "Unexpected input while parsing UID FETCH response. Could not parse \
+                         ENVELOPE: {err}. Input was: {}",
+                        String::from_utf8_lossy(&input[i..])
+                    );
+                    return Err(Error::new(format!(
+                        "Unexpected input while parsing UID FETCH response. Could not parse \
+                         ENVELOPE: {err}. Input was: {}",
+                        String::from_utf8_lossy(&input[i..])
+                            .as_ref()
+                            .trim_at_boundary(40)
+                    )));
+                }
             }
         } else if input[i..].starts_with(b"BODYSTRUCTURE ") {
             i += b"BODYSTRUCTURE ".len();
