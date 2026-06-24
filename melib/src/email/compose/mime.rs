@@ -27,8 +27,8 @@ pub fn encode_header(value: &str) -> String {
     let mut is_current_window_ascii = true;
     let mut current_window_start = 0;
     {
-        let graphemes = value.graphemes_indices();
-        for (idx, g) in graphemes {
+        let mut graphemes = value.graphemes_indices().into_iter().peekable();
+        while let Some((idx, g)) = graphemes.next() {
             match (g.is_ascii(), is_current_window_ascii) {
                 (true, true) => {
                     ret.push_str(g);
@@ -38,7 +38,13 @@ pub fn encode_header(value: &str) -> String {
                      *
                      * Whitespaces inside encoded tokens must be greedily taken,
                      * instead of splitting each non-ascii word into separate encoded tokens. */
-                    if !g.is_empty() && !g.trim_matches(&[' ', '\t'] as &[_]).is_empty() {
+                    if ((g.is_empty() || g.trim_matches(&[' ', '\t'] as &[_]).is_empty())
+                        || g == "\"")
+                        && graphemes
+                            .peek()
+                            .map(|(_, next_g)| next_g.is_ascii())
+                            .unwrap_or(true)
+                    {
                         ret.push_str(&format!(
                             "=?UTF-8?B?{}?=",
                             BASE64_MIME

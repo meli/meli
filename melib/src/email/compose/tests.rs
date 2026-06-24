@@ -260,7 +260,7 @@ fn test_email_compose_mime_encode_header() {
     use crate::email::compose::mime;
     let words = "compilers/2020a σε Rust";
     assert_eq!(
-        "compilers/2020a =?UTF-8?B?z4POtSA=?=Rust",
+        "compilers/2020a =?UTF-8?B?z4POtQ==?= Rust",
         &mime::encode_header(words),
     );
     assert_eq!(
@@ -305,6 +305,7 @@ fn test_email_compose_mime_encode_header() {
         )
         .unwrap(),
     );
+
     assert_eq!(
         "übänöte",
         std::str::from_utf8(
@@ -332,6 +333,27 @@ fn test_email_compose_mime_encode_header() {
             .unwrap(),
         );
     }
+
+    assert_eq!(
+        "Dud=?UTF-8?B?w6k=?= <daude@example.com>",
+        mime::encode_header("Dudé <daude@example.com>")
+    );
+    assert_eq!(
+        "\"Danny B. Orrang=?UTF-8?B?w6k=?=\" <orrange@example.com>",
+        mime::encode_header("\"Danny B. Orrangé\" <orrange@example.com>")
+    );
+    assert_eq!(
+        "Dudé <daude@example.com>",
+        std::str::from_utf8(
+            &crate::email::parser::encodings::phrase(
+                mime::encode_header("Dudé <daude@example.com>").as_bytes(),
+                false
+            )
+            .unwrap()
+            .1
+        )
+        .unwrap(),
+    );
 }
 
 #[test]
