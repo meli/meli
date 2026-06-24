@@ -322,6 +322,8 @@ impl ResponseCode {
     }
 }
 
+/// Corresponds to `7.1. Server Responses - Generic Status Responses` from
+/// `RFC9051`
 #[derive(Debug, Eq, PartialEq)]
 pub enum ImapResponse {
     Ok(ResponseCode),
