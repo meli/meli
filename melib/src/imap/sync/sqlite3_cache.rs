@@ -369,15 +369,12 @@ impl ImapCache for Sqlite3Cache {
         let res = {
             let min = max_uid.saturating_sub(batch_size).max(1);
             let max = max_uid;
-            let tx = self.connection.transaction()?;
-            let mut stmt = tx.prepare(
-                "SELECT uid, hash, envelope, modsequence FROM envelopes WHERE mailbox_hash = ?1 \
-                 AND uid <= ?2 AND uid >= ?3;",
-            )?;
 
-            #[allow(clippy::let_and_return)] // false positive, the let binding is needed
-            // for the temporary to live long enough
-            let x = stmt
+            self.connection
+                .prepare(
+                    "SELECT uid, hash, envelope, modsequence FROM envelopes WHERE mailbox_hash = \
+                     ?1 AND uid <= ?2 AND uid >= ?3;",
+                )?
                 .query_map(sqlite3::params![mailbox_hash, max, min], |row| {
                     Ok((
                         row.get(0).map(|i: Sqlite3UID| i as UID)?,
@@ -386,11 +383,15 @@ impl ImapCache for Sqlite3Cache {
                         row.get(3)?,
                     ))
                 })?
-                .collect::<std::result::Result<_, _>>();
-            x
+                .collect::<std::result::Result<_, _>>()
         };
         let ret: Vec<(UID, EnvelopeHash, Envelope, Option<ModSequence>)> = match res {
             Err(err) if matches!(&err, rusqlite::Error::FromSqlConversionFailure(_, _, _)) => {
+                log::error!(
+                    "IMAP cache error: could not fetch env cache for {}. Reason: {:?}",
+                    self.uid_store.account_name,
+                    err
+                );
                 drop(err);
                 self.reset()?;
                 return Ok(None);
@@ -512,13 +513,11 @@ impl ImapCache for Sqlite3Cache {
         let tx = connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
         let values = std::rc::Rc::new(env_hashes.iter().map(Value::from).collect::<Vec<Value>>());
 
-        let mut stmt =
-            tx.prepare("SELECT uid, envelope FROM envelopes WHERE hash IN rarray(?1);")?;
-        let rows = stmt
+        let rows = tx
+            .prepare("SELECT uid, envelope FROM envelopes WHERE hash IN rarray(?1);")?
             .query_map([values], |row| Ok((row.get(0)?, row.get(1)?)))?
             .filter_map(|r| r.ok())
             .collect::<Vec<(UID, Envelope)>>();
-        drop(stmt);
         let mut stmt =
             tx.prepare("UPDATE envelopes SET envelope = ?1 WHERE mailbox_hash = ?2 AND uid = ?3;")?;
         for (uid, mut env) in rows {
@@ -649,46 +648,34 @@ impl ImapCache for Sqlite3Cache {
         mailbox_hash: MailboxHash,
     ) -> Result<Option<CachedEnvelope>> {
         let mut ret: Vec<(UID, Envelope, Option<ModSequence>)> = match identifier {
-            Ok(uid) => {
-                let tx = self.connection.transaction()?;
-                let mut stmt = tx.prepare(
+            Ok(uid) => self
+                .connection
+                .prepare(
                     "SELECT uid, envelope, modsequence FROM envelopes WHERE mailbox_hash = ?1 AND \
                      uid = ?2;",
-                )?;
-
-                #[allow(clippy::let_and_return)] // false positive, the let binding is needed
-                // for the temporary to live long enough
-                let x = stmt
-                    .query_map(sqlite3::params![mailbox_hash, uid as Sqlite3UID], |row| {
-                        Ok((
-                            row.get(0).map(|u: Sqlite3UID| u as UID)?,
-                            row.get(1)?,
-                            row.get(2)?,
-                        ))
-                    })?
-                    .collect::<std::result::Result<_, _>>()?;
-                x
-            }
-            Err(env_hash) => {
-                let tx = self.connection.transaction()?;
-                let mut stmt = tx.prepare(
+                )?
+                .query_map(sqlite3::params![mailbox_hash, uid as Sqlite3UID], |row| {
+                    Ok((
+                        row.get(0).map(|u: Sqlite3UID| u as UID)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                    ))
+                })?
+                .collect::<std::result::Result<_, _>>()?,
+            Err(env_hash) => self
+                .connection
+                .prepare(
                     "SELECT uid, envelope, modsequence FROM envelopes WHERE mailbox_hash = ?1 AND \
                      hash = ?2;",
-                )?;
-
-                #[allow(clippy::let_and_return)] // false positive, the let binding is needed
-                // for the temporary to live long enough
-                let x = stmt
-                    .query_map(sqlite3::params![mailbox_hash, env_hash], |row| {
-                        Ok((
-                            row.get(0).map(|u: Sqlite3UID| u as UID)?,
-                            row.get(1)?,
-                            row.get(2)?,
-                        ))
-                    })?
-                    .collect::<std::result::Result<_, _>>()?;
-                x
-            }
+                )?
+                .query_map(sqlite3::params![mailbox_hash, env_hash], |row| {
+                    Ok((
+                        row.get(0).map(|u: Sqlite3UID| u as UID)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                    ))
+                })?
+                .collect::<std::result::Result<_, _>>()?,
         };
         if ret.len() != 1 {
             return Ok(None);
