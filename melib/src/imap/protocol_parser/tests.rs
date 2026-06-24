@@ -276,34 +276,95 @@ fn test_imap_untagged_responses() {
 
 #[test]
 fn test_imap_fetch_response() {
-    #[rustfmt::skip]
+    {
+        #[rustfmt::skip]
     let input: &[u8] = b"* 198 FETCH (UID 7608 FLAGS (\\Seen) ENVELOPE (\"Fri, 24 Jun 2011 10:09:10 +0000\" \"xxxx/xxxx\" ((\"xx@xx.com\" NIL \"xx\" \"xx.com\")) NIL NIL ((\"xx@xx\" NIL \"xx\" \"xx.com\")) ((\"'xx, xx'\" NIL \"xx.xx\" \"xx.com\")(\"xx.xx@xx.com\" NIL \"xx.xx\" \"xx.com\")(\"'xx'\" NIL \"xx.xx\" \"xx.com\")(\"'xx xx'\" NIL \"xx.xx\" \"xx.com\")(\"xx.xx@xx.com\" NIL \"xx.xx\" \"xx.com\")) NIL NIL \"<xx@xx.com>\") BODY[HEADER.FIELDS (REFERENCES)] {2}\r\n\r\n BODYSTRUCTURE ((\"text\" \"html\" (\"charset\" \"us-ascii\") \"<xx@xx>\" NIL \"7BIT\" 17236 232 NIL NIL NIL NIL)(\"image\" \"jpeg\" (\"name\" \"image001.jpg\") \"<image001.jpg@xx.xx>\" \"image001.jpg\" \"base64\" 1918 NIL (\"inline\" (\"filename\" \"image001.jpg\" \"size\" \"1650\" \"creation-date\" \"Sun, 09 Aug 2015 20:56:04 GMT\" \"modification-date\" \"Sun, 14 Aug 2022 22:11:45 GMT\")) NIL NIL) \"related\" (\"boundary\" \"xx--xx\" \"type\" \"text/html\") NIL \"en-US\"))\r\n";
-    let mut address = SmallVec::new();
-    address.push(Address::new(None, "xx@xx.com".to_string()));
-    let mut env = Envelope::new(EnvelopeHash::default());
-    env.set_subject(b"xxxx/xxxx".to_vec());
-    env.set_date(b"Fri, 24 Jun 2011 10:09:10 +0000");
-    env.set_from(address.clone());
-    env.set_to(address);
-    env.set_message_id(b"<xx@xx.com>");
-    assert_eq!(
-        fetch_response(input).unwrap(),
-        (
-            &b""[..],
-            FetchResponse {
-                uid: Some(7608),
-                message_sequence_number: 198,
-                flags: Some((Flag::SEEN, vec![])),
-                modseq: None,
-                body: None,
-                references: Some(b""),
-                envelope: Some(env),
-                bodystructure: true,
-                raw_fetch_value: input,
-            },
-            None
-        )
-    );
+        let mut address = SmallVec::new();
+        address.push(Address::new(None, "xx@xx.com".to_string()));
+        let mut env = Envelope::new(EnvelopeHash::default());
+        env.set_subject(b"xxxx/xxxx".to_vec());
+        env.set_date(b"Fri, 24 Jun 2011 10:09:10 +0000");
+        env.set_from(address.clone());
+        env.set_to(address);
+        env.set_message_id(b"<xx@xx.com>");
+        assert_eq!(
+            fetch_response(input).unwrap(),
+            (
+                &b""[..],
+                FetchResponse {
+                    uid: Some(7608),
+                    message_sequence_number: 198,
+                    flags: Some((Flag::SEEN, vec![])),
+                    modseq: None,
+                    body: None,
+                    references: Some(b""),
+                    envelope: Some(env),
+                    bodystructure: true,
+                    raw_fetch_value: input,
+                },
+                vec![]
+            )
+        );
+    }
+    {
+        let input = b"* 1429 FETCH (UID 1505 FLAGS (\\Seen))\r\n* 1430 FETCH (UID 1506 FLAGS (\\Seen))\r\n* OK Searched 99% of the mailbox, ETA 0:00\r\n* 1431 FETCH (UID 1507 FLAGS (\\Seen))\r\n* 1432 FETCH (UID 1500 FLAGS (\\Seen) RFC822 {4}\r\nnull\r\n)\r\n";
+        assert_eq!(
+            fetch_responses(input).unwrap(),
+            (
+                &b""[..],
+                vec![
+                    FetchResponse {
+                        uid: Some(1505),
+                        message_sequence_number: 1429,
+                        modseq: None,
+                        flags: Some((Flag::SEEN, vec![])),
+                        body: None,
+                        references: None,
+                        envelope: None,
+                        bodystructure: false,
+                        raw_fetch_value: &b"* 1429 FETCH (UID 1505 FLAGS (\\Seen))\r\n"[..]
+                    },
+                    FetchResponse {
+                        uid: Some(1506),
+                        message_sequence_number: 1430,
+                        modseq: None,
+                        flags: Some((Flag::SEEN, vec![])),
+                        body: None,
+                        references: None,
+                        envelope: None,
+                        bodystructure: false,
+                        raw_fetch_value: &b"* 1430 FETCH (UID 1506 FLAGS (\\Seen))\r\n"[..]
+                    },
+                    FetchResponse {
+                        uid: Some(1507),
+                        message_sequence_number: 1431,
+                        modseq: None,
+                        flags: Some((Flag::SEEN, vec![])),
+                        body: None,
+                        references: None,
+                        envelope: None,
+                        bodystructure: false,
+                        raw_fetch_value: &b"* 1431 FETCH (UID 1507 FLAGS (\\Seen))\r\n"[..]
+                    },
+                    FetchResponse {
+                        uid: Some(1500),
+                        message_sequence_number: 1432,
+                        modseq: None,
+                        flags: Some((Flag::SEEN, vec![])),
+                        body: Some(&b"null"[..]),
+                        references: None,
+                        envelope: None,
+                        bodystructure: false,
+                        raw_fetch_value:
+                            &b"* 1432 FETCH (UID 1500 FLAGS (\\Seen) RFC822 {4}\r\nnull\r\n)\r\n"[..]
+                    }
+                ],
+                vec![ImapResponse::Ok(ResponseCode::Alert(
+                    "Searched 99% of the mailbox, ETA 0:00".to_string()
+                ))]
+            )
+        );
+    }
 }
 
 #[test]

@@ -178,10 +178,7 @@ impl RequiredResponses {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
-pub struct Alert(String);
-
-pub type ImapParseResult<'a, T> = Result<(&'a [u8], T, Option<Alert>)>;
+pub type ImapParseResult<'a, T> = Result<(&'a [u8], T, Vec<ImapResponse>)>;
 pub struct ImapLineIterator<'a> {
     slice: &'a [u8],
 }
@@ -373,6 +370,19 @@ impl TryFrom<&'_ [u8]> for ImapResponse {
             )));
         })
     }
+}
+
+/// Try to parse first line as an [`ImapResponse`].
+#[inline]
+pub fn imap_generic_status_response(input: &[u8]) -> IResult<&[u8], ImapResponse> {
+    let val: &[u8] = input.split_rn().next().unwrap_or(input);
+    let rest = &input[val.len()..];
+    Ok((
+        rest,
+        ImapResponse::try_from(val).map_err(|_| {
+            nom::Err::Error((val, "imap_generic_status_response(): invalid").into())
+        })?,
+    ))
 }
 
 impl From<ImapResponse> for Result<()> {
@@ -826,25 +836,23 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<'_, FetchResponse<'_>> {
         env.set_has_attachments(has_attachments);
     }
 
-    Ok((&input[i..], ret, None))
+    Ok((&input[i..], ret, Vec::with_capacity(0)))
 }
 
 pub fn fetch_responses(mut input: &[u8]) -> ImapParseResult<'_, Vec<FetchResponse<'_>>> {
     let mut ret = Vec::new();
-    let mut alert: Option<Alert> = None;
+    let mut status_responses = Vec::with_capacity(0);
 
     while input.starts_with(UNTAGGED_PREFIX) {
+        if let Ok((rest, status_response)) = imap_generic_status_response(input) {
+            status_responses.push(status_response);
+            input = rest;
+            continue;
+        }
         let next_response = fetch_response(input);
         match next_response {
-            Ok((rest, el, el_alert)) => {
-                if let Some(el_alert) = el_alert {
-                    match &mut alert {
-                        Some(Alert(ref mut alert)) => {
-                            alert.push_str(&el_alert.0);
-                        }
-                        a @ None => *a = Some(el_alert),
-                    }
-                }
+            Ok((rest, el, status_response)) => {
+                status_responses.extend(status_response);
                 input = rest;
                 ret.push(el);
             }
@@ -867,7 +875,7 @@ pub fn fetch_responses(mut input: &[u8]) -> ImapParseResult<'_, Vec<FetchRespons
             String::from_utf8_lossy(input)
         )));
     }
-    Ok((input, ret, alert))
+    Ok((input, ret, status_responses))
 }
 
 pub fn uid_fetch_flags_responses(input: &[u8]) -> IResult<&[u8], Vec<(UID, (Flag, Vec<String>))>> {
@@ -1006,8 +1014,8 @@ pub fn untagged_responses(input: &[u8]) -> ImapParseResult<'_, Option<UntaggedRe
                 b"EXISTS" => Some(Exists(num)),
                 b"RECENT" => Some(Recent(num)),
                 _ if _tag.starts_with(b"FETCH ") => {
-                    let (rest, resp, alert) = fetch_response(orig_input)?;
-                    return Ok((rest, Some(Fetch(Box::new(resp))), alert));
+                    let (rest, resp, status_response) = fetch_response(orig_input)?;
+                    return Ok((rest, Some(Fetch(Box::new(resp))), status_response));
                 }
                 _ => {
                     log::error!(
@@ -1019,7 +1027,7 @@ pub fn untagged_responses(input: &[u8]) -> ImapParseResult<'_, Option<UntaggedRe
                 }
             }
         },
-        None,
+        Vec::with_capacity(0),
     ))
 }
 
