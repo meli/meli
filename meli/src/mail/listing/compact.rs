@@ -717,9 +717,7 @@ impl ListingTrait for CompactListing {
             self.cursor_pos.2 = self.new_cursor_pos.2;
         }
 
-        if self.force_draw {
-            grid.clear_area(area, self.color_cache.theme_default);
-        }
+        grid.clear_area(area, self.color_cache.theme_default);
         /* Page_no has changed, so draw new page */
         _ = self.data_columns.recalc_widths(area.size(), top_idx);
         /* copy table columns */
@@ -1160,6 +1158,16 @@ impl CompactListing {
             self.data_columns.columns[3].area().width(),
             self.data_columns.columns[4].area().width(),
         );
+
+        for i in 0..self.data_columns.columns.len() {
+            let area = self.data_columns.columns[i]
+                .area()
+                .skip_rows(start)
+                .take_rows(end - start + 1);
+            self.data_columns.columns[i]
+                .grid_mut()
+                .clear_area(area, self.color_cache.theme_default);
+        }
 
         let columns = &mut self.data_columns.columns;
         let mut itoa_buffer = itoa::Buffer::new();
@@ -1891,16 +1899,19 @@ impl Component for CompactListing {
                 self.color_cache = ColorCache::new(context, IndexStyle::Compact);
                 self.refresh_mailbox(context, true);
                 self.set_dirty(true);
+                self.force_draw = true;
             }
             UIEvent::MailboxUpdate((ref idxa, ref idxf))
                 if (*idxa, *idxf) == (self.new_cursor_pos.0, self.cursor_pos.1) =>
             {
                 self.refresh_mailbox(context, false);
                 self.set_dirty(true);
+                self.force_draw = true;
             }
             UIEvent::StartupCheck(ref f) if *f == self.cursor_pos.1 => {
                 self.refresh_mailbox(context, false);
                 self.set_dirty(true);
+                self.force_draw = true;
             }
             UIEvent::EnvelopeRename(_, ref new_hash) => {
                 let account = &context.accounts[&self.cursor_pos.0];
@@ -1925,6 +1936,7 @@ impl Component for CompactListing {
                 if self.rows.thread_order.contains_key(thread_hash) {
                     self.refresh_mailbox(context, false);
                     self.set_dirty(true);
+                    self.force_draw = true;
                 }
             }
             UIEvent::EnvelopeUpdate(ref env_hash) => {
@@ -1956,6 +1968,7 @@ impl Component for CompactListing {
                 self.set_coordinates((self.new_cursor_pos.0, self.new_cursor_pos.1));
                 self.refresh_mailbox(context, false);
                 self.set_dirty(true);
+                self.force_draw = true;
                 return true;
             }
             UIEvent::Action(Action::Listing(Search(ref filter_term))) if !self.unfocused() => {
