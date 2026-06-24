@@ -157,12 +157,12 @@ fn test_imap_required_responses() {
 #[test]
 fn test_imap_line_iterator() {
     {
-        let s = b"* 1429 FETCH (UID 1505 FLAGS (\\Seen) RFC822 {26}\r\nReturn-Path: <blah blah...\r\n* 1430 FETCH (UID 1506 FLAGS (\\Seen)\r\n* 1431 FETCH (UID 1507 FLAGS (\\Seen)\r\n* 1432 FETCH (UID 1500 FLAGS (\\Seen) RFC822 {4}\r\nnull\r\n";
+        let s = b"* 1429 FETCH (UID 1505 FLAGS (\\Seen) RFC822 {26}\r\nReturn-Path: <blah blah...)\r\n* 1430 FETCH (UID 1506 FLAGS (\\Seen))\r\n* 1431 FETCH (UID 1507 FLAGS (\\Seen))\r\n* 1432 FETCH (UID 1500 FLAGS (\\Seen) RFC822 {4}\r\nnull)\r\n";
         let line_a =
-            b"* 1429 FETCH (UID 1505 FLAGS (\\Seen) RFC822 {26}\r\nReturn-Path: <blah blah...\r\n";
-        let line_b = b"* 1430 FETCH (UID 1506 FLAGS (\\Seen)\r\n";
-        let line_c = b"* 1431 FETCH (UID 1507 FLAGS (\\Seen)\r\n";
-        let line_d = b"* 1432 FETCH (UID 1500 FLAGS (\\Seen) RFC822 {4}\r\nnull\r\n";
+            b"* 1429 FETCH (UID 1505 FLAGS (\\Seen) RFC822 {26}\r\nReturn-Path: <blah blah...)\r\n";
+        let line_b = b"* 1430 FETCH (UID 1506 FLAGS (\\Seen))\r\n";
+        let line_c = b"* 1431 FETCH (UID 1507 FLAGS (\\Seen))\r\n";
+        let line_d = b"* 1432 FETCH (UID 1500 FLAGS (\\Seen) RFC822 {4}\r\nnull)\r\n";
 
         let mut iter = s.split_rn();
 
