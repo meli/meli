@@ -62,6 +62,7 @@ pub struct CachedState {
 
 /// Helper function for ignoring cache misses with
 /// `.or_else(ignore_not_found)?`.
+#[inline(always)]
 pub fn ignore_not_found(err: Error) -> Result<()> {
     if matches!(err.kind, ErrorKind::NotFound) {
         return Ok(());
