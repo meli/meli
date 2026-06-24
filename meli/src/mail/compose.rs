@@ -2802,7 +2802,7 @@ pub fn send_draft_async(
                 .unwrap();
         } else if !store_sent_mail && is_ok {
             let f = File::create_temp_file(message.as_bytes(), None, None, Some("eml"), false)?;
-            log::info!(
+            log::debug!(
                 "store_sent_mail is false; stored sent mail to {}",
                 f.path().display()
             );
