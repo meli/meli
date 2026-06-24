@@ -65,7 +65,6 @@ const DB_DESCRIPTION: DatabaseDescription = DatabaseDescription {
                     mailbox_hash     INTEGER NOT NULL,
                     uid              INTEGER NOT NULL,
                     modsequence      INTEGER,
-                    rfc822           BLOB,
                     envelope         BLOB NOT NULL,
                     PRIMARY KEY (mailbox_hash, uid),
                     FOREIGN KEY (mailbox_hash) REFERENCES mailbox(mailbox_hash) ON DELETE CASCADE
@@ -78,11 +77,11 @@ const DB_DESCRIPTION: DatabaseDescription = DatabaseDescription {
                 highestmodseq    INTEGER,
                 PRIMARY KEY (mailbox_hash)
                );
-    CREATE INDEX IF NOT EXISTS envelope_uid_idx ON envelopes(mailbox_hash, uid);
+    CREATE INDEX IF NOT EXISTS envelope_uid_idx ON envelopes(mailbox_hash, uid ASC);
     CREATE INDEX IF NOT EXISTS envelope_idx ON envelopes(hash);
     CREATE INDEX IF NOT EXISTS mailbox_idx ON mailbox(mailbox_hash);",
     ),
-    version: 4,
+    version: 5,
 };
 
 impl From<EnvelopeHash> for Value {
@@ -701,45 +700,5 @@ impl ImapCache for Sqlite3Cache {
             mailbox_hash,
             modsequence,
         }))
-    }
-
-    fn rfc822(
-        &mut self,
-        identifier: std::result::Result<UID, EnvelopeHash>,
-        mailbox_hash: MailboxHash,
-    ) -> Result<Option<Vec<u8>>> {
-        let mut ret: Vec<Option<Vec<u8>>> = match identifier {
-            Ok(uid) => {
-                let tx = self.connection.transaction()?;
-                let mut stmt = tx.prepare(
-                    "SELECT rfc822 FROM envelopes WHERE mailbox_hash = ?1 AND uid = ?2;",
-                )?;
-                #[allow(clippy::let_and_return)] // false positive, the let binding is needed
-                // for the temporary to live long enough
-                let x = stmt
-                    .query_map(sqlite3::params![mailbox_hash, uid as Sqlite3UID], |row| {
-                        row.get(0)
-                    })?
-                    .collect::<std::result::Result<_, _>>()?;
-                x
-            }
-            Err(env_hash) => {
-                let tx = self.connection.transaction()?;
-                let mut stmt = tx.prepare(
-                    "SELECT rfc822 FROM envelopes WHERE mailbox_hash = ?1 AND hash = ?2;",
-                )?;
-                #[allow(clippy::let_and_return)] // false positive, the let binding is needed
-                // for the temporary to live long enough
-                let x = stmt
-                    .query_map(sqlite3::params![mailbox_hash, env_hash], |row| row.get(0))?
-                    .collect::<std::result::Result<_, _>>()?;
-                x
-            }
-        };
-
-        if ret.len() != 1 {
-            return Ok(None);
-        }
-        Ok(ret.pop().unwrap())
     }
 }

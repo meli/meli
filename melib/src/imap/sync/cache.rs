@@ -112,12 +112,6 @@ pub trait ImapCache: Send + std::fmt::Debug {
         select_response: &SelectResponse,
     ) -> Result<()>;
 
-    fn rfc822(
-        &mut self,
-        identifier: std::result::Result<UID, EnvelopeHash>,
-        mailbox_hash: MailboxHash,
-    ) -> Result<Option<Vec<u8>>>;
-
     fn update_flags(
         &mut self,
         env_hashes: EnvelopeHashBatch,
@@ -271,23 +265,6 @@ impl ImapCache for Arc<UIDStore> {
             return cache_handle.init_mailbox(mailbox_hash, select_response);
         }
         Ok(())
-    }
-
-    fn rfc822(
-        &mut self,
-        identifier: std::result::Result<UID, EnvelopeHash>,
-        mailbox_hash: MailboxHash,
-    ) -> Result<Option<Vec<u8>>> {
-        if !self.keep_offline_cache.load(Ordering::SeqCst) {
-            return Ok(None);
-        }
-        let mut mutex = self.offline_cache.lock().unwrap();
-        self.init_cache(&mut mutex)?;
-
-        if let Some(ref mut cache_handle) = *mutex {
-            return cache_handle.rfc822(identifier, mailbox_hash);
-        }
-        Ok(None)
     }
 
     fn update_flags(
