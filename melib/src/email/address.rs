@@ -425,7 +425,7 @@ impl std::fmt::Display for Address {
                     g.mailbox_list.iter().map(|a| format!("{a}")).collect();
                 write!(
                     f,
-                    "{}: {}",
+                    "{}:{};",
                     g.display_name.display(&g.raw),
                     attachment_strings.join(", ")
                 )
@@ -479,7 +479,7 @@ impl std::fmt::Display for UINameAddress<'_> {
                     g.mailbox_list.iter().map(|a| Self(a).to_string()).collect();
                 write!(
                     f,
-                    "{}: {}",
+                    "{}:{};",
                     g.display_name.display(&g.raw),
                     attachment_strings.join(", ")
                 )
