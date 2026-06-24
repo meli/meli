@@ -31,14 +31,14 @@ use super::*;
 #[cfg(test)]
 mod tests;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug)]
 pub struct GroupAddress {
     pub raw: Vec<u8>,
     pub display_name: StrBuilder,
     pub mailbox_list: Vec<Address>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug)]
 /**
  * Container for an address.
  *
@@ -102,7 +102,7 @@ impl PartialEq for MailboxAddress {
 /// assert_eq!(addr.get_display_name(), Some("Jörg Doe".to_string()));
 /// assert_eq!(addr.get_email(), "joerg@example.com".to_string());
 /// ```
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone)]
 pub enum Address {
     Mailbox(MailboxAddress),
     Group(GroupAddress),
@@ -463,6 +463,25 @@ impl TryFrom<&str> for Address {
     }
 }
 
+impl serde::Serialize for Address {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.to_string().serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Address {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = std::borrow::Cow::<'de, str>::deserialize(deserializer)?;
+        Self::try_from(s.as_ref()).map_err(serde::de::Error::custom)
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 #[repr(transparent)]
 pub struct UINameAddress<'a>(&'a Address);
@@ -518,7 +537,7 @@ impl StrBuilder {
 }
 
 /// `MessageID` is accessed through the `StrBuild` trait.
-#[derive(Clone, Default, Deserialize, Serialize)]
+#[derive(Clone, Default)]
 pub struct MessageID(pub Vec<u8>, pub StrBuilder);
 
 impl MessageID {
@@ -720,4 +739,24 @@ macro_rules! make_address {
             }
         })
     }};
+}
+
+impl serde::Serialize for MessageID {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.as_str().serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for MessageID {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s: String = String::deserialize(deserializer)?;
+        let length = s.len();
+        Ok(Self(s.into(), StrBuilder { offset: 0, length }))
+    }
 }
