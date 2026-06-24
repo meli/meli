@@ -29,7 +29,7 @@ macro_rules! to_str (
 #[test]
 fn test_imap_response() {
     assert_eq!(ImapResponse::try_from(&b"M12 NO [CANNOT] Invalid mailbox name: Name must not have \'/\' characters (0.000 + 0.098 + 0.097 secs).\r\n"[..]).unwrap(),
-        ImapResponse::No(ResponseCode::Alert("Invalid mailbox name: Name must not have '/' characters".to_string())));
+        ImapResponse::No(ResponseCode::Alert("[CANNOT] Invalid mailbox name: Name must not have '/' characters".to_string())));
 
     assert_eq!(
         ImapResponse::try_from(&b"M13 OK [UIDNEXT 4392] Predicted next UID\r\n"[..]).unwrap(),

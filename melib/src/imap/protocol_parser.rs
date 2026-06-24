@@ -275,25 +275,24 @@ impl std::fmt::Display for ResponseCode {
 }
 
 impl ResponseCode {
-    fn from(val: &[u8]) -> Self {
-        use ResponseCode::*;
-        if !val.starts_with(b"[") {
-            let msg = val.trim();
-            return Alert(String::from_utf8_lossy(msg).to_string());
+    fn from(orig_val: &[u8]) -> Self {
+        if !orig_val.starts_with(b"[") {
+            let msg = orig_val.trim();
+            return Self::Alert(String::from_utf8_lossy(msg).to_string());
         }
 
-        let val = &val[1..];
+        let val = &orig_val[1..];
         if val.starts_with(b"BADCHARSET") {
             let charsets = val.find(b"(").map(|pos| val[pos + 1..].trim());
-            Badcharset(charsets.map(|charsets| String::from_utf8_lossy(charsets).to_string()))
+            Self::Badcharset(charsets.map(|charsets| String::from_utf8_lossy(charsets).to_string()))
         } else if val.starts_with(b"READONLY") {
-            ReadOnly
+            Self::ReadOnly
         } else if val.starts_with(b"READWRITE") {
-            ReadWrite
+            Self::ReadWrite
         } else if val.starts_with(b"TRYCREATE") {
-            Trycreate
+            Self::Trycreate
         } else if val.starts_with(b"UIDNEXT") {
-            Uidnext(
+            Self::Uidnext(
                 UID::from_str(&String::from_utf8_lossy(
                     val.find(b"]")
                         .map(|end| &val[b"UIDNEXT ".len()..end])
@@ -302,7 +301,7 @@ impl ResponseCode {
                 .unwrap_or(0),
             )
         } else if val.starts_with(b"UIDVALIDITY") {
-            Uidvalidity(
+            Self::Uidvalidity(
                 UIDVALIDITY::from_str(&String::from_utf8_lossy(
                     val.find(b"]")
                         .map(|end| &val[b"UIDVALIDITY ".len()..end])
@@ -311,7 +310,7 @@ impl ResponseCode {
                 .unwrap_or(0),
             )
         } else if val.starts_with(b"UNSEEN") {
-            Unseen(
+            Self::Unseen(
                 usize::from_str(&String::from_utf8_lossy(
                     val.find(b"]")
                         .map(|end| &val[b"UNSEEN ".len()..end])
@@ -320,8 +319,8 @@ impl ResponseCode {
                 .unwrap_or(0),
             )
         } else {
-            let msg = &val[val.find(b"] ").unwrap() + 1..].trim();
-            Alert(String::from_utf8_lossy(msg).to_string())
+            // Fallback
+            Self::Alert(String::from_utf8_lossy(orig_val.trim()).to_string())
         }
     }
 }
