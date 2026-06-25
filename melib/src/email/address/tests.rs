@@ -22,27 +22,23 @@
 
 use super::*;
 
-const M_ID: &str = "<20170825132332.6734-1@mail.ntua.gr>";
+const M_ID: &str = "<20170825132332.6734-1@example.com>";
 const M_LEN: usize = M_ID.len();
 
 #[test]
-fn test_email_address_message_id_strbuilder() {
-    let (_, val) = parser::address::msg_id(M_ID.as_bytes()).unwrap();
-    assert_eq!(
-        val,
-        MessageID(
-            M_ID.as_bytes().to_vec(),
-            StrBuilder {
-                offset: 1,
-                length: 35,
-            }
-        )
-    );
-}
-
-#[test]
-fn test_email_address_message_id_comparisons() {
-    let (_, val) = parser::address::msg_id(M_ID.as_bytes()).unwrap();
+fn test_email_address_message_id() {
+    let (rest, val) = parser::address::msg_id(M_ID.as_bytes()).unwrap();
+    assert_eq!(rest, b"");
     assert_eq!(val, M_ID);
     assert_eq!(val, M_ID[1..][..M_LEN - 2]);
+    assert_eq!(val.to_string(), M_ID[1..][..M_LEN - 2]);
+    assert_eq!(val.display_brackets().to_string(), M_ID);
+    assert_eq!(
+        MessageID::display_slice(&[val.clone(), val.clone()], Some(" ")),
+        format!("{M_ID} {M_ID}")
+    );
+    assert_eq!(
+        MessageID::display_slice(&[val.clone(), val], None),
+        format!("{M_ID}, {M_ID}")
+    );
 }

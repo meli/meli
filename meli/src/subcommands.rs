@@ -336,7 +336,7 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
 
             use melib::{
                 utils::patch_retrieve::{PatchSource, PublicInboxHTTP},
-                MessageID, StrBuild,
+                MessageID,
             };
 
             use crate::args::PublicInboxOpt;
@@ -350,7 +350,7 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
                     message_id,
                 } => {
                     let lore = PublicInboxHTTP::new(url.as_str()).unwrap();
-                    let msg_id = MessageID::new(message_id.as_bytes(), message_id.as_bytes());
+                    let msg_id = MessageID::new(message_id);
                     std::thread::spawn(move || {
                         let ex = melib::smol::Executor::new();
                         futures::executor::block_on(ex.run(futures::future::pending::<()>()));

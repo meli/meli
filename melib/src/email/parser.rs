@@ -2695,10 +2695,9 @@ pub mod address {
         let (input, _) = opt(cfws)(input)?;
         Ok((
             input,
-            MessageID::new(
-                &orig_input[..3 + id_left_.len() + id_right_.len()],
+            MessageID::new(String::from_utf8_lossy(
                 &orig_input[1..2 + id_left_.len() + id_right_.len()],
-            ),
+            )),
         ))
     }
 

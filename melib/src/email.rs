@@ -456,7 +456,7 @@ impl Envelope {
         if let Ok(d) = parser::dates::rfc5322_date(self.date.as_bytes()) {
             self.set_datetime(d);
         }
-        if self.message_id.raw().is_empty() {
+        if self.message_id.is_empty() {
             let hash = self.hash;
             self.set_message_id(format!("<{:x}>", hash.0).as_bytes());
         }
@@ -661,7 +661,7 @@ impl Envelope {
                 self.message_id = val;
             }
             Err(_) => {
-                self.message_id = MessageID::new(new_val, new_val);
+                self.message_id = MessageID::new(String::from_utf8_lossy(new_val));
             }
         }
         self

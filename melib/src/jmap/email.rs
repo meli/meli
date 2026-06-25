@@ -314,12 +314,9 @@ impl From<EmailObject> for crate::Envelope {
         if let Some(v) = t.headers.get(HeaderName::REFERENCES.as_str()) {
             env.set_references(v.as_bytes());
         } else if let Some(r) = t.references.take() {
-            use crate::email::address::{MessageID, References, StrBuild};
+            use crate::email::address::{MessageID, References};
 
-            let r = r
-                .into_iter()
-                .map(|m| MessageID::new(m.as_bytes(), m.as_bytes()))
-                .collect::<Vec<_>>();
+            let r = r.into_iter().map(MessageID::new).collect::<Vec<_>>();
 
             env.other_headers_mut().insert(
                 HeaderName::REFERENCES,
@@ -330,11 +327,11 @@ impl From<EmailObject> for crate::Envelope {
             }
         }
         if let Some(in_reply_to) = t.in_reply_to.take() {
-            use crate::email::address::{MessageID, References, StrBuild};
+            use crate::email::address::{MessageID, References};
 
             let in_reply_to = in_reply_to
                 .into_iter()
-                .map(|m| MessageID::new(m.as_bytes(), m.as_bytes()))
+                .map(MessageID::new)
                 .collect::<Vec<_>>();
             for m in &in_reply_to {
                 env.push_in_reply_to(m.clone());

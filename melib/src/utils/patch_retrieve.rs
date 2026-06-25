@@ -25,15 +25,15 @@
 //! # Example
 //!
 //! ```no_run
-//! use melib::{utils::patch_retrieve::*, MessageID, StrBuild};
+//! use melib::{utils::patch_retrieve::*, MessageID};
 //!
 //! let lore = PublicInboxNNTP {
 //!     server_hostname: "nntp.lore.kernel.org".to_string(),
 //!     port: None,
 //! };
-//! let msg_id = b"20240910-rust-pl011-v10-8-85a89ee33c40@linaro.org";
+//! let msg_id = "20240910-rust-pl011-v10-8-85a89ee33c40@linaro.org";
 //! let mail = futures::executor::block_on(
-//!     lore.fetch("qemu-devel.nongnu.org", MessageID::new(msg_id, msg_id))
+//!     lore.fetch("qemu-devel.nongnu.org", MessageID::new(msg_id))
 //!         .unwrap(),
 //! )
 //! .unwrap();
@@ -319,7 +319,6 @@ mod tests {
     use futures::executor::block_on;
 
     use super::*;
-    use crate::email::StrBuild;
 
     #[test]
     #[ignore = "accesses the internet/network"]
@@ -329,9 +328,9 @@ mod tests {
             server_hostname: "nntp.lore.kernel.org".to_string(),
             port: None,
         };
-        let msg_id = b"20240910-rust-pl011-v10-8-85a89ee33c40@linaro.org";
-        let mail = futures::executor::block_on(
-            lore.fetch("qemu-devel.nongnu.org", MessageID::new(msg_id, msg_id))
+        let msg_id = "20240910-rust-pl011-v10-8-85a89ee33c40@linaro.org";
+        let mail = block_on(
+            lore.fetch("qemu-devel.nongnu.org", MessageID::new(msg_id))
                 .unwrap(),
         )
         .unwrap();
@@ -344,8 +343,7 @@ mod tests {
     fn test_lore_http_fetch() {
         let lore = PublicInboxHTTP::new("https://lore.kernel.org").unwrap();
         let msg_id = MessageID::new(
-            b"<20260525-hw_random_registration_rng_list-v1-1-ee1c215d544d@pitsidianak.is>",
-            b"20260525-hw_random_registration_rng_list-v1-1-ee1c215d544d@pitsidianak.is",
+            "<20260525-hw_random_registration_rng_list-v1-1-ee1c215d544d@pitsidianak.is>",
         );
         eprintln!("{:?}", block_on(lore.fetch("all", msg_id).unwrap()));
     }
@@ -356,8 +354,7 @@ mod tests {
     fn test_lore_http_fetch_thread() {
         let lore = PublicInboxHTTP::new("https://lore.kernel.org").unwrap();
         let msg_id = MessageID::new(
-            b"<20260521-rust-gitignore-long-types-txt-v1-1-5be5e6fa427c@pitsidianak.is>",
-            b"20260521-rust-gitignore-long-types-txt-v1-1-5be5e6fa427c@pitsidianak.is",
+            "<20260521-rust-gitignore-long-types-txt-v1-1-5be5e6fa427c@pitsidianak.is>",
         );
         eprintln!(
             "{:#?}",

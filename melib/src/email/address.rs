@@ -451,14 +451,31 @@ impl StrBuilder {
     }
 }
 
-/// `MessageID` is accessed through the `StrBuild` trait.
+/// A unique message identifier, used in `Message-ID`, `References` etc headers.
+///
+/// See section "3.6.4. Identification Fields" of `RFC5322`.
 #[derive(Clone, Default)]
-pub struct MessageID(pub Vec<u8>, pub StrBuilder);
+pub struct MessageID(pub Box<str>);
 
 impl MessageID {
+    pub fn new<T: Into<String>>(val: T) -> Self {
+        let val: String = val.into();
+        if val.trim().starts_with('<') && val.trim().ends_with('>') {
+            let val = val.trim().trim_matches(['<', '>']);
+            Self(val.into())
+        } else {
+            Self(val.into())
+        }
+    }
+
+    #[inline(always)]
     pub fn as_str(&self) -> &str {
-        // SAFETY: MessageIDs are always valid UTF-8 (ascii)
-        unsafe { std::str::from_utf8_unchecked(self.raw()) }
+        self.0.as_ref()
+    }
+
+    #[inline(always)]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 
     pub fn display_brackets(&self) -> impl std::fmt::Display + '_ {
@@ -482,29 +499,6 @@ impl MessageID {
     }
 }
 
-impl StrBuild for MessageID {
-    fn new(string: &[u8], slice: &[u8]) -> Self {
-        let offset = string.find(slice).unwrap_or(0);
-        Self(
-            string.to_owned(),
-            StrBuilder {
-                offset,
-                length: slice.len() + 1,
-            },
-        )
-    }
-
-    fn raw(&self) -> &[u8] {
-        let offset = self.1.offset;
-        let length = self.1.length;
-        &self.0[offset..offset + length.saturating_sub(1)]
-    }
-
-    fn val(&self) -> &[u8] {
-        &self.0
-    }
-}
-
 struct MessageIDBracket<'a>(&'a MessageID);
 
 impl std::fmt::Display for MessageIDBracket<'_> {
@@ -517,18 +511,13 @@ impl std::fmt::Display for MessageIDBracket<'_> {
 
 impl std::fmt::Display for MessageID {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let val = String::from_utf8_lossy(self.val());
-        write!(
-            fmt,
-            "{}",
-            val.trim().trim_start_matches('<').trim_end_matches('>')
-        )
+        write!(fmt, "{}", self.0)
     }
 }
 
 impl PartialEq for MessageID {
     fn eq(&self, other: &Self) -> bool {
-        self.raw() == other.raw()
+        self.0 == other.0
     }
 }
 
@@ -536,12 +525,7 @@ impl Eq for MessageID {}
 
 impl PartialEq<str> for MessageID {
     fn eq(&self, other: &str) -> bool {
-        self.raw()
-            == other
-                .trim()
-                .trim_start_matches('<')
-                .trim_end_matches('>')
-                .as_bytes()
+        self.0.as_ref() == other.trim().trim_matches(['<', '>'])
     }
 }
 
@@ -553,13 +537,13 @@ impl PartialEq<&str> for MessageID {
 
 impl std::fmt::Debug for MessageID {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", String::from_utf8_lossy(self.raw()))
+        write!(f, "{}", self.0)
     }
 }
 
 impl Hash for MessageID {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.raw().hash(state)
+        self.0.hash(state)
     }
 }
 
@@ -657,7 +641,6 @@ impl<'de> serde::Deserialize<'de> for MessageID {
         D: serde::Deserializer<'de>,
     {
         let s: String = String::deserialize(deserializer)?;
-        let length = s.len();
-        Ok(Self(s.into(), StrBuilder { offset: 0, length }))
+        Ok(Self::new(s))
     }
 }

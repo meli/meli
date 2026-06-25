@@ -34,7 +34,7 @@
 //! user having mutable ownership.
 
 use crate::{
-    email::{address::StrBuild, parser::BytesExt, *},
+    email::{parser::BytesExt, *},
     SortField, SortOrder, UnixTimestamp,
 };
 
@@ -956,7 +956,7 @@ impl Threads {
                     None
                 }
             })
-            .unwrap_or_else(|| ThreadNodeHash::from(message_id.raw()));
+            .unwrap_or_else(|| ThreadNodeHash::from(message_id.as_str()));
         {
             let node = self.thread_nodes.entry(new_id).or_default();
             node.message = Some(env_hash);
@@ -1028,7 +1028,7 @@ impl Threads {
                     .cloned()
             })
         {
-            let reply_to_id = ThreadNodeHash::from(&r.raw());
+            let reply_to_id = ThreadNodeHash::from(&r.as_str());
             self.thread_nodes.insert(
                 reply_to_id,
                 ThreadNode {
@@ -1082,7 +1082,7 @@ impl Threads {
                     make!((id) parent of (current_descendant_id), self);
                     current_descendant_id = id;
                 } else {
-                    let id = ThreadNodeHash::from(reference.raw());
+                    let id = ThreadNodeHash::from(reference.as_str());
                     self.thread_nodes.insert(
                         id,
                         ThreadNode {

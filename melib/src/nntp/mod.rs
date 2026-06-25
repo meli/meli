@@ -48,10 +48,7 @@ pub use connection::*;
 
 use crate::{
     backends::prelude::*,
-    email::{
-        address::{MessageID, StrBuild},
-        Mail,
-    },
+    email::{address::MessageID, Mail},
     error::{Error, ErrorKind, Result, ResultIntoError},
     parser::BytesExt,
     utils::futures::timeout,
@@ -310,12 +307,7 @@ impl MailBackend for NntpType {
                         res.split_rn()
                             .skip(1)
                             .map(|s| s.trim())
-                            .filter(|msg_id| {
-                                !message_id_lck.contains_key(&MessageID::new(
-                                    msg_id.as_bytes(),
-                                    msg_id.as_bytes(),
-                                ))
-                            })
+                            .filter(|msg_id| !message_id_lck.contains_key(&MessageID::new(*msg_id)))
                             .map(str::to_string)
                             .collect::<Vec<String>>()
                     };

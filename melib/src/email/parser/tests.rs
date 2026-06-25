@@ -625,12 +625,12 @@ fn test_email_parser_msg_id() {
     let (rest, (_header_name, value)) = headers::header(s.as_bytes()).unwrap();
     assert!(rest.is_empty());
     let a = msg_id(value).unwrap().1;
-    assert_eq!(a.val(), b"<1234@local.machine.example>");
+    assert_eq!(a, "<1234@local.machine.example>");
     let s = "Message-ID:              <testabcd.1234@silly.test>\r\n";
     let (rest, (_header_name, value)) = headers::header(s.as_bytes()).unwrap();
     assert!(rest.is_empty());
     let b = msg_id(value).unwrap().1;
-    assert_eq!(b.val(), b"<testabcd.1234@silly.test>");
+    assert_eq!(b, "<testabcd.1234@silly.test>");
     let s = "References: <1234@local.machine.example>\r\n";
     let (rest, (_header_name, value)) = headers::header(s.as_bytes()).unwrap();
     assert!(rest.is_empty());
