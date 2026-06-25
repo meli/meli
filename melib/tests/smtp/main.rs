@@ -399,8 +399,8 @@ hello world.
                 new_mail,
                 /* tos */
                 Some(&[
-                    Address::new(None, "user2@example.com".to_string()),
-                    Address::new(None, "postmaster@example.com".to_string()),
+                    Address::new(None::<&str>, "user2@example.com"),
+                    Address::new(None::<&str>, "postmaster@example.com"),
                 ]),
             ))
             .unwrap();

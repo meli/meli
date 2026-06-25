@@ -73,12 +73,12 @@ impl Key {
                 None
             } else if (*uid).name.is_null() {
                 Some(Address::new(
-                    None,
+                    None::<&str>,
                     CStr::from_ptr((*uid).email).to_string_lossy().to_string(),
                 ))
             } else if (*uid).email.is_null() {
                 Some(Address::new(
-                    None,
+                    None::<&str>,
                     CStr::from_ptr((*uid).name).to_string_lossy().to_string(),
                 ))
             } else {

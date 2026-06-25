@@ -364,7 +364,7 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
                         let msgs = futures::executor::block_on(
                             lore.fetch_thread(list.as_str(), msg_id.clone())?,
                         )?;
-                        let address = Address::new(None, "mboxrd@z".into());
+                        let address = Address::new(None::<&str>, "mboxrd@z".to_string());
                         let (mut file, path): (BufWriter<Box<dyn Write>>, _) = match output {
                             Some(PathOrStdio::Stdio) => {
                                 (BufWriter::new(Box::new(std::io::stdout())), None)

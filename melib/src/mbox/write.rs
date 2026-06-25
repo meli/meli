@@ -48,7 +48,7 @@ impl MboxFormat {
         }
         writer.write_all(b"From ")?;
         if let Some(from) = envelope_from {
-            writer.write_all(from.address_spec_raw())?;
+            writer.write_all(from.get_email().as_bytes())?;
         } else {
             write!(writer, "{}", uuid::Uuid::nil().as_simple())?;
         }

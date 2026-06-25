@@ -270,12 +270,12 @@ fn test_jmap_identity_methods() {
             .create(Some({
                 let id: Id<Identity> = main_identity.into();
                 let address = crate::email::Address::try_from(main_identity)
-                    .unwrap_or_else(|_| crate::email::Address::new(None, main_identity.into()));
+                    .unwrap_or_else(|_| crate::email::Address::new(None::<&str>, main_identity));
                 indexmap! {
                     id.clone().into() => Identity {
                         id,
-                        name: address.get_display_name().unwrap_or_default(),
-                        email: address.get_email(),
+                        name: address.get_display_name().unwrap_or_default().to_string(),
+                        email: address.get_email().to_string(),
                         ..Identity::default()
                     }
                 }

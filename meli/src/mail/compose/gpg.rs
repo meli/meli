@@ -550,8 +550,8 @@ mod tests {
                     key.fingerprint() == "ADAB7FCC1F4DE2616ECFA402AF82244F9CD9FD55"
                         && key.primary_uid()
                             == Some(melib::Address::new(
-                                Some("Joe Random Hacker".into()),
-                                "joe@example.com".into(),
+                                Some("Joe Random Hacker"),
+                                "joe@example.com",
                             ))
                         && key.can_encrypt()
                         && key.can_sign()

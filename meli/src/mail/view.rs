@@ -287,10 +287,10 @@ impl MailView {
             seen.insert(addr.clone());
             let mut new_card: Card = Card::new();
             new_card
-                .set_email(addr.get_email())
-                .set_id(addr.get_email().into());
+                .set_email(addr.get_email().to_string())
+                .set_id(addr.get_email().to_string().into());
             if let Some(display_name) = addr.get_display_name() {
-                new_card.set_name(display_name);
+                new_card.set_name(display_name.to_string());
             }
             entries.insert(new_card.clone(), (new_card, format!("{addr}")));
         }

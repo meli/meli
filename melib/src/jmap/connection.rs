@@ -364,7 +364,7 @@ impl JmapConnection {
                             crate::email::Address::try_from(self.store.main_identity.as_str())
                                 .unwrap_or_else(|_| {
                                     crate::email::Address::new(
-                                        None,
+                                        None::<&str>,
                                         self.store.main_identity.clone(),
                                     )
                                 });
@@ -374,16 +374,16 @@ impl JmapConnection {
                             id,
                             Identity {
                                 id: id.clone(),
-                                name: address.get_display_name().unwrap_or_default(),
-                                email: address.get_email(),
+                                name: address.get_display_name().unwrap_or_default().into(),
+                                email: address.get_email().into(),
                                 ..Identity::default()
                             }
                         );
                         indexmap! {
                             id.clone().into() => Identity {
                                 id,
-                                name: address.get_display_name().unwrap_or_default(),
-                                email: address.get_email(),
+                                name: address.get_display_name().unwrap_or_default().into(),
+                                email: address.get_email().into(),
                                 ..Identity::default()
                             }
                         }

@@ -82,7 +82,7 @@ use smallvec::SmallVec;
 use smol::{unblock, Async as AsyncWrapper};
 
 use crate::{
-    email::{parser::BytesExt, Address, Envelope},
+    email::{Address, Envelope},
     error::{Error, ErrorKind, Result, ResultIntoError},
     utils::connections::{std_net::connect as tcp_stream_connect, Connection},
 };
@@ -667,7 +667,7 @@ impl SmtpConnection {
         if !envelope_from.is_empty() {
             current_command.push(envelope_from.trim().as_bytes());
         } else {
-            if envelope.from().is_empty() {
+            if envelope.from().is_empty() || envelope.from()[0].get_email().is_empty() {
                 return Err(Error::new(
                     "SMTP submission was aborted because there was no e-mail address found in the \
                      From: header field. Consider adding a valid value or setting `envelope_from` \
@@ -680,7 +680,7 @@ impl SmtpConnection {
                      client settings",
                 ));
             }
-            current_command.push(envelope.from()[0].address_spec_raw().trim());
+            current_command.push(envelope.from()[0].get_email().trim().as_bytes());
         }
         current_command.push(b">");
         if self.server_conf.extensions.prdr {
@@ -711,25 +711,41 @@ impl SmtpConnection {
             .chain(envelope.cc().iter())
             .chain(envelope.bcc().iter())
         {
-            current_command.clear();
-            current_command.push(b"RCPT TO:<");
-            current_command.push(addr.address_spec_raw().trim());
-            if let Some(dsn_notify) = dsn_notify.as_ref() {
-                current_command.push(b"> NOTIFY=");
-                current_command.push(dsn_notify.as_bytes());
-            } else {
-                current_command.push(b">");
-            }
-            self.send_command(&current_command).await?;
+            macro_rules! send_to_mailbox {
+                ($mailbox:expr) => {{
+                    if $mailbox.get_email().trim().is_empty() {
+                        continue;
+                    }
+                    current_command.clear();
+                    current_command.push(b"RCPT TO:<");
+                    current_command.push($mailbox.get_email().trim().as_bytes());
+                    if let Some(dsn_notify) = dsn_notify.as_ref() {
+                        current_command.push(b"> NOTIFY=");
+                        current_command.push(dsn_notify.as_bytes());
+                    } else {
+                        current_command.push(b">");
+                    }
+                    self.send_command(&current_command).await?;
 
-            //`RCPT TO:<forward-path> [ SP <rcpt-parameters> ] <CRLF>`
-            // If accepted, the SMTP server returns a "250 OK" reply and stores the
-            // forward-path.
-            if !self.server_conf.extensions.pipelining {
-                self.read_lines(&mut res, Some((ReplyCode::_250, &[])))
-                    .await?;
-            } else {
-                pipelining_queue.push(Some((ReplyCode::_250, &[])));
+                    //`RCPT TO:<forward-path> [ SP <rcpt-parameters> ] <CRLF>`
+                    // If accepted, the SMTP server returns a "250 OK" reply and stores the
+                    // forward-path.
+                    if !self.server_conf.extensions.pipelining {
+                        self.read_lines(&mut res, Some((ReplyCode::_250, &[])))
+                            .await?;
+                    } else {
+                        pipelining_queue.push(Some((ReplyCode::_250, &[])));
+                    }
+                }};
+            }
+
+            match addr {
+                Address::Mailbox(_) => send_to_mailbox!(addr),
+                Address::Group(g) => {
+                    for m in &g.mailbox_list {
+                        send_to_mailbox!(m);
+                    }
+                }
             }
         }
 

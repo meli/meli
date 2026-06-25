@@ -2414,11 +2414,7 @@ pub mod address {
 
                 Ok((
                     input.get(rest_start..).unwrap_or_default(),
-                    Address::Mailbox(MailboxAddress {
-                        raw,
-                        display_name,
-                        address_spec,
-                    }),
+                    Address::new(Some(display_name.display(&raw)), address_spec.display(&raw)),
                 ))
             } else {
                 Err(nom::Err::Error(
@@ -2509,7 +2505,7 @@ pub mod address {
         Ok((
             input,
             Address::new(
-                None,
+                None::<&str>,
                 format!("{}@{}", to_str!(&local_part), to_str!(&domain)),
             ),
         ))

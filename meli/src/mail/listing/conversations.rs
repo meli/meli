@@ -269,7 +269,7 @@ impl MailListingTrait for ConversationsListing {
         let mut other_subjects = IndexSet::new();
         let mut tags = IndexSet::new();
         let mut from_address_list = Vec::new();
-        let mut from_address_set: std::collections::HashSet<Vec<u8>> =
+        let mut from_address_set: std::collections::HashSet<Box<str>> =
             std::collections::HashSet::new();
         'items_for_loop: for thread in items {
             let thread_node = &threads.thread_nodes()[&threads.thread_ref(thread).root()];
@@ -347,10 +347,10 @@ impl MailListingTrait for ConversationsListing {
                 }
 
                 for addr in envelope.from().iter() {
-                    if from_address_set.contains(addr.address_spec_raw()) {
+                    if addr.get_email().is_empty() || from_address_set.contains(addr.get_email()) {
                         continue;
                     }
-                    from_address_set.insert(addr.address_spec_raw().to_vec());
+                    from_address_set.insert(addr.get_email().into());
                     from_address_list.push(addr.clone());
                 }
             }
@@ -810,7 +810,7 @@ impl ConversationsListing {
         let mut other_subjects = IndexSet::new();
         let mut tags = IndexSet::new();
         let mut from_address_list = Vec::new();
-        let mut from_address_set: std::collections::HashSet<Vec<u8>> =
+        let mut from_address_set: std::collections::HashSet<Box<str>> =
             std::collections::HashSet::new();
         for (envelope, show_subject) in threads
             .thread_iter(thread_hash)
@@ -837,10 +837,10 @@ impl ConversationsListing {
                 }
             }
             for addr in envelope.from().iter() {
-                if from_address_set.contains(addr.address_spec_raw()) {
+                if addr.get_email().is_empty() || from_address_set.contains(addr.get_email()) {
                     continue;
                 }
-                from_address_set.insert(addr.address_spec_raw().to_vec());
+                from_address_set.insert(addr.get_email().into());
                 from_address_list.push(addr.clone());
             }
         }

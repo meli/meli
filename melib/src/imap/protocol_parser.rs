@@ -40,7 +40,7 @@ use nom::{
 use super::*;
 use crate::{
     email::{
-        address::{Address, MailboxAddress},
+        address::Address,
         parser::{
             generic::{byte_in_range, byte_in_slice},
             BytesExt, IResult,
@@ -1336,17 +1336,7 @@ pub fn envelope(input: &[u8]) -> IResult<&[u8], Envelope> {
     ))
 }
 
-/* Helper to build StrBuilder for Address structs */
-macro_rules! str_builder {
-    ($offset:expr, $length:expr) => {
-        StrBuilder {
-            offset: $offset,
-            length: $length,
-        }
-    };
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AddressValue {
     Address(Address),
     GroupStart(Vec<u8>),
@@ -1434,7 +1424,7 @@ pub fn envelope_address(input: &[u8]) -> IResult<&[u8], AddressValue> {
 
     // If non-NIL, holds phrase from [RFC5322] mailbox after removing [RFC5322]
     // quoting
-    let (input, addr_name) = utils::nil_to_default(quoted)(input)?;
+    let (input, addr_name) = utils::nil_to_none(quoted)(input)?;
     let (input, _) = is_a(WS)(input)?;
 
     // Holds route from [RFC5322] obs-route if non-NIL (we ignore this)
@@ -1454,28 +1444,23 @@ pub fn envelope_address(input: &[u8]) -> IResult<&[u8], AddressValue> {
         return Ok((input, AddressValue::GroupEnd));
     };
 
+    let to_str = |b: Vec<u8>| {
+        if std::str::from_utf8(&b).is_ok() {
+            String::from_utf8(b).unwrap()
+        } else {
+            String::from_utf8_lossy(&b).to_string()
+        }
+    };
+
     if let Some(addr_host) = addr_host {
+        let addr_mailbox = to_str(addr_mailbox);
+        let addr_host = to_str(addr_host);
         Ok((
             input,
-            AddressValue::Address(Address::Mailbox(MailboxAddress {
-                raw: format!(
-                    "{}{}<{}@{}>",
-                    to_str!(&addr_name),
-                    if addr_name.is_empty() { "" } else { " " },
-                    to_str!(&addr_mailbox),
-                    to_str!(&addr_host)
-                )
-                .into_bytes(),
-                display_name: str_builder!(0, addr_name.len()),
-                address_spec: str_builder!(
-                    if addr_name.is_empty() {
-                        1
-                    } else {
-                        addr_name.len() + 2
-                    },
-                    addr_mailbox.len() + addr_host.len() + 1
-                ),
-            })),
+            AddressValue::Address(Address::new(
+                addr_name.map(to_str),
+                format!("{addr_mailbox}@{addr_host}"),
+            )),
         ))
     } else {
         // Group syntax.

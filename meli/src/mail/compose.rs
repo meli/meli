@@ -954,9 +954,9 @@ To: {}
         }
         let first = list.remove(0);
         let patterns = (
-            first.get_email(),
+            first.get_email().to_string(),
             list.into_iter()
-                .map(|addr| addr.get_email())
+                .map(|addr| addr.get_email().to_string())
                 .collect::<Vec<String>>(),
         );
         gpg::KeySelectionLoading::new(
@@ -2831,15 +2831,15 @@ fn attribution_string(
     );
     let fmt = fmt.replace(
         "%+n",
-        &sender
+        sender
             .map(|addr| addr.get_display_name().unwrap_or_else(|| addr.get_email()))
-            .unwrap_or_else(|| "\"\"".to_string()),
+            .unwrap_or_else(|| "\"\""),
     );
     let fmt = fmt.replace(
         "%+a",
-        &sender
+        sender
             .map(|addr| addr.get_email())
-            .unwrap_or_else(|| "\"\"".to_string()),
+            .unwrap_or_else(|| "\"\""),
     );
     melib::utils::datetime::timestamp_to_string(date, Some(fmt.as_str()), posix)
 }

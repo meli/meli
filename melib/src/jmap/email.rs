@@ -49,7 +49,7 @@ use crate::{
         UtcDate,
     },
     utils::datetime,
-    EnvelopeHash, StrBuilder,
+    EnvelopeHash,
 };
 
 mod import;
@@ -268,33 +268,32 @@ where
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailAddress {
-    pub email: String,
-    pub name: Option<String>,
+    pub email: Box<str>,
+    pub name: Option<Box<str>>,
 }
 
-impl From<crate::email::Address> for EmailAddress {
-    fn from(val: crate::email::Address) -> Self {
+impl From<Address> for EmailAddress {
+    fn from(val: Address) -> Self {
         Self {
-            email: val.get_email(),
-            name: val.get_display_name(),
+            email: val.get_email().into(),
+            name: val.get_display_name().map(Into::into),
         }
     }
 }
 
-impl From<EmailAddress> for crate::email::Address {
+impl From<EmailAddress> for Address {
     fn from(val: EmailAddress) -> Self {
         let EmailAddress { email, name } = val;
-        crate::make_address!(name.unwrap_or_default(), email)
+        Self::Mailbox(MailboxAddress {
+            display_name: name,
+            address_spec: email,
+        })
     }
 }
 
 impl std::fmt::Display for EmailAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if let Some(name) = self.name.as_ref() {
-            write!(f, "{} <{}>", name, self.email)
-        } else {
-            write!(f, "{}", self.email)
-        }
+        crate::email::address::fmt_mailbox(self.name.as_deref(), &self.email, f)
     }
 }
 

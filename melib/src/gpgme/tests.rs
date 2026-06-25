@@ -131,10 +131,7 @@ fn run_gpgme_verify_sig() {
             let assert_key = |key: &Key| {
                 key.fingerprint() == "ADAB7FCC1F4DE2616ECFA402AF82244F9CD9FD55"
                     && key.primary_uid()
-                        == Some(Address::new(
-                            Some("Joe Random Hacker".into()),
-                            "joe@example.com".into(),
-                        ))
+                        == Some(Address::new(Some("Joe Random Hacker"), "joe@example.com"))
                     && key.can_encrypt()
                     && key.can_sign()
                     && !key.secret()

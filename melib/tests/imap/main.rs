@@ -93,14 +93,16 @@ pub mod server {
                     imap_types::envelope::Address {
                         name: $a.display_name().to_string().try_into().unwrap(),
                         adl: NString(None),
-                        mailbox: String::from_utf8_lossy($a.address_spec_raw())
+                        mailbox: $a
+                            .get_email()
                             .split_once('@')
                             .unwrap()
                             .0
                             .to_string()
                             .try_into()
                             .unwrap(),
-                        host: String::from_utf8_lossy($a.address_spec_raw())
+                        host: $a
+                            .get_email()
                             .split_once('@')
                             .unwrap()
                             .1

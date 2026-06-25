@@ -31,47 +31,36 @@ use super::*;
 #[cfg(test)]
 mod tests;
 
+/// A named group of mailboxes.
+///
+/// See Section 3.4 of `RFC5322`.
 #[derive(Clone, Debug)]
 pub struct GroupAddress {
-    pub raw: Vec<u8>,
-    pub display_name: StrBuilder,
+    pub display_name: Box<str>,
     pub mailbox_list: Vec<Address>,
 }
 
 #[derive(Clone, Debug)]
-/**
- * Container for an address.
- *
- * ```text
- * >           raw: Vec<u8>
- * > ┌──────────┴────────────┐
- * > Name <address@domain.tld>
- * > └─┬┘  └──────────┬─────┘
- * > display_name     │
- * >                  │
- * >            address_spec
- *
- *
- * >           raw: Vec<u8>
- * > ┌──────────┴────────────────────┐
- * > "Name Name2" <address@domain.tld>
- * >  └─────┬──┘   └──────────┬─────┘
- * > display_name             │
- * >                          │
- * >                    address_spec
- * ```
- */
+/// A mailbox address.
+///
+/// See Section 3.4 of `RFC5322`.
+// ```text
+// > "Name Name2" <address@domain.tld>
+// >  └─────┬──┘   └──────────┬─────┘
+// > display_name             │
+// >                          │
+// >                    address_spec
+// ```
 pub struct MailboxAddress {
-    pub raw: Vec<u8>,
-    pub display_name: StrBuilder,
-    pub address_spec: StrBuilder,
+    pub display_name: Option<Box<str>>,
+    pub address_spec: Box<str>,
 }
 
 impl Eq for MailboxAddress {}
 
 impl PartialEq for MailboxAddress {
     fn eq(&self, other: &Self) -> bool {
-        self.address_spec.display_bytes(&self.raw) == other.address_spec.display_bytes(&other.raw)
+        self.address_spec == other.address_spec
     }
 }
 
@@ -80,14 +69,13 @@ impl PartialEq for MailboxAddress {
 /// Conforms to [RFC5322 - Internet Message Format](https://tools.ietf.org/html/rfc5322).
 ///
 /// # Creating an `Address`
-/// You can directly create an address with `Address::new`,
+///
+/// You can directly create an address with [`Address::new`] /
+/// [`Address::new_group`]:
 ///
 /// ```rust
 /// # use melib::email::Address;
-/// let addr = Address::new(
-///     Some("Jörg Doe".to_string()),
-///     "joerg@example.com".to_string(),
-/// );
+/// let addr = Address::new(Some("Jörg Doe"), "joerg@example.com");
 /// assert_eq!(addr.to_string().as_str(), "Jörg Doe <joerg@example.com>");
 /// ```
 ///
@@ -99,69 +87,44 @@ impl PartialEq for MailboxAddress {
 /// )
 /// .unwrap();
 /// assert!(rest_bytes.is_empty());
-/// assert_eq!(addr.get_display_name(), Some("Jörg Doe".to_string()));
-/// assert_eq!(addr.get_email(), "joerg@example.com".to_string());
+/// assert_eq!(addr.get_display_name(), Some("Jörg Doe"));
+/// assert_eq!(addr.get_email(), "joerg@example.com");
 /// ```
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Address {
     Mailbox(MailboxAddress),
     Group(GroupAddress),
 }
 
 impl Address {
-    pub fn new(display_name: Option<String>, address: String) -> Self {
-        Self::Mailbox(if let Some(d) = display_name {
-            MailboxAddress {
-                raw: format!("{d} <{address}>").into_bytes(),
-                display_name: StrBuilder {
-                    offset: 0,
-                    length: d.len(),
-                },
-                address_spec: StrBuilder {
-                    offset: d.len() + 2,
-                    length: address.len(),
-                },
-            }
-        } else {
-            MailboxAddress {
-                raw: address.to_string().into_bytes(),
-                display_name: StrBuilder {
-                    offset: 0,
-                    length: 0,
-                },
-                address_spec: StrBuilder {
-                    offset: 0,
-                    length: address.len(),
-                },
-            }
+    #[inline(always)]
+    fn new_inner(display_name: Option<Box<str>>, address_spec: Box<str>) -> Self {
+        Self::Mailbox(MailboxAddress {
+            display_name,
+            address_spec,
         })
     }
 
-    pub fn new_group(display_name: String, mailbox_list: Vec<Self>) -> Self {
+    /// Create a new mailbox address.
+    ///
+    /// See [`MailboxAddress]` type.
+    #[inline(always)]
+    pub fn new<A: Into<String>, B: Into<String>>(display_name: Option<A>, address_spec: B) -> Self {
+        let display_name = display_name.map(Into::into).filter(|s| !s.is_empty());
+        let address_spec = address_spec.into();
+        Self::new_inner(display_name.map(Into::into), address_spec.into())
+    }
+
+    /// Create a new group address.
+    ///
+    /// See [`GroupAddress]` type.
+    #[inline(always)]
+    pub fn new_group<T: Into<String>>(display_name: T, mailbox_list: Vec<Self>) -> Self {
+        let display_name = display_name.into();
         Self::Group(GroupAddress {
-            raw: format!(
-                "{}:{};",
-                display_name,
-                mailbox_list
-                    .iter()
-                    .map(|a| a.to_string())
-                    .collect::<Vec<String>>()
-                    .join(",")
-            )
-            .into_bytes(),
-            display_name: StrBuilder {
-                offset: 0,
-                length: display_name.len(),
-            },
+            display_name: display_name.into(),
             mailbox_list,
         })
-    }
-
-    pub fn raw(&self) -> &[u8] {
-        match self {
-            Self::Mailbox(m) => m.raw.as_slice(),
-            Self::Group(g) => g.raw.as_slice(),
-        }
     }
 
     /// Get the display name of this address.
@@ -179,40 +142,27 @@ impl Address {
     ///                  │                                   │
     ///            address_spec                        address_spec
     /// ```
-    pub fn get_display_name(&self) -> Option<String> {
-        let ret = match self {
-            Self::Mailbox(m) => m.display_name.display(&m.raw),
-            Self::Group(g) => g.display_name.display(&g.raw),
-        };
-        if ret.is_empty() {
-            None
-        } else {
-            Some(ret)
+    pub fn get_display_name(&self) -> Option<&str> {
+        match self {
+            Self::Mailbox(m) => m.display_name.as_deref().filter(|s| !s.is_empty()),
+            Self::Group(g) => Some(&g.display_name),
         }
     }
 
     /// Get the address spec part of this address. A group returns an empty
-    /// `String`.
-    pub fn get_email(&self) -> String {
+    /// slice.
+    pub fn get_email(&self) -> &str {
         match self {
-            Self::Mailbox(m) => m.address_spec.display(&m.raw),
-            Self::Group(_) => String::new(),
+            Self::Mailbox(m) => &m.address_spec,
+            Self::Group(_) => "",
         }
     }
 
-    pub fn address_spec_raw(&self) -> &[u8] {
-        match self {
-            Self::Mailbox(m) => m.address_spec.display_bytes(&m.raw),
-            Self::Group(g) => &g.raw,
-        }
-    }
-
-    pub fn get_fqdn(&self) -> Option<String> {
+    pub fn get_fqdn(&self) -> Option<&str> {
         match self {
             Self::Mailbox(m) => {
-                let raw_address = m.address_spec.display_bytes(&m.raw);
-                let fqdn_pos = raw_address.iter().position(|&b| b == b'@')? + 1;
-                Some(String::from_utf8_lossy(&raw_address[fqdn_pos..]).into())
+                let fqdn_pos = m.address_spec.as_bytes().iter().position(|&b| b == b'@')? + 1;
+                Some(&m.address_spec[fqdn_pos..])
             }
             Self::Group(_) => None,
         }
@@ -264,7 +214,7 @@ impl Address {
     /// assert_eq!(
     ///     val.subaddress("+"),
     ///     Some((
-    ///         Address::new(None, "ken@example.org".to_string()),
+    ///         Address::new(None::<&str>, "ken@example.org"),
     ///         "sieve".to_string()
     ///     ))
     /// );
@@ -298,17 +248,6 @@ impl Address {
         }
     }
 
-    /// Get the display name of this address in bytes.
-    ///
-    /// For a string, see the [`display_name`](fn@Self::get_display_name)
-    /// method.
-    pub fn display_name_bytes(&self) -> &[u8] {
-        match self {
-            Self::Mailbox(m) => m.display_name.display_bytes(&m.raw),
-            Self::Group(g) => g.display_name.display_bytes(&g.raw),
-        }
-    }
-
     /// Returns a type that prints the names of addresses (or the e-mail part,
     /// if the name is missing) suitably for UI display, e.g. without
     /// quotes.
@@ -317,10 +256,7 @@ impl Address {
     ///
     /// ```rust
     /// # use melib::email::Address;
-    /// let addr = Address::new(
-    ///     Some("Jörg T. Doe".to_string()),
-    ///     "joerg@example.com".to_string(),
-    /// );
+    /// let addr = Address::new(Some("Jörg T. Doe"), "joerg@example.com");
     /// assert_eq!(
     ///     addr.to_string().as_str(),
     ///     r#""Jörg T. Doe" <joerg@example.com>"#
@@ -371,7 +307,7 @@ impl PartialEq for Address {
             (Self::Mailbox(_), Self::Group(_)) | (Self::Group(_), Self::Mailbox(_)) => false,
             (Self::Mailbox(s), Self::Mailbox(o)) => s == o,
             (Self::Group(s), Self::Group(o)) => {
-                self.display_name_bytes() == other.display_name_bytes()
+                s.display_name == o.display_name
                     && s.mailbox_list.iter().collect::<HashSet<_>>()
                         == o.mailbox_list.iter().collect::<HashSet<_>>()
             }
@@ -383,10 +319,10 @@ impl Hash for Address {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
             Self::Mailbox(s) => {
-                s.address_spec.display_bytes(&s.raw).hash(state);
+                s.address_spec.hash(state);
             }
             Self::Group(s) => {
-                s.display_name.display_bytes(&s.raw).hash(state);
+                s.display_name.hash(state);
                 for sub in &s.mailbox_list {
                     sub.hash(state);
                 }
@@ -395,61 +331,44 @@ impl Hash for Address {
     }
 }
 
-impl std::fmt::Display for Address {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        // [ref:FIXME]: do proper string escaping; we need a string escaping trait
-        match self {
-            Self::Mailbox(m) if m.display_name.length > 0 => {
-                let address_spec = m.address_spec.display(&m.raw);
-                let display_name = m.display_name.display(&m.raw);
-                let display_name = display_name
-                    .strip_prefix('"')
-                    .and_then(|d| d.strip_suffix('"'))
-                    .unwrap_or(&display_name);
-                let must_be_quoted = b"()<>[]:;@\\,.\""
-                    .iter()
-                    .any(|b| display_name.as_bytes().contains(b));
-                let must_be_escaped = display_name.as_bytes().contains(&b'"');
-                if must_be_escaped {
-                    let display_name = display_name.replace("\"", "\\\"");
-                    write!(f, "\"{display_name}\" <{address_spec}>")
-                } else if must_be_quoted {
-                    write!(f, "\"{display_name}\" <{address_spec}>")
-                } else {
-                    write!(f, "{display_name} <{address_spec}>")
-                }
-            }
-            Self::Mailbox(m) => write!(f, "{}", m.address_spec.display(&m.raw)),
-            Self::Group(g) => {
-                let attachment_strings: Vec<String> =
-                    g.mailbox_list.iter().map(|a| format!("{a}")).collect();
-                write!(
-                    f,
-                    "{}:{};",
-                    g.display_name.display(&g.raw),
-                    attachment_strings.join(", ")
-                )
-            }
+pub fn fmt_mailbox(
+    display_name: Option<&str>,
+    address_spec: &str,
+    f: &mut std::fmt::Formatter,
+) -> std::fmt::Result {
+    // [ref:FIXME]: do proper string escaping; we need a string escaping trait
+    if let Some(display_name) = display_name {
+        let display_name = display_name
+            .strip_prefix('"')
+            .and_then(|d| d.strip_suffix('"'))
+            .unwrap_or(display_name);
+        let must_be_quoted = b"()<>[]:;@\\,.\""
+            .iter()
+            .any(|b| display_name.as_bytes().contains(b));
+        let must_be_escaped = display_name.as_bytes().contains(&b'"');
+        if must_be_escaped {
+            let display_name = display_name.replace("\"", "\\\"");
+            write!(f, "\"{display_name}\" <{address_spec}>")
+        } else if must_be_quoted {
+            write!(f, "\"{display_name}\" <{address_spec}>")
+        } else {
+            write!(f, "{display_name} <{address_spec}>")
         }
+    } else if address_spec.is_empty() {
+        write!(f, "<>")
+    } else {
+        write!(f, "{}", address_spec)
     }
 }
 
-impl std::fmt::Debug for Address {
+impl std::fmt::Display for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::Mailbox(m) => f
-                .debug_struct(stringify!(Address::Mailbox))
-                .field("display_name", &m.display_name.display(&m.raw))
-                .field("address_spec", &m.address_spec.display(&m.raw))
-                .finish(),
+            Self::Mailbox(m) => fmt_mailbox(m.display_name.as_deref(), &m.address_spec, f),
             Self::Group(g) => {
                 let attachment_strings: Vec<String> =
                     g.mailbox_list.iter().map(|a| format!("{a}")).collect();
-
-                f.debug_struct(stringify!(Address::Group))
-                    .field("display_name", &g.display_name.display(&g.raw))
-                    .field("addresses", &attachment_strings.join(", "))
-                    .finish()
+                write!(f, "{}:{};", g.display_name, attachment_strings.join(", "))
             }
         }
     }
@@ -489,19 +408,15 @@ pub struct UINameAddress<'a>(&'a Address);
 impl std::fmt::Display for UINameAddress<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self.0 {
-            Address::Mailbox(m) if m.display_name.length > 0 => {
-                write!(f, "{}", m.display_name.display(&m.raw),)
+            Address::Mailbox(m) => {
+                if let Some(ref display_name) = m.display_name {
+                    write!(f, "{}", display_name)
+                } else {
+                    write!(f, "{}", m.address_spec)
+                }
             }
-            Address::Mailbox(m) => write!(f, "{}", m.address_spec.display(&m.raw)),
             Address::Group(g) => {
-                let attachment_strings: Vec<String> =
-                    g.mailbox_list.iter().map(|a| Self(a).to_string()).collect();
-                write!(
-                    f,
-                    "{}:{};",
-                    g.display_name.display(&g.raw),
-                    attachment_strings.join(", ")
-                )
+                write!(f, "{}", g.display_name)
             }
         }
     }
@@ -706,39 +621,6 @@ impl<'a> Extend<&'a MessageID> for References {
             }
         }
     }
-}
-
-#[macro_export]
-macro_rules! make_address {
-    ($d:expr, $a:expr) => {{
-        let display_name = { $d };
-        let address = { $a };
-        Address::Mailbox(if display_name.is_empty() {
-            MailboxAddress {
-                raw: format!("{}", address).into_bytes(),
-                display_name: StrBuilder {
-                    offset: 0,
-                    length: 0,
-                },
-                address_spec: StrBuilder {
-                    offset: 0,
-                    length: address.len(),
-                },
-            }
-        } else {
-            MailboxAddress {
-                raw: format!("{} <{}>", display_name, address).into_bytes(),
-                display_name: StrBuilder {
-                    offset: 0,
-                    length: display_name.len(),
-                },
-                address_spec: StrBuilder {
-                    offset: display_name.len() + 2,
-                    length: address.len(),
-                },
-            }
-        })
-    }};
 }
 
 impl serde::Serialize for MessageID {

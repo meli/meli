@@ -20,20 +20,17 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
-use crate::{
-    email::{
+use crate::email::{
+    address::*,
+    parser::{
         address::*,
-        parser::{
-            address::*,
-            dates::rfc5322_date,
-            encodings::*,
-            generic::{comment, phrase2, unstructured},
-            headers,
-            mailing_lists::rfc_2369_list_headers_action_list,
-            BytesExt,
-        },
+        dates::rfc5322_date,
+        encodings::*,
+        generic::{comment, phrase2, unstructured},
+        headers,
+        mailing_lists::rfc_2369_list_headers_action_list,
+        BytesExt,
     },
-    make_address,
 };
 
 macro_rules! to_str {
@@ -194,12 +191,12 @@ fn test_email_parser_address_list() {
         (
             [].as_slice(),
             smallvec::smallvec![
-                make_address!("Obit Oppidum", "user@domain"),
-                make_address!("list", "list@domain.tld"),
-                make_address!("list2", "list2@domain.tld"),
-                make_address!("Bobit Boppidum", "user@otherdomain.com"),
-                make_address!("Cobit Coppidum", "user2@otherdomain.com"),
-                make_address!("", "user@domain.tld")
+                Address::new(Some("Obit Oppidum"), "user@domain"),
+                Address::new(Some("list"), "list@domain.tld"),
+                Address::new(Some("list2"), "list2@domain.tld"),
+                Address::new(Some("Bobit Boppidum"), "user@otherdomain.com"),
+                Address::new(Some("Cobit Coppidum"), "user2@otherdomain.com"),
+                Address::new(None::<&str>, "user@domain.tld")
             ]
         ),
         rfc2822address_list(b"Obit Oppidum <user@domain>, list <list@domain.tld>, list2 <list2@domain.tld>, Bobit Boppidum <user@otherdomain.com>, Cobit Coppidum <user2@otherdomain.com>, <user@domain.tld>").unwrap()
@@ -217,7 +214,10 @@ fn test_email_parser_address_list() {
     assert_eq!(
         (
             [].as_slice(),
-            smallvec::smallvec![make_address!("Joe Q. Public", "john.q.public@example.com")],
+            smallvec::smallvec![Address::new(
+                Some("Joe Q. Public"),
+                "john.q.public@example.com"
+            )],
         ),
         rfc2822address_list(br#""Joe Q. Public" <john.q.public@example.com>"#).unwrap()
     );
@@ -225,9 +225,9 @@ fn test_email_parser_address_list() {
         (
             [].as_slice(),
             smallvec::smallvec![
-                make_address!("Mary Smith", "mary@example.com"),
-                make_address!("", "jdoe@example.org"),
-                make_address!("Who?", "one@example.com"),
+                Address::new(Some("Mary Smith"), "mary@example.com"),
+                Address::new(None::<&str>, "jdoe@example.org"),
+                Address::new(Some("Who?"), "one@example.com"),
             ],
         ),
         rfc2822address_list(
@@ -239,8 +239,8 @@ fn test_email_parser_address_list() {
         (
             [].as_slice(),
             smallvec::smallvec![
-                make_address!("", "boss@example.com"),
-                make_address!("Giant; \"Big\" Box", "sysservices@example.com"),
+                Address::new(None::<&str>, "boss@example.com"),
+                Address::new(Some("Giant; \"Big\" Box"), "sysservices@example.com"),
             ]
         ),
         rfc2822address_list(
@@ -255,9 +255,9 @@ fn test_email_parser_address_list() {
             smallvec::smallvec![Address::new_group(
                 "A Group".to_string(),
                 vec![
-                    make_address!("Ed Jones", "c@a.test"),
-                    make_address!("", "joe@where.test"),
-                    make_address!("John", "jdoe@one.test"),
+                    Address::new(Some("Ed Jones"), "c@a.test"),
+                    Address::new(None::<&str>, "joe@where.test"),
+                    Address::new(Some("John"), "jdoe@one.test"),
                 ]
             )]
         ),
@@ -298,10 +298,7 @@ fn test_email_parser_whitespace_comments_and_other_oddities() {
     assert_eq!(
         (
             [].as_slice(),
-            smallvec::smallvec![Address::new(
-                Some("Pete".to_string()),
-                "pete@silly.test".to_string()
-            )]
+            smallvec::smallvec![Address::new(Some("Pete"), "pete@silly.test")]
         ),
         rfc2822address_list(br#"Pete(A nice \) chap) <pete(his account)@silly.test(his host)>"#)
             .unwrap()
@@ -310,14 +307,11 @@ fn test_email_parser_whitespace_comments_and_other_oddities() {
         (
             [].as_slice(),
             smallvec::smallvec![Address::new_group(
-                "A Group".to_string(),
+                "A Group",
                 vec![
-                    Address::new(
-                        Some("Chris Jones".to_string()),
-                        "c@public.example".to_string()
-                    ),
-                    Address::new(None, "joe@example.org".to_string()),
-                    Address::new(Some("John".to_string()), "jdoe@one.test".to_string()),
+                    Address::new(Some("Chris Jones"), "c@public.example"),
+                    Address::new(None::<&str>, "joe@example.org"),
+                    Address::new(Some("John"), "jdoe@one.test"),
                 ]
             )]
         ),
@@ -348,8 +342,13 @@ fn test_email_parser_addresses() {
             let r = address(s).unwrap().1;
             match r {
                 Address::Mailbox(ref m) => {
-                    assert_eq!(to_str!(m.display_name.display_bytes(&m.raw)), $name);
-                    assert_eq!(to_str!(m.address_spec.display_bytes(&m.raw)), $addr);
+                    assert_eq!(
+                        (
+                            m.display_name.as_deref().unwrap_or_default(),
+                            m.address_spec.as_ref()
+                        ),
+                        ($name, $addr)
+                    );
                 }
                 _ => assert!(false),
             }
@@ -456,7 +455,7 @@ fn test_email_parser_addresses() {
         r#""Giant; \"Big\" Box" <sysservices@example.net>"#
     );
     //assert_eq!(
-    //    make_address!("Jeffrey Stedfast", "fejj@helixcode.com"),
+    //    Address::new(Some("Jeffrey Stedfast"), "fejj@helixcode.com"),
     //    address(b"Jeffrey Stedfast <fejj@helixcode.com.>")
     //        .unwrap()
     //        .1
@@ -569,9 +568,9 @@ fn test_email_parser_addresses() {
         Address::new_group(
             "A Group".to_string(),
             vec![
-                make_address!("Ed Jones", "c@a.test"),
-                make_address!("", "joe@where.test"),
-                make_address!("John", "jdoe@one.test")
+                Address::new(Some("Ed Jones"), "c@a.test"),
+                Address::new(None::<&str>, "joe@where.test"),
+                Address::new(Some("John"), "jdoe@one.test")
             ]
         ),
         address(b"A Group:Ed Jones <c@a.test>,joe@where.test,John <jdoe@one.test>;")

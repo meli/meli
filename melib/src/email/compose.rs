@@ -338,7 +338,7 @@ impl Draft {
             {
                 if let Some(fqdn) = addr.get_fqdn() {
                     self.headers
-                        .insert(HeaderName::MESSAGE_ID, random::gen_message_id(&fqdn));
+                        .insert(HeaderName::MESSAGE_ID, random::gen_message_id(fqdn));
                 }
             }
         }

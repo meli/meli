@@ -317,7 +317,7 @@ impl MailListingTrait for CompactListing {
         let mut other_subjects = IndexSet::new();
         let mut tags = IndexSet::new();
         let mut from_address_list = Vec::new();
-        let mut from_address_set: std::collections::HashSet<Vec<u8>> =
+        let mut from_address_set: std::collections::HashSet<Box<str>> =
             std::collections::HashSet::new();
         let mut highlight_self: bool;
         let my_address: Address = context.accounts[&self.cursor_pos.0]
@@ -419,10 +419,10 @@ impl MailListingTrait for CompactListing {
                 highlight_self |= should_highlight_self
                     && (envelope.recipient_any(&my_address) || envelope.sender_any(&my_address));
                 for addr in envelope.from().iter() {
-                    if from_address_set.contains(addr.address_spec_raw()) {
+                    if addr.get_email().is_empty() || from_address_set.contains(addr.get_email()) {
                         continue;
                     }
-                    from_address_set.insert(addr.address_spec_raw().to_vec());
+                    from_address_set.insert(addr.get_email().into());
                     from_address_list.push(addr.clone());
                 }
             }
@@ -1063,7 +1063,7 @@ impl CompactListing {
         let mut other_subjects = IndexSet::new();
         let mut tags = IndexSet::new();
         let mut from_address_list = Vec::new();
-        let mut from_address_set: std::collections::HashSet<Vec<u8>> =
+        let mut from_address_set: std::collections::HashSet<Box<str>> =
             std::collections::HashSet::new();
         let mut highlight_self: bool = false;
         let should_highlight_self = mailbox_settings!(
@@ -1103,10 +1103,10 @@ impl CompactListing {
             highlight_self |= should_highlight_self
                 && (envelope.recipient_any(&my_address) || envelope.sender_any(&my_address));
             for addr in envelope.from().iter() {
-                if from_address_set.contains(addr.address_spec_raw()) {
+                if addr.get_email().is_empty() || from_address_set.contains(addr.get_email()) {
                     continue;
                 }
-                from_address_set.insert(addr.address_spec_raw().to_vec());
+                from_address_set.insert(addr.get_email().into());
                 from_address_list.push(addr.clone());
             }
         }

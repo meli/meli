@@ -280,7 +280,7 @@ fn test_imap_fetch_response() {
         #[rustfmt::skip]
     let input: &[u8] = b"* 198 FETCH (UID 7608 FLAGS (\\Seen) ENVELOPE (\"Fri, 24 Jun 2011 10:09:10 +0000\" \"xxxx/xxxx\" ((\"xx@xx.com\" NIL \"xx\" \"xx.com\")) NIL NIL ((\"xx@xx\" NIL \"xx\" \"xx.com\")) ((\"'xx, xx'\" NIL \"xx.xx\" \"xx.com\")(\"xx.xx@xx.com\" NIL \"xx.xx\" \"xx.com\")(\"'xx'\" NIL \"xx.xx\" \"xx.com\")(\"'xx xx'\" NIL \"xx.xx\" \"xx.com\")(\"xx.xx@xx.com\" NIL \"xx.xx\" \"xx.com\")) NIL NIL \"<xx@xx.com>\") BODY[HEADER.FIELDS (REFERENCES)] {2}\r\n\r\n BODYSTRUCTURE ((\"text\" \"html\" (\"charset\" \"us-ascii\") \"<xx@xx>\" NIL \"7BIT\" 17236 232 NIL NIL NIL NIL)(\"image\" \"jpeg\" (\"name\" \"image001.jpg\") \"<image001.jpg@xx.xx>\" \"image001.jpg\" \"base64\" 1918 NIL (\"inline\" (\"filename\" \"image001.jpg\" \"size\" \"1650\" \"creation-date\" \"Sun, 09 Aug 2015 20:56:04 GMT\" \"modification-date\" \"Sun, 14 Aug 2022 22:11:45 GMT\")) NIL NIL) \"related\" (\"boundary\" \"xx--xx\" \"type\" \"text/html\") NIL \"en-US\"))\r\n";
         let mut address = SmallVec::new();
-        address.push(Address::new(None, "xx@xx.com".to_string()));
+        address.push(Address::new(None::<&str>, "xx@xx.com"));
         let mut env = Envelope::new(EnvelopeHash::default());
         env.set_subject(b"xxxx/xxxx".to_vec());
         env.set_date(b"Fri, 24 Jun 2011 10:09:10 +0000");
@@ -536,7 +536,7 @@ fn test_imap_envelope_address() {
                 "A Group".to_string(),
                 vec![
                     Address::new(Some("Ed Jones".to_string()), "c@example.com".to_string()),
-                    Address::new(None, "joe@example.com".to_string()),
+                    Address::new(None::<&str>, "joe@example.com".to_string()),
                     Address::new(Some("John".to_string()), "jdoe@example.com".to_string()),
                 ]
             )])
