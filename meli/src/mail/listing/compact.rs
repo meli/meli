@@ -775,11 +775,13 @@ impl ListingTrait for CompactListing {
             if !account.collection.contains_key(&env_hash) {
                 continue;
             }
-            let env_thread_node_hash = account.collection.get_env(env_hash).thread();
-            if !threads.thread_nodes.contains_key(&env_thread_node_hash) {
+            let Some(env_thread_node_hash) = threads.envelope_to_thread_node.get(&env_hash) else {
                 continue;
-            }
-            let thread = threads.find_group(threads.thread_nodes[&env_thread_node_hash].group);
+            };
+            let Some(thread_node) = threads.thread_nodes.get(env_thread_node_hash) else {
+                continue;
+            };
+            let thread = threads.find_group(thread_node.group);
             if self.filtered_order.contains_key(&thread) {
                 continue;
             }
@@ -1383,12 +1385,14 @@ impl CompactListing {
                     if !account.collection.contains_key(&env_hash) {
                         continue;
                     }
-                    let env_thread_node_hash = account.collection.get_env(env_hash).thread();
-                    if !threads.thread_nodes.contains_key(&env_thread_node_hash) {
+                    let Some(env_thread_node_hash) = threads.envelope_to_thread_node.get(&env_hash)
+                    else {
                         continue;
-                    }
-                    let thread =
-                        threads.find_group(threads.thread_nodes[&env_thread_node_hash].group);
+                    };
+                    let Some(thread_node) = threads.thread_nodes.get(env_thread_node_hash) else {
+                        continue;
+                    };
+                    let thread = threads.find_group(thread_node.group);
                     if self.rows.all_threads.contains(&thread) {
                         self.selection_mut()
                             .entry(env_hash)
@@ -1919,12 +1923,14 @@ impl Component for CompactListing {
                 if !account.collection.contains_key(new_hash) {
                     return false;
                 }
-                let new_env_thread_node_hash = account.collection.get_env(*new_hash).thread();
-                if !threads.thread_nodes.contains_key(&new_env_thread_node_hash) {
+                let Some(env_thread_node_hash) = threads.envelope_to_thread_node.get(new_hash)
+                else {
                     return false;
-                }
-                let thread: ThreadHash =
-                    threads.find_group(threads.thread_nodes()[&new_env_thread_node_hash].group);
+                };
+                let Some(thread_node) = threads.thread_nodes.get(env_thread_node_hash) else {
+                    return false;
+                };
+                let thread: ThreadHash = threads.find_group(thread_node.group);
                 drop(threads);
                 if self.rows.contains_thread(thread) {
                     self.rows.row_update_add_thread(thread);
@@ -1945,12 +1951,14 @@ impl Component for CompactListing {
                 if !account.collection.contains_key(env_hash) {
                     return false;
                 }
-                let new_env_thread_node_hash = account.collection.get_env(*env_hash).thread();
-                if !threads.thread_nodes.contains_key(&new_env_thread_node_hash) {
+                let Some(env_thread_node_hash) = threads.envelope_to_thread_node.get(env_hash)
+                else {
                     return false;
-                }
-                let thread: ThreadHash =
-                    threads.find_group(threads.thread_nodes()[&new_env_thread_node_hash].group);
+                };
+                let Some(thread_node) = threads.thread_nodes.get(env_thread_node_hash) else {
+                    return false;
+                };
+                let thread: ThreadHash = threads.find_group(thread_node.group);
                 drop(threads);
                 if self.rows.contains_thread(thread) {
                     self.rows.row_update_add_thread(thread);

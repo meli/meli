@@ -650,26 +650,21 @@ impl Account {
                         continue;
                     }
 
-                    let thread_hash = self.collection.get_env(env_hash).thread();
-                    if self
-                        .collection
-                        .get_threads(mailbox_hash)
-                        .thread_nodes()
-                        .contains_key(&thread_hash)
                     {
-                        let thread = self.collection.get_threads(mailbox_hash).find_group(
-                            self.collection.get_threads(mailbox_hash)[&thread_hash].group,
-                        );
-                        if self
-                            .collection
-                            .get_threads(mailbox_hash)
-                            .thread_ref(thread)
-                            .snoozed()
-                        {
+                        let threads = self.collection.get_threads(mailbox_hash);
+                        let Some(thread_node_hash) = threads.envelope_to_thread_node.get(&env_hash)
+                        else {
+                            continue;
+                        };
+                        let Some(thread) = threads.thread_nodes().get(thread_node_hash) else {
+                            continue;
+                        };
+                        let thread = threads.find_group(thread.group);
+                        if threads.thread_ref(thread).snoozed() {
                             ui_events.push(mbox_update_event);
                             continue;
                         }
-                    }
+                    };
                     if is_seen || is_draft {
                         ui_events.push(mbox_update_event);
                         continue;
@@ -720,19 +715,18 @@ impl Account {
                             },
                         );
                     }
-                    let thread_hash = self.collection.get_env(env_hash).thread();
-                    if !self
-                        .collection
-                        .get_threads(mailbox_hash)
-                        .thread_nodes()
-                        .contains_key(&thread_hash)
-                    {
-                        continue;
-                    }
-                    let thread_hash = self
-                        .collection
-                        .get_threads(mailbox_hash)
-                        .find_group(self.collection.get_threads(mailbox_hash)[&thread_hash].group);
+
+                    let thread_hash = {
+                        let threads = self.collection.get_threads(mailbox_hash);
+                        let Some(thread_node_hash) = threads.envelope_to_thread_node.get(&env_hash)
+                        else {
+                            continue;
+                        };
+                        let Some(thread) = threads.thread_nodes().get(thread_node_hash) else {
+                            continue;
+                        };
+                        threads.find_group(thread.group)
+                    };
                     self.collection.remove(env_hash, mailbox_hash);
                     ui_events.push(UIEvent::EnvelopeRemove(env_hash, thread_hash));
                     continue;

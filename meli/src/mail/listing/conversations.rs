@@ -540,11 +540,13 @@ impl ListingTrait for ConversationsListing {
             if !account.collection.contains_key(&env_hash) {
                 continue;
             }
-            let env_thread_node_hash = account.collection.get_env(env_hash).thread();
-            if !threads.thread_nodes.contains_key(&env_thread_node_hash) {
+            let Some(env_thread_node_hash) = threads.envelope_to_thread_node.get(&env_hash) else {
                 continue;
-            }
-            let thread = threads.find_group(threads.thread_nodes[&env_thread_node_hash].group);
+            };
+            let Some(thread_node) = threads.thread_nodes.get(env_thread_node_hash) else {
+                continue;
+            };
+            let thread = threads.find_group(thread_node.group);
             if self.filtered_order.contains_key(&thread) {
                 continue;
             }
@@ -1399,12 +1401,14 @@ impl Component for ConversationsListing {
                     if !account.collection.contains_key(new_hash) {
                         return false;
                     }
-                    let env_thread_node_hash = account.collection.get_env(*new_hash).thread();
-                    if !threads.thread_nodes.contains_key(&env_thread_node_hash) {
+                    let Some(env_thread_node_hash) = threads.envelope_to_thread_node.get(new_hash)
+                    else {
                         return false;
-                    }
-                    let thread: ThreadHash =
-                        threads.find_group(threads.thread_nodes()[&env_thread_node_hash].group);
+                    };
+                    let Some(thread_node) = threads.thread_nodes.get(env_thread_node_hash) else {
+                        return false;
+                    };
+                    let thread: ThreadHash = threads.find_group(thread_node.group);
                     drop(threads);
                     if self.rows.thread_order.contains_key(&thread) {
                         self.rows.rename_env(*old_hash, *new_hash);
@@ -1424,12 +1428,14 @@ impl Component for ConversationsListing {
                     if !account.collection.contains_key(env_hash) {
                         return false;
                     }
-                    let env_thread_node_hash = account.collection.get_env(*env_hash).thread();
-                    if !threads.thread_nodes.contains_key(&env_thread_node_hash) {
+                    let Some(env_thread_node_hash) = threads.envelope_to_thread_node.get(env_hash)
+                    else {
                         return false;
-                    }
-                    let thread: ThreadHash =
-                        threads.find_group(threads.thread_nodes()[&env_thread_node_hash].group);
+                    };
+                    let Some(thread_node) = threads.thread_nodes.get(env_thread_node_hash) else {
+                        return false;
+                    };
+                    let thread: ThreadHash = threads.find_group(thread_node.group);
                     drop(threads);
                     if self.rows.thread_order.contains_key(&thread) {
                         self.rows.row_updates.push(*env_hash);

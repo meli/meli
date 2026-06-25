@@ -612,6 +612,7 @@ pub struct Threads {
     pub hash_set: HashSet<EnvelopeHash>,
     pub thread_to_envelope: HashMap<ThreadHash, Vec<EnvelopeHash>>,
     pub envelope_to_thread: HashMap<EnvelopeHash, ThreadHash>,
+    pub envelope_to_thread_node: HashMap<EnvelopeHash, ThreadNodeHash>,
     sort: Arc<RwLock<(SortField, SortOrder)>>,
     subsort: Arc<RwLock<(SortField, SortOrder)>>,
 }
@@ -737,6 +738,10 @@ impl Threads {
         } else {
             return Err(());
         };
+        debug_assert_eq!(
+            Some(&thread_node_hash),
+            self.envelope_to_thread_node.get(&old_hash)
+        );
 
         self.thread_nodes
             .get_mut(&thread_node_hash)
@@ -766,6 +771,9 @@ impl Threads {
             .or_default()
             .push(new_hash);
         *self.envelope_to_thread.entry(new_hash).or_default() = thread_hash;
+        self.envelope_to_thread_node.remove(&old_hash);
+        self.envelope_to_thread_node
+            .insert(new_hash, thread_node_hash);
         Ok(())
     }
 
@@ -783,6 +791,11 @@ impl Threads {
         } else {
             return;
         };
+        debug_assert_eq!(
+            Some(&t_id),
+            self.envelope_to_thread_node.get(&envelope_hash)
+        );
+        self.envelope_to_thread_node.remove(&envelope_hash);
 
         if self.thread_nodes[&t_id].parent.is_none() {
             let mut tree_index = self.tree_index.write().unwrap();
@@ -908,12 +921,7 @@ impl Threads {
                 let thread_hash = self.message_ids[message_id];
                 let node = self.thread_nodes.entry(thread_hash).or_default();
                 drop(envelopes_lck);
-                envelopes
-                    .write()
-                    .unwrap()
-                    .get_mut(&env_hash)
-                    .unwrap()
-                    .set_thread(thread_hash);
+                self.envelope_to_thread_node.insert(env_hash, thread_hash);
 
                 /* If thread node currently has a message from a foreign mailbox and env_hash
                  * is from current mailbox we want to update it, otherwise
@@ -949,13 +957,7 @@ impl Threads {
             .message_ids
             .get(message_id)
             .cloned()
-            .or_else(|| {
-                if envelopes_lck[&env_hash].thread() != ThreadNodeHash::null() {
-                    Some(envelopes_lck[&env_hash].thread())
-                } else {
-                    None
-                }
-            })
+            .or_else(|| self.envelope_to_thread_node.get(&env_hash).cloned())
             .unwrap_or_else(|| ThreadNodeHash::from(message_id.as_str()));
         {
             let node = self.thread_nodes.entry(new_id).or_default();
@@ -1111,13 +1113,7 @@ impl Threads {
         }
         drop(envelopes_lck);
         self.update_show_subject(new_id, env_hash, envelopes);
-        envelopes
-            .write()
-            .unwrap()
-            .get_mut(&env_hash)
-            .unwrap()
-            .set_thread(new_id);
-
+        self.envelope_to_thread_node.insert(env_hash, new_id);
         /*
         save_graph(
             &self.tree_index.read().unwrap(),

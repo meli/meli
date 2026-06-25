@@ -276,14 +276,8 @@ impl Collection {
         }
     }
 
-    pub fn update(
-        &self,
-        old_hash: EnvelopeHash,
-        mut envelope: Envelope,
-        mailbox_hash: MailboxHash,
-    ) {
-        let old_env = self.envelopes.write().unwrap().remove(&old_hash).unwrap();
-        envelope.set_thread(old_env.thread());
+    pub fn update(&self, old_hash: EnvelopeHash, envelope: Envelope, mailbox_hash: MailboxHash) {
+        self.envelopes.write().unwrap().remove(&old_hash);
         let new_hash = envelope.hash();
         self.mailboxes
             .write()

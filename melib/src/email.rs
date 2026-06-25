@@ -113,7 +113,6 @@ use smallvec::SmallVec;
 use crate::{
     error::{Error, Result},
     parser::BytesExt,
-    thread::ThreadNodeHash,
     TagHash, UnixTimestamp,
 };
 
@@ -263,7 +262,6 @@ pub struct Envelope {
     // ----- Other -----
     pub hash: EnvelopeHash,
     pub timestamp: UnixTimestamp,
-    pub thread: ThreadNodeHash,
     pub flags: Flag,
     pub has_attachments: bool,
     pub tags: IndexSet<TagHash>,
@@ -307,7 +305,6 @@ impl Envelope {
             in_reply_to: None,
             references: None,
             other_headers: Default::default(),
-            thread: ThreadNodeHash::null(),
             has_attachments: false,
             flags: Flag::default(),
             tags: IndexSet::new(),
@@ -709,15 +706,6 @@ impl Envelope {
 
     pub fn other_headers_mut(&mut self) -> &mut HeaderMap {
         &mut self.other_headers
-    }
-
-    pub fn thread(&self) -> ThreadNodeHash {
-        self.thread
-    }
-
-    pub fn set_thread(&mut self, new_val: ThreadNodeHash) -> &mut Self {
-        self.thread = new_val;
-        self
     }
 
     pub fn set_datetime(&mut self, new_val: UnixTimestamp) -> &mut Self {
