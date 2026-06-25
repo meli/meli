@@ -103,8 +103,8 @@ pub mod pgp;
 
 use std::{borrow::Cow, ops::Deref};
 
-pub use address::{Address, MessageID, References, StrBuild, StrBuilder};
-pub use attachments::{Attachment, AttachmentBuilder};
+pub use address::{Address, MessageID, References};
+pub use attachments::{Attachment, AttachmentBuilder, StrBuild, StrBuilder};
 pub use compose::{attachment_from_file, Draft};
 pub use headers::*;
 use indexmap::IndexSet;

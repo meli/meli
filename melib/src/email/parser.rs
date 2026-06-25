@@ -1733,8 +1733,8 @@ pub mod attachments {
     //! Email attachments.
     use super::*;
     use crate::email::{
-        address::*,
         attachment_types::{ContentDisposition, ContentDispositionKind},
+        attachments::StrBuilder,
     };
 
     pub fn attachment(input: &[u8]) -> IResult<&[u8], (std::vec::Vec<(HeaderName, &[u8])>, &[u8])> {
@@ -2327,7 +2327,8 @@ pub mod address {
     //! - [RFC2047 "MIME Part Three: Message Header Extensions for Non-ASCII Text"](https://tools.ietf.org/html/rfc2047)
     use super::*;
     use crate::email::{
-        address::*,
+        address::{Address, MessageID},
+        attachments::StrBuilder,
         parser::generic::{atom, cfws, dot_atom, dot_atom_text, dtext, phrase2, quoted_string},
     };
     pub fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {

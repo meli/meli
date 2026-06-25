@@ -422,35 +422,6 @@ impl std::fmt::Display for UINameAddress<'_> {
     }
 }
 
-/// Helper struct to return slices from a struct field on demand.
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
-pub struct StrBuilder {
-    pub offset: usize,
-    pub length: usize,
-}
-
-/// Structs implementing this trait must contain a `StrBuilder` field.
-pub trait StrBuild {
-    /// Create a new `Self` out of a string and a slice
-    fn new(string: &[u8], slice: &[u8]) -> Self;
-    /// Get the slice part of the string
-    fn raw(&self) -> &[u8];
-    /// Get the entire string as a slice
-    fn val(&self) -> &[u8];
-}
-
-impl StrBuilder {
-    pub fn display(&self, s: &[u8]) -> String {
-        let offset = self.offset;
-        let length = self.length;
-        String::from_utf8_lossy(&s[offset..offset + length]).to_string()
-    }
-
-    pub fn display_bytes<'a>(&self, b: &'a [u8]) -> &'a [u8] {
-        &b[self.offset..(self.offset + self.length)]
-    }
-}
-
 /// A unique message identifier, used in `Message-ID`, `References` etc headers.
 ///
 /// See section "3.6.4. Identification Fields" of `RFC5322`.
