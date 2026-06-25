@@ -563,7 +563,7 @@ impl Hash for MessageID {
     }
 }
 
-#[derive(Clone, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Eq, Hash, PartialEq)]
 pub struct References {
     refs: Vec<MessageID>,
 }
@@ -620,6 +620,25 @@ impl<'a> Extend<&'a MessageID> for References {
                 self.refs.push(elem.clone());
             }
         }
+    }
+}
+
+impl serde::Serialize for References {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.refs.serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for References {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let refs: Vec<MessageID> = Vec::<MessageID>::deserialize(deserializer)?;
+        Ok(Self { refs })
     }
 }
 
