@@ -1199,6 +1199,7 @@ dependencies = [
  "flate2",
  "futures",
  "imap-codec",
+ "imap-types",
  "indexmap",
  "isahc",
  "libc",

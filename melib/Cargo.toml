@@ -23,7 +23,7 @@ debug-tracing = []
 gpgme = []
 http = ["isahc", "url/serde"]
 http-static = ["isahc", "isahc/static-curl"]
-imap = ["imap-codec", "tls"]
+imap = ["imap-codec", "imap-types", "tls"]
 imap-trace = ["imap"]
 jmap = ["http"]
 jmap-trace = ["jmap"]
@@ -51,6 +51,7 @@ encoding_rs = { version = "^0.8" }
 flate2 = { workspace = true }
 futures = { workspace = true }
 imap-codec = { version = "=2.0.0-alpha.4", features = ["ext_condstore_qresync", "ext_id"], optional = true }
+imap-types = { version = "=2.0.0-alpha.4", optional = true }
 indexmap = { workspace = true }
 isahc = { version = "^1.7.2", optional = true, default-features = false, features = ["http2", "json", "text-decoding"] }
 libc = { workspace = true }
