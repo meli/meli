@@ -74,7 +74,7 @@ pub trait ImapCache: Send + std::fmt::Debug {
     fn reset(&mut self) -> Result<()>;
     fn mailbox_state(&mut self, mailbox_hash: MailboxHash) -> Result<Option<CachedState>>;
 
-    fn max_uid(&mut self, mailbox_hash: MailboxHash) -> Result<Option<UID>>;
+    fn lastseenuid(&mut self, mailbox_hash: MailboxHash) -> Result<Option<UID>>;
 
     fn find_envelope(
         &mut self,
@@ -103,7 +103,7 @@ pub trait ImapCache: Send + std::fmt::Debug {
     fn envelopes(
         &mut self,
         mailbox_hash: MailboxHash,
-        max_uid: UID,
+        lastseenuid: UID,
         batch_size: usize,
     ) -> Result<Option<Vec<EnvelopeHash>>>;
 
@@ -152,7 +152,7 @@ impl ImapCache for Arc<UIDStore> {
         Ok(None)
     }
 
-    fn max_uid(&mut self, mailbox_hash: MailboxHash) -> Result<Option<UID>> {
+    fn lastseenuid(&mut self, mailbox_hash: MailboxHash) -> Result<Option<UID>> {
         if !self.keep_offline_cache.load(Ordering::SeqCst) {
             return Ok(None);
         }
@@ -160,7 +160,7 @@ impl ImapCache for Arc<UIDStore> {
         self.init_cache(&mut mutex)?;
 
         if let Some(ref mut cache_handle) = *mutex {
-            return cache_handle.max_uid(mailbox_hash);
+            return cache_handle.lastseenuid(mailbox_hash);
         }
         Ok(None)
     }
@@ -236,7 +236,7 @@ impl ImapCache for Arc<UIDStore> {
     fn envelopes(
         &mut self,
         mailbox_hash: MailboxHash,
-        max_uid: UID,
+        lastseenuid: UID,
         batch_size: usize,
     ) -> Result<Option<Vec<EnvelopeHash>>> {
         if !self.keep_offline_cache.load(Ordering::SeqCst) {
@@ -246,7 +246,7 @@ impl ImapCache for Arc<UIDStore> {
         self.init_cache(&mut mutex)?;
 
         if let Some(ref mut cache_handle) = *mutex {
-            return cache_handle.envelopes(mailbox_hash, max_uid, batch_size);
+            return cache_handle.envelopes(mailbox_hash, lastseenuid, batch_size);
         }
         Ok(None)
     }

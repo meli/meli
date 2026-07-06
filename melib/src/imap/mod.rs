@@ -176,7 +176,7 @@ pub struct UIDStore {
     // Offline caching
     pub uidvalidity: Arc<Mutex<HashMap<MailboxHash, UID>>>,
     pub envelopes: Arc<Mutex<HashMap<EnvelopeHash, sync::cache::CachedEnvelope>>>,
-    pub max_uids: Arc<Mutex<HashMap<MailboxHash, UID>>>,
+    pub lastseenuid: Arc<Mutex<HashMap<MailboxHash, UID>>>,
     pub modseq: Arc<Mutex<HashMap<EnvelopeHash, ModSequence>>>,
     pub highestmodseqs: Arc<Mutex<HashMap<MailboxHash, std::result::Result<ModSequence, ()>>>>,
     pub mailboxes: Arc<FutureMutex<HashMap<MailboxHash, ImapMailbox>>>,
@@ -204,7 +204,7 @@ impl UIDStore {
             capabilities: Default::default(),
             uidvalidity: Default::default(),
             envelopes: Default::default(),
-            max_uids: Default::default(),
+            lastseenuid: Default::default(),
             modseq: Default::default(),
             highestmodseqs: Default::default(),
             hash_index: Default::default(),

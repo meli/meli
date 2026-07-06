@@ -89,7 +89,7 @@ impl FetchState {
                     {
                         (self.uid_store.event_consumer)(self.uid_store.account_hash, err.into());
                     }
-                    match self.max_uid() {
+                    match self.lastseenuid() {
                         Ok(Some(max_uid)) => {
                             self.stage = FetchStage::FromCache { max_uid, batch: 0 };
                             continue;
@@ -469,11 +469,11 @@ impl FetchState {
         }
     }
 
-    fn max_uid(&mut self) -> Result<Option<UID>> {
+    fn lastseenuid(&mut self) -> Result<Option<UID>> {
         let mailbox_hash = self.mailbox_hash;
-        match self.uid_store.max_uid(mailbox_hash)? {
+        match self.uid_store.lastseenuid(mailbox_hash)? {
             None => Ok(None),
-            Some(max_uid) => Ok(Some(max_uid)),
+            Some(lastseenuid) => Ok(Some(lastseenuid)),
         }
     }
 }

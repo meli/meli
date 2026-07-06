@@ -151,11 +151,11 @@ impl ImapCache for Sqlite3Cache {
         Self::reset_db(&self.uid_store, self.data_dir.as_deref())
     }
 
-    fn max_uid(&mut self, mailbox_hash: MailboxHash) -> Result<Option<UID>> {
+    fn lastseenuid(&mut self, mailbox_hash: MailboxHash) -> Result<Option<UID>> {
         let tx = self
             .connection
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-        let env_max_uid: Option<UID> = {
+        let env_lastseenuid: Option<UID> = {
             let mut stmt = tx.prepare("SELECT MAX(uid) FROM envelopes WHERE mailbox_hash = ?1;")?;
 
             let ret: Option<UID> = stmt.query_row(sqlite3::params![mailbox_hash], |row| {
@@ -164,7 +164,7 @@ impl ImapCache for Sqlite3Cache {
             drop(stmt);
             ret
         };
-        let mut max_uid = {
+        let mut lastseenuid = {
             let mut stmt = tx.prepare("SELECT max_uid FROM mailbox WHERE mailbox_hash = ?1;")?;
 
             let ret: Option<UID> = stmt.query_row(sqlite3::params![mailbox_hash], |row| {
@@ -173,22 +173,22 @@ impl ImapCache for Sqlite3Cache {
             drop(stmt);
             ret
         };
-        if let (Some(env_max_uid), true) = (env_max_uid, max_uid != env_max_uid) {
-            max_uid = Some(env_max_uid);
+        if let (Some(env_lastseenuid), true) = (env_lastseenuid, lastseenuid != env_lastseenuid) {
+            lastseenuid = Some(env_lastseenuid);
             tx.execute(
                 "UPDATE mailbox SET max_uid=?1 where mailbox_hash = ?2;",
-                sqlite3::params![env_max_uid, mailbox_hash],
+                sqlite3::params![env_lastseenuid, mailbox_hash],
             )?;
             tx.commit()?;
         }
-        if let Some(max_uid) = max_uid {
+        if let Some(lastseenuid) = lastseenuid {
             self.uid_store
-                .max_uids
+                .lastseenuid
                 .lock()
                 .unwrap()
-                .insert(mailbox_hash, max_uid);
+                .insert(mailbox_hash, lastseenuid);
         }
-        Ok(max_uid)
+        Ok(lastseenuid)
     }
 
     fn mailbox_state(&mut self, mailbox_hash: MailboxHash) -> Result<Option<CachedState>> {
@@ -211,7 +211,7 @@ impl ImapCache for Sqlite3Cache {
             ))
         })?;
         if let Some(v) = ret.next() {
-            let (uidvalidity, max_uid, flags, highestmodseq): (
+            let (uidvalidity, lastseenuid, flags, highestmodseq): (
                 UIDVALIDITY,
                 Option<UID>,
                 Vec<u8>,
@@ -238,12 +238,12 @@ impl ImapCache for Sqlite3Cache {
                 let hash = TagHash::from_bytes(f.as_bytes());
                 tag_lck.entry(hash).or_insert_with(|| f.to_string());
             }
-            if let Some(max_uid) = max_uid {
+            if let Some(lastseenuid) = lastseenuid {
                 self.uid_store
-                    .max_uids
+                    .lastseenuid
                     .lock()
                     .unwrap()
-                    .insert(mailbox_hash, max_uid);
+                    .insert(mailbox_hash, lastseenuid);
             };
             let retval = CachedState {
                 highestmodseq,
@@ -359,7 +359,7 @@ impl ImapCache for Sqlite3Cache {
     fn envelopes(
         &mut self,
         mailbox_hash: MailboxHash,
-        max_uid: UID,
+        lastseenuid: UID,
         batch_size: usize,
     ) -> Result<Option<Vec<EnvelopeHash>>> {
         if self.mailbox_state(mailbox_hash)?.is_none() {
@@ -367,8 +367,8 @@ impl ImapCache for Sqlite3Cache {
         }
 
         let res = {
-            let min = max_uid.saturating_sub(batch_size).max(1);
-            let max = max_uid;
+            let min = lastseenuid.saturating_sub(batch_size).max(1);
+            let max = lastseenuid;
 
             self.connection
                 .prepare(
@@ -399,7 +399,7 @@ impl ImapCache for Sqlite3Cache {
             Err(err) => return Err(err.into()),
             Ok(v) => v,
         };
-        let mut max_uid = 0;
+        let mut lastseenuid = 0;
         let mut env_lck = self.uid_store.envelopes.lock().unwrap();
         let mut hash_index_lck = self.uid_store.hash_index.lock().unwrap();
         let mut uid_index_lck = self.uid_store.uid_index.lock().unwrap();
@@ -409,7 +409,7 @@ impl ImapCache for Sqlite3Cache {
                 return Ok(None);
             }
             env_hashes.push(env.hash());
-            max_uid = max_uid.max(uid);
+            lastseenuid = lastseenuid.max(uid);
             hash_index_lck.insert(env.hash(), (uid, mailbox_hash));
             uid_index_lck.insert((mailbox_hash, uid), env.hash());
             env_lck.insert(
@@ -430,9 +430,9 @@ impl ImapCache for Sqlite3Cache {
         mailbox_hash: MailboxHash,
         fetches: &[FetchResponse<'_>],
     ) -> Result<()> {
-        let mut max_uid = self
+        let mut lastseenuid = self
             .uid_store
-            .max_uids
+            .lastseenuid
             .lock()
             .unwrap()
             .get(&mailbox_hash)
@@ -458,7 +458,7 @@ impl ImapCache for Sqlite3Cache {
                 bodystructure: _,
             } = item
             {
-                max_uid = max_uid.max(*uid);
+                lastseenuid = lastseenuid.max(*uid);
                 let result = tx.execute(
                     "INSERT OR REPLACE INTO envelopes (hash, uid, mailbox_hash, modsequence, \
                      envelope) VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -488,12 +488,12 @@ impl ImapCache for Sqlite3Cache {
             }
         }
         tx.commit()?;
-        if let Ok(Some(new_max_uid)) = self.max_uid(mailbox_hash) {
+        if let Ok(Some(new_lastseenuid)) = self.lastseenuid(mailbox_hash) {
             self.uid_store
-                .max_uids
+                .lastseenuid
                 .lock()
                 .unwrap()
-                .insert(mailbox_hash, new_max_uid);
+                .insert(mailbox_hash, new_lastseenuid);
         }
         Ok(())
     }
@@ -550,12 +550,12 @@ impl ImapCache for Sqlite3Cache {
         }
         drop(stmt);
         tx.commit()?;
-        if let Ok(Some(new_max_uid)) = self.max_uid(mailbox_hash) {
+        if let Ok(Some(new_lastseenuid)) = self.lastseenuid(mailbox_hash) {
             self.uid_store
-                .max_uids
+                .lastseenuid
                 .lock()
                 .unwrap()
-                .insert(mailbox_hash, new_max_uid);
+                .insert(mailbox_hash, new_lastseenuid);
         }
         Ok(())
     }
@@ -632,12 +632,12 @@ impl ImapCache for Sqlite3Cache {
             }
             tx.commit()?;
         }
-        if let Ok(Some(new_max_uid)) = self.max_uid(mailbox_hash) {
+        if let Ok(Some(new_lastseenuid)) = self.lastseenuid(mailbox_hash) {
             self.uid_store
-                .max_uids
+                .lastseenuid
                 .lock()
                 .unwrap()
-                .insert(mailbox_hash, new_max_uid);
+                .insert(mailbox_hash, new_lastseenuid);
         }
         Ok(())
     }

@@ -70,20 +70,20 @@ impl ImapConnection {
             .unwrap()
             .get(&mailbox_hash)
             .cloned();
-        let cached_max_uid = self
+        let lastseenuid = self
             .uid_store
-            .max_uids
+            .lastseenuid
             .lock()
             .unwrap()
             .get(&mailbox_hash)
             .cloned();
         // 3. tag2 UID FETCH 1:<lastseenuid> FLAGS
-        //if cached_uidvalidity.is_none() || cached_max_uid.is_none() {
+        //if cached_uidvalidity.is_none() || cached_lastseenuid.is_none() {
         //    return Ok(None);
         //}
 
         let current_uidvalidity: UID = cached_uidvalidity.unwrap_or(1);
-        let max_uid: UID = cached_max_uid.unwrap_or(1);
+        let lastseenuid: UID = lastseenuid.unwrap_or(1);
         let (mailbox_path, mailbox_exists, unseen) = {
             let f = &self.uid_store.mailboxes.lock().await[&mailbox_hash];
             (
@@ -107,7 +107,7 @@ impl ImapConnection {
 
         // 2. tag1 UID FETCH <lastseenuid+1>:* <descriptors>
         let (required_responses, attributes) = crate::imap::email::common_attributes();
-        self.send_command(CommandBody::fetch(max_uid + 1.., attributes, true)?)
+        self.send_command(CommandBody::fetch(lastseenuid + 1.., attributes, true)?)
             .await?;
         self.read_response(&mut response, required_responses)
             .await?;
@@ -193,10 +193,10 @@ impl ImapConnection {
             }
         }
         // 3. tag2 UID FETCH 1:<lastseenuid> FLAGS
-        let sequence_set = if max_uid == 0 {
+        let sequence_set = if lastseenuid == 0 {
             SequenceSet::from(..)
         } else {
-            SequenceSet::try_from(..=max_uid)?
+            SequenceSet::try_from(..=lastseenuid)?
         };
         self.send_command(CommandBody::Fetch {
             sequence_set,
@@ -296,9 +296,9 @@ impl ImapConnection {
             .unwrap()
             .get(&mailbox_hash)
             .cloned();
-        let cached_max_uid = self
+        let lastseenuid = self
             .uid_store
-            .max_uids
+            .lastseenuid
             .lock()
             .unwrap()
             .get(&mailbox_hash)
@@ -310,15 +310,12 @@ impl ImapConnection {
             .unwrap()
             .get(&mailbox_hash)
             .cloned();
-        if cached_uidvalidity.is_none()
-            || cached_max_uid.is_none()
-            || cached_highestmodseq.is_none()
-        {
+        if cached_uidvalidity.is_none() || lastseenuid.is_none() || cached_highestmodseq.is_none() {
             // This means the mailbox is not cached.
             return Ok(None);
         }
         let cached_uidvalidity: UID = cached_uidvalidity.unwrap();
-        let cached_max_uid: UID = cached_max_uid.unwrap();
+        let lastseenuid: UID = lastseenuid.unwrap();
         let cached_highestmodseq: std::result::Result<ModSequence, ()> =
             cached_highestmodseq.unwrap();
         if cached_highestmodseq.is_err() {
@@ -392,7 +389,7 @@ impl ImapConnection {
                 format!(
                     "UID FETCH {}:* (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] \
                      BODYSTRUCTURE) (CHANGEDSINCE {})",
-                    cached_max_uid + 1,
+                    lastseenuid + 1,
                     cached_highestmodseq,
                 )
                 .as_bytes(),
@@ -500,7 +497,7 @@ impl ImapConnection {
                 }
             }
             // 3. tag2 UID FETCH 1:<lastseenuid> FLAGS
-            if cached_max_uid == 0 {
+            if lastseenuid == 0 {
                 // [ref:TODO]: (#222) imap-codec does not support "CONDSTORE/QRESYNC" currently.
                 self.send_command_raw(
                     format!("UID FETCH 1:* FLAGS (CHANGEDSINCE {cached_highestmodseq})").as_bytes(),
@@ -510,7 +507,7 @@ impl ImapConnection {
                 // [ref:TODO]: (#222) imap-codec does not support "CONDSTORE/QRESYNC" currently.
                 self.send_command_raw(
                     format!(
-                        "UID FETCH 1:{cached_max_uid} FLAGS (CHANGEDSINCE {cached_highestmodseq})"
+                        "UID FETCH 1:{lastseenuid} FLAGS (CHANGEDSINCE {cached_highestmodseq})"
                     )
                     .as_bytes(),
                 )
