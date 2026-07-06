@@ -56,34 +56,54 @@ impl ImapConnection {
 
     /// Re-sync IMAP state by following the strategy described in
     /// [RFC4549](https://datatracker.ietf.org/doc/rfc4549/) "Synchronization Operations for
-    /// Disconnected IMAP4 Clients".
+    /// Disconnected IMAP4 Clients" Section 4.3. Details of "Normal"
+    /// Synchronization of a Single Mailbox.
     pub async fn resync_basic(
         &mut self,
         mailbox_hash: MailboxHash,
     ) -> Result<Option<Vec<Envelope>>> {
-        let mut payload = vec![];
-        let mut response = Vec::with_capacity(8 * 1024);
-        let cached_uidvalidity = self
-            .uid_store
-            .uidvalidity
-            .lock()
-            .unwrap()
-            .get(&mailbox_hash)
-            .cloned();
-        let lastseenuid = self
-            .uid_store
-            .lastseenuid
-            .lock()
-            .unwrap()
-            .get(&mailbox_hash)
-            .cloned();
-        // 3. tag2 UID FETCH 1:<lastseenuid> FLAGS
-        //if cached_uidvalidity.is_none() || cached_lastseenuid.is_none() {
-        //    return Ok(None);
-        //}
+        // Plan:
+        //
+        // 1. Check UIDVALIDITY
+        // 2. Discover New Messages and Changes to Old Messages (Section 4.3.1.) i. tag1
+        //    UID FETCH <lastseenuid+1>:* <descriptors> (Create events are created from
+        //    return value) ii. tag2 UID FETCH 1:<lastseenuid> FLAGS (NewFlags events
+        //    must be manually added)
+        // 3. Update seen/unseen sets for mailbox
+        // 4. Check for removed messages (Remove events must be manually added)
+        // 5. Add events
+        // 6. Return new envelopes
 
-        let current_uidvalidity: UID = cached_uidvalidity.unwrap_or(1);
-        let lastseenuid: UID = lastseenuid.unwrap_or(1);
+        // Step 1: Check UIDVALIDITY
+        let (Some(cached_uidvalidity), Some(lastseenuid)) = (
+            self.uid_store
+                .uidvalidity
+                .lock()
+                .unwrap()
+                .get(&mailbox_hash)
+                .cloned(),
+            self.uid_store
+                .lastseenuid
+                .lock()
+                .unwrap()
+                .get(&mailbox_hash)
+                .cloned(),
+        ) else {
+            return Ok(None);
+        };
+        let mut response = Vec::with_capacity(1024);
+        let select_response = self
+            .select_mailbox(mailbox_hash, &mut response, true)
+            .await?;
+        if select_response.uidvalidity != cached_uidvalidity {
+            self.uid_store
+                .init_mailbox(mailbox_hash, &select_response)?;
+            return Ok(None);
+        }
+
+        self.uid_store
+            .update_mailbox(mailbox_hash, &select_response)?;
+
         let (mailbox_path, mailbox_exists, unseen) = {
             let f = &self.uid_store.mailboxes.lock().await[&mailbox_hash];
             (
@@ -92,107 +112,82 @@ impl ImapConnection {
                 f.unseen.clone(),
             )
         };
-        let mut new_unseen = BTreeSet::default();
-        let select_response = self
-            .select_mailbox(mailbox_hash, &mut response, true)
-            .await?;
-        // 1. check UIDVALIDITY. If fail, discard cache and rebuild
-        if select_response.uidvalidity != current_uidvalidity {
-            self.uid_store
-                .init_mailbox(mailbox_hash, &select_response)?;
-            return Ok(None);
-        }
-        self.uid_store
-            .update_mailbox(mailbox_hash, &select_response)?;
+        let mut refresh_events = vec![];
 
-        // 2. tag1 UID FETCH <lastseenuid+1>:* <descriptors>
+        let mut new_envelopes = vec![];
+        let mut new_unseen = BTreeSet::default();
+        let mut new_seen = BTreeSet::default();
+        let mut valid_envs = BTreeSet::default();
+
+        // Step 2. Discover New Messages and Changes to Old Messages
+
+        // Step 2i. Create events
+
         let (required_responses, attributes) = crate::imap::email::common_attributes();
         self.send_command(CommandBody::fetch(lastseenuid + 1.., attributes, true)?)
             .await?;
         self.read_response(&mut response, required_responses)
             .await?;
         let (_, mut v, _) = protocol_parser::fetch_responses(&response)?;
-        for FetchResponse {
-            ref uid,
-            ref mut envelope,
-            ref mut flags,
-            ref references,
-            ..
-        } in v.iter_mut()
+        //> Also note that a UID range of 559:* always includes the UID of the
+        //> last message in the mailbox, even if 559 is higher than any
+        //> assigned UID value. This is because the contents of a range are
+        //> independent of the order of the range endpoints. Thus, any UID
+        //> range with * as one of the endpoints indicates at least one
+        //> message (the message with the highest numbered UID), unless the
+        //> mailbox is empty.
+        //- 6.4.9. UID Command - RFC9051
+        v.retain(|f| f.uid != Some(lastseenuid));
         {
-            let uid = uid.unwrap();
-            let env = envelope.as_mut().unwrap();
-            env.set_hash(generate_envelope_hash(&mailbox_path, &uid));
-            if let Some(value) = references {
-                env.set_references(value);
-            }
-            let mut tag_lck = self.uid_store.collection.tag_index.write().unwrap();
-            if let Some((flags, keywords)) = flags {
-                env.set_flags(*flags);
-                if !env.is_seen() {
-                    new_unseen.insert(env.hash());
+            {
+                let mut tag_lck = self.uid_store.collection.tag_index.write().unwrap();
+                for FetchResponse {
+                    ref uid,
+                    ref mut envelope,
+                    ref mut flags,
+                    ref references,
+                    ..
+                } in v.iter_mut()
+                {
+                    let uid = uid.unwrap();
+                    let env = envelope.as_mut().unwrap();
+                    let env_hash = generate_envelope_hash(&mailbox_path, &uid);
+                    valid_envs.insert(env_hash);
+                    env.set_hash(env_hash);
+                    if let Some(value) = references {
+                        env.set_references(value);
+                    }
+                    if let Some((flags, keywords)) = flags {
+                        env.set_flags(*flags);
+                        if !env.is_seen() {
+                            new_unseen.insert(env_hash);
+                        } else {
+                            new_seen.insert(env_hash);
+                        }
+                        for f in keywords {
+                            let hash = TagHash::from_bytes(f.as_bytes());
+                            tag_lck.entry(hash).or_insert_with(|| f.to_string());
+                            env.tags_mut().insert(hash);
+                        }
+                    }
                 }
-                for f in keywords {
-                    let hash = TagHash::from_bytes(f.as_bytes());
-                    tag_lck.entry(hash).or_insert_with(|| f.to_string());
-                    env.tags_mut().insert(hash);
-                }
             }
-        }
-        {
+
             self.uid_store
                 .insert_envelopes(mailbox_hash, &v)
                 .chain_err_summary(|| {
                     format!("Could not save envelopes in cache for mailbox {mailbox_path}")
                 })?;
         }
+        for FetchResponse { envelope, .. } in v {
+            let Some(env) = envelope else {
+                continue;
+            };
+            new_envelopes.push(env);
+        }
 
-        for FetchResponse {
-            uid,
-            message_sequence_number: _,
-            envelope,
-            ..
-        } in v
-        {
-            let uid = uid.unwrap();
-            let env = envelope.unwrap();
-            self.uid_store
-                .hash_index
-                .lock()
-                .unwrap()
-                .insert(env.hash(), (uid, mailbox_hash));
-            self.uid_store
-                .uid_index
-                .lock()
-                .unwrap()
-                .insert((mailbox_hash, uid), env.hash());
-            payload.push((uid, env));
-        }
-        let payload_hash_set: BTreeSet<_> =
-            payload.iter().map(|(_, env)| env.hash()).collect::<_>();
-        {
-            let mut unseen_lck = unseen.lock().unwrap();
-            if unseen_lck.set.is_empty() {
-                let new_total = unseen_lck.len() + new_unseen.len();
-                unseen_lck.set_not_yet_seen(new_total);
-            } else {
-                for &seen_env_hash in payload_hash_set.difference(&new_unseen) {
-                    unseen_lck.remove(seen_env_hash);
-                }
+        // Step 2ii. NewFlags events
 
-                unseen_lck.insert_set(new_unseen);
-            }
-        }
-        {
-            let mut exists_lck = mailbox_exists.lock().unwrap();
-            if exists_lck.set.is_empty() {
-                let new_total = exists_lck.len() + payload_hash_set.len();
-                exists_lck.set_not_yet_seen(new_total);
-            } else {
-                exists_lck.insert_set(payload_hash_set);
-            }
-        }
-        // 3. tag2 UID FETCH 1:<lastseenuid> FLAGS
         let sequence_set = if lastseenuid == 0 {
             SequenceSet::from(..)
         } else {
@@ -208,74 +203,111 @@ impl ImapConnection {
         .await?;
         self.read_response(&mut response, RequiredResponses::FETCH_FLAGS)
             .await?;
-        // 1) update cached flags for old messages;
-        // 2) find out which old messages got expunged; and
-        // 3) build a mapping between message numbers and UIDs (for old messages).
-        let mut valid_envs = BTreeSet::default();
-        let mut env_lck = self.uid_store.envelopes.lock().unwrap();
         let (_, v, _) = protocol_parser::fetch_responses(&response)?;
-        let mut refresh_events = vec![];
-        for FetchResponse { uid, flags, .. } in v {
-            let uid = uid.unwrap();
-            let env_hash = generate_envelope_hash(&mailbox_path, &uid);
-            valid_envs.insert(env_hash);
-            if !env_lck.contains_key(&env_hash) {
-                return Ok(None);
+        {
+            let mut env_lck = self.uid_store.envelopes.lock().unwrap();
+            let mut tag_lck = self.uid_store.collection.tag_index.write().unwrap();
+            for FetchResponse { uid, flags, .. } in v {
+                let uid = uid.unwrap();
+                let env_hash = generate_envelope_hash(&mailbox_path, &uid);
+                let Some(cenv) = env_lck.get_mut(&env_hash) else {
+                    continue;
+                };
+                valid_envs.insert(env_hash);
+                if let Some((flags, tags)) = flags {
+                    let is_new_flags = !(flags == cenv.inner.flags()
+                        && cenv.inner.tags()
+                            == &tags
+                                .iter()
+                                .map(|t| TagHash::from_bytes(t.as_bytes()))
+                                .collect::<IndexSet<TagHash>>());
+                    cenv.inner.set_flags(flags);
+                    if is_new_flags && !cenv.inner.is_seen() {
+                        new_unseen.insert(env_hash);
+                    } else if is_new_flags {
+                        new_seen.insert(env_hash);
+                    }
+                    cenv.inner.tags_mut().clear();
+                    for f in &tags {
+                        let hash = TagHash::from_bytes(f.as_bytes());
+                        tag_lck.entry(hash).or_insert_with(|| f.to_string());
+                        cenv.inner.tags_mut().insert(hash);
+                    }
+                    if is_new_flags {
+                        refresh_events.push((
+                            uid,
+                            RefreshEvent {
+                                mailbox_hash,
+                                account_hash: self.uid_store.account_hash,
+                                kind: RefreshEventKind::NewFlags(env_hash, (flags, tags)),
+                            },
+                        ));
+                    }
+                }
             }
-            let (flags, tags) = flags.unwrap();
-            if env_lck[&env_hash].inner.flags() != flags
-                || env_lck[&env_hash].inner.tags()
-                    != &tags
-                        .iter()
-                        .map(|t| TagHash::from_bytes(t.as_bytes()))
-                        .collect::<IndexSet<TagHash>>()
+        }
+
+        // Step 3. Update seen/unseen sets for mailbox
+        let new_envelopes_hash_set: BTreeSet<_> =
+            new_envelopes.iter().map(|env| env.hash()).collect::<_>();
+        {
+            let mut unseen_lck = unseen.lock().unwrap();
+            if unseen_lck.set.is_empty() {
+                let new_total = unseen_lck.len() + new_unseen.len();
+                unseen_lck.set_not_yet_seen(new_total);
+            } else {
+                for &seen_env_hash in new_envelopes_hash_set
+                    .difference(&new_unseen)
+                    .chain(new_seen.iter())
+                {
+                    unseen_lck.remove(seen_env_hash);
+                }
+
+                unseen_lck.insert_set(new_unseen);
+            }
+        }
+        {
+            let mut exists_lck = mailbox_exists.lock().unwrap();
+            if exists_lck.set.is_empty() {
+                let new_total = exists_lck.len() + new_envelopes_hash_set.len();
+                exists_lck.set_not_yet_seen(new_total);
+            } else {
+                exists_lck.insert_set(new_envelopes_hash_set);
+            }
+        }
+        // Step 4. Remove events
+        {
+            let mut env_lck = self.uid_store.envelopes.lock().unwrap();
+            for env_hash in env_lck
+                .iter()
+                .filter_map(|(h, cenv)| {
+                    if cenv.mailbox_hash == mailbox_hash {
+                        Some(*h)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<BTreeSet<EnvelopeHash>>()
+                .difference(&valid_envs)
             {
-                env_lck.entry(env_hash).and_modify(|entry| {
-                    entry.inner.set_flags(flags);
-                    entry.inner.tags_mut().clear();
-                    entry
-                        .inner
-                        .tags_mut()
-                        .extend(tags.iter().map(|t| TagHash::from_bytes(t.as_bytes())));
-                });
                 refresh_events.push((
-                    uid,
+                    env_lck[env_hash].uid,
                     RefreshEvent {
                         mailbox_hash,
                         account_hash: self.uid_store.account_hash,
-                        kind: RefreshEventKind::NewFlags(env_hash, (flags, tags)),
+                        kind: RefreshEventKind::Remove(*env_hash),
                     },
                 ));
+                env_lck.remove(env_hash);
             }
         }
-        for env_hash in env_lck
-            .iter()
-            .filter_map(|(h, cenv)| {
-                if cenv.mailbox_hash == mailbox_hash {
-                    Some(*h)
-                } else {
-                    None
-                }
-            })
-            .collect::<BTreeSet<EnvelopeHash>>()
-            .difference(&valid_envs)
-        {
-            refresh_events.push((
-                env_lck[env_hash].uid,
-                RefreshEvent {
-                    mailbox_hash,
-                    account_hash: self.uid_store.account_hash,
-                    kind: RefreshEventKind::Remove(*env_hash),
-                },
-            ));
-            env_lck.remove(env_hash);
-        }
-        drop(env_lck);
+        // Step 5. Add events
         self.uid_store.update(mailbox_hash, &refresh_events)?;
         for (_uid, ev) in refresh_events {
             self.add_refresh_event(ev);
         }
-        Ok(Some(payload.into_iter().map(|(_, env)| env).collect()))
+        // Step 6. Return new envelopes
+        Ok(Some(new_envelopes))
     }
 
     /// Resync with `CONDSTORE` Extension
@@ -287,8 +319,8 @@ impl ImapConnection {
         &mut self,
         mailbox_hash: MailboxHash,
     ) -> Result<Option<Vec<Envelope>>> {
-        let mut payload = vec![];
         let mut response = Vec::with_capacity(8 * 1024);
+
         let cached_uidvalidity = self
             .uid_store
             .uidvalidity
@@ -310,19 +342,45 @@ impl ImapConnection {
             .unwrap()
             .get(&mailbox_hash)
             .cloned();
-        if cached_uidvalidity.is_none() || lastseenuid.is_none() || cached_highestmodseq.is_none() {
+
+        let (Some(cached_uidvalidity), Some(lastseenuid), Some(cached_highestmodseq)): (
+            Option<UID>,
+            Option<UID>,
+            Option<std::result::Result<ModSequence, ()>>,
+        ) = (cached_uidvalidity, lastseenuid, cached_highestmodseq) else {
             // This means the mailbox is not cached.
             return Ok(None);
-        }
-        let cached_uidvalidity: UID = cached_uidvalidity.unwrap();
-        let lastseenuid: UID = lastseenuid.unwrap();
-        let cached_highestmodseq: std::result::Result<ModSequence, ()> =
-            cached_highestmodseq.unwrap();
-        if cached_highestmodseq.is_err() {
+        };
+        let Ok(cached_highestmodseq) = cached_highestmodseq else {
             // No MODSEQ is available for __this__ mailbox, fallback to basic sync
             return self.resync_basic(mailbox_hash).await;
+        };
+
+        // 1. check UIDVALIDITY. If fail, discard cache and rebuild
+        let select_response = self
+            .select_mailbox(mailbox_hash, &mut response, true)
+            .await?;
+        if select_response.uidvalidity != cached_uidvalidity {
+            self.uid_store
+                .init_mailbox(mailbox_hash, &select_response)?;
+            return Ok(None);
         }
-        let cached_highestmodseq: ModSequence = cached_highestmodseq.unwrap();
+
+        let new_highestmodseq = match select_response.highestmodseq {
+            None => return self.resync_basic(mailbox_hash).await,
+            Some(Err(_)) => {
+                self.uid_store
+                    .highestmodseqs
+                    .lock()
+                    .unwrap()
+                    .insert(mailbox_hash, Err(()));
+                return self.resync_basic(mailbox_hash).await;
+            }
+            Some(Ok(v)) => v,
+        };
+
+        self.uid_store
+            .update_mailbox(mailbox_hash, &select_response)?;
 
         let (mailbox_path, mailbox_exists, unseen) = {
             let f = &self.uid_store.mailboxes.lock().await[&mailbox_hash];
@@ -332,42 +390,13 @@ impl ImapConnection {
                 f.unseen.clone(),
             )
         };
-        let mut new_unseen = BTreeSet::default();
-        // 1. check UIDVALIDITY. If fail, discard cache and rebuild
-        let select_response = self
-            .select_mailbox(mailbox_hash, &mut response, true)
-            .await?;
-        if select_response.uidvalidity != cached_uidvalidity {
-            // 1a) Check the mailbox UIDVALIDITY (see section 4.1 for more
-            //details) with SELECT/EXAMINE/STATUS.
-            //   If the UIDVALIDITY value returned by the server differs, the
-            //   client MUST
-            //   * empty the local cache of that mailbox;
-            //   * "forget" the cached HIGHESTMODSEQ value for the mailbox;
-            //   * remove any pending "actions" that refer to UIDs in that mailbox (note
-            //     that this doesn't affect actions performed on client-generated fake UIDs;
-            //     see Section 5); and
-            //   * skip steps 1b and 2-II;
-            self.uid_store
-                .init_mailbox(mailbox_hash, &select_response)?;
-            return Ok(None);
-        }
-        if select_response.highestmodseq.is_none()
-            || select_response.highestmodseq.as_ref().unwrap().is_err()
-        {
-            if select_response.highestmodseq.as_ref().unwrap().is_err() {
-                self.uid_store
-                    .highestmodseqs
-                    .lock()
-                    .unwrap()
-                    .insert(mailbox_hash, Err(()));
-            }
-            return self.resync_basic(mailbox_hash).await;
-        }
-        self.uid_store
-            .update_mailbox(mailbox_hash, &select_response)?;
-        let new_highestmodseq = select_response.highestmodseq.unwrap().unwrap();
+
         let mut refresh_events = vec![];
+        let mut new_envelopes = vec![];
+        let mut new_unseen = BTreeSet::default();
+        let mut new_seen = BTreeSet::default();
+        let mut valid_envs = BTreeSet::default();
+
         // 1b) Check the mailbox HIGHESTMODSEQ.
         //  If the cached value is the same as the one returned by the server, skip
         // fetching  message flags on step 2-II, i.e., the client only has to
@@ -405,41 +434,49 @@ impl ImapConnection {
                     | RequiredResponses::FETCH_MODSEQ,
             )
             .await?;
-            debug!(
-                "fetch response is {} bytes and {} lines",
-                response.len(),
-                String::from_utf8_lossy(&response).lines().count()
-            );
             let (_, mut v, _) = protocol_parser::fetch_responses(&response)?;
-            debug!("responses len is {}", v.len());
-            for FetchResponse {
-                ref uid,
-                ref mut envelope,
-                ref mut flags,
-                ref references,
-                ..
-            } in v.iter_mut()
+            //> Also note that a UID range of 559:* always includes the UID of the
+            //> last message in the mailbox, even if 559 is higher than any
+            //> assigned UID value. This is because the contents of a range are
+            //> independent of the order of the range endpoints. Thus, any UID
+            //> range with * as one of the endpoints indicates at least one
+            //> message (the message with the highest numbered UID), unless the
+            //> mailbox is empty.
+            //- 6.4.9. UID Command - RFC9051
+            v.retain(|f| f.uid != Some(lastseenuid));
             {
-                let uid = uid.unwrap();
-                let env = envelope.as_mut().unwrap();
-                env.set_hash(generate_envelope_hash(&mailbox_path, &uid));
-                if let Some(value) = references {
-                    env.set_references(value);
-                }
-                let mut tag_lck = self.uid_store.collection.tag_index.write().unwrap();
-                if let Some((flags, keywords)) = flags {
-                    env.set_flags(*flags);
-                    if !env.is_seen() {
-                        new_unseen.insert(env.hash());
+                {
+                    let mut tag_lck = self.uid_store.collection.tag_index.write().unwrap();
+                    for FetchResponse {
+                        ref uid,
+                        ref mut envelope,
+                        ref mut flags,
+                        ref references,
+                        ..
+                    } in v.iter_mut()
+                    {
+                        let uid = uid.unwrap();
+                        let env = envelope.as_mut().unwrap();
+                        let env_hash = generate_envelope_hash(&mailbox_path, &uid);
+                        env.set_hash(env_hash);
+                        if let Some(value) = references {
+                            env.set_references(value);
+                        }
+                        if let Some((flags, keywords)) = flags {
+                            env.set_flags(*flags);
+                            if !env.is_seen() {
+                                new_unseen.insert(env.hash());
+                            } else {
+                                new_seen.insert(env.hash());
+                            }
+                            for f in keywords {
+                                let hash = TagHash::from_bytes(f.as_bytes());
+                                tag_lck.entry(hash).or_insert_with(|| f.to_string());
+                                env.tags_mut().insert(hash);
+                            }
+                        }
                     }
-                    for f in keywords {
-                        let hash = TagHash::from_bytes(f.as_bytes());
-                        tag_lck.entry(hash).or_insert_with(|| f.to_string());
-                        env.tags_mut().insert(hash);
-                    }
                 }
-            }
-            {
                 self.uid_store
                     .insert_envelopes(mailbox_hash, &v)
                     .chain_err_summary(|| {
@@ -447,55 +484,14 @@ impl ImapConnection {
                     })?;
             }
 
-            for FetchResponse { uid, envelope, .. } in v {
-                let uid = uid.unwrap();
-                let env = envelope.unwrap();
-                /*
-                debug!(
-                    "env hash {} {} UID = {} MSN = {}",
-                    env.hash(),
-                    env.subject(),
-                    uid,
-                    message_sequence_number
-                );
-                */
-                self.uid_store
-                    .hash_index
-                    .lock()
-                    .unwrap()
-                    .insert(env.hash(), (uid, mailbox_hash));
-                self.uid_store
-                    .uid_index
-                    .lock()
-                    .unwrap()
-                    .insert((mailbox_hash, uid), env.hash());
-                payload.push((uid, env));
+            for FetchResponse { envelope, .. } in v {
+                let Some(env) = envelope else {
+                    continue;
+                };
+                new_envelopes.push(env);
             }
-            debug!("sending payload for {}", mailbox_hash);
-            let payload_hash_set: BTreeSet<_> =
-                payload.iter().map(|(_, env)| env.hash()).collect::<_>();
-            {
-                let mut unseen_lck = unseen.lock().unwrap();
-                if unseen_lck.set.is_empty() {
-                    let new_total = unseen_lck.len() + new_unseen.len();
-                    unseen_lck.set_not_yet_seen(new_total);
-                } else {
-                    for &seen_env_hash in payload_hash_set.difference(&new_unseen) {
-                        unseen_lck.remove(seen_env_hash);
-                    }
-
-                    unseen_lck.insert_set(new_unseen);
-                }
-            }
-            {
-                let mut exists_lck = mailbox_exists.lock().unwrap();
-                if exists_lck.set.is_empty() {
-                    let new_total = exists_lck.len() + payload_hash_set.len();
-                    exists_lck.set_not_yet_seen(new_total);
-                } else {
-                    exists_lck.insert_set(payload_hash_set);
-                }
-            }
+            // 3. Fetch the bodies of any "interesting" messages that the client doesn't
+            //    already have.
             // 3. tag2 UID FETCH 1:<lastseenuid> FLAGS
             if lastseenuid == 0 {
                 // [ref:TODO]: (#222) imap-codec does not support "CONDSTORE/QRESYNC" currently.
@@ -520,37 +516,46 @@ impl ImapConnection {
             .await?;
             // 1) update cached flags for old messages;
             let mut env_lck = self.uid_store.envelopes.lock().unwrap();
+            let mut tag_lck = self.uid_store.collection.tag_index.write().unwrap();
             let (_, v, _) = protocol_parser::fetch_responses(&response)?;
-            for FetchResponse { uid, flags, .. } in v {
-                let uid = uid.unwrap();
-                let env_hash = generate_envelope_hash(&mailbox_path, &uid);
-                if !env_lck.contains_key(&env_hash) {
-                    return Ok(None);
-                }
-                let (flags, tags) = flags.unwrap();
-                if env_lck[&env_hash].inner.flags() != flags
-                    || env_lck[&env_hash].inner.tags()
-                        != &tags
-                            .iter()
-                            .map(|t| TagHash::from_bytes(t.as_bytes()))
-                            .collect::<IndexSet<TagHash>>()
-                {
-                    env_lck.entry(env_hash).and_modify(|entry| {
-                        entry.inner.set_flags(flags);
-                        entry.inner.tags_mut().clear();
-                        entry
-                            .inner
-                            .tags_mut()
-                            .extend(tags.iter().map(|t| TagHash::from_bytes(t.as_bytes())));
-                    });
-                    refresh_events.push((
-                        uid,
-                        RefreshEvent {
-                            mailbox_hash,
-                            account_hash: self.uid_store.account_hash,
-                            kind: RefreshEventKind::NewFlags(env_hash, (flags, tags)),
-                        },
-                    ));
+            {
+                for FetchResponse { uid, flags, .. } in v {
+                    let uid = uid.unwrap();
+                    let env_hash = generate_envelope_hash(&mailbox_path, &uid);
+                    let Some(cenv) = env_lck.get_mut(&env_hash) else {
+                        continue;
+                    };
+                    valid_envs.insert(env_hash);
+                    if let Some((flags, tags)) = flags {
+                        let is_new_flags = !(flags == cenv.inner.flags()
+                            && cenv.inner.tags()
+                                == &tags
+                                    .iter()
+                                    .map(|t| TagHash::from_bytes(t.as_bytes()))
+                                    .collect::<IndexSet<TagHash>>());
+                        cenv.inner.set_flags(flags);
+                        if is_new_flags && !cenv.inner.is_seen() {
+                            new_unseen.insert(env_hash);
+                        } else if is_new_flags {
+                            new_seen.insert(env_hash);
+                        }
+                        cenv.inner.tags_mut().clear();
+                        for f in &tags {
+                            let hash = TagHash::from_bytes(f.as_bytes());
+                            tag_lck.entry(hash).or_insert_with(|| f.to_string());
+                            cenv.inner.tags_mut().insert(hash);
+                        }
+                        if is_new_flags {
+                            refresh_events.push((
+                                uid,
+                                RefreshEvent {
+                                    mailbox_hash,
+                                    account_hash: self.uid_store.account_hash,
+                                    kind: RefreshEventKind::NewFlags(env_hash, (flags, tags)),
+                                },
+                            ));
+                        }
+                    }
                 }
             }
             self.uid_store
@@ -558,49 +563,81 @@ impl ImapConnection {
                 .lock()
                 .unwrap()
                 .insert(mailbox_hash, Ok(new_highestmodseq));
-        }
-        let mut valid_envs = BTreeSet::default();
-        // This should be UID SEARCH 1:<maxuid> but it's difficult to compare to cached
-        // UIDs at the point of calling this function
-        self.send_command(CommandBody::search(None, SearchKey::All.into(), true))
-            .await?;
-        self.read_response(&mut response, RequiredResponses::SEARCH)
-            .await?;
-        // 1) update cached flags for old messages;
-        let (_, v) = protocol_parser::search_results(response.as_slice())?;
-        for uid in v {
-            valid_envs.insert(generate_envelope_hash(&mailbox_path, &uid));
+            // Step 3. Update seen/unseen sets for mailbox
+            let new_envelopes_hash_set: BTreeSet<_> =
+                new_envelopes.iter().map(|env| env.hash()).collect::<_>();
+            {
+                let mut unseen_lck = unseen.lock().unwrap();
+                if unseen_lck.set.is_empty() {
+                    let new_total = unseen_lck.len() + new_unseen.len();
+                    unseen_lck.set_not_yet_seen(new_total);
+                } else {
+                    for &seen_env_hash in new_envelopes_hash_set
+                        .difference(&new_unseen)
+                        .chain(new_seen.iter())
+                    {
+                        unseen_lck.remove(seen_env_hash);
+                    }
+
+                    unseen_lck.insert_set(new_unseen);
+                }
+            }
+            {
+                let mut exists_lck = mailbox_exists.lock().unwrap();
+                if exists_lck.set.is_empty() {
+                    let new_total = exists_lck.len() + new_envelopes_hash_set.len();
+                    exists_lck.set_not_yet_seen(new_total);
+                } else {
+                    exists_lck.insert_set(new_envelopes_hash_set);
+                }
+            }
         }
         {
-            let mut env_lck = self.uid_store.envelopes.lock().unwrap();
-            let olds = env_lck
-                .iter()
-                .filter_map(|(h, cenv)| {
-                    if cenv.mailbox_hash == mailbox_hash {
-                        Some(*h)
-                    } else {
-                        None
-                    }
-                })
-                .collect::<BTreeSet<EnvelopeHash>>();
-            for env_hash in olds.difference(&valid_envs) {
-                refresh_events.push((
-                    env_lck[env_hash].uid,
-                    RefreshEvent {
-                        mailbox_hash,
-                        account_hash: self.uid_store.account_hash,
-                        kind: RefreshEventKind::Remove(*env_hash),
-                    },
-                ));
-                env_lck.remove(env_hash);
+            // EXPUNGE events.
+            // This should be UID SEARCH 1:<maxuid> but it's difficult to compare to cached
+            // UIDs at the point of calling this function
+            self.send_command(CommandBody::search(None, SearchKey::All.into(), true))
+                .await?;
+            self.read_response(&mut response, RequiredResponses::SEARCH)
+                .await?;
+            // 1) update cached flags for old messages;
+            let (_, v) = protocol_parser::search_results(response.as_slice())?;
+            for uid in v {
+                valid_envs.insert(generate_envelope_hash(&mailbox_path, &uid));
             }
-            drop(env_lck);
+            {
+                let mut env_lck = self.uid_store.envelopes.lock().unwrap();
+                let olds = env_lck
+                    .iter()
+                    .filter_map(|(h, cenv)| {
+                        if cenv.mailbox_hash == mailbox_hash {
+                            Some(*h)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<BTreeSet<EnvelopeHash>>();
+                for env_hash in olds.difference(&valid_envs) {
+                    refresh_events.push((
+                        env_lck[env_hash].uid,
+                        RefreshEvent {
+                            mailbox_hash,
+                            account_hash: self.uid_store.account_hash,
+                            kind: RefreshEventKind::Remove(*env_hash),
+                        },
+                    ));
+                    env_lck.remove(env_hash);
+                }
+                drop(env_lck);
+            }
         }
+        // Step 5. Add events
         self.uid_store.update(mailbox_hash, &refresh_events)?;
         for (_uid, ev) in refresh_events {
             self.add_refresh_event(ev);
         }
-        Ok(Some(payload.into_iter().map(|(_, env)| env).collect()))
+        // Step 6. Return new envelopes
+        Ok(Some(new_envelopes))
     }
 
     /// Resync with `CONDSTORE` and `QRESYNC` Extension
