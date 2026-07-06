@@ -506,9 +506,255 @@ impl Account {
         Ok(())
     }
 
-    pub fn reload(
+    fn consume_refresh_event(
         &mut self,
-        mut events: Vec<RefreshEventKind>,
+        event: RefreshEventKind,
+        mailbox_hash: MailboxHash,
+        ui_events: &mut Vec<UIEvent>,
+    ) {
+        match event {
+            RefreshEventKind::Update(old_hash, envelope) => {
+                if !self.collection.contains_key(&old_hash) {
+                    self.consume_refresh_event(
+                        RefreshEventKind::Create(envelope),
+                        mailbox_hash,
+                        ui_events,
+                    );
+                    return;
+                }
+                #[cfg(feature = "sqlite3")]
+                self.update_cached_env(*envelope.clone(), Some(old_hash));
+                self.collection.update(old_hash, *envelope, mailbox_hash);
+                ui_events.push(UIEvent::EnvelopeUpdate(old_hash));
+            }
+            RefreshEventKind::NewFlags(env_hash, (flags, tags)) => {
+                if !self.collection.contains_key(&env_hash) {
+                    return;
+                }
+                self.collection
+                    .envelopes
+                    .write()
+                    .unwrap()
+                    .entry(env_hash)
+                    .and_modify(|entry| {
+                        entry.tags_mut().clear();
+                        entry
+                            .tags_mut()
+                            .extend(tags.into_iter().map(|h| TagHash::from_bytes(h.as_bytes())));
+                        entry.set_flags(flags);
+                    });
+                #[cfg(feature = "sqlite3")]
+                if let Some(env) = {
+                    let temp = self
+                        .collection
+                        .envelopes
+                        .read()
+                        .unwrap()
+                        .get(&env_hash)
+                        .cloned();
+
+                    temp
+                } {
+                    self.update_cached_env(env, None);
+                }
+                self.collection.update_flags(env_hash, mailbox_hash);
+                ui_events.push(UIEvent::EnvelopeUpdate(env_hash));
+            }
+            RefreshEventKind::Rename(old_hash, new_hash) => {
+                log::trace!("rename {} to {}", old_hash, new_hash);
+                if !self.collection.rename(old_hash, new_hash, mailbox_hash) {
+                    ui_events.push(UIEvent::EnvelopeRename(old_hash, new_hash));
+                    return;
+                }
+                #[cfg(feature = "sqlite3")]
+                if let Some(env) = {
+                    let temp = self
+                        .collection
+                        .envelopes
+                        .read()
+                        .unwrap()
+                        .get(&new_hash)
+                        .cloned();
+
+                    temp
+                } {
+                    self.update_cached_env(env, Some(old_hash));
+                }
+                ui_events.push(UIEvent::EnvelopeRename(old_hash, new_hash));
+            }
+            RefreshEventKind::Create(envelope) => {
+                let env_hash = envelope.hash();
+                if self.collection.contains_key(&env_hash)
+                    && self
+                        .collection
+                        .get_mailbox(mailbox_hash)
+                        .contains(&env_hash)
+                {
+                    return;
+                }
+                let (is_seen, is_draft) =
+                    { (envelope.is_seen(), envelope.flags().contains(Flag::DRAFT)) };
+                let (subject, from) = {
+                    (
+                        envelope.subject().into_owned(),
+                        envelope.field_from_to_string(),
+                    )
+                };
+                #[cfg(feature = "sqlite3")]
+                if self.settings.conf.search_backend == SearchBackend::Sqlite3 {
+                    let handle = self.main_loop_handler.job_executor.spawn(
+                        "sqlite3::insert".into(),
+                        crate::sqlite3::AccountCache::insert(
+                            (*envelope).clone(),
+                            self.backend.clone(),
+                            self.name.clone(),
+                        ),
+                        crate::sqlite3::AccountCache::is_async(),
+                    );
+                    self.insert_job(
+                        handle.job_id,
+                        JobRequest::Generic {
+                            name: format!(
+                                "Update envelope {} in sqlite3 cache",
+                                envelope.message_id().display_brackets()
+                            )
+                            .into(),
+                            handle,
+                            log_level: LogLevel::TRACE,
+                            on_finish: None,
+                        },
+                    );
+                }
+
+                if self.collection.insert(*envelope, mailbox_hash) {
+                    /* is a duplicate */
+                    return;
+                }
+
+                let mbox_update_event = UIEvent::MailboxUpdate((self.hash, mailbox_hash));
+
+                if self.mailbox_entries[&mailbox_hash]
+                    .conf
+                    .mailbox_conf
+                    .ignore
+                    .is_true()
+                {
+                    ui_events.push(mbox_update_event);
+                    return;
+                }
+
+                {
+                    let threads = self.collection.get_threads(mailbox_hash);
+                    let Some(thread_node_hash) = threads.envelope_to_thread_node.get(&env_hash)
+                    else {
+                        return;
+                    };
+                    let Some(thread) = threads.thread_nodes().get(thread_node_hash) else {
+                        return;
+                    };
+                    let thread = threads.find_group(thread.group);
+                    if threads.thread_ref(thread).snoozed() {
+                        ui_events.push(mbox_update_event);
+                        return;
+                    }
+                };
+                if is_seen || is_draft {
+                    ui_events.push(mbox_update_event);
+                    return;
+                }
+
+                if !matches!(
+                    self.mailbox_entries[&mailbox_hash]
+                        .ref_mailbox
+                        .special_usage(),
+                    SpecialUsageMailbox::Normal
+                        | SpecialUsageMailbox::Inbox
+                        | SpecialUsageMailbox::Flagged
+                ) {
+                    ui_events.push(mbox_update_event);
+                    return;
+                }
+                self.main_loop_handler
+                    .send(ThreadEvent::UIEvent(UIEvent::Notification {
+                        title: Some(subject.into()),
+                        body: format!(
+                            "{from}\n{} | {}",
+                            self.name,
+                            self.mailbox_entries[&mailbox_hash].name()
+                        )
+                        .into(),
+                        source: None,
+                        kind: Some(NotificationType::NewMail),
+                    }));
+
+                ui_events.push(mbox_update_event);
+            }
+            RefreshEventKind::Remove(env_hash) => {
+                if !self.collection.contains_key(&env_hash) {
+                    return;
+                }
+                #[cfg(feature = "sqlite3")]
+                if self.settings.conf.search_backend == SearchBackend::Sqlite3 {
+                    let handle = self.main_loop_handler.job_executor.spawn(
+                        "sqlite3::remove-envelope".into(),
+                        crate::sqlite3::AccountCache::remove(self.name.clone(), env_hash),
+                        crate::sqlite3::AccountCache::is_async(),
+                    );
+                    self.insert_job(
+                        handle.job_id,
+                        JobRequest::Refresh {
+                            mailbox_hash,
+                            handle,
+                        },
+                    );
+                }
+
+                let thread_hash = {
+                    let threads = self.collection.get_threads(mailbox_hash);
+                    let Some(thread_node_hash) = threads.envelope_to_thread_node.get(&env_hash)
+                    else {
+                        return;
+                    };
+                    let Some(thread) = threads.thread_nodes().get(thread_node_hash) else {
+                        return;
+                    };
+                    threads.find_group(thread.group)
+                };
+                self.collection.remove(env_hash, mailbox_hash);
+                ui_events.push(UIEvent::EnvelopeRemove(env_hash, thread_hash));
+            }
+            RefreshEventKind::Rescan => {
+                self.watch(None);
+            }
+            RefreshEventKind::Failure(err) => {
+                log::trace!("RefreshEvent Failure: {}", err.to_string());
+                while let Some((job_id, _)) = self.active_jobs.iter().find(|(_, j)| j.is_watch()) {
+                    let job_id = *job_id;
+                    let j = self.active_jobs.remove(&job_id);
+                    drop(j);
+                }
+                self.watch(None);
+                ui_events.push(UIEvent::Notification {
+                    title: Some("Account watch failed".into()),
+                    body: err.to_string().into(),
+                    kind: Some(NotificationType::Error(err.kind)),
+                    source: Some(err),
+                });
+            }
+            RefreshEventKind::MailboxCreate(_new_mailbox) => {}
+            RefreshEventKind::MailboxDelete(_mailbox_hash) => {}
+            RefreshEventKind::MailboxRename {
+                old_mailbox_hash: _,
+                new_mailbox: _,
+            } => {}
+            RefreshEventKind::MailboxSubscribe(_mailbox_hash) => {}
+            RefreshEventKind::MailboxUnsubscribe(_mailbox_hash) => {}
+        }
+    }
+
+    pub fn consume_refresh_events(
+        &mut self,
+        events: Vec<RefreshEventKind>,
         mailbox_hash: MailboxHash,
     ) -> Option<Vec<UIEvent>> {
         if !self.mailbox_entries[&mailbox_hash].status.is_available()
@@ -522,244 +768,8 @@ impl Account {
         }
 
         let mut ui_events = vec![];
-        while let Some(event) = events.pop() {
-            match event {
-                RefreshEventKind::Update(old_hash, envelope) => {
-                    if !self.collection.contains_key(&old_hash) {
-                        events.push(RefreshEventKind::Create(envelope));
-                        continue;
-                    }
-                    #[cfg(feature = "sqlite3")]
-                    self.update_cached_env(*envelope.clone(), Some(old_hash));
-                    self.collection.update(old_hash, *envelope, mailbox_hash);
-                    ui_events.push(UIEvent::EnvelopeUpdate(old_hash));
-                }
-                RefreshEventKind::NewFlags(env_hash, (flags, tags)) => {
-                    if !self.collection.contains_key(&env_hash) {
-                        continue;
-                    }
-                    self.collection
-                        .envelopes
-                        .write()
-                        .unwrap()
-                        .entry(env_hash)
-                        .and_modify(|entry| {
-                            entry.tags_mut().clear();
-                            entry.tags_mut().extend(
-                                tags.into_iter().map(|h| TagHash::from_bytes(h.as_bytes())),
-                            );
-                            entry.set_flags(flags);
-                        });
-                    #[cfg(feature = "sqlite3")]
-                    if let Some(env) = {
-                        let temp = self
-                            .collection
-                            .envelopes
-                            .read()
-                            .unwrap()
-                            .get(&env_hash)
-                            .cloned();
-
-                        temp
-                    } {
-                        self.update_cached_env(env, None);
-                    }
-                    self.collection.update_flags(env_hash, mailbox_hash);
-                    ui_events.push(UIEvent::EnvelopeUpdate(env_hash));
-                }
-                RefreshEventKind::Rename(old_hash, new_hash) => {
-                    log::trace!("rename {} to {}", old_hash, new_hash);
-                    if !self.collection.rename(old_hash, new_hash, mailbox_hash) {
-                        ui_events.push(UIEvent::EnvelopeRename(old_hash, new_hash));
-                        continue;
-                    }
-                    #[cfg(feature = "sqlite3")]
-                    if let Some(env) = {
-                        let temp = self
-                            .collection
-                            .envelopes
-                            .read()
-                            .unwrap()
-                            .get(&new_hash)
-                            .cloned();
-
-                        temp
-                    } {
-                        self.update_cached_env(env, Some(old_hash));
-                    }
-                    ui_events.push(UIEvent::EnvelopeRename(old_hash, new_hash));
-                }
-                RefreshEventKind::Create(envelope) => {
-                    let env_hash = envelope.hash();
-                    if self.collection.contains_key(&env_hash)
-                        && self
-                            .collection
-                            .get_mailbox(mailbox_hash)
-                            .contains(&env_hash)
-                    {
-                        continue;
-                    }
-                    let (is_seen, is_draft) =
-                        { (envelope.is_seen(), envelope.flags().contains(Flag::DRAFT)) };
-                    let (subject, from) = {
-                        (
-                            envelope.subject().into_owned(),
-                            envelope.field_from_to_string(),
-                        )
-                    };
-                    #[cfg(feature = "sqlite3")]
-                    if self.settings.conf.search_backend == SearchBackend::Sqlite3 {
-                        let handle = self.main_loop_handler.job_executor.spawn(
-                            "sqlite3::insert".into(),
-                            crate::sqlite3::AccountCache::insert(
-                                (*envelope).clone(),
-                                self.backend.clone(),
-                                self.name.clone(),
-                            ),
-                            crate::sqlite3::AccountCache::is_async(),
-                        );
-                        self.insert_job(
-                            handle.job_id,
-                            JobRequest::Generic {
-                                name: format!(
-                                    "Update envelope {} in sqlite3 cache",
-                                    envelope.message_id().display_brackets()
-                                )
-                                .into(),
-                                handle,
-                                log_level: LogLevel::TRACE,
-                                on_finish: None,
-                            },
-                        );
-                    }
-
-                    if self.collection.insert(*envelope, mailbox_hash) {
-                        /* is a duplicate */
-                        continue;
-                    }
-
-                    let mbox_update_event = UIEvent::MailboxUpdate((self.hash, mailbox_hash));
-
-                    if self.mailbox_entries[&mailbox_hash]
-                        .conf
-                        .mailbox_conf
-                        .ignore
-                        .is_true()
-                    {
-                        ui_events.push(mbox_update_event);
-                        continue;
-                    }
-
-                    {
-                        let threads = self.collection.get_threads(mailbox_hash);
-                        let Some(thread_node_hash) = threads.envelope_to_thread_node.get(&env_hash)
-                        else {
-                            continue;
-                        };
-                        let Some(thread) = threads.thread_nodes().get(thread_node_hash) else {
-                            continue;
-                        };
-                        let thread = threads.find_group(thread.group);
-                        if threads.thread_ref(thread).snoozed() {
-                            ui_events.push(mbox_update_event);
-                            continue;
-                        }
-                    };
-                    if is_seen || is_draft {
-                        ui_events.push(mbox_update_event);
-                        continue;
-                    }
-
-                    if !matches!(
-                        self.mailbox_entries[&mailbox_hash]
-                            .ref_mailbox
-                            .special_usage(),
-                        SpecialUsageMailbox::Normal
-                            | SpecialUsageMailbox::Inbox
-                            | SpecialUsageMailbox::Flagged
-                    ) {
-                        ui_events.push(mbox_update_event);
-                        continue;
-                    }
-                    self.main_loop_handler
-                        .send(ThreadEvent::UIEvent(UIEvent::Notification {
-                            title: Some(subject.into()),
-                            body: format!(
-                                "{from}\n{} | {}",
-                                self.name,
-                                self.mailbox_entries[&mailbox_hash].name()
-                            )
-                            .into(),
-                            source: None,
-                            kind: Some(NotificationType::NewMail),
-                        }));
-
-                    ui_events.push(mbox_update_event);
-                }
-                RefreshEventKind::Remove(env_hash) => {
-                    if !self.collection.contains_key(&env_hash) {
-                        continue;
-                    }
-                    #[cfg(feature = "sqlite3")]
-                    if self.settings.conf.search_backend == SearchBackend::Sqlite3 {
-                        let handle = self.main_loop_handler.job_executor.spawn(
-                            "sqlite3::remove-envelope".into(),
-                            crate::sqlite3::AccountCache::remove(self.name.clone(), env_hash),
-                            crate::sqlite3::AccountCache::is_async(),
-                        );
-                        self.insert_job(
-                            handle.job_id,
-                            JobRequest::Refresh {
-                                mailbox_hash,
-                                handle,
-                            },
-                        );
-                    }
-
-                    let thread_hash = {
-                        let threads = self.collection.get_threads(mailbox_hash);
-                        let Some(thread_node_hash) = threads.envelope_to_thread_node.get(&env_hash)
-                        else {
-                            continue;
-                        };
-                        let Some(thread) = threads.thread_nodes().get(thread_node_hash) else {
-                            continue;
-                        };
-                        threads.find_group(thread.group)
-                    };
-                    self.collection.remove(env_hash, mailbox_hash);
-                    ui_events.push(UIEvent::EnvelopeRemove(env_hash, thread_hash));
-                    continue;
-                }
-                RefreshEventKind::Rescan => {
-                    self.watch(None);
-                }
-                RefreshEventKind::Failure(err) => {
-                    log::trace!("RefreshEvent Failure: {}", err.to_string());
-                    while let Some((job_id, _)) =
-                        self.active_jobs.iter().find(|(_, j)| j.is_watch())
-                    {
-                        let job_id = *job_id;
-                        let j = self.active_jobs.remove(&job_id);
-                        drop(j);
-                    }
-                    self.watch(None);
-                    ui_events.push(UIEvent::Notification {
-                        title: Some("Account watch failed".into()),
-                        body: err.to_string().into(),
-                        kind: Some(NotificationType::Error(err.kind)),
-                        source: Some(err),
-                    });
-                }
-                RefreshEventKind::MailboxCreate(_new_mailbox) => {}
-                RefreshEventKind::MailboxDelete(_mailbox_hash) => {}
-                RefreshEventKind::MailboxRename {
-                    old_mailbox_hash: _,
-                    new_mailbox: _,
-                } => {}
-                RefreshEventKind::MailboxSubscribe(_mailbox_hash) => {}
-                RefreshEventKind::MailboxUnsubscribe(_mailbox_hash) => {}
-            }
+        for event in events {
+            self.consume_refresh_event(event, mailbox_hash, &mut ui_events);
         }
         Some(ui_events)
     }

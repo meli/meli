@@ -593,7 +593,9 @@ impl State {
                 ref mut accounts, ..
             } = &mut *self.context;
 
-            if let Some(notifications) = accounts[&account_hash].reload(events, mailbox_hash) {
+            if let Some(notifications) =
+                accounts[&account_hash].consume_refresh_events(events, mailbox_hash)
+            {
                 for n in notifications {
                     if matches!(n, UIEvent::Notification { .. }) {
                         self.rcv_event(UIEvent::MailboxUpdate((account_hash, mailbox_hash)));
@@ -1152,6 +1154,28 @@ impl State {
                 }),
             ) => {
                 self.refresh_event(account_hash, mailbox_hash, vec![kind]);
+                return;
+            }
+            UIEvent::BackendEvent(_, BackendEvent::RefreshBatch(events)) => {
+                let Some(first) = events.first() else {
+                    return;
+                };
+                let account_hash = first.account_hash;
+                let mailbox_hash = first.mailbox_hash;
+                let Some(events) = events
+                    .into_iter()
+                    .map(|ev| {
+                        if (ev.account_hash, ev.mailbox_hash) != (account_hash, mailbox_hash) {
+                            None
+                        } else {
+                            Some(ev.kind)
+                        }
+                    })
+                    .collect::<Option<Vec<RefreshEventKind>>>()
+                else {
+                    return;
+                };
+                self.refresh_event(account_hash, mailbox_hash, events);
                 return;
             }
             UIEvent::ChangeMode(m) => {
