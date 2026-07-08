@@ -10,7 +10,6 @@ Try an [old, outdated but online and interactive web demo](https://meli-email.or
 * Main repository <https://git.meli-email.org/meli/meli> Report bugs and/or feature requests in [meli's issue tracker](https://git.meli-email.org/meli/meli/issues "meli gitea issue tracker")<details><summary>Official git mirrors</summary>
   - <https://codeberg.org/meli/meli>
   - <https://github.com/meli/meli>
-  - <https://ayllu-forge.org/meli/meli>
   - <https://gitlab.com/meli-project/meli>
   </details>
 
