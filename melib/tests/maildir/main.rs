@@ -44,7 +44,7 @@ use futures::{
 };
 use melib::{
     backends::prelude::*,
-    maildir::*,
+    maildir::{utilities::MaildirFilePathExt, *},
     utils::logging::{LogLevel, StderrLogger},
     Mail,
 };
@@ -110,6 +110,31 @@ fn new_maildir_backend(
 
     let maildir = MaildirType::new(&account_conf, Default::default(), event_consumer)?;
     Ok((root_mailbox, account_conf, maildir))
+}
+
+fn move_file(
+    cache: &cache::Cache,
+    config: &Configuration,
+    env_hash: EnvelopeHash,
+    source_mailbox_hash: MailboxHash,
+    destination_mailbox_hash: MailboxHash,
+) {
+    let mut hash_indexes_lck = cache.hash_indexes.lock().unwrap();
+    let hash_index = hash_indexes_lck.entry(source_mailbox_hash).or_default();
+    let path_src = {
+        assert!(
+            hash_index.contains_key(&env_hash),
+            "{hash_index:?} does not contain {env_hash:?}"
+        );
+        hash_index[&env_hash].to_path_buf()
+    };
+
+    let mut dest_dir: PathBuf = cache.mailboxes.lock().unwrap()[&destination_mailbox_hash]
+        .fs_path()
+        .into();
+    dest_dir.push("cur");
+    let dest_path = path_src.place_in_dir(&dest_dir, config).unwrap();
+    std::fs::rename(&path_src, &dest_path).unwrap();
 }
 
 /// Test that `MaildirType::watch` `Stream` returns the expected `Refresh`
@@ -181,12 +206,13 @@ hello world.
     let (trash_hash, _mailboxes) =
         block_on(maildir.create_mailbox("Trash".into()).unwrap()).unwrap();
     eprintln!("trash_hash = {trash_hash:?} inbox_hash = {inbox_hash:?}");
-    block_on(
-        maildir
-            .copy_messages(inbox_env.hash().into(), inbox_hash, trash_hash, true)
-            .unwrap(),
-    )
-    .unwrap();
+    move_file(
+        &maildir.cache,
+        &maildir.config,
+        inbox_env.hash(),
+        inbox_hash,
+        trash_hash,
+    );
     let (value1, _watch_fut) = block_on(_watch_fut.into_future());
     let mut backend_events = vec![];
     backend_events.push(value1.unwrap().unwrap());

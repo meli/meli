@@ -20,7 +20,7 @@
  */
 
 use std::{
-    collections::{hash_map::DefaultHasher, HashMap},
+    collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
     io::{BufReader, Read},
     ops::{Deref, DerefMut},
@@ -28,12 +28,14 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-use super::Configuration;
+use super::{Configuration, HashIndex};
 use crate::{
     backends::prelude::*,
     error::{Error, Result, ResultIntoError},
     utils::shellexpand::ShellExpandTrait,
 };
+
+type HashIndexes = Arc<Mutex<HashMap<MailboxHash, HashIndex>>>;
 
 /// Read a maildir entry into bytes.
 #[derive(Debug)]
@@ -611,43 +613,6 @@ impl From<PathBuf> for MaildirPath {
         }
     }
 }
-
-#[derive(Debug, Default)]
-pub struct HashIndex {
-    pub index: HashMap<EnvelopeHash, MaildirPath>,
-    pub reverse_index: HashMap<PathBuf, EnvelopeHash>,
-    pub mailbox_hash: MailboxHash,
-}
-
-impl Deref for HashIndex {
-    type Target = HashMap<EnvelopeHash, MaildirPath>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.index
-    }
-}
-
-impl DerefMut for HashIndex {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.index
-    }
-}
-
-impl HashIndex {
-    pub fn path_to_hash(&self, path: &Path) -> Option<EnvelopeHash> {
-        self.reverse_index.get(path).cloned()
-    }
-
-    pub fn remove_env_hash(&mut self, env_hash: &EnvelopeHash) -> bool {
-        let Some(path) = self.index.remove(env_hash) else {
-            return false;
-        };
-        self.reverse_index.remove(&path.buf);
-        true
-    }
-}
-
-pub type HashIndexes = Arc<Mutex<HashMap<MailboxHash, HashIndex>>>;
 
 pub fn move_to_cur(config: &Configuration, p: &Path) -> Result<PathBuf> {
     let cur = {
