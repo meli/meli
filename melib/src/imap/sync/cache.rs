@@ -31,6 +31,13 @@ use crate::{
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ModSequence(pub std::num::NonZeroU64);
 
+impl From<ModSequence> for std::num::NonZeroU64 {
+    #[inline]
+    fn from(m: ModSequence) -> Self {
+        m.0
+    }
+}
+
 impl TryFrom<i64> for ModSequence {
     type Error = ();
     fn try_from(val: i64) -> std::result::Result<Self, ()> {

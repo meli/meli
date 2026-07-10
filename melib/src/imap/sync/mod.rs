@@ -20,6 +20,7 @@
  */
 
 use imap_codec::imap_types::{
+    command::FetchModifier,
     fetch::{MacroOrMessageDataItemNames, MessageDataItemName},
     search::SearchKey,
     sequence::SequenceSet,
@@ -199,6 +200,7 @@ impl ImapConnection {
                 MessageDataItemName::Flags,
             ]),
             uid: true,
+            modifiers: vec![],
         })
         .await?;
         self.read_response(&mut response, RequiredResponses::FETCH_FLAGS)
@@ -413,25 +415,17 @@ impl ImapConnection {
             //       "SEARCH MODSEQ <cached-value>".
 
             // 2. tag1 UID FETCH <lastseenuid+1>:* <descriptors>
-            // [ref:TODO]: (#222) imap-codec does not support "CONDSTORE/QRESYNC" currently.
-            self.send_command_raw(
-                format!(
-                    "UID FETCH {}:* (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] \
-                     BODYSTRUCTURE) (CHANGEDSINCE {})",
-                    lastseenuid + 1,
-                    cached_highestmodseq,
-                )
-                .as_bytes(),
-            )
+            let (required_responses, macro_or_item_names) = crate::imap::email::common_attributes();
+            self.send_command(CommandBody::Fetch {
+                sequence_set: ((lastseenuid + 1)..).try_into()?,
+                macro_or_item_names,
+                uid: true,
+                modifiers: vec![FetchModifier::ChangedSince(cached_highestmodseq.into())],
+            })
             .await?;
             self.read_response(
                 &mut response,
-                RequiredResponses::FETCH_UID
-                    | RequiredResponses::FETCH_FLAGS
-                    | RequiredResponses::FETCH_ENVELOPE
-                    | RequiredResponses::FETCH_REFERENCES
-                    | RequiredResponses::FETCH_BODYSTRUCTURE
-                    | RequiredResponses::FETCH_MODSEQ,
+                required_responses | RequiredResponses::FETCH_MODSEQ,
             )
             .await?;
             let (_, mut v, _) = protocol_parser::fetch_responses(&response)?;
@@ -493,22 +487,22 @@ impl ImapConnection {
             // 3. Fetch the bodies of any "interesting" messages that the client doesn't
             //    already have.
             // 3. tag2 UID FETCH 1:<lastseenuid> FLAGS
-            if lastseenuid == 0 {
-                // [ref:TODO]: (#222) imap-codec does not support "CONDSTORE/QRESYNC" currently.
-                self.send_command_raw(
-                    format!("UID FETCH 1:* FLAGS (CHANGEDSINCE {cached_highestmodseq})").as_bytes(),
-                )
-                .await?;
+
+            let sequence_set = if lastseenuid == 0 {
+                (1..).try_into()?
             } else {
-                // [ref:TODO]: (#222) imap-codec does not support "CONDSTORE/QRESYNC" currently.
-                self.send_command_raw(
-                    format!(
-                        "UID FETCH 1:{lastseenuid} FLAGS (CHANGEDSINCE {cached_highestmodseq})"
-                    )
-                    .as_bytes(),
-                )
-                .await?;
-            }
+                (1..lastseenuid).try_into()?
+            };
+            self.send_command(CommandBody::Fetch {
+                sequence_set,
+                macro_or_item_names: MacroOrMessageDataItemNames::MessageDataItemNames(vec![
+                    MessageDataItemName::Uid,
+                    MessageDataItemName::Flags,
+                ]),
+                uid: true,
+                modifiers: vec![FetchModifier::ChangedSince(cached_highestmodseq.into())],
+            })
+            .await?;
             self.read_response(
                 &mut response,
                 RequiredResponses::FETCH_FLAGS | RequiredResponses::FETCH_MODSEQ,

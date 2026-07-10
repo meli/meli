@@ -817,6 +817,7 @@ impl MailBackend for ImapType {
                         response: StoreResponse::Answer,
                         flags,
                         uid: true,
+                        modifiers: vec![],
                     }
                 };
                 conn.send_command(command).await?;
@@ -884,6 +885,7 @@ impl MailBackend for ImapType {
                         response: StoreResponse::Answer,
                         flags,
                         uid: true,
+                        modifiers: vec![],
                     }
                 };
                 conn.send_command(command).await?;

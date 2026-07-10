@@ -270,6 +270,7 @@ impl FetchState {
                             sequence_set,
                             macro_or_item_names,
                             uid: true,
+                            modifiers: vec![],
                         })
                         .await?;
                         conn.read_response(&mut response, required_responses)
