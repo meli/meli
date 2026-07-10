@@ -20,10 +20,10 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
-#[cfg(feature = "notmuch")]
+#![cfg(feature = "notmuch")]
+
 use rusty_fork::rusty_fork_test;
 
-#[cfg(feature = "notmuch")]
 rusty_fork_test! {
     #[test]
     fn test_notmuch_watch() {
@@ -31,7 +31,6 @@ rusty_fork_test! {
     }
 }
 
-#[cfg(feature = "notmuch")]
 rusty_fork_test! {
     #[test]
     fn test_notmuch_refresh() {
@@ -39,7 +38,6 @@ rusty_fork_test! {
     }
 }
 
-#[cfg(feature = "notmuch")]
 mod tests {
     use std::{
         collections::VecDeque,

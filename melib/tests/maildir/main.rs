@@ -20,30 +20,27 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
-#[cfg(feature = "maildir")]
+#![cfg(feature = "maildir")]
+
 use std::{
     collections::VecDeque,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
 
-#[cfg(feature = "maildir")]
 use futures::{
     executor::block_on,
     future::{self, Either},
     StreamExt,
 };
-#[cfg(feature = "maildir")]
 use melib::{
     backends::prelude::*,
     maildir::*,
     utils::logging::{LogLevel, StderrLogger},
     Mail,
 };
-#[cfg(feature = "maildir")]
 use tempfile::TempDir;
 
-#[cfg(feature = "maildir")]
 fn new_maildir_backend(
     temp_dir: &TempDir,
     acc_name: &str,
@@ -106,7 +103,6 @@ fn new_maildir_backend(
     Ok((root_mailbox, account_conf, maildir))
 }
 
-#[cfg(feature = "maildir")]
 #[test]
 /// Test that `MaildirType::watch` `Stream` returns the expected `Refresh`
 /// events when altering the mail store in the filesystem.

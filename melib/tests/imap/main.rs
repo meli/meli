@@ -20,10 +20,10 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
-#[cfg(feature = "imap")]
+#![cfg(feature = "imap")]
+
 use rusty_fork::rusty_fork_test;
 
-#[cfg(feature = "imap")]
 rusty_fork_test! {
     #[test]
     fn test_imap_watch() {
@@ -31,7 +31,6 @@ rusty_fork_test! {
     }
 }
 
-#[cfg(feature = "imap")]
 pub mod server {
     use std::{
         convert::TryInto,
@@ -677,7 +676,6 @@ pub mod server {
     }
 }
 
-#[cfg(feature = "imap")]
 mod tests {
     use std::{
         net::TcpListener,

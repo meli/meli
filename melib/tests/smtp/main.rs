@@ -25,10 +25,10 @@
 // [ref:TODO]: add tests for SMTP auth methods
 // [ref:TODO]: add tests for STARTTLS/TLS
 
-#[cfg(feature = "smtp")]
+#![cfg(feature = "smtp")]
+
 use rusty_fork::rusty_fork_test;
 
-#[cfg(feature = "smtp")]
 rusty_fork_test! {
     #[test]
     fn test_smtp_transaction() {
@@ -36,7 +36,6 @@ rusty_fork_test! {
     }
 }
 
-#[cfg(feature = "smtp")]
 pub mod server {
     use std::{
         net::{IpAddr, SocketAddr, TcpListener, TcpStream},
@@ -354,7 +353,6 @@ pub mod server {
     }
 }
 
-#[cfg(feature = "smtp")]
 pub mod tests {
     use std::thread;
 
