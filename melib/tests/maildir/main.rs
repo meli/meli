@@ -22,6 +22,15 @@
 
 #![cfg(feature = "maildir")]
 
+use rusty_fork::rusty_fork_test;
+
+rusty_fork_test! {
+    #[test]
+    fn test_maildir_watch() {
+        run_maildir_watch();
+    }
+}
+
 use std::{
     collections::VecDeque,
     path::PathBuf,
@@ -103,10 +112,9 @@ fn new_maildir_backend(
     Ok((root_mailbox, account_conf, maildir))
 }
 
-#[test]
 /// Test that `MaildirType::watch` `Stream` returns the expected `Refresh`
 /// events when altering the mail store in the filesystem.
-fn test_maildir_watch() {
+fn run_maildir_watch() {
     let mut _logger = StderrLogger::new_with(LogLevel::TRACE, true);
     let temp_dir = TempDir::new().unwrap();
     let backend_event_queue = Arc::new(Mutex::new(VecDeque::with_capacity(16)));
@@ -219,7 +227,7 @@ hello world.
         assert_eq!(trash_env.message_id(), inbox_env.message_id());
         trash_env.hash()
     };
-    assert!(backend_events.is_empty());
+    assert!(backend_events.is_empty(), "{backend_events:?}");
     drop(backend_events);
     eprintln!("Delete envelope from Trash folder and assert we receive a Remove event");
     block_on(
