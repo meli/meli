@@ -467,10 +467,6 @@ impl Envelope {
         self.timestamp
     }
 
-    pub fn datetime(&self) -> UnixTimestamp {
-        self.timestamp
-    }
-
     pub fn date_as_str(&self) -> &str {
         &self.date
     }
@@ -788,7 +784,7 @@ impl Eq for Envelope {}
 
 impl Ord for Envelope {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.datetime().cmp(&other.datetime())
+        self.date().cmp(&other.date())
     }
 }
 
