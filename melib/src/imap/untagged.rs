@@ -349,41 +349,20 @@ impl ImapConnection {
                     self.send_command(CommandBody::search(None, SearchKey::Recent.into(), true)).await
                     self.read_response(&mut response, RequiredResponses::SEARCH).await
                 );
-                match super::protocol_parser::search_results_raw(&response)
+                match super::protocol_parser::search_results(&response)
                     .map(|(_, v)| v)
                     .map_err(Error::from)
                 {
-                    Ok(&[]) => {
+                    Ok(v) if v.is_empty() => {
                         imap_log!(trace, self, "UID SEARCH RECENT returned no results");
                         Ok(None)
                     }
                     Ok(v) => {
-                        // [ref:FIXME]: use imap_codec types instead of a raw command
-                        let command = {
-                            let mut iter = v.split(u8::is_ascii_whitespace);
-                            let first = iter.next().unwrap_or(v);
-                            let mut accum = to_str!(first).trim().to_string();
-                            for ms in iter {
-                                accum.push(',');
-                                accum.push_str(to_str!(ms).trim());
-                            }
-                            format!(
-                                "UID FETCH {accum} (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS \
-                                 (REFERENCES)] BODYSTRUCTURE)"
-                            )
-                        };
+                        let (required_responses, attributes) = common_attributes();
                         try_fail!(
                             mailbox_hash,
-                            self.send_command_raw(command.as_bytes()).await,
-                            self.read_response(
-                                &mut response,
-                                RequiredResponses::FETCH_UID
-                                    | RequiredResponses::FETCH_FLAGS
-                                    | RequiredResponses::FETCH_ENVELOPE
-                                    | RequiredResponses::FETCH_REFERENCES
-                                    | RequiredResponses::FETCH_BODYSTRUCTURE,
-                            )
-                            .await,
+                            self.send_command(CommandBody::fetch(v.as_slice(), attributes, true)?).await
+                            self.read_response(&mut response, required_responses).await
                         );
                         let mut v = match super::protocol_parser::fetch_responses(&response) {
                             Ok((_, v, _)) => v,
