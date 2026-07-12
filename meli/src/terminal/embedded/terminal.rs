@@ -1834,90 +1834,18 @@ impl EmbeddedGrid {
             ) => {
                 *state = State::Normal;
             }
-            (_, State::Csi) => {
-                log::trace!(
-                    "state: {:?} ignoring unknown code {} byte {}",
-                    &state,
-                    EscCode::from((&(*state), byte)),
-                    byte
-                );
-                *state = State::Normal;
-            }
-            (_, State::Csi1(_)) => {
-                log::trace!(
-                    "state: {:?} ignoring unknown code {} byte {}",
-                    &state,
-                    EscCode::from((&(*state), byte)),
-                    byte
-                );
-                *state = State::Normal;
-            }
-            (_, State::Csi2(_, _)) => {
-                log::trace!(
-                    "state: {:?} ignoring unknown code {} byte {}",
-                    &state,
-                    EscCode::from((&(*state), byte)),
-                    byte
-                );
-                *state = State::Normal;
-            }
-            (_, State::Csi3(_, _, _)) => {
-                log::trace!(
-                    "state: {:?} ignoring unknown code {} byte {}",
-                    &state,
-                    EscCode::from((&(*state), byte)),
-                    byte
-                );
-                *state = State::Normal;
-            }
-            (_, State::Csi4(_, _, _, _)) => {
-                log::trace!(
-                    "state: {:?} ignoring unknown code {} byte {}",
-                    &state,
-                    EscCode::from((&(*state), byte)),
-                    byte
-                );
-                *state = State::Normal;
-            }
-            (_, State::Csi5(_, _, _, _, _)) => {
-                log::trace!(
-                    "state: {:?} ignoring unknown code {} byte {}",
-                    &state,
-                    EscCode::from((&(*state), byte)),
-                    byte
-                );
-                *state = State::Normal;
-            }
-            (_, State::Csi6(_, _, _, _, _, _)) => {
-                log::trace!(
-                    "state: {:?} ignoring unknown code {} byte {}",
-                    &state,
-                    EscCode::from((&(*state), byte)),
-                    byte
-                );
-                *state = State::Normal;
-            }
-            (_, State::Osc1(_)) => {
-                log::trace!(
-                    "state: {:?} ignoring unknown code {} byte {}",
-                    &state,
-                    EscCode::from((&(*state), byte)),
-                    byte
-                );
-                *state = State::Normal;
-            }
-            (_, State::Osc2(_, _)) => {
-                log::trace!(
-                    "state: {:?} ignoring unknown code {} byte {}",
-                    &state,
-                    EscCode::from((&(*state), byte)),
-                    byte
-                );
-                *state = State::Normal;
-            }
             (
                 _,
-                State::CsiQ(_)
+                State::Csi
+                | State::Csi1(_)
+                | State::Csi2(_, _)
+                | State::Csi3(_, _, _)
+                | State::Csi4(_, _, _, _)
+                | State::Csi5(_, _, _, _, _)
+                | State::Csi6(_, _, _, _, _, _)
+                | State::Osc1(_)
+                | State::Osc2(_, _)
+                | State::CsiQ(_)
                 | State::Csi58
                 | State::Csi58_2
                 | State::Csi58_5
@@ -1931,10 +1859,8 @@ impl EmbeddedGrid {
                 | State::Csi58_5_ { ps: _ },
             ) => {
                 log::trace!(
-                    "state: {:?} ignoring unknown code {} byte {}",
-                    &state,
-                    EscCode::from((&(*state), byte)),
-                    byte
+                    "state: {state:?} ignoring unknown code {} byte {byte}",
+                    EscCode::from((&(*state), byte))
                 );
                 *state = State::Normal;
             }

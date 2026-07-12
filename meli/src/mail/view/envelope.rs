@@ -1556,7 +1556,7 @@ impl Component for EnvelopeView {
                     context.input_kill();
                 }
                 let pipe_command = format!("{} {}", bin, args.as_slice().join(" "));
-                log::trace!("Executing: {}", &pipe_command);
+                log::trace!("Executing: {pipe_command:?}");
                 match Command::new(bin)
                     .args(args)
                     .stdin(Stdio::piped())

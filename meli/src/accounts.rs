@@ -426,7 +426,7 @@ impl Account {
                 "Account `{name}` mailboxes `{mailbox_conf_hash_set:?}` configured but not \
                  present in account's mailboxes. Are they misspelled? Account `{name}` has the \
                  following mailboxes: [{mailbox_comma_sep_list_string}]",
-                name = &self.name,
+                name = self.name,
             );
             self.main_loop_handler
                 .send(ThreadEvent::UIEvent(UIEvent::Notification {
@@ -436,7 +436,7 @@ impl Account {
                         "Account `{name}` mailboxes `{mailbox_conf_hash_set:?}` configured but \
                          not present in account's mailboxes. Are they misspelled? Account \
                          `{name}` has the following mailboxes: [{mailbox_comma_sep_list_string}]",
-                        name = &self.name,
+                        name = self.name,
                     )
                     .into(),
                     kind: None,
@@ -727,7 +727,7 @@ impl Account {
                 self.watch(None);
             }
             RefreshEventKind::Failure(err) => {
-                log::trace!("RefreshEvent Failure: {}", err.to_string());
+                log::trace!("RefreshEvent Failure: {err}");
                 while let Some((job_id, _)) = self.active_jobs.iter().find(|(_, j)| j.is_watch()) {
                     let job_id = *job_id;
                     let j = self.active_jobs.remove(&job_id);

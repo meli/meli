@@ -415,9 +415,8 @@ impl Envelope {
                                 Attachment::check_if_has_attachments_quick(body, boundary);
                         } else {
                             log::debug!(
-                                "{:?} has no boundary field set in multipart/mixed content-type \
-                                 field.",
-                                &self
+                                "{self:?} has no boundary field set in multipart/mixed \
+                                 content-type field."
                             );
                         }
                     }

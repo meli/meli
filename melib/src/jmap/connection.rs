@@ -717,7 +717,7 @@ impl JmapConnection {
         }
         let _: MethodResponse = match deserialize_from_str(&res_text) {
             Err(err) => {
-                log::error!("{}", &err);
+                log::error!("Could not deserialize response {res_text:?}: {err}");
                 _ = self.store.online_status.set(None, Err(err.clone())).await;
                 return Err(err);
             }

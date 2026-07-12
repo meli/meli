@@ -77,9 +77,8 @@ impl MailboxEntry {
             }
             Some(other) => {
                 log::warn!(
-                    "mailbox `{}`: unrecognized mailbox name charset: {}",
-                    &ret.name,
-                    other
+                    "mailbox `{}`: unrecognized mailbox name charset: {other}",
+                    ret.name
                 );
             }
         }

@@ -151,7 +151,7 @@ pub fn idle(kit: ImapWatchKit) -> impl futures::stream::Stream<Item = Result<Bac
             let line = match timeout(Some(_10_MINS), blockn.read_line()).await {
                 Ok(Some(line)) => line,
                 Ok(None) => {
-                    log::trace!("IDLE connection dropped: {:?}", &blockn.err());
+                    log::trace!("IDLE connection dropped: {:?}", blockn.err());
                     return Ok(());
                 }
                 Err(_) => {

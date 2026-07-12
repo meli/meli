@@ -118,11 +118,11 @@ fn run_app(mut opt: Opt) -> Result<()> {
              * watching events and the signal watcher. */
             crossbeam::select! {
                 recv(receiver) -> r => {
-                    match r {
-                         Ok(ThreadEvent::Pulse) | Ok(ThreadEvent::UIEvent(UIEvent::Timer(_))) => {},
-                        _ => {
-                            log::trace!("{:?}", &r);
-                        }
+                    if !matches!(
+                        r,
+                        Ok(ThreadEvent::Pulse) | Ok(ThreadEvent::UIEvent(UIEvent::Timer(_)))
+                    ) {
+                        log::trace!("{r:?}");
                     }
                     match r.unwrap() {
                         ThreadEvent::Input((Key::Ctrl('z'), _)) if state.mode != UIMode::Embedded => {

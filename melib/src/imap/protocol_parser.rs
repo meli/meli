@@ -1164,7 +1164,7 @@ pub fn select_response(input: &[u8]) -> Result<SelectResponse> {
         Ok(ret)
     } else {
         let ret = String::from_utf8_lossy(input).to_string();
-        log::error!("BAD/NO response in select: {}", &ret);
+        log::error!("BAD/NO response in select: {ret}");
         Err(Error::new(ret))
     }
 }

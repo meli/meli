@@ -316,18 +316,18 @@ pub fn get_events(
                             (Ok((TEvent::Key(TKey::Alt('\\')), _)), InputMode::EscapeSequence(ref mut buf)) => {
                                 esc_seq_buf = std::mem::take(buf);
                                 input_mode = InputMode::Normal;
-                                log::trace!("EscapeSequence is {:?} == {:?}", &esc_seq_buf, String::from_utf8_lossy(&esc_seq_buf));
+                                log::trace!("EscapeSequence is {esc_seq_buf:?} == {:?}", String::from_utf8_lossy(&esc_seq_buf));
                                 if let Some(bg) = QueryBackground::parse(&String::from_utf8_lossy(&esc_seq_buf)) {
-                                    log::trace!("EscapeSequence parsed bg {:?}", bg);
+                                    log::trace!("EscapeSequence parsed bg {bg:?}");
                                     palette.1 = Some(bg);
                                 } else if let Some(fg) = QueryForeground::parse(&String::from_utf8_lossy(&esc_seq_buf)) {
-                                    log::trace!("EscapeSequence parsed fg {:?}", fg);
+                                    log::trace!("EscapeSequence parsed fg {fg:?}");
                                     palette.0 = Some(fg);
                                 } else {
                                     log::trace!("EscapeSequence unknown");
                                 }
                                 if let (Some(fg), Some(bg)) = palette {
-                                    log::trace!("compute_scheme_contrast(fg {:?}, bg {:?}) = {:?}", fg, bg, Color::compute_scheme_contrast(fg, bg));
+                                    log::trace!("compute_scheme_contrast(fg {fg:?}, bg {bg:?}) = {:?}", Color::compute_scheme_contrast(fg, bg));
                                     palette.0.take();
                                     palette.1.take();
                                 }
@@ -400,7 +400,7 @@ pub fn get_events(
                                             '3' => ANSIDECModeSetting::PermanentlySet,
                                             '4' => ANSIDECModeSetting::PermanentlyReset,
                                             other => {
-                                                log::trace!("Received invalid DECRPM setting value: {:?}: expected one of {{0, 1, 2, 3, 4}}", other);
+                                                log::trace!("Received invalid DECRPM setting value: {other:?}: expected one of {{0, 1, 2, 3, 4}}");
                                                 ANSIDECModeSetting::default()
                                             }
                                         };
@@ -442,7 +442,7 @@ pub fn get_events(
                     if let InputMode::EscapeSequence(ref mut buf) = input_mode {
                         esc_seq_buf = std::mem::take(buf);
                         input_mode = InputMode::Normal;
-                        log::trace!("EscapeSequence is {:?} == {:?}", &esc_seq_buf, String::from_utf8_lossy(&esc_seq_buf));
+                        log::trace!("EscapeSequence is {esc_seq_buf:?} == {:?}", String::from_utf8_lossy(&esc_seq_buf));
                         log::trace!("EscapeSequence parsed {:?}", QueryBackground::parse(&String::from_utf8_lossy(&esc_seq_buf)));
                     }
 

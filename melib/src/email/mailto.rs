@@ -144,11 +144,8 @@ impl TryFrom<&[u8]> for Mailto {
         super::parser::generic::mailto(value)
             .map(|(_, v)| v)
             .map_err(|err| {
-                log::debug!(
-                    "parser::mailto returned error while parsing {}:\n{:?}",
-                    String::from_utf8_lossy(value),
-                    &err,
-                );
+                let value = String::from_utf8_lossy(value);
+                log::debug!("parser::mailto returned error while parsing {value}:\n{err:?}");
                 format!("{err:?}")
             })
     }
@@ -161,11 +158,7 @@ impl TryFrom<&str> for Mailto {
         super::parser::generic::mailto(value.as_bytes())
             .map(|(_, v)| v)
             .map_err(|err| {
-                log::debug!(
-                    "parser::mailto returned error while parsing {}:\n{:?}",
-                    value,
-                    &err
-                );
+                log::debug!("parser::mailto returned error while parsing {value}:\n{err:?}");
                 format!("{err:?}")
             })
     }

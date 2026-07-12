@@ -320,7 +320,7 @@ impl MaildirWatch {
                                             PathMod::Hash(hash) => log::trace!(
                                                 "envelope {} has modified path set {}",
                                                 hash,
-                                                &index_lock[hash].buf.display()
+                                                index_lock[hash].buf.display()
                                             ),
                                         }
                                         index_lock.entry(hash).and_modify(|e| {

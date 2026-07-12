@@ -577,20 +577,15 @@ impl MailBackend for ImapType {
                         } else {
                             return Err(err);
                         }
-                        log::trace!(
-                            "{} Watch failure: {}",
-                            uid_store.account_name,
-                            err.to_string()
-                        );
+                        log::trace!("{} Watch failure: {err}", uid_store.account_name);
                         match timeout(uid_store.timeout, main_conn_lck.connect())
                             .await
                             .and_then(|res| res)
                         {
                             Err(err2) => {
                                 log::trace!(
-                                    "{} Watch reconnect attempt failed: {}",
-                                    uid_store.account_name,
-                                    err2.to_string()
+                                    "{} Watch reconnect attempt failed: {err2}",
+                                    uid_store.account_name
                                 );
                             }
                             Ok(()) => {
@@ -1040,9 +1035,8 @@ impl MailBackend for ImapType {
                 for root_mailbox in mailboxes.values().filter(|f| f.parent.is_none()) {
                     if path.starts_with(&root_mailbox.name) {
                         log::trace!(
-                            "{} path starts with {:?}",
-                            uid_store.account_name,
-                            &root_mailbox
+                            "{} path starts with {root_mailbox:?}",
+                            uid_store.account_name
                         );
                         path = path.replace(
                             '/',

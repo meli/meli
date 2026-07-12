@@ -492,7 +492,7 @@ column_str!(struct TagString(String, SmallVec<[Option<Color>; 8]>));
 
 impl FlagString {
     pub(self) fn new(
-        flags: Flag,
+        f: Flag,
         is_selected: bool,
         is_snoozed: bool,
         is_unseen: bool,
@@ -503,24 +503,12 @@ impl FlagString {
         Self(format!(
             "{flag_passed}{flag_replied}{flag_seen}{flag_trashed}{flag_draft}{flag_flagged} \
              {selected}{snoozed}{unseen}{attachments}{whitespace}",
-            flag_passed = Some("P")
-                .filter(|_| flags.contains(Flag::PASSED))
-                .unwrap_or_default(),
-            flag_replied = Some("R")
-                .filter(|_| flags.contains(Flag::REPLIED))
-                .unwrap_or_default(),
-            flag_seen = Some("S")
-                .filter(|_| flags.contains(Flag::SEEN))
-                .unwrap_or_default(),
-            flag_trashed = Some("T")
-                .filter(|_| flags.contains(Flag::TRASHED))
-                .unwrap_or_default(),
-            flag_draft = Some("D")
-                .filter(|_| flags.contains(Flag::DRAFT))
-                .unwrap_or_default(),
-            flag_flagged = Some("F")
-                .filter(|_| flags.contains(Flag::FLAGGED))
-                .unwrap_or_default(),
+            flag_passed = if f.contains(Flag::PASSED) { "P" } else { "" },
+            flag_replied = if f.contains(Flag::REPLIED) { "R" } else { "" },
+            flag_seen = if f.contains(Flag::SEEN) { "S" } else { "" },
+            flag_trashed = if f.contains(Flag::TRASHED) { "T" } else { "" },
+            flag_draft = if f.contains(Flag::DRAFT) { "D" } else { "" },
+            flag_flagged = if f.contains(Flag::FLAGGED) { "F" } else { "" },
             selected = if is_selected {
                 mailbox_settings!(context[coordinates.0][&coordinates.1].listing.selected_flag)
                     .as_ref()
@@ -1119,10 +1107,8 @@ pub trait ListingTrait: Component {
 
     fn kick_parent(&self, parent: ComponentId, msg: ListingMessage, context: &mut Context) {
         log::trace!(
-            "kick_parent self is {} parent is {} msg is {:?}",
-            self.id(),
-            parent,
-            &msg
+            "kick_parent self is {} parent is {parent} msg is {msg:?}",
+            self.id()
         );
         context.replies.push_back(UIEvent::IntraComm {
             from: self.id(),
