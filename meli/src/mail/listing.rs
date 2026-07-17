@@ -1612,10 +1612,8 @@ impl Component for Listing {
                                 context,
                             );
                         }
-                        if matches!(new_value, Focus::Entry) {
-                            // Need to clear gap between sidebar and listing component, if any.
-                            self.dirty = true;
-                        }
+                        // Need to clear gap between sidebar and listing component, if any.
+                        self.dirty = true;
                     }
                     Some(ListingMessage::UpdateView) => {
                         if let Some(ref mut view) = self.view {
