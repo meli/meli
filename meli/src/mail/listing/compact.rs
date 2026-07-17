@@ -1795,7 +1795,7 @@ impl Component for CompactListing {
                     return true;
                 }
                 UIEvent::Input(ref k)
-                    if matches!(self.focus, Focus::Entry)
+                    if !matches!(self.focus, Focus::None)
                         && shortcut!(k == shortcuts[Shortcuts::LISTING]["exit_entry"]) =>
                 {
                     self.set_focus(Focus::None, context);
