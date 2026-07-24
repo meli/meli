@@ -1128,7 +1128,8 @@ impl Threads {
         true
     }
 
-    /* Insert or update */
+    /// Insert an envelope as a reply from another mailbox, for example a Sent
+    /// folder.
     pub fn insert_reply(&mut self, envelopes: &Envelopes, env_hash: EnvelopeHash) -> bool {
         self.insert_internal(envelopes, env_hash, true)
     }
@@ -1202,6 +1203,7 @@ impl Threads {
             }
         });
     }
+
     pub fn node_inner_sort_by(
         &self,
         vec: &mut [ThreadNodeHash],
