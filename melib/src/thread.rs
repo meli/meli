@@ -28,9 +28,7 @@
 //! The entry point of this module is the [`Threads`] struct and its
 //! [`new`](Threads::new) method. It contains [`ThreadNode`s](ThreadNode) which
 //! are the nodes in the thread trees that might have messages associated with
-//! them. The root nodes (first messages in each thread) are stored in
-//! [`root_set`](Threads::root_set) and [`thread_nodes`](Threads::thread_nodes)
-//! vectors. [`Threads`] has inner mutability since we need to sort without the
+//! them. [`Threads`] has inner mutability since we need to sort without the
 //! user having mutable ownership.
 
 use crate::{
@@ -602,8 +600,6 @@ impl ThreadNode {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Threads {
     pub thread_nodes: HashMap<ThreadNodeHash, ThreadNode>,
-    root_set: Arc<RwLock<Vec<ThreadNodeHash>>>,
-    tree_index: Arc<RwLock<Vec<ThreadNodeHash>>>,
     pub groups: HashMap<ThreadHash, ThreadGroup>,
 
     message_ids: HashMap<MessageID, ThreadNodeHash>,
@@ -797,12 +793,6 @@ impl Threads {
         );
         self.envelope_to_thread_node.remove(&envelope_hash);
 
-        if self.thread_nodes[&t_id].parent.is_none() {
-            let mut tree_index = self.tree_index.write().unwrap();
-            if let Some(i) = tree_index.iter().position(|t| *t == t_id) {
-                tree_index.remove(i);
-            }
-        }
         if let Some((message_id, _)) = self.message_ids.iter().find(|(_, h)| **h == t_id) {
             self.missing_message_ids.insert(message_id.clone());
         }
@@ -1134,72 +1124,6 @@ impl Threads {
         self.insert_internal(envelopes, env_hash, true)
     }
 
-    fn inner_subsort_by(&self, _subsort: (SortField, SortOrder), _envelopes: &Envelopes) {
-        // [ref:FIXME]: self\.thread_nodes needs interior mutability */
-        /*
-        let Threads {
-            ref tree_index,
-            ref thread_nodes,
-            ..
-        } = self;
-        let tree = &mut tree_index.write().unwrap();
-        for t in tree.iter_mut() {
-            thread_nodes[t].children.sort_by(|a, b| match subsort {
-                (SortField::Date, SortOrder::Desc) => {
-                    let a = &thread_nodes[&a];
-                    let b = &thread_nodes[&b];
-                    b.date.cmp(&a.date)
-                }
-                (SortField::Date, SortOrder::Asc) => {
-                    let a = &thread_nodes[&a];
-                    let b = &thread_nodes[&b];
-                    a.date.cmp(&b.date)
-                }
-                (SortField::Subject, SortOrder::Desc) => {
-                    let a = &thread_nodes[&a].message();
-                    let b = &thread_nodes[&b].message();
-
-                    match (a, b) {
-                        (Some(_), Some(_)) => {}
-                        (Some(_), None) => {
-                            return Ordering::Greater;
-                        }
-                        (None, Some(_)) => {
-                            return Ordering::Less;
-                        }
-                        (None, None) => {
-                            return Ordering::Equal;
-                        }
-                    }
-                    let ma = &envelopes[&a.unwrap()];
-                    let mb = &envelopes[&b.unwrap()];
-                    ma.subject().cmp(&mb.subject())
-                }
-                (SortField::Subject, SortOrder::Asc) => {
-                    let a = &thread_nodes[&a].message();
-                    let b = &thread_nodes[&b].message();
-
-                    match (a, b) {
-                        (Some(_), Some(_)) => {}
-                        (Some(_), None) => {
-                            return Ordering::Less;
-                        }
-                        (None, Some(_)) => {
-                            return Ordering::Greater;
-                        }
-                        (None, None) => {
-                            return Ordering::Equal;
-                        }
-                    }
-                    let ma = &envelopes[&a.unwrap()];
-                    let mb = &envelopes[&b.unwrap()];
-                    mb.subject().cmp(&ma.subject())
-                }
-            });
-        }
-        */
-    }
-
     pub fn group_inner_sort_by(
         &self,
         vec: &mut [ThreadHash],
@@ -1338,87 +1262,6 @@ impl Threads {
             }
         });
     }
-    fn inner_sort_by(&self, sort: (SortField, SortOrder), envelopes: &Envelopes) {
-        let tree = &mut self.tree_index.write().unwrap();
-        let envelopes = envelopes.read().unwrap();
-        tree.sort_by(|a, b| match sort {
-            (SortField::Date, SortOrder::Desc) => {
-                let a = self.thread_ref(self.thread_nodes[a].group).date();
-                let b = self.thread_ref(self.thread_nodes[b].group).date();
-                b.cmp(&a)
-            }
-            (SortField::Date, SortOrder::Asc) => {
-                let a = self.thread_ref(self.thread_nodes[a].group).date();
-                let b = self.thread_ref(self.thread_nodes[b].group).date();
-                a.cmp(&b)
-            }
-            (SortField::Subject, SortOrder::Desc) => {
-                let a = &self.thread_nodes[a].message();
-                let b = &self.thread_nodes[b].message();
-
-                match (a, b) {
-                    (Some(_), Some(_)) => {}
-                    (Some(_), None) => {
-                        return Ordering::Greater;
-                    }
-                    (None, Some(_)) => {
-                        return Ordering::Less;
-                    }
-                    (None, None) => {
-                        return Ordering::Equal;
-                    }
-                }
-                let ma = &envelopes[&a.unwrap()];
-                let mb = &envelopes[&b.unwrap()];
-                {
-                    ma.subject()
-                        .split_graphemes()
-                        .cmp(&mb.subject().split_graphemes())
-                }
-            }
-            (SortField::Subject, SortOrder::Asc) => {
-                let a = &self.thread_nodes[a].message();
-                let b = &self.thread_nodes[b].message();
-
-                match (a, b) {
-                    (Some(_), Some(_)) => {}
-                    (Some(_), None) => {
-                        return Ordering::Less;
-                    }
-                    (None, Some(_)) => {
-                        return Ordering::Greater;
-                    }
-                    (None, None) => {
-                        return Ordering::Equal;
-                    }
-                }
-                let ma = &envelopes[&a.unwrap()];
-                let mb = &envelopes[&b.unwrap()];
-                {
-                    mb.subject()
-                        .as_ref()
-                        .split_graphemes()
-                        .cmp(&ma.subject().split_graphemes())
-                }
-            }
-        });
-    }
-
-    pub fn sort_by(
-        &self,
-        sort: (SortField, SortOrder),
-        subsort: (SortField, SortOrder),
-        envelopes: &Envelopes,
-    ) {
-        if *self.sort.read().unwrap() != sort {
-            self.inner_sort_by(sort, envelopes);
-            *self.sort.write().unwrap() = sort;
-        }
-        if *self.subsort.read().unwrap() != subsort {
-            self.inner_subsort_by(subsort, envelopes);
-            *self.subsort.write().unwrap() = subsort;
-        }
-    }
 
     pub fn thread_to_mail(&self, i: ThreadNodeHash) -> EnvelopeHash {
         let thread = &self.thread_nodes[&i];
@@ -1435,14 +1278,6 @@ impl Threads {
 
     pub fn is_empty(&self) -> bool {
         self.hash_set.is_empty()
-    }
-
-    pub fn root_len(&self) -> usize {
-        self.tree_index.read().unwrap().len()
-    }
-
-    pub fn root_set(&self, idx: usize) -> ThreadNodeHash {
-        self.tree_index.read().unwrap()[idx]
     }
 
     pub fn roots(&self) -> SmallVec<[ThreadHash; 1024]> {
