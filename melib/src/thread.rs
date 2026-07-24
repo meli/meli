@@ -1104,18 +1104,27 @@ impl Threads {
         drop(envelopes_lck);
         self.update_show_subject(new_id, env_hash, envelopes);
         self.envelope_to_thread_node.insert(env_hash, new_id);
-        /*
-        save_graph(
-            &self.tree_index.read().unwrap(),
-            &self.thread_nodes,
-            &self
-                .message_ids
-                .iter()
-                .map(|(a, &b)| (b, a.to_vec()))
-                .collect::<HashMap<ThreadNodeHash, MessageID>>(),
-            &envelopes,
-        );
-        */
+        //save_graph(
+        //    &self.node_roots(),
+        //    &self.thread_nodes,
+        //    &self
+        //        .message_ids
+        //        .iter()
+        //        .map(|(a, &b)| (b, a.clone()))
+        //        .collect::<HashMap<ThreadNodeHash, MessageID>>(),
+        //    envelopes,
+        //);
+        //save_graph2(
+        //    &self.node_roots(),
+        //    &self.thread_nodes,
+        //    &self
+        //        .message_ids
+        //        .iter()
+        //        .map(|(a, &b)| (b, a.clone()))
+        //        .collect::<HashMap<ThreadNodeHash, MessageID>>(),
+        //    envelopes,
+        //    _message_id,
+        //);
         true
     }
 
@@ -1281,11 +1290,17 @@ impl Threads {
     }
 
     pub fn roots(&self) -> SmallVec<[ThreadHash; 1024]> {
-        // [ref:FIXME]: refactor filter
         self.groups
             .iter()
             .filter_map(|(h, g)| g.root().map(|_| *h))
             .collect::<SmallVec<[ThreadHash; 1024]>>()
+    }
+
+    pub fn node_roots(&self) -> SmallVec<[ThreadNodeHash; 1024]> {
+        self.groups
+            .values()
+            .filter_map(|g| g.root().map(|r| r.root))
+            .collect::<SmallVec<[ThreadNodeHash; 1024]>>()
     }
 }
 
@@ -1297,174 +1312,250 @@ impl Index<&ThreadNodeHash> for Threads {
     }
 }
 
-/*
-fn print_threadnodes(
-    node_hash: ThreadNodeHash,
-    nodes: &HashMap<ThreadNodeHash, ThreadNode>,
-    envelopes: &Envelopes,
-) {
-    fn help(
-        level: usize,
-        node_hash: ThreadNodeHash,
-        nodes: &HashMap<ThreadNodeHash, ThreadNode>,
-        envelopes: &Envelopes,
-    ) {
-        eprint!("{}ThreadNode {}\n{}\tmessage: {}\n{}\tparent: {}\n{}\tthread_group: {}\n{}\tchildren (len: {}):\n",
-                  "\t".repeat(level),
-                  node_hash,
-                  "\t".repeat(level),
-                  nodes[&node_hash].message().as_ref().map(|m| format!("{} - {}\n{}\t\t{}", envelopes[m].message_id(), envelopes[m].subject(), "\t".repeat(level), envelopes[m].references().iter().map(ToString::to_string).collect::<Vec<String>>().join(", "))).unwrap_or_else(|| "None".to_string()),
-                  "\t".repeat(level),
-                  nodes[&node_hash].parent().as_ref().map(ToString::to_string).unwrap_or_else(|| "None".to_string()),
-                  "\t".repeat(level),
-                  nodes[&node_hash].thread_group,
-                  "\t".repeat(level),
-                  nodes[&node_hash].children.len(),
-                  );
-        for c in &nodes[&node_hash].children {
-            help(level + 2, *c, nodes, envelopes);
-        }
-    }
-    help(0, node_hash, nodes, envelopes);
-}
-*/
+//fn print_threadnodes(
+//    node_hash: ThreadNodeHash,
+//    nodes: &HashMap<ThreadNodeHash, ThreadNode>,
+//    envelopes: &Envelopes,
+//) {
+//    fn help(
+//        level: usize,
+//        node_hash: ThreadNodeHash,
+//        nodes: &HashMap<ThreadNodeHash, ThreadNode>,
+//        envelopes: &Envelopes,
+//    ) {
+//        {
+//            let envelopes = envelopes.read().unwrap();
+//            log::debug!("{}ThreadNode {}\n{}\tmessage: {}\n{}\tparent:
+// {}\n{}\tthread_group: {}\n{}\tchildren (len: {}):\n",
+// "\t".repeat(level),                  node_hash,
+//                  "\t".repeat(level),
+//                  nodes[&node_hash].message().as_ref().map(|m| format!("{} -
+// {}\n{}\t\t{}", envelopes[m].message_id(), envelopes[m].subject(),
+// "\t".repeat(level),
+// envelopes[m].references().iter().map(ToString::to_string).
+// collect::<Vec<String>>().join(", "))).unwrap_or_else(|| "None".to_string()),
+//                  "\t".repeat(level),
+//
+// nodes[&node_hash].parent().as_ref().map(ToString::to_string).
+// unwrap_or_else(|| "None".to_string()),                  "\t".repeat(level),
+//                  nodes[&node_hash].group,
+//                  "\t".repeat(level),
+//                  nodes[&node_hash].children.len(),
+//                  );
+//        }
+//        for c in &nodes[&node_hash].children {
+//            help(level + 2, *c, nodes, envelopes);
+//        }
+//    }
+//    help(0, node_hash, nodes, envelopes);
+//}
+//
+//#[derive(Serialize)]
+//struct Node {
+//    id: String,
+//    subject: String,
+//    from: String,
+//    to: String,
+//    date: UnixTimestamp,
+//    references: String,
+//    in_reply_to: String,
+//}
+//
+//#[derive(Serialize)]
+//struct Link {
+//    source: String,
+//    target: String,
+//}
+//
+//#[derive(Serialize)]
+//struct Graph {
+//    nodes: Vec<Node>,
+//    links: Vec<Link>,
+//}
+//
+//fn save_graph(
+//    node_arr: &[ThreadNodeHash],
+//    nodes: &HashMap<ThreadNodeHash, ThreadNode>,
+//    ids: &HashMap<ThreadNodeHash, MessageID>,
+//    envelopes: &Envelopes,
+//) {
+//    //log::debug!("save_graph {node_arr:?} nodes {nodes:?} ids {ids:?}
+// envelopes {envelopes:?}");    for &n in node_arr {
+//        print_threadnodes(n, nodes, envelopes);
+//    }
+//    let envelopes = envelopes.read().unwrap();
+//    let mut graph = Graph {
+//        nodes: vec![],
+//        links: vec![],
+//    };
+//    let mut stack: SmallVec<[(ThreadNodeHash, String); 16]> = SmallVec::new();
+//    for n in node_arr {
+//        stack.extend(nodes[n].children.iter().cloned().
+// zip(std::iter::repeat_n(            ids[n].to_string(),
+//            nodes[n].children.len(),
+//        )));
+//        graph.nodes.push(Node {
+//            id: ids[n].to_string(),
+//            subject: nodes[n]
+//                .message
+//                .as_ref()
+//                .map(|h| envelopes[h].subject().to_string())
+//                .unwrap_or_else(|| "missing".into()),
+//            from: nodes[n]
+//                .message
+//                .as_ref()
+//                .map(|h| envelopes[h].field_from_to_string())
+//                .unwrap_or_else(|| "missing".into()),
+//            to: nodes[n]
+//                .message
+//                .as_ref()
+//                .map(|h| envelopes[h].field_to_to_string())
+//                .unwrap_or_else(|| "missing".into()),
+//            date: nodes[n]
+//                .message
+//                .as_ref()
+//                .map(|h| envelopes[h].date())
+//                .unwrap_or(0),
+//            references: nodes[n]
+//                .message
+//                .as_ref()
+//                .map(|h| envelopes[h].references())
+//                .map(|h| MessageID::display_slice(h, None).to_string())
+//                .unwrap_or_else(|| "missing".into()),
+//            in_reply_to: nodes[n]
+//                .message
+//                .as_ref()
+//                .and_then(|h| envelopes[h].in_reply_to())
+//                .map(|h| MessageID::display_slice(h.refs(), None).to_string())
+//                .unwrap_or_else(|| "missing".into()),
+//        });
+//        while let Some((target, parent)) = stack.pop() {
+//            graph.nodes.push(Node {
+//                id: ids[&target].to_string(),
+//                subject: nodes[&target]
+//                    .message
+//                    .as_ref()
+//                    .map(|h| envelopes[h].subject().to_string())
+//                    .unwrap_or_else(|| "missing".into()),
+//                from: nodes[&target]
+//                    .message
+//                    .as_ref()
+//                    .map(|h| envelopes[h].field_from_to_string())
+//                    .unwrap_or_else(|| "missing".into()),
+//                to: nodes[&target]
+//                    .message
+//                    .as_ref()
+//                    .map(|h| envelopes[h].field_to_to_string())
+//                    .unwrap_or_else(|| "missing".into()),
+//                date: nodes[&target]
+//                    .message
+//                    .as_ref()
+//                    .map(|h| envelopes[h].date())
+//                    .unwrap_or(0),
+//                references: nodes[&target]
+//                    .message
+//                    .as_ref()
+//                    .map(|h| envelopes[h].references())
+//                    .map(|h| MessageID::display_slice(h, None).to_string())
+//                    .unwrap_or_else(|| "missing".into()),
+//                in_reply_to: nodes[&target]
+//                    .message
+//                    .as_ref()
+//                    .and_then(|h| envelopes[h].in_reply_to())
+//                    .map(|h| MessageID::display_slice(h.refs(),
+// None).to_string())                    .unwrap_or_else(|| "missing".into()),
+//            });
+//            graph.links.push(Link {
+//                source: parent,
+//                target: ids[&target].to_string(),
+//            });
+//
+//            stack.extend(
+//                nodes[&target]
+//                    .children
+//                    .iter()
+//                    .cloned()
+//                    .zip(std::iter::repeat_n(
+//                        ids[&target].to_string(),
+//                        nodes[&target].children.len(),
+//                    )),
+//            );
+//        }
+//        let s = serde_json::to_string(&graph).unwrap();
+//        use std::fs::File;
+//        use std::io::prelude::*;
+//
+//        let filename = format!(
+//            "/tmp/meli/threads/threads_{}.json",
+//            crate::utils::datetime::now()
+//        );
+//        let mut file = File::create(&filename).unwrap();
+//        file.write_all(s.as_bytes()).unwrap();
+//        file.flush().unwrap();
+//        log::debug!("wrote graph to {filename}");
+//    }
+//}
 
-// #[derive(Serialize)]
-// struct Node {
-//     id: String,
-//     subject: String,
-//     from: String,
-//     to: String,
-//     date: UnixTimestamp,
-//     references: String,
-//     in_reply_to: String,
-// }
-
-// #[derive(Serialize)]
-// struct Link {
-//     source: String,
-//     target: String,
-// }
-
-// #[derive(Serialize)]
-// struct Graph {
-//     nodes: Vec<Node>,
-//     links: Vec<Link>,
-// }
-
-/*
-fn save_graph(
-    node_arr: &[ThreadNodeHash],
-    nodes: &HashMap<ThreadNodeHash, ThreadNode>,
-    ids: &HashMap<ThreadNodeHash, MessageID>,
-    envelopes: &Envelopes,
-) {
-    let envelopes = envelopes.read().unwrap();
-    let mut graph = Graph {
-        nodes: vec![],
-        links: vec![],
-    };
-    let mut stack: SmallVec<[(ThreadNodeHash, String); 16]> = SmallVec::new();
-    for n in node_arr {
-        stack.extend(
-            nodes[n].children.iter().cloned().zip(
-                std::iter::repeat(unsafe { std::str::from_utf8_unchecked(&ids[n]) }.to_string())
-                    .take(nodes[n].children.len()),
-            ),
-        );
-        graph.nodes.push(Node {
-            id: unsafe { std::str::from_utf8_unchecked(&ids[n]).to_string() },
-            subject: nodes[n]
-                .message
-                .as_ref()
-                .map(|h| envelopes[h].subject().to_string())
-                .unwrap_or("missing".into()),
-            from: nodes[n]
-                .message
-                .as_ref()
-                .map(|h| envelopes[h].field_from_to_string())
-                .unwrap_or("missing".into()),
-            to: nodes[n]
-                .message
-                .as_ref()
-                .map(|h| envelopes[h].field_to_to_string())
-                .unwrap_or("missing".into()),
-            date: nodes[n]
-                .message
-                .as_ref()
-                .map(|h| envelopes[h].date())
-                .unwrap_or(0),
-            references: nodes[n]
-                .message
-                .as_ref()
-                .map(|h| envelopes[h].field_references_to_string())
-                .unwrap_or("missing".into()),
-            in_reply_to: nodes[n]
-                .message
-                .as_ref()
-                .and_then(|h| envelopes[h].in_reply_to())
-                .map(|h| h.to_string())
-                .unwrap_or("missing".into()),
-        });
-        while let Some((target, parent)) = stack.pop() {
-            graph.nodes.push(Node {
-                id: unsafe { std::str::from_utf8_unchecked(&ids[&target]).to_string() },
-                subject: nodes[&target]
-                    .message
-                    .as_ref()
-                    .map(|h| envelopes[h].subject().to_string())
-                    .unwrap_or("missing".into()),
-                from: nodes[&target]
-                    .message
-                    .as_ref()
-                    .map(|h| envelopes[h].field_from_to_string())
-                    .unwrap_or("missing".into()),
-                to: nodes[&target]
-                    .message
-                    .as_ref()
-                    .map(|h| envelopes[h].field_to_to_string())
-                    .unwrap_or("missing".into()),
-                date: nodes[&target]
-                    .message
-                    .as_ref()
-                    .map(|h| envelopes[h].date())
-                    .unwrap_or(0),
-                references: nodes[&target]
-                    .message
-                    .as_ref()
-                    .map(|h| envelopes[h].field_references_to_string())
-                    .unwrap_or("missing".into()),
-                in_reply_to: nodes[&target]
-                    .message
-                    .as_ref()
-                    .and_then(|h| envelopes[h].in_reply_to())
-                    .map(|h| h.to_string())
-                    .unwrap_or("missing".into()),
-            });
-            graph.links.push(Link {
-                source: parent,
-                target: unsafe { std::str::from_utf8_unchecked(&ids[&target]).to_string() },
-            });
-
-            stack.extend(
-                nodes[&target].children.iter().cloned().zip(
-                    std::iter::repeat(
-                        unsafe { std::str::from_utf8_unchecked(&ids[&target]) }.to_string(),
-                    )
-                    .take(nodes[&target].children.len()),
-                ),
-            );
-        }
-        let s = serde_json::to_string(&graph).unwrap();
-        use std::fs::File;
-        use std::io::prelude::*;
-
-        let mut file = File::create(format!(
-            "/tmp/meli/threads/threads_{}.json",
-            crate::utils::datetime::now()
-        ))
-        .unwrap();
-        file.write_all(s.as_bytes()).unwrap();
-    }
-}
-*/
+//fn save_graph2(
+//    node_arr: &[ThreadNodeHash],
+//    nodes: &HashMap<ThreadNodeHash, ThreadNode>,
+//    ids: &HashMap<ThreadNodeHash, MessageID>,
+//    _envelopes: &Envelopes,
+//    _inserting_msg_id: MessageID,
+//) {
+//    use petgraph::Graph;
+//    use visgraph::{graph_to_svg, settings::SettingsBuilder, Layout,
+// Orientation};
+//
+//    let mut graph = Graph::new();
+//
+//    let mut graph_nodes = HashMap::<ThreadNodeHash, _>::default();
+//    let mut graph_node_labels = HashMap::<_, String>::default();
+//    let mut stack: SmallVec<[(ThreadNodeHash, ThreadNodeHash); 16]> =
+// SmallVec::new();    for n in node_arr {
+//        stack.extend(
+//            nodes[n]
+//                .children
+//                .iter()
+//                .cloned()
+//                .zip(std::iter::repeat_n(*n, nodes[n].children.len())),
+//        );
+//        let node = graph.add_node(());
+//        graph_node_labels.insert(node, ids[n].to_string());
+//        graph_nodes.insert(*n, node);
+//        while let Some((target, parent)) = stack.pop() {
+//            let target_node = graph.add_node(());
+//            graph_nodes.insert(target, target_node);
+//            graph_node_labels.insert(target_node, ids[&target].to_string());
+//            let parent_node = graph_nodes[&parent];
+//            graph.add_edge(parent_node, target_node, ());
+//            stack.extend(
+//                nodes[&target]
+//                    .children
+//                    .iter()
+//                    .cloned()
+//                    .zip(std::iter::repeat_n(target,
+// nodes[&target].children.len())),            );
+//        }
+//    }
+//
+//    let settings = SettingsBuilder::new()
+//        // Use hierarchical layout
+//        .layout(Layout::Hierarchical(Orientation::default()))
+//        .node_label_fn(|node_idx| graph_node_labels[&node_idx].clone())
+//        .font_size(8.0)
+//        .width(2048.0)
+//        .height(2048.0)
+//        .build()
+//        .expect("Values should be valid.");
+//
+//    static mut ITER: usize = 0;
+//
+//    let iter = unsafe { ITER };
+//    unsafe { ITER += 1 };
+//
+//    let filename =
+// format!("/tmp/meli/threads/threads_{iter}_{_inserting_msg_id}.svg");
+//    graph_to_svg(&graph, &settings, &filename).unwrap();
+//    log::debug!("wrote graph to {filename}");
+//}
