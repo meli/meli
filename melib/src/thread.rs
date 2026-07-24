@@ -1048,6 +1048,8 @@ impl Threads {
 
         if envelopes_lck[&env_hash].references.is_some() {
             let mut current_descendant_id = new_id;
+            let mut current_twice_descendant_id = None;
+            let mut current_thread_hash = None;
             let mut references = envelopes_lck[&env_hash].references().to_vec();
             if envelopes_lck[&env_hash]
                 .in_reply_to()
@@ -1065,14 +1067,15 @@ impl Threads {
                     continue;
                 }
                 if let Some(&id) = self.message_ids.get(&reference) {
+                    current_twice_descendant_id = Some(current_descendant_id);
+                    current_descendant_id = id;
+                    current_thread_hash = Some(self.find_group(self.thread_nodes[&id].group));
                     if self.thread_nodes[&id].date > self.thread_nodes[&current_descendant_id].date
                         || self.thread_nodes[&current_descendant_id].parent.is_some()
                     {
-                        current_descendant_id = id;
                         continue;
                     }
                     make!((id) parent of (current_descendant_id), self);
-                    current_descendant_id = id;
                 } else {
                     let id = ThreadNodeHash::from(reference.as_str());
                     self.thread_nodes.insert(
@@ -1084,19 +1087,29 @@ impl Threads {
                     );
                     self.groups.insert(
                         self.thread_nodes[&id].group,
-                        ThreadGroup::Root(Thread {
-                            root: id,
-                            date: envelopes_lck[&env_hash].date(),
-                            len: 0,
-                            unseen: 0,
-                            attachments: 0,
-                            snoozed: false,
-                        }),
+                        if let Some(group_hash) = current_thread_hash {
+                            ThreadGroup::Node {
+                                parent: Arc::new(RwLock::new(group_hash)),
+                            }
+                        } else {
+                            ThreadGroup::Root(Thread {
+                                root: id,
+                                date: envelopes_lck[&env_hash].date(),
+                                len: 0,
+                                unseen: 0,
+                                attachments: 0,
+                                snoozed: false,
+                            })
+                        },
                     );
                     make!((id) parent of (current_descendant_id), self);
+                    if let Some(twice_descendant) = current_twice_descendant_id {
+                        make!((twice_descendant) parent of (id), self);
+                    }
                     self.missing_message_ids.insert(reference.clone());
                     self.message_ids.insert(reference.clone(), id);
                     self.message_ids_set.insert(reference.clone());
+                    current_twice_descendant_id = Some(current_descendant_id);
                     current_descendant_id = id;
                 }
             }
