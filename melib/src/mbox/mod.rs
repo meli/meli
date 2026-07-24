@@ -132,7 +132,7 @@
 //! ```
 
 use std::{
-    collections::hash_map::HashMap,
+    collections::{HashMap, HashSet},
     io::{BufReader, Read},
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
@@ -171,8 +171,8 @@ pub struct MboxMailbox {
     pub usage: Arc<RwLock<SpecialUsageMailbox>>,
     pub is_subscribed: bool,
     pub permissions: MailboxPermissions,
-    pub total: Arc<Mutex<usize>>,
-    pub unseen: Arc<Mutex<usize>>,
+    pub total: Arc<Mutex<HashSet<MessageID>>>,
+    pub unseen: Arc<Mutex<HashSet<MessageID>>>,
     pub index: Arc<Mutex<HashMap<EnvelopeHash, (Offset, Length)>>>,
     pub format: MboxFormat,
 }
@@ -238,7 +238,7 @@ impl BackendMailbox for MboxMailbox {
     }
 
     fn count(&self) -> Result<(usize, usize)> {
-        Ok((*self.unseen.lock()?, *self.total.lock()?))
+        Ok((self.unseen.lock()?.len(), self.total.lock()?.len()))
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -886,14 +886,14 @@ impl MailBackend for MboxType {
                 };
                 let mut payload = vec![];
                 let mut done = false;
-                let mut total = 0;
-                let mut unseen = 0;
+                let mut total = HashSet::new();
+                let mut unseen = HashSet::new();
                 for _ in 0..150 {
                     match message_iter.next() {
                         Some(Ok(env)) => {
-                            total += 1;
+                            total.insert(env.message_id().clone());
                             if !env.is_seen() {
-                                unseen += 1;
+                                unseen.insert(env.message_id().clone());
                             }
                             payload.push(env);
                         }
@@ -919,8 +919,8 @@ impl MailBackend for MboxType {
                     .unwrap()
                     .entry(self.mailbox_hash)
                     .and_modify(|f| {
-                        *f.unseen.lock().unwrap() += unseen;
-                        *f.total.lock().unwrap() += total;
+                        f.unseen.lock().unwrap().extend(unseen);
+                        f.total.lock().unwrap().extend(total);
                     });
                 if done {
                     let contents = std::mem::take(&mut self.contents);
@@ -1049,13 +1049,25 @@ impl MailBackend for MboxType {
                                         ) {
                                             let mut mailbox_index_lck =
                                                 mailbox_index.lock().unwrap();
-                                            *mailbox_lock[&mailbox_hash].unseen.lock().unwrap() +=
-                                                envelopes
-                                                    .iter()
-                                                    .filter(|env| !env.is_seen())
-                                                    .count();
-                                            *mailbox_lock[&mailbox_hash].total.lock().unwrap() +=
-                                                envelopes.len();
+                                            mailbox_lock[&mailbox_hash]
+                                                .unseen
+                                                .lock()
+                                                .unwrap()
+                                                .extend(
+                                                    envelopes
+                                                        .iter()
+                                                        .filter(|env| !env.is_seen())
+                                                        .map(|env| env.message_id().clone()),
+                                                );
+                                            mailbox_lock[&mailbox_hash]
+                                                .total
+                                                .lock()
+                                                .unwrap()
+                                                .extend(
+                                                    envelopes
+                                                        .iter()
+                                                        .map(|env| env.message_id().clone()),
+                                                );
                                             for env in envelopes {
                                                 mailbox_index_lck.insert(env.hash(), mailbox_hash);
                                                 events.push(BackendEvent::Refresh(RefreshEvent {
@@ -1416,8 +1428,8 @@ impl MboxType {
                     delete_mailbox: !read_only,
                     change_permissions: false,
                 },
-                unseen: Arc::new(Mutex::new(0)),
-                total: Arc::new(Mutex::new(0)),
+                unseen: Arc::new(Mutex::new(HashSet::default())),
+                total: Arc::new(Mutex::new(HashSet::default())),
                 index: Default::default(),
                 format: ret.prefer_mbox_type,
             },
@@ -1480,8 +1492,8 @@ impl MboxType {
                         delete_mailbox: !read_only,
                         change_permissions: false,
                     },
-                    unseen: Arc::new(Mutex::new(0)),
-                    total: Arc::new(Mutex::new(0)),
+                    unseen: Arc::new(Mutex::new(HashSet::default())),
+                    total: Arc::new(Mutex::new(HashSet::default())),
                     index: Default::default(),
                     format,
                 },
