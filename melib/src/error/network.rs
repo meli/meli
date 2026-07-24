@@ -255,6 +255,7 @@ impl NetworkErrorKind {
                 | NetworkAuthenticationRequired
                 | ConnectionFailed
                 | TLSConnectionFailed
+                | HostLookupFailed
         )
     }
 
