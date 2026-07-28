@@ -771,6 +771,14 @@ impl Account {
         for event in events {
             self.consume_refresh_event(event, mailbox_hash, &mut ui_events);
         }
+        // Remove duplicate `MailboxUpdate` events.
+        // `ui_events` is not sorted, but for a `RefreshBatch` of events the `Create`
+        // events will be in order, causing a lot of consecutive
+        // `MailboxUpdate`s  to be placed in `ui_events` which is expensive for
+        // listing widgets to process.
+        ui_events.dedup_by(|a, b| {
+            matches!((a, b), (UIEvent::MailboxUpdate((ref a_h, ref a_m)), UIEvent::MailboxUpdate((ref b_h, ref b_m))) if (a_h, a_m) == (b_h, b_m))
+        });
         Some(ui_events)
     }
 
