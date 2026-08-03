@@ -428,6 +428,138 @@ impl EmbeddedGrid {
             }};
         }
 
+        macro_rules! sgr {
+            ($slice:expr) => {{
+                let slice: &[u8] = $slice;
+                let mut change = true;
+                match slice {
+                    b"0" => {
+                        *attrs = Attr::DEFAULT;
+                    }
+                    b"1" => {
+                        /* bold */
+                        *attrs |= Attr::BOLD;
+                    }
+                    b"2" => {
+                        /* faint, dim */
+                        *attrs |= Attr::DIM;
+                    }
+                    b"3" => {
+                        /* italicized */
+                        *attrs |= Attr::ITALICS;
+                    }
+                    b"4" => {
+                        /* underlined */
+                        *attrs |= Attr::UNDERLINE;
+                    }
+                    b"5" => {
+                        /* blink */
+                        *attrs |= Attr::BLINK;
+                    }
+                    b"7" => {
+                        /* Inverse */
+                        *attrs |= Attr::REVERSE;
+                    }
+                    b"8" => {
+                        /* invisible */
+                        *attrs |= Attr::HIDDEN;
+                    }
+                    b"9" => {
+                        /* crossed out */
+                        change = false;
+                    }
+                    b"21" => {
+                        /* Doubly-underlined */
+                        change = false;
+                    }
+                    b"22" => {
+                        /* Normal (neither bold nor faint), ECMA-48 3rd. */
+                        *attrs &= !(Attr::BOLD | Attr::DIM);
+                    }
+                    b"23" => {
+                        /* Not italicized, ECMA-48 3rd */
+                        *attrs &= !Attr::ITALICS;
+                    }
+                    b"24" => {
+                        /* Not underlined, ECMA-48 3rd. */
+                        *attrs &= !Attr::UNDERLINE;
+                        *attrs &= !Attr::UNDERCURL;
+                    }
+                    b"25" => {
+                        /* Steady (not blinking), ECMA-48 3rd. */
+                        *attrs &= !Attr::BLINK;
+                    }
+                    b"27" => {
+                        /* Positive (not inverse), ECMA-48 3rd. */
+                        *attrs &= !Attr::REVERSE;
+                    }
+                    b"28" => {
+                        /* Visible, i.e., not hidden, ECMA-48 3rd, VT300. */
+                        *attrs &= !Attr::HIDDEN;
+                    }
+                    b"29" => {
+                        /* Not crossed-out, ECMA-48 3rd. */
+                        change = false;
+                    }
+                    b"30" => *fg_color = Color::Black,
+                    b"31" => *fg_color = Color::Red,
+                    b"32" => *fg_color = Color::Green,
+                    b"33" => *fg_color = Color::Yellow,
+                    b"34" => *fg_color = Color::Blue,
+                    b"35" => *fg_color = Color::Magenta,
+                    b"36" => *fg_color = Color::Cyan,
+                    b"37" => *fg_color = Color::White,
+                    b"39" => *fg_color = Color::Default,
+
+                    b"40" => *bg_color = Color::Black,
+                    b"41" => *bg_color = Color::Red,
+                    b"42" => *bg_color = Color::Green,
+                    b"43" => *bg_color = Color::Yellow,
+                    b"44" => *bg_color = Color::Blue,
+                    b"45" => *bg_color = Color::Magenta,
+                    b"46" => *bg_color = Color::Cyan,
+                    b"47" => *bg_color = Color::White,
+                    b"49" => *bg_color = Color::Default,
+                    b"59" => {
+                        /* reset the underline color */
+
+                        change = false;
+                    }
+                    b"90" => *fg_color = Color::Black,
+                    b"91" => *fg_color = Color::Red,
+                    b"92" => *fg_color = Color::Green,
+                    b"93" => *fg_color = Color::Yellow,
+                    b"94" => *fg_color = Color::Blue,
+                    b"95" => *fg_color = Color::Magenta,
+                    b"96" => *fg_color = Color::Cyan,
+                    b"97" => *fg_color = Color::White,
+
+                    b"100" => *bg_color = Color::Black,
+                    b"101" => *bg_color = Color::Red,
+                    b"102" => *bg_color = Color::Green,
+                    b"103" => *bg_color = Color::Yellow,
+                    b"104" => *bg_color = Color::Blue,
+                    b"105" => *bg_color = Color::Magenta,
+                    b"106" => *bg_color = Color::Cyan,
+                    b"107" => *bg_color = Color::White,
+                    other => {
+                        log::trace!(
+                            "unknown SGR attribute {:?} m",
+                            String::from_utf8_lossy(other)
+                        );
+                        change = false;
+                    }
+                }
+                if change {
+                    screen.grid_mut()[cursor_val!()]
+                        .set_fg(*fg_color)
+                        .set_bg(*bg_color)
+                        .set_attrs(*attrs);
+                    *dirty = true;
+                }
+            }};
+        }
+
         let mut state = &mut self.state;
         match (byte, &mut state) {
             (b'\x1b', State::Normal) => {
@@ -1158,115 +1290,7 @@ impl EmbeddedGrid {
             }
             (b'm', State::Csi1(ref buf1)) => {
                 // Character Attributes.
-                match buf1.as_slice() {
-                    b"0" => {
-                        *attrs = Attr::DEFAULT;
-                    }
-                    b"1" => {
-                        /* bold */
-                        *attrs |= Attr::BOLD;
-                    }
-                    b"2" => {
-                        /* faint, dim */
-                        *attrs |= Attr::DIM;
-                    }
-                    b"3" => {
-                        /* italicized */
-                        *attrs |= Attr::ITALICS;
-                    }
-                    b"4" => {
-                        /* underlined */
-                        *attrs |= Attr::UNDERLINE;
-                    }
-                    b"5" => {
-                        /* blink */
-                        *attrs |= Attr::BLINK;
-                    }
-                    b"7" => {
-                        /* Inverse */
-                        *attrs |= Attr::REVERSE;
-                    }
-                    b"8" => {
-                        /* invisible */
-                        *attrs |= Attr::HIDDEN;
-                    }
-                    b"9" => { /* crossed out */ }
-                    b"21" => { /* Doubly-underlined */ }
-                    b"22" => {
-                        /* Normal (neither bold nor faint), ECMA-48 3rd. */
-                        *attrs &= !(Attr::BOLD | Attr::DIM);
-                    }
-                    b"23" => {
-                        /* Not italicized, ECMA-48 3rd */
-                        *attrs &= !Attr::ITALICS;
-                    }
-                    b"24" => {
-                        /* Not underlined, ECMA-48 3rd. */
-                        *attrs &= !Attr::UNDERLINE;
-                        *attrs &= !Attr::UNDERCURL;
-                    }
-                    b"25" => {
-                        /* Steady (not blinking), ECMA-48 3rd. */
-                        *attrs &= !Attr::BLINK;
-                    }
-                    b"27" => {
-                        /* Positive (not inverse), ECMA-48 3rd. */
-                        *attrs &= !Attr::REVERSE;
-                    }
-                    b"28" => {
-                        /* Visible, i.e., not hidden, ECMA-48 3rd, VT300. */
-                        *attrs &= !Attr::HIDDEN;
-                    }
-                    b"29" => { /* Not crossed-out, ECMA-48 3rd. */ }
-                    b"30" => *fg_color = Color::Black,
-                    b"31" => *fg_color = Color::Red,
-                    b"32" => *fg_color = Color::Green,
-                    b"33" => *fg_color = Color::Yellow,
-                    b"34" => *fg_color = Color::Blue,
-                    b"35" => *fg_color = Color::Magenta,
-                    b"36" => *fg_color = Color::Cyan,
-                    b"37" => *fg_color = Color::White,
-                    b"39" => *fg_color = Color::Default,
-
-                    b"40" => *bg_color = Color::Black,
-                    b"41" => *bg_color = Color::Red,
-                    b"42" => *bg_color = Color::Green,
-                    b"43" => *bg_color = Color::Yellow,
-                    b"44" => *bg_color = Color::Blue,
-                    b"45" => *bg_color = Color::Magenta,
-                    b"46" => *bg_color = Color::Cyan,
-                    b"47" => *bg_color = Color::White,
-                    b"49" => *bg_color = Color::Default,
-                    b"59" => { /*reset the underline color*/ }
-                    b"90" => *fg_color = Color::Black,
-                    b"91" => *fg_color = Color::Red,
-                    b"92" => *fg_color = Color::Green,
-                    b"93" => *fg_color = Color::Yellow,
-                    b"94" => *fg_color = Color::Blue,
-                    b"95" => *fg_color = Color::Magenta,
-                    b"96" => *fg_color = Color::Cyan,
-                    b"97" => *fg_color = Color::White,
-
-                    b"100" => *bg_color = Color::Black,
-                    b"101" => *bg_color = Color::Red,
-                    b"102" => *bg_color = Color::Green,
-                    b"103" => *bg_color = Color::Yellow,
-                    b"104" => *bg_color = Color::Blue,
-                    b"105" => *bg_color = Color::Magenta,
-                    b"106" => *bg_color = Color::Cyan,
-                    b"107" => *bg_color = Color::White,
-                    _ => {
-                        log::trace!(
-                            "unknown attribute Csi1 {:?} m",
-                            String::from_utf8_lossy(buf1.as_slice())
-                        );
-                    }
-                }
-                screen.grid_mut()[cursor_val!()]
-                    .set_fg(*fg_color)
-                    .set_bg(*bg_color)
-                    .set_attrs(*attrs);
-                *dirty = true;
+                sgr!(buf1.as_slice());
                 *state = State::Normal;
             }
             (b'm', State::Csi2(ref buf1, ref buf2))
@@ -1297,116 +1321,8 @@ impl EmbeddedGrid {
             }
             (b'm', State::Csi2(ref buf1, ref buf2)) => {
                 for b in &[buf1, buf2] {
-                    match b.as_slice() {
-                        b"0" => {
-                            *attrs = Attr::DEFAULT;
-                        }
-                        b"1" => {
-                            /* bold */
-                            *attrs |= Attr::BOLD;
-                        }
-                        b"2" => {
-                            /* faint, dim */
-                            *attrs |= Attr::DIM;
-                        }
-                        b"3" => {
-                            /* italicized */
-                            *attrs |= Attr::ITALICS;
-                        }
-                        b"4" => {
-                            /* underlined */
-                            *attrs |= Attr::UNDERLINE;
-                        }
-                        b"5" => {
-                            /* blink */
-                            *attrs |= Attr::BLINK;
-                        }
-                        b"7" => {
-                            /* Inverse */
-                            *attrs |= Attr::REVERSE;
-                        }
-                        b"8" => {
-                            /* invisible */
-                            *attrs |= Attr::HIDDEN;
-                        }
-                        b"9" => { /* crossed out */ }
-                        b"21" => { /* Doubly-underlined */ }
-                        b"22" => {
-                            /* Normal (neither bold nor faint), ECMA-48 3rd. */
-                            *attrs &= !(Attr::BOLD | Attr::DIM);
-                        }
-                        b"23" => {
-                            /* Not italicized, ECMA-48 3rd */
-                            *attrs &= !Attr::ITALICS;
-                        }
-                        b"24" => {
-                            /* Not underlined, ECMA-48 3rd. */
-                            *attrs &= !Attr::UNDERLINE;
-                            *attrs &= !Attr::UNDERCURL;
-                        }
-                        b"25" => {
-                            /* Steady (not blinking), ECMA-48 3rd. */
-                            *attrs &= !Attr::BLINK;
-                        }
-                        b"27" => {
-                            /* Positive (not inverse), ECMA-48 3rd. */
-                            *attrs &= !Attr::REVERSE;
-                        }
-                        b"28" => {
-                            /* Visible, i.e., not hidden, ECMA-48 3rd, VT300. */
-                            *attrs &= !Attr::HIDDEN;
-                        }
-                        b"29" => { /* Not crossed-out, ECMA-48 3rd. */ }
-                        b"30" => *fg_color = Color::Black,
-                        b"31" => *fg_color = Color::Red,
-                        b"32" => *fg_color = Color::Green,
-                        b"33" => *fg_color = Color::Yellow,
-                        b"34" => *fg_color = Color::Blue,
-                        b"35" => *fg_color = Color::Magenta,
-                        b"36" => *fg_color = Color::Cyan,
-                        b"37" => *fg_color = Color::White,
-                        b"39" => *fg_color = Color::Default,
-
-                        b"40" => *bg_color = Color::Black,
-                        b"41" => *bg_color = Color::Red,
-                        b"42" => *bg_color = Color::Green,
-                        b"43" => *bg_color = Color::Yellow,
-                        b"44" => *bg_color = Color::Blue,
-                        b"45" => *bg_color = Color::Magenta,
-                        b"46" => *bg_color = Color::Cyan,
-                        b"47" => *bg_color = Color::White,
-                        b"49" => *bg_color = Color::Default,
-
-                        b"90" => *fg_color = Color::Black,
-                        b"91" => *fg_color = Color::Red,
-                        b"92" => *fg_color = Color::Green,
-                        b"93" => *fg_color = Color::Yellow,
-                        b"94" => *fg_color = Color::Blue,
-                        b"95" => *fg_color = Color::Magenta,
-                        b"96" => *fg_color = Color::Cyan,
-                        b"97" => *fg_color = Color::White,
-
-                        b"100" => *bg_color = Color::Black,
-                        b"101" => *bg_color = Color::Red,
-                        b"102" => *bg_color = Color::Green,
-                        b"103" => *bg_color = Color::Yellow,
-                        b"104" => *bg_color = Color::Blue,
-                        b"105" => *bg_color = Color::Magenta,
-                        b"106" => *bg_color = Color::Cyan,
-                        b"107" => *bg_color = Color::White,
-                        _ => {
-                            log::trace!(
-                                "unknown attribute Csi1 {:?} m",
-                                String::from_utf8_lossy(buf1.as_slice())
-                            );
-                        }
-                    }
+                    sgr!(b.as_slice());
                 }
-                screen.grid_mut()[cursor_val!()]
-                    .set_fg(*fg_color)
-                    .set_bg(*bg_color)
-                    .set_attrs(*attrs);
-                *dirty = true;
                 *state = State::Normal;
             }
             (c, State::Csi1(ref mut buf)) if c.is_ascii_digit() || c == b' ' => {
@@ -1832,6 +1748,20 @@ impl EmbeddedGrid {
                     ps_3: _,
                 },
             ) => {
+                *state = State::Normal;
+            }
+            (b'm', State::Csi6(a, b, c, d, e, f)) => {
+                // https://vt100.net/docs/vt510-rm/SGR.html
+                // SGR—Select Graphic Rendition
+                //
+                // This control function selects one or more character attributes at the same
+                // time.
+                sgr!(a.as_slice());
+                sgr!(b.as_slice());
+                sgr!(c.as_slice());
+                sgr!(d.as_slice());
+                sgr!(e.as_slice());
+                sgr!(f.as_slice());
                 *state = State::Normal;
             }
             (
