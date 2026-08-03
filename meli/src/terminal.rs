@@ -21,8 +21,6 @@
 
 //! Terminal grid cells, keys, colors, etc.
 
-use serde::{de, de::Visitor, Deserialize, Deserializer};
-
 mod braille;
 mod color;
 mod screen;
@@ -32,6 +30,7 @@ pub mod cells;
 #[macro_use]
 pub mod keys;
 pub mod embedded;
+pub mod input;
 #[cfg(test)]
 mod tests;
 pub mod text_editing;
@@ -41,7 +40,12 @@ use std::borrow::Cow;
 pub use braille::BraillePixelIter;
 pub use screen::{Area, Screen, ScreenGeneration, StateStdout, Tty, Virtual};
 
-pub use self::{cells::*, keys::*, text_editing::*};
+pub use self::{
+    cells::*,
+    input::{get_events, InputCommand},
+    keys::*,
+    text_editing::*,
+};
 
 /// A type alias for a `(x, y)` position on screen.
 pub type Pos = (usize, usize);
@@ -66,13 +70,6 @@ macro_rules! emoji_text_presentation_selector {
         '\u{FE0E}'
     };
 }
-
-/*
- * CSI events we use
- */
-
-pub const BRACKET_PASTE_START: &[u8] = b"\x1B[200~";
-pub const BRACKET_PASTE_END: &[u8] = b"\x1B[201~";
 
 /// `Display` utility to print text as a clickable hyperlink with the [`OSC8`]
 /// format.

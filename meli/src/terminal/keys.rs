@@ -19,21 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::os::fd::{AsFd, AsRawFd, OwnedFd};
-
-use crossbeam::{channel::Receiver, select};
-use melib::log;
-use nix::poll::{poll, PollFd, PollFlags, PollTimeout};
-use serde::{Serialize, Serializer};
-use termion::{
-    event::{
-        Event as TEvent, Key as TKey, MouseButton as TermionMouseButton,
-        MouseEvent as TermionMouseEvent,
-    },
-    input::TermReadEventsAndRaw,
-};
-
-use super::*;
+use serde::{de, de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Key {
@@ -98,17 +84,6 @@ pub enum MouseEvent {
     Hold(u16, u16),
 }
 
-impl From<TermionMouseEvent> for MouseEvent {
-    fn from(val: TermionMouseEvent) -> Self {
-        use TermionMouseEvent::*;
-        match val {
-            Press(btn, a, b) => Self::Press(btn.into(), a, b),
-            Release(a, b) => Self::Release(a, b),
-            Hold(a, b) => Self::Hold(a, b),
-        }
-    }
-}
-
 /// A mouse button.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(untagged)]
@@ -129,45 +104,31 @@ pub enum MouseButton {
     WheelDown,
 }
 
-impl From<TermionMouseButton> for MouseButton {
-    fn from(val: TermionMouseButton) -> Self {
-        use TermionMouseButton::*;
-        match val {
-            Left => Self::Left,
-            Right => Self::Right,
-            Middle => Self::Middle,
-            WheelUp => Self::WheelUp,
-            WheelDown => Self::WheelDown,
-        }
-    }
-}
-
 impl std::fmt::Display for Key {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        use crate::Key::*;
         match self {
-            F(n) => write!(f, "F{n}"),
-            Char(' ') => write!(f, "Space"),
-            Char('\t') => write!(f, "Tab"),
-            Char('\n') => write!(f, "Enter"),
-            Char(c) => write!(f, "{c}"),
-            Alt(c) => write!(f, "M-{c}"),
-            Ctrl(c) => write!(f, "C-{c}"),
-            Paste(_) => write!(f, "Pasted buf"),
-            Null => write!(f, "Null byte"),
-            Esc => write!(f, "Esc"),
-            Backspace => write!(f, "Backspace"),
-            Left => write!(f, "Left"),
-            Right => write!(f, "Right"),
-            Up => write!(f, "Up"),
-            Down => write!(f, "Down"),
-            Home => write!(f, "Home"),
-            End => write!(f, "End"),
-            PageUp => write!(f, "PageUp"),
-            PageDown => write!(f, "PageDown"),
-            Delete => write!(f, "Delete"),
-            Insert => write!(f, "Insert"),
-            Mouse(_) => write!(f, "Mouse"),
+            Self::F(n) => write!(f, "F{n}"),
+            Self::Char(' ') => write!(f, "Space"),
+            Self::Char('\t') => write!(f, "Tab"),
+            Self::Char('\n') => write!(f, "Enter"),
+            Self::Char(c) => write!(f, "{c}"),
+            Self::Alt(c) => write!(f, "M-{c}"),
+            Self::Ctrl(c) => write!(f, "C-{c}"),
+            Self::Paste(_) => write!(f, "Pasted buf"),
+            Self::Null => write!(f, "Null byte"),
+            Self::Esc => write!(f, "Esc"),
+            Self::Backspace => write!(f, "Backspace"),
+            Self::Left => write!(f, "Left"),
+            Self::Right => write!(f, "Right"),
+            Self::Up => write!(f, "Up"),
+            Self::Down => write!(f, "Down"),
+            Self::Home => write!(f, "Home"),
+            Self::End => write!(f, "End"),
+            Self::PageUp => write!(f, "PageUp"),
+            Self::PageDown => write!(f, "PageDown"),
+            Self::Delete => write!(f, "Delete"),
+            Self::Insert => write!(f, "Insert"),
+            Self::Mouse(_) => write!(f, "Mouse"),
         }
     }
 }
@@ -178,296 +139,10 @@ impl<'a> From<&'a String> for Key {
     }
 }
 
-impl From<TKey> for Key {
-    fn from(k: TKey) -> Self {
-        match k {
-            TKey::Backspace => Self::Backspace,
-            TKey::Left => Self::Left,
-            TKey::Right => Self::Right,
-            TKey::Up => Self::Up,
-            TKey::Down => Self::Down,
-            TKey::Home => Self::Home,
-            TKey::End => Self::End,
-            TKey::PageUp => Self::PageUp,
-            TKey::PageDown => Self::PageDown,
-            TKey::Delete => Self::Delete,
-            TKey::Insert => Self::Insert,
-            TKey::F(u) => Self::F(u),
-            TKey::Char(c) => Self::Char(c),
-            TKey::Alt(c) => Self::Alt(c),
-            TKey::Ctrl(c) => Self::Ctrl(c),
-            TKey::Null => Self::Null,
-            TKey::Esc => Self::Esc,
-            _ => Self::Char(' '),
-        }
-    }
-}
-
 impl PartialEq<Key> for &Key {
     fn eq(&self, other: &Key) -> bool {
         **self == *other
     }
-}
-
-/// Setting mode value in ANSI or DEC report sequences.
-///
-/// See <https://vt100.net/docs/vt510-rm/DECRPM.html>.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-#[repr(u8)]
-enum ANSIDECModeSetting {
-    #[default]
-    ModeNotRecognized = 0,
-    Set = 1,
-    Reset = 2,
-    PermanentlySet = 3,
-    PermanentlyReset = 4,
-}
-
-/// Report Mode, Terminal to Host.
-///
-/// See <https://vt100.net/docs/vt510-rm/DECRPM.html>.
-///
-/// Format is:
-///
-/// ```text
-/// CSI ? Pd ; Ps $ y
-/// ```
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum DECRPMReport {
-    WaitingForSemicolon {
-        mode: u16,
-    },
-    Semicolon {
-        mode: u16,
-    },
-    WaitingForDollar {
-        mode: u16,
-        setting: ANSIDECModeSetting,
-    },
-    WaitingForEnd {
-        mode: u16,
-        setting: ANSIDECModeSetting,
-    },
-}
-
-#[derive(Debug, Eq, PartialEq)]
-/// Keep track of whether we're accepting normal user input or a pasted string.
-enum InputMode {
-    Normal,
-    EscapeSequence(Vec<u8>),
-    #[allow(clippy::upper_case_acronyms)]
-    /// Report Mode, Terminal to Host.
-    DECRPM(DECRPMReport),
-    Paste(Vec<u8>),
-}
-
-#[derive(Debug, Default)]
-/// Main process sends commands to the input thread.
-pub enum InputCommand {
-    #[default]
-    /// Exit thread
-    Kill,
-}
-
-/// The thread function that listens for user input and forwards it to the main
-/// event loop.
-///
-/// If we fork (for example start `$EDITOR`) we want the `input-thread` to stop
-/// reading from stdin. The best way I came up with right now is to send a
-/// signal to the thread that is read in the first input in stdin after the
-/// fork, and then the thread kills itself. The parent process spawns a new
-/// input-thread when the child returns.
-///
-/// The main loop uses [`crate::state::State::try_wait_on_children`] to check if
-/// child has exited.
-pub fn get_events(
-    mut closure: impl FnMut((Key, Vec<u8>)),
-    rx: &Receiver<InputCommand>,
-    new_command_fd: &OwnedFd,
-    working: std::sync::Arc<()>,
-) {
-    let stdin = std::io::stdin();
-    let stdin2 = std::io::stdin();
-    let mut input_mode = InputMode::Normal;
-    let mut esc_seq_buf = vec![];
-    let mut palette = (None, None);
-    let mut paste_buf = String::with_capacity(256);
-    let mut stdin_iter = stdin.events_and_raw();
-    'poll_while: loop {
-        let mut poll_fds = [
-            PollFd::new(stdin2.as_fd(), PollFlags::POLLIN),
-            PollFd::new(new_command_fd.as_fd(), PollFlags::POLLIN),
-        ];
-        let Ok(_n_raw) = poll(&mut poll_fds, PollTimeout::NONE) else {
-            break 'poll_while;
-        };
-        select! {
-            default => {
-                if poll_fds[0].revents().is_some() {
-                    'stdin_while: for c in stdin_iter.by_ref() {
-                        match (c, &mut input_mode) {
-                            (Ok((TEvent::Key(TKey::Alt(']')), _)), InputMode::Normal)=> {
-                                esc_seq_buf.clear();
-                                esc_seq_buf.extend_from_slice(b"\x1b]");
-                                input_mode = InputMode::EscapeSequence(std::mem::take(&mut esc_seq_buf));
-
-                                continue 'stdin_while;
-                            }
-                            (Ok((TEvent::Key(TKey::Alt('\\')), _)), InputMode::EscapeSequence(ref mut buf)) => {
-                                esc_seq_buf = std::mem::take(buf);
-                                input_mode = InputMode::Normal;
-                                log::trace!("EscapeSequence is {esc_seq_buf:?} == {:?}", String::from_utf8_lossy(&esc_seq_buf));
-                                if let Some(bg) = QueryBackground::parse(&String::from_utf8_lossy(&esc_seq_buf)) {
-                                    log::trace!("EscapeSequence parsed bg {bg:?}");
-                                    palette.1 = Some(bg);
-                                } else if let Some(fg) = QueryForeground::parse(&String::from_utf8_lossy(&esc_seq_buf)) {
-                                    log::trace!("EscapeSequence parsed fg {fg:?}");
-                                    palette.0 = Some(fg);
-                                } else {
-                                    log::trace!("EscapeSequence unknown");
-                                }
-                                if let (Some(fg), Some(bg)) = palette {
-                                    log::trace!("compute_scheme_contrast(fg {fg:?}, bg {bg:?}) = {:?}", Color::compute_scheme_contrast(fg, bg));
-                                    palette.0.take();
-                                    palette.1.take();
-                                }
-                                continue 'stdin_while;
-                            }
-                            (Ok((TEvent::Key(_), ref bytes)), InputMode::EscapeSequence(ref mut buf)) => {
-                                buf.extend(bytes);
-                                continue 'stdin_while;
-                            }
-                            (Ok((TEvent::Key(k), bytes)), InputMode::Normal) => {
-                                closure((Key::from(k), bytes));
-                                continue 'poll_while;
-                            }
-                            (
-                                Ok((TEvent::Key(TKey::Char(k)), ref mut bytes)), InputMode::Paste(ref mut buf),
-                            ) => {
-                                paste_buf.push(k);
-                                let bytes = std::mem::take(bytes);
-                                buf.extend(bytes.into_iter());
-                                continue 'stdin_while;
-                            }
-                            (Ok((TEvent::Unsupported(ref k), _)), _) if k.as_slice() == BRACKET_PASTE_START => {
-                                input_mode = InputMode::Paste(Vec::new());
-                                continue 'stdin_while;
-                            }
-                            (Ok((TEvent::Unsupported(ref k), _)), InputMode::Paste(ref mut buf))
-                                if k.as_slice() == BRACKET_PASTE_END =>
-                                {
-                                    let buf = std::mem::take(buf);
-                                    input_mode = InputMode::Normal;
-                                    let ret = Key::from(&paste_buf);
-                                    paste_buf.clear();
-                                    closure((ret, buf));
-                                    continue 'poll_while;
-                                }
-                            (Ok((TEvent::Mouse(mev), bytes)), InputMode::Normal) => {
-                                closure((Key::Mouse(mev.into()), bytes));
-                                continue 'poll_while;
-                                }
-                            (Ok((TEvent::Unsupported(ref k,), _)), InputMode::Normal) if k.as_slice() == [27, 91, 63] => {
-                                // DECRPM - Report Mode - Terminal To Host
-                                esc_seq_buf.clear();
-                                input_mode = InputMode::DECRPM(DECRPMReport::WaitingForSemicolon { mode: 0});
-                            }
-                            (Ok((TEvent::Key(TKey::Char(k)), _)), InputMode::DECRPM(ref report_state)) => {
-                                // CSI ? Pd ; Ps $ y
-                                match (k, report_state) {
-                                    (d, DECRPMReport::WaitingForSemicolon { mode }) if d.is_ascii_digit() => {
-                                        if let Some(mut mode) = mode.checked_mul(10) {
-                                            // SAFETY: we performed an char::is_ascii_digit() check in
-                                            // the guard above.
-                                            mode += (d as u8 - b'0') as u16;
-                                            input_mode = InputMode::DECRPM(DECRPMReport::WaitingForSemicolon { mode });
-                                        }
-                                    },
-                                    (';', DECRPMReport::WaitingForSemicolon { mode }) => {
-                                        input_mode = InputMode::DECRPM(DECRPMReport::Semicolon { mode: *mode });
-                                    },
-                                    (other, DECRPMReport::WaitingForSemicolon { mode }) => {
-                                        log::trace!("Received invalid DECRPM response: Was waiting for an ASCII digit or `;` after `Pd` argument (mode, whose value was currently {mode:?} but instead got character {other:?}");
-                                        // Revert to normal input mode, to prevent locking
-                                        // up the user's terminal input
-                                        input_mode = InputMode::Normal;
-                                    }
-                                    (d, DECRPMReport::Semicolon { mode }) if d.is_ascii_digit() => {
-                                        let setting = match d {
-                                            '0' => ANSIDECModeSetting::ModeNotRecognized,
-                                            '1' => ANSIDECModeSetting::Set,
-                                            '2' => ANSIDECModeSetting::Reset,
-                                            '3' => ANSIDECModeSetting::PermanentlySet,
-                                            '4' => ANSIDECModeSetting::PermanentlyReset,
-                                            other => {
-                                                log::trace!("Received invalid DECRPM setting value: {other:?}: expected one of {{0, 1, 2, 3, 4}}");
-                                                ANSIDECModeSetting::default()
-                                            }
-                                        };
-                                        input_mode = InputMode::DECRPM(DECRPMReport::WaitingForDollar { mode: *mode, setting });
-                                    },
-                                    (other, DECRPMReport::Semicolon { ref mode }) => {
-                                        log::trace!("Received invalid DECRPM response: Was waiting for an ASCII digit reporting setting value (`Ps` argument), for mode {mode:?} but instead got character {other:?}");
-                                        // Revert to normal input mode, to prevent locking
-                                        // up the user's terminal input
-                                        input_mode = InputMode::Normal;
-                                    }
-                                    ('$', DECRPMReport::WaitingForDollar { mode, setting }) => {
-                                        input_mode = InputMode::DECRPM(DECRPMReport::WaitingForEnd { mode: *mode, setting: *setting });
-                                    },
-                                    (other, DECRPMReport::WaitingForDollar { mode, setting }) => {
-                                        log::trace!("Received invalid DECRPM response: Was waiting for an ASCII `$` character (`Pm` argument was {mode:?} and `Ps` argument was {setting:?}) but instead got character {other:?}");
-                                        // Revert to normal input mode, to prevent locking
-                                        // up the user's terminal input
-                                        input_mode = InputMode::Normal;
-                                    }
-                                    (c, DECRPMReport::WaitingForEnd { mode, setting }) => {
-                                        if c != 'y' {
-                                            log::trace!("Received invalid DECRPM response: Was waiting for an ASCII `y` character (`Pm` argument was {mode:?} and `Ps` argument was {setting:?}) but instead got character {c:?}");
-                                        } else {
-                                            log::trace!("Got an DECRPM Terminal mode report: Mode {mode:?} is set to {setting:?}");
-                                        }
-                                        // end of report sequence.
-                                        input_mode = InputMode::Normal;
-                                    },
-
-                                }
-                            }
-                            other => {
-                                log::trace!("get_events other = {:?}", other);
-                                continue 'poll_while;
-                            } // Mouse events or errors.
-                        }
-                    }
-                    if let InputMode::EscapeSequence(ref mut buf) = input_mode {
-                        esc_seq_buf = std::mem::take(buf);
-                        input_mode = InputMode::Normal;
-                        log::trace!("EscapeSequence is {esc_seq_buf:?} == {:?}", String::from_utf8_lossy(&esc_seq_buf));
-                        log::trace!("EscapeSequence parsed {:?}", QueryBackground::parse(&String::from_utf8_lossy(&esc_seq_buf)));
-                    }
-
-                }
-            },
-            recv(rx) -> cmd => {
-                use nix::sys::time::TimeValLike;
-                let mut buf = [0;2];
-                let mut read_fd_set = nix::sys::select::FdSet::new();
-                read_fd_set.insert(new_command_fd.as_fd());
-                let mut error_fd_set = nix::sys::select::FdSet::new();
-                error_fd_set.insert(new_command_fd.as_fd());
-                let timeval:  nix::sys::time::TimeSpec = nix::sys::time::TimeSpec::seconds(2);
-                let pselect_result = nix::sys::select::pselect(None, Some(&mut read_fd_set), None, Some(&mut error_fd_set), Some(&timeval), None);
-                if pselect_result.is_err() || error_fd_set.highest().map(|bfd| bfd.as_raw_fd()) == Some(new_command_fd.as_raw_fd()) || read_fd_set.highest().map(|bfd| bfd.as_raw_fd()) != Some(new_command_fd.as_raw_fd()) {
-                    continue 'poll_while;
-                };
-                let _ = nix::unistd::read(new_command_fd, buf.as_mut());
-                match cmd.unwrap_or_default() {
-                    InputCommand::Kill => return,
-                }
-            }
-        };
-    }
-    drop(working);
 }
 
 impl<'de> Deserialize<'de> for Key {
