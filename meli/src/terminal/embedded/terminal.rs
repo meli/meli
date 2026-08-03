@@ -1764,6 +1764,28 @@ impl EmbeddedGrid {
                 sgr!(f.as_slice());
                 *state = State::Normal;
             }
+            (b';', State::Csi6(a, b, c, d, e, f)) => {
+                let a = a.to_vec();
+                let b = b.to_vec();
+                let c = c.to_vec();
+                let d = d.to_vec();
+                let e = e.to_vec();
+                let f = f.to_vec();
+                *state = State::CsiLarge(vec![a, b, c, d, e, f]);
+            }
+            (b';', State::CsiLarge(ref mut bufs)) => {
+                bufs.push(vec![]);
+            }
+            (b'm', State::CsiLarge(_)) => {
+                log::trace!(
+                    "state: {state:?} {} ignoring grouped SGR update",
+                    EscCode::from((&(*state), byte))
+                );
+                *state = State::Normal;
+            }
+            (other, State::CsiLarge(ref mut bufs)) => {
+                bufs.last_mut().unwrap().push(other);
+            }
             (
                 _,
                 State::Csi

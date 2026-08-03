@@ -52,6 +52,7 @@ pub enum State {
         SmallVec<[u8; 8]>,
         SmallVec<[u8; 8]>,
     ),
+    CsiLarge(Vec<Vec<u8>>),
     // `CSI 58 : 2 : Ps : Ps : Ps m`
     // `CSI 58 : 5 : Ps m`
     Csi58,
