@@ -193,11 +193,12 @@ pub fn idle(kit: ImapWatchKit) -> impl futures::stream::Stream<Item = Result<Bac
                 continue;
             }
             {
-                let mut main_conn_lck = main_conn.lock().await?;
-                main_conn_lck
-                    .examine_mailbox(mailbox_hash, &mut response, false)
+                blockn.conn.send_raw(b"DONE").await?;
+                blockn
+                    .conn
+                    .read_response(&mut response, RequiredResponses::empty())
                     .await?;
-                for l in line.split_rn() {
+                for l in line.split_rn().chain(response.split_rn()) {
                     log::trace!("process_untagged {:?}", String::from_utf8_lossy(l));
                     if l.starts_with(b"+ ")
                         || l.starts_with(b"* ok")
@@ -210,16 +211,12 @@ pub fn idle(kit: ImapWatchKit) -> impl futures::stream::Stream<Item = Result<Bac
                     if let Ok(Some(untagged_response)) =
                         super::protocol_parser::untagged_responses(l).map(|(_, v, _)| v)
                     {
-                        if let Some(ev) = main_conn_lck.process_untagged(untagged_response).await? {
+                        if let Some(ev) = blockn.conn.process_untagged(untagged_response).await? {
                             emitter.emit(ev).await;
                         }
                     }
                 }
-                if let Some(ev) =
-                    examine_updates(Clone::clone(&mailbox), &mut main_conn_lck).await?
-                {
-                    emitter.emit(ev).await;
-                }
+                blockn.conn.send_command(CommandBody::Idle).await?;
             }
         }
     })
