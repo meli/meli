@@ -894,86 +894,142 @@ hello world.
             )
             .unwrap(),
         );
+        let new_mail_2 = Box::new(
+            Mail::new(
+                br#"From: "some name" <some@example.com>
+To: "me" <myself@example.com>
+Cc:
+Subject: RE: your e-mail 2
+Message-ID: <h2g7f.z0gy2pgaen6m@example.com>
+Content-Type: text/plain
+
+hello world 2.
+"#
+                .to_vec(),
+                None,
+            )
+            .unwrap(),
+        );
+        let new_mail_3 = Box::new(
+            Mail::new(
+                br#"From: "some name" <some@example.com>
+To: "me" <myself@example.com>
+Cc:
+Subject: RE: your e-mail 3
+Message-ID: <h2g7f.z0gy2pgaen7m@example.com>
+Content-Type: text/plain
+
+hello world 3.
+"#
+                .to_vec(),
+                None,
+            )
+            .unwrap(),
+        );
         watch_conn_sender
             .unbounded_send(ServerEvent::New(new_mail))
+            .unwrap();
+        watch_conn_sender
+            .unbounded_send(ServerEvent::New(new_mail_2))
+            .unwrap();
+        watch_conn_sender
+            .unbounded_send(ServerEvent::New(new_mail_3))
             .unwrap();
         let watch_conn_loop = watch_conn.loop_handler("watch");
         let loops = loops_fut(main_conn_loop, watch_conn_loop);
         let loops_handle = std::thread::spawn(move || {
             block_on(loops);
         });
-        let hash;
-        let watch_fut = {
-            let (value1, rest) = block_on(watch_fut);
-            let backend_event = value1.unwrap().unwrap();
-            let BackendEvent::Refresh(refresh_event) = backend_event else {
-                panic!("Expected Refresh event, got: {backend_event:?}");
-            };
-            let RefreshEventKind::Create(ref env) = refresh_event.kind else {
-                panic!("Expected Create event, got: {refresh_event:?}");
-            };
-            assert_eq!(env.subject(), "RE: your e-mail");
-            assert_eq!(env.message_id(), "h2g7f.z0gy2pgaen5m@example.com");
-            hash = env.hash();
-            let uid = {
-                let state_lck = server_state.lock().unwrap();
-                state_lck
-                    .envelopes
-                    .iter()
-                    .find_map(|(uid, env)| {
-                        if env.message_id() == "h2g7f.z0gy2pgaen5m@example.com" {
-                            Some(*uid)
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap()
-            };
-            watch_conn_sender
-                .unbounded_send(ServerEvent::Delete(uid))
-                .unwrap();
-            rest.into_future()
-        };
-        {
-            let mailbox = block_on(imap.uid_store.mailboxes.lock());
-            let exists_lck = mailbox.values().next().unwrap().exists.lock().unwrap();
-            assert_eq!(exists_lck.len(), 1);
-            let unseen_lck = mailbox.values().next().unwrap().unseen.lock().unwrap();
-            assert_eq!(unseen_lck.len(), 1);
-        }
-        let watch_fut = {
-            let (value1, rest) = block_on(watch_fut);
-            let backend_event = value1.unwrap().unwrap();
-            let BackendEvent::Refresh(refresh_event) = backend_event else {
-                panic!("Expected Refresh event, got: {backend_event:?}");
-            };
-            let RefreshEventKind::Remove(ref env_hash) = refresh_event.kind else {
-                panic!("Expected Remove event, got: {refresh_event:?}");
-            };
-            assert_eq!(*env_hash, hash);
-            rest.into_future()
-        };
-        {
-            let mailbox = block_on(imap.uid_store.mailboxes.lock());
-            let exists_lck = mailbox.values().next().unwrap().exists.lock().unwrap();
-            assert_eq!(exists_lck.len(), 0);
-            let unseen_lck = mailbox.values().next().unwrap().unseen.lock().unwrap();
-            assert_eq!(unseen_lck.len(), 0);
-        }
-        watch_conn_sender.unbounded_send(ServerEvent::Quit).unwrap();
-        main_conn_sender.unbounded_send(ServerEvent::Quit).unwrap();
-        let (value1, _) = block_on(watch_fut);
-        loops_handle.join().unwrap();
-        if let Some(val) = value1 {
-            if !(matches!(val, Err(ref err) if matches!(err.kind, ErrorKind::OSError(nix::errno::Errno::EPIPE | nix::errno::Errno::ECONNRESET)))
-                || matches!(val, Err(ref err) if err.summary == "Offline"))
-            {
-                panic!(
-                    "Expected watch TCP connection to have disconnected with EPIPE/ECONNRESET, \
-                     got: {val:?}"
-                );
+        let fut = async move {
+            let hash;
+            let mut refresh_events = vec![];
+            while refresh_events.len() < 3 {
+                let (value1, rest) = watch_fut.await;
+                let backend_event = value1.unwrap().unwrap();
+                match backend_event {
+                    BackendEvent::RefreshBatch(events) => {
+                        refresh_events.extend(events);
+                    }
+                    BackendEvent::Refresh(event) => {
+                        refresh_events.push(event);
+                    }
+                    backend_event => {
+                        panic!("Expected Refresh event, got: {backend_event:?}");
+                    }
+                }
+                watch_fut = rest.into_future();
             }
-        }
+            {
+                let mailbox = imap.uid_store.mailboxes.lock().await;
+                let exists_lck = mailbox.values().next().unwrap().exists.lock().unwrap();
+                assert_eq!(exists_lck.len(), 3);
+                let unseen_lck = mailbox.values().next().unwrap().unseen.lock().unwrap();
+                assert_eq!(unseen_lck.len(), 3);
+            }
+            {
+                let Some(RefreshEvent { kind: RefreshEventKind::Create(ref env), .. }) = refresh_events.iter().find(|refresh_event| matches!(refresh_event.kind, RefreshEventKind::Create(ref env) if env.subject()== "RE: your e-mail")) else {
+                    panic!("Expected Create event, got: {refresh_events:?}");
+                };
+                assert_eq!(env.subject(), "RE: your e-mail");
+                assert_eq!(env.message_id(), "h2g7f.z0gy2pgaen5m@example.com");
+                hash = env.hash();
+                let uid = {
+                    let state_lck = server_state.lock().unwrap();
+                    state_lck
+                        .envelopes
+                        .iter()
+                        .find_map(|(uid, env)| {
+                            if env.message_id() == "h2g7f.z0gy2pgaen5m@example.com" {
+                                Some(*uid)
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap()
+                };
+                watch_conn_sender
+                    .unbounded_send(ServerEvent::Delete(uid))
+                    .unwrap();
+            }
+            let watch_fut = {
+                let (value1, rest) = watch_fut.await;
+                let backend_event = value1.unwrap().unwrap();
+                let BackendEvent::Refresh(refresh_event) = backend_event else {
+                    panic!("Expected Refresh event, got: {backend_event:?}");
+                };
+                let RefreshEventKind::Remove(ref env_hash) = refresh_event.kind else {
+                    panic!("Expected Remove event, got: {refresh_event:?}");
+                };
+                assert_eq!(*env_hash, hash);
+                rest.into_future()
+            };
+            {
+                let mailbox = imap.uid_store.mailboxes.lock().await;
+                let exists_lck = mailbox.values().next().unwrap().exists.lock().unwrap();
+                assert_eq!(exists_lck.len(), 2);
+                let unseen_lck = mailbox.values().next().unwrap().unseen.lock().unwrap();
+                assert_eq!(unseen_lck.len(), 2);
+            }
+            watch_conn_sender.unbounded_send(ServerEvent::Quit).unwrap();
+            main_conn_sender.unbounded_send(ServerEvent::Quit).unwrap();
+            loops_handle.join().unwrap();
+            let (value1, _rest) = watch_fut.await;
+            if let Some(val) = value1 {
+                if !(matches!(val, Err(ref err) if matches!(err.kind, ErrorKind::OSError(nix::errno::Errno::EPIPE | nix::errno::Errno::ECONNRESET)))
+                    || matches!(val, Err(ref err) if err.summary == "Offline"))
+                {
+                    panic!(
+                        "Expected watch TCP connection to have disconnected with \
+                         EPIPE/ECONNRESET, got: {val:?}"
+                    );
+                }
+            }
+        };
+        std::thread::spawn(move || {
+            block_on(fut);
+        })
+        .join()
+        .unwrap();
     }
 
     async fn loops_fut(
