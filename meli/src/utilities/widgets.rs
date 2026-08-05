@@ -220,6 +220,7 @@ pub trait FormWidgetLabel:
 }
 
 impl FormWidgetLabel for Cow<'static, str> {}
+impl FormWidgetLabel for melib::HeaderName {}
 
 #[derive(Debug)]
 pub struct FormWidget<T, F: FormWidgetLabel = Cow<'static, str>>

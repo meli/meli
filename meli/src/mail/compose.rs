@@ -118,7 +118,7 @@ pub struct Composer {
 
     pager: Pager,
     draft: Draft,
-    form: FormWidget<bool>,
+    form: FormWidget<bool, HeaderName>,
 
     mode: ViewMode,
 
@@ -600,7 +600,7 @@ To: {}
         let header_values = self.form.values_mut();
         let draft_header_map = self.draft.headers_mut();
         for (k, v) in draft_header_map.iter_mut() {
-            if let Some(vn) = header_values.get(k.as_str()) {
+            if let Some(vn) = header_values.get(k) {
                 *v = vn.as_str().to_string();
             }
         }
@@ -642,7 +642,7 @@ To: {}
         {
             if matches!(*k, HeaderName::NEWSGROUPS) {
                 self.form.push_cl((
-                    k.into(),
+                    k.clone(),
                     headers[k].to_string(),
                     Box::new(move |c, term| {
                         c.accounts[&account_hash]
@@ -660,7 +660,7 @@ To: {}
                     }),
                 ));
             } else {
-                self.form.push((k.into(), headers[k].to_string()));
+                self.form.push((k.clone(), headers[k].to_string()));
             }
         }
         for k in &[
@@ -673,7 +673,7 @@ To: {}
         ] {
             if matches!(*k, HeaderName::TO | HeaderName::CC | HeaderName::BCC) {
                 self.form.push_cl((
-                    k.into(),
+                    k.clone(),
                     headers[k].to_string(),
                     Box::new(move |c, term| {
                         let book: &Contacts = &c.accounts[&account_hash].contacts;
@@ -686,7 +686,7 @@ To: {}
                 ));
             } else if k == HeaderName::FROM {
                 self.form.push_cl((
-                    k.into(),
+                    k.clone(),
                     headers[k].to_string(),
                     Box::new(move |c, _term| {
                         c.accounts
@@ -717,7 +717,7 @@ To: {}
                     }),
                 ));
             } else {
-                self.form.push((k.into(), headers[k].to_string()));
+                self.form.push((k.clone(), headers[k].to_string()));
             }
         }
     }
