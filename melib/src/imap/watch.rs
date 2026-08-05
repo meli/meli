@@ -147,7 +147,14 @@ pub fn idle(kit: ImapWatchKit) -> impl futures::stream::Stream<Item = Result<Bac
         conn.send_command(CommandBody::Idle).await?;
         let mut blockn = ImapBlockingConnection::from(conn);
         let mut watch = Instant::now();
+        let mut events = vec![];
         loop {
+            if !events.is_empty() {
+                let events = BackendEvent::flatten(std::mem::take(&mut events));
+                for ev in events {
+                    emitter.emit(ev).await;
+                }
+            }
             let line = match timeout(Some(_10_MINS), blockn.read_line()).await {
                 Ok(Some(line)) => line,
                 Ok(None) => {
@@ -173,7 +180,7 @@ pub fn idle(kit: ImapWatchKit) -> impl futures::stream::Stream<Item = Result<Bac
                 let mut main_conn_lck = main_conn.lock().await?;
                 for (_h, mailbox) in mailboxes.clone() {
                     if let Some(ev) = examine_updates(mailbox, &mut main_conn_lck).await? {
-                        emitter.emit(ev).await;
+                        events.push(ev);
                     }
                 }
                 watch = now;
@@ -212,7 +219,7 @@ pub fn idle(kit: ImapWatchKit) -> impl futures::stream::Stream<Item = Result<Bac
                         super::protocol_parser::untagged_responses(l).map(|(_, v, _)| v)
                     {
                         if let Some(ev) = blockn.conn.process_untagged(untagged_response).await? {
-                            emitter.emit(ev).await;
+                            events.push(ev);
                         }
                     }
                 }
