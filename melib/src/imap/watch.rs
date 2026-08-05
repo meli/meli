@@ -196,7 +196,7 @@ pub fn idle(kit: ImapWatchKit) -> impl futures::stream::Stream<Item = Result<Bac
                 blockn.conn.send_raw(b"DONE").await?;
                 blockn
                     .conn
-                    .read_response(&mut response, RequiredResponses::empty())
+                    .read_response(&mut response, RequiredResponses::UNTAGGED)
                     .await?;
                 for l in line.split_rn().chain(response.split_rn()) {
                     log::trace!("process_untagged {:?}", String::from_utf8_lossy(l));
