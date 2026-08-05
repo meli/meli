@@ -573,3 +573,11 @@ impl Iterator for AsciiIgnoreCaseCmp<'_, '_> {
         }
     }
 }
+
+#[test]
+fn test_email_headers_names_custom() {
+    assert_eq!(
+        &HeaderName::from(Custom(b"x-foobar".to_vec().into())).to_string(),
+        "X-Foobar"
+    );
+}

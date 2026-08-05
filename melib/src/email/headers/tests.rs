@@ -20,6 +20,8 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
+use std::borrow::Cow;
+
 use super::*;
 
 #[test]
@@ -57,6 +59,75 @@ fn test_email_headers_names_headername_display() {
         &HeaderName::try_from("something-dKim").unwrap().to_string(),
         "Something-DKIM"
     );
+    assert_eq!(
+        &HeaderName::try_from("something-dKim").unwrap().into_bytes(),
+        b"Something-DKIM"
+    );
+    // TryFrom<&'a String>
+    assert_eq!(
+        &HeaderName::try_from(&"subject".to_string())
+            .unwrap()
+            .to_string(),
+        "Subject",
+    );
+    // TryFrom<String>
+    assert_eq!(
+        &HeaderName::try_from("subject".to_string())
+            .unwrap()
+            .to_string(),
+        "Subject",
+    );
+    // TryFrom<Vec<u8>>
+    assert_eq!(
+        &HeaderName::try_from(b"subject".to_vec())
+            .unwrap()
+            .to_string(),
+        "Subject",
+    );
+    // as_lowercase_bytes
+    assert_eq!(
+        &HeaderName::try_from("something-dKim")
+            .unwrap()
+            .as_lowercase_bytes(),
+        b"something-dkim"
+    );
+    assert_eq!(&HeaderName::SUBJECT.as_lowercase_bytes(), b"subject");
+    assert_eq!(
+        <HeaderName as AsRef<str>>::as_ref(&HeaderName::try_from("something-dKim").unwrap()),
+        "something-dkim"
+    );
+    assert_eq!(
+        <HeaderName as AsRef<[u8]>>::as_ref(&HeaderName::try_from("something-dKim").unwrap()),
+        b"something-dkim"
+    );
+    assert_eq!(
+        <HeaderName as std::borrow::Borrow<str>>::borrow(
+            &HeaderName::try_from("something-dKim").unwrap()
+        ),
+        "something-dkim"
+    );
+    assert_eq!(
+        serde_json::from_str::<HeaderName>("\"Subject\"").unwrap(),
+        HeaderName::SUBJECT
+    );
+    assert_eq!(
+        serde_json::from_str::<HeaderName>("[83,117,98,106,101,99,116]").unwrap(),
+        HeaderName::SUBJECT
+    );
+    assert_eq!(
+        serde_json::from_str::<HeaderName>("42")
+            .unwrap_err()
+            .to_string(),
+        "invalid header name value"
+    );
+    assert_eq!(
+        Cow::from(&HeaderName::try_from("arc-foobar").unwrap()),
+        Cow::<'static, str>::Owned("ARC-Foobar".to_string())
+    );
+    assert_eq!(
+        Cow::from(&HeaderName::SUBJECT),
+        Cow::<'static, str>::Borrowed("Subject")
+    );
 }
 
 #[test]
@@ -78,6 +149,20 @@ fn test_email_headers_names_parse_standard_headers() {
             HeaderName::from_bytes(upper.as_bytes()).unwrap(),
             HeaderName::from(std)
         );
+
+        let _protocol = std.protocol();
+        let _status = std.status();
+        for standard in std.standards() {
+            assert!(standard.as_str().starts_with("RFC"));
+            assert!(standard
+                .url()
+                .starts_with("https://datatracker.ietf.org/doc/html/rfc"));
+            assert_eq!(
+                Standard::from_bytes(standard.as_str().as_bytes()),
+                Some(*standard)
+            );
+        }
+        assert_eq!(Standard::from_bytes(b"foobar"), None);
     }
 }
 
@@ -106,4 +191,31 @@ fn test_headers_map_index() {
     assert_eq!(&headers["Subject"], "foobar");
     assert_eq!(&headers[b"Subject".as_slice()], "foobar");
     assert!(&headers[HeaderName::MESSAGE_ID] != "foobar");
+}
+
+// Pedantic tests to maximise coverage.
+#[test]
+fn test_email_headers_pedantic_coverage() {
+    assert_eq!(format!("{:?}", InvalidHeaderName), "Invalid header name.");
+    assert_eq!(InvalidHeaderName.to_string(), "InvalidHeaderName");
+    // PartialEq<str> for HeaderName
+    assert!(<HeaderName as PartialEq<str>>::eq(
+        &HeaderName::SUBJECT,
+        "Subject"
+    ));
+    // PartialEq<HeaderName> for str
+    assert!(<str as PartialEq<HeaderName>>::eq(
+        "Subject",
+        &HeaderName::SUBJECT,
+    ));
+    // PartialEq<&'_ str> for HeaderName
+    assert!(<HeaderName as PartialEq<&str>>::eq(
+        &HeaderName::SUBJECT,
+        &"Subject"
+    ));
+    // PartialEq<HeaderName> for &str
+    assert!(<&str as PartialEq<HeaderName>>::eq(
+        &"Subject",
+        &HeaderName::SUBJECT,
+    ));
 }
