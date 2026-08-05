@@ -274,7 +274,7 @@ impl Backends {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum BackendEvent {
     Notice {
         description: String,
@@ -322,7 +322,7 @@ impl TryFrom<Vec<RefreshEvent>> for BackendEvent {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RefreshEventKind {
     Update(EnvelopeHash, Box<Envelope>),
     /// `Rename(old_hash, new_hash)`
@@ -342,7 +342,7 @@ pub enum RefreshEventKind {
     MailboxUnsubscribe(MailboxHash),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RefreshEvent {
     pub account_hash: AccountHash,
     pub mailbox_hash: MailboxHash,
@@ -636,6 +636,21 @@ pub trait BackendMailbox: std::fmt::Debug + std::any::Any {
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
+
+impl PartialEq for Mailbox {
+    fn eq(&self, other: &Self) -> bool {
+        self.hash() == other.hash()
+            && self.name() == other.name()
+            && self.path() == other.path()
+            && self.children() == other.children()
+            && self.parent() == other.parent()
+            && self.is_subscribed() == other.is_subscribed()
+            && self.special_usage() == other.special_usage()
+            && self.permissions() == other.permissions()
+    }
+}
+
+impl Eq for Mailbox {}
 
 crate::declare_u64_hash!(AccountHash);
 crate::declare_u64_hash!(MailboxHash);
