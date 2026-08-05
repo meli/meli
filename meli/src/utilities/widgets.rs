@@ -205,13 +205,29 @@ pub enum FormButtonAction {
     Other(&'static str),
 }
 
+pub trait FormWidgetLabel:
+    std::fmt::Debug
+    + std::fmt::Display
+    + Clone
+    + Ord
+    + std::hash::Hash
+    + Eq
+    + PartialOrd
+    + Send
+    + Sync
+    + AsRef<str>
+{
+}
+
+impl FormWidgetLabel for Cow<'static, str> {}
+
 #[derive(Debug)]
-pub struct FormWidget<T>
+pub struct FormWidget<T, F: FormWidgetLabel = Cow<'static, str>>
 where
     T: 'static + std::fmt::Debug + Copy + Default + Send + Sync,
 {
-    fields: IndexMap<Cow<'static, str>, Field>,
-    layout: Vec<Cow<'static, str>>,
+    fields: IndexMap<F, Field>,
+    layout: Vec<F>,
     buttons: ButtonWidget<T>,
 
     field_name_max_length: usize,
@@ -226,7 +242,9 @@ where
     id: ComponentId,
 }
 
-impl<T: 'static + std::fmt::Debug + Copy + Default + Clone + Send + Sync> Clone for FormWidget<T> {
+impl<T: 'static + std::fmt::Debug + Copy + Default + Clone + Send + Sync, F: FormWidgetLabel> Clone
+    for FormWidget<T, F>
+{
     fn clone(&self) -> Self {
         Self {
             fields: self.fields.clone(),
@@ -246,7 +264,9 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Clone + Send + Sync> Clone 
     }
 }
 
-impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Default for FormWidget<T> {
+impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync, F: FormWidgetLabel> Default
+    for FormWidget<T, F>
+{
     fn default() -> Self {
         Self {
             fields: Default::default(),
@@ -266,15 +286,17 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Default for Fo
     }
 }
 
-impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> std::fmt::Display
-    for FormWidget<T>
+impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync, F: FormWidgetLabel>
+    std::fmt::Display for FormWidget<T, F>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "form")
     }
 }
 
-impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> FormWidget<T> {
+impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync, F: FormWidgetLabel>
+    FormWidget<T, F>
+{
     pub fn new(
         action: (Cow<'static, str>, T),
         cursor_up_shortcut: Key,
@@ -325,48 +347,48 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> FormWidget<T> 
         self.buttons.push(val);
     }
 
-    pub fn push_choices(&mut self, value: (Cow<'static, str>, Vec<Cow<'static, str>>)) {
-        self.field_name_max_length = std::cmp::max(self.field_name_max_length, value.0.len());
-        self.layout.push(value.0.clone());
+    pub fn push_choices(&mut self, (field_name, value): (F, Vec<Cow<'static, str>>)) {
+        self.field_name_max_length = self.field_name_max_length.max(field_name.as_ref().len());
+        self.layout.push(field_name.clone());
         self.fields
-            .insert(value.0, Field::Choice(value.1, 0, ComponentId::default()));
+            .insert(field_name, Field::Choice(value, 0, ComponentId::default()));
     }
 
-    pub fn push_cl(&mut self, value: (Cow<'static, str>, String, AutoCompleteFn)) {
-        self.field_name_max_length = std::cmp::max(self.field_name_max_length, value.0.len());
-        self.layout.push(value.0.clone());
+    pub fn push_cl(&mut self, (field_name, value, auto): (F, String, AutoCompleteFn)) {
+        self.field_name_max_length = self.field_name_max_length.max(field_name.as_ref().len());
+        self.layout.push(field_name.clone());
         self.fields.insert(
-            value.0,
+            field_name,
             Field::Text(TextField::new(
-                UText::new(value.1),
-                Some((value.2, AutoComplete::new(Vec::new()))),
+                UText::new(value),
+                Some((auto, AutoComplete::new(Vec::new()))),
             )),
         );
     }
 
-    pub fn push(&mut self, value: (Cow<'static, str>, String)) {
-        self.field_name_max_length = std::cmp::max(self.field_name_max_length, value.0.len());
-        self.layout.push(value.0.clone());
+    pub fn push(&mut self, (field_name, value): (F, String)) {
+        self.field_name_max_length = self.field_name_max_length.max(field_name.as_ref().len());
+        self.layout.push(field_name.clone());
         self.fields.insert(
-            value.0,
-            Field::Text(TextField::new(UText::new(value.1), None)),
+            field_name,
+            Field::Text(TextField::new(UText::new(value), None)),
         );
     }
 
-    pub fn insert(&mut self, index: usize, value: (Cow<'static, str>, Field)) {
-        self.layout.insert(index, value.0.clone());
-        self.fields.insert(value.0, value.1);
+    pub fn insert(&mut self, index: usize, (field_name, value): (F, Field)) {
+        self.layout.insert(index, field_name.clone());
+        self.fields.insert(field_name, value);
     }
 
-    pub fn values(&self) -> &IndexMap<Cow<'static, str>, Field> {
+    pub fn values(&self) -> &IndexMap<F, Field> {
         &self.fields
     }
 
-    pub fn values_mut(&mut self) -> &mut IndexMap<Cow<'static, str>, Field> {
+    pub fn values_mut(&mut self) -> &mut IndexMap<F, Field> {
         &mut self.fields
     }
 
-    pub fn collect(self) -> IndexMap<Cow<'static, str>, Field> {
+    pub fn collect(self) -> IndexMap<F, Field> {
         self.fields
     }
 
@@ -375,7 +397,9 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> FormWidget<T> 
     }
 }
 
-impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for FormWidget<T> {
+impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync, F: FormWidgetLabel> Component
+    for FormWidget<T, F>
+{
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.is_dirty() {
             let theme_default = crate::conf::value(context, "theme_default");
