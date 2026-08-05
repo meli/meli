@@ -54,7 +54,7 @@ pub mod server {
         fetch::MessageDataItem,
         response::{Data, Response},
     };
-    use melib::{backends::prelude::*, imap::*, smol::Async, Mail};
+    use melib::{backends::prelude::*, imap::*, parser::BytesExt, smol::Async, Mail};
 
     pub enum SessionState {
         // Unauthenticated,
@@ -280,31 +280,86 @@ pub mod server {
                 mut session_state,
                 mut buf,
             } = self;
-            let mut buf_cursor = 0;
+            let mut buf_start = 0;
+            let mut buf_end = 0;
+            async fn read_line<'a>(
+                tcp_stream: &mut Async<TcpStream>,
+                buf: &'a mut [u8],
+                start: &mut usize,
+                end: &mut usize,
+            ) -> Option<&'a [u8]> {
+                // log::trace!(
+                //     "read_line: buf={:?} start = {start:?} end = {end:?}",
+                //     String::from_utf8_lossy(&buf[..*end])
+                // );
+                if *start == 0 || !buf[*start..*end].contains_subsequence(b"\r\n") {
+                    let read_bytes = tcp_stream.read(&mut buf[*end..]).await.unwrap();
+                    *end += read_bytes;
+                    // log::trace!(
+                    //     "read_line: read_bytes = {read_bytes:?} buf = {:?}",
+                    //     String::from_utf8_lossy(&buf[..*end])
+                    // );
+                    if !buf[*start..*end].contains_subsequence(b"\r\n") {
+                        // log::trace!("read_line: returning None");
+                        return None;
+                    }
+                    let Some(input) = buf[*start..*end].split_rn().next() else {
+                        // log::trace!("read_line: returning None");
+                        return None;
+                    };
+                    *start += input.len();
+                    if *start == *end {
+                        *start = 0;
+                        *end = 0;
+                    }
+                    // log::trace!("read_line: returning {:?}", String::from_utf8_lossy(input));
+                    Some(input)
+                } else {
+                    let rest = &buf[*start..*end];
+                    let input = rest.split_rn().next().unwrap();
+                    *start += input.len();
+                    if *start == *end {
+                        *start = 0;
+                        *end = 0;
+                    }
+                    // log::trace!("read_line: returning {:?}", String::from_utf8_lossy(input));
+                    Some(input)
+                }
+            }
             'outer: loop {
                 let idle_cmd_id = 'main: loop {
-                    let read_bytes = tcp_stream.read(&mut buf[buf_cursor..]).await.unwrap();
-                    let input = String::from_utf8_lossy(&buf[..(buf_cursor + read_bytes)]);
-                    if input.is_empty() {
-                        // peek into command receiver for a Quit event
-                        let command = command_receiver.try_next().unwrap();
-                        let Some(command) = command else {
-                            continue 'main;
-                        };
-                        if matches!(command, ServerEvent::Quit) {
-                            tcp_stream.write_all(b"* BYE world\r\n").await.unwrap();
-                            tcp_stream.flush().await.unwrap();
-                            break 'outer;
+                    let mut read_fut = Box::pin(read_line(
+                        &mut tcp_stream,
+                        &mut buf,
+                        &mut buf_start,
+                        &mut buf_end,
+                    ));
+                    let input = match future::select(&mut read_fut, command_receiver.next()).await {
+                        Either::Left((value1, _)) => {
+                            if value1.is_none() {
+                                continue 'main;
+                            }
+                            drop(read_fut);
+                            value1.unwrap()
                         }
-                        command_sender.unbounded_send(command).unwrap();
-                    }
-                    eprintln!("{name} loop_handler 'main received: {input:?}");
-                    if !input.ends_with("\r\n") {
-                        buf_cursor += read_bytes;
-                        continue 'main;
-                    }
-                    buf_cursor = 0;
-                    let (id, cmd) = input.split_once(' ').unwrap();
+                        Either::Right((command, _)) => {
+                            drop(read_fut);
+                            let command = command.unwrap();
+                            if matches!(command, ServerEvent::Quit) {
+                                tcp_stream.write_all(b"* BYE world\r\n").await.unwrap();
+                                tcp_stream.flush().await.unwrap();
+                                eprintln!(
+                                    "{name} loop_handler received ServerEvent::Quit from 'main"
+                                );
+                                break 'outer;
+                            }
+                            command_sender.unbounded_send(command).unwrap();
+                            continue 'main;
+                        }
+                    };
+                    let line = String::from_utf8_lossy(input).to_string();
+                    eprintln!("{name} loop_handler 'main received: {line:?}");
+                    let (id, cmd) = line.split_once(' ').unwrap();
                     match cmd {
                         "IDLE\r\n" => {
                             break 'main id.to_string();
@@ -325,6 +380,7 @@ pub mod server {
                                 .await
                                 .unwrap();
                             tcp_stream.flush().await.unwrap();
+                            eprintln!("{name} loop_handler received LOGOUT from 'main");
                             break 'outer;
                         }
                         "LIST \"\" *\r\n" => {
@@ -603,11 +659,22 @@ pub mod server {
                 tcp_stream.write_all(b"+ idling\r\n").await.unwrap();
                 tcp_stream.flush().await.unwrap();
                 'idle: loop {
-                    let read_fut = tcp_stream.read(&mut buf[buf_cursor..]);
-                    pin_mut!(read_fut);
-                    let read_bytes = match future::select(read_fut, command_receiver.next()).await {
-                        Either::Left((value1, _)) => value1.unwrap(),
+                    let mut read_fut = Box::pin(read_line(
+                        &mut tcp_stream,
+                        &mut buf,
+                        &mut buf_start,
+                        &mut buf_end,
+                    ));
+                    let input = match future::select(&mut read_fut, command_receiver.next()).await {
+                        Either::Left((value1, _)) => {
+                            if value1.is_none() {
+                                continue 'idle;
+                            }
+                            drop(read_fut);
+                            value1.unwrap()
+                        }
                         Either::Right((value2, _)) => {
+                            drop(read_fut);
                             match value2.unwrap() {
                                 ServerEvent::New(new_mail) => {
                                     let exists_msn = {
@@ -649,19 +716,17 @@ pub mod server {
                                         .await
                                         .unwrap();
                                     tcp_stream.flush().await.unwrap();
+                                    eprintln!(
+                                        "{name} loop_handler received ServerEvent::Quit from 'main"
+                                    );
                                     break 'outer;
                                 }
                             }
                             continue 'idle;
                         }
                     };
-                    let input = String::from_utf8_lossy(&buf[..(buf_cursor + read_bytes)]);
+                    let input = String::from_utf8_lossy(input).to_string();
                     eprintln!("{name} loop_handler 'idle received: {input:?}");
-                    if !input.ends_with("\r\n") {
-                        buf_cursor += read_bytes;
-                        continue 'idle;
-                    }
-                    buf_cursor = 0;
                     if input == "DONE\r\n" {
                         tcp_stream.write_all(idle_cmd_id.as_bytes()).await.unwrap();
                         tcp_stream
@@ -826,7 +891,7 @@ hello world.
             .unwrap();
         let watch_conn_loop = watch_conn.loop_handler("watch");
         let loops = loops_fut(main_conn_loop, watch_conn_loop);
-        std::thread::spawn(move || {
+        let loops_handle = std::thread::spawn(move || {
             block_on(loops);
         });
         let hash;
@@ -889,7 +954,8 @@ hello world.
         }
         watch_conn_sender.unbounded_send(ServerEvent::Quit).unwrap();
         main_conn_sender.unbounded_send(ServerEvent::Quit).unwrap();
-        let (value1, _rest) = block_on(watch_fut);
+        let (value1, _) = block_on(watch_fut);
+        loops_handle.join().unwrap();
         if let Some(val) = value1 {
             if !(matches!(val, Err(ref err) if matches!(err.kind, ErrorKind::OSError(nix::errno::Errno::EPIPE | nix::errno::Errno::ECONNRESET)))
                 || matches!(val, Err(ref err) if err.summary == "Offline"))
