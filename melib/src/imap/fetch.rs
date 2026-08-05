@@ -250,7 +250,7 @@ impl FetchState {
                     }
                     let mut conn = connection.lock().await?;
                     let mut response = Vec::with_capacity(8 * 1024);
-                    let max_uid_left = max_uid;
+                    let mut max_uid_left = max_uid;
 
                     let mut envelopes = Vec::with_capacity(*batch_size);
                     conn.examine_mailbox(mailbox_hash, &mut response, false)
@@ -261,6 +261,7 @@ impl FetchState {
                         } else {
                             let min = max_uid_left.saturating_sub(*batch_size).max(1);
                             let max = max_uid_left;
+                            max_uid_left = min.saturating_sub(1);
 
                             SequenceSet::try_from(min..=max)?
                         };
@@ -392,7 +393,7 @@ impl FetchState {
                         *stage = FetchStage::Finished;
                     } else {
                         *stage = FetchStage::FreshFetch {
-                            max_uid: max_uid_left.saturating_sub(*batch_size + 1).max(1),
+                            max_uid: max_uid_left,
                         };
                     }
                     return Ok(envelopes);
