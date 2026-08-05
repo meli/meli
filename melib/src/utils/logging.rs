@@ -207,7 +207,7 @@ impl StderrLogger {
                 level: Arc::new(AtomicU8::new(level as u8)),
                 print_level: true,
                 print_module_names: true,
-                debug_dest: Destination::Stderr,
+                debug_dest: Destination::None,
             }
         } else {
             #[inline(always)]
