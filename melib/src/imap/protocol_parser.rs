@@ -453,6 +453,14 @@ impl ImapLineSplit for [u8] {
     }
 }
 
+impl ImapLineSplit for str {
+    fn split_rn(&self) -> ImapLineIterator<'_> {
+        ImapLineIterator {
+            slice: self.as_bytes(),
+        }
+    }
+}
+
 macro_rules! to_str (
     ($v:expr) => (unsafe{ std::str::from_utf8_unchecked($v) })
 );
