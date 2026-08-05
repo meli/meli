@@ -70,11 +70,12 @@ pub mod server {
     }
 
     impl ServerState {
-        pub fn insert(&mut self, new: Box<Mail>) -> UID {
+        pub fn insert(&mut self, new: Box<Mail>) -> (usize, UID) {
             let uid = self.next_uid;
             self.envelopes.insert(uid, *new);
+            let msn = self.envelopes.len();
             self.next_uid += 1;
-            uid
+            (msn, uid)
         }
     }
 
@@ -611,8 +612,7 @@ pub mod server {
                                 ServerEvent::New(new_mail) => {
                                     let exists_msn = {
                                         let mut state_lck = state.lock().unwrap();
-                                        let new_uid = state_lck.insert(new_mail);
-                                        let msn = state_lck.envelopes.len();
+                                        let (msn, new_uid) = state_lck.insert(new_mail);
                                         eprintln!("{name} EXISTS uid = {new_uid} msn = {msn}");
                                         msn
                                     };
