@@ -49,7 +49,7 @@ macro_rules! standard_headers {
         ///
         /// Each variant value corresponds to an associated constant exposing it as a
         /// [`HeaderName`] under both [`StandardHeader`] and [`HeaderName`] types.
-        #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+        #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd)]
         pub enum StandardHeader {
             $(
                 $konst,

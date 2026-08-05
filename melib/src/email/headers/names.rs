@@ -50,12 +50,12 @@ use crate::email::parser::BytesExt;
 /// standard header name values.
 ///
 /// [RFC5322]: https://datatracker.ietf.org/doc/html/rfc5322
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct HeaderName {
     pub(super) inner: Repr<Custom>,
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(super) enum Repr<T> {
     Standard(StandardHeader),
     Custom(T),
@@ -71,7 +71,7 @@ impl<T: std::fmt::Display> std::fmt::Display for Repr<T> {
 }
 
 /// Wrapper type used to hijack the Hash impl
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(super) struct Custom(SmallVec<[u8; 32]>);
 
 impl Custom {
