@@ -64,7 +64,7 @@ pub(super) enum Repr<T> {
 impl<T: std::fmt::Display> std::fmt::Display for Repr<T> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Standard(inner) => write!(fmt, "{}", inner.as_str()),
+            Self::Standard(inner) => write!(fmt, "{}", inner.as_cased_str()),
             Self::Custom(inner) => inner.fmt(fmt),
         }
     }
@@ -297,7 +297,7 @@ impl<'a> From<&'a Self> for HeaderName {
 impl From<&HeaderName> for Cow<'static, str> {
     fn from(src: &HeaderName) -> Self {
         match src.inner {
-            Repr::Standard(s) => Cow::Borrowed(s.as_str()),
+            Repr::Standard(s) => Cow::Borrowed(s.as_cased_str()),
             Repr::Custom(_) => Cow::Owned(src.to_string()),
         }
     }
