@@ -128,3 +128,21 @@ perf script | stackcollapse-perf | rust-unmangle | flamegraph > perf.svg
 <!-- ```sh -->
 <!-- cargo +nightly fuzz run envelope_parse -- -dict=fuzz/envelope_tokens.dict -->
 <!-- ``` -->
+
+## Coverage
+
+```sh
+export RUSTFLAGS="-Cinstrument-coverage" ; export LLVM_PROFILE_FILE="meli-%p-%m.profraw"
+make -f .gitea/Makefile.build cargo-test
+make -f .gitea/Makefile.build rustdoc-test
+grcov . -s . --binary-path ./target/debug/ -t html --branch --ignore-not-existing -o ./target/debug/coverage/
+```
+
+And inspect `target/debug/coverage/index.html`.
+
+
+Clean profile files with:
+
+```sh
+find . -name '*.profraw' -delete
+```
