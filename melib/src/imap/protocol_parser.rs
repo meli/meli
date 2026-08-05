@@ -55,55 +55,68 @@ const UNTAGGED_PREFIX: &[u8] = b"* ";
 
 bitflags! {
     #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub struct RequiredResponses: u64 {
+    pub struct RequiredResponses: u32 {
         /// Require a **tagged** `NO` response.
         const NO                  = 0;
         /// Require an *untagged* `CAPABILITY` response.
-        const CAPABILITY          = 0b0000_0000_0000_0000_0001;
+        const CAPABILITY          = 1 << 1;
         /// Require an *untagged* `BYE` response.
-        const BYE                 = 0b0000_0000_0000_0000_0010;
+        const BYE                 = 1 << 2;
         /// Require an *untagged* `FLAGS` response as part of a `SELECT`/`EXAMINE` response.
-        const FLAGS               = 0b0000_0000_0000_0000_0100;
+        const FLAGS               = 1 << 3;
         /// Require an *untagged* `EXISTS` response as part of a `SELECT`/`EXAMINE` response or when
         /// the size of the mailbox changes.
-        const EXISTS              = 0b0000_0000_0000_0000_1000;
+        const EXISTS              = 1 << 4;
+        /// Require an *untagged* `EXPUNGE` response.
+        const EXPUNGE             = 1 << 5;
         /// Require an *untagged* `RECENT` response as part of a `SELECT`/`EXAMINE` response.
-        const RECENT              = 0b0000_0000_0000_0001_0000;
+        const RECENT              = 1 << 6;
         /// Require an *untagged* `UNSEEN` response as part of a `SELECT`/`EXAMINE` response.
-        const UNSEEN              = 0b0000_0000_0000_0010_0000;
+        const UNSEEN              = 1 << 7;
         /// Require an *untagged* `PERMANENTFLAGS` response as part of a `SELECT`/`EXAMINE`
         /// response.
-        const PERMANENTFLAGS      = 0b0000_0000_0000_0100_0000;
+        const PERMANENTFLAGS      = 1 << 8;
         /// Require an *untagged* `UIDNEXT` response as part of a `SELECT`/`EXAMINE` response.
-        const UIDNEXT             = 0b0000_0000_0000_1000_0000;
+        const UIDNEXT             = 1 << 9;
         /// Require an *untagged* `UIDVALIDITY` response as part of a `SELECT`/`EXAMINE` response.
-        const UIDVALIDITY         = 0b0000_0000_0001_0000_0000;
+        const UIDVALIDITY         = 1 << 10;
         /// Require an *untagged* `LIST` response as part of a `LIST` response.
-        const LIST                = 0b0000_0000_0010_0000_0000;
+        const LIST                = 1 << 11;
         /// Require an *untagged* `LSUB` response as part of a `LSUB` response.
-        const LSUB                = 0b0000_0000_0100_0000_0000;
+        const LSUB                = 1 << 12;
         /// Require an *untagged* `STATUS` response as part of a `STATUS` response.
-        const STATUS              = 0b0000_0000_1000_0000_0000;
+        const STATUS              = 1 << 13;
         /// Require an *untagged* `SEARCH` response as part of a `SEARCH` response.
-        const SEARCH              = 0b0000_0001_0000_0000_0000;
+        const SEARCH              = 1 << 14;
         /// Require an *untagged* `FETCH` response with a `UID` item included.
-        const FETCH_UID           = 0b0000_0010_0000_0000_0000;
+        const FETCH_UID           = 1 << 15;
         /// Require an *untagged* `FETCH` response with a `MODSEQ` item included.
-        const FETCH_MODSEQ        = 0b0000_0100_0000_0000_0000;
+        const FETCH_MODSEQ        = 1 << 16;
         /// Require an *untagged* `FETCH` response with a `FLAGS` item included.
-        const FETCH_FLAGS         = 0b0000_1000_0000_0000_0000;
+        const FETCH_FLAGS         = 1 << 17;
         /// Require an *untagged* `FETCH` response with a `BODY`/`RFC822` item included.
-        const FETCH_BODY          = 0b0001_0000_0000_0000_0000;
+        const FETCH_BODY          = 1 << 18;
         /// Require an *untagged* `FETCH` response with a `BODY[HEADER.FIELDS (REFERENCES)]` item included.
-        const FETCH_REFERENCES    = 0b0010_0000_0000_0000_0000;
+        const FETCH_REFERENCES    = 1 << 19;
         /// Require an *untagged* `FETCH` response with a `BODYSTRUCTURE` item included.
-        const FETCH_BODYSTRUCTURE = 0b0100_0000_0000_0000_0000;
+        const FETCH_BODYSTRUCTURE = 1 << 20;
         /// Require an *untagged* `FETCH` response with a `ENVELOPE` item included.
-        const FETCH_ENVELOPE      = 0b1000_0000_0000_0000_0000;
+        const FETCH_ENVELOPE      = 1 << 21;
         /// Require any `SELECT` related reponse.
         const SELECT              = Self::FLAGS.bits() | Self::EXISTS.bits() | Self::RECENT.bits() | Self::UNSEEN.bits() | Self::PERMANENTFLAGS.bits() | Self::UIDNEXT.bits() | Self::UIDVALIDITY.bits();
         /// Require any `EXAMINE` related reponse.
         const EXAMINE             = Self::FLAGS.bits() | Self::EXISTS.bits() | Self::RECENT.bits() | Self::UNSEEN.bits() | Self::PERMANENTFLAGS.bits() | Self::UIDNEXT.bits() | Self::UIDVALIDITY.bits();
+        /// Require any untagged related reponse.
+        const UNTAGGED             = Self::EXPUNGE.bits()
+                                     | Self::EXISTS.bits()
+                                     | Self::RECENT.bits()
+                                     | Self::FETCH_UID.bits()
+                                     | Self::FETCH_MODSEQ.bits()
+                                     | Self::FETCH_FLAGS.bits()
+                                     | Self::FETCH_BODY.bits()
+                                     | Self::FETCH_REFERENCES.bits()
+                                     | Self::FETCH_BODYSTRUCTURE.bits()
+                                     | Self::FETCH_ENVELOPE.bits();
     }
 }
 
@@ -129,6 +142,7 @@ impl RequiredResponses {
             Self::BYE => stripped.starts_with(b"BYE"),
             Self::FLAGS => stripped.starts_with(b"FLAGS ("),
             Self::EXISTS => stripped.ends_with(b"EXISTS\r\n"),
+            Self::EXPUNGE => stripped.ends_with(b"EXPUNGE\r\n"),
             Self::RECENT => stripped.ends_with(b"RECENT\r\n"),
             Self::UNSEEN => stripped.starts_with(b"OK [UNSEEN "),
             Self::PERMANENTFLAGS =>  stripped.starts_with(b"OK [PERMANENTFLAGS "),
