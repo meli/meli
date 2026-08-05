@@ -20,7 +20,13 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
-use super::{EnvelopeHash, LazyCountSet};
+use crate::{
+    backends::{
+        AccountHash, BackendEvent, EnvelopeHash, LazyCountSet, MailboxHash, RefreshEvent,
+        RefreshEventKind,
+    },
+    utils::logging::LogLevel,
+};
 
 #[test]
 fn test_lazy_count_set() {
@@ -34,4 +40,123 @@ fn test_lazy_count_set() {
     assert_eq!(new.len(), 10);
     assert!(new.insert_existing(EnvelopeHash(10)));
     assert_eq!(new.len(), 11);
+}
+
+#[test]
+fn test_backend_event_flatten() {
+    const NOTICE: BackendEvent = BackendEvent::Notice {
+        description: String::new(),
+        content: None,
+        level: LogLevel::ERROR,
+    };
+    const ACS: BackendEvent = BackendEvent::AccountStateChange {
+        message: std::borrow::Cow::<'static, str>::Borrowed(""),
+    };
+    const REFRESH_1: RefreshEvent = RefreshEvent {
+        account_hash: AccountHash(0),
+        mailbox_hash: MailboxHash(0),
+        kind: RefreshEventKind::Rescan,
+    };
+    const REFRESH_2: RefreshEvent = RefreshEvent {
+        account_hash: AccountHash(0),
+        mailbox_hash: MailboxHash(0),
+        kind: RefreshEventKind::MailboxDelete(MailboxHash(0)),
+    };
+    const REFRESH_3: RefreshEvent = RefreshEvent {
+        account_hash: AccountHash(0),
+        mailbox_hash: MailboxHash(1),
+        kind: RefreshEventKind::MailboxDelete(MailboxHash(1)),
+    };
+    const REFRESH_4: RefreshEvent = RefreshEvent {
+        account_hash: AccountHash(0),
+        mailbox_hash: MailboxHash(1),
+        kind: RefreshEventKind::MailboxSubscribe(MailboxHash(1)),
+    };
+
+    assert_eq!(BackendEvent::flatten(vec![]), vec![]);
+    assert_eq!(
+        BackendEvent::flatten(vec![NOTICE, ACS.clone()]),
+        vec![NOTICE, ACS.clone()]
+    );
+    assert_eq!(
+        BackendEvent::flatten(vec![
+            NOTICE,
+            BackendEvent::Refresh(REFRESH_1.clone()),
+            ACS.clone()
+        ]),
+        vec![
+            NOTICE,
+            BackendEvent::Refresh(REFRESH_1.clone()),
+            ACS.clone()
+        ]
+    );
+    assert_eq!(
+        BackendEvent::flatten(vec![
+            NOTICE,
+            BackendEvent::RefreshBatch(vec![REFRESH_1.clone()]),
+            ACS.clone()
+        ]),
+        vec![
+            NOTICE,
+            BackendEvent::RefreshBatch(vec![REFRESH_1.clone()]),
+            ACS.clone()
+        ]
+    );
+    assert_eq!(
+        BackendEvent::flatten(vec![
+            NOTICE,
+            BackendEvent::Refresh(REFRESH_1.clone()),
+            BackendEvent::Refresh(REFRESH_2.clone()),
+            ACS.clone()
+        ]),
+        vec![
+            NOTICE,
+            BackendEvent::RefreshBatch(vec![REFRESH_1.clone(), REFRESH_2.clone()]),
+            ACS.clone()
+        ]
+    );
+    assert_eq!(
+        BackendEvent::flatten(vec![
+            NOTICE,
+            BackendEvent::Refresh(REFRESH_1.clone()),
+            BackendEvent::RefreshBatch(vec![REFRESH_2.clone()]),
+            ACS.clone()
+        ]),
+        vec![
+            NOTICE,
+            BackendEvent::RefreshBatch(vec![REFRESH_1.clone(), REFRESH_2.clone()]),
+            ACS.clone()
+        ]
+    );
+    assert_eq!(
+        BackendEvent::flatten(vec![
+            NOTICE,
+            BackendEvent::RefreshBatch(vec![REFRESH_1.clone()]),
+            BackendEvent::Refresh(REFRESH_2.clone()),
+            ACS.clone()
+        ]),
+        vec![
+            NOTICE,
+            BackendEvent::RefreshBatch(vec![REFRESH_1.clone(), REFRESH_2.clone()]),
+            ACS.clone()
+        ]
+    );
+    assert_eq!(
+        BackendEvent::flatten(vec![
+            ACS.clone(),
+            BackendEvent::RefreshBatch(vec![REFRESH_1.clone()]),
+            BackendEvent::Refresh(REFRESH_2.clone()),
+            BackendEvent::Refresh(REFRESH_3.clone()),
+            BackendEvent::Refresh(REFRESH_4.clone()),
+        ]),
+        vec![
+            ACS.clone(),
+            BackendEvent::RefreshBatch(vec![
+                REFRESH_1.clone(),
+                REFRESH_2.clone(),
+                REFRESH_3.clone(),
+                REFRESH_4.clone(),
+            ]),
+        ]
+    );
 }

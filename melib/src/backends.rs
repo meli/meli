@@ -322,6 +322,68 @@ impl TryFrom<Vec<RefreshEvent>> for BackendEvent {
     }
 }
 
+impl BackendEvent {
+    /// Flatten a vector of [`BackendEvent`]s.
+    #[inline]
+    pub fn flatten(mut val: Vec<Self>) -> Vec<Self> {
+        let refresh_events = val.iter().filter(|v| matches!(v, Self::Refresh(_))).count();
+        let refresh_batch_events = val
+            .iter()
+            .filter(|v| matches!(v, Self::RefreshBatch(_)))
+            .count();
+        if val.is_empty()
+            || (refresh_events < 2
+                && refresh_batch_events < 2
+                && !(refresh_events == 1 && refresh_batch_events == 1))
+        {
+            return val;
+        }
+
+        let Some(first) = val
+            .iter()
+            .position(|v| matches!(v, Self::Refresh(_) | Self::RefreshBatch(_)))
+        else {
+            return val;
+        };
+        if matches!(&val[first], Self::Refresh(_)) {
+            let Self::Refresh(ev) = std::mem::replace(&mut val[first], Self::RefreshBatch(vec![]))
+            else {
+                unreachable!();
+            };
+            let Self::RefreshBatch(ref mut b) = val[first] else {
+                unreachable!();
+            };
+            b.push(ev);
+        }
+        debug_assert!(matches!(&val[first], Self::RefreshBatch(events) if !events.is_empty()));
+        // [ref:msrv]: use extract_if in 1.87.0.
+        let mut i = first + 1;
+
+        while i < val.len() {
+            if matches!(val[i], Self::Refresh(_)) {
+                let Self::Refresh(ev) = val.remove(i) else {
+                    unreachable!();
+                };
+                let Self::RefreshBatch(ref mut b) = val[first] else {
+                    unreachable!();
+                };
+                b.push(ev);
+            } else if matches!(val[i], Self::RefreshBatch(_)) {
+                let Self::RefreshBatch(evs) = val.remove(i) else {
+                    unreachable!();
+                };
+                let Self::RefreshBatch(ref mut b) = val[first] else {
+                    unreachable!();
+                };
+                b.extend(evs);
+            } else {
+                i += 1;
+            }
+        }
+        val
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RefreshEventKind {
     Update(EnvelopeHash, Box<Envelope>),
