@@ -573,6 +573,21 @@ pub mod server {
                                 .unwrap();
                             tcp_stream.flush().await.unwrap();
                         }
+                        "STATUS INBOX (UIDNEXT)\r\n" => {
+                            let uidnext = state.lock().unwrap().next_uid;
+                            tcp_stream
+                                .write_all(
+                                    format!("* STATUS INBOX (UIDNEXT {uidnext})\r\n").as_bytes(),
+                                )
+                                .await
+                                .unwrap();
+                            tcp_stream.write_all(id.as_bytes()).await.unwrap();
+                            tcp_stream
+                                .write_all(b" OK STATUS completed\r\n")
+                                .await
+                                .unwrap();
+                            tcp_stream.flush().await.unwrap();
+                        }
                         fetch
                             if fetch.starts_with("FETCH ")
                                 && fetch.ends_with(
@@ -656,6 +671,169 @@ pub mod server {
                             }
                             tcp_stream
                                 .write_all(format!("{id} OK FETCH completed\r\n").as_bytes())
+                                .await
+                                .unwrap();
+                            tcp_stream.flush().await.unwrap();
+                        }
+                        uid_fetch
+                            if uid_fetch.starts_with("UID FETCH ")
+                                && uid_fetch.ends_with(" FLAGS\r\n") =>
+                        {
+                            if !matches!(session_state, SessionState::SelectedMailbox) {
+                                tcp_stream.write_all(id.as_bytes()).await.unwrap();
+                                tcp_stream
+                                    .write_all(b" BAD no mailbox is selected\r\n")
+                                    .await
+                                    .unwrap();
+                                tcp_stream.flush().await.unwrap();
+                                continue 'main;
+                            }
+                            let sequence_set = Self::parse_sequence_set(
+                                uid_fetch
+                                    .strip_prefix("UID FETCH ")
+                                    .unwrap()
+                                    .strip_suffix(" FLAGS\r\n")
+                                    .unwrap(),
+                            );
+                            eprintln!("{name} loop_handler got UID FETCH flags {sequence_set:?}");
+                            let largest = state.lock().unwrap().next_uid.saturating_sub(1) as u32;
+                            'uid_fetch_flags: for uid in
+                                sequence_set.iter(largest.try_into().unwrap())
+                            {
+                                let Some(mail) = state
+                                    .lock()
+                                    .unwrap()
+                                    .envelopes
+                                    .get(&(uid.get() as usize))
+                                    .cloned()
+                                else {
+                                    continue 'uid_fetch_flags;
+                                };
+                                let response = Response::Data(Data::Fetch {
+                                    seq: uid,
+                                    items: vec![
+                                        MessageDataItem::Uid(uid),
+                                        MessageDataItem::Flags(mail.as_flags()),
+                                    ]
+                                    .try_into()
+                                    .unwrap(),
+                                });
+                                //eprintln!(
+                                //    "fragment raw: {:?}",
+                                //    String::from_utf8_lossy(
+                                //        &ResponseCodec::new().encode(&response).dump()
+                                //    )
+                                //);
+                                for fragment in ResponseCodec::new().encode(&response) {
+                                    match fragment {
+                                        Fragment::Line { data } => {
+                                            tcp_stream.write_all(&data).await.unwrap();
+                                            tcp_stream.flush().await.unwrap();
+                                        }
+                                        Fragment::Literal { data, mode } => match mode {
+                                            LiteralMode::Sync => {
+                                                // Wait for a continuation request.
+                                                todo!()
+                                            }
+                                            LiteralMode::NonSync => {
+                                                // We don't need to wait for a continuation request
+                                                // as the server will also not send it.
+                                                tcp_stream.write_all(&data).await.unwrap();
+                                                tcp_stream.flush().await.unwrap();
+                                            }
+                                        },
+                                    }
+                                }
+                            }
+                            tcp_stream
+                                .write_all(
+                                    format!("{id} OK UID FETCH flags completed\r\n").as_bytes(),
+                                )
+                                .await
+                                .unwrap();
+                            tcp_stream.flush().await.unwrap();
+                        }
+                        uid_fetch
+                            if uid_fetch.starts_with("UID FETCH ")
+                                && uid_fetch.ends_with(
+                                    " (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] \
+                                     BODYSTRUCTURE)\r\n",
+                                ) =>
+                        {
+                            if !matches!(session_state, SessionState::SelectedMailbox) {
+                                tcp_stream.write_all(id.as_bytes()).await.unwrap();
+                                tcp_stream
+                                    .write_all(b" BAD no mailbox is selected\r\n")
+                                    .await
+                                    .unwrap();
+                                tcp_stream.flush().await.unwrap();
+                                continue 'main;
+                            }
+                            let sequence_set = Self::parse_sequence_set(
+                                uid_fetch
+                                    .strip_prefix("UID FETCH ")
+                                    .unwrap()
+                                    .strip_suffix(
+                                        " (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS \
+                                         (REFERENCES)] BODYSTRUCTURE)\r\n",
+                                    )
+                                    .unwrap(),
+                            );
+
+                            eprintln!("{name} loop_handler got UID FETCH {sequence_set:?}");
+                            let largest = state.lock().unwrap().next_uid.saturating_sub(1) as u32;
+                            'uid_fetch: for uid in sequence_set.iter(largest.try_into().unwrap()) {
+                                let Some(mail) = state
+                                    .lock()
+                                    .unwrap()
+                                    .envelopes
+                                    .get(&(uid.get() as usize))
+                                    .cloned()
+                                else {
+                                    continue 'uid_fetch;
+                                };
+                                let references = mail.as_body_peek_references();
+                                let response = Response::Data(Data::Fetch {
+                                    seq: uid,
+                                    items: vec![
+                                        MessageDataItem::Uid(uid),
+                                        MessageDataItem::Flags(mail.as_flags()),
+                                        MessageDataItem::Envelope(mail.as_envelope()),
+                                        MessageDataItem::BodyStructure(mail.as_bodystructure()),
+                                        references,
+                                    ]
+                                    .try_into()
+                                    .unwrap(),
+                                });
+                                //eprintln!(
+                                //    "fragment raw: {:?}",
+                                //    String::from_utf8_lossy(
+                                //        &ResponseCodec::new().encode(&response).dump()
+                                //    )
+                                //);
+                                for fragment in ResponseCodec::new().encode(&response) {
+                                    match fragment {
+                                        Fragment::Line { data } => {
+                                            tcp_stream.write_all(&data).await.unwrap();
+                                            tcp_stream.flush().await.unwrap();
+                                        }
+                                        Fragment::Literal { data, mode } => match mode {
+                                            LiteralMode::Sync => {
+                                                // Wait for a continuation request.
+                                                todo!()
+                                            }
+                                            LiteralMode::NonSync => {
+                                                // We don't need to wait for a continuation request
+                                                // as the server will also not send it.
+                                                tcp_stream.write_all(&data).await.unwrap();
+                                                tcp_stream.flush().await.unwrap();
+                                            }
+                                        },
+                                    }
+                                }
+                            }
+                            tcp_stream
+                                .write_all(format!("{id} OK UID FETCH completed\r\n").as_bytes())
                                 .await
                                 .unwrap();
                             tcp_stream.flush().await.unwrap();
@@ -746,6 +924,29 @@ pub mod server {
                 }
             }
         }
+
+        fn parse_sequence_set(set: &str) -> imap_types::sequence::SequenceSet {
+            use imap_types::sequence::{SeqOrUid, Sequence, SequenceSet};
+
+            if set.contains(':') {
+                let [a, b]: [SeqOrUid; 2] = set
+                    .split(":")
+                    .map(|n| {
+                        if n == "*" {
+                            SeqOrUid::Asterisk
+                        } else {
+                            SeqOrUid::Value(n.parse::<u32>().unwrap().try_into().unwrap())
+                        }
+                    })
+                    .collect::<Vec<SeqOrUid>>()
+                    .try_into()
+                    .unwrap();
+                SequenceSet::try_from(vec![Sequence::Range(a, b)]).unwrap()
+            } else {
+                let item = set.parse::<u32>().unwrap().try_into().unwrap();
+                SequenceSet::try_from(vec![Sequence::Single(item)]).unwrap()
+            }
+        }
     }
 }
 
@@ -783,9 +984,6 @@ mod tests {
             let backend_event_queue = Arc::clone(&backend_event_queue);
 
             BackendEventConsumer::new(Arc::new(move |ah, be| {
-                if matches!(be, BackendEvent::Refresh(_)) {
-                    panic!("Unexpected Refresh event received via BackendEventConsumer");
-                }
                 eprintln!("BackendEventConsumer: ah {ah:?} be {be:?}");
                 backend_event_queue.lock().unwrap().push_back((ah, be));
             }))
@@ -860,7 +1058,7 @@ mod tests {
         block_on(is_online_fut).unwrap();
         let mut mailboxes_fut = imap.mailboxes().unwrap();
         let mut main_conn_loop = Box::pin(main_conn.loop_handler("main"));
-        let _mailboxes = match block_on(future::select(
+        let mailboxes = match block_on(future::select(
             mailboxes_fut.as_mut(),
             main_conn_loop.as_mut(),
         )) {
@@ -869,6 +1067,7 @@ mod tests {
                 unreachable!("{:?}", value2);
             }
         };
+        let inbox_hash = *mailboxes.keys().next().unwrap();
 
         let mut watch_fut = imap.watch().unwrap().into_future();
         let (watch_conn_sender, watch_conn_receiver) = unbounded();
@@ -878,10 +1077,12 @@ mod tests {
             (watch_conn_sender.clone(), watch_conn_receiver),
             Arc::clone(&server_state),
         );
+        // $ date -R -u -r 0
         let new_mail = Box::new(
             Mail::new(
                 br#"From: "some name" <some@example.com>
 To: "me" <myself@example.com>
+Date: Thu, 01 Jan 1970 00:00:00 +0000
 Cc:
 Subject: RE: your e-mail
 Message-ID: <h2g7f.z0gy2pgaen5m@example.com>
@@ -899,6 +1100,7 @@ hello world.
                 br#"From: "some name" <some@example.com>
 To: "me" <myself@example.com>
 Cc:
+Date: Thu, 01 Jan 1970 00:00:01 +0000
 Subject: RE: your e-mail 2
 Message-ID: <h2g7f.z0gy2pgaen6m@example.com>
 Content-Type: text/plain
@@ -915,6 +1117,7 @@ hello world 2.
                 br#"From: "some name" <some@example.com>
 To: "me" <myself@example.com>
 Cc:
+Date: Thu, 01 Jan 1970 00:00:02 +0000
 Subject: RE: your e-mail 3
 Message-ID: <h2g7f.z0gy2pgaen7m@example.com>
 Content-Type: text/plain
@@ -927,13 +1130,13 @@ hello world 3.
             .unwrap(),
         );
         watch_conn_sender
-            .unbounded_send(ServerEvent::New(new_mail))
+            .unbounded_send(ServerEvent::New(new_mail.clone()))
             .unwrap();
         watch_conn_sender
-            .unbounded_send(ServerEvent::New(new_mail_2))
+            .unbounded_send(ServerEvent::New(new_mail_2.clone()))
             .unwrap();
         watch_conn_sender
-            .unbounded_send(ServerEvent::New(new_mail_3))
+            .unbounded_send(ServerEvent::New(new_mail_3.clone()))
             .unwrap();
         let watch_conn_loop = watch_conn.loop_handler("watch");
         let loops = loops_fut(main_conn_loop, watch_conn_loop);
@@ -965,6 +1168,32 @@ hello world 3.
                 assert_eq!(exists_lck.len(), 3);
                 let unseen_lck = mailbox.values().next().unwrap().unseen.lock().unwrap();
                 assert_eq!(unseen_lck.len(), 3);
+            }
+            {
+                let mut fetch_fut = imap.fetch(inbox_hash).unwrap().into_future();
+                let mut envelopes: Vec<Envelope> = vec![];
+                loop {
+                    let (envs, rest) = fetch_fut.await;
+                    let Some(envs) = envs else {
+                        break;
+                    };
+                    envelopes.extend(envs.unwrap());
+
+                    fetch_fut = rest.into_future();
+                }
+                envelopes.sort_by_key(|env| env.date());
+                for env in &mut envelopes {
+                    env.set_hash(EnvelopeHash(0));
+                }
+                let mut expected = vec![
+                    new_mail.envelope.clone(),
+                    new_mail_2.envelope.clone(),
+                    new_mail_3.envelope.clone(),
+                ];
+                for env in &mut expected {
+                    env.set_hash(EnvelopeHash(0));
+                }
+                assert_eq!(envelopes, expected);
             }
             {
                 let Some(RefreshEvent { kind: RefreshEventKind::Create(ref env), .. }) = refresh_events.iter().find(|refresh_event| matches!(refresh_event.kind, RefreshEventKind::Create(ref env) if env.subject()== "RE: your e-mail")) else {
@@ -1009,6 +1238,28 @@ hello world 3.
                 assert_eq!(exists_lck.len(), 2);
                 let unseen_lck = mailbox.values().next().unwrap().unseen.lock().unwrap();
                 assert_eq!(unseen_lck.len(), 2);
+            }
+            {
+                let mut fetch_fut = imap.fetch(inbox_hash).unwrap().into_future();
+                let mut envelopes: Vec<Envelope> = vec![];
+                loop {
+                    let (envs, rest) = fetch_fut.await;
+                    let Some(envs) = envs else {
+                        break;
+                    };
+                    envelopes.extend(envs.unwrap());
+
+                    fetch_fut = rest.into_future();
+                }
+                envelopes.sort_by_key(|env| env.date());
+                for env in &mut envelopes {
+                    env.set_hash(EnvelopeHash(0));
+                }
+                let mut expected = vec![new_mail_2.envelope.clone(), new_mail_3.envelope.clone()];
+                for env in &mut expected {
+                    env.set_hash(EnvelopeHash(0));
+                }
+                assert_eq!(envelopes, expected);
             }
             watch_conn_sender.unbounded_send(ServerEvent::Quit).unwrap();
             main_conn_sender.unbounded_send(ServerEvent::Quit).unwrap();
