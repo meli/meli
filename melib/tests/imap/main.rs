@@ -600,13 +600,21 @@ pub mod server {
                                 .parse::<usize>()
                                 .unwrap();
                             eprintln!("{name} loop_handler got FETCH for msn {msn_to_fetch}");
-                            let (uid, mail) = state
+                            let Some((uid, mail)) = state
                                 .lock()
                                 .unwrap()
                                 .envelopes
                                 .get_index(msn_to_fetch.saturating_sub(1))
                                 .map(|(u, m)| (*u, m.clone()))
-                                .unwrap();
+                            else {
+                                tcp_stream.write_all(id.as_bytes()).await.unwrap();
+                                tcp_stream
+                                    .write_all(b" BAD msn not found\r\n")
+                                    .await
+                                    .unwrap();
+                                tcp_stream.flush().await.unwrap();
+                                continue 'main;
+                            };
                             let references = mail.as_body_peek_references();
                             let response = Response::Data(Data::Fetch {
                                 seq: (msn_to_fetch as u32).try_into().unwrap(),
