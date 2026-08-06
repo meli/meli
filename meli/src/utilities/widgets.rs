@@ -217,10 +217,17 @@ pub trait FormWidgetLabel:
     + Sync
     + AsRef<str>
 {
+    fn display(&'_ self) -> Cow<'_, str> {
+        Cow::Borrowed(self.as_ref())
+    }
 }
 
 impl FormWidgetLabel for Cow<'static, str> {}
-impl FormWidgetLabel for melib::HeaderName {}
+impl FormWidgetLabel for melib::HeaderName {
+    fn display(&'_ self) -> Cow<'_, str> {
+        Cow::Owned(self.to_string())
+    }
+}
 
 #[derive(Debug)]
 pub struct FormWidget<T, F: FormWidgetLabel = Cow<'static, str>>
@@ -422,7 +429,7 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync, F: FormWidgetL
                 let v = self.fields.get_mut(k).unwrap();
                 /* Write field label */
                 grid.write_string(
-                    k.as_ref(),
+                    &k.display(),
                     theme_attr.fg,
                     theme_attr.bg,
                     theme_attr.attrs,
