@@ -506,6 +506,7 @@ impl NotmuchDb {
                 s.root_mailbox.as_str(),
                 s.name
             ))
+            .set_related_path(Some(path))
             .set_kind(ErrorKind::Configuration));
         }
         if !path.is_dir() {
@@ -514,6 +515,7 @@ impl NotmuchDb {
                 s.root_mailbox.as_str(),
                 s.name
             ))
+            .set_related_path(Some(path))
             .set_kind(ErrorKind::Configuration));
         }
         path.push(".notmuch");
@@ -524,6 +526,7 @@ impl NotmuchDb {
                 s.root_mailbox.as_str(),
                 s.name
             ))
+            .set_related_path(Some(path))
             .set_kind(ErrorKind::Configuration));
         }
         path.pop();
@@ -613,6 +616,7 @@ impl NotmuchDb {
                 s.root_mailbox.as_str(),
                 s.name
             ))
+            .set_related_path(Some(path))
             .set_kind(ErrorKind::Configuration));
         }
         if !path.is_dir() {
@@ -621,6 +625,7 @@ impl NotmuchDb {
                 s.root_mailbox.as_str(),
                 s.name
             ))
+            .set_related_path(Some(path))
             .set_kind(ErrorKind::Configuration));
         }
         path.push(".notmuch");
@@ -631,6 +636,7 @@ impl NotmuchDb {
                 s.root_mailbox.as_str(),
                 s.name
             ))
+            .set_related_path(Some(path))
             .set_kind(ErrorKind::Configuration));
         }
         path.pop();
@@ -648,6 +654,7 @@ impl NotmuchDb {
                      not exist or is a directory.",
                     s.name
                 ))
+                .set_related_path(Some(lib_path))
                 .set_kind(ErrorKind::Configuration));
             }
         }
