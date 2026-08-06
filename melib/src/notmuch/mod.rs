@@ -531,6 +531,14 @@ impl NotmuchDb {
         }
         path.pop();
 
+        if s.mailboxes.is_empty() {
+            return Err(Error::new(format!(
+                "Notmuch account `{}` requires mailboxes explicitly set, since they are virtual, \
+                 but none are configured. Try adding some.",
+                s.name
+            ))
+            .set_kind(ErrorKind::Configuration));
+        }
         let mut mailboxes = HashMap::with_capacity(s.mailboxes.len());
         let mut parents: Vec<(MailboxHash, &str)> = Vec::with_capacity(s.mailboxes.len());
         for (k, f) in s.mailboxes.iter() {
@@ -657,6 +665,13 @@ impl NotmuchDb {
                 .set_related_path(Some(lib_path))
                 .set_kind(ErrorKind::Configuration));
             }
+        }
+        if s.mailboxes.is_empty() {
+            return Err(Error::new(format!(
+                "Notmuch account `{account_name}` requires mailboxes explicitly set, since they \
+                 are virtual, but none are configured. Try adding some."
+            ))
+            .set_kind(ErrorKind::Configuration));
         }
         let mut parents: Vec<(String, String)> = Vec::with_capacity(s.mailboxes.len());
         for (k, f) in s.mailboxes.iter_mut() {
