@@ -96,6 +96,7 @@ fn help(env: &Env) {
             .stdout(predicates::str::contains("man"))
             .stdout(predicates::str::contains("install-man"))
             .stdout(predicates::str::contains("compiled-with"))
+            .stdout(predicates::str::contains("completions"))
             .stdout(predicates::str::contains("edit-config"))
             .stdout(predicates::str::contains("help"))
             .stdout(predicates::str::contains("print-app-directories"))
@@ -104,6 +105,23 @@ fn help(env: &Env) {
             .stdout(predicates::str::contains("print-loaded-themes"))
             .stdout(predicates::str::contains("print-log-path"))
             .stdout(predicates::str::contains("view"));
+    }
+}
+
+fn completions(env: &Env) {
+    for shell in ["bash", "fish", "zsh", "powershell", "elvish"] {
+        let mut cmd = Command::cargo_bin("meli").unwrap();
+        let output = cmd
+            .env_clear()
+            .envs(env)
+            .args(["completions", shell])
+            .output()
+            .unwrap()
+            .assert();
+        output
+            .code(0)
+            .stdout(predicates::str::is_empty().not())
+            .stderr(predicates::str::is_empty());
     }
 }
 
@@ -317,6 +335,7 @@ fn run_cli_subcommands() {
 
         version(&common_env);
         help(&common_env);
+        completions(&common_env);
         test_subcommand_succeeds(&common_env, "help");
         test_subcommand_succeeds(&common_env, "compiled-with");
         test_subcommand_succeeds(&common_env, "man");

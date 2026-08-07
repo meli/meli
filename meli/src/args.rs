@@ -103,6 +103,13 @@ pub enum SubCommand {
     #[structopt(display_order = 6)]
     /// Print compile time feature flags of this binary
     CompiledWith,
+    /// Generate shell completions and print them to stdout.
+    #[structopt(display_order = 7)]
+    Completions {
+        /// Shell to generate completions for.
+        #[structopt(possible_values = &structopt::clap::Shell::variants(), case_insensitive = true)]
+        shell: structopt::clap::Shell,
+    },
     /// Print log file location.
     PrintLogPath,
     /// View mail from input file.
@@ -247,6 +254,10 @@ impl Opt {
             }
             SubCommand::CompiledWith => {
                 subcommands::compiled_with()
+            }
+            SubCommand::Completions { shell } => {
+                Opt::clap().gen_completions_to("meli", shell, &mut std::io::stdout());
+                Ok(())
             }
             SubCommand::PrintLoadedThemes => {
                 let s = ret_err!(conf::FileSettings::new());
