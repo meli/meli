@@ -312,6 +312,7 @@ hello world.
             );
             assert_eq!(old_hash, env.hash());
         }
+        std::mem::forget(_watch_fut);
     }
 
     /// Test that `NotmuchDb::refresh` returns the expected `Refresh` events
