@@ -307,6 +307,41 @@ fn test_imap_fetch_response() {
         );
     }
     {
+        // Same as above, but the server quotes the header field name in the
+        // `BODY[HEADER.FIELDS ("REFERENCES")]` response, as Zoho does. An empty
+        // `References` header must still yield `Some("")` and not `None`,
+        // otherwise the response fails `RequiredResponses::FETCH_REFERENCES` and
+        // the envelope is silently dropped.
+        #[rustfmt::skip]
+    let input: &[u8] = b"* 198 FETCH (UID 7608 FLAGS (\\Seen) ENVELOPE (\"Fri, 24 Jun 2011 10:09:10 +0000\" \"xxxx/xxxx\" ((\"xx@xx.com\" NIL \"xx\" \"xx.com\")) NIL NIL ((\"xx@xx\" NIL \"xx\" \"xx.com\")) NIL NIL NIL \"<xx@xx.com>\") BODY[HEADER.FIELDS (\"REFERENCES\")] {2}\r\n\r\n BODYSTRUCTURE ((\"text\" \"html\" (\"charset\" \"us-ascii\") \"<xx@xx>\" NIL \"7BIT\" 17236 232 NIL NIL NIL NIL) \"related\" (\"boundary\" \"xx--xx\" \"type\" \"text/html\") NIL \"en-US\"))\r\n";
+        let mut address = SmallVec::new();
+        address.push(Address::new(None::<&str>, "xx@xx.com"));
+        let mut env = Envelope::new(EnvelopeHash::default());
+        env.set_subject(b"xxxx/xxxx".to_vec());
+        env.set_date(b"Fri, 24 Jun 2011 10:09:10 +0000");
+        env.set_from(address.clone());
+        env.set_to(address);
+        env.set_message_id(b"<xx@xx.com>");
+        assert_eq!(
+            fetch_response(input).unwrap(),
+            (
+                &b""[..],
+                FetchResponse {
+                    uid: Some(7608),
+                    message_sequence_number: 198,
+                    flags: Some((Flag::SEEN, vec![])),
+                    modseq: None,
+                    body: None,
+                    references: Some(b""),
+                    envelope: Some(env),
+                    bodystructure: true,
+                    raw_fetch_value: input,
+                },
+                vec![]
+            )
+        );
+    }
+    {
         let input = b"* 1429 FETCH (UID 1505 FLAGS (\\Seen))\r\n* 1430 FETCH (UID 1506 FLAGS (\\Seen))\r\n* OK Searched 99% of the mailbox, ETA 0:00\r\n* 1431 FETCH (UID 1507 FLAGS (\\Seen))\r\n* 1432 FETCH (UID 1500 FLAGS (\\Seen) RFC822 {4}\r\nnull\r\n)\r\n";
         assert_eq!(
             fetch_responses(input).unwrap(),

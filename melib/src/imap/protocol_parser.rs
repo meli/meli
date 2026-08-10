@@ -825,6 +825,8 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<'_, FetchResponse<'_>> {
                         references = v;
                     }
                     ret.references = Some(references);
+                } else {
+                    ret.references = Some(references.trim());
                 }
                 i += input.len() - i - rest.len();
             } else {
