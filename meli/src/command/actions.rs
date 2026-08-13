@@ -109,6 +109,8 @@ pub enum ViewAction {
     SaveAttachment(usize, FileAction),
     PipeAttachment(usize, String, Vec<String>),
     ExportMail(String),
+    ExportThread(String),
+    ExportThreadMbox(Option<melib::mbox::MboxFormat>, PathBuf),
     AddAddressesToContacts,
 }
 

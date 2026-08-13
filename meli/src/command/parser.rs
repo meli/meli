@@ -144,6 +144,8 @@ pub fn view(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
         save_attachment,
         pipe_attachment,
         export_mail,
+        export_thread,
+        export_thread_mbox,
         add_addresses_to_contacts,
     ))(input)
 }
@@ -533,6 +535,25 @@ pub fn export_mbox(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>>
         ))),
     ))
 }
+
+pub fn export_thread_mbox(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
+    let mut check = arg_init! { min_arg:1, max_arg: 1, export_thread_mbox};
+    let (input, _) = tag("export-thread-mbox")(input.trim())?;
+    arg_chk!(start check, input);
+    let (input, _) = is_a(" ")(input)?;
+    arg_chk!(inc check, input);
+    let (input, path) = quoted_argument(input.trim())?;
+    arg_chk!(finish check, input);
+    let (input, _) = eof(input)?;
+    Ok((
+        input,
+        Ok(View(ExportThreadMbox(
+            Some(melib::mbox::MboxFormat::MboxCl2),
+            path.to_string().into(),
+        ))),
+    ))
+}
+
 pub fn mailinglist(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     let mut check = arg_init! { min_arg:0, max_arg: 0, mailinglist};
     arg_chk!(start check, input);
@@ -985,6 +1006,19 @@ pub fn export_mail(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>>
     let (input, _) = eof(input)?;
     Ok((input, Ok(View(ExportMail(path.to_string())))))
 }
+
+pub fn export_thread(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
+    let mut check = arg_init! { min_arg:1, max_arg: 1, export_thread};
+    let (input, _) = tag("export-thread")(input.trim())?;
+    arg_chk!(start check, input);
+    let (input, _) = is_a(" ")(input)?;
+    arg_chk!(inc check, input);
+    let (input, path) = quoted_argument(input.trim())?;
+    arg_chk!(finish check, input);
+    let (input, _) = eof(input)?;
+    Ok((input, Ok(View(ExportThread(path.to_string())))))
+}
+
 pub fn add_addresses_to_contacts(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     let mut check = arg_init! { min_arg:0, max_arg: 0, add_addresses_to_contacts};
     let (input, _) = tag("add-addresses-to-contacts")(input.trim())?;

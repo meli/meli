@@ -487,6 +487,16 @@ Alternatives(&[to_stream!(One(Literal("save-attachment")), One(AttachmentIndexVa
                   tokens: &[One(Literal("export-mail")), One(Filepath)],
                   parser: parser::export_mail
                 },
+                { tags: ["export-thread "],
+                  desc: "export-thread PATH",
+                  tokens: &[One(Literal("export-thread")), One(Filepath)],
+                  parser: parser::export_thread
+                },
+                { tags: ["export-thread-mbox "],
+                  desc: "export-thread-mbox PATH",
+                  tokens: &[One(Literal("export-thread-mbox")), One(Filepath)],
+                  parser: parser::export_thread_mbox
+                },
                 { tags: ["add-addresses-to-contacts "],
                   desc: "add-addresses-to-contacts",
                   tokens: &[One(Literal("add-addresses-to-contacts"))],

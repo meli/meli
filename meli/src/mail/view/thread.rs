@@ -19,10 +19,18 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::cmp;
+use std::{
+    cmp,
+    fs::File,
+    io::{BufWriter, Write},
+};
 
+use futures::future::try_join_all;
 use melib::{
-    utils::datetime::{timestamp_to_string, UnixTimestamp},
+    utils::{
+        datetime::{timestamp_to_string, UnixTimestamp},
+        shellexpand::ShellExpandTrait,
+    },
     Address,
 };
 
@@ -1052,6 +1060,244 @@ impl Component for ThreadView {
                         false
                     }) =>
             {
+                true
+            }
+            UIEvent::Action(View(ViewAction::ExportThread(ref path))) => {
+                // Save entire thread as eml files in a directory path
+                let mut path = std::path::Path::new(path).to_path_buf().expand();
+                if path.is_relative() {
+                    path = context.current_dir().join(&path);
+                }
+                if !path.try_exists().unwrap_or(false) || !path.is_dir() {
+                    context.replies.push_back(UIEvent::Notification {
+                        title: Some("Thread export".into()),
+                        source: None,
+                        body: format!(
+                            "Path {path} either does not exist, or is not a directory.",
+                            path = path.display()
+                        )
+                        .into(),
+                        kind: Some(NotificationType::Info),
+                    });
+                    return true;
+                }
+
+                let mut results = vec![];
+                for entry in &self.entries {
+                    match entry.mailview.state {
+                        MailViewState::Init { .. } | MailViewState::LoadingBody { .. } => {
+                            context.replies.push_back(UIEvent::Notification {
+                                title: Some("Thread export".into()),
+                                source: None,
+                                body: "Thread is still loading".into(),
+                                kind: Some(NotificationType::Info),
+                            });
+                            return true;
+                        }
+                        MailViewState::Error { .. } => {
+                            context.replies.push_back(UIEvent::Notification {
+                                title: Some("Thread export".into()),
+                                source: None,
+                                body: "Thread messages could not be loaded because of errors"
+                                    .into(),
+                                kind: Some(NotificationType::Info),
+                            });
+                            return true;
+                        }
+                        MailViewState::Loaded {
+                            ref bytes,
+                            ref env,
+                            env_view: _,
+                            stack: _,
+                        } => {
+                            path.push(format!("{}.eml", env.message_id()));
+                            if let Err(err) = save_attachment(&path, bytes) {
+                                log::error!("Failed to create file at {}: {err}", path.display());
+                                context.replies.push_back(UIEvent::Notification {
+                                    title: Some(
+                                        format!("Failed to create file at {}", path.display())
+                                            .into(),
+                                    ),
+                                    body: err.to_string().into(),
+                                    source: Some(err),
+                                    kind: Some(NotificationType::Error(melib::ErrorKind::External)),
+                                });
+                                results.push(false);
+                            } else {
+                                results.push(true);
+                            }
+                            path.pop();
+                        }
+                    }
+                }
+
+                let failures = results.iter().filter(|b| **b).count();
+                let body = if failures == results.len() {
+                    "Could not export thread, check error logs.".into()
+                } else if failures > 0 {
+                    format!(
+                        "Saved at {path}: {failures}/{total} could not be saved, check error logs.",
+                        path = path.display(),
+                        total = results.len()
+                    )
+                    .into()
+                } else {
+                    format!(
+                        "Saved {total} mail{s} at {path}",
+                        path = path.display(),
+                        total = results.len(),
+                        s = if results.len() == 1 { "" } else { "s" }
+                    )
+                    .into()
+                };
+
+                context.replies.push_back(UIEvent::Notification {
+                    title: Some("Thread export".into()),
+                    source: None,
+                    body,
+                    kind: Some(NotificationType::Info),
+                });
+
+                true
+            }
+            UIEvent::Action(View(ViewAction::ExportThreadMbox(ref format, ref path))) => {
+                // Save entire thread as eml files in a directory path
+                let mut path = std::path::Path::new(path).to_path_buf().expand();
+                if path.is_relative() {
+                    path = context.current_dir().join(&path);
+                }
+                let format = (*format).unwrap_or_default();
+                let (account_hash, _, _) = self.coordinates;
+                let account = &mut context.accounts[&account_hash];
+                let collection = account.collection.clone();
+                let envs_to_set = self
+                    .entries
+                    .iter()
+                    .map(|e| e.msg_hash)
+                    .collect::<Vec<EnvelopeHash>>();
+
+                let futures: Result<Vec<_>> = envs_to_set
+                    .iter()
+                    .map(|&env_hash| account.envelope_bytes_by_hash(env_hash))
+                    .collect::<Result<Vec<_>>>();
+                let (sender, mut receiver) = crate::jobs::oneshot::channel();
+                let fut = Box::pin(async move {
+                    let cl = async move {
+                        // fully capture variables.
+                        let _ = (&envs_to_set, &collection);
+                        let bytes: Vec<Vec<u8>> = try_join_all(futures?).await?;
+                        let envs: Vec<_> = envs_to_set
+                            .iter()
+                            .map(|&env_hash| collection.get_env(env_hash))
+                            .collect();
+                        if path.is_dir() {
+                            if envs.len() == 1 {
+                                path.push(format!("{}.mbox", envs[0].message_id()));
+                            } else {
+                                let now = melib::utils::datetime::timestamp_to_string(
+                                    melib::utils::datetime::now(),
+                                    Some(melib::utils::datetime::formats::RFC3339_DATETIME),
+                                    false,
+                                );
+                                path.push(format!(
+                                    "{}-{}-{}_envelopes.mbox",
+                                    now,
+                                    envs[0].message_id(),
+                                    envs.len(),
+                                ));
+                            }
+                        }
+                        let mut file = BufWriter::new(
+                            File::options()
+                                .read(true)
+                                .write(true)
+                                .create_new(true)
+                                .open(&path)
+                                .chain_err_related_path(&path)?,
+                        );
+                        let mut iter = envs.iter().zip(bytes);
+                        let tags_lck = collection.tag_index.read().unwrap();
+                        if let Some((env, ref bytes)) = iter.next() {
+                            let tags: Vec<&str> = env
+                                .tags()
+                                .iter()
+                                .filter_map(|h| tags_lck.get(h).map(|s| s.as_str()))
+                                .collect();
+                            format
+                                .append(
+                                    &mut file,
+                                    bytes.as_slice(),
+                                    env.from().first(),
+                                    Some(env.date()),
+                                    (env.flags(), tags),
+                                    melib::mbox::MboxMetadata::CClient,
+                                    true,
+                                    false,
+                                )
+                                .chain_err_related_path(&path)?;
+                        }
+                        for (env, bytes) in iter {
+                            let tags: Vec<&str> = env
+                                .tags()
+                                .iter()
+                                .filter_map(|h| tags_lck.get(h).map(|s| s.as_str()))
+                                .collect();
+                            format
+                                .append(
+                                    &mut file,
+                                    bytes.as_slice(),
+                                    env.from().first(),
+                                    Some(env.date()),
+                                    (env.flags(), tags),
+                                    melib::mbox::MboxMetadata::CClient,
+                                    false,
+                                    false,
+                                )
+                                .chain_err_related_path(&path)?;
+                        }
+                        file.flush().chain_err_related_path(&path)?;
+                        Ok(path)
+                    };
+                    let r: Result<PathBuf> = cl.await;
+                    let _ = sender.send(r);
+                    Ok(())
+                });
+                let handle = account.main_loop_handler.job_executor.spawn(
+                    "exporting-thread-mbox".into(),
+                    fut,
+                    crate::jobs::IsAsync::Blocking,
+                );
+                account.insert_job(
+                    handle.job_id,
+                    JobRequest::Generic {
+                        name: "exporting mbox".into(),
+                        handle,
+                        on_finish: Some(CallbackFn(Box::new(move |context: &mut Context| {
+                            context.replies.push_back(match receiver.try_recv() {
+                                Err(_) | Ok(None) => UIEvent::Notification {
+                                    title: Some("Thread mbox export".into()),
+                                    source: None,
+                                    body: "Could not export thread as mbox: Job was canceled."
+                                        .into(),
+                                    kind: Some(NotificationType::Info),
+                                },
+                                Ok(Some(Err(err))) => UIEvent::Notification {
+                                    title: Some("Thread mbox export".into()),
+                                    source: None,
+                                    body: err.to_string().into(),
+                                    kind: Some(NotificationType::Error(err.kind)),
+                                },
+                                Ok(Some(Ok(path))) => UIEvent::Notification {
+                                    title: Some("Thread mbox export".into()),
+                                    source: None,
+                                    body: format!("Wrote to file {}", path.display()).into(),
+                                    kind: Some(NotificationType::Info),
+                                },
+                            });
+                        }))),
+                        log_level: LogLevel::INFO,
+                    },
+                );
                 true
             }
             _ => {

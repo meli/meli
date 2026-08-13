@@ -570,7 +570,7 @@ Copy or move to another account's mailbox.
 .It Cm delete
 Delete selected entries.
 .It Cm export-mbox Ar FILEPATH
-Export selected threads to mboxcl2 file.
+Export selected threads to mbox (mboxcl2 format) file.
 .It Cm create\-mailbox Ar ACCOUNT Ar MAILBOX_PATH
 create mailbox with given path.
 Be careful with backends and separator sensitivity (eg IMAP)
@@ -609,6 +609,11 @@ open list archive with
 .Xr xdg-open 1
 or, in MacOS,
 .Xr open 1
+.It Cm export-thread Ar DIRECTORY
+Export thread to directory as eml files
+.It Cm export-mbox-thread Ar FILEPATH
+Export thread to mbox (mboxcl2 format) file.
+Argument can be either a filepath (that will be created) or a directory, in which case a filename will be automatically generated.
 .El
 .Ss Composing mail commands
 .HorizontalRule
