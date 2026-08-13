@@ -707,6 +707,27 @@ impl MboxFormat {
             }
         }
     }
+
+    pub fn detect(bytes: &[u8]) -> Option<Self> {
+        let index: Arc<Mutex<HashMap<EnvelopeHash, (Offset, Length)>>> =
+            Arc::new(Mutex::new(HashMap::default()));
+
+        let is_crlf = bytes.contains_subsequence(b"\r\n");
+        for format in [Self::MboxCl2, Self::MboxCl, Self::MboxRd, Self::MboxO] {
+            let message_iter = MessageIterator {
+                index: index.clone(),
+                input: bytes,
+                offset: 0,
+                file_offset: 0,
+                format,
+                is_crlf,
+            };
+            if message_iter.collect::<Result<Vec<Envelope>>>().is_ok() {
+                return Some(format);
+            }
+        }
+        None
+    }
 }
 
 pub fn mbox_parse(
