@@ -342,12 +342,14 @@ impl Component for MailView {
                         coordinates.1,
                         vec![FlagOp::Set(Flag::SEEN)],
                     ) {
-                        context.replies.push_back(UIEvent::Notification {
-                            title: Some("Could not set message as seen".into()),
-                            source: None,
-                            body: err.to_string().into(),
-                            kind: Some(NotificationType::Error(err.kind)),
-                        });
+                        if !matches!(err.kind, ErrorKind::NotImplemented) {
+                            context.replies.push_back(UIEvent::Notification {
+                                title: Some("Could not set message as seen".into()),
+                                source: None,
+                                body: err.to_string().into(),
+                                kind: Some(NotificationType::Error(err.kind)),
+                            });
+                        }
                     }
                 }
             }
