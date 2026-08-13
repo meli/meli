@@ -226,111 +226,65 @@ pub mod server {
                      method_type ={method_type:?}, id = {id:?}"
                 );
                 match method_type {
-                    MethodCallType::Get => match object_type_name.as_str() {
-                        "Identity" => {
-                            let get: Get<identity::Identity> =
-                                serde_json::value::from_value(body).unwrap();
-                            eprintln!("Parsed Identity/get object {get:?}");
-                            let response: GetResponse<identity::Identity> = GetResponse {
-                                account_id: get.account_id,
-                                state: self.identity_state.clone(),
-                                list: self.identities.values().cloned().collect(),
-                                not_found: vec![],
-                            };
-                            eprintln!("Sending {id} {type} response: {response:?}");
-                            responses
-                                .method_responses
-                                .insert(id.clone(), serde_json::json! {[r#type, response, id]});
-                        }
-                        "Mailbox" => {
-                            let get: Get<mailbox::MailboxObject> =
-                                serde_json::value::from_value(body).unwrap();
-                            eprintln!("Parsed Mailbox/get object {get:?}");
-                            let response: GetResponse<mailbox::MailboxObject> = GetResponse {
-                                account_id: get.account_id,
-                                state: self.mailbox_state.clone(),
-                                list: self.mailboxes.values().cloned().collect(),
-                                not_found: vec![],
-                            };
-                            eprintln!("Sending {id} {type} response: {response:?}");
-                            responses
-                                .method_responses
-                                .insert(id.clone(), serde_json::json! {[r#type, response, id]});
-                        }
-                        "Email" => {
-                            let get: Get<email::EmailObject> =
-                                serde_json::value::from_value(body).unwrap();
-                            eprintln!("Parsed Email/get object {get:?}");
-                            let mut not_found = vec![];
-                            eprintln!("get.ids = {:?}", get.ids);
-                            let list = match get.ids {
-                                None => {
-                                    // Return all.
-                                    self.envelopes
-                                        .values()
-                                        .map(Into::into)
-                                        .zip(self.envelopes.keys())
-                                        .map(|(mut email, id): (email::EmailObject, &Id<_>)| {
-                                            email.id = id.clone();
-                                            email.mailbox_ids.insert(
-                                                self.mailboxes.keys().next().unwrap().clone(),
-                                                true,
-                                            );
+                    MethodCallType::Get => {
+                        match object_type_name.as_str() {
+                            "Identity" => {
+                                let get: Get<identity::Identity> =
+                                    serde_json::value::from_value(body).unwrap();
+                                eprintln!("Parsed Identity/get object {get:?}");
+                                let response: GetResponse<identity::Identity> = GetResponse {
+                                    account_id: get.account_id,
+                                    state: self.identity_state.clone(),
+                                    list: self.identities.values().cloned().collect(),
+                                    not_found: vec![],
+                                };
+                                eprintln!("Sending {id} {type} response: {response:?}");
+                                responses
+                                    .method_responses
+                                    .insert(id.clone(), serde_json::json! {[r#type, response, id]});
+                            }
+                            "Mailbox" => {
+                                let get: Get<mailbox::MailboxObject> =
+                                    serde_json::value::from_value(body).unwrap();
+                                eprintln!("Parsed Mailbox/get object {get:?}");
+                                let response: GetResponse<mailbox::MailboxObject> = GetResponse {
+                                    account_id: get.account_id,
+                                    state: self.mailbox_state.clone(),
+                                    list: self.mailboxes.values().cloned().collect(),
+                                    not_found: vec![],
+                                };
+                                eprintln!("Sending {id} {type} response: {response:?}");
+                                responses
+                                    .method_responses
+                                    .insert(id.clone(), serde_json::json! {[r#type, response, id]});
+                            }
+                            "Email" => {
+                                let get: Get<email::EmailObject> =
+                                    serde_json::value::from_value(body).unwrap();
+                                eprintln!("Parsed Email/get object {get:?}");
+                                let mut not_found = vec![];
+                                eprintln!("get.ids = {:?}", get.ids);
+                                let list = match get.ids {
+                                    None => {
+                                        // Return all.
+                                        self.envelopes
+                                            .values()
+                                            .map(Into::into)
+                                            .zip(self.envelopes.keys())
+                                            .map(|(mut email, id): (email::EmailObject, &Id<_>)| {
+                                                email.id = id.clone();
+                                                email.mailbox_ids.insert(
+                                                    self.mailboxes.keys().next().unwrap().clone(),
+                                                    true,
+                                                );
 
-                                            email
-                                        })
-                                        .collect()
-                                }
-                                Some(Argument::Value(email_ids)) => {
-                                    let mut list = Vec::with_capacity(email_ids.len());
-                                    for email_id in email_ids {
-                                        if let Some(mail) = self.envelopes.get(&email_id) {
-                                            let mut email_obj: email::EmailObject = mail.into();
-                                            email_obj.id = email_id.clone();
-                                            email_obj.mailbox_ids.insert(
-                                                self.mailboxes.keys().next().unwrap().clone(),
-                                                true,
-                                            );
-                                            list.push(email_obj);
-                                        } else {
-                                            not_found.push(email_id);
-                                        }
+                                                email
+                                            })
+                                            .collect()
                                     }
-                                    list
-                                }
-                                Some(Argument::ResultReference {
-                                    result_of,
-                                    name,
-                                    path,
-                                }) => {
-                                    // [ref:TODO]: `path` is a JSON pointer, so we should parse it
-                                    // as such. Example values: "/created", "/list/*/threadId"
-                                    //
-                                    // [ref:TODO]: if result reference evaluation fails, respond
-                                    // with `invalidResultReference`:
-                                    //
-                                    // > If any result reference fails to resolve, the whole method
-                                    // > MUST be rejected with an "invalidResultReference" error.
-                                    // > If an arguments object contains the same argument name in
-                                    // > normal and referenced form (e.g., "foo" and "#foo"), the
-                                    // > method MUST return an "invalidArguments" error.
-                                    let prev_response =
-                                        responses.method_responses.get(&result_of).unwrap();
-                                    assert_eq!(
-                                        prev_response[0].as_str().unwrap(),
-                                        &name,
-                                        "{prev_response:?}"
-                                    );
-                                    prev_response[1][path.trim_matches('/')]
-                                        .as_array()
-                                        .unwrap()
-                                        .iter()
-                                        .filter_map(|id| {
-                                            let email_id =
-                                                serde_json::from_value::<Id<email::EmailObject>>(
-                                                    id.clone(),
-                                                )
-                                                .unwrap();
+                                    Some(Argument::Value(email_ids)) => {
+                                        let mut list = Vec::with_capacity(email_ids.len());
+                                        for email_id in email_ids {
                                             if let Some(mail) = self.envelopes.get(&email_id) {
                                                 let mut email_obj: email::EmailObject = mail.into();
                                                 email_obj.id = email_id.clone();
@@ -338,28 +292,98 @@ pub mod server {
                                                     self.mailboxes.keys().next().unwrap().clone(),
                                                     true,
                                                 );
-                                                Some(email_obj)
+                                                list.push(email_obj);
                                             } else {
                                                 not_found.push(email_id);
-                                                None
                                             }
-                                        })
-                                        .collect::<Vec<email::EmailObject>>()
-                                }
-                            };
-                            let response: GetResponse<email::EmailObject> = GetResponse {
-                                account_id: get.account_id,
-                                state: self.email_state.clone(),
-                                list,
-                                not_found,
-                            };
-                            eprintln!("Sending {id} {type} response: {response:?}");
-                            responses
-                                .method_responses
-                                .insert(id.clone(), serde_json::json! {[r#type, response, id]});
+                                        }
+                                        list
+                                    }
+                                    Some(Argument::ResultReference {
+                                        result_of,
+                                        name,
+                                        path,
+                                    }) => {
+                                        // [ref:TODO]: `path` is a JSON pointer, so we should parse it
+                                        // as such. Example values: "/created", "/list/*/threadId"
+                                        //
+                                        // [ref:TODO]: if result reference evaluation fails, respond
+                                        // with `invalidResultReference`:
+                                        //
+                                        // > If any result reference fails to resolve, the whole method
+                                        // > MUST be rejected with an "invalidResultReference" error.
+                                        // > If an arguments object contains the same argument name in
+                                        // > normal and referenced form (e.g., "foo" and "#foo"), the
+                                        // > method MUST return an "invalidArguments" error.
+                                        let Some(prev_response) =
+                                            responses.method_responses.get(&result_of)
+                                        else {
+                                            eprintln!("{id} {type}: resultOf={result_of:?} not found, have: {method_responses:?}", method_responses=responses.method_responses);
+                                            responses.method_responses.insert(
+                                                id.clone(),
+                                                serde_json::json! {["error",{"type":"invalidResultReference"},id]},
+                                            );
+                                            continue;
+                                        };
+                                        if prev_response[0].as_str() == Some("error") {
+                                            eprintln!("{id} {type}: resultOf={result_of:?} was error: {prev_response:?}");
+                                            responses.method_responses.insert(
+                                                id.clone(),
+                                                serde_json::json! {["error",{"type":"invalidResultReference"},id]},
+                                            );
+                                            continue;
+                                        }
+                                        assert_eq!(
+                                            prev_response[0].as_str(),
+                                            Some(name.as_str()),
+                                            "{prev_response:?}"
+                                        );
+                                        prev_response[1][path.trim_matches('/')]
+                                            .as_array()
+                                            .unwrap()
+                                            .iter()
+                                            .filter_map(|id| {
+                                                let email_id = serde_json::from_value::<
+                                                    Id<email::EmailObject>,
+                                                >(
+                                                    id.clone()
+                                                )
+                                                .unwrap();
+                                                if let Some(mail) = self.envelopes.get(&email_id) {
+                                                    let mut email_obj: email::EmailObject =
+                                                        mail.into();
+                                                    email_obj.id = email_id.clone();
+                                                    email_obj.mailbox_ids.insert(
+                                                        self.mailboxes
+                                                            .keys()
+                                                            .next()
+                                                            .unwrap()
+                                                            .clone(),
+                                                        true,
+                                                    );
+                                                    Some(email_obj)
+                                                } else {
+                                                    not_found.push(email_id);
+                                                    None
+                                                }
+                                            })
+                                            .collect::<Vec<email::EmailObject>>()
+                                    }
+                                };
+                                let response: GetResponse<email::EmailObject> = GetResponse {
+                                    account_id: get.account_id,
+                                    state: self.email_state.clone(),
+                                    list,
+                                    not_found,
+                                };
+                                eprintln!("Sending {id} {type} response: {response:?}");
+                                responses
+                                    .method_responses
+                                    .insert(id.clone(), serde_json::json! {[r#type, response, id]});
+                            }
+                            other => panic!("other type name {other}"),
                         }
-                        other => panic!("other type name {other}"),
-                    },
+                    }
                     MethodCallType::Changes => match object_type_name.as_str() {
                         "Email" => {
                             let changes: Changes<email::EmailObject> =
@@ -370,9 +394,15 @@ pub mod server {
                                 .keys()
                                 .position(|k| *k == changes.since_state)
                             else {
+                                eprintln!(
+                                    "Email/changes since_state={since_state:?} not found, have: \
+                                     {email_state_changes:?}",
+                                    since_state = changes.since_state,
+                                    email_state_changes = self.email_state_changes
+                                );
                                 responses.method_responses.insert(
                                     id.clone(),
-                                    serde_json::json! {{ "type": "cannotCalculateChanges" }},
+                                    serde_json::json! {["error",{"type":"cannotCalculateChanges"},id]},
                                 );
                                 continue;
                             };
