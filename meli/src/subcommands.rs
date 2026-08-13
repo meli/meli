@@ -158,14 +158,48 @@ pub fn view(
     }
     let bytes = std::fs::read(&path)
         .chain_err_summary(|| format!("Could not read from `{}`", path.display()))?;
-    let wrapper = Mail::new(bytes, Some(Flag::SEEN))
-        .chain_err_summary(|| format!("Could not parse `{}`", path.display()))?;
+
+    if bytes.starts_with(b"From ") {
+        use melib::conf::AccountSettings;
+
+        let Some(mbox_format) = melib::mbox::MboxFormat::detect(&bytes) else {
+            return Err(Error::new("Could not detect mbox format").set_kind(ErrorKind::ValueError));
+        };
+        let mut settings = Settings::without_accounts().unwrap_or_default();
+        let mut ac = AccountSettings {
+            name: "mbox".into(),
+            root_mailbox: path.display().to_string(),
+            format: "mbox".into(),
+            read_only: true,
+            manual_refresh: true,
+            ..AccountSettings::default()
+        };
+        ac.extra
+            .insert("prefer_mbox_type".into(), mbox_format.to_string());
+        settings.accounts.insert("mbox".into(), ac.into());
+
+        let mut state = State::new(Some(settings), sender, receiver)?;
+
+        let window = Box::new(Tabbed::new(
+            vec![Box::new(listing::Listing::new(&mut state.context))],
+            &state.context,
+        ));
+
+        state.register_component(Box::new(StatusBar::new(&state.context, window)));
+        state.register_component(Box::new(notifications::NotificationRouter::new(
+            &state.context,
+        )));
+        return Ok(state);
+    }
     let mut state = State::new(
         Some(Settings::without_accounts().unwrap_or_default()),
         sender,
         receiver,
     )?;
     let main_loop_handler = state.context.main_loop_handler.clone();
+
+    let wrapper = Mail::new(bytes, Some(Flag::SEEN))
+        .chain_err_summary(|| format!("Could not parse `{}`", path.display()))?;
     state.register_component(Box::new(EnvelopeView::new(
         wrapper,
         None,
