@@ -66,11 +66,11 @@ pub use mailbox::*;
 #[macro_export]
 macro_rules! try_recv_timeout {
     ($oneshot:expr) => {{
-        const _3_MS: std::time::Duration = std::time::Duration::from_millis(95);
+        const _3_MS: std::time::Duration = std::time::Duration::from_millis(3);
         let now = std::time::Instant::now();
         let mut res = Ok(None);
         while now + _3_MS >= std::time::Instant::now() {
-            res = $oneshot.try_recv().map_err(|_| Error::new("canceled"));
+            res = $oneshot.try_recv().map_err(|_| Error::new("cancelled"));
             if res.as_ref().map(|r| r.is_some()).unwrap_or(false) || res.is_err() {
                 break;
             }
