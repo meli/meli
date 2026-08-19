@@ -20,6 +20,8 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
+use imap_codec::imap_types::search::SearchKey;
+
 use super::*;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -46,6 +48,16 @@ pub struct FetchState {
     pub uid_store: Arc<UIDStore>,
     pub batch_size: usize,
     pub cache_batch_size: usize,
+    // Real UIDs that exist on the server, sorted descending (newest first,
+    // matching FreshFetch's existing fetch order), populated once via a
+    // single `UID SEARCH ALL` instead of blindly walking the full UID space
+    // in fixed-size windows - UIDs are not necessarily dense (e.g. a mailbox
+    // with a lot of archiving/deletion history has large gaps between real
+    // UIDs, sometimes spanning the entire UID space), so the old approach
+    // could need dozens of round-trips that mostly land on empty ranges.
+    // `real_uids_offset` tracks how far into the list the walk has reached.
+    pub real_uids: Option<Vec<UID>>,
+    pub real_uids_offset: usize,
 }
 
 impl FetchState {
@@ -224,7 +236,7 @@ impl FetchState {
                     self.stage = FetchStage::InitialFresh;
                     continue;
                 }
-                FetchStage::FreshFetch { max_uid } => {
+                FetchStage::FreshFetch { max_uid: _ } => {
                     let Self {
                         ref mut stage,
                         ref connection,
@@ -232,6 +244,8 @@ impl FetchState {
                         ref uid_store,
                         batch_size,
                         cache_batch_size: _,
+                        ref mut real_uids,
+                        ref mut real_uids_offset,
                     } = self;
                     let mailbox_hash = *mailbox_hash;
                     let mut our_unseen: BTreeSet<EnvelopeHash> = BTreeSet::default();
@@ -250,21 +264,42 @@ impl FetchState {
                     }
                     let mut conn = connection.lock().await?;
                     let mut response = Vec::with_capacity(8 * 1024);
-                    let mut max_uid_left = max_uid;
 
                     let mut envelopes = Vec::with_capacity(*batch_size);
                     conn.examine_mailbox(mailbox_hash, &mut response, false)
                         .await?;
-                    if max_uid_left > 0 {
-                        let sequence_set = if max_uid_left == 1 {
-                            SequenceSet::from(ONE)
-                        } else {
-                            let min = max_uid_left.saturating_sub(*batch_size).max(1);
-                            let max = max_uid_left;
-                            max_uid_left = min.saturating_sub(1);
 
-                            SequenceSet::try_from(min..=max)?
-                        };
+                    // Discover which UIDs actually exist on the server once
+                    // (a single SEARCH, which the server answers directly
+                    // from its own mailbox index), instead of blindly
+                    // walking the full UID space in fixed-size windows that
+                    // are mostly empty when UIDs are sparse. Uses the same
+                    // SearchKey::All + search_results() machinery as
+                    // resync() above, just for the initial full sync instead
+                    // of an incremental one.
+                    if real_uids.is_none() {
+                        conn.send_command(CommandBody::search(None, SearchKey::All.into(), true))
+                            .await?;
+                        let mut search_response = Vec::with_capacity(8 * 1024);
+                        conn.read_response(&mut search_response, RequiredResponses::SEARCH)
+                            .await
+                            .chain_err_summary(|| {
+                                format!(
+                                    "Could not parse SEARCH response for mailbox {mailbox_path}"
+                                )
+                            })?;
+                        let (_, mut uids) = protocol_parser::search_results(&search_response)?;
+                        uids.sort_unstable_by(|a, b| b.cmp(a));
+                        *real_uids = Some(uids);
+                        *real_uids_offset = 0;
+                    }
+                    let all_uids = real_uids.as_ref().unwrap();
+                    let batch_end = (*real_uids_offset + *batch_size).min(all_uids.len());
+                    let batch = &all_uids[*real_uids_offset..batch_end];
+                    let is_last_batch = batch_end >= all_uids.len();
+
+                    if !batch.is_empty() {
+                        let sequence_set = SequenceSet::try_from(batch)?;
                         let (required_responses, macro_or_item_names) =
                             crate::imap::email::common_attributes();
                         conn.send_command(CommandBody::Fetch {
@@ -387,14 +422,13 @@ impl FetchState {
                         );
                         drop(conn);
                     }
-                    if max_uid_left <= 1 {
+                    *real_uids_offset = batch_end;
+                    if is_last_batch {
                         unseen.lock().unwrap().set_not_yet_seen(0);
                         mailbox_exists.lock().unwrap().set_not_yet_seen(0);
                         *stage = FetchStage::Finished;
                     } else {
-                        *stage = FetchStage::FreshFetch {
-                            max_uid: max_uid_left,
-                        };
+                        *stage = FetchStage::FreshFetch { max_uid: 0 };
                     }
                     return Ok(envelopes);
                 }
@@ -445,6 +479,8 @@ impl FetchState {
             ref uid_store,
             batch_size: _,
             cache_batch_size: _,
+            real_uids: _,
+            real_uids_offset: _,
         } = self;
         let mailbox_hash = *mailbox_hash;
         if !uid_store.keep_offline_cache.load(Ordering::SeqCst) {

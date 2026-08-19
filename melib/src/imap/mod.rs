@@ -64,7 +64,7 @@ use imap_codec::imap_types::{
     core::Atom,
     flag::{Flag as ImapCodecFlag, StoreResponse, StoreType},
     mailbox::Mailbox as ImapTypesMailbox,
-    sequence::{SequenceSet, ONE},
+    sequence::SequenceSet,
 };
 pub use sync::cache::ModSequence;
 
@@ -394,6 +394,8 @@ impl MailBackend for ImapType {
             uid_store: self.uid_store.clone(),
             batch_size: 2_500,
             cache_batch_size: 95_000,
+            real_uids: None,
+            real_uids_offset: 0,
         };
 
         Ok(Box::pin(try_fn_stream(|emitter| async move {
