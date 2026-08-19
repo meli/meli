@@ -74,11 +74,19 @@ impl FetchState {
                     continue;
                 }
                 FetchStage::InitialCache => {
+                    // Use select_mailbox(.., force: false) instead of
+                    // init_mailbox() (which always forces a real SELECT
+                    // round-trip): this mailbox was already selected moments
+                    // earlier by ResyncCache's own init_mailbox() call in
+                    // the same fetch() operation, so the connection's
+                    // existing selection can be reused instead of paying for
+                    // a redundant network round-trip.
+                    let mut response = Vec::with_capacity(8 * 1024);
                     let select_response = self
                         .connection
                         .lock()
                         .await?
-                        .init_mailbox(self.mailbox_hash)
+                        .select_mailbox(self.mailbox_hash, &mut response, false)
                         .await?;
                     if let Err(err) = self
                         .uid_store
@@ -452,7 +460,15 @@ impl FetchState {
         }
         {
             let mut conn = connection.lock().await?;
-            let select_response = conn.init_mailbox(mailbox_hash).await?;
+            // Same reasoning as the InitialCache stage above: this is called
+            // once per cache batch within a single fetch() operation that
+            // has already selected this exact mailbox, so force: false lets
+            // select_mailbox() reuse the existing selection instead of
+            // re-selecting on every batch.
+            let mut response = Vec::with_capacity(8 * 1024);
+            let select_response = conn
+                .select_mailbox(mailbox_hash, &mut response, false)
+                .await?;
             match Self::load_cache(&conn, mailbox_hash, max_uid, batch_size, select_response) {
                 None => Ok(None),
                 Some(Ok(env_hashes)) => {
