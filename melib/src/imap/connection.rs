@@ -1410,17 +1410,23 @@ impl ImapConnection {
         ret: &mut Vec<u8>,
         force: bool,
     ) -> Result<SelectResponse> {
-        if let (
-            true,
-            MailboxSelection::Examine {
-                mailbox_hash: _,
-                latest_response,
-            },
-        ) = (
-            !force,
-            self.stream.as_ref()?.current_mailbox.is(&mailbox_hash),
-        ) {
-            return Ok(latest_response.clone());
+        if !force {
+            match self.stream.as_ref()?.current_mailbox.is(&mailbox_hash) {
+                // Already SELECTed (read-write) or EXAMINEd (read-only) on this exact
+                // mailbox: either satisfies a read-only EXAMINE request, since SELECT
+                // is a strict superset of EXAMINE's access. Re-issuing EXAMINE here
+                // would only be a same-mailbox no-op re-select, not a genuine
+                // permission change.
+                MailboxSelection::Examine {
+                    latest_response, ..
+                }
+                | MailboxSelection::Select {
+                    latest_response, ..
+                } => {
+                    return Ok(latest_response.clone());
+                }
+                MailboxSelection::None => {}
+            }
         }
         let (imap_path, no_select) = {
             let m = &self.uid_store.mailboxes.lock().await[&mailbox_hash];
