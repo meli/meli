@@ -1655,7 +1655,7 @@ impl ImapConnection {
             Ok(Ok(())) => Ok(()),
             Err(err) | Ok(Err(err)) => {
                 self.stream = Err(err.clone());
-                self.connect().await
+                timeout(timeout_dur, self.connect()).await?
             }
         }
     }
