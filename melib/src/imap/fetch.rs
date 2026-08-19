@@ -79,7 +79,7 @@ impl FetchState {
                         .connection
                         .lock()
                         .await?
-                        .init_mailbox(self.mailbox_hash)
+                        .select_mailbox(self.mailbox_hash, &mut self.response, false)
                         .await?;
                     if let Err(err) = self
                         .uid_store
@@ -445,7 +445,7 @@ impl FetchState {
             ref uid_store,
             batch_size: _,
             cache_batch_size: _,
-            response: _,
+            ref mut response,
         } = self;
         let mailbox_hash = *mailbox_hash;
         if !uid_store.keep_offline_cache.load(Ordering::SeqCst) {
@@ -453,7 +453,7 @@ impl FetchState {
         }
         {
             let mut conn = connection.lock().await?;
-            let select_response = conn.init_mailbox(mailbox_hash).await?;
+            let select_response = conn.select_mailbox(mailbox_hash, response, false).await?;
             match Self::load_cache(&conn, mailbox_hash, max_uid, batch_size, select_response) {
                 None => Ok(None),
                 Some(Ok(env_hashes)) => {
