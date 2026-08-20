@@ -66,7 +66,7 @@ pub enum SubCommand {
     /// print location of configuration file that will be loaded on normal app
     /// startup.
     PrintConfigPath,
-    /// edit configuration files with `$EDITOR`/`$VISUAL`.
+    /// edit configuration files with EDITOR/VISUAL.
     EditConfig,
     /// create a sample configuration file with available configuration options.
     /// If `PATH` is not specified, meli will try to create it in
