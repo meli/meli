@@ -607,7 +607,12 @@ impl Attachment {
 
     fn get_text_recursive(&self, kind: &Text, text: &mut Vec<u8>) {
         match self.content_type {
-            ContentType::Text { .. } | ContentType::PGPSignature | ContentType::CMSSignature => {
+            ContentType::Text {
+                kind: ref a_kind, ..
+            } if a_kind == kind => {
+                text.extend(self.decode(Default::default()));
+            }
+            ContentType::PGPSignature | ContentType::CMSSignature => {
                 text.extend(self.decode(Default::default()));
             }
             ContentType::Multipart {
