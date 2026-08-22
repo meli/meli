@@ -607,7 +607,20 @@ impl Attachment {
 
     fn get_text_recursive(&self, kind: &Text, text: &mut Vec<u8>) {
         match self.content_type {
-            ContentType::Text { .. } | ContentType::PGPSignature | ContentType::CMSSignature => {
+            // A bare `Text` leaf only ever contains one `Text::Kind`, so it
+            // must actually match the one requested - unlike the
+            // `Multipart` branches below (which already filter their
+            // children this way), this arm previously decoded and
+            // returned its content regardless of `kind`, so asking a
+            // lone `text/plain` message (no `multipart/alternative`
+            // wrapper) for `Text::Html` wrongly returned the plain
+            // content back mislabeled as HTML.
+            ContentType::Text {
+                kind: ref a_kind, ..
+            } if a_kind == kind => {
+                text.extend(self.decode(Default::default()));
+            }
+            ContentType::PGPSignature | ContentType::CMSSignature => {
                 text.extend(self.decode(Default::default()));
             }
             ContentType::Multipart {
@@ -1050,5 +1063,33 @@ impl StrBuilder {
 
     pub fn display_bytes<'a>(&self, b: &'a [u8]) -> &'a [u8] {
         &b[self.offset..(self.offset + self.length)]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::email::Envelope;
+
+    /// A message whose entire body is a single, bare `text/plain` part (no
+    /// `multipart/alternative` wrapper) must not return that content when
+    /// `Text::Html` is requested - `get_text_recursive`'s leaf case
+    /// previously ignored the requested `kind` entirely, returning the
+    /// same plain content back regardless of what was asked for.
+    #[test]
+    fn test_attachment_text_kind_does_not_leak_across_bare_leaf() {
+        let raw = b"From: a@example.com\r\n\
+Subject: plain only\r\n\
+Content-Type: text/plain; charset=utf-8\r\n\
+\r\n\
+hello world.\r\n";
+        let envelope = Envelope::from_bytes(raw, None).expect("could not parse mail");
+        let body = envelope.body_bytes(raw);
+
+        assert_eq!(body.text(Text::Plain).trim(), "hello world.");
+        assert!(
+            body.text(Text::Html).trim().is_empty(),
+            "a bare text/plain leaf must not return content when Text::Html is requested"
+        );
     }
 }
