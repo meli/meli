@@ -78,7 +78,7 @@ use crate::{
     utils::futures::timeout,
 };
 
-pub type ImapNum = usize;
+pub type ImapNum = u32;
 pub type UID = ImapNum;
 pub type UIDVALIDITY = UID;
 pub type MessageSequenceNumber = ImapNum;
@@ -185,7 +185,7 @@ impl MessageSequenceNumberMap {
             return None;
         }
         debug_assert_eq!(
-            self.0.last_key_value().map(|(msn, _uid)| *msn),
+            self.0.last_key_value().map(|(msn, _uid)| *msn as usize),
             Some(self.0.len())
         );
         self.0.last_key_value().map(|(msn, _uid)| msn)
@@ -203,7 +203,7 @@ impl MessageSequenceNumberMap {
                 .iter()
                 .copied()
                 .enumerate()
-                .map(|(i, uid)| (i + 1, uid)),
+                .map(|(i, uid)| (i as u32 + 1, uid)),
         );
         Ok(results)
     }
@@ -212,7 +212,7 @@ impl MessageSequenceNumberMap {
         if self.0.get(&msn) == Some(&uid) {
             return true;
         }
-        if self.0.len() + 1 != msn {
+        if self.0.len() + 1 != msn as usize {
             self.0.clear();
             return false;
         }
@@ -809,30 +809,23 @@ impl MailBackend for ImapType {
                 .collect()
         };
 
-        if uids.is_empty() {
-            return Ok(Box::pin(async move { Ok(()) }));
-        }
-
-        // Conversion from UID (usize) to UID (NonZeroU32).
+        // Conversion from UID (u32) to UID (NonZeroU32).
         // TODO: Directly use NonZeroU32 for UID everywhere?
-        let sequence_set = {
+        let Ok(sequence_set) = ({
             let mut tmp = Vec::new();
 
             for uid in uids.iter() {
-                if let Ok(uid) = u32::try_from(*uid) {
-                    if let Ok(uid) = NonZeroU32::try_from(uid) {
-                        tmp.push(uid);
-                    } else {
-                        return Err(Error::new("Application error: UID was 0"));
-                    }
+                if let Ok(uid) = NonZeroU32::try_from(*uid) {
+                    tmp.push(uid);
                 } else {
-                    return Err(Error::new("Application error: UID exceeded u32"));
+                    return Err(Error::new("Application error: UID was 0"));
                 }
             }
 
-            // Safety: We know this can't fail due to the `is_empty` check above.
-            // TODO: This could be too easy to overlook.
-            SequenceSet::try_from(tmp).unwrap()
+            SequenceSet::try_from(tmp)
+        }) else {
+            // `uids` is empty.
+            return Ok(Box::pin(async move { Ok(()) }));
         };
 
         Ok(Box::pin(async move {
@@ -1037,30 +1030,23 @@ impl MailBackend for ImapType {
                         .collect()
                 };
 
-                if uids.is_empty() {
-                    return Ok(());
-                }
-
-                // Conversion from UID (usize) to UID (NonZeroU32).
+                // Conversion from UID (u32) to UID (NonZeroU32).
                 // TODO: Directly use NonZeroU32 for UID everywhere?
-                let sequence_set = {
+                let Ok(sequence_set) = ({
                     let mut tmp = Vec::new();
 
                     for uid in uids.iter() {
-                        if let Ok(uid) = u32::try_from(*uid) {
-                            if let Ok(uid) = NonZeroU32::try_from(uid) {
-                                tmp.push(uid);
-                            } else {
-                                return Err(Error::new("Application error: UID was 0"));
-                            }
+                        if let Ok(uid) = NonZeroU32::try_from(*uid) {
+                            tmp.push(uid);
                         } else {
-                            return Err(Error::new("Application error: UID exceeded u32"));
+                            return Err(Error::new("Application error: UID was 0"));
                         }
                     }
 
-                    // Safety: We know this can't fail due to the `is_empty` check above.
-                    // TODO: This could be too easy to overlook.
-                    SequenceSet::try_from(tmp).unwrap()
+                    SequenceSet::try_from(tmp)
+                }) else {
+                    // `uids` is empty.
+                    return Ok(());
                 };
 
                 conn.send_command(CommandBody::ExpungeUid { sequence_set })
@@ -1676,10 +1662,10 @@ impl ImapType {
                         let entry = mailboxes.entry(mailbox_hash).or_default();
                         let mut counters = entry.counters.lock().unwrap();
                         if let Some(total) = status.messages {
-                            counters.total.set_not_yet_seen(total);
+                            counters.total.set_not_yet_seen(total as usize);
                         }
                         if let Some(total) = status.unseen {
-                            counters.unseen.set_not_yet_seen(total);
+                            counters.unseen.set_not_yet_seen(total as usize);
                         }
                     }
                 }

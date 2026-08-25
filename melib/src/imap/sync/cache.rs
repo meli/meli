@@ -101,7 +101,7 @@ pub trait ImapCache: Send + std::fmt::Debug {
         &mut self,
         mailbox_hash: MailboxHash,
         lastseenuid: UID,
-        batch_size: usize,
+        batch_size: UID,
     ) -> Result<Option<Vec<EnvelopeHash>>>;
 
     fn init_mailbox(
@@ -265,7 +265,7 @@ impl ImapCache for Arc<UIDStore> {
         &mut self,
         mailbox_hash: MailboxHash,
         lastseenuid: UID,
-        batch_size: usize,
+        batch_size: UID,
     ) -> Result<Option<Vec<EnvelopeHash>>> {
         if !self.keep_offline_cache.load(Ordering::SeqCst) {
             return Ok(None);

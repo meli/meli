@@ -917,15 +917,14 @@ pub mod server {
                                     let msn = msn_map.get(&uid).copied().unwrap();
                                     assert_eq!(msn_map.expunge(&msn), Some(uid));
                                     responses.push(Response::Data(Data::Expunge(
-                                        (msn as u32).try_into().unwrap(),
+                                        msn.try_into().unwrap(),
                                     )));
                                     silence_exists = false;
                                 }
                                 Untagged::Exists => {
                                     if !silence_exists {
                                         if let Some(exists) = msn_map.exists().copied() {
-                                            responses
-                                                .push(Response::Data(Data::Exists(exists as u32)));
+                                            responses.push(Response::Data(Data::Exists(exists)));
                                         }
                                         silence_exists = true;
                                     }
@@ -1227,7 +1226,7 @@ pub mod server {
                             responses.push(Response::Status(
                                 Status::ok(
                                     None,
-                                    Some(Code::UidNext((uidnext as u32).try_into().unwrap())),
+                                    Some(Code::UidNext(uidnext.try_into().unwrap())),
                                     "Next UID",
                                 )
                                 .unwrap(),
@@ -1235,9 +1234,7 @@ pub mod server {
                             responses.push(Response::Status(
                                 Status::ok(
                                     None,
-                                    Some(Code::UidValidity(
-                                        (uidvalidity as u32).try_into().unwrap(),
-                                    )),
+                                    Some(Code::UidValidity(uidvalidity.try_into().unwrap())),
                                     "UIDs valid",
                                 )
                                 .unwrap(),
@@ -1303,7 +1300,7 @@ pub mod server {
                                         let msn = msn_map.get(uid).copied().unwrap();
                                         assert_eq!(msn_map.expunge(&msn), Some(*uid));
                                         responses.push(Response::Data(Data::Expunge(
-                                            (msn as u32).try_into().unwrap(),
+                                            msn.try_into().unwrap(),
                                         )));
                                     }
                                     our_untagged.insert(UntaggedEvent::Deletes(expunged));
@@ -1334,7 +1331,7 @@ pub mod server {
                                     .unwrap()
                                     .envelopes
                                     .iter()
-                                    .map(|(u, _)| (*u as u32).try_into().unwrap())
+                                    .map(|(u, _)| (*u).try_into().unwrap())
                                     .collect::<Vec<_>>();
                                 responses.push(Response::Data(Data::Search(uids, None)));
                                 responses.push(Response::Status(
@@ -1359,7 +1356,7 @@ pub mod server {
                                         .iter()
                                         .filter(|(_, env)| !env.is_seen())
                                         .map(|(uid, _)| {
-                                            (*msn_map.get(uid).unwrap() as u32).try_into().unwrap()
+                                            (*msn_map.get(uid).unwrap()).try_into().unwrap()
                                         })
                                         .collect::<Vec<_>>()
                                 };
@@ -1379,7 +1376,7 @@ pub mod server {
                             responses.push(Response::Data(Data::Status {
                                 mailbox: imap_types::mailbox::Mailbox::Inbox,
                                 items: vec![imap_types::status::StatusDataItem::UidNext(
-                                    (uidnext as u32).try_into().unwrap(),
+                                    uidnext.try_into().unwrap(),
                                 )]
                                 .into(),
                             }));
@@ -1415,7 +1412,7 @@ pub mod server {
                                     responses.push(Response::Data(Data::Fetch {
                                         seq: msn,
                                         items: vec![
-                                            MessageDataItem::Uid((uid as u32).try_into().unwrap()),
+                                            MessageDataItem::Uid(uid.try_into().unwrap()),
                                             MessageDataItem::Flags(mail.as_flags()),
                                             MessageDataItem::Envelope(mail.as_envelope()),
                                             MessageDataItem::BodyStructure(mail.as_bodystructure()),
@@ -1443,17 +1440,12 @@ pub mod server {
                                     Status::bad(Some(id), None, "no mailbox is selected").unwrap(),
                                 ));
                             } else {
-                                let largest =
-                                    state.lock().unwrap().next_uid.saturating_sub(1) as u32;
+                                let largest = state.lock().unwrap().next_uid.saturating_sub(1);
                                 'uid_fetch_flags: for uid in
                                     sequence_set.iter(largest.try_into().unwrap())
                                 {
-                                    let Some(mail) = state
-                                        .lock()
-                                        .unwrap()
-                                        .envelopes
-                                        .get(&(uid.get() as usize))
-                                        .cloned()
+                                    let Some(mail) =
+                                        state.lock().unwrap().envelopes.get(&(uid.get())).cloned()
                                     else {
                                         continue 'uid_fetch_flags;
                                     };
@@ -1483,17 +1475,12 @@ pub mod server {
                                     Status::bad(Some(id), None, "no mailbox is selected").unwrap(),
                                 ));
                             } else {
-                                let largest =
-                                    state.lock().unwrap().next_uid.saturating_sub(1) as u32;
+                                let largest = state.lock().unwrap().next_uid.saturating_sub(1);
                                 'uid_fetch: for uid in
                                     sequence_set.iter(largest.try_into().unwrap())
                                 {
-                                    let Some(mail) = state
-                                        .lock()
-                                        .unwrap()
-                                        .envelopes
-                                        .get(&(uid.get() as usize))
-                                        .cloned()
+                                    let Some(mail) =
+                                        state.lock().unwrap().envelopes.get(&(uid.get())).cloned()
                                     else {
                                         continue 'uid_fetch;
                                     };
@@ -1535,7 +1522,7 @@ pub mod server {
                                                     imap_types::flag::Flag::Deleted => {
                                                         if let Some(env) = state_lck
                                                             .envelopes
-                                                            .get_mut(&(uid.get() as usize))
+                                                            .get_mut(&(uid.get()))
                                                         {
                                                             env.envelope
                                                                 .set_flag(Flag::TRASHED, true);
@@ -1791,11 +1778,11 @@ pub mod tests {
             std::env::set_var(var, &dir);
         }
 
-        let next_uid = initial_envelopes.len() + 1;
+        let next_uid = initial_envelopes.len() as u32 + 1;
         let envelopes = initial_envelopes
             .into_iter()
             .enumerate()
-            .map(|(i, env)| (i + 1, env))
+            .map(|(i, env)| (i as u32 + 1, env))
             .collect();
         let server_state = Arc::new(Mutex::new(ServerState {
             envelopes,

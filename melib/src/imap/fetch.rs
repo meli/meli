@@ -44,8 +44,8 @@ pub struct FetchState {
     pub connection: Arc<ConnectionMutex>,
     pub mailbox_hash: MailboxHash,
     pub uid_store: Arc<UIDStore>,
-    pub batch_size: usize,
-    pub cache_batch_size: usize,
+    pub batch_size: UID,
+    pub cache_batch_size: UID,
     pub response: Vec<u8>,
 }
 
@@ -262,7 +262,7 @@ impl FetchState {
                     let mut conn = connection.lock().await?;
                     let mut max_uid_left = max_uid;
 
-                    let mut envelopes = Vec::with_capacity(*batch_size);
+                    let mut envelopes = Vec::with_capacity(*batch_size as usize);
                     conn.examine_mailbox(mailbox_hash, response, false).await?;
                     if max_uid_left > 0 {
                         let sequence_set = if max_uid_left == 1 {
@@ -424,7 +424,7 @@ impl FetchState {
         conn: &ImapConnection,
         mailbox_hash: MailboxHash,
         max_uid: UID,
-        batch_size: usize,
+        batch_size: UID,
         select_response: SelectResponse,
     ) -> Option<Result<Vec<EnvelopeHash>>> {
         let mut uid_store = conn.uid_store.clone();
@@ -451,7 +451,7 @@ impl FetchState {
     async fn cached_envs(
         &mut self,
         max_uid: UID,
-        batch_size: usize,
+        batch_size: UID,
     ) -> Result<Option<Vec<Envelope>>> {
         let Self {
             stage: _,

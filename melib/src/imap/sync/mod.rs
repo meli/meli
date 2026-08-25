@@ -682,7 +682,9 @@ impl ImapConnection {
             {
                 let mut counters = counters.lock().unwrap();
                 counters.total.clear();
-                counters.total.set_not_yet_seen(select_response.exists);
+                counters
+                    .total
+                    .set_not_yet_seen(select_response.exists as usize);
             }
         }
         if select_response.exists == 0 {

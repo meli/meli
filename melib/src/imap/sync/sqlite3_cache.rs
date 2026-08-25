@@ -390,7 +390,7 @@ impl ImapCache for Sqlite3Cache {
         &mut self,
         mailbox_hash: MailboxHash,
         lastseenuid: UID,
-        batch_size: usize,
+        batch_size: UID,
     ) -> Result<Option<Vec<EnvelopeHash>>> {
         if self.mailbox_state(mailbox_hash)?.is_none() {
             return Ok(None);
