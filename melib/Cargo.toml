@@ -62,7 +62,7 @@ notify = { version = "8", optional = true }
 polling = { version = "3" }
 quick-xml = { version = "0.31.0", optional = true, features = ["serialize"] }
 regex = { workspace = true }
-rusqlite = { version = "^0.37", default-features = false, features = ["array", "modern_sqlite"], optional = true }
+rusqlite = { version = "^0.40", default-features = false, features = ["array", "modern_sqlite"], optional = true }
 serde = { workspace = true, features = ["rc"] }
 serde_derive = { workspace = true }
 serde_json = { workspace = true, features = ["raw_value"] }
