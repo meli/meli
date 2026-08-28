@@ -490,6 +490,7 @@ pub struct MailBackendCapabilities {
     pub is_remote: bool,
     pub extensions: Option<Vec<(String, MailBackendExtensionStatus)>>,
     pub supports_search: bool,
+    pub supports_raw_search: bool,
     pub supports_tags: bool,
     pub supports_submission: bool,
     pub extra_submission_headers: &'static [HeaderName],
@@ -501,6 +502,7 @@ pub const EMPTY_MAIL_BACKEND_CAPABILITIES: MailBackendCapabilities = MailBackend
     is_async: false,
     is_remote: false,
     supports_search: false,
+    supports_raw_search: false,
     extensions: None,
     supports_tags: false,
     supports_submission: false,
@@ -615,6 +617,15 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         query: crate::search::Query,
         mailbox_hash: Option<MailboxHash>,
     ) -> ResultFuture<Vec<EnvelopeHash>>;
+
+    fn raw_search(
+        &mut self,
+        _query: String,
+        _mailbox_hash: Option<MailboxHash>,
+    ) -> ResultFuture<Vec<EnvelopeHash>> {
+        Err(Error::new("Raw search not supported in this backend.")
+            .set_kind(ErrorKind::NotSupported))
+    }
 
     fn submit(
         &mut self,
