@@ -215,12 +215,11 @@ impl MailBackend for NntpType {
         MailBackendCapabilities {
             is_async: true,
             is_remote: true,
-            supports_search: false,
             extensions: Some(extensions),
-            supports_tags: false,
             supports_submission,
             extra_submission_headers: &[HeaderName::NEWSGROUPS],
             metadata,
+            ..MailBackendCapabilities::default()
         }
     }
 

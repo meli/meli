@@ -496,6 +496,24 @@ pub struct MailBackendCapabilities {
     pub metadata: Option<serde_json::Value>,
 }
 
+/// A default for [`MailBackendCapabilities`] for use in const contexts.
+pub const EMPTY_MAIL_BACKEND_CAPABILITIES: MailBackendCapabilities = MailBackendCapabilities {
+    is_async: false,
+    is_remote: false,
+    supports_search: false,
+    extensions: None,
+    supports_tags: false,
+    supports_submission: false,
+    extra_submission_headers: &[],
+    metadata: None,
+};
+
+impl Default for MailBackendCapabilities {
+    fn default() -> Self {
+        EMPTY_MAIL_BACKEND_CAPABILITIES
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub enum MailBackendExtensionStatus {
     Unsupported { comment: Option<&'static str> },

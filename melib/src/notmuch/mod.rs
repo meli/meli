@@ -700,14 +700,9 @@ impl NotmuchDb {
 impl MailBackend for NotmuchDb {
     fn capabilities(&mut self) -> MailBackendCapabilities {
         const CAPABILITIES: MailBackendCapabilities = MailBackendCapabilities {
-            is_async: false,
-            is_remote: false,
             supports_search: true,
-            extensions: None,
             supports_tags: true,
-            supports_submission: false,
-            extra_submission_headers: &[],
-            metadata: None,
+            ..crate::backends::EMPTY_MAIL_BACKEND_CAPABILITIES
         };
         CAPABILITIES
     }

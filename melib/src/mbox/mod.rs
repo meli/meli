@@ -861,17 +861,7 @@ pub struct MboxType {
 
 impl MailBackend for MboxType {
     fn capabilities(&mut self) -> MailBackendCapabilities {
-        const CAPABILITIES: MailBackendCapabilities = MailBackendCapabilities {
-            is_async: false,
-            is_remote: false,
-            supports_search: false,
-            extensions: None,
-            supports_tags: false,
-            supports_submission: false,
-            extra_submission_headers: &[],
-            metadata: None,
-        };
-        CAPABILITIES
+        crate::backends::EMPTY_MAIL_BACKEND_CAPABILITIES
     }
 
     fn is_online(&mut self) -> ResultFuture<()> {

@@ -392,11 +392,8 @@ impl MailBackend for JmapType {
             is_async: true,
             is_remote: true,
             supports_search: true,
-            extensions: None,
             supports_tags: true,
-            supports_submission: false,
-            extra_submission_headers: &[],
-            metadata: None,
+            ..crate::backends::EMPTY_MAIL_BACKEND_CAPABILITIES
         };
         let mut supports_submission = false;
         let mut extensions = None;
