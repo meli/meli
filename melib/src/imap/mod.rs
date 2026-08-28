@@ -72,7 +72,7 @@ use crate::{
     backends::{prelude::*, RefreshEventKind::*},
     collection::Collection,
     conf::AccountSettings,
-    email::*,
+    email::{parser::BytesExt, *},
     error::{Error, ErrorKind, Result, ResultIntoError},
     imap::{protocol_parser::id_ext::IDResponse, sync::cache::ImapCache},
     text::Truncate,
@@ -340,6 +340,7 @@ impl MailBackend for ImapType {
                 )
             })
             .collect::<Vec<(String, MailBackendExtensionStatus)>>();
+        let mut supports_raw_search = false;
         if let ImapProtocol::IMAP {
             extension_use:
                 ImapExtensionUse {
@@ -425,6 +426,22 @@ impl MailBackend for ImapType {
                             };
                         }
                     }
+                    "XLIST" => {
+                        *status = MailBackendExtensionStatus::Unsupported {
+                            comment: Some("Deprecated by LIST-EXTENDED"),
+                        };
+                    }
+                    "XYZZY" => {
+                        *status = MailBackendExtensionStatus::Supported {
+                            comment: Some("Nothing is supported"),
+                        };
+                    }
+                    "X-GM-EXT-1" => {
+                        *status = MailBackendExtensionStatus::Supported {
+                            comment: Some("Only raw search"),
+                        };
+                        supports_raw_search = true;
+                    }
                     _ => {
                         if SUPPORTED_CAPABILITIES
                             .iter()
@@ -448,6 +465,7 @@ impl MailBackend for ImapType {
             is_async: true,
             is_remote: true,
             supports_search: true,
+            supports_raw_search,
             extensions: Some(extensions),
             supports_tags: true,
             supports_submission: false,
@@ -1365,6 +1383,62 @@ impl MailBackend for ImapType {
         Ok(Box::pin(async move {
             let mut conn = connection.lock().await?;
             conn.search(query, mailbox_hash).await
+        }))
+    }
+
+    // We only support Gmail's X-GM-RAW at the moment.
+    fn raw_search(
+        &mut self,
+        query_str: String,
+        mailbox_hash: Option<MailboxHash>,
+    ) -> ResultFuture<Vec<EnvelopeHash>> {
+        let capabilities = self.capabilities();
+        if !capabilities.supports_raw_search {
+            return Err(Error::new("Raw search not supported in this IMAP server.")
+                .set_kind(ErrorKind::NotSupported));
+        }
+        let Some(mailbox_hash) = mailbox_hash else {
+            return Err(Error::new(
+                "Cannot search without specifying mailbox on IMAP",
+            ));
+        };
+        let connection = self.connection.clone();
+
+        Ok(Box::pin(async move {
+            let mut conn = connection.lock().await?;
+            let mut response = Vec::with_capacity(8 * 1024);
+            conn.examine_mailbox(mailbox_hash, &mut response, false)
+                .await?;
+            let query_str = query_str.trim();
+            let query_str_bytes = query_str.len();
+            conn.send_command_raw(format!("UID SEARCH X-GM-RAW {{{query_str_bytes}}}").as_bytes())
+                .await?;
+            conn.wait_for_continuation_request().await?;
+            conn.send_literal(query_str.as_bytes()).await?;
+            conn.read_response(&mut response, RequiredResponses::SEARCH)
+                .await?;
+            imap_log!(
+                trace,
+                conn,
+                "searching for {} returned: {}",
+                query_str,
+                String::from_utf8_lossy(&response)
+            );
+
+            for l in response.split_rn() {
+                if l.starts_with(b"* SEARCH") {
+                    let uid_index = conn.uid_store.uid_index.lock()?;
+                    return Ok(Vec::from_iter(
+                        String::from_utf8_lossy(l[b"* SEARCH".len()..].trim())
+                            .split_whitespace()
+                            .map(UID::from_str)
+                            .filter_map(std::result::Result::ok)
+                            .filter_map(|uid| uid_index.get(&(mailbox_hash, uid)))
+                            .copied(),
+                    ));
+                }
+            }
+            Err(Error::new(String::from_utf8_lossy(&response).to_string()))
         }))
     }
 }
