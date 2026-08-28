@@ -1964,9 +1964,13 @@ impl Component for CompactListing {
                 self.force_draw = true;
                 return true;
             }
-            UIEvent::Action(Action::Listing(Search(ref filter_term))) if !self.unfocused() => {
+            UIEvent::Action(Action::Listing(Search {
+                term: ref filter_term,
+                raw_search,
+            })) if !self.unfocused() => {
                 match context.accounts[&self.cursor_pos.0].search(
                     filter_term,
+                    raw_search,
                     self.sort,
                     self.cursor_pos.1,
                 ) {
@@ -1993,9 +1997,13 @@ impl Component for CompactListing {
                 self.set_dirty(true);
                 return true;
             }
-            UIEvent::Action(Action::Listing(Select(ref search_term))) if !self.unfocused() => {
+            UIEvent::Action(Action::Listing(Select {
+                term: ref search_term,
+                raw_search,
+            })) if !self.unfocused() => {
                 match context.accounts[&self.cursor_pos.0].search(
                     search_term,
+                    raw_search,
                     self.sort,
                     self.cursor_pos.1,
                 ) {

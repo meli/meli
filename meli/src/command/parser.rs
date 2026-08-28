@@ -476,17 +476,30 @@ pub fn sort_column(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>>
     let (input, _) = eof(input)?;
     Ok((input, Ok(SortColumn(i, order))))
 }
+
 pub fn search(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     let mut check = arg_init! { min_arg:1, max_arg:{ u8::MAX}, search};
-    let (input, _) = tag("search")(input.trim())?;
+    let (input, raw_search) = if let Some(input) = input.trim().strip_prefix(b"raw-") {
+        (input, true)
+    } else {
+        (input, false)
+    };
+    let (input, _) = tag("search")(input)?;
     arg_chk!(start check, input);
     let (input, _) = is_a(" ")(input)?;
     arg_chk!(inc check, input);
     let (input, string) = map_res(not_line_ending, std::str::from_utf8)(input)?;
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
-    Ok((input, Ok(Listing(Search(String::from(string))))))
+    Ok((
+        input,
+        Ok(Listing(Search {
+            term: String::from(string),
+            raw_search,
+        })),
+    ))
 }
+
 pub fn select(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     #[inline]
     fn clear_selection(input: &[u8]) -> Option<IResult<&[u8], Result<Action, CommandError>>> {
@@ -509,6 +522,11 @@ pub fn select(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     }
 
     let mut check = arg_init! { min_arg:1, max_arg: {u8::MAX}, select};
+    let (input, raw_search) = if let Some(input) = input.trim().strip_prefix(b"raw-") {
+        (input, true)
+    } else {
+        (input, false)
+    };
     let (input, _) = tag("select")(input.trim())?;
     arg_chk!(start check, input);
     let (input, _) = is_a(" ")(input)?;
@@ -516,8 +534,15 @@ pub fn select(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     let (input, string) = map_res(not_line_ending, std::str::from_utf8)(input)?;
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
-    Ok((input, Ok(Listing(Select(String::from(string))))))
+    Ok((
+        input,
+        Ok(Listing(Select {
+            term: String::from(string),
+            raw_search,
+        })),
+    ))
 }
+
 pub fn export_mbox(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     let mut check = arg_init! { min_arg:1, max_arg: 1, export_mbox};
     let (input, _) = tag("export-mbox")(input.trim())?;

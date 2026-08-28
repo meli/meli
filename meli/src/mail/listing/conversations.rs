@@ -1489,9 +1489,13 @@ impl Component for ConversationsListing {
                 self.set_dirty(true);
             }
             UIEvent::Action(ref action) => match action {
-                Action::Listing(Search(ref filter_term)) if !self.unfocused() => {
+                Action::Listing(Search {
+                    term: ref filter_term,
+                    raw_search,
+                }) if !self.unfocused() => {
                     match context.accounts[&self.cursor_pos.0].search(
                         filter_term,
+                        *raw_search,
                         self.sort,
                         self.cursor_pos.1,
                     ) {

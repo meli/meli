@@ -1438,7 +1438,7 @@ impl Component for Tabbed {
                     );
                 }
             }
-            UIEvent::Action(Action::Listing(ListingAction::Search(pattern)))
+            UIEvent::Action(Action::Listing(ListingAction::Search { term: pattern, .. }))
                 if self.show_shortcuts =>
             {
                 self.help_view.search = Some(SearchPattern {

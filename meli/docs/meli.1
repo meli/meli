@@ -256,6 +256,7 @@ or
 .Dl less \-r
 if you want to preserve the ANSI escape codes in the pager's output.
 .Sh SEARCH
+.Command search QUERY
 Each e\-mail storage backend has a default search method assigned.
 .Em IMAP
 uses the SEARCH command,
@@ -362,6 +363,20 @@ Sqlite3 on the contrary at reasonable mailbox sizes should have a non noticeable
 .It
 .Li subject = \&"subject:\&" term
 .El
+.Ss Raw search
+Wherever supported, you can perform a search using the backend's native query language:
+.Bl -dash -compact
+.It
+with the notmuch backend, which appends the mailbox's query to your query
+.It
+on IMAP backend with Gmail using its proprietary
+.Li X-GM-EXT-1
+extension.
+.El
+.Pp
+Use the
+.Command raw-search QUERY
+command to perform a raw search.
 .Sh FLAGS
 .Nm
 supports the basic maildir flags: passed, replied, seen, trashed, draft and flagged.

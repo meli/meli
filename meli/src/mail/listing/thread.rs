@@ -1755,9 +1755,13 @@ impl Component for ThreadListing {
                     }
                     return true;
                 }
-                Action::Listing(Search(ref filter_term)) if !self.unfocused() => {
+                Action::Listing(Search {
+                    term: ref filter_term,
+                    raw_search,
+                }) if !self.unfocused() => {
                     match context.accounts[&self.new_cursor_pos.0].search(
                         filter_term,
+                        *raw_search,
                         self.sort,
                         self.new_cursor_pos.1,
                     ) {
@@ -1784,9 +1788,13 @@ impl Component for ThreadListing {
                     self.set_dirty(true);
                     return true;
                 }
-                Action::Listing(Select(ref search_term)) if !self.unfocused() => {
+                Action::Listing(Select {
+                    term: ref search_term,
+                    raw_search,
+                }) if !self.unfocused() => {
                     match context.accounts[&self.cursor_pos.0].search(
                         search_term,
+                        *raw_search,
                         self.sort,
                         self.cursor_pos.1,
                     ) {

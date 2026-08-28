@@ -243,15 +243,19 @@ impl AccountStatus {
             &match (
                 a.settings.conf.search_backend(),
                 a.backend_capabilities.supports_search,
+                a.backend_capabilities.supports_raw_search,
             ) {
-                (SearchBackend::Auto, true) | (SearchBackend::None, true) => {
+                (SearchBackend::Auto, true, false) | (SearchBackend::None, true, false) => {
                     Cow::Borrowed("backend-side search")
                 }
-                (SearchBackend::Auto, false) | (SearchBackend::None, false) => {
+                (SearchBackend::Auto, true, true) | (SearchBackend::None, true, true) => {
+                    Cow::Borrowed("backend-side search (+ raw search)")
+                }
+                (SearchBackend::Auto, false, _) | (SearchBackend::None, false, _) => {
                     Cow::Borrowed("none (search will be slow)")
                 }
                 #[cfg(feature = "sqlite3")]
-                (SearchBackend::Sqlite3, _) => {
+                (SearchBackend::Sqlite3, _, _) => {
                     match crate::sqlite3::AccountCache::db_path(&a.name) {
                         Ok(Some(path)) => {
                             Cow::Owned(format!("sqlite3 database: {}", path.display()))

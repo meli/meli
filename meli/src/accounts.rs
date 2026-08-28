@@ -1277,25 +1277,31 @@ impl Account {
     pub fn search(
         &self,
         search_term: &str,
+        raw_search: bool,
         _sort: (SortField, SortOrder),
         mailbox_hash: MailboxHash,
     ) -> ResultFuture<Vec<EnvelopeHash>> {
-        let query = melib::search::Query::try_from(search_term)?;
         match self.settings.conf.search_backend {
             #[cfg(feature = "sqlite3")]
             SearchBackend::Sqlite3 => Ok(Box::pin(crate::sqlite3::AccountCache::search(
                 self.name.clone(),
-                query,
+                melib::search::Query::try_from(search_term)?,
                 _sort,
             ))),
             SearchBackend::Auto | SearchBackend::None => {
-                if self.backend_capabilities.supports_search {
+                if raw_search {
                     self.backend
                         .lock()
                         .unwrap()
-                        .search(query, Some(mailbox_hash))
+                        .raw_search(search_term.into(), Some(mailbox_hash))
+                } else if self.backend_capabilities.supports_search {
+                    self.backend.lock().unwrap().search(
+                        melib::search::Query::try_from(search_term)?,
+                        Some(mailbox_hash),
+                    )
                 } else {
                     use melib::search::QueryTrait;
+                    let query = melib::search::Query::try_from(search_term)?;
                     let mut ret = Vec::with_capacity(512);
                     let envelopes = self.collection.envelopes.read().unwrap();
                     for &env_hash in self.collection.get_mailbox(mailbox_hash).iter() {
