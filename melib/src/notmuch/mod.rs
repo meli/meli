@@ -701,6 +701,7 @@ impl MailBackend for NotmuchDb {
     fn capabilities(&mut self) -> MailBackendCapabilities {
         const CAPABILITIES: MailBackendCapabilities = MailBackendCapabilities {
             supports_search: true,
+            supports_raw_search: true,
             supports_tags: true,
             ..crate::backends::EMPTY_MAIL_BACKEND_CAPABILITIES
         };
@@ -1107,6 +1108,34 @@ impl MailBackend for NotmuchDb {
                 String::new()
             };
             melib_query.query_to_string(&mut query_s)?;
+            let query: Query = Query::new(&database, &query_s)?;
+            Ok(query.search()?.map(|message| message.env_hash()).collect())
+        }))
+    }
+
+    fn raw_search(
+        &mut self,
+        query_str: String,
+        mailbox_hash: Option<MailboxHash>,
+    ) -> ResultFuture<Vec<EnvelopeHash>> {
+        let database = DbConnection::new(self.path.as_path(), self.lib.clone(), false)?;
+        let mailboxes = self.mailboxes.clone();
+        Ok(Box::pin(async move {
+            let mailbox_query_s = if let Some(mailbox_hash) = mailbox_hash {
+                if let Some(m) = mailboxes.read().unwrap().get(&mailbox_hash) {
+                    let mut s = m.query_str.clone();
+                    s.push(' ');
+                    s
+                } else {
+                    return Err(
+                        Error::new(format!("Mailbox with hash {mailbox_hash} not found!"))
+                            .set_kind(ErrorKind::NotFound),
+                    );
+                }
+            } else {
+                String::new()
+            };
+            let query_s = format!("{mailbox_query_s}{query_str}");
             let query: Query = Query::new(&database, &query_s)?;
             Ok(query.search()?.map(|message| message.env_hash()).collect())
         }))
