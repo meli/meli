@@ -391,6 +391,9 @@ pub async fn examine_updates(
             ..
         } in v.iter_mut()
         {
+            if uid.is_none() || envelope.is_none() {
+                continue;
+            }
             let uid = uid.unwrap();
             let env = envelope.as_mut().unwrap();
             env.set_hash(generate_envelope_hash(mailbox.imap_path(), &uid));
