@@ -179,7 +179,7 @@ send_mail = { hostname = "localhost", port = 25, auth = { type = "none" }, secur
 
 [pager]
 filter = "COLUMNS=72 /usr/local/bin/pygmentize -l email"
-html_filter = "w3m -I utf-8 -T text/html"
+html_filter = "w3m -I utf-8 -T text/html -o display_link_number=1"
 
 [notifications]
 script = "notify-send"

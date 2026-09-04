@@ -109,7 +109,7 @@ by setting the `pager.html_filter` setting. The default setting corresponds to:
 
 ```toml
 [pager]
-html_filter = "w3m -I utf-8 -T text/html"
+html_filter = "w3m -I utf-8 -T text/html -o display_link_number=1"
 ```
 
 The HTML of the e-mail is piped into `html_filter`'s standard input.

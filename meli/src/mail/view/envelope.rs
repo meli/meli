@@ -148,7 +148,7 @@ impl EnvelopeView {
             let filter_invocation = view_settings
                 .html_filter
                 .as_deref()
-                .unwrap_or("w3m -I utf-8 -T text/html");
+                .unwrap_or("w3m -I utf-8 -T text/html -o display_link_number=1");
             let command_obj = Command::new("sh")
                 .args(["-c", filter_invocation])
                 .stdin(Stdio::piped())

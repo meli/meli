@@ -253,7 +253,7 @@ impl ViewFilter {
             )
         } else {
             (
-                "w3m -I utf-8 -T text/html".into(),
+                "w3m -I utf-8 -T text/html -o display_link_number=1".into(),
                 "w3m",
                 smallvec::smallvec!["-I".into(), "utf-8".into(), "-T".into(), "text/html".into()],
             )
