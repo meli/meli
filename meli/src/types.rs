@@ -327,9 +327,12 @@ pub enum UIEvent {
     EmbeddedInput((Key, Vec<u8>)),
     Resize,
     Fork(ForkedProcess),
-    /// Restore input/output, useful after forking to something that captures
-    /// stdin/stdout.
-    RestoreStandardIO,
+    ProcessRequest {
+        owner: ComponentId,
+        command: std::process::Command,
+        spawn: Option<SpawnInteractionFn>,
+        result_cb: ProcessResultFn,
+    },
     ChangeMailbox(usize),
     ChangeMode(UIMode),
     Command(String),
@@ -372,11 +375,28 @@ pub enum UIEvent {
     VisibilityChange(bool),
 }
 
-pub struct CallbackFn(pub Box<dyn FnOnce(&mut crate::Context) + Send + 'static>);
+macro_rules! declare_fn_newtype {
+    ($($id:ident: $ty:ty),*$(,)?) => {
+        $(
+            pub struct $id(pub $ty);
+            impl std::fmt::Debug for $id {
+                fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+                    fmt.debug_struct(melib::identify!($id)).finish()
+                }
+            }
+        )*
+    };
+}
 
-impl std::fmt::Debug for CallbackFn {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        fmt.debug_struct(melib::identify!(CallbackFn)).finish()
+declare_fn_newtype! {
+    CallbackFn: Box<dyn FnOnce(&mut crate::Context) + Send + Sync + 'static>,
+    ProcessResultFn: Box<dyn FnOnce(Result<std::process::Output>) -> Option<UIMessage> + Send + Sync + 'static>,
+    SpawnInteractionFn: Box<dyn FnOnce(std::process::Child) -> Result<std::process::Child> + Send + Sync + 'static>,
+}
+
+impl Default for SpawnInteractionFn {
+    fn default() -> Self {
+        Self(Box::new(Ok))
     }
 }
 

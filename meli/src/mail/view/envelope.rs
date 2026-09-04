@@ -31,6 +31,12 @@ use super::*;
 use crate::jobs::IsAsync;
 use crate::{command::actions::FileAction, ThreadEvent};
 
+#[derive(Clone)]
+enum EnvelopeViewMessage {
+    FilePickerExit(usize, Result<std::process::Output>),
+    PipeAttachmentExit(Result<std::process::Output>),
+}
+
 /// Envelope view, with sticky headers, a pager for the body, and
 /// subviews for more menus.
 ///
@@ -1397,7 +1403,7 @@ impl Component for EnvelopeView {
                     return true;
                 };
                 if let Some(attachment) = self.open_attachment(lidx, context) {
-                    if crate::mailcap::MailcapEntry::execute(attachment, context).is_ok() {
+                    if crate::mailcap::MailcapEntry::execute(self.id, attachment, context).is_ok() {
                         self.set_dirty(true);
                     } else {
                         context.replies.push_back(UIEvent::Notification {
@@ -1479,75 +1485,32 @@ impl Component for EnvelopeView {
                     self.set_dirty(true);
                     return true;
                 };
-                /* Kill input thread so that spawned command can be sole receiver of stdin */
-                {
-                    context.input_kill();
-                }
 
-                log::trace!("Executing: sh -c \"{}\"", command.replace('"', "\\\""));
-                match Command::new("sh")
-                    .args(["-c", command])
-                    .stdin(Stdio::inherit())
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped())
-                    .spawn()
-                    .and_then(|child| Ok(child.wait_with_output()?.stdout))
-                {
-                    Ok(stdout) => {
-                        log::trace!("picker output:\n{:?}", String::from_utf8_lossy(&stdout));
-                        let paths = stdout
-                            .split(|c| b"\0\t\n".contains(c))
-                            .filter(|p| !p.trim().is_empty())
-                            .collect::<Vec<_>>();
-                        if paths.len() != 1 {
-                            context.replies.push_back(UIEvent::Notification {
-                                title: None,
-                                source: None,
-                                body: if paths.is_empty() {
-                                    "Expected 1 path from file picker, got none".into()
-                                } else {
-                                    format!("Expected 1 path from file picker, got {}", paths.len())
-                                        .into()
-                                },
-                                kind: Some(NotificationType::Error(
-                                    melib::error::ErrorKind::ValueError,
-                                )),
-                            });
-                            context.replies.push_back(UIEvent::RestoreStandardIO);
-                            context.restore_input();
-                            self.set_dirty(true);
-                            return true;
+                context.replies.push_back(UIEvent::ProcessRequest {
+                    owner: self.id,
+                    command: {
+                        let mut cmd = Command::new("sh");
+                        cmd.args(["-c", command])
+                            .stdin(Stdio::inherit())
+                            .stdout(Stdio::piped())
+                            .stderr(Stdio::piped());
+                        cmd
+                    },
+                    spawn: Some(Default::default()),
+                    result_cb: ProcessResultFn(Box::new(move |output| {
+                        if let Ok(ref output) = output {
+                            log::trace!("picker output:\n{output:?}");
                         }
-                        let path = String::from_utf8_lossy(paths[0]);
-                        log::trace!("saving to {path:?}");
-                        self.save_attachment(a_i, &path, context);
-                    }
-                    Err(err) => {
-                        let command = command.to_string();
-                        context.replies.push_back(UIEvent::Notification {
-                            title: Some(format!("Failed to execute {command}: {err}").into()),
-                            source: None,
-                            body: err.to_string().into(),
-                            kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
-                        });
-                        context.replies.push_back(UIEvent::RestoreStandardIO);
-                        context.restore_input();
-                        self.set_dirty(true);
-                        return true;
-                    }
-                }
-                context.replies.push_back(UIEvent::RestoreStandardIO);
-                self.set_dirty(true);
-
+                        Some(Box::new(EnvelopeViewMessage::FilePickerExit(a_i, output)))
+                    })),
+                });
                 return true;
             }
             UIEvent::Action(View(ViewAction::PipeAttachment(a_i, ref bin, ref args))) => {
-                use std::borrow::Cow;
-
                 let bytes = if let Some(u) = self.open_attachment(a_i, context) {
-                    Cow::Owned(u.decode(self.view_settings.charset.into()))
+                    u.decode(self.view_settings.charset.into())
                 } else if a_i == 0 {
-                    Cow::Borrowed(&self.mail.bytes)
+                    self.mail.bytes.clone()
                 } else {
                     context.replies.push_back(UIEvent::Notification {
                         title: None,
@@ -1557,20 +1520,20 @@ impl Component for EnvelopeView {
                     });
                     return true;
                 };
-                // Kill input thread so that spawned command can be sole receiver of stdin
-                {
-                    context.input_kill();
-                }
-                let pipe_command = format!("{} {}", bin, args.as_slice().join(" "));
-                log::trace!("Executing: {pipe_command:?}");
-                match Command::new(bin)
-                    .args(args)
-                    .stdin(Stdio::piped())
-                    .stdout(Stdio::inherit())
-                    .stderr(Stdio::inherit())
-                    .spawn()
-                    .map_err(Error::from)
-                    .and_then(|mut child| {
+
+                let bin = bin.clone();
+                let args = args.clone();
+                context.replies.push_back(UIEvent::ProcessRequest {
+                    owner: self.id,
+                    command: {
+                        let mut cmd = Command::new(&bin);
+                        cmd.args(&args)
+                            .stdin(Stdio::piped())
+                            .stdout(Stdio::inherit())
+                            .stderr(Stdio::inherit());
+                        cmd
+                    },
+                    spawn: Some(SpawnInteractionFn(Box::new(move |mut child| {
                         let Some(mut stdin) = child.stdin.take() else {
                             let _ = child.wait();
                             return Err(Error::new(format!(
@@ -1583,24 +1546,12 @@ impl Component for EnvelopeView {
                         })?;
 
                         Ok(child)
-                    }) {
-                    Ok(mut child) => {
-                        let _ = child.wait();
-                    }
-                    Err(err) => {
-                        context.replies.push_back(UIEvent::Notification {
-                            title: Some(format!("Failed to execute {pipe_command}: {err}").into()),
-                            source: None,
-                            body: err.to_string().into(),
-                            kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
-                        });
-                        context.replies.push_back(UIEvent::RestoreStandardIO);
-                        context.restore_input();
-                        self.set_dirty(true);
-                        return true;
-                    }
-                }
-                context.replies.push_back(UIEvent::RestoreStandardIO);
+                    }))),
+                    result_cb: ProcessResultFn(Box::new(|output| {
+                        Some(Box::new(EnvelopeViewMessage::PipeAttachmentExit(output)))
+                    })),
+                });
+
                 return true;
             }
             UIEvent::Input(ref key)
@@ -1861,6 +1812,75 @@ impl Component for EnvelopeView {
                     context,
                 )));
                 self.dirty = true;
+                return true;
+            }
+            UIEvent::IntraComm {
+                from,
+                to,
+                ref content,
+            } if (from, to) == (self.id(), self.id()) => {
+                match content.downcast_ref::<EnvelopeViewMessage>().cloned() {
+                    None => {}
+                    Some(EnvelopeViewMessage::FilePickerExit(a_i, output)) => match output {
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::Notification {
+                                title: Some(
+                                    format!("Failed to execute file picker command: {err}").into(),
+                                ),
+                                source: None,
+                                body: err.to_string().into(),
+                                kind: Some(NotificationType::Error(
+                                    melib::error::ErrorKind::External,
+                                )),
+                            });
+                            self.set_dirty(true);
+                        }
+                        Ok(output) => {
+                            let paths = output
+                                .stdout
+                                .split(|c| b"\0\t\n".contains(c))
+                                .filter(|p| !p.trim().is_empty())
+                                .collect::<Vec<_>>();
+                            if paths.len() != 1 {
+                                context.replies.push_back(UIEvent::Notification {
+                                    title: None,
+                                    source: None,
+                                    body: if paths.is_empty() {
+                                        "Expected 1 path from file picker, got none".into()
+                                    } else {
+                                        format!(
+                                            "Expected 1 path from file picker, got {}",
+                                            paths.len()
+                                        )
+                                        .into()
+                                    },
+                                    kind: Some(NotificationType::Error(
+                                        melib::error::ErrorKind::ValueError,
+                                    )),
+                                });
+                            } else {
+                                let path = String::from_utf8_lossy(paths[0]);
+                                log::trace!("saving to {path:?}");
+                                self.save_attachment(a_i, &path, context);
+                            }
+                        }
+                    },
+                    Some(EnvelopeViewMessage::PipeAttachmentExit(output)) => {
+                        if let Err(err) = output {
+                            context.replies.push_back(UIEvent::Notification {
+                                title: Some(
+                                    format!("Failed to execute pipe command: {err}").into(),
+                                ),
+                                source: None,
+                                body: err.to_string().into(),
+                                kind: Some(NotificationType::Error(
+                                    melib::error::ErrorKind::External,
+                                )),
+                            });
+                            self.set_dirty(true);
+                        }
+                    }
+                }
                 return true;
             }
             _ => {}

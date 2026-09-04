@@ -1089,19 +1089,6 @@ impl State {
                 }
                 return;
             }
-            UIEvent::RestoreStandardIO => {
-                /*
-                 * Fork has finished in the past.
-                 * We're back in the AlternateScreen, but the cursor is reset to Shown, so fix
-                 * it.
-                write!(self.screen.stdout(), "{}", cursor::Hide,).unwrap();
-                self.flush();
-                 */
-                self.screen.switch_to_main_screen();
-                self.screen.switch_to_alternate_screen(&self.context);
-                self.context.restore_input();
-                return;
-            }
             UIEvent::Fork(
                 child @ ForkedProcess::Generic {
                     id: _,
@@ -1236,6 +1223,62 @@ impl State {
                 self.context.realized.insert(value.id(), parent);
                 self.overlay.insert(value.id(), value);
                 self.process_realizations();
+                return;
+            }
+            UIEvent::ProcessRequest {
+                owner,
+                mut command,
+                spawn,
+                result_cb,
+            } => {
+                log::trace!(
+                    "Executing: {:?} {:?}",
+                    command.get_program(),
+                    command.get_args().collect::<Vec<_>>()
+                );
+                let content = if let Some(spawn_fn) = spawn {
+                    // Kill input thread so that spawned command can be sole receiver of stdin
+                    self.context.input_kill();
+
+                    self.screen.switch_to_main_screen();
+                    let result = command.spawn().map_err(Into::into).and_then(|child| {
+                        let child = (spawn_fn.0)(child)?;
+
+                        child
+                            .wait_with_output()
+                            .map_err(Into::into)
+                            .and_then(|output| {
+                                let status = output.status;
+                                if status.success() {
+                                    return Ok(output);
+                                }
+                                Err(Error::new(match status.code() {
+                                    Some(code) => {
+                                        format!("Process exited with status code: {code}")
+                                    }
+                                    None => "Process terminated by signal".to_string(),
+                                })
+                                .set_details(format!("Captured output was: {output:?}")))
+                            })
+                    });
+                    self.screen.switch_to_main_screen();
+                    self.screen.switch_to_alternate_screen(&self.context);
+                    self.context.restore_input();
+                    (result_cb.0)(result)
+                } else {
+                    (result_cb.0)(command.output().map_err(Into::into))
+                };
+                if let Some(content) = content {
+                    if content.is::<UIEvent>() {
+                        self.rcv_event(*content.downcast::<UIEvent>().unwrap());
+                    } else {
+                        self.rcv_event(UIEvent::IntraComm {
+                            from: owner,
+                            to: owner,
+                            content,
+                        });
+                    }
+                }
                 return;
             }
             _ => {}

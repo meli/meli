@@ -33,8 +33,9 @@ use std::{
 use melib::{email::Attachment, log, utils::fnmatch::Fnmatch, Error, Result};
 
 use crate::{
+    components::ComponentId,
     state::Context,
-    types::{File, UIEvent},
+    types::{File, NotificationType, ProcessResultFn, SpawnInteractionFn, UIEvent},
 };
 
 macro_rules! split_command {
@@ -50,7 +51,7 @@ pub struct MailcapEntry {
 }
 
 impl MailcapEntry {
-    pub fn execute(a: &Attachment, context: &mut Context) -> Result<()> {
+    pub fn execute(owner: ComponentId, a: &Attachment, context: &mut Context) -> Result<()> {
         /* lookup order:
          *  $XDG_CONFIG_HOME/meli/mailcap:$XDG_CONFIG_HOME/.mailcap:$HOME/.mailcap:/
          * etc/mailcap:/usr/etc/mailcap:/usr/local/etc/mailcap
@@ -194,70 +195,118 @@ impl MailcapEntry {
                         a => Ok(a.to_string()),
                     })
                     .collect::<Result<Vec<String>>>()?;
-                let cmd_string = format!("{} {}", cmd, args.join(" "));
-                log::trace!("Executing: sh -c \"{}\"", cmd_string.replace('"', "\\\""));
-                if copiousoutput {
-                    let out = if needs_stdin {
-                        let mut child = Command::new("sh")
-                            .args(["-c", &cmd_string])
-                            .stdin(Stdio::piped())
-                            .stdout(Stdio::piped())
-                            .spawn()?;
-
-                        child
-                            .stdin
-                            .as_mut()
-                            .unwrap()
-                            .write_all(&a.decode(Default::default()))?;
-                        child.wait_with_output()?.stdout
-                    } else {
-                        let child = Command::new("sh")
-                            .args(["-c", &cmd_string])
-                            .stdin(Stdio::piped())
-                            .stdout(Stdio::piped())
-                            .spawn()?;
-
-                        child.wait_with_output()?.stdout
-                    };
-                    let pager_cmd = if let Ok(v) = std::env::var("PAGER") {
-                        std::borrow::Cow::from(v)
-                    } else {
-                        std::borrow::Cow::from("less")
-                    };
-
-                    let mut pager = Command::new("sh")
-                        .args(["-c", pager_cmd.as_ref()])
-                        .stdin(Stdio::piped())
-                        .stdout(Stdio::inherit())
-                        .spawn()?;
-                    pager.stdin.as_mut().unwrap().write_all(&out)?;
-                    let _output = pager.wait_with_output()?;
-                    log::trace!("stdout = {}", String::from_utf8_lossy(&_output.stdout));
-                } else if needs_stdin {
-                    let mut child = Command::new("sh")
-                        .args(["-c", &cmd_string])
-                        .stdin(Stdio::piped())
-                        .stdout(Stdio::inherit())
-                        .spawn()?;
-
-                    child
-                        .stdin
-                        .as_mut()
-                        .unwrap()
-                        .write_all(&a.decode(Default::default()))?;
-                    let _output = child.wait_with_output()?;
-                    log::trace!("stdout = {}", String::from_utf8_lossy(&_output.stdout));
+                let decoded_bytes = if needs_stdin {
+                    Some(a.decode(Default::default()))
                 } else {
-                    let child = Command::new("sh")
-                        .args(["-c", &cmd_string])
-                        .stdin(Stdio::inherit())
-                        .stdout(Stdio::inherit())
-                        .spawn()?;
+                    None
+                };
+                let cmd_string = format!("{} {}", cmd, args.join(" "));
+                if copiousoutput {
+                    context.replies.push_back(UIEvent::ProcessRequest {
+                        owner,
+                        command: {
+                            let mut cmd = Command::new("sh");
+                            cmd.args(["-c", &cmd_string])
+                                .stdin(Stdio::piped())
+                                .stdout(Stdio::piped())
+                                .stderr(Stdio::piped());
+                            cmd
+                        },
+                        spawn: Some(SpawnInteractionFn(Box::new(move |mut child| {
+                            if let Some(decoded_bytes) = decoded_bytes {
+                                child
+                                    .stdin
+                                    .as_mut()
+                                    .expect("handle present")
+                                    .write_all(&decoded_bytes)?;
+                            }
+                            Ok(child)
+                        }))),
+                        result_cb: ProcessResultFn(Box::new(move |output| {
+                            let output = match output {
+                                Ok(v) => v,
+                                Err(err) => {
+                                    return Some(Box::new(UIEvent::Notification {
+                                        title: None,
+                                        source: None,
+                                        body: err.to_string().into(),
+                                        kind: Some(NotificationType::Error(err.kind)),
+                                    }));
+                                }
+                            };
+                            let pager_cmd = if let Ok(v) = std::env::var("PAGER") {
+                                std::borrow::Cow::from(v)
+                            } else {
+                                std::borrow::Cow::from("less")
+                            };
 
-                    let _output = child.wait_with_output()?;
-                    log::trace!("stdout = {}", String::from_utf8_lossy(&_output.stdout));
+                            Some(Box::new(UIEvent::ProcessRequest {
+                                owner,
+                                command: {
+                                    let mut cmd = Command::new("sh");
+                                    cmd.args(["-c", &pager_cmd])
+                                        .stdin(Stdio::piped())
+                                        .stdout(Stdio::inherit())
+                                        .stderr(Stdio::inherit());
+                                    cmd
+                                },
+                                spawn: Some(SpawnInteractionFn(Box::new(move |mut child| {
+                                    child
+                                        .stdin
+                                        .as_mut()
+                                        .expect("handle present")
+                                        .write_all(&output.stdout)?;
+                                    Ok(child)
+                                }))),
+                                result_cb: ProcessResultFn(Box::new(|_output| {
+                                    log::trace!("output = {_output:?}");
+                                    None
+                                })),
+                            }))
+                        })),
+                    });
+                } else if let Some(decoded_bytes) = decoded_bytes {
+                    context.replies.push_back(UIEvent::ProcessRequest {
+                        owner,
+                        command: {
+                            let mut cmd = Command::new("sh");
+                            cmd.args(["-c", &cmd_string])
+                                .stdin(Stdio::piped())
+                                .stdout(Stdio::inherit())
+                                .stderr(Stdio::inherit());
+                            cmd
+                        },
+                        spawn: Some(SpawnInteractionFn(Box::new(move |mut child| {
+                            child
+                                .stdin
+                                .as_mut()
+                                .expect("handle present")
+                                .write_all(&decoded_bytes)?;
+                            Ok(child)
+                        }))),
+                        result_cb: ProcessResultFn(Box::new(|_output| {
+                            log::trace!("output = {_output:?}");
+                            None
+                        })),
+                    });
+                } else {
+                    context.replies.push_back(UIEvent::ProcessRequest {
+                        owner,
+                        command: {
+                            let mut cmd = Command::new("sh");
+                            cmd.args(["-c", &cmd_string])
+                                .stdin(Stdio::inherit())
+                                .stdout(Stdio::inherit())
+                                .stderr(Stdio::inherit());
+                            cmd
+                        },
+                        spawn: Some(SpawnInteractionFn::default()),
+                        result_cb: ProcessResultFn(Box::new(|_output| {
+                            log::trace!("output = {_output:?}");
+                            None
+                        })),
+                    });
                 }
-                context.replies.push_back(UIEvent::RestoreStandardIO);
                 Ok(())
             }
         }
