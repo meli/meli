@@ -82,7 +82,6 @@ fn main() -> Result<(), std::io::Error> {
     println!("cargo:rerun-if-changed={MOD_PATH}");
 
     eprintln!("Fetching unicode data tables for unicode version {version:?}");
-    let ucd = Ucd::get(&version).unwrap();
     let mod_path = Path::new(MOD_PATH);
     if mod_path.exists() {
         eprintln!(
@@ -91,6 +90,7 @@ fn main() -> Result<(), std::io::Error> {
         );
         return Ok(());
     }
+    let ucd = Ucd::get(&version).unwrap();
     let mut line_break_table: Vec<(u32, u32, LineBreakClass)> = Vec::with_capacity(3800);
     for line in ucd.line_break_table.lines() {
         if line.starts_with('#') || line.starts_with(' ') || line.is_empty() {
