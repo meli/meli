@@ -50,7 +50,7 @@ use crate::email::parser::BytesExt;
 /// standard header name values.
 ///
 /// [RFC5322]: https://datatracker.ietf.org/doc/html/rfc5322
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct HeaderName {
     pub(super) inner: Repr<Custom>,
 }
@@ -441,7 +441,7 @@ impl PartialEq<HeaderName> for str {
     /// ```
     #[inline]
     fn eq(&self, other: &HeaderName) -> bool {
-        *other == *self
+        other.as_str().eq_ignore_ascii_case(self)
     }
 }
 
@@ -449,7 +449,7 @@ impl PartialEq<HeaderName> for str {
 impl<'a> PartialEq<&'a str> for HeaderName {
     #[inline]
     fn eq(&self, other: &&'a str) -> bool {
-        *self == **other
+        self.as_str().eq_ignore_ascii_case(other)
     }
 }
 
@@ -457,16 +457,21 @@ impl<'a> PartialEq<&'a str> for HeaderName {
 impl PartialEq<HeaderName> for &str {
     #[inline]
     fn eq(&self, other: &HeaderName) -> bool {
-        *other == *self
+        other.as_str().eq_ignore_ascii_case(self)
     }
 }
 
 impl Hash for Custom {
     #[inline]
     fn hash<H: Hasher>(&self, hasher: &mut H) {
-        for b in self.0.as_slice() {
-            hasher.write_u8(b.to_ascii_lowercase())
-        }
+        self.as_str().hash(hasher)
+    }
+}
+
+impl Hash for HeaderName {
+    #[inline]
+    fn hash<H: Hasher>(&self, hasher: &mut H) {
+        self.as_str().hash(hasher)
     }
 }
 

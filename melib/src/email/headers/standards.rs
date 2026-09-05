@@ -24,6 +24,8 @@
 //! This module exposes the types [`Protocol`], [`Standard`] and
 //! [`StandardHeader`].
 
+use std::hash::{Hash, Hasher};
+
 use super::names::*;
 
 bitflags! {
@@ -49,7 +51,7 @@ macro_rules! standard_headers {
         ///
         /// Each variant value corresponds to an associated constant exposing it as a
         /// [`HeaderName`] under both [`StandardHeader`] and [`HeaderName`] types.
-        #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd)]
+        #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
         pub enum StandardHeader {
             $(
                 $konst,
@@ -67,6 +69,13 @@ macro_rules! standard_headers {
             $(
                 pub const $upcase: Self = $upcase;
             )+
+        }
+
+        impl Hash for StandardHeader {
+            #[inline]
+            fn hash<H: Hasher>(&self, hasher: &mut H) {
+                self.as_str().hash(hasher)
+            }
         }
 
         impl StandardHeader {

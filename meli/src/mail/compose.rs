@@ -954,13 +954,15 @@ To: {}
         header: &HeaderName,
         context: &Context,
     ) -> Result<gpg::KeySelectionLoading> {
-        let (_, mut list) = melib::email::parser::address::rfc2822address_list(
-            self.form.values()[header.as_str()].as_str().as_bytes(),
-        )
-        .map_err(|_err| -> Error { format!("No valid address in `{header}:`").into() })?;
-        if list.is_empty() {
-            return Err(format!("No valid address in `{header}:`").into());
-        }
+        let (_, mut list) = self
+            .form
+            .values()
+            .get(header)
+            .and_then(|h| {
+                melib::email::parser::address::rfc2822address_list(h.as_str().as_bytes()).ok()
+            })
+            .filter(|(_, l)| !l.is_empty())
+            .ok_or_else(|| -> Error { format!("No valid address in `{header}:`").into() })?;
         let first = list.remove(0);
         let patterns = (
             first.get_email().to_string(),
@@ -1840,10 +1842,7 @@ impl Component for Composer {
                     && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit"]) =>
             {
                 let mut result = self.create_key_selection_widget(false, &HeaderName::TO, context);
-                if !self.form.values()[HeaderName::CC.as_str()]
-                    .as_str()
-                    .is_empty()
-                {
+                if !self.form.values()[&HeaderName::CC].as_str().is_empty() {
                     result = result.and_then(|mut to_result| {
                         let cc_result =
                             self.create_key_selection_widget(false, &HeaderName::CC, context)?;
@@ -1851,10 +1850,7 @@ impl Component for Composer {
                         Ok(to_result)
                     });
                 }
-                if !self.form.values()[HeaderName::BCC.as_str()]
-                    .as_str()
-                    .is_empty()
-                {
+                if !self.form.values()[&HeaderName::BCC].as_str().is_empty() {
                     result = result.and_then(|mut to_result| {
                         let bcc_result =
                             self.create_key_selection_widget(false, &HeaderName::BCC, context)?;
@@ -1862,10 +1858,7 @@ impl Component for Composer {
                         Ok(to_result)
                     });
                 }
-                if !self.form.values()[HeaderName::FROM.as_str()]
-                    .as_str()
-                    .is_empty()
-                {
+                if !self.form.values()[&HeaderName::FROM].as_str().is_empty() {
                     result = result.and_then(|mut to_result| {
                         let from_result =
                             self.create_key_selection_widget(false, &HeaderName::FROM, context)?;
