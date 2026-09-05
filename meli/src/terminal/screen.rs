@@ -479,6 +479,9 @@ impl Screen<Tty> {
                 }
             }
         }
+        if current_uri.take().is_some() {
+            crate::terminal::Hyperlink::<str, str, str>::write_end(stdout).unwrap();
+        }
     }
 
     pub fn draw_horizontal_segment_no_color(
