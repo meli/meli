@@ -228,7 +228,23 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
         {
             if inner.process_event(event, context) {
                 match inner.buttons_result() {
-                    Some(FormButtonAction::Accept) | Some(FormButtonAction::Cancel) => {
+                    Some(FormButtonAction::Accept) => {
+                        if let Some(entry) = self.draft.attachments_mut().get_mut(*no) {
+                            let current_filename =
+                                entry.content_type().name().unwrap_or_default().to_string();
+                            let current_mime_type = entry.content_type().to_string();
+                            let filename = &inner.values()["Filename"];
+                            let mime_type = &inner.values()["Mime type"];
+                            if current_filename != filename.as_str() {
+                                entry.content_type.set_name(filename.as_str().to_string());
+                            }
+                            if current_mime_type != mime_type.as_str() {
+                                entry.content_type.set_tag(mime_type.as_str().to_string());
+                            }
+                        }
+                        self.inner.mode = EditAttachmentMode::Overview;
+                    }
+                    Some(FormButtonAction::Cancel) => {
                         self.inner.mode = EditAttachmentMode::Overview;
                     }
                     Some(FormButtonAction::Reset) => {
