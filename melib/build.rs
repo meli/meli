@@ -76,7 +76,7 @@ impl Ucd {
 }
 
 fn main() -> Result<(), std::io::Error> {
-    let version: String = std::env::var("UNICODE_VERSION").unwrap_or("13.0.0".into());
+    let version: String = std::env::var("UNICODE_VERSION").unwrap_or("16.0.0".into());
     println!("cargo:rerun-if-env-changed=UNICODE_REGENERATE_TABLES");
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed={MOD_PATH}");

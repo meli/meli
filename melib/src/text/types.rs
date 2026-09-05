@@ -81,6 +81,12 @@ define_line_break_class! {
     SG,
     SY,
     XX,
+    HH,
+    AK,
+    VI,
+    AS,
+    VF,
+    AP,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
