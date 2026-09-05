@@ -494,12 +494,44 @@ impl ContentType {
 
     pub fn name(&self) -> Option<&str> {
         match self {
-            Self::Other { ref name, .. } => name.as_ref().map(|n| n.as_ref()),
-            Self::OctetStream {
+            Self::Other { ref name, .. }
+            | Self::OctetStream {
                 ref name,
                 parameters: _,
             } => name.as_ref().map(|n| n.as_ref()),
             _ => None,
+        }
+    }
+
+    pub fn set_name(&mut self, val: String) -> bool {
+        match self {
+            Self::OctetStream {
+                ref mut name,
+                parameters: _,
+            }
+            | Self::Other { ref mut name, .. } => {
+                *name = Some(val);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    pub fn set_tag(&mut self, val: String) -> bool {
+        match self {
+            Self::OctetStream { name, parameters } => {
+                *self = Self::Other {
+                    tag: val.into(),
+                    name: name.clone(),
+                    parameters: parameters.clone(),
+                };
+                true
+            }
+            Self::Other { ref mut tag, .. } => {
+                *tag = val.into();
+                true
+            }
+            _ => false,
         }
     }
 
