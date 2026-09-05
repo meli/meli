@@ -184,9 +184,8 @@ pub fn sign_filter(
             }
             let a: Attachment = a.into();
             let mut ctx = Context::new()?;
-            let data = ctx.new_data_mem(&melib_pgp::convert_attachment_to_rfc_spec(
-                a.into_raw().as_bytes(),
-            ))?;
+            let signed_data = melib_pgp::convert_attachment_to_rfc_spec(a.into_raw().as_bytes());
+            let data = ctx.new_data_mem(&signed_data)?;
             let (sig_metadata, sig_bytes) = ctx.sign(sign_keys, data, false)?.await?;
             let sig_attachment =
                 Attachment::new(ContentType::PGPSignature, Default::default(), sig_bytes);

@@ -171,6 +171,7 @@ Content-Type: multipart/mixed; charset=\"utf-8\"; \
 \x0d
 This is a MIME formatted message with attachments. Use a MIME-compliant client to view it \
          properly.\x0d
+\x0d
 --bzz_bzz__bzz__xxxxxxxxxxxxxxxxxxxxxxxxxxxxx\x0d
 Content-Transfer-Encoding: 8bit\x0d
 Content-Type: text/plain; charset=\"utf-8\"\x0d
@@ -184,6 +185,7 @@ Content-Transfer-Encoding: base64\x0d
 /9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkI\x0d
 CQkKDA8MCgsOCwkJDRENDg8QEBEQCgwSExIQEw8QEBD/yQALCAABAAEBAREA/8wABgAQEAX/2gAI\x0d
 AQEAAD8A0s8g/9k=\x0d
+\x0d
 --bzz_bzz__bzz__xxxxxxxxxxxxxxxxxxxxxxxxxxxxx--\x0d
 "
     );
@@ -226,15 +228,19 @@ data = sys.stdin.buffer.read()
 parser = BytesParser(policy=policy.strict)
 msg = parser.parsebytes(data)
 richest = msg.get_body()
-partfiles = {}
 if richest['content-type'].maintype == 'text' and richest['content-type'].subtype == 'plain':
-    sys.stdout.write(richest.get_content())
+    content = richest.get_content()
+    if isinstance(content, str):
+        sys.stdout.write(content)
+    elif isinstance(content, bytes):
+        sys.stdout.buffer.write(content)
+    sys.stdout.flush()
 else:
     print("Unexpected content-type: {}".format(richest.get_content_type()))
     "#,
         )
         .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
+        .stderr(Stdio::piped())
         .stdin(Stdio::piped())
         .spawn()
         .expect("Failed to start python3 process");

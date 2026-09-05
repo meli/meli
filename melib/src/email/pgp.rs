@@ -24,6 +24,7 @@ use crate::{
     email::{
         attachment_types::{ContentType, MultipartType},
         attachments::Attachment,
+        parser::BytesExt,
     },
     error::{Error, ErrorKind, Result},
 };
@@ -46,48 +47,11 @@ pub fn convert_attachment_to_rfc_spec(input: &[u8]) -> Vec<u8> {
     if input.is_empty() {
         return Vec::new();
     }
-    let mut ret = Vec::with_capacity(input.len());
-
-    if input[0] == b'\n' {
-        /* This is an RFC violation but test for it anyway */
-        ret.push(b'\r');
-        ret.push(b'\n');
-    } else {
-        ret.push(input[0]);
+    let re = regex::bytes::Regex::new(r"[^\r]\n").unwrap();
+    if re.find_iter(input).count() > 0 {
+        return input.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n");
     }
-
-    let mut ctr = 1;
-
-    while ctr < input.len() {
-        if input[ctr] == b'\r' && ctr + 1 < input.len() && input[ctr + 1] == b'\n' {
-            ret.push(b'\r');
-            ret.push(b'\n');
-            ctr += 2;
-        } else if input[ctr] == b'\n' {
-            ret.push(b'\r');
-            ret.push(b'\n');
-            ctr += 1;
-        } else {
-            ret.push(input[ctr]);
-            ctr += 1;
-        }
-    }
-    loop {
-        match ret.iter().last() {
-            None => {
-                break;
-            }
-            Some(c) if c.is_ascii_whitespace() => {
-                ret.pop();
-            }
-            _ => {
-                break;
-            }
-        }
-    }
-    ret.push(0x0d);
-    ret.push(0x0a);
-    ret
+    input.to_vec()
 }
 
 // [ref:TODO]: add cleartext support
@@ -126,16 +90,13 @@ pub fn verify_signature(a: &Attachment) -> Result<(Vec<u8>, &Attachment)> {
                 .set_kind(ErrorKind::ValueError));
             }
 
-            let part_boundaries = a.part_boundaries();
-
             let signed_part: Vec<u8> = if let Some(v) = parts
                 .iter()
-                .zip(part_boundaries.iter())
-                .find(|(p, _)| {
+                .find(|p| {
                     p.content_type != ContentType::PGPSignature
                         && p.content_type != ContentType::CMSSignature
                 })
-                .map(|(_, s)| convert_attachment_to_rfc_spec(s.display_bytes(a.body())))
+                .map(|a| convert_attachment_to_rfc_spec(a.raw()))
             {
                 v
             } else {

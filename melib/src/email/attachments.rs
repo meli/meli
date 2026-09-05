@@ -801,17 +801,13 @@ impl Attachment {
                     );
 
                     for sub in parts {
-                        if !ret.ends_with("\r\n") {
-                            ret.push_str("\r\n");
-                        }
+                        ret.push_str("\r\n");
                         ret.push_str("--");
                         ret.push_str(&boundary);
                         ret.push_str("\r\n");
                         into_raw_helper(sub, ret);
                     }
-                    if !ret.ends_with("\r\n") {
-                        ret.push_str("\r\n");
-                    }
+                    ret.push_str("\r\n");
                     ret.push_str("--");
                     ret.push_str(&boundary);
                     ret.push_str("--\r\n");
