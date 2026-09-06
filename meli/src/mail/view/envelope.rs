@@ -357,8 +357,8 @@ impl EnvelopeView {
                     }
                 }
                 MultipartType::Encrypted => {
-                    for a in parts {
-                        if a.content_type == "application/octet-stream" {
+                    for part in parts {
+                        if part.content_type == "application/octet-stream" {
                             #[cfg(not(feature = "gpgme"))]
                             {
                                 acc.push(AttachmentDisplay::EncryptedFailed {
@@ -1232,6 +1232,10 @@ impl Component for EnvelopeView {
                         self.links.clear();
                         self.initialised = false;
                         self.set_dirty(true);
+                        let (attachment_paths, attachment_tree) =
+                            self.attachment_displays_to_tree(&self.display);
+                        self.attachment_tree = attachment_tree;
+                        self.attachment_paths = attachment_paths;
                     }
 
                     self.active_jobs.remove(job_id);

@@ -430,8 +430,8 @@ impl AttachmentDisplay {
             | Self::EncryptedPending { inner, handle: _ }
             | Self::EncryptedFailed { inner, error: _ }
             | Self::EncryptedSuccess {
-                inner: _,
-                plaintext: inner,
+                inner,
+                plaintext: _,
                 plaintext_display: _,
                 description: _,
             } => inner,
