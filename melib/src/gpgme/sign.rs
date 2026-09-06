@@ -38,13 +38,13 @@ pub struct SignResult {
 }
 
 impl SignResult {
-    pub fn retrieve(lib: &Arc<libloading::Library>, ctx: &super::Context) -> Option<Self> {
+    pub fn retrieve(ctx: &super::Context) -> Option<Self> {
         let ptr =
             // SAFETY: context pointer is valid
-            NonNull::new(unsafe { call!(&lib, gpgme_op_sign_result)(ctx.inner.ptr.as_ptr()) })?;
+            NonNull::new(unsafe { call!(&ctx.inner.lib, gpgme_op_sign_result)(ctx.inner.ptr.as_ptr()) })?;
         Some(Self {
             ptr,
-            lib: Arc::clone(lib),
+            lib: Arc::clone(&ctx.inner.lib),
         })
     }
 

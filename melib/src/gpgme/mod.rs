@@ -24,22 +24,11 @@
 
 use std::{
     borrow::Cow,
-    collections::HashMap,
-    ffi::{c_void, CStr, CString, OsStr},
+    ffi::{CStr, CString},
     future::Future,
     io::Seek,
-    mem::ManuallyDrop,
-    os::{
-        fd::{AsFd, BorrowedFd, OwnedFd},
-        unix::{
-            ffi::OsStrExt,
-            io::{AsRawFd, RawFd},
-        },
-    },
-    path::Path,
-    pin::Pin,
     ptr::NonNull,
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
 use futures::FutureExt;
@@ -89,6 +78,8 @@ pub mod key;
 pub use key::*;
 pub mod io;
 pub mod sign;
+
+use io::{Data, IoState};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum GpgmeFlag {
@@ -205,24 +196,6 @@ impl std::fmt::Display for LocateKey {
     }
 }
 
-type Done = Arc<Mutex<Option<Result<()>>>>;
-
-#[derive(Debug)]
-struct IoState {
-    max_idx: usize,
-    ops: HashMap<usize, GpgmeFd>,
-    done: Done,
-    sender: Sender<()>,
-    receiver: Receiver<()>,
-    key_sender: Sender<KeyInner>,
-    key_receiver: Receiver<KeyInner>,
-    // ops: HashMap<usize, Arc<GpgmeFd>>,
-    lib: Arc<libloading::Library>,
-}
-
-unsafe impl Send for IoState {}
-unsafe impl Sync for IoState {}
-
 pub struct ContextInner {
     ptr: NonNull<gpgme_context>,
     lib: Arc<libloading::Library>,
@@ -234,7 +207,7 @@ unsafe impl Sync for ContextInner {}
 #[derive(Clone)]
 pub struct Context {
     inner: Arc<ContextInner>,
-    io_state: Arc<IoStateWrapper>,
+    io_state: Arc<IoState>,
 }
 
 impl Drop for ContextInner {
@@ -269,40 +242,29 @@ impl Context {
             ))
             .set_kind(ErrorKind::LinkedLibrary("gpgme")));
         };
-        let (sender, receiver) = smol::channel::unbounded();
-        let (key_sender, key_receiver) = smol::channel::unbounded();
 
-        let mut ptr = std::ptr::null_mut();
+        let (io_state, mut io_cbs) = IoState::new(lib.clone());
 
-        let (io_state, mut io_cbs) = IoStateWrapper::new(IoState {
-            max_idx: 0,
-            ops: HashMap::default(),
-            done: Arc::new(Mutex::new(None)),
-            sender,
-            receiver,
-            key_sender,
-            key_receiver,
-            lib: lib.clone(),
-        });
-
+        let mut ptr = core::mem::MaybeUninit::zeroed();
+        // SAFETY: `&raw mut ptr` points to valid, stack allocated memory
         unsafe {
-            gpgme_error_try(&lib, call!(&lib, gpgme_new)(&raw mut ptr))?;
-            call!(&lib, gpgme_set_io_cbs)(ptr, &raw mut io_cbs);
+            gpgme_error_try(&lib, call!(&lib, gpgme_new)(ptr.as_mut_ptr()))?;
         }
+        // SAFETY: `gpgme_new()` succeeded so this pointer is initialized.
+        let ptr = unsafe { ptr.assume_init() };
         let mut ret = Self {
             inner: Arc::new(ContextInner {
                 ptr: NonNull::new(ptr).ok_or_else(|| {
                     Error::new("Could not use libgpgme")
-                        .set_details(
-                            "gpgme_new
-                            returned a NULL value.",
-                        )
+                        .set_details("gpgme_new returned a NULL value.")
                         .set_kind(ErrorKind::LinkedLibrary("gpgme"))
                 })?,
                 lib,
             }),
             io_state,
         };
+        // SAFETY: `ptr` and `io_cbs` are both valid.
+        unsafe { call!(&ret.inner.lib, gpgme_set_io_cbs)(ret.inner.ptr.as_ptr(), &raw mut io_cbs) };
         ret.set_flag(GpgmeFlag::AutoKeyRetrieve, false)?
             .set_flag(GpgmeFlag::OfflineMode, true)?
             .set_flag(GpgmeFlag::AsciiArmor, true)?
@@ -431,61 +393,7 @@ impl Context {
     }
 
     pub fn new_data_mem(&self, bytes: &[u8]) -> Result<Data> {
-        let mut ptr = std::ptr::null_mut();
-        let bytes: Pin<Vec<u8>> = Pin::new(bytes.to_vec());
-        unsafe {
-            gpgme_error_try(
-                &self.inner.lib,
-                call!(&self.inner.lib, gpgme_data_new_from_mem)(
-                    &raw mut ptr,
-                    bytes.as_ptr() as *const ::std::os::raw::c_char,
-                    bytes
-                        .len()
-                        .try_into()
-                        .map_err(|_| std::io::Error::from_raw_os_error(libc::EOVERFLOW))?,
-                    1,
-                ),
-            )?;
-        }
-
-        Ok(Data {
-            lib: self.inner.lib.clone(),
-            kind: DataKind::Memory,
-            bytes,
-            inner: NonNull::new(ptr).ok_or_else(|| {
-                Error::new("Could not create libgpgme data").set_kind(ErrorKind::Bug)
-            })?,
-        })
-    }
-
-    pub fn new_data_file<P: AsRef<Path>>(&self, r: P) -> Result<Data> {
-        let path: &Path = r.as_ref();
-        if !path.exists() {
-            return Err(Error::new(format!(
-                "File `{}` doesn't exist.",
-                path.display()
-            )));
-        }
-        let os_str: &OsStr = path.as_ref();
-        let bytes = Pin::new(os_str.as_bytes().to_vec());
-        let mut ptr = std::ptr::null_mut();
-        unsafe {
-            let ret: gpgme_error_t = call!(&self.inner.lib, gpgme_data_new_from_file)(
-                &raw mut ptr,
-                bytes.as_ptr() as *const ::std::os::raw::c_char,
-                1,
-            );
-            gpgme_error_try(&self.inner.lib, ret)?;
-        }
-
-        Ok(Data {
-            lib: self.inner.lib.clone(),
-            kind: DataKind::Memory,
-            bytes,
-            inner: NonNull::new(ptr).ok_or_else(|| {
-                Error::new("Could not create libgpgme data").set_kind(ErrorKind::Bug)
-            })?,
-        })
+        Data::new_mem(self.inner.lib.clone(), bytes)
     }
 
     pub fn verify(
@@ -498,70 +406,18 @@ impl Context {
                 &self.inner.lib,
                 call!(&self.inner.lib, gpgme_op_verify_start)(
                     self.inner.ptr.as_ptr(),
-                    signature.inner.as_mut(),
-                    text.inner.as_mut(),
+                    signature.as_ptr(),
+                    text.as_ptr(),
                     std::ptr::null_mut(),
                 ),
             )?;
         }
 
         let ctx = self.clone();
-        let (done, fut) = self.io_state.done_fut()?;
         Ok(async move {
             let _s = signature;
             let _t = text;
-            futures::future::join_all(fut.iter().map(|fut| {
-                let done = done.clone();
-                if fut.get_ref().write {
-                    futures::future::select(
-                        fut.get_ref().receiver.recv().boxed(),
-                        fut.write_with(move |_f| {
-                            if done.lock().unwrap().is_some() {
-                                return Ok(());
-                            }
-                            unsafe {
-                                (fut.get_ref().fnc.unwrap())(
-                                    fut.get_ref().fnc_data,
-                                    fut.get_ref().as_raw_fd(),
-                                )
-                            };
-                            if done.lock().unwrap().is_none() {
-                                return Err(std::io::ErrorKind::WouldBlock.into());
-                            }
-                            Ok(())
-                        })
-                        .boxed(),
-                    )
-                    .boxed()
-                } else {
-                    futures::future::select(
-                        fut.get_ref().receiver.recv().boxed(),
-                        fut.read_with(move |_f| {
-                            if done.lock().unwrap().is_some() {
-                                return Ok(());
-                            }
-                            unsafe {
-                                (fut.get_ref().fnc.unwrap())(
-                                    fut.get_ref().fnc_data,
-                                    fut.get_ref().as_raw_fd(),
-                                )
-                            };
-                            if done.lock().unwrap().is_none() {
-                                return Err(std::io::ErrorKind::WouldBlock.into());
-                            }
-                            Ok(())
-                        })
-                        .boxed(),
-                    )
-                    .boxed()
-                }
-            }))
-            .await;
-            let rcv = {
-                let io_state_lck = ctx.io_state.lock().unwrap();
-                io_state_lck.receiver.clone()
-            };
-            let _ = rcv.recv().await;
+            ctx.io_state.wait_for_op().await?;
             let ret = {
                 let Some(verify_result) = sign::VerifyResult::retrieve(&ctx.inner.lib, &ctx) else {
                     return Err(Error::new(
@@ -575,15 +431,6 @@ impl Context {
                 }
                 Ok(SignaturesMetadata { signatures })
             };
-            let io_state_lck = ctx.io_state.lock().unwrap();
-            io_state_lck
-                .done
-                .lock()
-                .unwrap()
-                .take()
-                .unwrap_or_else(|| {
-                    Err(Error::new("Unspecified libgpgme error").set_kind(ErrorKind::Bug))
-                })?;
             ret
         })
     }
@@ -614,83 +461,21 @@ impl Context {
         }
 
         let ctx = self.clone();
-        let (done, fut) = self.io_state.done_fut()?;
         Ok(async move {
-            futures::future::join_all(fut.iter().map(|fut| {
-                let done = done.clone();
-                if fut.get_ref().write {
-                    futures::future::select(
-                        fut.get_ref().receiver.recv().boxed(),
-                        fut.write_with(move |_f| {
-                            if done.lock().unwrap().is_some() {
-                                return Ok(());
-                            }
-                            unsafe {
-                                (fut.get_ref().fnc.unwrap())(
-                                    fut.get_ref().fnc_data,
-                                    fut.get_ref().as_raw_fd(),
-                                )
-                            };
-                            if done.lock().unwrap().is_none() {
-                                return Err(std::io::ErrorKind::WouldBlock.into());
-                            }
-                            Ok(())
-                        })
-                        .boxed(),
-                    )
-                    .boxed()
-                } else {
-                    futures::future::select(
-                        fut.get_ref().receiver.recv().boxed(),
-                        fut.read_with(move |_f| {
-                            if done.lock().unwrap().is_some() {
-                                return Ok(());
-                            }
-                            unsafe {
-                                (fut.get_ref().fnc.unwrap())(
-                                    fut.get_ref().fnc_data,
-                                    fut.get_ref().as_raw_fd(),
-                                )
-                            };
-                            if done.lock().unwrap().is_none() {
-                                return Err(std::io::ErrorKind::WouldBlock.into());
-                            }
-                            Ok(())
-                        })
-                        .boxed(),
-                    )
-                    .boxed()
-                }
-            }))
-            .await;
-            let (rcv, key_receiver) = {
-                let io_state_lck = ctx.io_state.lock().unwrap();
-                (
-                    io_state_lck.receiver.clone(),
-                    io_state_lck.key_receiver.clone(),
-                )
-            };
-            let _ = rcv.recv().await;
+            let res = ctx.io_state.wait_for_op().await;
+            let key_receiver = ctx.io_state.key_receiver();
             unsafe {
                 gpgme_error_try(
                     &ctx.inner.lib,
                     call!(&ctx.inner.lib, gpgme_op_keylist_end)(ctx.inner.ptr.as_ptr()),
                 )?;
             }
-            ctx.io_state
-                .lock()
-                .unwrap()
-                .done
-                .lock()
-                .unwrap()
-                .take()
-                .unwrap_or_else(|| Err(Error::new("Unspecified libgpgme error")))?;
+            res?;
             let mut keys = vec![];
             while let Ok(inner) = key_receiver.try_recv() {
                 let key = Key::new(inner, ctx.inner.lib.clone());
                 keys.push(key);
             }
-            drop(ctx);
             Ok(keys)
         })
     }
@@ -732,7 +517,7 @@ impl Context {
                 &self.inner.lib,
                 call!(&self.inner.lib, gpgme_op_sign_start)(
                     self.inner.ptr.as_ptr(),
-                    text.inner.as_mut(),
+                    text.as_ptr(),
                     sig.as_ptr(),
                     gpgme_sig_mode_t::GPGME_SIG_MODE_DETACH,
                 ),
@@ -740,71 +525,9 @@ impl Context {
         }
 
         let ctx = self.clone();
-        let lib = Arc::clone(&self.inner.lib);
-        let (done, fut) = self.io_state.done_fut()?;
         Ok(async move {
-            futures::future::join_all(fut.iter().map(|fut| {
-                let done = done.clone();
-                if fut.get_ref().write {
-                    futures::future::select(
-                        fut.get_ref().receiver.recv().boxed(),
-                        fut.write_with(move |_f| {
-                            if done.lock().unwrap().is_some() {
-                                return Ok(());
-                            }
-                            unsafe {
-                                (fut.get_ref().fnc.unwrap())(
-                                    fut.get_ref().fnc_data,
-                                    fut.get_ref().as_raw_fd(),
-                                )
-                            };
-                            if done.lock().unwrap().is_none() {
-                                return Err(std::io::ErrorKind::WouldBlock.into());
-                            }
-                            Ok(())
-                        })
-                        .boxed(),
-                    )
-                    .boxed()
-                } else {
-                    futures::future::select(
-                        fut.get_ref().receiver.recv().boxed(),
-                        fut.read_with(move |_f| {
-                            if done.lock().unwrap().is_some() {
-                                return Ok(());
-                            }
-                            unsafe {
-                                (fut.get_ref().fnc.unwrap())(
-                                    fut.get_ref().fnc_data,
-                                    fut.get_ref().as_raw_fd(),
-                                )
-                            };
-                            if done.lock().unwrap().is_none() {
-                                return Err(std::io::ErrorKind::WouldBlock.into());
-                            }
-                            Ok(())
-                        })
-                        .boxed(),
-                    )
-                    .boxed()
-                }
-            }))
-            .await;
-            {
-                let rcv = ctx.io_state.lock().unwrap().receiver.clone();
-                let _ = rcv.recv().await;
-            }
-            ctx.io_state
-                .lock()
-                .unwrap()
-                .done
-                .lock()
-                .unwrap()
-                .take()
-                .unwrap_or_else(|| {
-                    Err(Error::new("Unspecified libgpgme error").set_kind(ErrorKind::External))
-                })?;
-            let sign_result = sign::SignResult::retrieve(&lib, &ctx).unwrap();
+            ctx.io_state.wait_for_op().await?;
+            let sign_result = sign::SignResult::retrieve(&ctx).unwrap();
             let mut signatures = sign_result.signatures().collect::<Vec<_>>();
             // [ref:FIXME]: can there be more than one new signature?
             let Some(new_sig) = signatures.pop() else {
@@ -827,92 +550,22 @@ impl Context {
         &mut self,
         mut cipher: Data,
     ) -> Result<impl Future<Output = Result<(DecryptionMetadata, Vec<u8>)>> + Send> {
-        let mut plain: gpgme_data_t = std::ptr::null_mut();
+        let mut plain: Data = Data::new(self.inner.lib.clone())?;
         unsafe {
-            gpgme_error_try(
-                &self.inner.lib,
-                call!(&self.inner.lib, gpgme_data_new)(&raw mut plain),
-            )?;
             gpgme_error_try(
                 &self.inner.lib,
                 call!(&self.inner.lib, gpgme_op_decrypt_start)(
                     self.inner.ptr.as_ptr(),
-                    cipher.inner.as_mut(),
-                    plain,
+                    cipher.as_ptr(),
+                    plain.as_ptr(),
                 ),
             )?;
         }
-        let mut plain = Data {
-            lib: self.inner.lib.clone(),
-            kind: DataKind::Memory,
-            bytes: Pin::new(vec![]),
-            inner: NonNull::new(plain).ok_or_else(|| {
-                Error::new("internal libgpgme error").set_kind(ErrorKind::LinkedLibrary("gpgme"))
-            })?,
-        };
 
         let ctx = self.clone();
-        let (done, fut) = self.io_state.done_fut()?;
         Ok(async move {
             let _c = cipher;
-            futures::future::join_all(fut.iter().map(|fut| {
-                let done = done.clone();
-                if fut.get_ref().write {
-                    futures::future::select(
-                        fut.get_ref().receiver.recv().boxed(),
-                        fut.write_with(move |_f| {
-                            if done.lock().unwrap().is_some() {
-                                return Ok(());
-                            }
-                            unsafe {
-                                (fut.get_ref().fnc.unwrap())(
-                                    fut.get_ref().fnc_data,
-                                    fut.get_ref().as_raw_fd(),
-                                )
-                            };
-                            if done.lock().unwrap().is_none() {
-                                return Err(std::io::ErrorKind::WouldBlock.into());
-                            }
-                            Ok(())
-                        })
-                        .boxed(),
-                    )
-                    .boxed()
-                } else {
-                    futures::future::select(
-                        fut.get_ref().receiver.recv().boxed(),
-                        fut.read_with(move |_f| {
-                            if done.lock().unwrap().is_some() {
-                                return Ok(());
-                            }
-                            unsafe {
-                                (fut.get_ref().fnc.unwrap())(
-                                    fut.get_ref().fnc_data,
-                                    fut.get_ref().as_raw_fd(),
-                                )
-                            };
-                            if done.lock().unwrap().is_none() {
-                                return Err(std::io::ErrorKind::WouldBlock.into());
-                            }
-                            Ok(())
-                        })
-                        .boxed(),
-                    )
-                    .boxed()
-                }
-            }))
-            .await;
-            let rcv = { ctx.io_state.lock().unwrap().receiver.clone() };
-            let _ = rcv.recv().await;
-            ctx.io_state
-                .lock()
-                .unwrap()
-                .done
-                .lock()
-                .unwrap()
-                .take()
-                .unwrap_or_else(|| Err(Error::new("Unspecified libgpgme error")))?;
-
+            ctx.io_state.wait_for_op().await?;
             let decrypt_result =
                 unsafe { call!(&ctx.inner.lib, gpgme_op_decrypt_result)(ctx.inner.ptr.as_ptr()) };
             if decrypt_result.is_null() {
@@ -988,16 +641,12 @@ impl Context {
             call!(&self.inner.lib, gpgme_signers_clear)(self.inner.ptr.as_ptr());
         }
 
-        let mut cipher: gpgme_data_t = std::ptr::null_mut();
+        let mut cipher: Data = Data::new(self.inner.lib.clone())?;
         let mut raw_keys: Vec<gpgme_key_t> = Vec::with_capacity(encrypt_keys.len() + 1);
         raw_keys.extend(encrypt_keys.iter().map(|k| k.inner.ptr.as_ptr()));
         raw_keys.push(std::ptr::null_mut());
         debug_assert_eq!(raw_keys.len(), encrypt_keys.len() + 1);
         unsafe {
-            gpgme_error_try(
-                &self.inner.lib,
-                call!(&self.inner.lib, gpgme_data_new)(&raw mut cipher),
-            )?;
             if let Err(mut err) = gpgme_error_try(
                 &self.inner.lib,
                 call!(&self.inner.lib, gpgme_op_encrypt_start)(
@@ -1006,8 +655,8 @@ impl Context {
                     gpgme_encrypt_flags_t::GPGME_ENCRYPT_NO_ENCRYPT_TO
                         | gpgme_encrypt_flags_t::GPGME_ENCRYPT_NO_COMPRESS
                         | gpgme_encrypt_flags_t::GPGME_ENCRYPT_ALWAYS_TRUST,
-                    plain.inner.as_mut(),
-                    cipher,
+                    plain.as_ptr(),
+                    cipher.as_ptr(),
                 ),
             ) {
                 let result =
@@ -1028,77 +677,11 @@ impl Context {
                 return Err(err);
             };
         }
-        let mut cipher = Data {
-            lib: self.inner.lib.clone(),
-            kind: DataKind::Memory,
-            bytes: Pin::new(vec![]),
-            inner: NonNull::new(cipher).ok_or_else(|| {
-                Error::new("internal libgpgme error").set_kind(ErrorKind::LinkedLibrary("gpgme"))
-            })?,
-        };
 
         let ctx = self.clone();
-        let (done, fut) = self.io_state.done_fut()?;
         Ok(async move {
-            futures::future::join_all(fut.iter().map(|fut| {
-                let done = done.clone();
-                if fut.get_ref().write {
-                    futures::future::select(
-                        fut.get_ref().receiver.recv().boxed(),
-                        fut.write_with(move |_f| {
-                            if done.lock().unwrap().is_some() {
-                                return Ok(());
-                            }
-                            unsafe {
-                                (fut.get_ref().fnc.unwrap())(
-                                    fut.get_ref().fnc_data,
-                                    fut.get_ref().as_raw_fd(),
-                                )
-                            };
-                            if done.lock().unwrap().is_none() {
-                                return Err(std::io::ErrorKind::WouldBlock.into());
-                            }
-                            Ok(())
-                        })
-                        .boxed(),
-                    )
-                    .boxed()
-                } else {
-                    futures::future::select(
-                        fut.get_ref().receiver.recv().boxed(),
-                        fut.read_with(move |_f| {
-                            if done.lock().unwrap().is_some() {
-                                return Ok(());
-                            }
-                            unsafe {
-                                (fut.get_ref().fnc.unwrap())(
-                                    fut.get_ref().fnc_data,
-                                    fut.get_ref().as_raw_fd(),
-                                )
-                            };
-                            if done.lock().unwrap().is_none() {
-                                return Err(std::io::ErrorKind::WouldBlock.into());
-                            }
-                            Ok(())
-                        })
-                        .boxed(),
-                    )
-                    .boxed()
-                }
-            }))
-            .await;
-            let rcv = { ctx.io_state.lock().unwrap().receiver.clone() };
-            let _ = rcv.recv().await;
-            if let Err(mut err) = ctx
-                .io_state
-                .lock()
-                .unwrap()
-                .done
-                .lock()
-                .unwrap()
-                .take()
-                .unwrap_or_else(|| Err(Error::new("Unspecified libgpgme error")))
-            {
+            let res = ctx.io_state.wait_for_op().await;
+            if let Err(mut err) = res {
                 let result = unsafe {
                     call!(&ctx.inner.lib, gpgme_op_encrypt_result)(ctx.inner.ptr.as_ptr())
                 };
@@ -1199,10 +782,7 @@ impl Context {
         unsafe {
             gpgme_error_try(
                 &self.inner.lib,
-                call!(&self.inner.lib, gpgme_op_import)(
-                    self.inner.ptr.as_ptr(),
-                    key_data.inner.as_mut(),
-                ),
+                call!(&self.inner.lib, gpgme_op_import)(self.inner.ptr.as_ptr(), key_data.as_ptr()),
             )?;
         }
         let result =
@@ -1212,38 +792,6 @@ impl Context {
             if res.imported == 0 && res.secret_imported == 0 {
                 return Err(Error::new("Key was not imported."));
             }
-        }
-        Ok(())
-    }
-
-    #[cfg(test)]
-    pub fn set_passphrase_cb(
-        &mut self,
-        cb: gpgme_passphrase_cb_t,
-        data: Option<*mut c_void>,
-    ) -> Result<()> {
-        unsafe {
-            call!(&self.inner.lib, gpgme_get_pinentry_mode)(self.inner.ptr.as_ptr());
-        }
-        unsafe {
-            gpgme_error_try(
-                &self.inner.lib,
-                call!(&self.inner.lib, gpgme_set_pinentry_mode)(
-                    self.inner.ptr.as_ptr(),
-                    if cb.is_none() {
-                        gpgme_pinentry_mode_t::GPGME_PINENTRY_MODE_DEFAULT
-                    } else {
-                        gpgme_pinentry_mode_t::GPGME_PINENTRY_MODE_LOOPBACK
-                    },
-                ),
-            )?;
-        }
-        unsafe {
-            call!(&self.inner.lib, gpgme_set_passphrase_cb)(
-                self.inner.ptr.as_ptr(),
-                cb,
-                data.unwrap_or(std::ptr::null_mut()),
-            );
         }
         Ok(())
     }
@@ -1344,196 +892,3 @@ fn gpgme_error_try(lib: &libloading::Library, error_code: gpgme_error_t) -> Resu
     Err(Error::from(gpgme_error_to_string(lib, error_code))
         .set_summary(format!("libgpgme error {error_code}")))
 }
-
-#[derive(Debug)]
-enum DataKind {
-    Memory,
-}
-
-#[derive(Debug)]
-pub struct Data {
-    inner: NonNull<bindings::gpgme_data>,
-    kind: DataKind,
-    #[allow(dead_code)]
-    bytes: std::pin::Pin<Vec<u8>>,
-    lib: Arc<libloading::Library>,
-}
-
-impl Data {
-    pub fn new(lib: Arc<libloading::Library>) -> Result<Self> {
-        let mut inner: gpgme_data_t = std::ptr::null_mut();
-        unsafe {
-            gpgme_error_try(&lib, call!(&lib, gpgme_data_new)(&raw mut inner))?;
-        }
-        let inner = NonNull::new(inner).ok_or_else(|| {
-            Error::new("internal libgpgme error").set_kind(ErrorKind::LinkedLibrary("gpgme"))
-        })?;
-        Ok(Self {
-            lib,
-            kind: DataKind::Memory,
-            bytes: Pin::new(vec![]),
-            inner,
-        })
-    }
-
-    pub fn into_bytes(mut self) -> Result<Vec<u8>> {
-        use std::io::Read;
-        let mut buf = vec![];
-        self.read_to_end(&mut buf)?;
-        Ok(buf)
-    }
-
-    pub const fn as_ptr(&self) -> *mut bindings::gpgme_data {
-        self.inner.as_ptr()
-    }
-}
-
-unsafe impl Send for Data {}
-unsafe impl Sync for Data {}
-
-impl Drop for Data {
-    #[inline]
-    fn drop(&mut self) {
-        match self.kind {
-            DataKind::Memory => unsafe { call!(self.lib, gpgme_data_release)(self.inner.as_mut()) },
-        }
-    }
-}
-
-#[derive(Clone)]
-#[repr(C)]
-struct GpgmeFd {
-    fd: Arc<ManuallyDrop<OwnedFd>>,
-    fnc: gpgme_io_cb_t,
-    fnc_data: *mut c_void,
-    idx: usize,
-    write: bool,
-    sender: Sender<()>,
-    receiver: Receiver<()>,
-    io_state: Arc<Mutex<IoState>>,
-}
-
-impl std::fmt::Debug for GpgmeFd {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        fmt.debug_struct(identify!(GpgmeFd))
-            .field("fd", &self.fd)
-            .field("fnc", &self.fnc)
-            .field("fnc_data", &self.fnc_data)
-            .field("idx", &self.idx)
-            .field("write", &self.write)
-            .finish_non_exhaustive()
-    }
-}
-
-unsafe impl Send for GpgmeFd {}
-unsafe impl Sync for GpgmeFd {}
-
-impl AsRawFd for GpgmeFd {
-    fn as_raw_fd(&self) -> RawFd {
-        self.fd.as_raw_fd()
-    }
-}
-
-impl AsFd for GpgmeFd {
-    fn as_fd(&'_ self) -> BorrowedFd<'_> {
-        self.fd.as_fd()
-    }
-}
-
-//#[test]
-//fn test_gpgme() {
-//    std::thread::spawn(move || {
-//        let ex = smol::Executor::new();
-//        futures::executor::block_on(ex.run(futures::future::pending::<()>()));
-//    });
-//    let mut ctx = Context::new().unwrap();
-//    //let sig = ctx.new_data_mem("sign").unwrap();
-//    //let text = ctx.new_data_mem("file").unwrap();
-//    let sig = ctx.new_data_mem(include_bytes!("/tmp/sig")).unwrap();
-//    let text = ctx.new_data_mem(include_bytes!("/tmp/data")).unwrap();
-//
-//    futures::executor::block_on(ctx.verify(sig, text).unwrap()).unwrap();
-//    println!(
-//        "keys = {:#?}",
-//        futures::executor::block_on(ctx.keylist().unwrap()).unwrap()
-//    );
-//    let cipher = ctx.new_data_file("/tmp/msg.asc").unwrap();
-//    let plain =
-// futures::executor::block_on(ctx.decrypt(cipher).unwrap()).unwrap();
-//    println!(
-//       "buf: {}",
-//       String::from_utf8_lossy(&plain.into_bytes().unwrap())
-//    );
-//}
-
-mod wrapper {
-    use super::*;
-
-    /// Wrapper type to free IO state and `add_priv`, `event_priv` leaked
-    /// references.
-    #[repr(transparent)]
-    pub(super) struct IoStateWrapper(ManuallyDrop<Arc<Mutex<IoState>>>);
-
-    impl IoStateWrapper {
-        pub(super) fn new(state: IoState) -> (Arc<Self>, gpgme_io_cbs) {
-            let inner = Arc::new(Mutex::new(state));
-            let add_priv = Arc::into_raw(Arc::clone(&inner))
-                .cast_mut()
-                .cast::<c_void>();
-            let event_priv = Arc::into_raw(Arc::clone(&inner))
-                .cast_mut()
-                .cast::<c_void>();
-
-            let io_cbs = gpgme_io_cbs {
-                add: Some(io::gpgme_register_io_cb),
-                add_priv,
-                remove: Some(io::gpgme_remove_io_cb),
-                event: Some(io::gpgme_event_io_cb),
-                event_priv,
-            };
-
-            (Arc::new(Self(ManuallyDrop::new(inner))), io_cbs)
-        }
-
-        pub(super) fn done_fut(&self) -> Result<(Done, Vec<Async<GpgmeFd>>)> {
-            let (done, fut) = if let Ok(io_state_lck) = self.0.lock() {
-                let done = io_state_lck.done.clone();
-                (
-                    done,
-                    io_state_lck
-                        .ops
-                        .values()
-                        .map(|a| Async::new(a.clone()))
-                        .collect::<std::io::Result<Vec<Async<GpgmeFd>>>>()?,
-                )
-            } else {
-                return Err(Error::new("Could not use gpgme library")
-                    .set_details("The context's IO state mutex was poisoned.")
-                    .set_kind(ErrorKind::Bug));
-            };
-            Ok((done, fut))
-        }
-    }
-
-    impl Drop for IoStateWrapper {
-        fn drop(&mut self) {
-            // SAFETY: struct unit value is ManuallyDrop, so no Drop impls are called on the
-            // uninit value.
-            // let inner = unsafe { ManuallyDrop::take(&mut self.0) };
-            // SAFETY: take add_priv reference
-            unsafe { Arc::decrement_strong_count(&raw const self.0) };
-            // SAFETY: take event_priv reference
-            unsafe { Arc::decrement_strong_count(&raw const self.0) };
-        }
-    }
-
-    impl std::ops::Deref for IoStateWrapper {
-        type Target = Arc<Mutex<IoState>>;
-
-        fn deref(&self) -> &Self::Target {
-            &self.0
-        }
-    }
-}
-
-use wrapper::IoStateWrapper;
