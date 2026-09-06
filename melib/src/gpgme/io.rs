@@ -213,15 +213,21 @@ impl IoState {
 
 impl Drop for IoState {
     fn drop(&mut self) {
-        // SAFETY: take add_priv reference
-        unsafe { Arc::decrement_strong_count(&raw const self.0) };
-        // SAFETY: take event_priv reference
-        unsafe { Arc::decrement_strong_count(&raw const self.0) };
-
-        // SAFETY: struct unit value is ManuallyDrop, so no Drop impls are called on the
-        // inner value.
-        let inner = unsafe { ManuallyDrop::take(&mut self.0) };
-        let _ = Arc::into_raw(inner);
+        // SAFETY: `self.0` is valid.
+        let inner: Arc<Mutex<IoStateInner>> = unsafe { ManuallyDrop::take(&mut self.0) };
+        let strong_count = Arc::strong_count(&inner);
+        if strong_count >= 3 {
+            // SAFETY: take add_priv reference
+            unsafe { Arc::decrement_strong_count(Arc::as_ptr(&inner)) };
+            // SAFETY: take event_priv reference
+            unsafe { Arc::decrement_strong_count(Arc::as_ptr(&inner)) };
+        }
+        if strong_count != 3 && cfg!(debug_assertions) {
+            eprintln!(
+                "BUG: On Drop, IoState expects three references to Arc<Mutex<IoStateInner>> but \
+                 got {strong_count}. This suggests a memory leak."
+            );
+        }
     }
 }
 
