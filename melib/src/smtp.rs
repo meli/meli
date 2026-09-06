@@ -949,7 +949,7 @@ impl ReplyCode {
         }
     }
 
-    /// Returns `true` if reply code indicates that an error has occured.
+    /// Returns `true` if reply code indicates that an error has occurred.
     pub const fn is_err(&self) -> bool {
         use ReplyCode::*;
         matches!(

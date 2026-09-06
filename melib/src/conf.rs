@@ -70,7 +70,7 @@ impl AccountSettings {
     /// [`AccountSettings::identity`] and [`AccountSettings::display_name`].
     #[deprecated(
         since = "0.8.5",
-        note = "Use AcountSettings::main_identity_address instead."
+        note = "Use AccountSettings::main_identity_address instead."
     )]
     pub fn make_display_name(&self) -> Address {
         Address::new(self.display_name.clone(), self.identity.clone())
@@ -83,7 +83,7 @@ impl AccountSettings {
         Address::new(self.display_name.clone(), self.identity.clone())
     }
 
-    /// Return addresses of extra identites associated with this account,
+    /// Return addresses of extra identities associated with this account,
     /// if any.
     pub fn extra_identity_addresses(&self) -> Vec<Address> {
         self.extra_identities

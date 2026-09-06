@@ -156,7 +156,7 @@ pub enum ToolOpt {
         account: String,
     },
     #[cfg(feature = "http")]
-    /// Interract with a public-inbox server (e.g. lore.kernel.org)
+    /// Interact with a public-inbox server (e.g. lore.kernel.org)
     PublicInbox(PublicInboxOpt),
 }
 

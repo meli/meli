@@ -132,7 +132,7 @@ fn test_config_serde_secret() {
          \"command\" (string) and optionally \"store_in_memory\" (bool)",
     );
 
-    // Backwards-compatibilty for melib::smtp::Password
+    // Backwards-compatibility for melib::smtp::Password
     assert_de_tokens(
         &Secret::Value(VALUE.to_string()),
         &[

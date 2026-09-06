@@ -74,7 +74,7 @@ pub use self::{composing::*, pgp::*, shortcuts::*, tags::*};
 /// Utility macro to access an [`AccountConf`] setting field from
 /// [`Context`](crate::Context) indexed by `$account_hash`
 ///
-/// The value returned is the optionally overriden one in the
+/// The value returned is the optionally overridden one in the
 /// [`AccountConf::conf_override`] field, otherwise the global one.
 ///
 /// See also the [`mailbox_settings`](crate::mailbox_settings) macro.
@@ -97,7 +97,7 @@ macro_rules! account_settings {
 /// Utility macro to access an [`AccountConf`] setting field from
 /// [`Context`](crate::Context) indexed by `$account_hash` and a mailbox.
 ///
-/// The value returned is the optionally overriden one in the
+/// The value returned is the optionally overridden one in the
 /// [`FileMailboxConf::conf_override`] field, otherwise the
 /// [`AccountConf::conf_override`] field, otherwise the global one.
 ///

@@ -199,7 +199,7 @@ if __name__ == "__main__":
     )
 
     def rfc_title(string):
-        """Validate `string` as an rfc id number, with a case-insensive "RFC" prefix"""
+        """Validate `string` as an rfc id number, with a case-insensitive "RFC" prefix"""
         if re.search(r"^[rR][fF][cC]\d{3,5}$", string, re.MULTILINE):
             return string.lower()
         raise ValueError(f"{string} is not of the form 'rfcNNNN' (case insensitive)")
@@ -217,7 +217,7 @@ if __name__ == "__main__":
         nargs="*",
         type=rfc_title,
         default=DEFAULT_RFCS,
-        help="space-seperated RFC titles of the form RFCNNNN",
+        help="space-separated RFC titles of the form RFCNNNN",
     )
     args = parser.parse_args()
     for rfc in args.rfc_list:

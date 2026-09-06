@@ -28,12 +28,12 @@ use unicode_segmentation::UnicodeSegmentation;
 use super::{types::Reflow, wcwidth::wcwidth};
 
 pub trait TextProcessing: UnicodeSegmentation + AsRef<str> {
-    /// Returns a vector containg each grapheme as a slice.
+    /// Returns a vector containing each grapheme as a slice.
     fn split_graphemes(&self) -> Vec<&str> {
         UnicodeSegmentation::graphemes(self, true).collect::<Vec<&str>>()
     }
 
-    /// Returns a vector containg each grapheme and the index it starts at as a
+    /// Returns a vector containing each grapheme and the index it starts at as a
     /// slice.
     fn graphemes_indices(&self) -> Vec<(usize, &str)> {
         UnicodeSegmentation::grapheme_indices(self, true).collect::<Vec<(usize, &str)>>()

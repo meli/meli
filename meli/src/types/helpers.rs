@@ -222,7 +222,7 @@ pub fn sanitize_filename(value: &mut Cow<'_, str>) {
         }};
     }
 
-    // Macro to detect whether <regex>.replace_all performed no replacements, because it returnes a
+    // Macro to detect whether <regex>.replace_all performed no replacements, because it returns a
     // Cow::Borrowed that borrowes the _haystack_ and not the function argument `value`'s lifetime.
     macro_rules! replace_all {
         ($re:expr, $with:literal) => {{

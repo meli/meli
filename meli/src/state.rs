@@ -1445,7 +1445,7 @@ impl State {
     ///
     /// - `None` if there's no child to kill.
     /// - `Some(Ok(()))` if the child is no longer running.
-    /// - `Some(Err(_))` if an error occured.
+    /// - `Some(Err(_))` if an error occurred.
     pub fn kill_main_child(&mut self) -> Option<Result<()>> {
         Some(self.child.as_mut()?.kill())
     }

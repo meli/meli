@@ -102,11 +102,11 @@ bitflags! {
         const FETCH_BODYSTRUCTURE = 1 << 20;
         /// Require an *untagged* `FETCH` response with a `ENVELOPE` item included.
         const FETCH_ENVELOPE      = 1 << 21;
-        /// Require any `SELECT` related reponse.
+        /// Require any `SELECT` related response.
         const SELECT              = Self::FLAGS.bits() | Self::EXISTS.bits() | Self::RECENT.bits() | Self::UNSEEN.bits() | Self::PERMANENTFLAGS.bits() | Self::UIDNEXT.bits() | Self::UIDVALIDITY.bits();
-        /// Require any `EXAMINE` related reponse.
+        /// Require any `EXAMINE` related response.
         const EXAMINE             = Self::FLAGS.bits() | Self::EXISTS.bits() | Self::RECENT.bits() | Self::UNSEEN.bits() | Self::PERMANENTFLAGS.bits() | Self::UIDNEXT.bits() | Self::UIDVALIDITY.bits();
-        /// Require any untagged related reponse.
+        /// Require any untagged related response.
         const UNTAGGED             = Self::EXPUNGE.bits()
                                      | Self::EXISTS.bits()
                                      | Self::RECENT.bits()

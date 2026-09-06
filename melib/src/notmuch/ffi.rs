@@ -2140,7 +2140,7 @@ pub type notmuch_config_get = unsafe extern "C" fn(
 ///
 /// @retval #NOTMUCH_STATUS_SUCCESS
 /// @retval #NOTMUCH_STATUS_ILLEGAL_ARGUMENT    The passed database was not open.
-/// @retval #NOTMUCH_STATUS_XAPIAN_EXCEPTION    A Xapian exception occured
+/// @retval #NOTMUCH_STATUS_XAPIAN_EXCEPTION    A Xapian exception occurred
 /// ```
 pub type notmuch_database_reopen = unsafe extern "C" fn(
     db: *mut notmuch_database_t,
