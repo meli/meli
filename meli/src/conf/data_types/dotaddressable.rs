@@ -49,7 +49,6 @@ impl DotAddressable for data_types::ThreadLayout {}
 impl DotAddressable for data_types::NotificationEnable {}
 impl DotAddressable for u8 {}
 impl DotAddressable for u64 {}
-impl DotAddressable for TagHash {}
 impl DotAddressable for crate::terminal::Color {}
 impl DotAddressable for crate::terminal::Attr {}
 impl DotAddressable for crate::terminal::Key {}

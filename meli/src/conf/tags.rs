@@ -21,35 +21,66 @@
 
 //! E-mail tag configuration and {de,}serializing.
 
+use std::hash::{Hash, Hasher};
+
 use indexmap::{IndexMap, IndexSet};
 use melib::{Error, Result, TagHash};
-use serde::{Deserialize, Deserializer};
+use serde::{
+    de::{Deserialize, Deserializer},
+    ser::{Serialize, Serializer},
+};
 
 use crate::{conf::DotAddressable, terminal::Color};
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TagName {
+    name: String,
+    hash: TagHash,
+}
+
+impl std::borrow::Borrow<TagHash> for TagName {
+    #[inline]
+    fn borrow(&self) -> &TagHash {
+        &self.hash
+    }
+}
+
+impl Serialize for TagName {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.name)
+    }
+}
+
+impl<'de> Deserialize<'de> for TagName {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let name = <String>::deserialize(deserializer)?;
+        let hash = TagHash::from_bytes(name.as_bytes());
+        Ok(Self { name, hash })
+    }
+}
+
+impl Hash for TagName {
+    fn hash<H: Hasher>(&self, hasher: &mut H) {
+        self.name.hash(hasher)
+    }
+}
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct TagsSettings {
     #[serde(default, deserialize_with = "tag_color_de")]
-    pub colors: IndexMap<TagHash, Color>,
-    #[serde(default, deserialize_with = "tag_set_de", alias = "ignore-tags")]
-    pub ignore_tags: IndexSet<TagHash>,
+    pub colors: IndexMap<TagName, Color>,
+    #[serde(default, alias = "ignore-tags")]
+    pub ignore_tags: IndexSet<TagName>,
 }
 
-pub fn tag_set_de<'de, D, T: std::convert::From<IndexSet<TagHash>>>(
-    deserializer: D,
-) -> std::result::Result<T, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    Ok(<Vec<String>>::deserialize(deserializer)?
-        .into_iter()
-        .map(|tag| TagHash::from_bytes(tag.as_bytes()))
-        .collect::<IndexSet<TagHash>>()
-        .into())
-}
-
-pub fn tag_color_de<'de, D, T: std::convert::From<IndexMap<TagHash, Color>>>(
+pub fn tag_color_de<'de, D, T: std::convert::From<IndexMap<TagName, Color>>>(
     deserializer: D,
 ) -> std::result::Result<T, D::Error>
 where
@@ -62,18 +93,18 @@ where
         C(Color),
     }
 
-    Ok(<IndexMap<String, _Color>>::deserialize(deserializer)?
+    Ok(<IndexMap<TagName, _Color>>::deserialize(deserializer)?
         .into_iter()
         .map(|(tag, color)| {
             (
-                TagHash::from_bytes(tag.as_bytes()),
+                tag,
                 match color {
                     _Color::B(b) => Color::Byte(b),
                     _Color::C(c) => c,
                 },
             )
         })
-        .collect::<IndexMap<TagHash, Color>>()
+        .collect::<IndexMap<TagName, Color>>()
         .into())
 }
 
@@ -91,6 +122,19 @@ impl DotAddressable for TagsSettings {
                 }
             }
             None => Ok(toml::Value::try_from(self)
+                .map_err(|err| err.to_string())?
+                .to_string()),
+        }
+    }
+}
+
+impl DotAddressable for TagName {
+    fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
+        match path.first() {
+            Some(other) => Err(Error::new(format!(
+                "{parent_field} has no field named {other}"
+            ))),
+            None => Ok(toml::Value::try_from(&self.name)
                 .map_err(|err| err.to_string())?
                 .to_string()),
         }
