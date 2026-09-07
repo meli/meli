@@ -29,10 +29,10 @@ use super::*;
 #[allow(clippy::type_complexity)]
 pub enum HookFn {
     /// Stateful hook.
-    Closure(Box<dyn FnMut(&mut Context, &mut Draft) -> Result<()> + Send + Sync>),
+    Closure(Box<dyn FnMut(&Context, &Draft) -> Result<()> + Send + Sync>),
 
     /// Static hook.
-    Ptr(fn(&mut Context, &mut Draft) -> Result<()>),
+    Ptr(fn(&Context, &Draft) -> Result<()>),
 }
 
 impl std::fmt::Debug for HookFn {
@@ -50,7 +50,7 @@ impl std::fmt::Debug for HookFn {
 }
 
 impl std::ops::Deref for HookFn {
-    type Target = dyn FnMut(&mut Context, &mut Draft) -> Result<()> + Send + Sync;
+    type Target = dyn FnMut(&Context, &Draft) -> Result<()> + Send + Sync;
 
     fn deref(&self) -> &Self::Target {
         match self {
@@ -143,7 +143,7 @@ impl Hook {
 }
 
 impl std::ops::Deref for Hook {
-    type Target = dyn FnMut(&mut Context, &mut Draft) -> Result<()> + Send + Sync;
+    type Target = dyn FnMut(&Context, &Draft) -> Result<()> + Send + Sync;
 
     fn deref(&self) -> &Self::Target {
         self.hook_fn.deref()
@@ -156,7 +156,7 @@ impl std::ops::DerefMut for Hook {
     }
 }
 
-fn past_date_warn(_ctx: &mut Context, draft: &mut Draft) -> Result<()> {
+fn past_date_warn(_ctx: &Context, draft: &Draft) -> Result<()> {
     use melib::utils::datetime::*;
     if let Some(v) = draft
         .headers
@@ -184,7 +184,7 @@ pub const PASTDATEWARN: Hook = Hook {
     hook_fn: HookFn::Ptr(past_date_warn),
 };
 
-fn important_header_warn(_ctx: &mut Context, draft: &mut Draft) -> Result<()> {
+fn important_header_warn(_ctx: &Context, draft: &Draft) -> Result<()> {
     for hdr in [HeaderName::FROM, HeaderName::TO] {
         match draft.headers.get(&hdr).map(melib::Address::list_try_from) {
             Some(Ok(_)) => {}
@@ -231,7 +231,7 @@ pub const HEADERWARN: Hook = Hook {
     hook_fn: HookFn::Ptr(important_header_warn),
 };
 
-fn missing_attachment_warn(_ctx: &mut Context, draft: &mut Draft) -> Result<()> {
+fn missing_attachment_warn(_ctx: &Context, draft: &Draft) -> Result<()> {
     if draft
         .headers
         .get(HeaderName::SUBJECT)
@@ -255,7 +255,7 @@ pub const MISSINGATTACHMENTWARN: Hook = Hook {
     hook_fn: HookFn::Ptr(missing_attachment_warn),
 };
 
-fn empty_draft_warn(_ctx: &mut Context, draft: &mut Draft) -> Result<()> {
+fn empty_draft_warn(_ctx: &Context, draft: &Draft) -> Result<()> {
     if draft
         .headers
         .get(HeaderName::SUBJECT)
