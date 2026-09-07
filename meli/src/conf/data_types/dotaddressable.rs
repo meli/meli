@@ -107,12 +107,11 @@ impl DotAddressable for Settings {
                     "listing" => self.listing.lookup(field, tail),
                     "notifications" => self.notifications.lookup(field, tail),
                     "shortcuts" => self.shortcuts.lookup(field, tail),
-                    "tags" => Err(Error::new("unimplemented")),
-                    "composing" => Err(Error::new("unimplemented")),
-                    "pgp" => Err(Error::new("unimplemented")),
+                    "tags" => self.tags.lookup(field, tail),
+                    "composing" => self.composing.lookup(field, tail),
+                    "pgp" => self.pgp.lookup(field, tail),
                     "terminal" => self.terminal.lookup(field, tail),
                     "log" => self.log.lookup(field, tail),
-
                     other => Err(Error::new(format!(
                         "{parent_field} has no field named {other}"
                     ))),
