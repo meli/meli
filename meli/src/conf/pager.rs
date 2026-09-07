@@ -168,7 +168,7 @@ impl DotAddressable for PagerSettings {
                         self.auto_choose_multipart_alternative.lookup(field, tail)
                     }
                     "show_date_in_my_timezone" => self.show_date_in_my_timezone.lookup(field, tail),
-                    "url_launcher" => self.html_filter.lookup(field, tail),
+                    "url_launcher" => self.url_launcher.lookup(field, tail),
                     "show_extra_headers" => self.show_extra_headers.lookup(field, tail),
                     other => Err(Error::new(format!(
                         "{parent_field} has no field named {other}"
