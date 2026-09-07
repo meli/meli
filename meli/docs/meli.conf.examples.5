@@ -169,9 +169,46 @@ identity = "My Name <user@fastmail.com>"
 send_mail = "server_submission"
 .Ed
 .Sh NOTMUCH ACCOUNT
-TODO
+An example configuration:
+.Bd -literal
+[accounts.notmuch]
+format = "notmuch"
+#library_file_path = "/opt/homebrew/lib/libnotmuch.5.dylib"
+# Note that the notmuch backend does not support trash folders
+# So add a shortcut to add/remove a trash tag
+shortcuts.listing.commands = [ { command = [ "tag remove trash"  ], shortcut = "D" }, { command = [ "tag add trash"  ], shortcut = "d"} ]
+\&...
+  [accounts.notmuch.mailboxes]
+  "INBOX" = {  query="tag:inbox", subscribe = true }
+  "Drafts" = {  query="tag:draft", subscribe = true }
+  "Sent" = {  query="from:username@example.com from:username2@example.com", subscribe = true }
+  "Archives" = {  query="tag:archived", subscribe = true }
+  "Archives/2019" = {  query="tag:archived date:01-2019..12-2019", parent="Archives", subscribe = true }
+.Ed
 .Sh NNTP / USENET ACCOUNT
-TODO
+An example configuration:
+.Bd -literal
+[accounts.eternal-september]
+format = "nntp"
+server_hostname = "news.eternal-september.org"
+server_username = "user"
+server_password = "password"
+require_auth = true
+use_tls = true
+server_port = 563
+root_mailbox = "comp.arch.storage"
+subscribed_mailboxes = ["comp.arch.storage",]
+identity = "user@example.com"
+composing.send_mail = "server_submission"
+[accounts.eternal-september.mailboxes]
+  "comp.arch.storage" = {}
+  "comp.bbs.majorbbs" = {}
+  "comp.bbs.misc" = {}
+  "comp.bbs.waffle" = {}
+  "comp.benchmarks" = {}
+  "comp.binaries.cbm" = {}
+  "comp.bugs" = {}
+.Ed
 .Sh SEE ALSO
 .Xr meli.conf 5 ,
 .Xr meli 1 ,
