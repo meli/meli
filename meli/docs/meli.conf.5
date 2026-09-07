@@ -316,6 +316,23 @@ Configuration for each mailbox.
 Its format is described below in
 .Sx mailboxes Ns
 \&.
+.It conf_override
+.Pq Em optional
+Override global settings for this account.
+The settings are nested, optional versions of global settings.
+Available sections to override are
+.Em pager, listing, notifications, shortcuts, composing, identity, tags, themes, pgp
+and the account options
+.Em identity, send_mail Ns
+\&.
+Example:
+.\"
+.\"
+.\"
+.Bd -literal
+[accounts."imap.example.com"]
+  pager = { filter = "pygmentize -l diff -f 256"} }
+.Ed
 .El
 .Ss notmuch only
 .HorizontalRule
@@ -815,23 +832,6 @@ otherwise usage is inferred from the mailbox title.
 If for example your Sent folder is not named
 .Qq Li Sent Ns
 , you must explicitly set it.
-.It Ic conf_override Ar boolean
-.Pq Em optional
-Override global settings for this mailbox.
-Available sections to override are
-.Em pager, notifications, shortcuts, composing
-and the account options
-.Em identity Ns
-\&.
-Example:
-.\"
-.\"
-.\"
-.Bd -literal
-[accounts."imap.example.com".mailboxes]
-  "INBOX" = { index_style = "plain" }
-  "INBOX/Lists/devlist" = { autoload = false, pager = { filter = "pygmentize -l diff -f 256"} }
-.Ed
 .\"
 .\"
 .\"
@@ -861,6 +861,24 @@ Useful only for
 .Em UTF-7
 mailboxes.
 .Pq Em "utf7", "utf-7", "utf8", "utf-8" \" default value
+.It conf_override
+.Pq Em optional
+Override global settings for this mailbox.
+The settings are nested, optional versions of global settings.
+Available sections to override are
+.Em pager, listing, notifications, shortcuts, composing, identity, tags, themes, pgp
+and the account options
+.Em identity, send_mail Ns
+\&.
+Example:
+.\"
+.\"
+.\"
+.Bd -literal
+[accounts."imap.example.com".mailboxes]
+  "INBOX" = { index_style = "plain" }
+  "INBOX/Lists/devlist" = { autoload = false, pager = { filter = "pygmentize -l diff -f 256"} }
+.Ed
 .El
 .\"
 .\"
