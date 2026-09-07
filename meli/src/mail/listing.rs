@@ -2593,6 +2593,7 @@ impl Component for Listing {
                 _ => {}
             }
         }
+        let (account_hash, mailbox_hash) = self.component.coordinates();
         match *event {
             UIEvent::Input(ref k) if shortcut!(k == shortcuts[Shortcuts::LISTING]["new_mail"]) => {
                 let account_hash = context.accounts[self.cursor_pos.account].hash();
@@ -2657,11 +2658,13 @@ impl Component for Listing {
                 return true;
             }
             UIEvent::Input(ref key)
-                if context
-                    .settings
-                    .shortcuts
-                    .listing
-                    .commands
+                if mailbox_settings!(context has [account_hash][&mailbox_hash])
+                    && mailbox_settings!(
+                        context[account_hash][&mailbox_hash]
+                            .shortcuts
+                            .listing
+                            .commands
+                    )
                     .iter()
                     .any(|cmd| {
                         if cmd.shortcut == *key {
@@ -2731,6 +2734,17 @@ impl Component for Listing {
         let mut config_map = context.settings.shortcuts.listing.key_values();
         if self.focus != ListingFocus::Menu {
             config_map.shift_remove("open_mailbox");
+        }
+        let (account_hash, mailbox_hash) = self.component.coordinates();
+        if mailbox_settings!(context has [account_hash][&mailbox_hash]) {
+            for command in mailbox_settings!(
+                context[account_hash][&mailbox_hash]
+                    .shortcuts
+                    .listing
+                    .commands
+            ) {
+                config_map.retain(|_, shortcut| shortcut != &command.shortcut);
+            }
         }
         map.insert(Shortcuts::LISTING, config_map);
 

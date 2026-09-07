@@ -851,6 +851,7 @@ impl Component for ThreadView {
         }
 
         let shortcuts = self.shortcuts(context);
+        let (account_hash, mailbox_hash, _) = self.coordinates;
         match *event {
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["toggle_layout"]) =>
@@ -1044,11 +1045,13 @@ impl Component for ThreadView {
                 false
             }
             UIEvent::Input(ref key)
-                if context
-                    .settings
-                    .shortcuts
-                    .thread_view
-                    .commands
+                if mailbox_settings!(context has [account_hash][&mailbox_hash])
+                    && mailbox_settings!(
+                        context[account_hash][&mailbox_hash]
+                            .shortcuts
+                            .thread_view
+                            .commands
+                    )
                     .iter()
                     .any(|cmd| {
                         if cmd.shortcut == *key {
@@ -1350,15 +1353,24 @@ impl Component for ThreadView {
             )
             .key_values(),
         );
-        map.insert(
-            Shortcuts::THREAD_VIEW,
-            mailbox_settings!(
-                context[self.coordinates.0][&self.coordinates.1]
+        let mut thread_view_map = mailbox_settings!(
+            context[self.coordinates.0][&self.coordinates.1]
+                .shortcuts
+                .thread_view
+        )
+        .key_values();
+        let (account_hash, mailbox_hash, _) = self.coordinates;
+        if mailbox_settings!(context has [account_hash][&mailbox_hash]) {
+            for command in mailbox_settings!(
+                context[account_hash][&mailbox_hash]
                     .shortcuts
                     .thread_view
-            )
-            .key_values(),
-        );
+                    .commands
+            ) {
+                thread_view_map.retain(|_, shortcut| shortcut != &command.shortcut);
+            }
+        }
+        map.insert(Shortcuts::THREAD_VIEW, thread_view_map);
 
         map
     }

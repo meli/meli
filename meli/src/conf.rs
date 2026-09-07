@@ -104,6 +104,13 @@ macro_rules! account_settings {
 /// See also the [`account_settings`] macro.
 #[macro_export]
 macro_rules! mailbox_settings {
+    ($context:ident has [$account_hash:expr][$mailbox_path:expr]) => {{
+        if let Some(ref acc) = $context.accounts.get(&$account_hash) {
+            acc.mailbox_entries.contains_key($mailbox_path)
+        } else {
+            false
+        }
+    }};
     ($context:ident[$account_hash:expr][$mailbox_path:expr].$setting:ident.$field:ident) => {{
         $context.accounts[&$account_hash][$mailbox_path]
             .conf
@@ -118,6 +125,23 @@ macro_rules! mailbox_settings {
                 .$field
                 .as_ref())
             .unwrap_or(&$context.settings.$setting.$field)
+    }};
+    ($context:ident[$account_hash:expr][$mailbox_path:expr].$setting:ident.$field:ident.$subfield:ident) => {{
+        $context.accounts[&$account_hash][$mailbox_path]
+            .conf
+            .conf_override
+            .$setting
+            .$field
+            .as_ref()
+            .map(|f| f.$subfield.as_ref())
+            .or($context.accounts[&$account_hash]
+                .settings
+                .conf_override
+                .$setting
+                .$field
+                .as_ref()
+                .map(|f| f.$subfield.as_ref()))
+            .unwrap_or(&$context.settings.$setting.$field.$subfield)
     }};
 }
 

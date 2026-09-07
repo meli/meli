@@ -1566,25 +1566,6 @@ impl Component for ConversationsListing {
                 }
                 self.set_dirty(true);
             }
-            UIEvent::Input(ref key)
-                if context
-                    .settings
-                    .shortcuts
-                    .listing
-                    .commands
-                    .iter()
-                    .any(|cmd| {
-                        if cmd.shortcut == *key {
-                            for cmd in &cmd.command {
-                                context.replies.push_back(UIEvent::Command(cmd.to_string()));
-                            }
-                            return true;
-                        }
-                        false
-                    }) =>
-            {
-                return true;
-            }
             _ => {}
         }
 
