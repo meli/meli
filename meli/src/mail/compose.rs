@@ -140,6 +140,15 @@ pub struct Composer {
     id: ComponentId,
 }
 
+#[allow(clippy::type_complexity)]
+pub struct ActionFn(Box<dyn FnOnce(&mut Composer, &mut Context) -> Result<()> + Send + Sync>);
+
+impl std::fmt::Debug for ActionFn {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fmt.debug_struct("ActionFn").finish_non_exhaustive()
+    }
+}
+
 #[derive(Debug)]
 enum ViewMode {
     Discard(ComponentId, UIDialog<char>),
@@ -151,7 +160,13 @@ enum ViewMode {
     SelectRecipients(UIDialog<Address>),
     #[cfg(feature = "gpgme")]
     SelectKey(bool, gpg::KeySelection),
-    Send(UIConfirmationDialog),
+    Send {
+        widget: UIConfirmationDialog,
+    },
+    PerformAction {
+        widget: UIConfirmationDialog,
+        action: ActionFn,
+    },
     WaitingForSendResult(UIDialog<char>, JoinHandle<Result<()>>),
 }
 
@@ -253,63 +268,6 @@ impl Composer {
             );
         }
         let format_flowed = *account_settings!(context[account_hash].composing.format_flowed);
-        if *account_settings!(context[account_hash].composing.use_signature) {
-            use std::{path::Path, time::Duration};
-
-            let read_sig_from_path = |path: &Path| -> Option<String> {
-                match std::fs::read_to_string(path).chain_err_related_path(path) {
-                    Ok(sig) => Some(sig),
-                    Err(err) => {
-                        log::error!(
-                            "Could not open signature file {} for account `{}`: {err}.",
-                            path.display(),
-                            context.accounts[&account_hash].name(),
-                        );
-                        None
-                    }
-                }
-            };
-            let override_value = account_settings!(context[account_hash].composing.signature_file)
-                .as_ref()
-                .and_then(|secret| {
-                    use melib::conf::Secret;
-
-                    match secret {
-                        Secret::Value(ref literal) => read_sig_from_path(Path::new(&literal)),
-                        Secret::Evaluate { .. } => match melib::smol::block_on(
-                            secret.value_with_timeout(Duration::from_millis(300)),
-                        ) {
-                            Err(err) => {
-                                log::error!(
-                                    "Could not execute signature command for account `{}`: {err}.",
-                                    context.accounts[&account_hash].name(),
-                                );
-                                None
-                            }
-                            Ok(v) => Some(v),
-                        },
-                    }
-                });
-            if let Some(sig) = override_value.or_else(|| {
-                context.accounts[&account_hash]
-                    .signature_file()
-                    .as_deref()
-                    .and_then(read_sig_from_path)
-            }) {
-                let mut delimiter =
-                    account_settings!(context[account_hash].composing.signature_delimiter)
-                        .as_deref()
-                        .map(Cow::Borrowed)
-                        .unwrap_or_else(|| Cow::Borrowed("\n\n-- \n"));
-                if format_flowed {
-                    delimiter = Cow::Owned(delimiter.replace(" \n", " \n\n"));
-                }
-                _ = write!(&mut ret.draft.body, "{}{}", delimiter.as_ref(), sig);
-                if !sig.ends_with('\n') {
-                    _ = writeln!(&mut ret.draft.body);
-                }
-            }
-        }
         if format_flowed {
             ret.pager.set_reflow(melib::text::Reflow::FormatFlowed);
         }
@@ -953,7 +911,7 @@ To: {}
         }
     }
 
-    fn update_from_file(&mut self, file: File, context: &mut Context) -> bool {
+    fn update_from_file(&mut self, file: &File, context: &mut Context) {
         match file.read_to_string().and_then(|res| {
             self.draft.update(res.as_str()).inspect_err(|_| {
                 self.draft.set_body(res);
@@ -961,7 +919,10 @@ To: {}
         }) {
             Ok(has_changes) => {
                 self.has_changes = has_changes;
-                true
+                if has_changes {
+                    self.pager.update_from_str(self.draft.body(), Some(77));
+                    self.update_form(context);
+                }
             }
             Err(err) => {
                 context.replies.push_back(UIEvent::Notification {
@@ -973,7 +934,6 @@ To: {}
                     kind: Some(NotificationType::Error(melib::error::ErrorKind::None)),
                 });
                 self.has_changes = true;
-                false
             }
         }
     }
@@ -1009,6 +969,82 @@ To: {}
             context,
         )
     }
+
+    fn get_signature(&self, context: &Context) -> Result<Option<String>> {
+        use std::{path::Path, time::Duration};
+
+        let read_sig_from_path = |path: &Path| -> Option<String> {
+            match std::fs::read_to_string(path).chain_err_related_path(path) {
+                Ok(sig) => Some(sig),
+                Err(err) => {
+                    log::error!(
+                        "Could not open signature file {} for account `{}`: {err}.",
+                        path.display(),
+                        context.accounts[&self.account_hash].name(),
+                    );
+                    None
+                }
+            }
+        };
+        let override_value = account_settings!(context[self.account_hash].composing.signature_file)
+            .as_ref()
+            .and_then(|secret| {
+                use melib::conf::Secret;
+
+                match secret {
+                    Secret::Value(ref literal) => read_sig_from_path(Path::new(&literal)),
+                    Secret::Evaluate { .. } => match melib::smol::block_on(
+                        secret.value_with_timeout(Duration::from_millis(300)),
+                    ) {
+                        Err(err) => {
+                            log::error!(
+                                "Could not execute signature command for account `{}`: {err}.",
+                                context.accounts[&self.account_hash].name(),
+                            );
+                            None
+                        }
+                        Ok(v) => Some(v),
+                    },
+                }
+            });
+        Ok(override_value.or_else(|| {
+            context.accounts[&self.account_hash]
+                .signature_file()
+                .as_deref()
+                .and_then(read_sig_from_path)
+        }))
+    }
+
+    fn add_signature(&mut self, context: &mut Context) {
+        if *account_settings!(context[self.account_hash].composing.use_signature) {
+            match self.get_signature(context) {
+                Ok(None) => {}
+                Ok(Some(sig)) => {
+                    let account_hash = self.account_hash;
+                    let format_flowed =
+                        *account_settings!(context[account_hash].composing.format_flowed);
+                    let mut delimiter =
+                        account_settings!(context[account_hash].composing.signature_delimiter)
+                            .as_deref()
+                            .map(Cow::Borrowed)
+                            .unwrap_or_else(|| Cow::Borrowed("\n\n-- \n"));
+                    if format_flowed {
+                        delimiter = Cow::Owned(delimiter.replace(" \n", " \n\n"));
+                    }
+                    _ = write!(&mut self.draft.body, "{}{}", delimiter.as_ref(), sig);
+                    if !sig.ends_with('\n') {
+                        _ = writeln!(&mut self.draft.body);
+                    }
+                }
+                Err(err) => context.replies.push_back(UIEvent::Notification {
+                    title: None,
+                    source: None,
+                    body: err.to_string().into(),
+                    kind: Some(NotificationType::Error(err.kind)),
+                }),
+            }
+        }
+    }
 }
 
 impl Component for Composer {
@@ -1040,6 +1076,7 @@ impl Component for Composer {
                         .to_string(),
                 );
             }
+            self.add_signature(context);
             self.pager.update_from_str(self.draft.body(), Some(77));
             self.update_form(context);
             self.initialized = true;
@@ -1201,12 +1238,12 @@ impl Component for Composer {
                 })
                 .draw(grid, area, context);
             }
-            ViewMode::Send(ref mut s) => {
+            ViewMode::Send { ref mut widget } | ViewMode::PerformAction { ref mut widget, .. } => {
                 let inner_area = area.center_inside((
                     area.width().saturating_sub(2),
                     area.height().saturating_sub(2),
                 ));
-                s.draw(grid, inner_area, context);
+                widget.draw(grid, inner_area, context);
             }
             #[cfg(feature = "gpgme")]
             ViewMode::SelectKey(
@@ -1358,8 +1395,8 @@ impl Component for Composer {
                     return true;
                 }
             }
-            (ViewMode::Send(ref selector), UIEvent::FinishedUIDialog(id, result))
-                if selector.id() == *id =>
+            (ViewMode::Send { ref widget }, UIEvent::FinishedUIDialog(id, result))
+                if widget.id() == *id =>
             {
                 if matches!(result.downcast_ref::<bool>(), Some(true)) {
                     self.update_draft();
@@ -1428,9 +1465,37 @@ impl Component for Composer {
                 self.set_dirty(true);
                 return true;
             }
-            (ViewMode::Send(ref dialog), UIEvent::ComponentUnrealize(ref id))
-                if *id == dialog.id() =>
-            {
+            (
+                ViewMode::PerformAction {
+                    ref widget,
+                    action: _,
+                },
+                UIEvent::FinishedUIDialog(id, result),
+            ) if widget.id() == *id => {
+                if let ViewMode::PerformAction { widget: _, action } =
+                    std::mem::replace(&mut self.mode, ViewMode::Edit)
+                {
+                    if matches!(result.downcast_ref::<bool>(), Some(true)) {
+                        match (action.0)(self, context) {
+                            Ok(()) => {}
+                            Err(err) => {
+                                context.replies.push_back(UIEvent::Notification {
+                                    title: None,
+                                    source: None,
+                                    body: err.to_string().into(),
+                                    kind: Some(NotificationType::Error(err.kind)),
+                                });
+                            }
+                        }
+                    }
+                }
+                self.set_dirty(true);
+                return true;
+            }
+            (
+                ViewMode::Send { ref widget } | ViewMode::PerformAction { ref widget, .. },
+                UIEvent::ComponentUnrealize(ref id),
+            ) if *id == widget.id() => {
                 self.mode = ViewMode::Edit;
                 self.set_dirty(true);
             }
@@ -1454,8 +1519,11 @@ impl Component for Composer {
                 self.set_dirty(true);
                 return true;
             }
-            (ViewMode::Send(ref mut selector), _) => {
-                if selector.process_event(event, context) {
+            (
+                ViewMode::Send { ref mut widget } | ViewMode::PerformAction { ref mut widget, .. },
+                _,
+            ) => {
+                if widget.process_event(event, context) {
                     self.set_dirty(true);
                     return true;
                 }
@@ -1664,16 +1732,18 @@ impl Component for Composer {
                         });
                     }
                 }
-                self.mode = ViewMode::Send(UIConfirmationDialog::new(
-                    "send mail?",
-                    vec![(true, "yes".to_string()), (false, "no".to_string())],
-                    /* only one choice */
-                    true,
-                    Some(Box::new(move |id: ComponentId, result: bool| {
-                        Some(UIEvent::FinishedUIDialog(id, Box::new(result)))
-                    })),
-                    context,
-                ));
+                self.mode = ViewMode::Send {
+                    widget: UIConfirmationDialog::new(
+                        "send mail?",
+                        vec![(true, "yes".to_string()), (false, "no".to_string())],
+                        /* only one choice */
+                        true,
+                        Some(Box::new(move |id: ComponentId, result: bool| {
+                            Some(UIEvent::FinishedUIDialog(id, Box::new(result)))
+                        })),
+                        context,
+                    ),
+                };
                 return true;
             }
             UIEvent::EmbeddedInput((Key::Ctrl('z'), _)) => {
@@ -1708,9 +1778,8 @@ impl Component for Composer {
                                     ..
                                 }) = self.embedded_pty.take()
                                 {
-                                    self.update_from_file(file, context);
+                                    self.update_from_file(&file, context);
                                 }
-                                self.initialized = false;
                                 self.mode = ViewMode::Edit;
                                 self.set_dirty(true);
                                 context
@@ -1738,9 +1807,8 @@ impl Component for Composer {
                                     ..
                                 }) = embedded_pty
                                 {
-                                    self.update_from_file(file, context);
+                                    self.update_from_file(&file, context);
                                 }
-                                self.initialized = false;
                                 self.mode = ViewMode::Edit;
                                 self.set_dirty(true);
                                 context
@@ -1810,7 +1878,6 @@ impl Component for Composer {
                                         melib::error::ErrorKind::External,
                                     )),
                                 });
-                                self.initialized = false;
                                 self.embedded_pty = None;
                                 self.mode = ViewMode::Edit;
                                 context
@@ -1827,7 +1894,6 @@ impl Component for Composer {
                                     )),
                                 });
                                 drop(embedded_guard);
-                                self.initialized = false;
                                 self.embedded_pty = None;
                                 self.mode = ViewMode::Edit;
                                 context
@@ -1927,6 +1993,96 @@ impl Component for Composer {
                 return true;
             }
             UIEvent::Input(ref key)
+                if self.mode.is_edit()
+                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["reset_date"]) =>
+            {
+                self.mode = ViewMode::PerformAction {
+                    widget: UIConfirmationDialog::new(
+                        "Reset date to current time? Action is irreversible!",
+                        vec![(true, "yes".to_string()), (false, "no".to_string())],
+                        /* only one choice */
+                        true,
+                        Some(Box::new(move |id: ComponentId, result: bool| {
+                            Some(UIEvent::FinishedUIDialog(id, Box::new(result)))
+                        })),
+                        context,
+                    ),
+                    action: ActionFn(Box::new(|composer, _context| {
+                        let now = melib::utils::datetime::timestamp_to_string(
+                            melib::utils::datetime::now(),
+                            Some(melib::utils::datetime::formats::RFC822_DATE),
+                            true,
+                        );
+                        if let Some(Field::Text(ref mut text_field)) =
+                            composer.form.values_mut().get_mut(&HeaderName::DATE)
+                        {
+                            text_field.set_content(now);
+                        }
+                        composer.update_draft();
+                        composer.set_dirty(true);
+                        Ok(())
+                    })),
+                };
+
+                self.set_dirty(true);
+                return true;
+            }
+            UIEvent::Input(ref key)
+                if self.mode.is_edit()
+                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["reset_body"]) =>
+            {
+                self.mode = ViewMode::PerformAction {
+                    widget: UIConfirmationDialog::new(
+                        "Reset email body to an empty state? Action is irreversible!",
+                        vec![(true, "yes".to_string()), (false, "no".to_string())],
+                        /* only one choice */
+                        true,
+                        Some(Box::new(move |id: ComponentId, result: bool| {
+                            Some(UIEvent::FinishedUIDialog(id, Box::new(result)))
+                        })),
+                        context,
+                    ),
+                    action: ActionFn(Box::new(|composer, context| {
+                        composer.draft.set_body(String::new());
+                        if *account_settings!(
+                            context[composer.account_hash].composing.use_signature
+                        ) {
+                            if let Some(sig) = composer.get_signature(context)? {
+                                let account_hash = composer.account_hash;
+                                let format_flowed = *account_settings!(
+                                    context[account_hash].composing.format_flowed
+                                );
+                                let mut delimiter = account_settings!(
+                                    context[account_hash].composing.signature_delimiter
+                                )
+                                .as_deref()
+                                .map(Cow::Borrowed)
+                                .unwrap_or_else(|| Cow::Borrowed("\n\n-- \n"));
+                                if format_flowed {
+                                    delimiter = Cow::Owned(delimiter.replace(" \n", " \n\n"));
+                                }
+                                _ = write!(
+                                    &mut composer.draft.body,
+                                    "{}{}",
+                                    delimiter.as_ref(),
+                                    sig
+                                );
+                                if !sig.ends_with('\n') {
+                                    _ = writeln!(&mut composer.draft.body);
+                                }
+                            }
+                        }
+                        composer
+                            .pager
+                            .update_from_str(composer.draft.body(), Some(77));
+                        composer.update_form(context);
+                        composer.set_dirty(true);
+                        Ok(())
+                    })),
+                };
+                self.set_dirty(true);
+            }
+            UIEvent::Input(ref key)
                 if self.embedded_pty.is_some()
                     && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit"]) =>
             {
@@ -1963,7 +2119,7 @@ impl Component for Composer {
                     let guard = terminal.lock().unwrap();
                     guard.wake_up();
                     guard.terminate();
-                    self.update_from_file(file, context);
+                    self.update_from_file(&file, context);
                 }
                 context.replies.push_back(UIEvent::Notification {
                     title: None,
@@ -1971,7 +2127,6 @@ impl Component for Composer {
                     body: "Subprocess was killed by SIGTERM signal".into(),
                     kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
                 });
-                self.initialized = false;
                 self.mode = ViewMode::Edit;
                 context
                     .replies
@@ -2327,33 +2482,7 @@ impl Component for Composer {
                             self.set_dirty(true);
                         }
                         Ok(f) => {
-                            match f.read_to_string().and_then(|res| {
-                                self.draft.update(res.as_str()).inspect_err(|_| {
-                                    self.draft.set_body(res);
-                                })
-                            }) {
-                                Ok(has_changes) => {
-                                    self.has_changes = has_changes;
-                                }
-                                Err(err) => {
-                                    context.replies.push_back(UIEvent::Notification {
-                                        title: Some(
-                                            "Could not parse draft headers correctly.".into(),
-                                        ),
-                                        source: None,
-                                        body: format!(
-                                            "{err}\nThe invalid text has been set as the body of \
-                                             your draft",
-                                        )
-                                        .into(),
-                                        kind: Some(NotificationType::Error(
-                                            melib::error::ErrorKind::None,
-                                        )),
-                                    });
-                                    self.has_changes = true;
-                                }
-                            }
-                            self.initialized = false;
+                            self.update_from_file(&f, context);
                             self.set_dirty(true);
                         }
                     },
@@ -2473,7 +2602,7 @@ impl Component for Composer {
             ViewMode::SelectKey(_, ref widget) => {
                 widget.is_dirty() || self.pager.is_dirty() || self.form.is_dirty()
             }
-            ViewMode::Send(ref widget) => {
+            ViewMode::Send { ref widget } | ViewMode::PerformAction { ref widget, .. } => {
                 widget.is_dirty() || self.pager.is_dirty() || self.form.is_dirty()
             }
             ViewMode::WaitingForSendResult(ref widget, _) => {
@@ -2497,7 +2626,7 @@ impl Component for Composer {
             ViewMode::SelectKey(_, ref mut widget) => {
                 widget.set_dirty(value);
             }
-            ViewMode::Send(ref mut widget) => {
+            ViewMode::Send { ref mut widget } | ViewMode::PerformAction { ref mut widget, .. } => {
                 widget.set_dirty(value);
             }
             ViewMode::WaitingForSendResult(ref mut widget, _) => {

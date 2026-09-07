@@ -101,7 +101,7 @@ macro_rules! shortcut_key_values {
     (
         $cname:expr,
         $(#[$outer:meta])*
-        pub struct $name:ident { $($fname:ident |> $fdesc:literal |> $default:expr),* }) => {
+        pub struct $name:ident { $($fname:ident |> $fdesc:literal |> $default:expr),*$(,)? }) => {
         $(#[$outer])*
         #[derive(Debug, Clone, Serialize, Deserialize)]
         #[serde(default)]
@@ -247,7 +247,9 @@ shortcut_key_values! { "composing",
         edit |> "Edit." |> Key::Char('e'),
         send_mail |> "Deliver draft to mailer." |> Key::Char('s'),
         scroll_up |> "Change field focus." |> Key::Char('k'),
-        scroll_down |> "Change field focus." |> Key::Char('j')
+        scroll_down |> "Change field focus." |> Key::Char('j'),
+        reset_date |> "Reset date to current time." |> Key::F(1),
+        reset_body |> "Reset body to default template." |> Key::F(2),
     }
 }
 
