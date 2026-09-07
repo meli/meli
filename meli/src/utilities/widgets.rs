@@ -396,6 +396,10 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync, F: FormWidgetL
         &mut self.fields
     }
 
+    pub fn layout_mut(&mut self) -> &mut Vec<F> {
+        &mut self.layout
+    }
+
     pub fn collect(self) -> IndexMap<F, Field> {
         self.fields
     }
@@ -443,7 +447,6 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync, F: FormWidgetL
                     area.nth_row(i).skip_cols(self.field_name_max_length + 2),
                     context,
                 );
-                grid.change_theme(area.nth_row(i), theme_attr);
 
                 /* Highlight if necessary */
                 if i == self.cursor && self.focus == FormFocus::TextInput {

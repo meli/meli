@@ -26,13 +26,17 @@ use std::sync::Arc;
 use super::*;
 use crate::melib::text::Truncate;
 
+pub type ValidateFn = Arc<dyn Fn(&str) -> bool + Send + Sync>;
+
 /// Text input widget.
 #[derive(Clone)]
 pub struct TextField {
     inner: UText,
     autocomplete: Option<(Arc<AutoCompleteFn>, Box<AutoComplete>)>,
+    validate_fn: Option<ValidateFn>,
     theme_attr: Option<ThemeAttribute>,
     highlight: Option<ThemeAttribute>,
+    invalid_attr: Option<ThemeAttribute>,
     id: ComponentId,
 }
 
@@ -41,6 +45,7 @@ impl std::fmt::Debug for TextField {
         fmt.debug_struct(melib::identify!(TextField))
             .field("id", &self.id)
             .field("inner", &self.inner)
+            .field("has validate_fn", &self.validate_fn.is_some())
             .field("has AutoComplete", &self.autocomplete.is_some())
             .finish_non_exhaustive()
     }
@@ -51,7 +56,9 @@ impl Default for TextField {
         Self {
             inner: UText::new(String::with_capacity(256)),
             autocomplete: None,
+            validate_fn: None,
             theme_attr: None,
+            invalid_attr: None,
             highlight: None,
             id: ComponentId::default(),
         }
@@ -63,9 +70,7 @@ impl TextField {
         Self {
             inner,
             autocomplete: autocomplete.map(|(a, b)| (Arc::new(a), b)),
-            theme_attr: None,
-            highlight: None,
-            id: ComponentId::default(),
+            ..Self::default()
         }
     }
 
@@ -150,6 +155,12 @@ impl TextField {
             autocomplete.draw(grid, secondary_area, context);
         }
     }
+
+    #[inline]
+    pub fn set_validate_fn(&mut self, validate_fn: Option<ValidateFn>) -> &mut Self {
+        self.validate_fn = validate_fn;
+        self
+    }
 }
 
 impl Component for TextField {
@@ -160,6 +171,19 @@ impl Component for TextField {
             val
         });
         let width = area.width();
+        let theme_attr = if let Some(ref validate_fn) = self.validate_fn {
+            if !validate_fn(self.as_str()) {
+                self.invalid_attr.unwrap_or_else(|| {
+                    let val = crate::conf::value(context, "text.error");
+                    self.invalid_attr = Some(val);
+                    val
+                })
+            } else {
+                theme_attr
+            }
+        } else {
+            theme_attr
+        };
         let str = self.as_str();
         /* Calculate which part of the str is visible
          * ##########################################

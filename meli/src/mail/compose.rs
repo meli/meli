@@ -750,6 +750,29 @@ To: {}
                 self.form.push((k.clone(), headers[k].to_string()));
             }
         }
+        if let Field::Text(ref mut field) = self.form.values_mut()[&HeaderName::DATE] {
+            field.set_validate_fn(Some(Arc::new(|d| -> bool {
+                let Ok(t) = melib::email::parser::dates::rfc5322_date(d.as_bytes()) else {
+                    return false;
+                };
+                t != 0
+            })));
+        }
+        for k in [
+            HeaderName::FROM,
+            HeaderName::TO,
+            HeaderName::CC,
+            HeaderName::BCC,
+        ] {
+            if let Field::Text(ref mut field) = self.form.values_mut()[&k] {
+                field.set_validate_fn(Some(Arc::new(|i| -> bool {
+                    matches!(
+                        melib::email::parser::address::group_list(i.as_bytes()),
+                        Ok((&[], _))
+                    )
+                })));
+            }
+        }
     }
 
     fn draw_attachments(&self, grid: &mut CellBuffer, mut area: Area, context: &Context) {
