@@ -504,12 +504,13 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
     Selector<T, F>
 {
     pub fn new(
-        title: &str,
+        title: impl Into<String>,
         mut entries: Vec<(T, String)>,
         single_only: bool,
         done_fn: F,
         context: &Context,
     ) -> Self {
+        let title = title.into();
         let entry_titles = entries
             .iter_mut()
             .map(|(_id, ref mut title)| std::mem::take(title))
@@ -531,7 +532,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             movement: None,
             vertical_alignment: Alignment::Center,
             horizontal_alignment: Alignment::Center,
-            title: title.to_string(),
+            title,
             content: Screen::<Virtual>::new(theme_default),
             initialized: false,
             done: false,
