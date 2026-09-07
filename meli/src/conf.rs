@@ -37,7 +37,7 @@ use std::{
 use indexmap::IndexMap;
 use melib::{
     backends::MailboxHash,
-    conf::{ActionFlag, MailboxConf, ToggleFlag},
+    conf::{ActionFlag, MailboxConf, Secret, ToggleFlag},
     error::*,
     search::Query,
     Logger, ShellExpandTrait, SortField, SortOrder,

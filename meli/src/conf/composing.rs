@@ -21,11 +21,9 @@
 
 //! Configuration for composing email.
 
-use std::path::PathBuf;
-
 use indexmap::IndexMap;
 use melib::{
-    conf::ActionFlag,
+    conf::{ActionFlag, Secret},
     email::HeaderName,
     error::{Error, Result},
 };
@@ -116,14 +114,15 @@ pub struct ComposingSettings {
     /// Disabled `compose-hooks`.
     #[serde(default, alias = "disabled-compose-hooks")]
     pub disabled_compose_hooks: Vec<String>,
-    /// Plain text file with signature that will pre-populate an email draft.
+    /// Path to plain text file with signature that will pre-populate an email draft, or a command
+    /// that must print a signature to standard output with a timeout of 300 milliseconds.
     ///
     /// Signatures must be explicitly enabled to be used, otherwise this setting
     /// will be ignored.
     ///
     /// Default: `None`
     #[serde(default, alias = "signature-file")]
-    pub signature_file: Option<PathBuf>,
+    pub signature_file: Option<Secret>,
     /// Pre-populate email drafts with signature, if any.
     ///
     /// `meli` will lookup the signature value in this order:

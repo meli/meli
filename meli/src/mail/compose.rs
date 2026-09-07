@@ -254,35 +254,59 @@ impl Composer {
         }
         let format_flowed = *account_settings!(context[account_hash].composing.format_flowed);
         if *account_settings!(context[account_hash].composing.use_signature) {
-            let override_value = account_settings!(context[account_hash].composing.signature_file)
-                .as_deref()
-                .map(Cow::Borrowed)
-                .filter(|p| p.as_ref().is_file());
-            let account_value = || {
-                context.accounts[&account_hash]
-                    .signature_file()
-                    .map(Cow::Owned)
-            };
-            if let Some(path) = override_value.or_else(account_value) {
-                match std::fs::read_to_string(path.as_ref()).chain_err_related_path(path.as_ref()) {
-                    Ok(sig) => {
-                        let mut delimiter =
-                            account_settings!(context[account_hash].composing.signature_delimiter)
-                                .as_deref()
-                                .map(Cow::Borrowed)
-                                .unwrap_or_else(|| Cow::Borrowed("\n\n-- \n"));
-                        if format_flowed {
-                            delimiter = Cow::Owned(delimiter.replace(" \n", " \n\n"));
-                        }
-                        _ = write!(&mut ret.draft.body, "{}{}", delimiter.as_ref(), sig);
-                    }
+            use std::{path::Path, time::Duration};
+
+            let read_sig_from_path = |path: &Path| -> Option<String> {
+                match std::fs::read_to_string(path).chain_err_related_path(path) {
+                    Ok(sig) => Some(sig),
                     Err(err) => {
                         log::error!(
-                            "Could not open signature file for account `{}`: {}.",
+                            "Could not open signature file {} for account `{}`: {err}.",
+                            path.display(),
                             context.accounts[&account_hash].name(),
-                            err
                         );
+                        None
                     }
+                }
+            };
+            let override_value = account_settings!(context[account_hash].composing.signature_file)
+                .as_ref()
+                .and_then(|secret| {
+                    use melib::conf::Secret;
+
+                    match secret {
+                        Secret::Value(ref literal) => read_sig_from_path(Path::new(&literal)),
+                        Secret::Evaluate { .. } => match melib::smol::block_on(
+                            secret.value_with_timeout(Duration::from_millis(300)),
+                        ) {
+                            Err(err) => {
+                                log::error!(
+                                    "Could not execute signature command for account `{}`: {err}.",
+                                    context.accounts[&account_hash].name(),
+                                );
+                                None
+                            }
+                            Ok(v) => Some(v),
+                        },
+                    }
+                });
+            if let Some(sig) = override_value.or_else(|| {
+                context.accounts[&account_hash]
+                    .signature_file()
+                    .as_deref()
+                    .and_then(read_sig_from_path)
+            }) {
+                let mut delimiter =
+                    account_settings!(context[account_hash].composing.signature_delimiter)
+                        .as_deref()
+                        .map(Cow::Borrowed)
+                        .unwrap_or_else(|| Cow::Borrowed("\n\n-- \n"));
+                if format_flowed {
+                    delimiter = Cow::Owned(delimiter.replace(" \n", " \n\n"));
+                }
+                _ = write!(&mut ret.draft.body, "{}{}", delimiter.as_ref(), sig);
+                if !sig.ends_with('\n') {
+                    _ = writeln!(&mut ret.draft.body);
                 }
             }
         }

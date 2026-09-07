@@ -56,8 +56,9 @@ impl DotAddressable for usize {}
 impl DotAddressable for Query {}
 impl DotAddressable for melib::LogLevel {}
 impl DotAddressable for PathBuf {}
-impl DotAddressable for ToggleFlag {}
-impl DotAddressable for ActionFlag {}
+impl DotAddressable for melib::conf::ToggleFlag {}
+impl DotAddressable for melib::conf::ActionFlag {}
+impl DotAddressable for melib::conf::Secret {}
 impl DotAddressable for melib::SpecialUsageMailbox {}
 impl DotAddressable for melib::email::HeaderName {}
 impl<T: DotAddressable> DotAddressable for Option<T> {}

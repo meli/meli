@@ -1041,9 +1041,22 @@ or draft body mention attachments but they are missing.
 .Ic empty-draft-warn
 — Warn if draft has no subject and no body.
 .El
-.It Ic signature_file Ar Path
+.It Ic signature_file Ar Path | Secret
 .Pq Em optional
-Plain text file with signature that will pre-populate an email draft.
+Path to plain text file with signature that will pre-populate an email draft, or a command that must print a signature to standard output with a timeout of 300 milliseconds.
+.Pp
+File example:
+.Bd -literal
+[composing]
+signature_file = "/home/user/.signature"
+.Ed
+.Pp
+Command example:
+.Bd -literal
+[composing]
+signature_file = { command = "fortune" }
+.Ed
+.Pp
 Signatures must be explicitly enabled to be used, otherwise this setting will be ignored.
 .Pq Em None \" default value
 .It Ic use_signature Ar bool
