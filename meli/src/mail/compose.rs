@@ -283,6 +283,38 @@ impl Composer {
         let mut ret = Self::with_account(account_hash, context);
         let envelope: EnvelopeRef = context.accounts[&account_hash].collection.get_env(env_hash);
         ret.draft = Draft::edit(&envelope, bytes, Text::Plain)?;
+        let mut past_date_warn_hook = hooks::PASTDATEWARN;
+        if let Err(err) = past_date_warn_hook(context, &ret.draft) {
+            ret.mode = ViewMode::PerformAction {
+                widget: UIConfirmationDialog::new(
+                    format!("{err} Reset date to current time?"),
+                    vec![(true, "yes".to_string()), (false, "no".to_string())],
+                    /* only one choice */
+                    true,
+                    Some(Box::new(move |id: ComponentId, result: bool| {
+                        Some(UIEvent::FinishedUIDialog(id, Box::new(result)))
+                    })),
+                    context,
+                ),
+                action: ActionFn(Box::new(|composer, _context| {
+                    let now = melib::utils::datetime::timestamp_to_string(
+                        melib::utils::datetime::now(),
+                        Some(melib::utils::datetime::formats::RFC822_DATE),
+                        true,
+                    );
+                    if let Some(Field::Text(ref mut text_field)) =
+                        composer.form.values_mut().get_mut(&HeaderName::DATE)
+                    {
+                        text_field.set_content(now);
+                    }
+                    composer.update_draft();
+                    composer.set_dirty(true);
+                    Ok(())
+                })),
+            };
+
+            ret.set_dirty(true);
+        }
         Ok(ret)
     }
 
