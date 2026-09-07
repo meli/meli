@@ -78,7 +78,7 @@ listing.index_style = "Compact"
 identity="email@example.com"
 display_name = "Name"
 send_mail = 'msmtp --read-recipients --read-envelope-from'
-#send_mail = { hostname = "smtp.example.com", port = 587, auth = { type = "auto", username = "user", password = { type = "command_eval", value = "gpg2 --no-tty -q -d ~/.passwords/user.gpg" } }, security = { type = "STARTTLS" } }
+#send_mail = { hostname = "smtp.example.com", port = 587, auth = { type = "auto", username = "user", password = { command = "gpg2 --no-tty -q -d ~/.passwords/user.gpg" } }, security = { type = "STARTTLS" } }
 
 # Set mailbox-specific settings
   [accounts.account-name.mailboxes]
@@ -114,7 +114,7 @@ server_username="username@example.com"
 #server_port="993" # imaps
 server_port="143" # STARTTLS
 use_starttls=true #optional
-send_mail = { hostname = "smtp.example.com", port = 587, auth = { type = "auto", username = "user", password = { type = "command_eval", value = "gpg2 --no-tty -q -d ~/.passwords/user.gpg" } }, security = { type = "STARTTLS" } }
+send_mail = { hostname = "smtp.example.com", port = 587, auth = { type = "auto", username = "user", password = { command = "gpg2 --no-tty -q -d ~/.passwords/user.gpg" } }, security = { type = "STARTTLS" } }
 display_name = "Name Name"
 identity = "username@example.com"
 ## show only specific mailboxes:
@@ -125,7 +125,7 @@ identity = "username@example.com"
 [accounts."account-name"]
 root_mailbox = '[Gmail]'
 format = "imap"
-send_mail = { hostname = "smtp.gmail.com", port = 587, auth = { type = "auto", username = "user", password = { type = "command_eval", value = "gpg2 --no-tty -q -d ~/.passwords/user.gpg" } }, security = { type = "STARTTLS" } }
+send_mail = { hostname = "smtp.gmail.com", port = 587, auth = { type = "auto", username = "user", password = { command = "gpg2 --no-tty -q -d ~/.passwords/user.gpg" } }, security = { type = "STARTTLS" } }
 server_hostname='imap.gmail.com'
 server_password="password"
 server_username="username@gmail.com"
