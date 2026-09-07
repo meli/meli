@@ -19,9 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use melib::conf::ActionFlag;
+use melib::{conf::ActionFlag, Error, Result};
 
-use crate::conf::default_values::*;
+use crate::conf::{default_values::*, DotAddressable};
 
 /// Settings for digital signing and encryption
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -112,6 +112,39 @@ impl Default for PGPSettings {
             remote_lookup_mechanisms: default_lookup_mechanism(),
             #[cfg(not(feature = "gpgme"))]
             remote_lookup_mechanisms: String::new(),
+        }
+    }
+}
+
+impl DotAddressable for melib::gpgme::LocateKey {}
+
+impl DotAddressable for PGPSettings {
+    fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
+        match path.first() {
+            Some(field) => {
+                let tail = &path[1..];
+                match *field {
+                    "auto_verify_signatures" => self.auto_verify_signatures.lookup(field, tail),
+                    "auto_decrypt" => self.auto_decrypt.lookup(field, tail),
+                    "auto_sign" => self.auto_sign.lookup(field, tail),
+                    "auto_encrypt" => self.auto_encrypt.lookup(field, tail),
+                    "encrypt_for_self" => self.encrypt_for_self.lookup(field, tail),
+                    "sign_key" => self.sign_key.lookup(field, tail),
+                    "decrypt_key" => self.decrypt_key.lookup(field, tail),
+                    "encrypt_key" => self.encrypt_key.lookup(field, tail),
+                    "allow_remote_lookup" => self.allow_remote_lookup.lookup(field, tail),
+                    #[cfg(feature = "gpgme")]
+                    "remote_lookup_mechanisms" => self.remote_lookup_mechanisms.lookup(field, tail),
+                    #[cfg(not(feature = "gpgme"))]
+                    "remote_lookup_mechanisms" => self.remote_lookup_mechanisms.lookup(field, tail),
+                    other => Err(Error::new(format!(
+                        "{parent_field} has no field named {other}"
+                    ))),
+                }
+            }
+            None => Ok(toml::Value::try_from(self)
+                .map_err(|err| err.to_string())?
+                .to_string()),
         }
     }
 }
