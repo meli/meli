@@ -73,55 +73,6 @@ fn test_command_parser() {
 }
 
 #[test]
-#[ignore]
-fn test_command_parser_interactive() {
-    use std::io;
-    let mut input = String::new();
-    loop {
-        input.clear();
-        print!("> ");
-        match io::stdin().read_line(&mut input) {
-            Ok(_n) => {
-                println!("Input is {:?}", input.as_str().trim());
-                let mut sugg: HashSet<String> = Default::default();
-                let mut vec = vec![];
-                //print!("{}", input);
-                for (_tags, _desc, tokens, _) in COMMAND_COMPLETION.iter() {
-                    //println!("{:?}, {:?}, {:?}", _tags, _desc, tokens);
-                    let m = tokens.matches(&mut input.as_str().trim(), &mut sugg);
-                    if !m.is_empty() {
-                        vec.push(tokens);
-                        //print!("{:?} ", desc);
-                        //println!(" result = {:#?}\n\n", m);
-                    }
-                }
-                println!(
-                    "suggestions = {:#?}",
-                    sugg.into_iter()
-                        .zip(vec.into_iter())
-                        .map(|(s, v)| format!(
-                            "{}{} {:?}",
-                            input.as_str().trim(),
-                            if input.trim().is_empty() {
-                                s.trim()
-                            } else {
-                                s.as_str()
-                            },
-                            v
-                        ))
-                        .collect::<Vec<String>>()
-                );
-                if input.trim() == "quit" {
-                    break;
-                }
-            }
-            Err(error) => println!("error: {error}"),
-        }
-    }
-    println!("alright");
-}
-
-#[test]
 fn test_command_parser_all() {
     use CommandError::*;
 
