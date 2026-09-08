@@ -2008,36 +2008,109 @@ pub enum WidgetWidth {
 
 #[cfg(test)]
 mod tests {
+    use melib::text::{Reflow, TextProcessing};
+
+    use super::KMP;
     use crate::terminal::{Screen, Virtual};
 
-    //use melib::text::{Reflow, TextProcessing, _ALICE_CHAPTER_1};
+    const _ALICE_CHAPTER_1: &str = "CHAPTER I. Down the Rabbit-Hole
+
+Alice was beginning to get very tired of sitting by her sister on the\x20
+bank, and of having nothing to do: once or twice she had peeped into the\x20
+book her sister was reading, but it had no pictures or conversations in\x20
+it, ‘and what is the use of a book,’ thought Alice ‘without pictures or\x20
+conversations?’
+
+So she was considering in her own mind (as well as she could, for the\x20
+hot day made her feel very sleepy and stupid), whether the pleasure\x20
+of making a daisy-chain would be worth the trouble of getting up and\x20
+picking the daisies, when suddenly a White Rabbit with pink eyes ran\x20
+close by her.
+
+There was nothing so VERY remarkable in that; nor did Alice think it so\x20
+VERY much out of the way to hear the Rabbit say to itself, ‘Oh dear!\x20
+Oh dear! I shall be late!’ (when she thought it over afterwards, it\x20
+occurred to her that she ought to have wondered at this, but at the time\x20
+it all seemed quite natural); but when the Rabbit actually TOOK A WATCH\x20
+OUT OF ITS WAISTCOAT-POCKET, and looked at it, and then hurried on,\x20
+Alice started to her feet, for it flashed across her mind that she had\x20
+never before seen a rabbit with either a waistcoat-pocket, or a watch\x20
+to take out of it, and burning with curiosity, she ran across the field\x20
+after it, and fortunately was just in time to see it pop down a large\x20
+rabbit-hole under the hedge.
+
+In another moment down went Alice after it, never once considering how\x20
+in the world she was to get out again.
+
+The rabbit-hole went straight on like a tunnel for some way, and then\x20
+dipped suddenly down, so suddenly that Alice had not a moment to think\x20
+about stopping herself before she found herself falling down a very deep\x20
+well.
+
+Either the well was very deep, or she fell very slowly, for she had\x20
+plenty of time as she went down to look about her and to wonder what was\x20
+going to happen next. First, she tried to look down and make out what\x20
+she was coming to, but it was too dark to see anything; then she\x20
+looked at the sides of the well, and noticed that they were filled with\x20
+cupboards and book-shelves; here and there she saw maps and pictures\x20
+hung upon pegs. She took down a jar from one of the shelves as\x20
+she passed; it was labelled ‘ORANGE MARMALADE’, but to her great\x20
+disappointment it was empty: she did not like to drop the jar for fear\x20
+of killing somebody, so managed to put it into one of the cupboards as\x20
+she fell past it.
+
+‘Well!’ thought Alice to herself, ‘after such a fall as this, I shall\x20
+think nothing of tumbling down stairs! How brave they’ll all think me at\x20
+home! Why, I wouldn’t say anything about it, even if I fell off the top\x20
+of the house!’ (Which was very likely true.)";
 
     #[test]
     fn test_cellbuffer_search() {
-        //let lines: Vec<String> =
-        // _ALICE_CHAPTER_1.split_lines_reflow(Reflow::All, Some(78));
-        // let mut buf = CellBuffer::new(
-        //    lines.iter().map(String::len).max().unwrap(),
-        //    lines.len(),
-        //    Cell::with_char(' '),
-        //);
-        //let width = buf.size().0;
-        //for (i, l) in lines.iter().enumerate() {
-        //    buf.write_string(
-        //        l,
-        //        Color::Default,
-        //        Color::Default,
-        //        Attr::DEFAULT,
-        //        ((0, i), (width.saturating_sub(1), i)),
-        //        None,
-        //    );
-        //}
-        //for ind in buf.kmp_search("Alice") {
-        //    for c in &buf.cellvec()[ind..std::cmp::min(buf.cellvec().len(),
-        // ind + 25)] {        print!("{}", c.ch());
-        //    }
-        //    println!();
-        //}
+        use crate::{Attr, Color};
+        let lines: Vec<String> = _ALICE_CHAPTER_1.split_lines_reflow(Reflow::All, Some(78));
+        let width = lines.iter().map(String::len).max().unwrap();
+        let height = lines.len();
+        let mut screen = Screen::<Virtual>::new(Default::default());
+        assert!(screen.resize(width, height));
+        let area = screen.grid().area();
+        for (i, l) in lines.iter().enumerate() {
+            screen.grid_mut().write_string(
+                l,
+                Color::Default,
+                Color::Default,
+                Attr::DEFAULT,
+                area.nth_row(i),
+                None,
+                None,
+            );
+        }
+        //eprintln!("{}", screen.grid().to_string());
+        let positions = screen
+            .grid()
+            .kmp_search("Alice")
+            .into_iter()
+            .map(|offset| (offset / width, offset % width))
+            .collect::<Vec<(usize, usize)>>();
+        assert_eq!(
+            &positions,
+            &[
+                (2, 0),
+                (5, 45),
+                (14, 54),
+                (20, 0),
+                (26, 28),
+                (30, 39),
+                (46, 16)
+            ]
+        );
+        for (y, x) in positions {
+            let mut row_match = String::new();
+            let row = screen.grid().row_iter(area, x..(x + "Alice".len()), y);
+            for c in row {
+                row_match.push(screen.grid()[c].ch());
+            }
+            assert_eq!(&row_match, "Alice");
+        }
     }
 
     #[test]
