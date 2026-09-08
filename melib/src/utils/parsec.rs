@@ -723,13 +723,50 @@ mod test {
             Ok(("", JsonValue::Object(HashMap::default()))),
             parse_value().parse(r#"{}"#)
         );
-        println!("{:?}", parse_value().parse(r#"{"a":true}"#));
-        println!("{:?}", parse_value().parse(r#"{"a":true,"b":false}"#));
-        println!("{:?}", parse_value().parse(r#"{ "a" : true,"b":  false }"#));
-        println!("{:?}", parse_value().parse(r#"{ "a" : true,"b":  false,}"#));
-        println!("{:?}", parse_value().parse(r#"{"a":false,"b":false,}"#));
-        // Line:0 Col:18 Error parsing object
-        // { "a":1, "b"  :  2, }
-        //                   ^Unexpected ','
+        assert_eq!(
+            Ok((
+                "",
+                JsonValue::Object(
+                    indexmap::indexmap! { "a".to_string() => JsonValue::Bool(true) }
+                        .into_iter()
+                        .collect()
+                )
+            )),
+            parse_value().parse(r#"{"a":true}"#),
+        );
+        assert_eq!(
+            Ok((
+                "",
+                JsonValue::Object(
+                    indexmap::indexmap! {"a".to_string() => JsonValue::Bool(true), "b".to_string() => JsonValue::Bool(false) }
+                        .into_iter()
+                        .collect()
+                )
+            )),
+            parse_value().parse(r#"{"a":true,"b":false}"#),
+        );
+        assert_eq!(
+            Ok((
+                "",
+                JsonValue::Object(
+                    indexmap::indexmap! {"a".to_string() => JsonValue::Bool(true), "b".to_string() => JsonValue::Bool(false) }
+                        .into_iter()
+                        .collect()
+                )
+            )),
+            parse_value().parse(r#"{ "a" : true,"b":  false }"#),
+        );
+        assert_eq!(
+            parse_value()
+                .parse(r#"{ "a" : true,"b":  false,}"#)
+                .unwrap_err(),
+            r#"{ "a" : true,"b":  false,}"#
+        );
+        assert_eq!(
+            parse_value()
+                .parse(r#"{"a":false,"b":false,}"#)
+                .unwrap_err(),
+            r#"{"a":false,"b":false,}"#
+        );
     }
 }
