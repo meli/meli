@@ -18,83 +18,99 @@
 // You should have received a copy of the GNU General Public License
 // along with meli. If not, see <http://www.gnu.org/licenses/>.
 
-//use super::ViewFilter;
-//use crate::melib::{Attachment, AttachmentBuilder};
-//use crate::Context;
+use crate::{
+    melib::{Attachment, AttachmentBuilder},
+    view::{ViewFilter, ViewSettings},
+    Context,
+};
 
 #[test]
 fn test_view_filter_text_plain() {
-    println!("[ref:TODO]");
-    //let bytes = b"";
-    //let tempdir = tempfile::tempdir().unwrap();
-    //let mut ctx = Context::new_mock(&tempdir);
-    //let att: Attachment = AttachmentBuilder::new(bytes).build();
-    //let value = ViewFilter::new_attachment(&att, &mut ctx).unwrap();
-    //assert_eq!(&value.content_type.to_string(), "text/plain");
+    let bytes = b"Content-Transfer-Encoding: 8bit
+Content-Type: text/plain; charset=utf-8
+
+foobar
+";
+    let settings = ViewSettings::default();
+    let tempdir = tempfile::tempdir().unwrap();
+    let ctx = Context::new_mock(&tempdir);
+    let att: Attachment = AttachmentBuilder::new(bytes).build();
+    let value = ViewFilter::new_attachment(&att, &settings, &ctx).unwrap();
+    assert_eq!(&value.content_type.to_string(), "text/plain");
 }
 
 #[test]
 fn test_view_filter_text_html() {
-    println!("[ref:TODO]");
-    //let bytes = b"";
-    //let tempdir = tempfile::tempdir().unwrap();
-    //let mut ctx = Context::new_mock(&tempdir);
-    //let att: Attachment = AttachmentBuilder::new(bytes).build();
-    //let value = ViewFilter::new_attachment(&att, &mut ctx).unwrap();
-    //assert_eq!(&value.content_type.to_string(), "text/html");
+    let bytes = b"Content-Transfer-Encoding: 8bit
+Content-Type: text/html
+
+foobar
+";
+    let settings = ViewSettings::default();
+    let tempdir = tempfile::tempdir().unwrap();
+    let ctx = Context::new_mock(&tempdir);
+    let att: Attachment = AttachmentBuilder::new(bytes).build();
+    let value = ViewFilter::new_attachment(&att, &settings, &ctx).unwrap();
+    assert_eq!(&value.content_type.to_string(), "text/html");
 }
 
 #[test]
 fn test_view_filter_multipart_alternative_plain_and_html() {
-    println!("[ref:TODO]");
-    //let bytes = b"";
-    //let tempdir = tempfile::tempdir().unwrap();
-    //let mut ctx = Context::new_mock(&tempdir);
-    //let att: Attachment = AttachmentBuilder::new(bytes).build();
-    //let value = ViewFilter::new_attachment(&att, &mut ctx).unwrap();
-    //assert_eq!(&value.content_type.to_string(), "text/plain");
+    let bytes = b"Content-Transfer-Encoding: 8bit
+Content-Type: multipart/alternative; boundary=\"0000000000000000000000000000\"
+
+--0000000000000000000000000000
+Content-Type: text/plain; charset=\"UTF-8\"
+Content-Transfer-Encoding: 8bit
+
+plain foobar
+
+--0000000000000000000000000000
+Content-Type: text/html; charset=\"UTF-8\"
+Content-Transfer-Encoding: 8bit
+
+html foobar
+";
+    let settings = ViewSettings {
+        auto_choose_multipart_alternative: true,
+        ..ViewSettings::default()
+    };
+
+    let tempdir = tempfile::tempdir().unwrap();
+    let ctx = Context::new_mock(&tempdir);
+    let att: Attachment = AttachmentBuilder::new(bytes).build();
+    let value = ViewFilter::new_attachment(&att, &settings, &ctx).unwrap();
+    assert_eq!(&value.content_type.to_string(), "text/plain");
 }
 
 #[test]
 fn test_view_filter_multipart_alternative_empty_plain_and_html() {
-    println!("[ref:TODO]");
-    //let bytes = b"";
-    //let tempdir = tempfile::tempdir().unwrap();
-    //let mut ctx = Context::new_mock(&tempdir);
-    //let att: Attachment = AttachmentBuilder::new(bytes).build();
-    //let value = ViewFilter::new_attachment(&att, &mut ctx).unwrap();
-    //assert_eq!(&value.content_type.to_string(), "text/html");
-}
+    let bytes = b"Content-Transfer-Encoding: 8bit
+Content-Type: multipart/alternative; boundary=\"0000000000000000000000000000\"
 
-#[test]
-fn test_view_filter_multipart_digest() {
-    println!("[ref:TODO]");
-    //let bytes = b"";
-    //let tempdir = tempfile::tempdir().unwrap();
-    //let mut ctx = Context::new_mock(&tempdir);
-    //let att: Attachment = AttachmentBuilder::new(bytes).build();
-    //let value = ViewFilter::new_attachment(&att, &mut ctx).unwrap();
-    //assert_eq!(&value.content_type.to_string(), "multipart/digest");
-}
+--0000000000000000000000000000
+Content-Type: text/plain; charset=\"UTF-8\"
+Content-Transfer-Encoding: 8bit
 
-#[test]
-fn test_view_filter_multipart_mixed() {
-    println!("[ref:TODO]");
-    //let bytes = b"";
-    //let tempdir = tempfile::tempdir().unwrap();
-    //let mut ctx = Context::new_mock(&tempdir);
-    //let att: Attachment = AttachmentBuilder::new(bytes).build();
-    //let value = ViewFilter::new_attachment(&att, &mut ctx).unwrap();
-    //assert_eq!(&value.content_type.to_string(), "multipart/mixed");
-}
+--0000000000000000000000000000
+Content-Type: text/html; charset=\"UTF-8\"
+Content-Transfer-Encoding: 8bit
 
-#[test]
-fn test_view_filter_multipart_related() {
-    println!("[ref:TODO]");
-    //let bytes = b"";
-    //let tempdir = tempfile::tempdir().unwrap();
-    //let mut ctx = Context::new_mock(&tempdir);
-    //let att: Attachment = AttachmentBuilder::new(bytes).build();
-    //let value = ViewFilter::new_attachment(&att, &mut ctx).unwrap();
-    //assert_eq!(&value.content_type.to_string(), "text/related");
+html foobar
+";
+    let mut settings = ViewSettings {
+        auto_choose_multipart_alternative: true,
+        ..ViewSettings::default()
+    };
+
+    let tempdir = tempfile::tempdir().unwrap();
+    let ctx = Context::new_mock(&tempdir);
+    let att: Attachment = AttachmentBuilder::new(bytes).build();
+    let value = ViewFilter::new_attachment(&att, &settings, &ctx).unwrap();
+    assert_eq!(&value.content_type.to_string(), "text/html");
+
+    settings.auto_choose_multipart_alternative = false;
+
+    let value = ViewFilter::new_attachment(&att, &settings, &ctx).unwrap();
+    assert_eq!(&value.content_type.to_string(), "text/plain");
 }
