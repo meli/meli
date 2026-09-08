@@ -400,7 +400,7 @@ impl Default for GpgComposeState {
 
 #[cfg(test)]
 mod tests {
-    use std::{borrow::Cow, ffi::CString, thread::sleep, time::Duration};
+    use std::{borrow::Cow, ffi::CString};
 
     use melib::gpgme::{EngineInfo, LocateKey, Protocol};
     use rusty_fork::rusty_fork_test;
@@ -529,19 +529,29 @@ mod tests {
             )
             .unwrap();
             let component_id = key_sel.id();
+            let our_job_id = if let KeySelection::Loading {
+                inner:
+                    KeySelectionLoading {
+                        handles: (ref handle, _),
+                        ..
+                    },
+                ..
+            } = key_sel
+            {
+                handle.job_id
+            } else {
+                unreachable!()
+            };
 
-            for _ in 0..2 {
-                sleep(Duration::from_secs(2));
-            }
-            while let Ok(ev) = ctx.receiver.try_recv() {
-                // if !matches!(ev, ThreadEvent::UIEvent(UIEvent::Timer(_))) {
-                //     dbg!(&ev);
-                // }
+            while let Ok(ev) = ctx.receiver.recv() {
                 if let ThreadEvent::UIEvent(mut ev) = ev {
                     key_sel.process_event(&mut ev, &mut ctx);
                 } else if let ThreadEvent::JobFinished(job_id) = ev {
                     let mut ev = UIEvent::StatusEvent(StatusEvent::JobFinished(job_id));
                     key_sel.process_event(&mut ev, &mut ctx);
+                    if job_id == our_job_id {
+                        break;
+                    }
                 }
             }
             if let Some(pubkey_data) = pubkey_data.take() {
