@@ -351,19 +351,83 @@ fn drop_right_whitespace(mut vec: Vec<u8>) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
+    use rusty_fork::rusty_fork_test;
+
     use super::*;
 
-    #[test]
-    fn test_various_mimes() {
-        /* Run with `cargo test -- --nocapture` to see output. */
-        println!("{:?}", query_default_app("image/jpeg"));
-        println!("{:?}", query_default_app("text/html"));
-        println!("{:?}", query_default_app("video/mp4"));
-        println!("{:?}", query_default_app("application/pdf"));
+    rusty_fork_test! {
+        #[test]
+        fn test_xdg_various_mimes() {
+            run_various_mimes();
+        }
+    }
+
+    fn run_various_mimes() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        let applications_dir = tempdir.path().join(".local/share/applications");
+        std::fs::create_dir_all(&applications_dir).unwrap();
+
+        let foo_desktop = applications_dir.join("foo.desktop");
+
+        std::fs::write(
+            &foo_desktop,
+            b"[Desktop Entry]\nType=Application\nVersion=1.0\nExec=foocmd",
+        )
+        .unwrap();
+
+        let config_dir = tempdir.path().join(".config");
+        std::fs::create_dir(&config_dir).unwrap();
+        let mimelist_path = config_dir.join("mimeapps.list");
+        std::fs::write(
+            &mimelist_path,
+            b"[Default Applications]\nimage/jpeg=foo.desktop\nvideo/mp4=a.desktop;foo.desktop",
+        )
+        .unwrap();
+        for var in [
+            "HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_CONFIG_DIRS",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_DIRS",
+            "XDG_DATA_HOME",
+        ] {
+            std::env::remove_var(var);
+        }
+        std::env::set_var("HOME", tempdir.path());
+        std::env::set_var("XDG_CONFIG_HOME", &config_dir);
+
+        assert_eq!(
+            query_default_app("image/jpeg").unwrap(),
+            "foocmd".to_string()
+        );
+
+        // non-existent a.desktop should be ignored
+        std::fs::write(
+            &mimelist_path,
+            b"[Default Applications]\nimage/jpeg=foo.desktop\nvideo/mp4=a.desktop;foo.desktop",
+        )
+        .unwrap();
+        assert_eq!(
+            query_default_app("video/mp4").unwrap(),
+            "foocmd".to_string()
+        );
+        // non-existent entry should return error
+        assert_eq!(
+            query_default_app("application/pdf")
+                .unwrap_err()
+                .to_string(),
+            Error::new(
+                ErrorKind::NotFound,
+                "No results for mime query: application/pdf"
+            )
+            .to_string()
+        );
     }
 
     #[test]
-    fn test_ini_works() {
+    fn test_xdg_ini_parse() {
         let ini = Ini(String::from("[foo]\n# comment\nbar=baz\n\n[bar]\nbar=foo"));
         for (key, value) in ini.iter_section("foo") {
             assert_eq!(key, "bar");
