@@ -38,7 +38,6 @@ pub mod shellexpand;
 pub mod sqlite3;
 #[cfg(test)]
 mod tests;
-pub mod urn;
 pub mod xdg;
 
 /// Convert an integer to a base 36 string using only ASCII letters and numbers.
