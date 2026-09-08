@@ -38,21 +38,29 @@ use crate::{
 };
 
 /* Supported vcard versions */
-pub trait VCardVersion: std::fmt::Debug {}
+pub trait VCardVersion: std::fmt::Debug {
+    const NAME: &str;
+}
 
 #[derive(Debug)]
 pub struct VCardVersionUnknown;
-impl VCardVersion for VCardVersionUnknown {}
+impl VCardVersion for VCardVersionUnknown {
+    const NAME: &str = "Unknown";
+}
 
 /// Version 4 <https://tools.ietf.org/html/rfc6350>
 #[derive(Debug)]
 pub struct VCardVersion4;
-impl VCardVersion for VCardVersion4 {}
+impl VCardVersion for VCardVersion4 {
+    const NAME: &str = "4";
+}
 
 /// <https://tools.ietf.org/html/rfc2426>
 #[derive(Debug)]
 pub struct VCardVersion3;
-impl VCardVersion for VCardVersion3 {}
+impl VCardVersion for VCardVersion3 {
+    const NAME: &str = "3";
+}
 
 pub struct CardDeserializer;
 
@@ -76,9 +84,13 @@ impl<V: VCardVersion> VCard<V> {
             std::marker::PhantomData::<*const VCardVersion4>,
         )
     }
+
+    pub const fn version(&self) -> &str {
+        <V as VCardVersion>::NAME
+    }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ContentLine {
     group: Option<String>,
     params: Vec<String>,
