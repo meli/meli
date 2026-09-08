@@ -216,53 +216,78 @@ enum AddOutcome {
     Error,
 }
 
-/*
 #[cfg(test)]
 mod tests {
+    use std::{
+        io::{ErrorKind, Read, Write},
+        net::{IpAddr, Ipv4Addr, Ipv6Addr, TcpListener},
+        thread::JoinHandle,
+    };
+
     use super::*;
-    use crate::test_utils::{serve_4, serve_6, tar_pit};
-    use rand::{thread_rng, Rng};
-    use std::io::Read;
-    use std::net::{Ipv4Addr, Ipv6Addr};
 
-    #[test]
-    fn test_no_ipv4() {
-        let port = thread_rng().gen_range(49152..=65535);
-        assert!(connect((Ipv4Addr::LOCALHOST, port)).is_err());
+    fn listen<A: Into<IpAddr>>(addr: A) -> (TcpListener, IpAddr, u16) {
+        let addr: IpAddr = addr.into();
+        loop {
+            match TcpListener::bind((addr, 0)) {
+                Ok(listener) => {
+                    let port = listener.local_addr().unwrap().port();
+                    return (listener, addr, port);
+                }
+                Err(err) if err.kind() == ErrorKind::AddrInUse => (),
+                Err(e) => panic!("TcpListener::bind({addr}, 0) failed: {e}"),
+            }
+        }
+    }
+
+    fn serve<A: Into<IpAddr>>(addr: A) -> (JoinHandle<()>, IpAddr, u16) {
+        let (serve, addr, port) = listen(addr);
+        let data = format!("{addr}");
+        let handle = std::thread::spawn(move || {
+            for s in serve.incoming() {
+                s.unwrap().write_all(data.as_bytes()).unwrap();
+            }
+        });
+        (handle, addr, port)
+    }
+
+    fn serve_4() -> (JoinHandle<()>, IpAddr, u16) {
+        serve(Ipv4Addr::LOCALHOST)
+    }
+
+    fn serve_6() -> (JoinHandle<()>, IpAddr, u16) {
+        serve(Ipv6Addr::LOCALHOST)
     }
 
     #[test]
-    fn test_connect_ipv4() {
+    #[ignore = "creates local IPv4/IPV6 connections"]
+    fn test_connections_std_net_connect_ipv4() {
         let (_serve, addr, port) = serve_4();
         let mut data = String::new();
-        connect((addr, port))
+        connect((addr, port), None)
             .unwrap()
             .read_to_string(&mut data)
             .unwrap();
         assert_eq!(data, format!("{addr}"));
-        assert!(connect((Ipv6Addr::LOCALHOST, port)).is_err());
+        connect((Ipv6Addr::LOCALHOST, port), None).unwrap_err();
     }
 
     #[test]
-    fn test_no_ipv6() {
-        let port = thread_rng().gen_range(49152..=65535);
-        assert!(connect((Ipv6Addr::LOCALHOST, port)).is_err());
-    }
-
-    #[test]
-    fn test_connect_ipv6() {
+    #[ignore = "creates local IPv4/IPV6 connections"]
+    fn test_connections_std_net_connect_ipv6() {
         let (_serve, addr, port) = serve_6();
         let mut data = String::new();
-        connect((addr, port))
+        connect((addr, port), None)
             .unwrap()
             .read_to_string(&mut data)
             .unwrap();
         assert_eq!(data, format!("{addr}"));
-        assert!(connect((Ipv4Addr::LOCALHOST, port)).is_err());
+        connect((Ipv4Addr::LOCALHOST, port), None).unwrap_err();
     }
 
     #[test]
-    fn test_connect_no_6_but_4() {
+    #[ignore = "creates local IPv4/IPV6 connections"]
+    fn test_connections_std_net_connect_no_6_but_4() {
         let (_serve, addr, port) = serve_4();
         let expect = format!("{addr}");
         let saddr6: SocketAddr = (Ipv6Addr::LOCALHOST, port).into();
@@ -271,19 +296,26 @@ mod tests {
         {
             let saddrs = &[saddr4, saddr6][..];
             data.clear();
-            connect(saddrs).unwrap().read_to_string(&mut data).unwrap();
+            connect(saddrs, None)
+                .unwrap()
+                .read_to_string(&mut data)
+                .unwrap();
             assert_eq!(data, expect);
         }
         {
             let saddrs = &[saddr6, saddr4][..];
             data.clear();
-            connect(saddrs).unwrap().read_to_string(&mut data).unwrap();
+            connect(saddrs, None)
+                .unwrap()
+                .read_to_string(&mut data)
+                .unwrap();
             assert_eq!(data, expect);
         }
     }
 
     #[test]
-    fn test_connect_no_4_but_6() {
+    #[ignore = "creates local IPv4/IPV6 connections"]
+    fn test_connections_std_net_connect_no_4_but_6() {
         let (_serve, addr, port) = serve_6();
         let expect = format!("{addr}");
         let saddr6: SocketAddr = (Ipv6Addr::LOCALHOST, port).into();
@@ -292,19 +324,26 @@ mod tests {
         {
             let saddrs = &[saddr4, saddr6][..];
             data.clear();
-            connect(saddrs).unwrap().read_to_string(&mut data).unwrap();
+            connect(saddrs, None)
+                .unwrap()
+                .read_to_string(&mut data)
+                .unwrap();
             assert_eq!(data, expect);
         }
         {
             let saddrs = &[saddr6, saddr4][..];
             data.clear();
-            connect(saddrs).unwrap().read_to_string(&mut data).unwrap();
+            connect(saddrs, None)
+                .unwrap()
+                .read_to_string(&mut data)
+                .unwrap();
             assert_eq!(data, expect);
         }
     }
 
     #[test]
-    fn test_connect() {
+    #[ignore = "creates local IPv4/IPV6 connections"]
+    fn test_connections_std_net_connect() {
         let (_serve4, addr4, port4) = serve_4();
         let (_serve6, addr6, port6) = serve_6();
         let saddr4: SocketAddr = (addr4, port4).into();
@@ -312,14 +351,14 @@ mod tests {
         let mut data = String::new();
 
         data.clear();
-        connect(&[saddr6, saddr4][..])
+        connect(&[saddr6, saddr4][..], None)
             .unwrap()
             .read_to_string(&mut data)
             .unwrap();
         assert_eq!(data, format!("{addr6}"));
 
         data.clear();
-        connect(&[saddr4, saddr6][..])
+        connect(&[saddr4, saddr6][..], None)
             .unwrap()
             .read_to_string(&mut data)
             .unwrap();
@@ -328,68 +367,12 @@ mod tests {
     }
 
     #[test]
-    fn test_connect_tar_pit4() {
-        let (_serve4, addr4, port4) = tar_pit(Ipv4Addr::LOCALHOST);
-        let (_serve6, addr6, port6) = serve_6();
-        let saddr4: SocketAddr = (addr4, port4).into();
-        let saddr6: SocketAddr = (addr6, port6).into();
-        let mut data = String::new();
-
-        data.clear();
-        connect(&[saddr4, saddr6][..])
-            .unwrap()
-            .read_to_string(&mut data)
-            .unwrap();
-        assert_eq!(data, format!("{addr6}"));
-
-        data.clear();
-        connect(&[saddr6, saddr4][..])
-            .unwrap()
-            .read_to_string(&mut data)
-            .unwrap();
-        assert_eq!(data, format!("{addr6}"));
-    }
-
-    #[test]
-    fn test_connect_tar_pit6() {
-        let (_serve4, addr4, port4) = serve_4();
-        let (_serve6, addr6, port6) = tar_pit(Ipv6Addr::LOCALHOST);
-        let saddr4: SocketAddr = (addr4, port4).into();
-        let saddr6: SocketAddr = (addr6, port6).into();
-        let mut data = String::new();
-
-        data.clear();
-        let mut cnx = connect(&[saddr4, saddr6][..]).unwrap();
-        cnx.read_to_string(&mut data).unwrap();
-        assert_eq!(data, format!("{addr4}"));
-
-        data.clear();
-        connect(&[saddr6, saddr4][..])
-            .unwrap()
-            .read_to_string(&mut data)
-            .unwrap();
-        assert_eq!(data, format!("{addr4}"));
-    }
-
-    #[test]
-    fn test_connect_tar_pit_all() {
-        let (_serve4, addr4, port4) = tar_pit(Ipv4Addr::LOCALHOST);
-        let (_serve6, addr6, port6) = tar_pit(Ipv6Addr::LOCALHOST);
-        let saddr4: SocketAddr = (addr4, port4).into();
-        let saddr6: SocketAddr = (addr6, port6).into();
-        assert_eq!(
-            connect(&[saddr4, saddr6][..]).unwrap_err().kind(),
-            std::io::ErrorKind::TimedOut
-        );
-    }
-
-    #[test]
-    fn test_connect_empty() {
+    #[ignore = "creates local IPv4/IPV6 connections"]
+    fn test_connections_std_net_connect_empty() {
         let empty = &[][..];
         assert_eq!(
-            connect(empty).unwrap_err().kind(),
+            connect(empty, None).unwrap_err().kind(),
             std::io::ErrorKind::InvalidInput
         );
     }
 }
-*/
