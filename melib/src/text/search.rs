@@ -88,14 +88,14 @@ mod tests {
     use crate::text::search::KMP;
 
     #[test]
-    fn test_search() {
+    fn test_kmp_search() {
+        const NEEDLE: &str = "Alice";
+
         use crate::text::_ALICE_CHAPTER_1;
-        for ind in _ALICE_CHAPTER_1.kmp_search("Alice") {
-            println!(
-                "{:#?}",
-                &_ALICE_CHAPTER_1
-                    [ind.saturating_sub(0)..std::cmp::min(_ALICE_CHAPTER_1.len(), ind + 25)]
-            );
+        let indices = _ALICE_CHAPTER_1.kmp_search(NEEDLE);
+        assert_eq!(indices.as_slice(), &[33, 300, 700, 1089, 1437, 1631, 2485]);
+        for ind in indices {
+            assert_eq!(&_ALICE_CHAPTER_1[ind..][..NEEDLE.len()], NEEDLE);
         }
     }
 }
