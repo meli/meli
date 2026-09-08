@@ -276,26 +276,6 @@ fn parse_card<'a>() -> impl Parser<'a, Vec<&'a str>> {
     }
 }
 
-#[test]
-fn test_load_cards() {
-    /*
-    let mut contents = String::with_capacity(256);
-    let p = &std::path::Path::new("/tmp/contacts.vcf");
-    use std::io::Read;
-    contents.clear();
-    std::fs::File::open(&p)
-        .unwrap()
-        .read_to_string(&mut contents)
-        .unwrap();
-    for s in parse_card().parse(contents.as_str()).unwrap().1 {
-        println!("");
-        println!("{}", s);
-        println!("{:?}", CardDeserializer::try_from_str(s));
-        println!("");
-    }
-    */
-}
-
 pub fn load_cards(p: &std::path::Path) -> Result<Vec<Card>> {
     let vcf_dir = std::fs::read_dir(p);
     let mut ret: Vec<Result<_>> = Vec::new();
@@ -344,15 +324,82 @@ pub fn load_cards(p: &std::path::Path) -> Result<Vec<Card>> {
 }
 
 #[test]
-fn test_card() {
+fn test_vcard_v4_parse() {
+    // Test with CRLF endings
     let j = "BEGIN:VCARD\r\nVERSION:4.0\r\nN:Gump;Forrest;;Mr.;\r\nFN:Forrest Gump\r\nORG:Bubba Gump Shrimp Co.\r\nTITLE:Shrimp Man\r\nPHOTO;MEDIATYPE=image/gif:http://www.example.com/dir_photos/my_photo.gif\r\nTEL;TYPE=work,voice;VALUE=uri:tel:+1-111-555-1212\r\nTEL;TYPE=home,voice;VALUE=uri:tel:+1-404-555-1212\r\nADR;TYPE=WORK;PREF=1;LABEL=\"100 Waters Edge\\nBaytown\\, LA 30314\\nUnited States of America\":;;100 Waters Edge;Baytown;LA;30314;United States of America\r\nADR;TYPE=HOME;LABEL=\"42 Plantation St.\\nBaytown\\, LA 30314\\nUnited States of America\":;;42 Plantation St.;Baytown;LA;30314;United States of America\r\nEMAIL:forrestgump@example.com\r\nREV:20080424T195243Z\r\nx-qq:21588891\r\nEND:VCARD\r\n";
-    println!(
-        "results = {:#?}",
-        CardDeserializer::try_from_str(j).unwrap()
-    );
+
+    let parsed = CardDeserializer::try_from_str(j).unwrap();
+    let contents = indexmap::indexmap! {
+        "VERSION".to_string() => ContentLine {
+            group: None,
+            params: vec![],
+            value: "4.0".to_string(),
+        },
+        "N".to_string() => ContentLine {
+            group: None,
+            params: vec![],
+            value: "Gump;Forrest;;Mr.;".to_string(),
+        },
+        "FN".to_string() => ContentLine {
+            group: None,
+            params: vec![],
+            value: "Forrest Gump".to_string(),
+        },
+        "ORG".to_string() => ContentLine {
+            group: None,
+            params: vec![],
+            value: "Bubba Gump Shrimp Co.".to_string(),
+        },
+        "TITLE".to_string() => ContentLine {
+            group: None,
+            params: vec![],
+            value: "Shrimp Man".to_string(),
+        },
+        "PHOTO".to_string() => ContentLine {
+            group: None,
+            params: vec![
+                "MEDIATYPE=image/gif".to_string(),
+            ],
+            value: "http://www.example.com/dir_photos/my_photo.gif".to_string(),
+        },
+        "TEL".to_string() => ContentLine {
+            group: None,
+            params: vec![
+                "TYPE=home,voice".to_string(),
+                "VALUE=uri".to_string(),
+            ],
+            value: "tel:+1-404-555-1212".to_string(),
+        },
+        "ADR".to_string() => ContentLine {
+            group: None,
+            params: vec![
+                "TYPE=HOME".to_string(),
+                "LABEL=\"42 Plantation St.\\nBaytown\\, LA 30314\\nUnited States of America\"".to_string(),
+            ],
+            value: ";;42 Plantation St.;Baytown;LA;30314;United States of America".to_string(),
+        },
+        "EMAIL".to_string() => ContentLine {
+            group: None,
+            params: vec![],
+            value: "forrestgump@example.com".to_string(),
+        },
+        "REV".to_string() => ContentLine {
+            group: None,
+            params: vec![],
+            value: "20080424T195243Z".to_string(),
+        },
+        "x-qq".to_string() => ContentLine {
+            group: None,
+            params: vec![],
+            value: "21588891".to_string(),
+        },
+    };
+    assert_eq!(parsed.version(), VCardVersion4::NAME);
+    assert_eq!(parsed.0, contents,);
+
+    // Test with LF endings
     let j = "BEGIN:VCARD\nVERSION:4.0\nN:Gump;Forrest;;Mr.;\nFN:Forrest Gump\nORG:Bubba Gump Shrimp Co.\nTITLE:Shrimp Man\nPHOTO;MEDIATYPE=image/gif:http://www.example.com/dir_photos/my_photo.gif\nTEL;TYPE=work,voice;VALUE=uri:tel:+1-111-555-1212\nTEL;TYPE=home,voice;VALUE=uri:tel:+1-404-555-1212\nADR;TYPE=WORK;PREF=1;LABEL=\"100 Waters Edge\\nBaytown\\, LA 30314\\nUnited States of America\":;;100 Waters Edge;Baytown;LA;30314;United States of America\nADR;TYPE=HOME;LABEL=\"42 Plantation St.\\nBaytown\\, LA 30314\\nUnited States of America\":;;42 Plantation St.;Baytown;LA;30314;United States of America\nEMAIL:forrestgump@example.com\nREV:20080424T195243Z\nx-qq:21588891\nEND:VCARD\n";
-    println!(
-        "results = {:#?}",
-        CardDeserializer::try_from_str(j).unwrap()
-    );
+    let parsed2 = CardDeserializer::try_from_str(j).unwrap();
+    assert_eq!(parsed2.version(), VCardVersion4::NAME);
+    assert_eq!(parsed2.0, contents,);
 }
