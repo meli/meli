@@ -938,46 +938,31 @@ impl CompactListing {
         from: &[Address],
         threads: &Threads,
         other_subjects: &IndexSet<String>,
-        tags: &IndexSet<TagHash>,
+        tags_set: &IndexSet<TagHash>,
         highlight_self: bool,
         hash: ThreadHash,
     ) -> EntryStrings {
         let thread = threads.thread_ref(hash);
-        let mut tags_string = String::new();
+        let mut tags = String::new();
         let flags = root_envelope.flags();
         let mut colors: SmallVec<[_; 8]> = SmallVec::new();
         let account = &context.accounts[&self.cursor_pos.0];
         if account.backend_capabilities.supports_tags {
-            for t in tags {
-                if mailbox_settings!(
-                    context[&self.cursor_pos.0][&self.cursor_pos.1]
-                        .tags
-                        .ignore_tags
-                )
-                .contains(t)
-                    || account_settings!(context[&self.cursor_pos.0].tags.ignore_tags).contains(t)
-                    || context.settings.tags.ignore_tags.contains(t)
-                    || !tags_lck.contains_key(t)
-                {
-                    continue;
-                }
-                tags_string.push(' ');
-                tags_string.push_str(tags_lck.get(t).as_ref().unwrap());
-                tags_string.push(' ');
-                colors.push(
-                    mailbox_settings!(context[&self.cursor_pos.0][&self.cursor_pos.1].tags.colors)
-                        .get(t)
-                        .cloned()
-                        .or_else(|| {
-                            account_settings!(context[&self.cursor_pos.0].tags.colors)
-                                .get(t)
-                                .cloned()
-                                .or_else(|| context.settings.tags.colors.get(t).cloned())
-                        }),
-                );
+            let tags_iter = TagsIterator::new(
+                tags_set.iter(),
+                context,
+                self.cursor_pos.0,
+                self.cursor_pos.1,
+                tags_lck,
+            );
+            for (t, c) in tags_iter {
+                tags.push(' ');
+                tags.push_str(t);
+                tags.push(' ');
+                colors.push(c);
             }
-            if !tags_string.is_empty() {
-                tags_string.pop();
+            if !tags.is_empty() {
+                tags.pop();
             }
         }
         let subject = if *mailbox_settings!(
@@ -1020,7 +1005,7 @@ impl CompactListing {
                 (self.cursor_pos.0, self.cursor_pos.1),
             ),
             from: FromString(Address::display_name_slice(from, None)),
-            tags: TagString(tags_string, colors),
+            tags: TagString(tags, colors),
             unseen: thread.unseen() > 0,
             highlight_self,
         }

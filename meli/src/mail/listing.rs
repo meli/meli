@@ -3615,3 +3615,63 @@ pub enum ListingMessage {
     },
     UpdateView,
 }
+
+struct TagsIterator<'envelope, 'context> {
+    context: &'context Context,
+    account_hash: AccountHash,
+    mailbox_hash: MailboxHash,
+    tags: &'context BTreeMap<melib::TagHash, String>,
+    iter: indexmap::set::Iter<'envelope, melib::TagHash>,
+}
+
+impl<'envelope, 'context> TagsIterator<'envelope, 'context> {
+    #[inline]
+    fn new(
+        iter: indexmap::set::Iter<'envelope, melib::TagHash>,
+        context: &'context Context,
+        account_hash: AccountHash,
+        mailbox_hash: MailboxHash,
+        tags: &'context BTreeMap<melib::TagHash, String>,
+    ) -> Self {
+        Self {
+            context,
+            account_hash,
+            mailbox_hash,
+            tags,
+            iter,
+        }
+    }
+}
+
+impl<'envelope, 'context> Iterator for TagsIterator<'envelope, 'context> {
+    type Item = (&'context str, Option<Color>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let Self {
+            ref account_hash,
+            ref mailbox_hash,
+            tags,
+            context,
+            ref mut iter,
+        } = self;
+        let mut t = iter.next()?;
+        while mailbox_settings!(context[account_hash][mailbox_hash].tags.ignore_tags).contains(t)
+            || account_settings!(context[account_hash].tags.ignore_tags).contains(t)
+            || context.settings.tags.ignore_tags.contains(t)
+            || !tags.contains_key(t)
+        {
+            t = iter.next()?;
+        }
+        let color = mailbox_settings!(context[account_hash][mailbox_hash].tags.colors)
+            .get(t)
+            .cloned()
+            .or_else(|| {
+                account_settings!(context[account_hash].tags.colors)
+                    .get(t)
+                    .cloned()
+                    .or_else(|| context.settings.tags.colors.get(t).cloned())
+            });
+        let s = tags.get(t)?.as_str();
+        Some((s, color))
+    }
+}

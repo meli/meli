@@ -672,33 +672,18 @@ impl PlainListing {
         let account = &context.accounts[&self.cursor_pos.0];
         if account.backend_capabilities.supports_tags {
             let tags_lck = account.collection.tag_index.read().unwrap();
-            for t in e.tags().iter() {
-                if mailbox_settings!(
-                    context[&self.cursor_pos.0][&self.cursor_pos.1]
-                        .tags
-                        .ignore_tags
-                )
-                .contains(t)
-                    || account_settings!(context[&self.cursor_pos.0].tags.ignore_tags).contains(t)
-                    || context.settings.tags.ignore_tags.contains(t)
-                    || !tags_lck.contains_key(t)
-                {
-                    continue;
-                }
+            let tags_iter = TagsIterator::new(
+                e.tags().iter(),
+                context,
+                self.cursor_pos.0,
+                self.cursor_pos.1,
+                &tags_lck,
+            );
+            for (t, c) in tags_iter {
                 tags.push(' ');
-                tags.push_str(tags_lck.get(t).as_ref().unwrap());
+                tags.push_str(t);
                 tags.push(' ');
-                colors.push(
-                    mailbox_settings!(context[&self.cursor_pos.0][&self.cursor_pos.1].tags.colors)
-                        .get(t)
-                        .cloned()
-                        .or_else(|| {
-                            account_settings!(context[&self.cursor_pos.0].tags.colors)
-                                .get(t)
-                                .cloned()
-                                .or_else(|| context.settings.tags.colors.get(t).cloned())
-                        }),
-                );
+                colors.push(c);
             }
             if !tags.is_empty() {
                 tags.pop();
