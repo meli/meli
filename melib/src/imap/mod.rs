@@ -394,6 +394,7 @@ impl MailBackend for ImapType {
             uid_store: self.uid_store.clone(),
             batch_size: 2_500,
             cache_batch_size: 95_000,
+            response: Vec::with_capacity(8 * 1024),
         };
 
         Ok(Box::pin(try_fn_stream(|emitter| async move {

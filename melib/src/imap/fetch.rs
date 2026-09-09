@@ -46,6 +46,7 @@ pub struct FetchState {
     pub uid_store: Arc<UIDStore>,
     pub batch_size: usize,
     pub cache_batch_size: usize,
+    pub response: Vec<u8>,
 }
 
 impl FetchState {
@@ -232,6 +233,7 @@ impl FetchState {
                         ref uid_store,
                         batch_size,
                         cache_batch_size: _,
+                        ref mut response,
                     } = self;
                     let mailbox_hash = *mailbox_hash;
                     let mut our_unseen: BTreeSet<EnvelopeHash> = BTreeSet::default();
@@ -249,12 +251,10 @@ impl FetchState {
                         return Ok(Vec::new());
                     }
                     let mut conn = connection.lock().await?;
-                    let mut response = Vec::with_capacity(8 * 1024);
                     let mut max_uid_left = max_uid;
 
                     let mut envelopes = Vec::with_capacity(*batch_size);
-                    conn.examine_mailbox(mailbox_hash, &mut response, false)
-                        .await?;
+                    conn.examine_mailbox(mailbox_hash, response, false).await?;
                     if max_uid_left > 0 {
                         let sequence_set = if max_uid_left == 1 {
                             SequenceSet::from(ONE)
@@ -274,12 +274,12 @@ impl FetchState {
                             modifiers: vec![],
                         })
                         .await?;
-                        conn.read_response(&mut response, required_responses)
+                        conn.read_response(response, required_responses)
                             .await
                             .chain_err_summary(|| {
                                 format!("Could not parse fetch response for mailbox {mailbox_path}")
                             })?;
-                        let (_, mut v, _) = protocol_parser::fetch_responses(&response)?;
+                        let (_, mut v, _) = protocol_parser::fetch_responses(response)?;
                         for FetchResponse {
                             ref uid,
                             ref mut envelope,
@@ -303,7 +303,7 @@ impl FetchState {
                                     trace,
                                     conn,
                                     "response was: {}",
-                                    String::from_utf8_lossy(&response)
+                                    String::from_utf8_lossy(response)
                                 );
                                 if let Ok(Some(untagged_response)) =
                                     super::protocol_parser::untagged_responses(raw_fetch_value)
@@ -445,6 +445,7 @@ impl FetchState {
             ref uid_store,
             batch_size: _,
             cache_batch_size: _,
+            response: _,
         } = self;
         let mailbox_hash = *mailbox_hash;
         if !uid_store.keep_offline_cache.load(Ordering::SeqCst) {
