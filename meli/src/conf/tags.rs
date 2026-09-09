@@ -78,6 +78,8 @@ pub struct TagsSettings {
     pub colors: IndexMap<TagName, Color>,
     #[serde(default, alias = "ignore-tags")]
     pub ignore_tags: IndexSet<TagName>,
+    #[serde(default)]
+    pub rename: IndexMap<TagName, String>,
 }
 
 pub fn tag_color_de<'de, D, T: std::convert::From<IndexMap<TagName, Color>>>(
@@ -116,6 +118,7 @@ impl DotAddressable for TagsSettings {
                 match *field {
                     "colors" => self.colors.lookup(field, tail),
                     "ignore_tags" => self.ignore_tags.lookup(field, tail),
+                    "rename" => self.rename.lookup(field, tail),
                     other => Err(Error::new(format!(
                         "{parent_field} has no field named {other}"
                     ))),

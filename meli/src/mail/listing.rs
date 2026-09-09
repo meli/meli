@@ -3671,7 +3671,13 @@ impl<'envelope, 'context> Iterator for TagsIterator<'envelope, 'context> {
                     .cloned()
                     .or_else(|| context.settings.tags.colors.get(t).cloned())
             });
-        let s = tags.get(t)?.as_str();
+        let s = if let Some(s) =
+            mailbox_settings!(context[account_hash][mailbox_hash].tags.rename).get(t)
+        {
+            s.as_str()
+        } else {
+            tags.get(t)?.as_str()
+        };
         Some((s, color))
     }
 }

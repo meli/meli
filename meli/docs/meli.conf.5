@@ -1993,6 +1993,9 @@ Set UI colors for tags
 .It Ic ignore_tags Ar Array String
 .Pq Em optional
 Hide tags (not the tagged messages themselves)
+.It Ic rename Ar hash table String[String]
+.Pq Em optional
+Rename the tag when shown in the UI (not used as an alias any other way).
 .El
 .sp
 Example:
@@ -2009,6 +2012,7 @@ colors = { signed="#Ff6600", replied="DeepSkyBlue4", draft="#f00", replied="8" }
   [accounts.dummy.mailboxes]
   # per mailbox override:
   "INBOX" = { tags.ignore_tags=["inbox", ] }
+  "Project" = { tags.rename = { "bug" = "🐜" } }
 .Ed
 .\"
 .\"
