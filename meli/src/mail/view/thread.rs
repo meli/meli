@@ -117,7 +117,9 @@ impl ThreadView {
             use_color: context.settings.terminal.use_color(),
             last_width: 0,
             thread_layout: *mailbox_settings!(
-                context[coordinates.0][&coordinates.1].listing.thread_layout
+                context[&coordinates.0][&coordinates.1]
+                    .listing
+                    .thread_layout
             ),
             expanded_pos: 0,
             new_expanded_pos: 0,
@@ -1045,9 +1047,9 @@ impl Component for ThreadView {
                 false
             }
             UIEvent::Input(ref key)
-                if mailbox_settings!(context has [account_hash][&mailbox_hash])
+                if mailbox_settings!(context has [&account_hash][&mailbox_hash])
                     && mailbox_settings!(
-                        context[account_hash][&mailbox_hash]
+                        context[&account_hash][&mailbox_hash]
                             .shortcuts
                             .thread_view
                             .commands
@@ -1347,22 +1349,22 @@ impl Component for ThreadView {
         map.insert(
             Shortcuts::GENERAL,
             mailbox_settings!(
-                context[self.coordinates.0][&self.coordinates.1]
+                context[&self.coordinates.0][&self.coordinates.1]
                     .shortcuts
                     .general
             )
             .key_values(),
         );
         let mut thread_view_map = mailbox_settings!(
-            context[self.coordinates.0][&self.coordinates.1]
+            context[&self.coordinates.0][&self.coordinates.1]
                 .shortcuts
                 .thread_view
         )
         .key_values();
         let (account_hash, mailbox_hash, _) = self.coordinates;
-        if mailbox_settings!(context has [account_hash][&mailbox_hash]) {
+        if mailbox_settings!(context has [&account_hash][&mailbox_hash]) {
             for command in mailbox_settings!(
-                context[account_hash][&mailbox_hash]
+                context[&account_hash][&mailbox_hash]
                     .shortcuts
                     .thread_view
                     .commands

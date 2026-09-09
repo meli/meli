@@ -235,7 +235,7 @@ impl Composer {
         };
 
         // Add user's custom hooks.
-        for hook in account_settings!(context[account_hash].composing.custom_compose_hooks)
+        for hook in account_settings!(context[&account_hash].composing.custom_compose_hooks)
             .iter()
             .cloned()
             .map(Into::into)
@@ -244,7 +244,7 @@ impl Composer {
         }
 
         ret.hooks.retain(|h| {
-            !account_settings!(context[account_hash].composing.disabled_compose_hooks)
+            !account_settings!(context[&account_hash].composing.disabled_compose_hooks)
                 .iter()
                 .any(|hn| hn.as_str() == h.name())
         });
@@ -257,17 +257,17 @@ impl Composer {
         }
 
         for (h, v) in
-            account_settings!(context[account_hash].composing.default_header_values).iter()
+            account_settings!(context[&account_hash].composing.default_header_values).iter()
         {
             ret.draft.set_header(h.into(), v.into());
         }
-        if *account_settings!(context[account_hash].composing.insert_user_agent) {
+        if *account_settings!(context[&account_hash].composing.insert_user_agent) {
             ret.draft.set_header(
                 HeaderName::USER_AGENT,
                 format!("meli/{}", crate::version_migrations::LATEST.as_str()),
             );
         }
-        let format_flowed = *account_settings!(context[account_hash].composing.format_flowed);
+        let format_flowed = *account_settings!(context[&account_hash].composing.format_flowed);
         if format_flowed {
             ret.pager.set_reflow(melib::text::Reflow::FormatFlowed);
         }
@@ -330,7 +330,7 @@ impl Composer {
         let subject = {
             let subject = envelope.subject();
             let prefix_list = account_settings!(
-                context[ret.account_hash]
+                context[&ret.account_hash]
                     .composing
                     .reply_prefix_list_to_strip
             )
@@ -347,7 +347,7 @@ impl Composer {
             ) == &subject.as_ref();
 
             let prefix =
-                account_settings!(context[ret.account_hash].composing.reply_prefix).as_str();
+                account_settings!(context[&ret.account_hash].composing.reply_prefix).as_str();
             if subject_stripped {
                 format!("{prefix} {subject}")
             } else {
@@ -403,7 +403,7 @@ impl Composer {
             && std::iter::once(&ours)
                 .chain(extra_ours.iter())
                 .any(|addr| envelope.from().contains(addr))
-            && !*account_settings!(context[account_hash].composing.allow_reply_to_self)
+            && !*account_settings!(context[&account_hash].composing.allow_reply_to_self)
         {
             reply_to_all = true;
         }
@@ -471,7 +471,7 @@ impl Composer {
         ret.draft.body = {
             let mut quoted = attribution_string(
                 account_settings!(
-                    context[ret.account_hash]
+                    context[&ret.account_hash]
                         .composing
                         .attribution_format_string
                 )
@@ -480,7 +480,7 @@ impl Composer {
                 envelope.from().first(),
                 envelope.date(),
                 *account_settings!(
-                    context[ret.account_hash]
+                    context[&ret.account_hash]
                         .composing
                         .attribution_use_posix_locale
                 ),
@@ -714,7 +714,7 @@ To: {}
                             .values()
                             .map(|acc| {
                                 let addr = acc.settings.account.main_identity_address();
-                                let desc = match account_settings!(c[acc.hash()].send_mail) {
+                                let desc = match account_settings!(c[&acc.hash()].send_mail) {
                                     crate::conf::composing::SendMail::ShellCommand(ref cmd) => {
                                         let mut cmd = cmd.as_str();
                                         cmd.truncate_at_boundary(10);
@@ -781,7 +781,7 @@ To: {}
         let highlight_attr = crate::conf::value(context, "highlight");
         grid.clear_area(area, theme_default);
         let our_map: ShortcutMap =
-            account_settings!(context[self.account_hash].shortcuts.composing).key_values();
+            account_settings!(context[&self.account_hash].shortcuts.composing).key_values();
         let mut shortcuts: ShortcutMaps = Default::default();
         shortcuts.insert(Shortcuts::COMPOSING, our_map);
         let toggle_shortcut = Key::Char('\n');
@@ -1018,9 +1018,9 @@ To: {}
         );
         gpg::KeySelectionLoading::new(
             secret,
-            account_settings!(context[self.account_hash].pgp.allow_remote_lookup).is_true(),
+            account_settings!(context[&self.account_hash].pgp.allow_remote_lookup).is_true(),
             patterns,
-            *account_settings!(context[self.account_hash].pgp.allow_remote_lookup),
+            *account_settings!(context[&self.account_hash].pgp.allow_remote_lookup),
             context,
         )
     }
@@ -1041,27 +1041,28 @@ To: {}
                 }
             }
         };
-        let override_value = account_settings!(context[self.account_hash].composing.signature_file)
-            .as_ref()
-            .and_then(|secret| {
-                use melib::conf::Secret;
+        let override_value =
+            account_settings!(context[&self.account_hash].composing.signature_file)
+                .as_ref()
+                .and_then(|secret| {
+                    use melib::conf::Secret;
 
-                match secret {
-                    Secret::Value(ref literal) => read_sig_from_path(Path::new(&literal)),
-                    Secret::Evaluate { .. } => match melib::smol::block_on(
-                        secret.value_with_timeout(Duration::from_millis(300)),
-                    ) {
-                        Err(err) => {
-                            log::error!(
-                                "Could not execute signature command for account `{}`: {err}.",
-                                context.accounts[&self.account_hash].name(),
-                            );
-                            None
-                        }
-                        Ok(v) => Some(v),
-                    },
-                }
-            });
+                    match secret {
+                        Secret::Value(ref literal) => read_sig_from_path(Path::new(&literal)),
+                        Secret::Evaluate { .. } => match melib::smol::block_on(
+                            secret.value_with_timeout(Duration::from_millis(300)),
+                        ) {
+                            Err(err) => {
+                                log::error!(
+                                    "Could not execute signature command for account `{}`: {err}.",
+                                    context.accounts[&self.account_hash].name(),
+                                );
+                                None
+                            }
+                            Ok(v) => Some(v),
+                        },
+                    }
+                });
         Ok(override_value.or_else(|| {
             context.accounts[&self.account_hash]
                 .signature_file()
@@ -1071,15 +1072,15 @@ To: {}
     }
 
     fn add_signature(&mut self, context: &mut Context) {
-        if *account_settings!(context[self.account_hash].composing.use_signature) {
+        if *account_settings!(context[&self.account_hash].composing.use_signature) {
             match self.get_signature(context) {
                 Ok(None) => {}
                 Ok(Some(sig)) => {
                     let account_hash = self.account_hash;
                     let format_flowed =
-                        *account_settings!(context[account_hash].composing.format_flowed);
+                        *account_settings!(context[&account_hash].composing.format_flowed);
                     let mut delimiter =
-                        account_settings!(context[account_hash].composing.signature_delimiter)
+                        account_settings!(context[&account_hash].composing.signature_delimiter)
                             .as_deref()
                             .map(Cow::Borrowed)
                             .unwrap_or_else(|| Cow::Borrowed("\n\n-- \n"));
@@ -1111,13 +1112,14 @@ impl Component for Composer {
         if !self.initialized {
             #[cfg(feature = "gpgme")]
             if self.gpg_state.sign_mail.is_none() {
-                self.gpg_state.sign_mail =
-                    Some(*account_settings!(context[self.account_hash].pgp.auto_sign));
+                self.gpg_state.sign_mail = Some(*account_settings!(
+                    context[&self.account_hash].pgp.auto_sign
+                ));
             }
             #[cfg(feature = "gpgme")]
             {
                 self.gpg_state.encrypt_for_self =
-                    *account_settings!(context[self.account_hash].pgp.encrypt_for_self);
+                    *account_settings!(context[&self.account_hash].pgp.encrypt_for_self);
             }
             if !self.draft.headers().contains_key(HeaderName::FROM)
                 || self.draft.headers()[HeaderName::FROM].is_empty()
@@ -1143,7 +1145,7 @@ impl Component for Composer {
             grid.clear_area(area.skip_rows(1), theme_default);
             grid.clear_area(area.nth_row(0), highlight_attr);
             let our_map: ShortcutMap =
-                account_settings!(context[self.account_hash].shortcuts.composing).key_values();
+                account_settings!(context[&self.account_hash].shortcuts.composing).key_values();
             let mut shortcuts: ShortcutMaps = Default::default();
             shortcuts.insert(Shortcuts::COMPOSING, our_map);
             let scroll_down_shortcut = &shortcuts[Shortcuts::COMPOSING]["scroll_down"];
@@ -1194,7 +1196,7 @@ impl Component for Composer {
                     );
                     grid.change_colors(embedded_area, Color::Byte(8), theme_default.bg);
                     let our_map: ShortcutMap =
-                        account_settings!(context[self.account_hash].shortcuts.composing)
+                        account_settings!(context[&self.account_hash].shortcuts.composing)
                             .key_values();
                     let mut shortcuts: ShortcutMaps = Default::default();
                     shortcuts.insert(Shortcuts::COMPOSING, our_map);
@@ -2100,15 +2102,15 @@ impl Component for Composer {
                     action: ActionFn(Box::new(|composer, context| {
                         composer.draft.set_body(String::new());
                         if *account_settings!(
-                            context[composer.account_hash].composing.use_signature
+                            context[&composer.account_hash].composing.use_signature
                         ) {
                             if let Some(sig) = composer.get_signature(context)? {
                                 let account_hash = composer.account_hash;
                                 let format_flowed = *account_settings!(
-                                    context[account_hash].composing.format_flowed
+                                    context[&account_hash].composing.format_flowed
                                 );
                                 let mut delimiter = account_settings!(
-                                    context[account_hash].composing.signature_delimiter
+                                    context[&account_hash].composing.signature_delimiter
                                 )
                                 .as_deref()
                                 .map(Cow::Borrowed)
@@ -2195,7 +2197,7 @@ impl Component for Composer {
             {
                 /* Edit draft in $EDITOR */
                 let editor = if let Some(editor_command) =
-                    account_settings!(context[self.account_hash].composing.editor_command).as_ref()
+                    account_settings!(context[&self.account_hash].composing.editor_command).as_ref()
                 {
                     editor_command.to_string()
                 } else {
@@ -2219,7 +2221,7 @@ impl Component for Composer {
                 /* update Draft's headers based on form values */
                 self.update_draft();
                 self.draft.set_wrap_header_preamble(
-                    account_settings!(context[self.account_hash].composing.wrap_header_preamble)
+                    account_settings!(context[&self.account_hash].composing.wrap_header_preamble)
                         .clone(),
                 );
                 let filename = format!(
@@ -2258,7 +2260,7 @@ impl Component for Composer {
                     }
                 };
 
-                if *account_settings!(context[self.account_hash].composing.embedded_pty) {
+                if *account_settings!(context[&self.account_hash].composing.embedded_pty) {
                     let command = [editor, f.path().display().to_string()].join(" ");
                     match crate::terminal::embedded::create_pty(
                         self.embedded_dimensions.0,
@@ -2746,7 +2748,7 @@ impl Component for Composer {
         };
 
         let our_map: ShortcutMap =
-            account_settings!(context[self.account_hash].shortcuts.composing).key_values();
+            account_settings!(context[&self.account_hash].shortcuts.composing).key_values();
         map.insert(Shortcuts::COMPOSING, our_map);
 
         map
@@ -2796,7 +2798,7 @@ pub fn send_draft(
     flags: Flag,
     complete_in_background: bool,
 ) -> Result<Option<JoinHandle<Result<()>>>> {
-    let format_flowed = *account_settings!(context[account_hash].composing.format_flowed);
+    let format_flowed = *account_settings!(context[&account_hash].composing.format_flowed);
     /*    if sign_mail.is_true() {
         let mut content_type = ContentType::default();
         if format_flowed {
@@ -2832,10 +2834,10 @@ pub fn send_draft(
     let output = todo!();
     crate::mail::pgp::sign(
         body.into(),
-        account_settings!(context[account_hash].pgp.gpg_binary)
+        account_settings!(context[&account_hash].pgp.gpg_binary)
             .as_ref()
             .map(|s| s.as_str()),
-        account_settings!(context[account_hash].pgp.sign_key)
+        account_settings!(context[&account_hash].pgp.sign_key)
             .as_ref()
             .map(|s| s.as_str()),
     );
@@ -2881,7 +2883,7 @@ pub fn send_draft(
         }
     }
     let bytes = draft.finalise().unwrap();
-    let send_mail = account_settings!(context[account_hash].send_mail).clone();
+    let send_mail = account_settings!(context[&account_hash].send_mail).clone();
     let ret =
         context.accounts[&account_hash].send(bytes.clone(), send_mail, complete_in_background);
     save_draft(bytes.as_bytes(), context, mailbox_type, flags, account_hash);
@@ -2932,8 +2934,8 @@ pub fn send_draft_async(
     mailbox_type: SpecialUsageMailbox,
     flags: Flag,
 ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
-    let store_sent_mail = *account_settings!(context[account_hash].composing.store_sent_mail);
-    let format_flowed = *account_settings!(context[account_hash].composing.format_flowed);
+    let store_sent_mail = *account_settings!(context[&account_hash].composing.store_sent_mail);
+    let format_flowed = *account_settings!(context[&account_hash].composing.format_flowed);
     let event_sender = context.main_loop_handler.sender.clone();
     #[cfg(feature = "gpgme")]
     let mut filters_stack: Vec<AttachmentFilterBox> = vec![];
@@ -2945,9 +2947,9 @@ pub fn send_draft_async(
             .is_true()
     {
         filters_stack.push(Box::new(crate::mail::pgp::sign_filter(
-            (account_settings!(context[account_hash].pgp.auto_sign).is_true()
+            (account_settings!(context[&account_hash].pgp.auto_sign).is_true()
                 && gpg_state.sign_keys.is_empty())
-            .then(|| account_settings!(context[account_hash].pgp.sign_key).clone())
+            .then(|| account_settings!(context[&account_hash].pgp.sign_key).clone())
             .flatten(),
             gpg_state.sign_keys,
         )?));
@@ -2968,7 +2970,7 @@ pub fn send_draft_async(
             )?,
             (gpg_state.sign_mail.unwrap_or(ActionFlag::False).is_true()
                 && gpg_state.sign_keys.is_empty())
-            .then(|| account_settings!(context[account_hash].pgp.sign_key).clone())
+            .then(|| account_settings!(context[&account_hash].pgp.sign_key).clone())
             .flatten(),
             gpg_state
                 .sign_mail
@@ -2978,12 +2980,12 @@ pub fn send_draft_async(
             gpg_state
                 .encrypt_keys
                 .is_empty()
-                .then(|| account_settings!(context[account_hash].pgp.encrypt_key).clone())
+                .then(|| account_settings!(context[&account_hash].pgp.encrypt_key).clone())
                 .flatten(),
             gpg_state.encrypt_keys,
         )?));
     }
-    let send_mail = account_settings!(context[account_hash].send_mail).clone();
+    let send_mail = account_settings!(context[&account_hash].send_mail).clone();
     let send_cb = context.accounts[&account_hash].send_async(send_mail);
     let mut content_type = ContentType::default();
     if let (

@@ -510,16 +510,20 @@ impl FlagString {
             flag_draft = if f.contains(Flag::DRAFT) { "D" } else { "" },
             flag_flagged = if f.contains(Flag::FLAGGED) { "F" } else { "" },
             selected = if is_selected {
-                mailbox_settings!(context[coordinates.0][&coordinates.1].listing.selected_flag)
-                    .as_ref()
-                    .map(|s| s.as_str())
-                    .unwrap_or(DEFAULT_SELECTED_FLAG)
+                mailbox_settings!(
+                    context[&coordinates.0][&coordinates.1]
+                        .listing
+                        .selected_flag
+                )
+                .as_ref()
+                .map(|s| s.as_str())
+                .unwrap_or(DEFAULT_SELECTED_FLAG)
             } else {
                 ""
             },
             snoozed = if is_snoozed {
                 mailbox_settings!(
-                    context[coordinates.0][&coordinates.1]
+                    context[&coordinates.0][&coordinates.1]
                         .listing
                         .thread_snoozed_flag
                 )
@@ -530,7 +534,7 @@ impl FlagString {
                 ""
             },
             unseen = if is_unseen {
-                mailbox_settings!(context[coordinates.0][&coordinates.1].listing.unseen_flag)
+                mailbox_settings!(context[&coordinates.0][&coordinates.1].listing.unseen_flag)
                     .as_ref()
                     .map(|s| s.as_str())
                     .unwrap_or(DEFAULT_UNSEEN_FLAG)
@@ -539,7 +543,7 @@ impl FlagString {
             },
             attachments = if has_attachments {
                 mailbox_settings!(
-                    context[coordinates.0][&coordinates.1]
+                    context[&coordinates.0][&coordinates.1]
                         .listing
                         .attachment_flag
                 )
@@ -1416,10 +1420,10 @@ impl Component for Listing {
                 self.theme_default = crate::conf::value(context, "theme_default");
                 let account_hash = context.accounts[self.cursor_pos.account].hash();
                 self.sidebar_divider =
-                    *account_settings!(context[account_hash].listing.sidebar_divider);
+                    *account_settings!(context[&account_hash].listing.sidebar_divider);
                 self.sidebar_divider_theme = conf::value(context, "mail.sidebar_divider");
                 self.mail_view_divider =
-                    *account_settings!(context[account_hash].listing.mail_view_divider);
+                    *account_settings!(context[&account_hash].listing.mail_view_divider);
                 self.mail_view_divider_theme = conf::value(context, "mail.view.divider");
                 self.menu.grid_mut().empty();
                 self.set_dirty(true);
@@ -2658,9 +2662,9 @@ impl Component for Listing {
                 return true;
             }
             UIEvent::Input(ref key)
-                if mailbox_settings!(context has [account_hash][&mailbox_hash])
+                if mailbox_settings!(context has [&account_hash][&mailbox_hash])
                     && mailbox_settings!(
-                        context[account_hash][&mailbox_hash]
+                        context[&account_hash][&mailbox_hash]
                             .shortcuts
                             .listing
                             .commands
@@ -2736,9 +2740,9 @@ impl Component for Listing {
             config_map.shift_remove("open_mailbox");
         }
         let (account_hash, mailbox_hash) = self.component.coordinates();
-        if mailbox_settings!(context has [account_hash][&mailbox_hash]) {
+        if mailbox_settings!(context has [&account_hash][&mailbox_hash]) {
             for command in mailbox_settings!(
-                context[account_hash][&mailbox_hash]
+                context[&account_hash][&mailbox_hash]
                     .shortcuts
                     .listing
                     .commands
@@ -2890,18 +2894,18 @@ impl Listing {
             theme_default: conf::value(context, "theme_default"),
             id: ComponentId::default(),
             sidebar_divider: *account_settings!(
-                context[first_account_hash].listing.sidebar_divider
+                context[&first_account_hash].listing.sidebar_divider
             ),
             sidebar_divider_theme: conf::value(context, "mail.sidebar_divider"),
             mail_view_divider: *account_settings!(
-                context[first_account_hash].listing.mail_view_divider
+                context[&first_account_hash].listing.mail_view_divider
             ),
             mail_view_divider_theme: conf::value(context, "mail.view.divider"),
             menu_visibility: !*account_settings!(
-                context[first_account_hash].listing.hide_sidebar_on_launch
+                context[&first_account_hash].listing.hide_sidebar_on_launch
             ),
-            ratio: *account_settings!(context[first_account_hash].listing.sidebar_ratio),
-            prev_ratio: *account_settings!(context[first_account_hash].listing.sidebar_ratio),
+            ratio: *account_settings!(context[&first_account_hash].listing.sidebar_ratio),
+            prev_ratio: *account_settings!(context[&first_account_hash].listing.sidebar_ratio),
             menu_width: WidgetWidth::Unset,
             focus: ListingFocus::Mailbox,
         };
@@ -3065,7 +3069,7 @@ impl Listing {
         let mail_sidebar_unread_count_value =
             crate::conf::value(context, "mail.sidebar_unread_count");
         let has_sibling_str: &str = account_settings!(
-            context[self.accounts[aidx].hash]
+            context[&self.accounts[aidx].hash]
                 .listing
                 .sidebar_mailbox_tree_has_sibling
         )
@@ -3073,7 +3077,7 @@ impl Listing {
         .map(|s| s.as_str())
         .unwrap_or(" ");
         let no_sibling_str: &str = account_settings!(
-            context[self.accounts[aidx].hash]
+            context[&self.accounts[aidx].hash]
                 .listing
                 .sidebar_mailbox_tree_no_sibling
         )
@@ -3082,7 +3086,7 @@ impl Listing {
         .unwrap_or(" ");
 
         let has_sibling_leaf_str: &str = account_settings!(
-            context[self.accounts[aidx].hash]
+            context[&self.accounts[aidx].hash]
                 .listing
                 .sidebar_mailbox_tree_has_sibling_leaf
         )
@@ -3091,7 +3095,7 @@ impl Listing {
         .unwrap_or(" ");
 
         let no_sibling_leaf_str: &str = account_settings!(
-            context[self.accounts[aidx].hash]
+            context[&self.accounts[aidx].hash]
                 .listing
                 .sidebar_mailbox_tree_no_sibling_leaf
         )
@@ -3099,7 +3103,7 @@ impl Listing {
         .map(|s| s.as_str())
         .unwrap_or(" ");
         let relative_menu_indices = *account_settings!(
-            context[self.accounts[aidx].hash]
+            context[&self.accounts[aidx].hash]
                 .listing
                 .relative_menu_indices
         );
@@ -3478,8 +3482,9 @@ impl Listing {
                     self.component.refresh_mailbox(context, true);
 
                     // Check if per-mailbox configuration overrides general configuration
-                    let index_style_override =
-                        *mailbox_settings!(context[account_hash][mailbox_hash].listing.index_style);
+                    let index_style_override = *mailbox_settings!(
+                        context[&account_hash][mailbox_hash].listing.index_style
+                    );
                     self.set_index_style(index_style.unwrap_or(index_style_override), context);
                 } else if !matches!(self.component, ListingComponent::Offline(_)) {
                     self.component.unrealize(context);
@@ -3515,12 +3520,12 @@ impl Listing {
                     )));
             }
         }
-        self.sidebar_divider = *account_settings!(context[account_hash].listing.sidebar_divider);
+        self.sidebar_divider = *account_settings!(context[&account_hash].listing.sidebar_divider);
         self.set_dirty(true);
         self.menu_cursor_pos = self.cursor_pos;
         // clear menu to force redraw
         self.menu.grid_mut().empty();
-        if *account_settings!(context[account_hash].listing.show_menu_scrollbar) {
+        if *account_settings!(context[&account_hash].listing.show_menu_scrollbar) {
             self.show_menu_scrollbar = ShowMenuScrollbar::True;
             self.menu_scrollbar_show_timer.rearm();
         } else {

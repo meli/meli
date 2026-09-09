@@ -297,12 +297,12 @@ impl MailListingTrait for ThreadListing {
         let mut prev_group = ThreadHash::null();
         let mut hide_from: bool = false;
         let threaded_repeat_identical_from_values: bool = *mailbox_settings!(
-            context[self.new_cursor_pos.0][&self.new_cursor_pos.1]
+            context[&self.new_cursor_pos.0][&self.new_cursor_pos.1]
                 .listing
                 .threaded_repeat_identical_from_values
         );
         let should_highlight_self = mailbox_settings!(
-            context[self.cursor_pos.0][&self.cursor_pos.1]
+            context[&self.cursor_pos.0][&self.cursor_pos.1]
                 .listing
                 .highlight_self
         )
@@ -312,7 +312,7 @@ impl MailListingTrait for ThreadListing {
             .account
             .main_identity_address();
         let highlight_self_colwidth: usize = mailbox_settings!(
-            context[self.cursor_pos.0][&self.cursor_pos.1]
+            context[&self.cursor_pos.0][&self.cursor_pos.1]
                 .listing
                 .highlight_self_flag
         )
@@ -327,7 +327,7 @@ impl MailListingTrait for ThreadListing {
                 let envelope: EnvelopeRef = account.collection.get_env(env_hash);
                 use melib::search::QueryTrait;
                 if let Some(filter_query) = mailbox_settings!(
-                    context[self.new_cursor_pos.0][&self.new_cursor_pos.1]
+                    context[&self.new_cursor_pos.0][&self.new_cursor_pos.1]
                         .listing
                         .filter
                 )
@@ -575,7 +575,7 @@ impl ListingTrait for ThreadListing {
                 }
                 context.dirty_areas.push_back(new_area);
             }
-            if *account_settings!(context[self.cursor_pos.0].listing.relative_list_indices) {
+            if *account_settings!(context[&self.cursor_pos.0].listing.relative_list_indices) {
                 self.draw_relative_numbers(grid, area, top_idx);
                 context.dirty_areas.push_back(area);
             }
@@ -600,7 +600,7 @@ impl ListingTrait for ThreadListing {
         // copy table columns
         self.data_columns
             .draw(grid, top_idx, self.cursor_pos.2, grid.bounds_iter(area));
-        if *account_settings!(context[self.cursor_pos.0].listing.relative_list_indices) {
+        if *account_settings!(context[&self.cursor_pos.0].listing.relative_list_indices) {
             self.draw_relative_numbers(grid, area, top_idx);
         }
         // apply each row colors separately
@@ -816,7 +816,7 @@ impl ThreadListing {
         context: &Context,
     ) -> Box<Self> {
         let color_cache = ColorCache::new(context, IndexStyle::Threaded);
-        let sort = *mailbox_settings!(context[coordinates.0][&coordinates.1].listing.sort);
+        let sort = *mailbox_settings!(context[&coordinates.0][&coordinates.1].listing.sort);
         Box::new(Self {
             cursor_pos: (coordinates.0, MailboxHash::default(), 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
@@ -911,12 +911,12 @@ impl ThreadListing {
             let tags_lck = account.collection.tag_index.read().unwrap();
             for t in e.tags().iter() {
                 if mailbox_settings!(
-                    context[self.cursor_pos.0][&self.cursor_pos.1]
+                    context[&self.cursor_pos.0][&self.cursor_pos.1]
                         .tags
                         .ignore_tags
                 )
                 .contains(t)
-                    || account_settings!(context[self.cursor_pos.0].tags.ignore_tags).contains(t)
+                    || account_settings!(context[&self.cursor_pos.0].tags.ignore_tags).contains(t)
                     || context.settings.tags.ignore_tags.contains(t)
                     || !tags_lck.contains_key(t)
                 {
@@ -926,11 +926,11 @@ impl ThreadListing {
                 tags.push_str(tags_lck.get(t).as_ref().unwrap());
                 tags.push(' ');
                 colors.push(
-                    mailbox_settings!(context[self.cursor_pos.0][&self.cursor_pos.1].tags.colors)
+                    mailbox_settings!(context[&self.cursor_pos.0][&self.cursor_pos.1].tags.colors)
                         .get(t)
                         .cloned()
                         .or_else(|| {
-                            account_settings!(context[self.cursor_pos.0].tags.colors)
+                            account_settings!(context[&self.cursor_pos.0].tags.colors)
                                 .get(t)
                                 .cloned()
                                 .or_else(|| context.settings.tags.colors.get(t).cloned())
@@ -1003,7 +1003,7 @@ impl ThreadListing {
             {
                 let mut area_col_0 = columns[0].area().nth_row(idx);
                 columns[0].grid_mut().clear_area(area_col_0, row_attr);
-                if !*account_settings!(context[self.cursor_pos.0].listing.relative_list_indices) {
+                if !*account_settings!(context[&self.cursor_pos.0].listing.relative_list_indices) {
                     area_col_0 = area_col_0.skip_cols(columns[0].grid_mut().write_string(
                         itoa_buffer.format(idx),
                         row_attr.fg,
@@ -1087,7 +1087,7 @@ impl ThreadListing {
                 if strings.highlight_self {
                     let (x, _) = columns[3].grid_mut().write_string(
                         mailbox_settings!(
-                            context[self.cursor_pos.0][&self.cursor_pos.1]
+                            context[&self.cursor_pos.0][&self.cursor_pos.1]
                                 .listing
                                 .highlight_self_flag
                         )
@@ -1189,7 +1189,7 @@ impl ThreadListing {
         self.seen_cache.insert(env_hash, envelope.is_seen());
 
         let should_highlight_self = mailbox_settings!(
-            context[self.cursor_pos.0][&self.cursor_pos.1]
+            context[&self.cursor_pos.0][&self.cursor_pos.1]
                 .listing
                 .highlight_self
         )

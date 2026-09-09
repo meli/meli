@@ -306,7 +306,7 @@ impl MailListingTrait for ConversationsListing {
                 .get_env(root_env_hash);
             use melib::search::QueryTrait;
             if let Some(filter_query) = mailbox_settings!(
-                context[self.cursor_pos.0][&self.cursor_pos.1]
+                context[&self.cursor_pos.0][&self.cursor_pos.1]
                     .listing
                     .filter
             )
@@ -668,7 +668,7 @@ impl ConversationsListing {
         coordinates: (AccountHash, MailboxHash),
         context: &Context,
     ) -> Box<Self> {
-        let sort = *mailbox_settings!(context[coordinates.0][&coordinates.1].listing.sort);
+        let sort = *mailbox_settings!(context[&coordinates.0][&coordinates.1].listing.sort);
         Box::new(Self {
             cursor_pos: (coordinates.0, MailboxHash::default(), 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
@@ -713,12 +713,12 @@ impl ConversationsListing {
         if account.backend_capabilities.supports_tags {
             for t in tags {
                 if mailbox_settings!(
-                    context[self.cursor_pos.0][&self.cursor_pos.1]
+                    context[&self.cursor_pos.0][&self.cursor_pos.1]
                         .tags
                         .ignore_tags
                 )
                 .contains(t)
-                    || account_settings!(context[self.cursor_pos.0].tags.ignore_tags).contains(t)
+                    || account_settings!(context[&self.cursor_pos.0].tags.ignore_tags).contains(t)
                     || context.settings.tags.ignore_tags.contains(t)
                     || !tags_lck.contains_key(t)
                 {
@@ -728,11 +728,11 @@ impl ConversationsListing {
                 tags_string.push_str(tags_lck.get(t).as_ref().unwrap());
                 tags_string.push(' ');
                 colors.push(
-                    mailbox_settings!(context[self.cursor_pos.0][&self.cursor_pos.1].tags.colors)
+                    mailbox_settings!(context[&self.cursor_pos.0][&self.cursor_pos.1].tags.colors)
                         .get(t)
                         .cloned()
                         .or_else(|| {
-                            account_settings!(context[self.cursor_pos.0].tags.colors)
+                            account_settings!(context[&self.cursor_pos.0].tags.colors)
                                 .get(t)
                                 .cloned()
                                 .or_else(|| context.settings.tags.colors.get(t).cloned())
@@ -744,7 +744,7 @@ impl ConversationsListing {
             }
         }
         let subject = if *mailbox_settings!(
-            context[self.cursor_pos.0][&self.cursor_pos.1]
+            context[&self.cursor_pos.0][&self.cursor_pos.1]
                 .listing
                 .thread_subject_pack
         ) {

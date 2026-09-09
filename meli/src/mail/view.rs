@@ -505,7 +505,7 @@ impl Component for MailView {
                 if shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["forward"]) =>
             {
                 match mailbox_settings!(
-                    context[coordinates.0][&coordinates.1]
+                    context[&coordinates.0][&coordinates.1]
                         .composing
                         .forward_as_attachment
                 ) {
@@ -724,7 +724,7 @@ impl Component for MailView {
                                     }
                                     list_management::ListAction::Url(url) => {
                                         let url_launcher = mailbox_settings!(
-                                            context[coordinates.0][&coordinates.1]
+                                            context[&coordinates.0][&coordinates.1]
                                                 .pager
                                                 .url_launcher
                                         )
@@ -779,7 +779,7 @@ impl Component for MailView {
                         MailingListAction::ListArchive if actions.archive.is_some() => {
                             /* open archive url with url_launcher */
                             let url_launcher = mailbox_settings!(
-                                context[coordinates.0][&coordinates.1].pager.url_launcher
+                                context[&coordinates.0][&coordinates.1].pager.url_launcher
                             )
                             .as_ref()
                             .map(|s| s.as_str())
@@ -830,9 +830,9 @@ impl Component for MailView {
                 return true;
             }
             UIEvent::Input(ref key)
-                if mailbox_settings!(context has [coordinates.0][&coordinates.1])
+                if mailbox_settings!(context has [&coordinates.0][&coordinates.1])
                     && mailbox_settings!(
-                        context[coordinates.0][&coordinates.1]
+                        context[&coordinates.0][&coordinates.1]
                             .shortcuts
                             .envelope_view
                             .commands
@@ -884,9 +884,9 @@ impl Component for MailView {
         let mut map = self.state.shortcuts(context);
         if let Some(envelope_view_map) = map.get_mut(Shortcuts::ENVELOPE_VIEW) {
             if let Some((account_hash, mailbox_hash, _)) = self.coordinates {
-                if mailbox_settings!(context has [account_hash][&mailbox_hash]) {
+                if mailbox_settings!(context has [&account_hash][&mailbox_hash]) {
                     for command in mailbox_settings!(
-                        context[account_hash][&mailbox_hash]
+                        context[&account_hash][&mailbox_hash]
                             .shortcuts
                             .envelope_view
                             .commands

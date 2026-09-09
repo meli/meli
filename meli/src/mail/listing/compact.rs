@@ -325,13 +325,13 @@ impl MailListingTrait for CompactListing {
             .account
             .main_identity_address();
         let should_highlight_self = mailbox_settings!(
-            context[self.cursor_pos.0][&self.cursor_pos.1]
+            context[&self.cursor_pos.0][&self.cursor_pos.1]
                 .listing
                 .highlight_self
         )
         .is_true();
         let highlight_self_colwidth: usize = mailbox_settings!(
-            context[self.cursor_pos.0][&self.cursor_pos.1]
+            context[&self.cursor_pos.0][&self.cursor_pos.1]
                 .listing
                 .highlight_self_flag
         )
@@ -375,7 +375,7 @@ impl MailListingTrait for CompactListing {
                 .get_env(root_env_hash);
             use melib::search::QueryTrait;
             if let Some(filter_query) = mailbox_settings!(
-                context[self.cursor_pos.0][&self.cursor_pos.1]
+                context[&self.cursor_pos.0][&self.cursor_pos.1]
                     .listing
                     .filter
             )
@@ -702,7 +702,7 @@ impl ListingTrait for CompactListing {
                 }
                 context.dirty_areas.push_back(new_area);
             }
-            if *account_settings!(context[self.cursor_pos.0].listing.relative_list_indices) {
+            if *account_settings!(context[&self.cursor_pos.0].listing.relative_list_indices) {
                 self.draw_relative_numbers(grid, area, top_idx, context);
                 context.dirty_areas.push_back(area);
             }
@@ -723,7 +723,7 @@ impl ListingTrait for CompactListing {
         /* copy table columns */
         self.data_columns
             .draw(grid, top_idx, self.cursor_pos.2, grid.bounds_iter(area));
-        if *account_settings!(context[self.cursor_pos.0].listing.relative_list_indices) {
+        if *account_settings!(context[&self.cursor_pos.0].listing.relative_list_indices) {
             self.draw_relative_numbers(grid, area, top_idx, context);
         }
         /* apply each row colors separately */
@@ -901,7 +901,7 @@ impl CompactListing {
         context: &Context,
     ) -> Box<Self> {
         let color_cache = ColorCache::new(context, IndexStyle::Compact);
-        let sort = *mailbox_settings!(context[coordinates.0][&coordinates.1].listing.sort);
+        let sort = *mailbox_settings!(context[&coordinates.0][&coordinates.1].listing.sort);
         Box::new(Self {
             cursor_pos: (AccountHash::default(), MailboxHash::default(), 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
@@ -950,12 +950,12 @@ impl CompactListing {
         if account.backend_capabilities.supports_tags {
             for t in tags {
                 if mailbox_settings!(
-                    context[self.cursor_pos.0][&self.cursor_pos.1]
+                    context[&self.cursor_pos.0][&self.cursor_pos.1]
                         .tags
                         .ignore_tags
                 )
                 .contains(t)
-                    || account_settings!(context[self.cursor_pos.0].tags.ignore_tags).contains(t)
+                    || account_settings!(context[&self.cursor_pos.0].tags.ignore_tags).contains(t)
                     || context.settings.tags.ignore_tags.contains(t)
                     || !tags_lck.contains_key(t)
                 {
@@ -965,11 +965,11 @@ impl CompactListing {
                 tags_string.push_str(tags_lck.get(t).as_ref().unwrap());
                 tags_string.push(' ');
                 colors.push(
-                    mailbox_settings!(context[self.cursor_pos.0][&self.cursor_pos.1].tags.colors)
+                    mailbox_settings!(context[&self.cursor_pos.0][&self.cursor_pos.1].tags.colors)
                         .get(t)
                         .cloned()
                         .or_else(|| {
-                            account_settings!(context[self.cursor_pos.0].tags.colors)
+                            account_settings!(context[&self.cursor_pos.0].tags.colors)
                                 .get(t)
                                 .cloned()
                                 .or_else(|| context.settings.tags.colors.get(t).cloned())
@@ -981,7 +981,7 @@ impl CompactListing {
             }
         }
         let subject = if *mailbox_settings!(
-            context[self.cursor_pos.0][&self.cursor_pos.1]
+            context[&self.cursor_pos.0][&self.cursor_pos.1]
                 .listing
                 .thread_subject_pack
         ) {
@@ -1069,7 +1069,7 @@ impl CompactListing {
             std::collections::HashSet::new();
         let mut highlight_self: bool = false;
         let should_highlight_self = mailbox_settings!(
-            context[self.cursor_pos.0][&self.cursor_pos.1]
+            context[&self.cursor_pos.0][&self.cursor_pos.1]
                 .listing
                 .highlight_self
         )
@@ -1276,7 +1276,7 @@ impl CompactListing {
                 if strings.highlight_self {
                     let (x, _) = columns[3].grid_mut().write_string(
                         mailbox_settings!(
-                            context[self.cursor_pos.0][&self.cursor_pos.1]
+                            context[&self.cursor_pos.0][&self.cursor_pos.1]
                                 .listing
                                 .highlight_self_flag
                         )

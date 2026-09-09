@@ -81,7 +81,7 @@ pub use self::{composing::*, pgp::*, shortcuts::*, tags::*};
 #[macro_export]
 macro_rules! account_settings {
     ($context:ident[$account_hash:expr].$setting:ident.$field:ident) => {{
-        $context.accounts[&$account_hash]
+        $context.accounts[$account_hash]
             .settings
             .conf_override
             .$setting
@@ -90,7 +90,7 @@ macro_rules! account_settings {
             .unwrap_or(&$context.settings.$setting.$field)
     }};
     ($context:ident[$account_hash:expr].$field:ident) => {{
-        &$context.accounts[&$account_hash].settings.$field
+        &$context.accounts[$account_hash].settings.$field
     }};
 }
 
@@ -105,20 +105,20 @@ macro_rules! account_settings {
 #[macro_export]
 macro_rules! mailbox_settings {
     ($context:ident has [$account_hash:expr][$mailbox_path:expr]) => {{
-        if let Some(ref acc) = $context.accounts.get(&$account_hash) {
+        if let Some(ref acc) = $context.accounts.get($account_hash) {
             acc.mailbox_entries.contains_key($mailbox_path)
         } else {
             false
         }
     }};
     ($context:ident[$account_hash:expr][$mailbox_path:expr].$setting:ident.$field:ident) => {{
-        $context.accounts[&$account_hash][$mailbox_path]
+        $context.accounts[$account_hash][$mailbox_path]
             .conf
             .conf_override
             .$setting
             .$field
             .as_ref()
-            .or($context.accounts[&$account_hash]
+            .or($context.accounts[$account_hash]
                 .settings
                 .conf_override
                 .$setting
@@ -127,14 +127,14 @@ macro_rules! mailbox_settings {
             .unwrap_or(&$context.settings.$setting.$field)
     }};
     ($context:ident[$account_hash:expr][$mailbox_path:expr].$setting:ident.$field:ident.$subfield:ident) => {{
-        $context.accounts[&$account_hash][$mailbox_path]
+        $context.accounts[$account_hash][$mailbox_path]
             .conf
             .conf_override
             .$setting
             .$field
             .as_ref()
             .map(|f| f.$subfield.as_ref())
-            .or($context.accounts[&$account_hash]
+            .or($context.accounts[$account_hash]
                 .settings
                 .conf_override
                 .$setting

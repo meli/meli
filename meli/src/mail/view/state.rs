@@ -114,52 +114,52 @@ impl MailViewState {
                 theme_default: crate::conf::value(context, "theme_default"),
                 body_theme: crate::conf::value(context, "mail.view.body"),
                 env_view_shortcuts: mailbox_settings!(
-                    context[coordinates.0][&coordinates.1]
+                    context[&coordinates.0][&coordinates.1]
                         .shortcuts
                         .envelope_view
                 )
                 .key_values(),
                 pager_filter: mailbox_settings!(
-                    context[coordinates.0][&coordinates.1].pager.filter
+                    context[&coordinates.0][&coordinates.1].pager.filter
                 )
                 .clone(),
                 html_filter: mailbox_settings!(
-                    context[coordinates.0][&coordinates.1].pager.html_filter
+                    context[&coordinates.0][&coordinates.1].pager.html_filter
                 )
                 .clone(),
                 url_launcher: mailbox_settings!(
-                    context[coordinates.0][&coordinates.1].pager.url_launcher
+                    context[&coordinates.0][&coordinates.1].pager.url_launcher
                 )
                 .clone(),
                 auto_choose_multipart_alternative: mailbox_settings!(
-                    context[coordinates.0][&coordinates.1]
+                    context[&coordinates.0][&coordinates.1]
                         .pager
                         .auto_choose_multipart_alternative
                 )
                 .is_true(),
                 expand_headers: false,
                 sticky_headers: *mailbox_settings!(
-                    context[coordinates.0][&coordinates.1].pager.sticky_headers
+                    context[&coordinates.0][&coordinates.1].pager.sticky_headers
                 ),
                 show_date_in_my_timezone: mailbox_settings!(
-                    context[coordinates.0][&coordinates.1]
+                    context[&coordinates.0][&coordinates.1]
                         .pager
                         .show_date_in_my_timezone
                 )
                 .is_true(),
                 show_extra_headers: mailbox_settings!(
-                    context[coordinates.0][&coordinates.1]
+                    context[&coordinates.0][&coordinates.1]
                         .pager
                         .show_extra_headers
                 )
                 .clone(),
                 auto_verify_signatures: *mailbox_settings!(
-                    context[coordinates.0][&coordinates.1]
+                    context[&coordinates.0][&coordinates.1]
                         .pgp
                         .auto_verify_signatures
                 ),
                 auto_decrypt: *mailbox_settings!(
-                    context[coordinates.0][&coordinates.1].pgp.auto_decrypt
+                    context[&coordinates.0][&coordinates.1].pgp.auto_decrypt
                 ),
                 charset: None,
             }),
