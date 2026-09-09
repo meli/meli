@@ -1321,14 +1321,14 @@ impl CompactListing {
                         None,
                         None,
                     );
-                    for c in columns[4].grid().row_iter(area_col_4, 0..(x + 1), 0) {
+                    for c in columns[4].grid().row_iter(area_col_4, 0..(x + 2), 0) {
                         columns[4].grid_mut()[c]
                             .set_bg(color)
                             .set_keep_fg(true)
                             .set_keep_bg(true)
                             .set_keep_attrs(true);
                     }
-                    area_col_4 = area_col_4.skip_cols(x + 1);
+                    area_col_4 = area_col_4.skip_cols(x + 2);
                 }
                 for c in columns[4].grid().row_iter(area_col_4, 0..min_width.4, 0) {
                     columns[4].grid_mut()[c]
