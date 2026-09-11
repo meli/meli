@@ -352,6 +352,7 @@ impl FetchState {
                             }
                         }
 
+                        let mut recreate_msn = false;
                         for f in v {
                             let FetchResponse {
                                 uid: Some(uid),
@@ -362,13 +363,11 @@ impl FetchState {
                             else {
                                 continue;
                             };
-                            uid_store
+                            recreate_msn |= !conn
                                 .msn_index
-                                .lock()
-                                .unwrap()
                                 .entry(mailbox_hash)
                                 .or_default()
-                                .insert(message_sequence_number - 1, uid);
+                                .insert(message_sequence_number, uid);
                             uid_store
                                 .hash_index
                                 .lock()
@@ -385,6 +384,9 @@ impl FetchState {
                         mailbox_exists.lock().unwrap().insert_existing_set(
                             envelopes.iter().map(|env| env.hash()).collect::<_>(),
                         );
+                        if recreate_msn {
+                            conn.create_uid_msn_cache(mailbox_hash).await?;
+                        }
                         drop(conn);
                     }
                     if max_uid_left <= 1 {

@@ -21,6 +21,7 @@
 
 use std::{
     borrow::Cow,
+    collections::HashMap,
     convert::TryFrom,
     fmt::Write,
     future::Future,
@@ -370,6 +371,7 @@ pub struct ImapConnection {
     pub server_conf: ImapServerConf,
     pub sync_policy: SyncPolicy,
     pub uid_store: Arc<UIDStore>,
+    pub msn_index: HashMap<MailboxHash, super::MessageSequenceNumberMap>,
     pub send_state_changes: bool,
 }
 
@@ -997,6 +999,7 @@ impl ImapConnection {
                 SyncPolicy::None
             },
             uid_store,
+            msn_index: Default::default(),
             send_state_changes,
         }
     }
@@ -1395,18 +1398,6 @@ impl ImapConnection {
             mailbox_hash,
             latest_response: select_response.clone(),
         };
-        if self
-            .uid_store
-            .msn_index
-            .lock()
-            .unwrap()
-            .get(&mailbox_hash)
-            .map(|i| i.is_empty())
-            .unwrap_or(true)
-        {
-            self.create_uid_msn_cache(mailbox_hash, 1, &select_response)
-                .await?;
-        }
         Ok(select_response)
     }
 
@@ -1460,18 +1451,6 @@ impl ImapConnection {
             mailbox_hash,
             latest_response: select_response.clone(),
         };
-        if !self
-            .uid_store
-            .msn_index
-            .lock()
-            .unwrap()
-            .get(&mailbox_hash)
-            .map(|i| i.is_empty())
-            .unwrap_or(true)
-        {
-            self.create_uid_msn_cache(mailbox_hash, 1, &select_response)
-                .await?;
-        }
         Ok(select_response)
     }
 
@@ -1521,33 +1500,23 @@ impl ImapConnection {
         (self.uid_store.event_consumer)(self.uid_store.account_hash, ev);
     }
 
-    async fn create_uid_msn_cache(
+    pub async fn create_uid_msn_cache(
         &mut self,
         mailbox_hash: MailboxHash,
-        low: usize,
-        _select_response: &SelectResponse,
-    ) -> Result<()> {
-        debug_assert!(low > 0);
+    ) -> Result<std::collections::BTreeSet<UID>> {
+        let mut response = Vec::new();
+        self.examine_mailbox(mailbox_hash, &mut response, false)
+            .await?;
         self.send_command(CommandBody::search(
             None,
-            SearchKey::SequenceSet(SequenceSet::try_from(low..)?).into(),
+            SearchKey::SequenceSet(SequenceSet::from(..)).into(),
             true,
         ))
         .await?;
-
-        let mut response = Vec::new();
         self.read_response(&mut response, RequiredResponses::SEARCH)
             .await?;
-        let mut msn_index_lck = self.uid_store.msn_index.lock().unwrap();
-        let msn_index = msn_index_lck.entry(mailbox_hash).or_default();
-        msn_index.retain(|&msn, _| msn >= low);
-        msn_index.extend(
-            protocol_parser::search_results(&response)?
-                .1
-                .into_iter()
-                .enumerate(),
-        );
-        Ok(())
+        let msn_index = self.msn_index.entry(mailbox_hash).or_default();
+        msn_index.recreate_from_search_results(&response)
     }
 }
 

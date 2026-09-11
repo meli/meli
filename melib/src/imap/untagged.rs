@@ -71,43 +71,17 @@ impl ImapConnection {
                 Err(reason.into())
             }
             UntaggedResponse::Expunge(n) => {
-                if self
-                    .uid_store
+                let Some(deleted_uid) = self
                     .msn_index
-                    .lock()
-                    .unwrap()
-                    .get(&mailbox_hash)
-                    .map(|i| i.len() < TryInto::<usize>::try_into(n).unwrap())
-                    .unwrap_or(true)
-                {
+                    .get_mut(&mailbox_hash)
+                    .and_then(|msn_index| msn_index.expunge(&n))
+                else {
                     debug!(
                         "Received expunge {} but mailbox msn index is {:?}",
                         n,
-                        self.uid_store.msn_index.lock().unwrap().get(&mailbox_hash)
+                        self.msn_index.get(&mailbox_hash)
                     );
-                    self.send_command(CommandBody::search(
-                        None,
-                        SearchKey::SequenceSet(SequenceSet::from(..)).into(),
-                        true,
-                    ))
-                    .await?;
-                    self.read_response(&mut response, RequiredResponses::SEARCH)
-                        .await?;
-                    let results = super::protocol_parser::search_results(&response)?
-                        .1
-                        .into_iter()
-                        .collect::<std::collections::BTreeSet<UID>>();
-                    {
-                        let mut lck = self.uid_store.msn_index.lock().unwrap();
-                        let msn_index = lck.entry(mailbox_hash).or_default();
-                        msn_index.clear();
-                        msn_index.extend(
-                            super::protocol_parser::search_results(&response)?
-                                .1
-                                .into_iter()
-                                .enumerate(),
-                        );
-                    }
+                    let uids = self.create_uid_msn_cache(mailbox_hash).await?;
                     let mut uid_events = vec![];
                     {
                         let mut mboxes = self.uid_store.mailboxes.lock().await;
@@ -117,7 +91,7 @@ impl ImapConnection {
                             .lock()
                             .unwrap()
                             .iter()
-                            .filter(|((mbx, u), _)| *mbx == mailbox_hash && !results.contains(u))
+                            .filter(|((mbx, u), _)| *mbx == mailbox_hash && !uids.contains(u))
                             .map(|((_, uid), hash)| (*uid, *hash))
                             .collect::<Vec<(UID, crate::email::EnvelopeHash)>>();
                         for (deleted_uid, deleted_hash) in deleted_uids_hashes {
@@ -166,17 +140,6 @@ impl ImapConnection {
                         .collect::<Vec<_>>()
                         .try_into()
                         .ok());
-                }
-                let Some(deleted_uid) = self
-                    .uid_store
-                    .msn_index
-                    .lock()
-                    .unwrap()
-                    .entry(mailbox_hash)
-                    .or_default()
-                    .remove(&TryInto::<usize>::try_into(n).unwrap().saturating_sub(1))
-                else {
-                    return Ok(None);
                 };
                 imap_log!(trace, self, "expunge {}, UID = {}", n, deleted_uid);
                 let Some(deleted_hash) = self
@@ -227,11 +190,35 @@ impl ImapConnection {
                 Ok(Some(event.into()))
             }
             UntaggedResponse::Exists(n) => {
-                imap_log!(trace, self, "exists {}", n);
+                // > The EXISTS response reports the number of messages in the mailbox.
+                // > This response occurs as a result of a SELECT or EXAMINE command and
+                // > if the size of the mailbox changes (e.g., new messages).
+                // > The update from the EXISTS response MUST be remembered by the client.
+                // rfc9051 7.4.1. EXISTS Response
+                let previous_exists = {
+                    self.msn_index
+                        .entry(mailbox_hash)
+                        .or_default()
+                        .exists()
+                        .cloned()
+                        .unwrap_or(0)
+                };
+                imap_log!(
+                    trace,
+                    self,
+                    "exists {} previous_exists {}",
+                    n,
+                    previous_exists
+                );
+                let sequence_set = if (previous_exists + 1) == n {
+                    n.try_into()?
+                } else {
+                    SequenceSet::try_from((previous_exists + 1)..=n)?
+                };
                 let (required_responses, attributes) = common_attributes();
                 try_fail!(
                     mailbox_hash,
-                    self.send_command(CommandBody::fetch(n, attributes, false)?).await
+                    self.send_command(CommandBody::fetch(sequence_set, attributes, false)?).await
                     self.read_response(&mut response, required_responses).await
                 );
                 let mut v = match super::protocol_parser::fetch_responses(&response) {
@@ -247,6 +234,7 @@ impl ImapConnection {
                     }
                 };
                 imap_log!(trace, self, "responses len is {}", v.len());
+                let mut recreate_msn = false;
                 for FetchResponse {
                     ref uid,
                     ref mut envelope,
@@ -278,21 +266,11 @@ impl ImapConnection {
                         }
                     }
                     mailbox.exists.lock().unwrap().insert_new(env.hash());
-                    if !self
-                        .uid_store
-                        .uid_index
-                        .lock()
-                        .unwrap()
-                        .contains_key(&(mailbox_hash, uid))
-                    {
-                        self.uid_store
-                            .msn_index
-                            .lock()
-                            .unwrap()
-                            .entry(mailbox_hash)
-                            .or_default()
-                            .insert(message_sequence_number.saturating_sub(1), uid);
-                    }
+                    recreate_msn |= !self
+                        .msn_index
+                        .entry(mailbox_hash)
+                        .or_default()
+                        .insert(*message_sequence_number, uid);
                     self.uid_store
                         .hash_index
                         .lock()
@@ -311,6 +289,9 @@ impl ImapConnection {
                         env.subject(),
                         mailbox.path(),
                     );
+                }
+                if recreate_msn {
+                    self.create_uid_msn_cache(mailbox_hash).await?;
                 }
                 {
                     if let Err(err) = self
@@ -423,6 +404,7 @@ impl ImapConnection {
                                 log::info!("{err}");
                             }
                         }
+                        let mut recreate_msn = false;
                         let mut events = vec![];
                         for response in v {
                             if let FetchResponse {
@@ -432,21 +414,11 @@ impl ImapConnection {
                                 ..
                             } = response
                             {
-                                if !self
-                                    .uid_store
-                                    .uid_index
-                                    .lock()
-                                    .unwrap()
-                                    .contains_key(&(mailbox_hash, uid))
-                                {
-                                    self.uid_store
-                                        .msn_index
-                                        .lock()
-                                        .unwrap()
-                                        .entry(mailbox_hash)
-                                        .or_default()
-                                        .insert(message_sequence_number.saturating_sub(1), uid);
-                                }
+                                recreate_msn |= !self
+                                    .msn_index
+                                    .entry(mailbox_hash)
+                                    .or_default()
+                                    .insert(message_sequence_number, uid);
                                 self.uid_store
                                     .hash_index
                                     .lock()
@@ -470,6 +442,9 @@ impl ImapConnection {
                                 });
                             }
                         }
+                        if recreate_msn {
+                            self.create_uid_msn_cache(mailbox_hash).await?;
+                        }
                         Ok(events.try_into().ok())
                     }
                     Err(err) => {
@@ -485,7 +460,7 @@ impl ImapConnection {
             UntaggedResponse::Fetch(fetch) => {
                 let FetchResponse {
                     uid,
-                    message_sequence_number: msg_seq,
+                    message_sequence_number,
                     modseq,
                     flags,
                     body: _,
@@ -502,7 +477,10 @@ impl ImapConnection {
                             mailbox_hash,
                             self.send_command(CommandBody::search(
                                 None,
-                                SearchKey::SequenceSet(SequenceSet::try_from(msg_seq)?).into(),
+                                SearchKey::SequenceSet(SequenceSet::try_from(
+                                    message_sequence_number
+                                )?)
+                                .into(),
                                 true
                             ))
                             .await,
@@ -525,6 +503,14 @@ impl ImapConnection {
                             }
                         }
                     };
+                    let recreate_msn = !self
+                        .msn_index
+                        .entry(mailbox_hash)
+                        .or_default()
+                        .insert(message_sequence_number, uid);
+                    if recreate_msn {
+                        self.create_uid_msn_cache(mailbox_hash).await?;
+                    }
                     debug!("fetch uid {} {:?}", uid, flags);
                     if let Some(env_hash) = {
                         let temp = self

@@ -424,6 +424,7 @@ pub async fn examine_updates(
         }
 
         let mut events = Vec::with_capacity(v.len());
+        let mut recreate_msn = false;
 
         for FetchResponse {
             uid,
@@ -452,10 +453,8 @@ pub async fn examine_updates(
                 env.subject(),
                 mailbox.path(),
             );
-            conn.uid_store
+            recreate_msn |= !conn
                 .msn_index
-                .lock()
-                .unwrap()
                 .entry(mailbox_hash)
                 .or_default()
                 .insert(message_sequence_number, uid);
@@ -474,6 +473,9 @@ pub async fn examine_updates(
                 mailbox_hash,
                 kind: Create(Box::new(env)),
             });
+        }
+        if recreate_msn {
+            conn.create_uid_msn_cache(mailbox_hash).await?;
         }
         Ok(events.try_into().ok())
     }

@@ -651,6 +651,14 @@ impl ImapConnection {
     }
 
     pub async fn init_mailbox(&mut self, mailbox_hash: MailboxHash) -> Result<SelectResponse> {
+        if self
+            .msn_index
+            .get(&mailbox_hash)
+            .map(|i| i.is_empty())
+            .unwrap_or(true)
+        {
+            _ = self.create_uid_msn_cache(mailbox_hash).await?;
+        }
         let mut response = Vec::with_capacity(8 * 1024);
         let (mailbox_path, mailbox_exists, permissions) = {
             let f = &self.uid_store.mailboxes.lock().await[&mailbox_hash];

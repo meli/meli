@@ -240,11 +240,10 @@ impl ImapCache for Arc<UIDStore> {
         let mut env_lck = self.envelopes.lock().unwrap();
         let mut hash_index_lck = self.hash_index.lock().unwrap();
         let mut uid_index_lck = self.uid_index.lock().unwrap();
-        let mut msn_index_lck = self.msn_index.lock().unwrap();
         for item in fetches {
             if let FetchResponse {
                 uid: Some(uid),
-                message_sequence_number,
+                message_sequence_number: _,
                 modseq,
                 flags: _,
                 body: _,
@@ -256,10 +255,6 @@ impl ImapCache for Arc<UIDStore> {
             {
                 let uid = *uid;
                 let modseq = *modseq;
-                msn_index_lck
-                    .entry(mailbox_hash)
-                    .or_default()
-                    .insert(message_sequence_number.saturating_sub(1), uid);
                 hash_index_lck.insert(env.hash(), (uid, mailbox_hash));
                 uid_index_lck.insert((mailbox_hash, uid), env.hash());
                 env_lck.insert(

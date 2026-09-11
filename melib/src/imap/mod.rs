@@ -157,6 +157,78 @@ macro_rules! get_conf_val {
     };
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct MessageSequenceNumberMap(BTreeMap<MessageSequenceNumber, UID>);
+
+impl MessageSequenceNumberMap {
+    pub fn expunge(&mut self, n: &MessageSequenceNumber) -> Option<UID> {
+        let uid = self.0.remove(n)?;
+        let keys_to_remove = self
+            .0
+            .keys()
+            .filter(|msn| msn > &n)
+            .copied()
+            .collect::<Vec<_>>();
+        for msn in keys_to_remove {
+            let (msn, entry) = self.0.remove_entry(&msn).expect("entry");
+            debug_assert!(msn > 1, "{msn} > 1");
+            self.0.insert(msn - 1, entry);
+        }
+        Some(uid)
+    }
+
+    pub fn get(&self, uid: &UID) -> Option<&MessageSequenceNumber> {
+        self.0
+            .iter()
+            .find_map(|(k, v)| if v == uid { Some(k) } else { None })
+    }
+
+    pub fn exists(&self) -> Option<&MessageSequenceNumber> {
+        if self.0.is_empty() {
+            return None;
+        }
+        debug_assert_eq!(
+            self.0.last_key_value().map(|(msn, _uid)| *msn),
+            Some(self.0.len())
+        );
+        self.0.last_key_value().map(|(msn, _uid)| msn)
+    }
+
+    pub fn recreate_from_search_results(&mut self, response: &[u8]) -> Result<BTreeSet<UID>> {
+        let results = protocol_parser::search_results(response)?
+            .1
+            .into_iter()
+            .collect::<std::collections::BTreeSet<UID>>();
+
+        self.0.clear();
+        self.0.extend(
+            results
+                .iter()
+                .copied()
+                .enumerate()
+                .map(|(i, uid)| (i + 1, uid)),
+        );
+        Ok(results)
+    }
+
+    pub fn insert(&mut self, msn: MessageSequenceNumber, uid: UID) -> bool {
+        if self.0.get(&msn) == Some(&uid) {
+            return true;
+        }
+        if self.0.len() + 1 != msn {
+            self.0.clear();
+            return false;
+        }
+        self.0.insert(msn, uid);
+        true
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
 #[derive(Debug)]
 pub struct UIDStore {
     pub is_subscribed: IsSubscribedFn,
@@ -168,7 +240,6 @@ pub struct UIDStore {
     pub capabilities: Arc<Mutex<Capabilities>>,
     pub hash_index: Arc<Mutex<HashMap<EnvelopeHash, (UID, MailboxHash)>>>,
     pub uid_index: Arc<Mutex<HashMap<(MailboxHash, UID), EnvelopeHash>>>,
-    pub msn_index: Arc<Mutex<HashMap<MailboxHash, BTreeMap<MessageSequenceNumber, UID>>>>,
 
     pub byte_cache: Arc<Mutex<HashMap<UID, EnvelopeCache>>>,
     pub collection: Collection,
@@ -209,7 +280,6 @@ impl UIDStore {
             highestmodseqs: Default::default(),
             hash_index: Default::default(),
             uid_index: Default::default(),
-            msn_index: Default::default(),
             byte_cache: Default::default(),
             mailboxes: Arc::new(FutureMutex::new(Default::default())),
             collection: Default::default(),
