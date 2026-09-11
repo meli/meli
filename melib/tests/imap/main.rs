@@ -33,35 +33,55 @@ rusty_fork_test! {
 
 pub mod server {
     use std::{
+        collections::{HashSet, VecDeque},
         convert::TryInto,
         net::{TcpListener, TcpStream},
+        num::NonZeroU32,
         sync::{Arc, Mutex},
     };
 
     use futures::{
-        channel::mpsc::{UnboundedReceiver, UnboundedSender},
+        channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender},
         executor::block_on,
         future::{self, Either},
         io::{AsyncReadExt, AsyncWriteExt},
-        pin_mut, Future, StreamExt,
+        stream::{FuturesUnordered, StreamExt},
+        FutureExt,
     };
     use imap_codec::{
+        decode::Decoder,
         encode::{Encoder, Fragment},
-        imap_types, ResponseCodec,
+        imap_types, CommandCodec, ResponseCodec,
     };
     use imap_types::{
-        core::{LiteralMode, NString},
+        auth::AuthMechanism,
+        core::{LiteralMode, NString, Vec1},
         fetch::MessageDataItem,
-        response::{Data, Response},
+        response::{Capability, Code, CommandContinuationRequest, Data, Response, Status},
     };
     use melib::{backends::prelude::*, imap::*, parser::BytesExt, smol::Async, Mail};
 
+    #[derive(Debug)]
     pub enum SessionState {
-        // Unauthenticated,
+        Unauthenticated,
         Authenticated,
         SelectedMailbox,
+        ExaminedMailbox,
     }
 
+    impl SessionState {
+        #[inline(always)]
+        pub const fn is_authenticated(&self) -> bool {
+            !matches!(self, Self::Unauthenticated)
+        }
+
+        #[inline(always)]
+        pub const fn is_selected(&self) -> bool {
+            matches!(self, Self::SelectedMailbox | Self::ExaminedMailbox)
+        }
+    }
+
+    #[derive(Debug)]
     /// Server state with only one mailbox (INBOX).
     pub struct ServerState {
         pub envelopes: IndexMap<UID, Mail>,
@@ -70,24 +90,66 @@ pub mod server {
     }
 
     impl ServerState {
-        pub fn insert(&mut self, new: Box<Mail>) -> (usize, UID) {
+        pub fn insert(&mut self, new: Box<Mail>) -> UID {
             let uid = self.next_uid;
             self.envelopes.insert(uid, *new);
-            let msn = self.envelopes.len();
             self.next_uid += 1;
-            (msn, uid)
+            uid
+        }
+
+        fn recv(&mut self, server_event: ServerEvent) -> StreamEvent {
+            match server_event {
+                ServerEvent::Quit => StreamEvent::Quit,
+                ServerEvent::New(new_mail) => {
+                    let uid = self.insert(new_mail);
+                    StreamEvent::Untagged(UntaggedEvent::New(uid))
+                }
+                ServerEvent::Delete(uid, on_success) => {
+                    eprintln!(
+                        "removing uid = {uid} mail = {:?}",
+                        self.envelopes.shift_remove(&uid)
+                    );
+                    _ = on_success.send(true);
+                    StreamEvent::Untagged(UntaggedEvent::Delete(uid))
+                }
+                ServerEvent::Expunge(reply) => {
+                    let uids = self
+                        .envelopes
+                        .iter()
+                        .filter_map(|(uid, env)| {
+                            if env.flags.is_trashed() {
+                                Some(*uid)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<UID>>();
+                    for uid in &uids {
+                        eprintln!(
+                            "removing uid = {uid} mail = {:?}",
+                            self.envelopes.shift_remove(uid)
+                        );
+                    }
+                    _ = reply.send(uids.clone());
+
+                    StreamEvent::Untagged(UntaggedEvent::Deletes(uids))
+                }
+                ServerEvent::WaitForCommand(cmd, notifier) => {
+                    StreamEvent::WaitForCommand(cmd, notifier)
+                }
+            }
         }
     }
 
     trait AsImapResponseItem {
-        fn as_envelope(&'_ self) -> imap_types::envelope::Envelope<'_>;
-        fn as_flags(&'_ self) -> Vec<imap_types::flag::FlagFetch<'_>>;
-        fn as_bodystructure(&'_ self) -> imap_types::body::BodyStructure<'_>;
-        fn as_body_peek_references(&self) -> imap_types::fetch::MessageDataItem<'_>;
+        fn as_envelope(&self) -> imap_types::envelope::Envelope<'static>;
+        fn as_flags(&self) -> Vec<imap_types::flag::FlagFetch<'static>>;
+        fn as_bodystructure(&self) -> imap_types::body::BodyStructure<'static>;
+        fn as_body_peek_references(&self) -> imap_types::fetch::MessageDataItem<'static>;
     }
 
     impl AsImapResponseItem for Mail {
-        fn as_envelope(&'_ self) -> imap_types::envelope::Envelope<'_> {
+        fn as_envelope(&self) -> imap_types::envelope::Envelope<'static> {
             macro_rules! address {
                 ($a:expr) => {{
                     imap_types::envelope::Address {
@@ -113,7 +175,7 @@ pub mod server {
                 }};
             }
             imap_types::envelope::Envelope {
-                date: self.date_as_str().try_into().unwrap(),
+                date: self.date_as_str().to_string().try_into().unwrap(),
                 subject: self.subject().as_ref().to_string().try_into().unwrap(),
                 from: self.from().iter().map(|a| address! {a}).collect(),
                 sender: self.from().iter().map(|a| address! {a}).collect(),
@@ -126,7 +188,7 @@ pub mod server {
             }
         }
 
-        fn as_flags(&'_ self) -> Vec<imap_types::flag::FlagFetch<'_>> {
+        fn as_flags(&self) -> Vec<imap_types::flag::FlagFetch<'static>> {
             let flags: Vec<imap_types::flag::Flag<'static>> = self.flags().into();
             flags
                 .into_iter()
@@ -134,7 +196,7 @@ pub mod server {
                 .collect()
         }
 
-        fn as_bodystructure(&'_ self) -> imap_types::body::BodyStructure<'_> {
+        fn as_bodystructure(&self) -> imap_types::body::BodyStructure<'static> {
             imap_types::body::BodyStructure::Single {
                 body: imap_types::body::Body {
                     basic: imap_types::body::BasicFields {
@@ -153,7 +215,7 @@ pub mod server {
             }
         }
 
-        fn as_body_peek_references(&self) -> imap_types::fetch::MessageDataItem<'_> {
+        fn as_body_peek_references(&self) -> imap_types::fetch::MessageDataItem<'static> {
             imap_types::fetch::MessageDataItem::BodyExt {
                 section: Some(imap_types::fetch::Section::HeaderFields(
                     None,
@@ -172,116 +234,269 @@ pub mod server {
     #[derive(Debug)]
     pub enum ServerEvent {
         New(Box<Mail>),
-        Delete(UID),
+        Delete(UID, futures::channel::oneshot::Sender<bool>),
+        Expunge(futures::channel::oneshot::Sender<Vec<UID>>),
+        WaitForCommand(
+            &'static str,
+            Arc<Mutex<Option<futures::channel::oneshot::Sender<()>>>>,
+        ),
         Quit,
     }
 
-    pub struct ImapServerStream {
-        pub tcp_stream: Async<TcpStream>,
+    #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+    enum UntaggedEvent {
+        New(UID),
+        Delete(UID),
+        Deletes(Vec<UID>),
+    }
+
+    #[derive(Clone)]
+    enum StreamEvent {
+        Untagged(UntaggedEvent),
+        WaitForCommand(
+            &'static str,
+            Arc<Mutex<Option<futures::channel::oneshot::Sender<()>>>>,
+        ),
+        Quit,
+    }
+
+    #[derive(Clone)]
+    pub struct ImapServerConfig {
+        pub capabilities: Vec1<Capability<'static>>,
+        pub authenticated_capabilities: Vec1<Capability<'static>>,
+    }
+
+    pub struct ImapServer {
+        pub listener: Async<TcpListener>,
         pub command_receiver: UnboundedReceiver<ServerEvent>,
         pub command_sender: UnboundedSender<ServerEvent>,
         pub state: Arc<Mutex<ServerState>>,
-        pub session_state: SessionState,
-        pub buf: Vec<u8>,
+        pub config: ImapServerConfig,
     }
 
-    impl ImapServerStream {
-        pub fn new<T: 'static, F: Future<Output = T> + std::marker::Unpin>(
-            listener: &Async<TcpListener>,
-            fut: F,
+    impl ImapServer {
+        pub fn new(
+            listener: Async<TcpListener>,
             (command_sender, command_receiver): (
                 UnboundedSender<ServerEvent>,
                 UnboundedReceiver<ServerEvent>,
             ),
             state: Arc<Mutex<ServerState>>,
         ) -> Self {
-            let mut buf = vec![0; 64 * 1024];
-            let tcp_stream = {
-                let (mut tcp_stream, next_fut) = {
-                    let accept_fut = listener.accept();
-                    pin_mut!(accept_fut);
-
-                    match block_on(future::select(fut, accept_fut)) {
-                        Either::Left((_, _)) => {
-                            unreachable!();
-                        }
-                        Either::Right((value2, fut)) => (value2.unwrap().0, fut),
-                    }
-                };
-                {
-                    let read_fut = tcp_stream.read(&mut buf);
-                    pin_mut!(read_fut);
-                    let next_fut = match block_on(future::select(next_fut, read_fut)) {
-                        Either::Left((_, _)) => {
-                            unreachable!();
-                        }
-                        Either::Right((value2, fut)) => {
-                            let read_bytes = value2.unwrap();
-                            assert_eq!(&buf[..read_bytes], b"M1 CAPABILITY\r\n");
-                            fut
-                        }
-                    };
-                    block_on(tcp_stream.write_all(
-                            b"* CAPABILITY IMAP4rev1 AUTH=PLAIN SASL-IR\r\nM1 OK CAPABILITY completed\r\n",
-                        ))
-                        .unwrap();
-                    let read_fut = tcp_stream.read(&mut buf);
-                    pin_mut!(read_fut);
-                    let next_fut = match block_on(future::select(next_fut, read_fut)) {
-                        Either::Left((_, _)) => {
-                            unreachable!();
-                        }
-                        Either::Right((value2, fut)) => {
-                            let read_bytes = value2.unwrap();
-                            assert_eq!(
-                                &buf[..read_bytes],
-                                b"M2 AUTHENTICATE PLAIN AHVzZXIAcGFzc3dvcmQ=\r\n"
-                            );
-                            fut
-                        }
-                    };
-                    block_on(tcp_stream.write_all(b"M2 OK Success\r\n")).unwrap();
-                    let read_fut = tcp_stream.read(&mut buf);
-                    pin_mut!(read_fut);
-                    match block_on(future::select(next_fut, read_fut)) {
-                        Either::Left((_, _)) => {
-                            unreachable!();
-                        }
-                        Either::Right((value2, _)) => {
-                            let read_bytes = value2.unwrap();
-                            assert_eq!(&buf[..read_bytes], b"M3 CAPABILITY\r\n");
-                        }
-                    };
-                    block_on(
-                        tcp_stream.write_all(
-                            b"* CAPABILITY IMAP4rev1 ID IDLE ENABLE\r\nM3 OK Success\r\n",
-                        ),
-                    )
-                    .unwrap();
-                    tcp_stream
-                }
-            };
+            let capabilities = vec![
+                Capability::Imap4Rev1,
+                Capability::Auth(AuthMechanism::Plain),
+                Capability::SaslIr,
+                Capability::Id,
+            ]
+            .try_into()
+            .unwrap();
+            let authenticated_capabilities = vec![
+                Capability::Imap4Rev1,
+                Capability::Id,
+                Capability::Idle,
+                Capability::Enable,
+            ]
+            .try_into()
+            .unwrap();
             Self {
-                tcp_stream,
-                command_receiver,
+                listener,
                 command_sender,
+                command_receiver,
                 state,
-                session_state: SessionState::Authenticated,
-                buf,
+                config: ImapServerConfig {
+                    capabilities,
+                    authenticated_capabilities,
+                },
             }
         }
 
-        pub async fn loop_handler(self, name: &'static str) {
-            let Self {
-                mut tcp_stream,
-                mut command_receiver,
-                command_sender,
+        pub fn spawn(self) -> std::thread::JoinHandle<()> {
+            struct StreamHandle {
+                join_handle: std::thread::JoinHandle<()>,
+                sender: UnboundedSender<StreamEvent>,
+            }
+            std::thread::spawn(move || {
+                block_on(async move {
+                    let Self {
+                        listener,
+                        command_sender,
+                        mut command_receiver,
+                        state,
+                        config,
+                    } = self;
+
+                    let mut streams: HashMap<usize, StreamHandle> = HashMap::new();
+                    let mut queue = VecDeque::new();
+                    #[derive(Debug)]
+                    enum FutResult {
+                        Event(UnboundedReceiver<ServerEvent>, ServerEvent),
+                        NewStream(Async<TcpListener>, Async<TcpStream>),
+                    }
+                    let mut fut_set: FuturesUnordered<futures::future::BoxFuture<'_, FutResult>> =
+                        FuturesUnordered::new();
+                    fut_set.push(
+                        {
+                            async move {
+                                let (stream, _) = listener.accept().await.unwrap();
+                                FutResult::NewStream(listener, stream)
+                            }
+                        }
+                        .boxed(),
+                    );
+                    fut_set.push(
+                        {
+                            async move {
+                                let command = command_receiver.next().await.unwrap();
+                                FutResult::Event(command_receiver, command)
+                            }
+                        }
+                        .boxed(),
+                    );
+                    'server_loop: loop {
+                        while let Some(server_event) = queue.pop_front() {
+                            let quit = matches!(server_event, ServerEvent::Quit);
+                            let event = state.lock().unwrap().recv(server_event);
+                            for stream in streams.values_mut() {
+                                stream.sender.unbounded_send(event.clone()).unwrap();
+                            }
+                            if quit {
+                                break 'server_loop;
+                            }
+                        }
+                        if let Some(next) = fut_set.next().await {
+                            match next {
+                                FutResult::NewStream(listener, tcp_stream) => {
+                                    fut_set.push(
+                                        {
+                                            async move {
+                                                let (stream, _) = listener.accept().await.unwrap();
+                                                FutResult::NewStream(listener, stream)
+                                            }
+                                        }
+                                        .boxed(),
+                                    );
+                                    let idx = streams.len();
+                                    let (sender, stream_receiver) = unbounded();
+                                    let mut stream = ImapServerStream::new(
+                                        tcp_stream,
+                                        state.clone(),
+                                        command_sender.clone(),
+                                        config.clone(),
+                                        stream_receiver,
+                                    );
+                                    let join_handle = std::thread::spawn(move || {
+                                        block_on(async move { while !stream.next().await {} });
+                                    });
+                                    streams.insert(
+                                        idx,
+                                        StreamHandle {
+                                            sender,
+                                            join_handle,
+                                        },
+                                    );
+                                }
+                                FutResult::Event(mut command_receiver, server_event) => {
+                                    queue.push_back(server_event);
+                                    fut_set.push(
+                                        {
+                                            async move {
+                                                let command =
+                                                    command_receiver.next().await.unwrap();
+                                                FutResult::Event(command_receiver, command)
+                                            }
+                                        }
+                                        .boxed(),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    eprintln!("waiting on {} stream handles", streams.len());
+                    for handle in streams.into_values() {
+                        handle.join_handle.join().unwrap();
+                    }
+                })
+            })
+        }
+    }
+
+    #[derive(Eq, Hash, PartialEq)]
+    enum Untagged {
+        Exists,
+        Expunge(UID),
+    }
+
+    struct ImapServerStream {
+        tcp_stream: Async<TcpStream>,
+        idle_cmd_id: Option<String>,
+        state: Arc<Mutex<ServerState>>,
+        stream_receiver: UnboundedReceiver<StreamEvent>,
+        server_sender: UnboundedSender<ServerEvent>,
+        session_state: SessionState,
+        config: ImapServerConfig,
+        untagged: VecDeque<Untagged>,
+        our_untagged: HashSet<UntaggedEvent>,
+        #[allow(clippy::type_complexity)]
+        command_notifiers: Vec<(
+            &'static str,
+            Arc<Mutex<Option<futures::channel::oneshot::Sender<()>>>>,
+        )>,
+        msn_map: MessageSequenceNumberMap,
+        buf: Vec<u8>,
+        buf_start: usize,
+        buf_end: usize,
+        events: VecDeque<StreamEvent>,
+    }
+
+    impl std::fmt::Debug for ImapServerStream {
+        fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fmt.debug_struct("ImapServerStream")
+                .field("tcp_stream", &self.tcp_stream)
+                .field("idle_cmd_id", &self.idle_cmd_id)
+                .field("state", &self.state)
+                .field("session_state", &self.session_state)
+                .finish_non_exhaustive()
+        }
+    }
+
+    impl ImapServerStream {
+        fn new(
+            tcp_stream: Async<TcpStream>,
+            state: Arc<Mutex<ServerState>>,
+            server_sender: UnboundedSender<ServerEvent>,
+            config: ImapServerConfig,
+            stream_receiver: UnboundedReceiver<StreamEvent>,
+        ) -> Self {
+            let msn_map = {
+                let mut msn_map = MessageSequenceNumberMap::default();
+                let state_lck = state.lock().unwrap();
+                for uid in state_lck.envelopes.keys() {
+                    let new_exists = msn_map.exists().copied().unwrap_or(0) + 1;
+                    assert!(msn_map.insert(new_exists, *uid));
+                }
+                msn_map
+            };
+            Self {
+                tcp_stream,
+                idle_cmd_id: None,
                 state,
-                mut session_state,
-                mut buf,
-            } = self;
-            let mut buf_start = 0;
-            let mut buf_end = 0;
+                server_sender,
+                session_state: SessionState::Unauthenticated,
+                config,
+                untagged: Default::default(),
+                our_untagged: Default::default(),
+                command_notifiers: vec![],
+                msn_map,
+                stream_receiver,
+                buf: vec![0; 64 * 1024],
+                buf_start: 0,
+                buf_end: 0,
+                events: VecDeque::new(),
+            }
+        }
+
+        async fn next(&mut self) -> bool {
             async fn read_line<'a>(
                 tcp_stream: &mut Async<TcpStream>,
                 buf: &'a mut [u8],
@@ -327,624 +542,741 @@ pub mod server {
                 }
             }
             'outer: loop {
-                let idle_cmd_id = 'main: loop {
-                    let mut read_fut = Box::pin(read_line(
-                        &mut tcp_stream,
-                        &mut buf,
-                        &mut buf_start,
-                        &mut buf_end,
-                    ));
-                    let input = match future::select(&mut read_fut, command_receiver.next()).await {
-                        Either::Left((value1, _)) => {
-                            if value1.is_none() {
-                                continue 'main;
-                            }
-                            drop(read_fut);
-                            value1.unwrap()
-                        }
-                        Either::Right((command, _)) => {
-                            drop(read_fut);
-                            let command = command.unwrap();
-                            if matches!(command, ServerEvent::Quit) {
-                                tcp_stream.write_all(b"* BYE world\r\n").await.unwrap();
-                                tcp_stream.flush().await.unwrap();
-                                eprintln!(
-                                    "{name} loop_handler received ServerEvent::Quit from 'main"
-                                );
-                                break 'outer;
-                            }
-                            command_sender.unbounded_send(command).unwrap();
-                            continue 'main;
-                        }
-                    };
-                    let line = String::from_utf8_lossy(input).to_string();
-                    eprintln!("{name} loop_handler 'main received: {line:?}");
-                    let (id, cmd) = line.split_once(' ').unwrap();
-                    match cmd {
-                        "IDLE\r\n" => {
-                            break 'main id.to_string();
-                        }
-                        "NOOP\r\n" => {
-                            tcp_stream.write_all(id.as_bytes()).await.unwrap();
-                            tcp_stream
-                                .write_all(b" OK NOOP completed\r\n")
-                                .await
-                                .unwrap();
-                            tcp_stream.flush().await.unwrap();
-                        }
-                        "LOGOUT\r\n" => {
-                            tcp_stream.write_all(b"* BYE world\r\n").await.unwrap();
-                            tcp_stream.write_all(id.as_bytes()).await.unwrap();
-                            tcp_stream
-                                .write_all(b" OK LOGOUT completed\r\n")
-                                .await
-                                .unwrap();
-                            tcp_stream.flush().await.unwrap();
-                            eprintln!("{name} loop_handler received LOGOUT from 'main");
-                            break 'outer;
-                        }
-                        "LIST \"\" *\r\n" => {
-                            tcp_stream
-                                .write_all(b"* LIST () \"/\" \"inbox\"\r\n")
-                                .await
-                                .unwrap();
-                            tcp_stream.write_all(id.as_bytes()).await.unwrap();
-                            tcp_stream
-                                .write_all(b" OK LIST completed\r\n")
-                                .await
-                                .unwrap();
-                            tcp_stream.flush().await.unwrap();
-                        }
-                        "LSUB \"\" *\r\n" => {
-                            tcp_stream
-                                .write_all(b"* LSUB () \".\" \"inbox\"\r\n")
-                                .await
-                                .unwrap();
-                            tcp_stream.write_all(id.as_bytes()).await.unwrap();
-                            tcp_stream
-                                .write_all(b" OK LSUB completed\r\n")
-                                .await
-                                .unwrap();
-                            tcp_stream.flush().await.unwrap();
-                        }
-                        "EXAMINE INBOX\r\n" => {
-                            session_state = SessionState::SelectedMailbox;
-                            let (exists, recent, uidvalidity) = {
-                                let state_lck = state.lock().unwrap();
-                                let uidvalidity = state_lck.uidvalidity;
-                                let exists = state_lck.envelopes.len();
-                                let recent = 0;
-                                (exists, recent, uidvalidity)
-                            };
-                            tcp_stream
-                                .write_all(
-                                    format!(
-                                        "* {exists} EXISTS\r\n* {recent} RECENT\r\n* OK \
-                                         [UIDVALIDITY {uidvalidity}] UIDs valid\r\n* FLAGS \
-                                         (\\Answered \\Flagged \\Deleted \\Seen \\Draft)\r\n* OK \
-                                         [PERMANENTFLAGS ()] No permanent flags permitted\r\n{id} \
-                                         OK [READ-ONLY] EXAMINE completed\r\n"
-                                    )
-                                    .as_bytes(),
-                                )
-                                .await
-                                .unwrap();
-                            tcp_stream.flush().await.unwrap();
-                        }
-                        "SELECT INBOX\r\n" => {
-                            session_state = SessionState::SelectedMailbox;
-                            let (exists, recent, uidvalidity) = {
-                                let state_lck = state.lock().unwrap();
-                                let uidvalidity = state_lck.uidvalidity;
-                                let exists = state_lck.envelopes.len();
-                                let recent = 0;
-                                (exists, recent, uidvalidity)
-                            };
-                            tcp_stream
-                                .write_all(
-                                    format!(
-                                        "* {exists} EXISTS\r\n* {recent} RECENT\r\n* OK \
-                                         [UIDVALIDITY {uidvalidity}] UIDs valid\r\n* FLAGS \
-                                         (\\Answered \\Flagged \\Deleted \\Seen \\Draft)\r\n* OK \
-                                         [PERMANENTFLAGS ()] No permanent flags permitted\r\n{id} \
-                                         OK SELECT completed\r\n"
-                                    )
-                                    .as_bytes(),
-                                )
-                                .await
-                                .unwrap();
-                            tcp_stream.flush().await.unwrap();
-                        }
-                        "UNSELECT\r\n" => {
-                            if !matches!(session_state, SessionState::SelectedMailbox) {
-                                tcp_stream.write_all(id.as_bytes()).await.unwrap();
-                                tcp_stream
-                                    .write_all(b" BAD no mailbox is selected\r\n")
-                                    .await
-                                    .unwrap();
-                                tcp_stream.flush().await.unwrap();
-                                continue 'main;
-                            }
-                            session_state = SessionState::Authenticated;
-                            tcp_stream.write_all(id.as_bytes()).await.unwrap();
-                            tcp_stream
-                                .write_all(b" OK UNSELECT succeeded\r\n")
-                                .await
-                                .unwrap();
-                            tcp_stream.flush().await.unwrap();
-                        }
-                        "CLOSE\r\n" => {
-                            session_state = SessionState::Authenticated;
-                            tcp_stream.write_all(id.as_bytes()).await.unwrap();
-                            tcp_stream
-                                .write_all(b" OK CLOSE succeeded\r\n")
-                                .await
-                                .unwrap();
-                            tcp_stream.flush().await.unwrap();
-                        }
-                        "EXPUNGE\r\n" => {
-                            if !matches!(session_state, SessionState::SelectedMailbox) {
-                                tcp_stream.write_all(id.as_bytes()).await.unwrap();
-                                tcp_stream
-                                    .write_all(b" BAD no mailbox is selected\r\n")
-                                    .await
-                                    .unwrap();
-                                tcp_stream.flush().await.unwrap();
-                                continue 'main;
-                            }
-                            tcp_stream.write_all(id.as_bytes()).await.unwrap();
-                            tcp_stream
-                                .write_all(b" OK EXPUNGE succeeded\r\n")
-                                .await
-                                .unwrap();
-                            tcp_stream.flush().await.unwrap();
-                        }
-                        "UID SEARCH 1:*\r\n" => {
-                            if !matches!(session_state, SessionState::SelectedMailbox) {
-                                tcp_stream.write_all(id.as_bytes()).await.unwrap();
-                                tcp_stream
-                                    .write_all(b" BAD no mailbox is selected\r\n")
-                                    .await
-                                    .unwrap();
-                                tcp_stream.flush().await.unwrap();
-                                continue 'main;
-                            }
-                            let uids = state
-                                .lock()
-                                .unwrap()
-                                .envelopes
-                                .iter()
-                                .map(|(u, _)| *u)
-                                .collect::<Vec<_>>();
-                            if uids.is_empty() {
-                                tcp_stream.write_all(b"* SEARCH\r\n").await.unwrap();
-                            } else {
-                                tcp_stream.write_all(b"* SEARCH ").await.unwrap();
-                                for uid in uids {
-                                    tcp_stream
-                                        .write_all(format!("{uid}").as_bytes())
-                                        .await
-                                        .unwrap();
-                                }
-                                tcp_stream.write_all(b"\r\n").await.unwrap();
-                            }
-                            tcp_stream.write_all(id.as_bytes()).await.unwrap();
-                            tcp_stream
-                                .write_all(b" OK SEARCH completed\r\n")
-                                .await
-                                .unwrap();
-                            tcp_stream.flush().await.unwrap();
-                        }
-                        "SEARCH UNSEEN\r\n" => {
-                            if !matches!(session_state, SessionState::SelectedMailbox) {
-                                tcp_stream.write_all(id.as_bytes()).await.unwrap();
-                                tcp_stream
-                                    .write_all(b" BAD no mailbox is selected\r\n")
-                                    .await
-                                    .unwrap();
-                                tcp_stream.flush().await.unwrap();
-                                continue 'main;
-                            }
-                            let msns = state
-                                .lock()
-                                .unwrap()
-                                .envelopes
-                                .values()
-                                .enumerate()
-                                .filter(|(_, env)| !env.is_seen())
-                                .map(|(i, _)| i + 1)
-                                .collect::<Vec<_>>();
-                            if msns.is_empty() {
-                                tcp_stream.write_all(b"* SEARCH\r\n").await.unwrap();
-                            } else {
-                                tcp_stream.write_all(b"* SEARCH ").await.unwrap();
-                                for msn in msns {
-                                    tcp_stream
-                                        .write_all(format!("{msn}").as_bytes())
-                                        .await
-                                        .unwrap();
-                                }
-                                tcp_stream.write_all(b"\r\n").await.unwrap();
-                            }
-                            tcp_stream.write_all(id.as_bytes()).await.unwrap();
-                            tcp_stream
-                                .write_all(b" OK SEARCH completed\r\n")
-                                .await
-                                .unwrap();
-                            tcp_stream.flush().await.unwrap();
-                        }
-                        "STATUS INBOX (UIDNEXT)\r\n" => {
-                            let uidnext = state.lock().unwrap().next_uid;
-                            tcp_stream
-                                .write_all(
-                                    format!("* STATUS INBOX (UIDNEXT {uidnext})\r\n").as_bytes(),
-                                )
-                                .await
-                                .unwrap();
-                            tcp_stream.write_all(id.as_bytes()).await.unwrap();
-                            tcp_stream
-                                .write_all(b" OK STATUS completed\r\n")
-                                .await
-                                .unwrap();
-                            tcp_stream.flush().await.unwrap();
-                        }
-                        fetch
-                            if fetch.starts_with("FETCH ")
-                                && fetch.ends_with(
-                                    " (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] \
-                                     BODYSTRUCTURE)\r\n",
-                                ) =>
-                        {
-                            if !matches!(session_state, SessionState::SelectedMailbox) {
-                                tcp_stream.write_all(id.as_bytes()).await.unwrap();
-                                tcp_stream
-                                    .write_all(b" BAD no mailbox is selected\r\n")
-                                    .await
-                                    .unwrap();
-                                tcp_stream.flush().await.unwrap();
-                                continue 'main;
-                            }
-                            let msn_to_fetch = fetch
-                                .strip_prefix("FETCH ")
-                                .unwrap()
-                                .strip_suffix(
-                                    " (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] \
-                                     BODYSTRUCTURE)\r\n",
-                                )
-                                .unwrap()
-                                .parse::<usize>()
-                                .unwrap();
-                            eprintln!("{name} loop_handler got FETCH for msn {msn_to_fetch}");
-                            let Some((uid, mail)) = state
-                                .lock()
-                                .unwrap()
-                                .envelopes
-                                .get_index(msn_to_fetch.saturating_sub(1))
-                                .map(|(u, m)| (*u, m.clone()))
-                            else {
-                                tcp_stream.write_all(id.as_bytes()).await.unwrap();
-                                tcp_stream
-                                    .write_all(b" BAD msn not found\r\n")
-                                    .await
-                                    .unwrap();
-                                tcp_stream.flush().await.unwrap();
-                                continue 'main;
-                            };
-                            let references = mail.as_body_peek_references();
-                            let response = Response::Data(Data::Fetch {
-                                seq: (msn_to_fetch as u32).try_into().unwrap(),
-                                items: vec![
-                                    MessageDataItem::Uid((uid as u32).try_into().unwrap()),
-                                    MessageDataItem::Flags(mail.as_flags()),
-                                    MessageDataItem::Envelope(mail.as_envelope()),
-                                    MessageDataItem::BodyStructure(mail.as_bodystructure()),
-                                    references,
-                                ]
-                                .try_into()
-                                .unwrap(),
-                            });
-                            eprintln!(
-                                "fragment raw: {:?}",
-                                String::from_utf8_lossy(
-                                    &ResponseCodec::new().encode(&response).dump()
-                                )
-                            );
-                            for fragment in ResponseCodec::new().encode(&response) {
-                                match fragment {
-                                    Fragment::Line { data } => {
-                                        tcp_stream.write_all(&data).await.unwrap();
-                                        tcp_stream.flush().await.unwrap();
-                                    }
-                                    Fragment::Literal { data, mode } => match mode {
-                                        LiteralMode::Sync => {
-                                            // Wait for a continuation request.
-                                            todo!()
-                                        }
-                                        LiteralMode::NonSync => {
-                                            // We don't need to wait for a continuation request
-                                            // as the server will also not send it.
-                                            tcp_stream.write_all(&data).await.unwrap();
-                                            tcp_stream.flush().await.unwrap();
-                                        }
-                                    },
-                                }
-                            }
-                            tcp_stream
-                                .write_all(format!("{id} OK FETCH completed\r\n").as_bytes())
-                                .await
-                                .unwrap();
-                            tcp_stream.flush().await.unwrap();
-                        }
-                        uid_fetch
-                            if uid_fetch.starts_with("UID FETCH ")
-                                && uid_fetch.ends_with(" FLAGS\r\n") =>
-                        {
-                            if !matches!(session_state, SessionState::SelectedMailbox) {
-                                tcp_stream.write_all(id.as_bytes()).await.unwrap();
-                                tcp_stream
-                                    .write_all(b" BAD no mailbox is selected\r\n")
-                                    .await
-                                    .unwrap();
-                                tcp_stream.flush().await.unwrap();
-                                continue 'main;
-                            }
-                            let sequence_set = Self::parse_sequence_set(
-                                uid_fetch
-                                    .strip_prefix("UID FETCH ")
-                                    .unwrap()
-                                    .strip_suffix(" FLAGS\r\n")
-                                    .unwrap(),
-                            );
-                            eprintln!("{name} loop_handler got UID FETCH flags {sequence_set:?}");
-                            let largest = state.lock().unwrap().next_uid.saturating_sub(1) as u32;
-                            'uid_fetch_flags: for uid in
-                                sequence_set.iter(largest.try_into().unwrap())
-                            {
-                                let Some(mail) = state
-                                    .lock()
-                                    .unwrap()
-                                    .envelopes
-                                    .get(&(uid.get() as usize))
-                                    .cloned()
-                                else {
-                                    continue 'uid_fetch_flags;
-                                };
-                                let response = Response::Data(Data::Fetch {
-                                    seq: uid,
-                                    items: vec![
-                                        MessageDataItem::Uid(uid),
-                                        MessageDataItem::Flags(mail.as_flags()),
-                                    ]
-                                    .try_into()
-                                    .unwrap(),
-                                });
-                                //eprintln!(
-                                //    "fragment raw: {:?}",
-                                //    String::from_utf8_lossy(
-                                //        &ResponseCodec::new().encode(&response).dump()
-                                //    )
-                                //);
-                                for fragment in ResponseCodec::new().encode(&response) {
-                                    match fragment {
-                                        Fragment::Line { data } => {
-                                            tcp_stream.write_all(&data).await.unwrap();
-                                            tcp_stream.flush().await.unwrap();
-                                        }
-                                        Fragment::Literal { data, mode } => match mode {
-                                            LiteralMode::Sync => {
-                                                // Wait for a continuation request.
-                                                todo!()
-                                            }
-                                            LiteralMode::NonSync => {
-                                                // We don't need to wait for a continuation request
-                                                // as the server will also not send it.
-                                                tcp_stream.write_all(&data).await.unwrap();
-                                                tcp_stream.flush().await.unwrap();
-                                            }
-                                        },
-                                    }
-                                }
-                            }
-                            tcp_stream
-                                .write_all(
-                                    format!("{id} OK UID FETCH flags completed\r\n").as_bytes(),
-                                )
-                                .await
-                                .unwrap();
-                            tcp_stream.flush().await.unwrap();
-                        }
-                        uid_fetch
-                            if uid_fetch.starts_with("UID FETCH ")
-                                && uid_fetch.ends_with(
-                                    " (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] \
-                                     BODYSTRUCTURE)\r\n",
-                                ) =>
-                        {
-                            if !matches!(session_state, SessionState::SelectedMailbox) {
-                                tcp_stream.write_all(id.as_bytes()).await.unwrap();
-                                tcp_stream
-                                    .write_all(b" BAD no mailbox is selected\r\n")
-                                    .await
-                                    .unwrap();
-                                tcp_stream.flush().await.unwrap();
-                                continue 'main;
-                            }
-                            let sequence_set = Self::parse_sequence_set(
-                                uid_fetch
-                                    .strip_prefix("UID FETCH ")
-                                    .unwrap()
-                                    .strip_suffix(
-                                        " (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS \
-                                         (REFERENCES)] BODYSTRUCTURE)\r\n",
-                                    )
-                                    .unwrap(),
-                            );
-
-                            eprintln!("{name} loop_handler got UID FETCH {sequence_set:?}");
-                            let largest = state.lock().unwrap().next_uid.saturating_sub(1) as u32;
-                            'uid_fetch: for uid in sequence_set.iter(largest.try_into().unwrap()) {
-                                let Some(mail) = state
-                                    .lock()
-                                    .unwrap()
-                                    .envelopes
-                                    .get(&(uid.get() as usize))
-                                    .cloned()
-                                else {
-                                    continue 'uid_fetch;
-                                };
-                                let references = mail.as_body_peek_references();
-                                let response = Response::Data(Data::Fetch {
-                                    seq: uid,
-                                    items: vec![
-                                        MessageDataItem::Uid(uid),
-                                        MessageDataItem::Flags(mail.as_flags()),
-                                        MessageDataItem::Envelope(mail.as_envelope()),
-                                        MessageDataItem::BodyStructure(mail.as_bodystructure()),
-                                        references,
-                                    ]
-                                    .try_into()
-                                    .unwrap(),
-                                });
-                                //eprintln!(
-                                //    "fragment raw: {:?}",
-                                //    String::from_utf8_lossy(
-                                //        &ResponseCodec::new().encode(&response).dump()
-                                //    )
-                                //);
-                                for fragment in ResponseCodec::new().encode(&response) {
-                                    match fragment {
-                                        Fragment::Line { data } => {
-                                            tcp_stream.write_all(&data).await.unwrap();
-                                            tcp_stream.flush().await.unwrap();
-                                        }
-                                        Fragment::Literal { data, mode } => match mode {
-                                            LiteralMode::Sync => {
-                                                // Wait for a continuation request.
-                                                todo!()
-                                            }
-                                            LiteralMode::NonSync => {
-                                                // We don't need to wait for a continuation request
-                                                // as the server will also not send it.
-                                                tcp_stream.write_all(&data).await.unwrap();
-                                                tcp_stream.flush().await.unwrap();
-                                            }
-                                        },
-                                    }
-                                }
-                            }
-                            tcp_stream
-                                .write_all(format!("{id} OK UID FETCH completed\r\n").as_bytes())
-                                .await
-                                .unwrap();
-                            tcp_stream.flush().await.unwrap();
-                        }
-                        other => panic!("Unexpected cmd: {id} {other:?}"),
-                    }
-                };
-                eprintln!("{name} loop_handler is now idling");
-                tcp_stream.write_all(b"+ idling\r\n").await.unwrap();
-                tcp_stream.flush().await.unwrap();
-                'idle: loop {
-                    let mut read_fut = Box::pin(read_line(
-                        &mut tcp_stream,
-                        &mut buf,
-                        &mut buf_start,
-                        &mut buf_end,
-                    ));
-                    let input = match future::select(&mut read_fut, command_receiver.next()).await {
-                        Either::Left((value1, _)) => {
-                            if value1.is_none() {
-                                continue 'idle;
-                            }
-                            drop(read_fut);
-                            value1.unwrap()
-                        }
-                        Either::Right((value2, _)) => {
-                            drop(read_fut);
-                            match value2.unwrap() {
-                                ServerEvent::New(new_mail) => {
-                                    let exists_msn = {
-                                        let mut state_lck = state.lock().unwrap();
-                                        let (msn, new_uid) = state_lck.insert(new_mail);
-                                        eprintln!("{name} EXISTS uid = {new_uid} msn = {msn}");
-                                        msn
-                                    };
-                                    tcp_stream
-                                        .write_all(format!("* {exists_msn} EXISTS\r\n").as_bytes())
-                                        .await
-                                        .unwrap();
-                                    tcp_stream.flush().await.unwrap();
-                                }
-                                ServerEvent::Delete(uid) => {
-                                    let msn = {
-                                        let mut state_lck = state.lock().unwrap();
-                                        let msn =
-                                            state_lck.envelopes.get_index_of(&uid).unwrap() + 1;
-                                        eprintln!(
-                                            "{name} removing msn = {} uid = {} mail = {:?}",
-                                            msn,
-                                            uid,
-                                            state_lck.envelopes.shift_remove(&uid)
-                                        );
-                                        msn
-                                    };
+                if let Some(ret) = self.recv().await {
+                    return ret;
+                }
+                let Self {
+                    ref mut tcp_stream,
+                    ref mut idle_cmd_id,
+                    ref state,
+                    ref mut session_state,
+                    ref config,
+                    ref mut buf,
+                    ref mut events,
+                    ref mut command_notifiers,
+                    ref mut stream_receiver,
+                    ref mut server_sender,
+                    ref mut buf_start,
+                    ref mut buf_end,
+                    ref mut untagged,
+                    ref mut our_untagged,
+                    ref mut msn_map,
+                } = self;
+                if let Some(ref idle_cmd_id) = idle_cmd_id {
+                    {
+                        let mut silence_exists = false;
+                        while let Some(untagged) = untagged.pop_front() {
+                            match untagged {
+                                Untagged::Expunge(uid) => {
+                                    let msn = msn_map.get(&uid).copied().unwrap();
+                                    assert_eq!(msn_map.expunge(&msn), Some(uid));
                                     tcp_stream
                                         .write_all(format!("* {msn} EXPUNGE\r\n").as_bytes())
                                         .await
                                         .unwrap();
                                     tcp_stream.flush().await.unwrap();
+                                    silence_exists = false;
                                 }
-                                ServerEvent::Quit => {
-                                    tcp_stream.write_all(b"* BYE world\r\n").await.unwrap();
-                                    tcp_stream.write_all(idle_cmd_id.as_bytes()).await.unwrap();
-                                    tcp_stream
-                                        .write_all(b" OK IDLE terminated\r\n")
-                                        .await
-                                        .unwrap();
-                                    tcp_stream.flush().await.unwrap();
-                                    eprintln!(
-                                        "{name} loop_handler received ServerEvent::Quit from 'main"
-                                    );
-                                    break 'outer;
+                                Untagged::Exists => {
+                                    if !silence_exists {
+                                        if let Some(exists) = msn_map.exists() {
+                                            tcp_stream
+                                                .write_all(
+                                                    format!("* {exists} EXISTS\r\n").as_bytes(),
+                                                )
+                                                .await
+                                                .unwrap();
+                                            tcp_stream.flush().await.unwrap();
+                                        }
+                                        silence_exists = true;
+                                    }
                                 }
                             }
-                            continue 'idle;
+                        }
+                    }
+                    let mut read_fut = Box::pin(read_line(tcp_stream, buf, buf_start, buf_end));
+                    let input = match future::select(&mut read_fut, stream_receiver.next()).await {
+                        Either::Left((value1, _)) => {
+                            if value1.is_none() {
+                                continue 'outer;
+                            }
+                            drop(read_fut);
+                            value1.unwrap()
+                        }
+                        Either::Right((event, _)) => {
+                            drop(read_fut);
+                            events.push_back(event.unwrap());
+                            continue 'outer;
                         }
                     };
                     let input = String::from_utf8_lossy(input).to_string();
-                    eprintln!("{name} loop_handler 'idle received: {input:?}");
+                    eprintln!("loop_handler 'idle received: {input:?}");
                     if input == "DONE\r\n" {
                         tcp_stream.write_all(idle_cmd_id.as_bytes()).await.unwrap();
                         tcp_stream
                             .write_all(b" OK IDLE terminated\r\n")
                             .await
                             .unwrap();
-                        continue 'outer;
+                        self.idle_cmd_id.take();
+                        return false;
                     }
+                } else {
+                    let mut read_fut = Box::pin(read_line(tcp_stream, buf, buf_start, buf_end));
+                    let input = match future::select(&mut read_fut, stream_receiver.next()).await {
+                        Either::Left((value1, _)) => {
+                            if value1.is_none() {
+                                continue 'outer;
+                            }
+                            drop(read_fut);
+                            value1.unwrap()
+                        }
+                        Either::Right((event, _)) => {
+                            drop(read_fut);
+                            events.push_back(event.unwrap());
+                            continue 'outer;
+                        }
+                    };
+                    let line = String::from_utf8_lossy(input).to_string();
+                    eprintln!("loop_handler 'main received: {line:?}");
+                    let codec = CommandCodec::new();
+                    let (remainder, cmd) = codec.decode(line.as_bytes()).unwrap();
+                    assert_eq!(remainder, b"");
+                    let id = cmd.tag;
+
+                    use imap_types::command::CommandBody;
+
+                    let mut logout = false;
+
+                    let mut responses = vec![];
+                    {
+                        let mut silence_exists = false;
+                        while let Some(untagged) = untagged.pop_front() {
+                            match untagged {
+                                Untagged::Expunge(uid) => {
+                                    let msn = msn_map.get(&uid).copied().unwrap();
+                                    assert_eq!(msn_map.expunge(&msn), Some(uid));
+                                    responses.push(Response::Data(Data::Expunge(
+                                        (msn as u32).try_into().unwrap(),
+                                    )));
+                                    silence_exists = false;
+                                }
+                                Untagged::Exists => {
+                                    if !silence_exists {
+                                        if let Some(exists) = msn_map.exists().copied() {
+                                            responses
+                                                .push(Response::Data(Data::Exists(exists as u32)));
+                                        }
+                                        silence_exists = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    match cmd.body {
+                        CommandBody::Id { parameters: _ } => {
+                            if !config
+                                .capabilities
+                                .as_ref()
+                                .iter()
+                                .any(|c| c == &Capability::Id)
+                            {
+                                responses.push(Response::Status(
+                                    Status::bad(Some(id), None, "unknown command").unwrap(),
+                                ));
+                            } else {
+                                responses.push(Response::Data(Data::Id { parameters: None }));
+                                responses.push(Response::Status(
+                                    Status::ok(Some(id), None, "ID completed").unwrap(),
+                                ));
+                            }
+                        }
+                        CommandBody::Capability => {
+                            responses.push(Response::Data(Data::Capability(
+                                if !session_state.is_authenticated() {
+                                    config.capabilities.clone()
+                                } else {
+                                    config.authenticated_capabilities.clone()
+                                },
+                            )));
+                            responses.push(Response::Status(
+                                Status::ok(Some(id), None, "CAPABILITY completed").unwrap(),
+                            ));
+                        }
+                        CommandBody::Authenticate {
+                            mechanism,
+                            initial_response,
+                        } => {
+                            if !session_state.is_authenticated() {
+                                assert_eq!(mechanism, AuthMechanism::Plain);
+                                let initial_response = initial_response.expect("password");
+                                let password = initial_response.declassify();
+                                assert_eq!(password.as_ref(), b"\0user\0password");
+                                *session_state = SessionState::Authenticated;
+                            } else {
+                                unimplemented!();
+                            }
+                            responses.push(Response::Status(
+                                Status::ok(Some(id), None, "Welcome").unwrap(),
+                            ));
+                        }
+                        CommandBody::Idle => {
+                            while let Some(pos) =
+                                command_notifiers.iter().position(|(k, _)| *k == "IDLE")
+                            {
+                                let (_, notifier) = command_notifiers.remove(pos);
+                                if let Some(notifier) = notifier.lock().unwrap().take() {
+                                    _ = notifier.send(());
+                                };
+                            }
+                            *idle_cmd_id = Some(id.inner().to_string());
+                            eprintln!("loop_handler is now idling");
+                            responses.push(Response::CommandContinuationRequest(
+                                CommandContinuationRequest::basic(None, "now idling").unwrap(),
+                            ));
+                        }
+                        CommandBody::Noop => {
+                            responses.push(Response::Status(
+                                Status::ok(Some(id), None, "NOOP completed").unwrap(),
+                            ));
+                        }
+                        CommandBody::Logout => {
+                            responses
+                                .push(Response::Status(Status::bye(None, "cruel world").unwrap()));
+                            responses.push(Response::Status(
+                                Status::ok(Some(id), None, "LOGOUT completed").unwrap(),
+                            ));
+                            logout = true;
+                        }
+                        // "LIST \"\" *\r\n"
+                        CommandBody::List {
+                            ref reference,
+                            ref mailbox_wildcard,
+                        } if (reference, mailbox_wildcard)
+                            == (
+                                &imap_types::mailbox::Mailbox::Other("".try_into().unwrap()),
+                                &imap_types::mailbox::ListMailbox::Token("*".try_into().unwrap()),
+                            ) =>
+                        {
+                            responses.push(Response::Data(Data::List {
+                                items: vec![],
+                                delimiter: Some('/'.try_into().unwrap()),
+                                mailbox: imap_types::mailbox::Mailbox::Inbox,
+                            }));
+                            responses.push(Response::Status(
+                                Status::ok(Some(id), None, "LIST completed").unwrap(),
+                            ));
+                        }
+                        // "LSUB \"\" *\r\n"
+                        CommandBody::Lsub {
+                            ref reference,
+                            ref mailbox_wildcard,
+                        } if (reference, mailbox_wildcard)
+                            == (
+                                &imap_types::mailbox::Mailbox::Other("".try_into().unwrap()),
+                                &imap_types::mailbox::ListMailbox::Token("*".try_into().unwrap()),
+                            ) =>
+                        {
+                            responses.push(Response::Data(Data::Lsub {
+                                items: vec![],
+                                delimiter: Some('/'.try_into().unwrap()),
+                                mailbox: imap_types::mailbox::Mailbox::Inbox,
+                            }));
+                            responses.push(Response::Status(
+                                Status::ok(Some(id), None, "LSUB completed").unwrap(),
+                            ));
+                        }
+                        CommandBody::Select {
+                            ref mailbox,
+                            ref parameters,
+                        }
+                        | CommandBody::Examine {
+                            ref mailbox,
+                            ref parameters,
+                        } => {
+                            // 6.3.1.  SELECT Command
+                            // 6.3.2.  EXAMINE Command
+                            assert_eq!(parameters, &[]);
+                            assert_eq!(mailbox, &imap_types::mailbox::Mailbox::Inbox);
+
+                            let is_select = matches!(cmd.body, CommandBody::Select { .. });
+                            *session_state = if is_select {
+                                SessionState::SelectedMailbox
+                            } else {
+                                SessionState::ExaminedMailbox
+                            };
+                            let (exists, recent, uidvalidity, uidnext, unseen) = {
+                                let state_lck = state.lock().unwrap();
+                                let uidnext = state_lck.next_uid;
+                                let uidvalidity = state_lck.uidvalidity;
+                                let exists = state_lck.envelopes.len();
+                                let unseen = state_lck
+                                    .envelopes
+                                    .values()
+                                    .filter(|env| !env.is_seen())
+                                    .count();
+                                let recent = 0;
+                                (exists, recent, uidvalidity, uidnext, unseen)
+                            };
+
+                            // REQUIRED untagged responses: FLAGS, EXISTS, RECENT
+                            responses.push(Response::Data(Data::Flags(vec![
+                                imap_types::flag::Flag::Answered,
+                                imap_types::flag::Flag::Flagged,
+                                imap_types::flag::Flag::Deleted,
+                                imap_types::flag::Flag::Seen,
+                                imap_types::flag::Flag::Draft,
+                            ])));
+                            responses.push(Response::Data(Data::Exists(exists as u32)));
+                            responses.push(Response::Data(Data::Recent(recent as u32)));
+                            // REQUIRED OK untagged responses:  UNSEEN,  PERMANENTFLAGS, UIDNEXT,
+                            // UIDVALIDITY
+                            if let Some(unseen) = NonZeroU32::new(unseen as u32) {
+                                responses.push(Response::Status(
+                                    Status::ok(None, Some(Code::Unseen(unseen)), "Unseen").unwrap(),
+                                ));
+                            }
+                            responses.push(Response::Status(
+                                Status::ok(
+                                    None,
+                                    Some(Code::PermanentFlags(vec![])),
+                                    "No permanent flags permitted",
+                                )
+                                .unwrap(),
+                            ));
+                            responses.push(Response::Status(
+                                Status::ok(
+                                    None,
+                                    Some(Code::UidNext((uidnext as u32).try_into().unwrap())),
+                                    "Next UID",
+                                )
+                                .unwrap(),
+                            ));
+                            responses.push(Response::Status(
+                                Status::ok(
+                                    None,
+                                    Some(Code::UidValidity(
+                                        (uidvalidity as u32).try_into().unwrap(),
+                                    )),
+                                    "UIDs valid",
+                                )
+                                .unwrap(),
+                            ));
+                            if is_select {
+                                responses.push(Response::Status(
+                                    Status::ok(Some(id), None, "SELECT completed").unwrap(),
+                                ));
+                            } else {
+                                responses.push(Response::Status(
+                                    Status::ok(Some(id), Some(Code::ReadOnly), "EXAMINE completed")
+                                        .unwrap(),
+                                ));
+                            }
+                        }
+                        CommandBody::Unselect => {
+                            if !session_state.is_selected() {
+                                responses.push(Response::Status(
+                                    Status::bad(Some(id), None, "no mailbox is selected").unwrap(),
+                                ));
+                            } else {
+                                *session_state = SessionState::Authenticated;
+                                responses.push(Response::Status(
+                                    Status::ok(Some(id), None, "UNSELECT completed").unwrap(),
+                                ));
+                            }
+                        }
+                        CommandBody::Close => {
+                            if matches!(session_state, SessionState::SelectedMailbox) {
+                                // 6.4.1.  CLOSE Command
+                                let (s, r) = futures::channel::oneshot::channel();
+                                server_sender
+                                    .unbounded_send(ServerEvent::Expunge(s))
+                                    .unwrap();
+                                let expunged = r.await.unwrap();
+                                eprintln!("CLOSE silently expunged following uids: {expunged:?}");
+                                our_untagged.insert(UntaggedEvent::Deletes(expunged));
+                            }
+
+                            *session_state = SessionState::Authenticated;
+                            responses.push(Response::Status(
+                                Status::ok(Some(id), None, "CLOSE completed").unwrap(),
+                            ));
+                        }
+                        CommandBody::Expunge => {
+                            if matches!(session_state, SessionState::ExaminedMailbox) {
+                                responses.push(Response::Status(
+                                    Status::no(Some(id), None, "mailbox is selected read-only")
+                                        .unwrap(),
+                                ));
+                            } else if !matches!(session_state, SessionState::SelectedMailbox) {
+                                responses.push(Response::Status(
+                                    Status::bad(Some(id), None, "no mailbox is selected").unwrap(),
+                                ));
+                            } else {
+                                {
+                                    let (s, r) = futures::channel::oneshot::channel();
+                                    server_sender
+                                        .unbounded_send(ServerEvent::Expunge(s))
+                                        .unwrap();
+                                    let expunged = r.await.unwrap();
+                                    for uid in &expunged {
+                                        let msn = msn_map.get(uid).copied().unwrap();
+                                        assert_eq!(msn_map.expunge(&msn), Some(*uid));
+                                        responses.push(Response::Data(Data::Expunge(
+                                            (msn as u32).try_into().unwrap(),
+                                        )));
+                                    }
+                                    our_untagged.insert(UntaggedEvent::Deletes(expunged));
+                                }
+                                responses.push(Response::Status(
+                                    Status::ok(Some(id), None, "EXPUNGE completed").unwrap(),
+                                ));
+                            }
+                        }
+                        // "UID SEARCH 1:*\r\n"
+                        CommandBody::Search {
+                            charset: None,
+                            criteria,
+                            uid: true,
+                        } if criteria
+                            == imap_types::search::SearchKey::SequenceSet(
+                                "1:*".try_into().unwrap(),
+                            )
+                            .into() =>
+                        {
+                            if !session_state.is_selected() {
+                                responses.push(Response::Status(
+                                    Status::bad(Some(id), None, "no mailbox is selected").unwrap(),
+                                ));
+                            } else {
+                                let uids = state
+                                    .lock()
+                                    .unwrap()
+                                    .envelopes
+                                    .iter()
+                                    .map(|(u, _)| (*u as u32).try_into().unwrap())
+                                    .collect::<Vec<_>>();
+                                responses.push(Response::Data(Data::Search(uids, None)));
+                                responses.push(Response::Status(
+                                    Status::ok(Some(id), None, "SEARCH completed").unwrap(),
+                                ));
+                            }
+                        }
+                        CommandBody::Search {
+                            charset: None,
+                            criteria,
+                            uid: false,
+                        } if criteria == imap_types::search::SearchKey::Unseen.into() => {
+                            if !session_state.is_selected() {
+                                responses.push(Response::Status(
+                                    Status::bad(Some(id), None, "no mailbox is selected").unwrap(),
+                                ));
+                            } else {
+                                let msns = {
+                                    let state_lck = state.lock().unwrap();
+                                    state_lck
+                                        .envelopes
+                                        .iter()
+                                        .filter(|(_, env)| !env.is_seen())
+                                        .map(|(uid, _)| {
+                                            (*msn_map.get(uid).unwrap() as u32).try_into().unwrap()
+                                        })
+                                        .collect::<Vec<_>>()
+                                };
+                                responses.push(Response::Data(Data::Search(msns, None)));
+                                responses.push(Response::Status(
+                                    Status::ok(Some(id), None, "SEARCH completed").unwrap(),
+                                ));
+                            }
+                        }
+                        CommandBody::Status {
+                            mailbox: imap_types::mailbox::Mailbox::Inbox,
+                            item_names,
+                        } if item_names.as_ref()
+                            == [imap_types::status::StatusDataItemName::UidNext] =>
+                        {
+                            let uidnext = state.lock().unwrap().next_uid;
+                            responses.push(Response::Data(Data::Status {
+                                mailbox: imap_types::mailbox::Mailbox::Inbox,
+                                items: vec![imap_types::status::StatusDataItem::UidNext(
+                                    (uidnext as u32).try_into().unwrap(),
+                                )]
+                                .into(),
+                            }));
+                            responses.push(Response::Status(
+                                Status::ok(Some(id), None, "STATUS completed").unwrap(),
+                            ));
+                        }
+                        CommandBody::Fetch {
+                            sequence_set,
+                            macro_or_item_names,
+                            modifiers: _,
+                            uid: false,
+                        } if macro_or_item_names == melib::imap::email::common_attributes().1 => {
+                            if !session_state.is_selected() {
+                                responses.push(Response::Status(
+                                    Status::bad(Some(id), None, "no mailbox is selected").unwrap(),
+                                ));
+                            } else {
+                                let largest = state.lock().unwrap().envelopes.len() as u32 + 1;
+                                'msn_fetch: for msn in
+                                    sequence_set.iter(largest.try_into().unwrap())
+                                {
+                                    let Some((uid, mail)) = state
+                                        .lock()
+                                        .unwrap()
+                                        .envelopes
+                                        .get_index(msn.get().saturating_sub(1) as usize)
+                                        .map(|(u, m)| (*u, m.clone()))
+                                    else {
+                                        continue 'msn_fetch;
+                                    };
+                                    let references = mail.as_body_peek_references();
+                                    responses.push(Response::Data(Data::Fetch {
+                                        seq: msn,
+                                        items: vec![
+                                            MessageDataItem::Uid((uid as u32).try_into().unwrap()),
+                                            MessageDataItem::Flags(mail.as_flags()),
+                                            MessageDataItem::Envelope(mail.as_envelope()),
+                                            MessageDataItem::BodyStructure(mail.as_bodystructure()),
+                                            references,
+                                        ]
+                                        .try_into()
+                                        .unwrap(),
+                                    }));
+                                }
+                                responses.push(Response::Status(
+                                    Status::ok(Some(id), None, "FETCH completed").unwrap(),
+                                ));
+                            }
+                        }
+                        CommandBody::Fetch {
+                            sequence_set,
+                            macro_or_item_names,
+                            modifiers: _,
+                            uid: true,
+                        } if macro_or_item_names
+                            == vec![imap_types::fetch::MessageDataItemName::Flags].into() =>
+                        {
+                            if !session_state.is_selected() {
+                                responses.push(Response::Status(
+                                    Status::bad(Some(id), None, "no mailbox is selected").unwrap(),
+                                ));
+                            } else {
+                                let largest =
+                                    state.lock().unwrap().next_uid.saturating_sub(1) as u32;
+                                'uid_fetch_flags: for uid in
+                                    sequence_set.iter(largest.try_into().unwrap())
+                                {
+                                    let Some(mail) = state
+                                        .lock()
+                                        .unwrap()
+                                        .envelopes
+                                        .get(&(uid.get() as usize))
+                                        .cloned()
+                                    else {
+                                        continue 'uid_fetch_flags;
+                                    };
+                                    responses.push(Response::Data(Data::Fetch {
+                                        seq: uid,
+                                        items: vec![
+                                            MessageDataItem::Uid(uid),
+                                            MessageDataItem::Flags(mail.as_flags()),
+                                        ]
+                                        .try_into()
+                                        .unwrap(),
+                                    }));
+                                }
+                                responses.push(Response::Status(
+                                    Status::ok(Some(id), None, "FETCH flags completed").unwrap(),
+                                ));
+                            }
+                        }
+                        CommandBody::Fetch {
+                            sequence_set,
+                            macro_or_item_names,
+                            modifiers: _,
+                            uid: true,
+                        } if macro_or_item_names == melib::imap::email::common_attributes().1 => {
+                            if !session_state.is_selected() {
+                                responses.push(Response::Status(
+                                    Status::bad(Some(id), None, "no mailbox is selected").unwrap(),
+                                ));
+                            } else {
+                                let largest =
+                                    state.lock().unwrap().next_uid.saturating_sub(1) as u32;
+                                'uid_fetch: for uid in
+                                    sequence_set.iter(largest.try_into().unwrap())
+                                {
+                                    let Some(mail) = state
+                                        .lock()
+                                        .unwrap()
+                                        .envelopes
+                                        .get(&(uid.get() as usize))
+                                        .cloned()
+                                    else {
+                                        continue 'uid_fetch;
+                                    };
+                                    let references = mail.as_body_peek_references();
+                                    responses.push(Response::Data(Data::Fetch {
+                                        seq: uid,
+                                        items: vec![
+                                            MessageDataItem::Uid(uid),
+                                            MessageDataItem::Flags(mail.as_flags()),
+                                            MessageDataItem::Envelope(mail.as_envelope()),
+                                            MessageDataItem::BodyStructure(mail.as_bodystructure()),
+                                            references,
+                                        ]
+                                        .try_into()
+                                        .unwrap(),
+                                    }));
+                                }
+                                responses.push(Response::Status(
+                                    Status::ok(Some(id), None, "UID FETCH completed").unwrap(),
+                                ));
+                            }
+                        }
+                        CommandBody::Store {
+                            sequence_set,
+                            kind,
+                            flags,
+                            response: imap_types::flag::StoreResponse::Answer,
+                            modifiers: _,
+                            uid: true,
+                        } => {
+                            {
+                                let mut state_lck = state.lock().unwrap();
+                                let largest = state_lck.envelopes.len() as u32 + 1;
+                                for uid in sequence_set.iter(largest.try_into().unwrap()) {
+                                    match kind {
+                                        imap_types::flag::StoreType::Add => {
+                                            for flag in &flags {
+                                                match flag {
+                                                    imap_types::flag::Flag::Deleted => {
+                                                        if let Some(env) = state_lck
+                                                            .envelopes
+                                                            .get_mut(&(uid.get() as usize))
+                                                        {
+                                                            env.envelope
+                                                                .set_flag(Flag::TRASHED, true);
+                                                        }
+                                                    }
+                                                    other => unimplemented!("{other:?}"),
+                                                }
+                                            }
+                                        }
+                                        other => unimplemented!("{other:?}"),
+                                    }
+                                }
+                            }
+                            responses.push(Response::Status(
+                                Status::ok(Some(id), None, "UID STORE completed").unwrap(),
+                            ));
+                        }
+                        other => panic!("Unexpected cmd: {id:?} {other:?}"),
+                    }
+                    for response in responses {
+                        for fragment in ResponseCodec::new().encode(&response) {
+                            match fragment {
+                                Fragment::Line { data } => {
+                                    tcp_stream.write_all(&data).await.unwrap();
+                                    tcp_stream.flush().await.unwrap();
+                                }
+                                Fragment::Literal { data, mode } => match mode {
+                                    LiteralMode::Sync => {
+                                        // Wait for a continuation request.
+                                        todo!()
+                                    }
+                                    LiteralMode::NonSync => {
+                                        // We don't need to wait for a continuation request
+                                        // as the server will also not send it.
+                                        tcp_stream.write_all(&data).await.unwrap();
+                                        tcp_stream.flush().await.unwrap();
+                                    }
+                                },
+                            }
+                        }
+                    }
+                    return logout;
                 }
+                return false;
             }
         }
 
-        fn parse_sequence_set(set: &str) -> imap_types::sequence::SequenceSet {
-            use imap_types::sequence::{SeqOrUid, Sequence, SequenceSet};
-
-            if set.contains(':') {
-                let [a, b]: [SeqOrUid; 2] = set
-                    .split(":")
-                    .map(|n| {
-                        if n == "*" {
-                            SeqOrUid::Asterisk
+        async fn recv(&mut self) -> Option<bool> {
+            let Self {
+                ref mut tcp_stream,
+                ref mut idle_cmd_id,
+                ref mut events,
+                ref mut stream_receiver,
+                ref mut untagged,
+                ref mut our_untagged,
+                ref mut msn_map,
+                ref mut command_notifiers,
+                ..
+            } = self;
+            while let Ok(event) = stream_receiver.try_recv() {
+                events.push_back(event);
+            }
+            let any = !events.is_empty();
+            while let Some(event) = events.pop_front() {
+                if let StreamEvent::Untagged(ref untagged) = event {
+                    if our_untagged.remove(untagged) {
+                        continue;
+                    }
+                }
+                match event {
+                    StreamEvent::Quit => {
+                        if let Some(idle_cmd_id) = idle_cmd_id.take() {
+                            eprintln!("IDLE loop_handler received ServerEvent::Quit from 'main");
+                            tcp_stream
+                                .write_all(b"* BYE cruel world\r\n")
+                                .await
+                                .unwrap();
+                            tcp_stream.write_all(idle_cmd_id.as_bytes()).await.unwrap();
+                            tcp_stream
+                                .write_all(b" OK IDLE terminated\r\n")
+                                .await
+                                .unwrap();
+                            tcp_stream.flush().await.unwrap();
                         } else {
-                            SeqOrUid::Value(n.parse::<u32>().unwrap().try_into().unwrap())
+                            eprintln!("main loop_handler received ServerEvent::Quit");
+                            tcp_stream
+                                .write_all(b"* BYE cruel world\r\n")
+                                .await
+                                .unwrap();
+                            tcp_stream.flush().await.unwrap();
                         }
-                    })
-                    .collect::<Vec<SeqOrUid>>()
-                    .try_into()
-                    .unwrap();
-                SequenceSet::try_from(vec![Sequence::Range(a, b)]).unwrap()
+                        return Some(true);
+                    }
+                    StreamEvent::Untagged(UntaggedEvent::New(uid)) => {
+                        assert_eq!(msn_map.get(&uid), None);
+                        let new_exists = msn_map.exists().copied().unwrap_or(0) + 1;
+                        assert!(msn_map.insert(new_exists, uid));
+                        untagged.push_back(Untagged::Exists);
+                    }
+                    StreamEvent::Untagged(UntaggedEvent::Delete(uid)) => {
+                        untagged.push_back(Untagged::Expunge(uid));
+                    }
+                    StreamEvent::Untagged(UntaggedEvent::Deletes(uids)) => {
+                        for uid in uids {
+                            untagged.push_back(Untagged::Expunge(uid));
+                        }
+                    }
+                    StreamEvent::WaitForCommand(cmd, notifier) => {
+                        if cmd == "IDLE" && idle_cmd_id.is_some() {
+                            if let Some(notifier) = notifier.lock().unwrap().take() {
+                                _ = notifier.send(());
+                            };
+                        } else {
+                            command_notifiers.push((cmd, notifier));
+                        }
+                    }
+                }
+            }
+            if any {
+                Some(false)
             } else {
-                let item = set.parse::<u32>().unwrap().try_into().unwrap();
-                SequenceSet::try_from(vec![Sequence::Single(item)]).unwrap()
+                None
             }
         }
     }
@@ -952,15 +1284,15 @@ pub mod server {
 
 mod tests {
     use std::{
+        collections::VecDeque,
         net::TcpListener,
         sync::{Arc, Mutex},
     };
 
     use futures::{
-        channel::mpsc::unbounded,
+        channel::mpsc::{unbounded, UnboundedSender},
         executor::block_on,
-        future::{self, Either},
-        pin_mut, StreamExt,
+        StreamExt,
     };
     use melib::{
         backends::prelude::*,
@@ -972,22 +1304,18 @@ mod tests {
 
     use super::server::*;
 
-    /// Test that `ImapType::watch` `Stream` returns the expected `Refresh`
-    /// events when altering the mail store in the IMAP server.
-    pub(crate) fn run_imap_watch() {
-        let mut _logger = Logger::new_with(LogLevel::TRACE, true);
+    struct ImapTest {
+        _logger: Logger,
+        _temp_dir: TempDir,
+        server_state: Arc<Mutex<ServerState>>,
+        server_sender: UnboundedSender<ServerEvent>,
+        account_conf: AccountSettings,
+        imap_server_handle: std::thread::JoinHandle<()>,
+    }
+
+    fn setup(initial_envelopes: Vec<Mail>) -> ImapTest {
+        let _logger = Logger::new_with(LogLevel::TRACE, true);
         let temp_dir = TempDir::new().unwrap();
-        let backend_event_queue =
-            Arc::new(Mutex::new(std::collections::VecDeque::with_capacity(16)));
-
-        let backend_event_consumer = {
-            let backend_event_queue = Arc::clone(&backend_event_queue);
-
-            BackendEventConsumer::new(Arc::new(move |ah, be| {
-                eprintln!("BackendEventConsumer: ah {ah:?} be {be:?}");
-                backend_event_queue.lock().unwrap().push_back((ah, be));
-            }))
-        };
 
         for var in [
             "HOME",
@@ -1013,14 +1341,29 @@ mod tests {
             std::env::set_var(var, &dir);
         }
 
+        let next_uid = initial_envelopes.len() + 1;
+        let envelopes = initial_envelopes
+            .into_iter()
+            .enumerate()
+            .map(|(i, env)| (i + 1, env))
+            .collect();
         let server_state = Arc::new(Mutex::new(ServerState {
-            envelopes: indexmap::indexmap! {},
-            next_uid: 1,
+            envelopes,
+            next_uid,
             uidvalidity: 1,
         }));
 
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let local_addr = listener.local_addr().unwrap();
+        let (server_sender, server_receiver) = unbounded();
+        let listener = smol::Async::new(listener).unwrap();
+        let imap_server_handle = ImapServer::new(
+            listener,
+            (server_sender.clone(), server_receiver),
+            Arc::clone(&server_state),
+        )
+        .spawn();
+
         let account_conf = AccountSettings {
             name: "test".to_string(),
             root_mailbox: "INBOX".to_string(),
@@ -1041,47 +1384,59 @@ mod tests {
                 "use_tls".to_string() => "false".to_string(),
                 // Important for testing, because we expect only one connection to be used.
                 "use_connection_pool".to_string() => "false".to_string(),
-                "timeout".to_string() => 1_u64.to_string(),
+                "timeout".to_string() => 0_u64.to_string(),
             },
+        };
+
+        ImapTest {
+            _logger,
+            _temp_dir: temp_dir,
+            server_state,
+            server_sender,
+            imap_server_handle,
+            account_conf,
+        }
+    }
+
+    /// Test that `ImapType::watch` `Stream` returns the expected `Refresh`
+    /// events when altering the mail store in the IMAP server.
+    pub(crate) fn run_imap_watch() {
+        let ImapTest {
+            _logger,
+            _temp_dir,
+            server_state,
+            server_sender,
+            account_conf,
+            imap_server_handle,
+        } = setup(vec![]);
+
+        let backend_event_queue = Arc::new(Mutex::new(VecDeque::with_capacity(16)));
+
+        let backend_event_consumer = {
+            let backend_event_queue = Arc::clone(&backend_event_queue);
+
+            BackendEventConsumer::new(Arc::new(move |ah, be| {
+                eprintln!("BackendEventConsumer: ah {ah:?} be {be:?}");
+                backend_event_queue.lock().unwrap().push_back((ah, be));
+            }))
         };
 
         let mut imap =
             ImapType::new(&account_conf, Default::default(), backend_event_consumer).unwrap();
-        let listener = smol::Async::new(listener).unwrap();
-        let mut is_online_fut = imap.is_online().unwrap();
-        let (main_conn_sender, main_conn_receiver) = unbounded();
-        let main_conn = ImapServerStream::new(
-            &listener,
-            &mut is_online_fut,
-            (main_conn_sender.clone(), main_conn_receiver),
-            Arc::clone(&server_state),
-        );
-        block_on(is_online_fut).unwrap();
-        let mut mailboxes_fut = imap.mailboxes().unwrap();
-        let mut main_conn_loop = Box::pin(main_conn.loop_handler("main"));
-        let mailboxes = match block_on(future::select(
-            mailboxes_fut.as_mut(),
-            main_conn_loop.as_mut(),
-        )) {
-            Either::Left((value1, _)) => value1.unwrap(),
-            Either::Right((value2, _)) => {
-                unreachable!("{:?}", value2);
-            }
-        };
-        let inbox_hash = *mailboxes.keys().next().unwrap();
+        let fut = async move {
+            assert_eq!(
+                imap.mailboxes().unwrap().await.unwrap_err(),
+                Error::new("Offline")
+            );
+            imap.is_online().unwrap().await.unwrap();
+            let mut watch_fut = imap.watch().unwrap().into_future();
+            let mailboxes = imap.mailboxes().unwrap().await.unwrap();
+            let inbox_hash = *mailboxes.keys().next().unwrap();
 
-        let mut watch_fut = imap.watch().unwrap().into_future();
-        let (watch_conn_sender, watch_conn_receiver) = unbounded();
-        let watch_conn = ImapServerStream::new(
-            &listener,
-            &mut watch_fut,
-            (watch_conn_sender.clone(), watch_conn_receiver),
-            Arc::clone(&server_state),
-        );
-        // $ date -R -u -r 0
-        let new_mail = Box::new(
-            Mail::new(
-                br#"From: "some name" <some@example.com>
+            // $ date -R -u -r 0
+            let new_mail = Box::new(
+                Mail::new(
+                    br#"From: "some name" <some@example.com>
 To: "me" <myself@example.com>
 Date: Thu, 01 Jan 1970 00:00:00 +0000
 Cc:
@@ -1091,14 +1446,14 @@ Content-Type: text/plain
 
 hello world.
 "#
-                .to_vec(),
-                None,
-            )
-            .unwrap(),
-        );
-        let new_mail_2 = Box::new(
-            Mail::new(
-                br#"From: "some name" <some@example.com>
+                    .to_vec(),
+                    None,
+                )
+                .unwrap(),
+            );
+            let new_mail_2 = Box::new(
+                Mail::new(
+                    br#"From: "some name" <some@example.com>
 To: "me" <myself@example.com>
 Cc:
 Date: Thu, 01 Jan 1970 00:00:01 +0000
@@ -1108,14 +1463,14 @@ Content-Type: text/plain
 
 hello world 2.
 "#
-                .to_vec(),
-                None,
-            )
-            .unwrap(),
-        );
-        let new_mail_3 = Box::new(
-            Mail::new(
-                br#"From: "some name" <some@example.com>
+                    .to_vec(),
+                    None,
+                )
+                .unwrap(),
+            );
+            let new_mail_3 = Box::new(
+                Mail::new(
+                    br#"From: "some name" <some@example.com>
 To: "me" <myself@example.com>
 Cc:
 Date: Thu, 01 Jan 1970 00:00:02 +0000
@@ -1125,30 +1480,55 @@ Content-Type: text/plain
 
 hello world 3.
 "#
-                .to_vec(),
-                None,
+                    .to_vec(),
+                    None,
+                )
+                .unwrap(),
+            );
+            assert!(melib::utils::futures::timeout(
+                Some(std::time::Duration::from_millis(10)),
+                &mut watch_fut
             )
-            .unwrap(),
-        );
-        watch_conn_sender
-            .unbounded_send(ServerEvent::New(new_mail.clone()))
-            .unwrap();
-        watch_conn_sender
-            .unbounded_send(ServerEvent::New(new_mail_2.clone()))
-            .unwrap();
-        watch_conn_sender
-            .unbounded_send(ServerEvent::New(new_mail_3.clone()))
-            .unwrap();
-        let watch_conn_loop = watch_conn.loop_handler("watch");
-        let loops = loops_fut(main_conn_loop, watch_conn_loop);
-        let loops_handle = std::thread::spawn(move || {
-            block_on(loops);
-        });
-        let fut = async move {
+            .await
+            .is_err());
+            let wait_handle = std::thread::spawn({
+                let server_sender = server_sender.clone();
+                let new_mail = new_mail.clone();
+                let new_mail_2 = new_mail_2.clone();
+                let new_mail_3 = new_mail_3.clone();
+                move || {
+                    block_on(async move {
+                        let (w_s, w_r) = futures::channel::oneshot::channel();
+                        server_sender
+                            .unbounded_send(ServerEvent::WaitForCommand(
+                                "IDLE",
+                                Arc::new(Mutex::new(Some(w_s))),
+                            ))
+                            .unwrap();
+                        eprintln!("waiting for IDLE..");
+                        _ = w_r.await;
+                        eprintln!("done waiting for IDLE");
+                        server_sender
+                            .unbounded_send(ServerEvent::New(new_mail.clone()))
+                            .unwrap();
+                        server_sender
+                            .unbounded_send(ServerEvent::New(new_mail_2.clone()))
+                            .unwrap();
+                        server_sender
+                            .unbounded_send(ServerEvent::New(new_mail_3.clone()))
+                            .unwrap();
+                    });
+                }
+            });
             let hash;
             let mut refresh_events = vec![];
             while refresh_events.len() < 3 {
-                let (value1, rest) = watch_fut.await;
+                let (value1, rest) = melib::utils::futures::timeout(
+                    Some(std::time::Duration::from_secs(5)),
+                    watch_fut,
+                )
+                .await
+                .unwrap();
                 let backend_event = value1.unwrap().unwrap();
                 match backend_event {
                     BackendEvent::RefreshBatch(events) => {
@@ -1163,6 +1543,7 @@ hello world 3.
                 }
                 watch_fut = rest.into_future();
             }
+            wait_handle.join().unwrap();
             {
                 let mailbox = imap.uid_store.mailboxes.lock().await;
                 let exists_lck = mailbox.values().next().unwrap().exists.lock().unwrap();
@@ -1217,12 +1598,21 @@ hello world 3.
                         })
                         .unwrap()
                 };
-                watch_conn_sender
-                    .unbounded_send(ServerEvent::Delete(uid))
+                // Simulate another client deleting an email
+                server_sender
+                    .unbounded_send(ServerEvent::Delete(
+                        uid,
+                        futures::channel::oneshot::channel().0,
+                    ))
                     .unwrap();
             }
             let watch_fut = {
-                let (value1, rest) = watch_fut.await;
+                let (value1, rest) = melib::utils::futures::timeout(
+                    Some(std::time::Duration::from_secs(5)),
+                    watch_fut,
+                )
+                .await
+                .unwrap();
                 let backend_event = value1.unwrap().unwrap();
                 let BackendEvent::Refresh(refresh_event) = backend_event else {
                     panic!("Expected Refresh event, got: {backend_event:?}");
@@ -1262,11 +1652,23 @@ hello world 3.
                 }
                 assert_eq!(envelopes, expected);
             }
-            watch_conn_sender.unbounded_send(ServerEvent::Quit).unwrap();
-            main_conn_sender.unbounded_send(ServerEvent::Quit).unwrap();
-            loops_handle.join().unwrap();
-            let (mut value1, rest) = watch_fut.await;
+            server_sender.unbounded_send(ServerEvent::Quit).unwrap();
+            imap_server_handle.join().unwrap();
+            let (mut value1, rest) =
+                melib::utils::futures::timeout(Some(std::time::Duration::from_secs(5)), watch_fut)
+                    .await
+                    .unwrap();
             let watch_fut = rest.into_future();
+            let err_check_fn = |err: &Error| -> bool {
+                matches!(
+                    err.kind,
+                    ErrorKind::OSError(nix::errno::Errno::EPIPE | nix::errno::Errno::ECONNRESET)
+                ) || err.summary == "Disconnected"
+                    || matches!(
+                        err.kind,
+                        ErrorKind::Network(NetworkErrorKind::ConnectionFailed)
+                    )
+            };
             if matches!(
                 value1,
                 Some(Ok(
@@ -1274,14 +1676,12 @@ hello world 3.
                         kind: RefreshEventKind::Failure(ref err),
                         ..
                     })))
-                if err.summary == "Disconnected"
+                if err_check_fn(err)
             ) {
                 value1 = watch_fut.await.0;
             }
             if let Some(val) = value1 {
-                if !(matches!(val, Err(ref err) if matches!(err.kind, ErrorKind::OSError(nix::errno::Errno::EPIPE | nix::errno::Errno::ECONNRESET)))
-                    || matches!(val, Err(ref err) if err.summary == "Disconnected"))
-                {
+                if !matches!(val, Err(ref err) if err_check_fn(err)) {
                     panic!(
                         "Expected watch TCP connection to have disconnected with \
                          EPIPE/ECONNRESET, got: {val:?}"
@@ -1294,25 +1694,5 @@ hello world 3.
         })
         .join()
         .unwrap();
-    }
-
-    async fn loops_fut(
-        main_conn_loop: impl futures::Future<Output = ()>,
-        watch_conn_loop: impl futures::Future<Output = ()>,
-    ) {
-        pin_mut!(main_conn_loop);
-        pin_mut!(watch_conn_loop);
-        match future::select(main_conn_loop.as_mut(), watch_conn_loop.as_mut()).await {
-            Either::Left((_, watch_conn)) => {
-                eprintln!("loops fut loop finished with main_conn",);
-                watch_conn.await;
-                eprintln!("loops fut loop finished with watch_conn",);
-            }
-            Either::Right((_, main_conn)) => {
-                eprintln!("loops fut loop finished with watch_conn",);
-                main_conn.await;
-                eprintln!("loops fut loop finished with main_conn",);
-            }
-        }
     }
 }
