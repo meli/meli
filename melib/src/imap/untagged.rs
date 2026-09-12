@@ -195,6 +195,7 @@ impl ImapConnection {
                 // > if the size of the mailbox changes (e.g., new messages).
                 // > The update from the EXISTS response MUST be remembered by the client.
                 // rfc9051 7.4.1. EXISTS Response
+                let mut events = vec![];
                 let previous_exists = {
                     self.msn_index
                         .entry(mailbox_hash)
@@ -210,30 +211,132 @@ impl ImapConnection {
                     n,
                     previous_exists
                 );
-                let sequence_set = if (previous_exists + 1) == n {
-                    n.try_into()?
-                } else {
-                    SequenceSet::try_from((previous_exists + 1)..=n)?
-                };
-                let (required_responses, attributes) = common_attributes();
-                try_fail!(
-                    mailbox_hash,
-                    self.send_command(CommandBody::fetch(sequence_set, attributes, false)?).await
-                    self.read_response(&mut response, required_responses).await
-                );
-                let mut v = match super::protocol_parser::fetch_responses(&response) {
-                    Ok((_, v, _)) => v,
-                    Err(err) => {
-                        imap_log!(
-                            trace,
-                            self,
-                            "Error when parsing FETCH response after untagged exists {:?}",
+                let mut fetch_responses = if previous_exists > n {
+                    // We missed EXPUNGE responses.
+                    imap_log!(error, self, "We missed EXPUNGE responses.");
+                    let uids = self.create_uid_msn_cache(mailbox_hash).await?;
+                    let mut uid_events = vec![];
+                    {
+                        let mut mboxes = self.uid_store.mailboxes.lock().await;
+                        let deleted_uids_hashes = self
+                            .uid_store
+                            .uid_index
+                            .lock()
+                            .unwrap()
+                            .iter()
+                            .filter(|((mbx, u), _)| *mbx == mailbox_hash && !uids.contains(u))
+                            .map(|((_, uid), hash)| (*uid, *hash))
+                            .collect::<Vec<(UID, crate::email::EnvelopeHash)>>();
+                        for (deleted_uid, deleted_hash) in deleted_uids_hashes {
+                            self.uid_store
+                                .uid_index
+                                .lock()
+                                .unwrap()
+                                .remove(&(mailbox_hash, deleted_uid));
+                            {
+                                if let Some(mbx) = mboxes.get_mut(&mailbox_hash) {
+                                    mbx.exists.lock().unwrap().remove(deleted_hash);
+                                    mbx.unseen.lock().unwrap().remove(deleted_hash);
+                                }
+                            }
+                            self.uid_store
+                                .hash_index
+                                .lock()
+                                .unwrap()
+                                .remove(&deleted_hash);
+                            uid_events.push((
+                                deleted_uid,
+                                RefreshEvent {
+                                    account_hash: self.uid_store.account_hash,
+                                    mailbox_hash,
+                                    kind: Remove(deleted_hash),
+                                },
+                            ));
+                        }
+                    }
+                    if let Err(err) = self
+                        .uid_store
+                        .update(mailbox_hash, &uid_events)
+                        .or_else(ignore_not_found)
+                    {
+                        log::error!(
+                            "Could not update cache for mailbox_hash = {:?} uid, events = {:?}: \
+                             err = {}",
+                            mailbox_hash,
+                            uid_events,
                             err
                         );
-                        return Ok(None);
+                    }
+                    for (_, ev) in uid_events {
+                        events.push(ev);
+                    }
+
+                    let lastseenuid = self
+                        .uid_store
+                        .lastseenuid
+                        .lock()
+                        .unwrap()
+                        .get(&mailbox_hash)
+                        .cloned()
+                        .unwrap_or(0);
+                    let sequence_set = if lastseenuid == 0 {
+                        SequenceSet::from(..)
+                    } else {
+                        SequenceSet::try_from(lastseenuid..)?
+                    };
+                    let (required_responses, macro_or_item_names) =
+                        crate::imap::email::common_attributes();
+                    self.send_command(CommandBody::Fetch {
+                        sequence_set,
+                        macro_or_item_names,
+                        uid: true,
+                        modifiers: vec![],
+                    })
+                    .await?;
+                    self.read_response(&mut response, required_responses)
+                        .await?;
+                    match super::protocol_parser::fetch_responses(&response) {
+                        Ok((_, mut v, _)) => {
+                            // Remove lastseenuid
+                            v.retain(|fr| fr.uid != Some(lastseenuid));
+                            v
+                        }
+                        Err(err) => {
+                            imap_log!(
+                                trace,
+                                self,
+                                "Error when parsing FETCH response after untagged exists {:?}",
+                                err
+                            );
+                            return Ok(None);
+                        }
+                    }
+                } else {
+                    let sequence_set = if (previous_exists + 1) == n {
+                        n.try_into()?
+                    } else {
+                        SequenceSet::try_from((previous_exists + 1)..=n)?
+                    };
+                    let (required_responses, attributes) = common_attributes();
+                    try_fail!(
+                        mailbox_hash,
+                        self.send_command(CommandBody::fetch(sequence_set, attributes, false)?).await
+                        self.read_response(&mut response, required_responses).await
+                    );
+                    match super::protocol_parser::fetch_responses(&response) {
+                        Ok((_, v, _)) => v,
+                        Err(err) => {
+                            imap_log!(
+                                trace,
+                                self,
+                                "Error when parsing FETCH response after untagged exists {:?}",
+                                err
+                            );
+                            return Ok(None);
+                        }
                     }
                 };
-                imap_log!(trace, self, "responses len is {}", v.len());
+                imap_log!(trace, self, "responses len is {}", fetch_responses.len());
                 let mut recreate_msn = false;
                 for FetchResponse {
                     ref uid,
@@ -242,7 +345,7 @@ impl ImapConnection {
                     ref references,
                     ref message_sequence_number,
                     ..
-                } in &mut v
+                } in &mut fetch_responses
                 {
                     if uid.is_none() || flags.is_none() || envelope.is_none() {
                         continue;
@@ -281,14 +384,6 @@ impl ImapConnection {
                         .lock()
                         .unwrap()
                         .insert((mailbox_hash, uid), env.hash());
-                    imap_log!(
-                        trace,
-                        self,
-                        "Create event {} {} {}",
-                        env.hash(),
-                        env.subject(),
-                        mailbox.path(),
-                    );
                 }
                 if recreate_msn {
                     self.create_uid_msn_cache(mailbox_hash).await?;
@@ -296,7 +391,7 @@ impl ImapConnection {
                 {
                     if let Err(err) = self
                         .uid_store
-                        .insert_envelopes(mailbox_hash, &v)
+                        .insert_envelopes(mailbox_hash, &fetch_responses)
                         .or_else(ignore_not_found)
                         .chain_err_summary(|| {
                             format!(
@@ -308,13 +403,20 @@ impl ImapConnection {
                         imap_log!(info, self, "{}", err);
                     }
                 }
-                let mut events = vec![];
-                for response in v {
+                for response in fetch_responses {
                     if let FetchResponse {
                         envelope: Some(envelope),
                         ..
                     } = response
                     {
+                        imap_log!(
+                            trace,
+                            self,
+                            "Create event {} {} {}",
+                            envelope.hash(),
+                            envelope.subject(),
+                            mailbox.path(),
+                        );
                         events.push(RefreshEvent {
                             account_hash: self.uid_store.account_hash,
                             mailbox_hash,
