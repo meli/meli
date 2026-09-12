@@ -1578,10 +1578,10 @@ impl ImapBlockingConnection {
         self.err.as_ref()
     }
 
-    /// Returns a future for a read line (including CRLF)
+    /// Returns a future for read lines (including CRLF)
     ///
     /// The return value is `None` if connection has dropped.
-    pub fn read_line(&mut self) -> impl Future<Output = Option<Vec<u8>>> + '_ {
+    pub fn read_lines(&mut self) -> impl Future<Output = Option<Vec<u8>>> + '_ {
         let mut break_flag = false;
         let mut prev_failure = None;
         async move {
@@ -1612,10 +1612,13 @@ async fn read(
         ref mut err,
     } = conn;
 
-    if let Some(line) = result.split_rn().next() {
-        let len = line.len();
-        let retval = line.to_vec();
-        result.drain(0..len);
+    if result.split_rn().next().is_some() {
+        let mut retval = vec![];
+        while let Some(line) = result.split_rn().next() {
+            let len = line.len();
+            retval.extend(line);
+            result.drain(0..len);
+        }
         return Some(retval);
     }
     match conn.stream.as_mut().unwrap().stream.read(buf).await {

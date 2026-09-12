@@ -155,8 +155,8 @@ pub fn idle(kit: ImapWatchKit) -> impl futures::stream::Stream<Item = Result<Bac
                     emitter.emit(ev).await;
                 }
             }
-            let line = match timeout(Some(_10_MINS), blockn.read_line()).await {
-                Ok(Some(line)) => line,
+            let lines = match timeout(Some(_10_MINS), blockn.read_lines()).await {
+                Ok(Some(lines)) => lines,
                 Ok(None) => {
                     log::trace!("IDLE connection dropped: {:?}", blockn.err());
                     return Ok(());
@@ -185,7 +185,7 @@ pub fn idle(kit: ImapWatchKit) -> impl futures::stream::Stream<Item = Result<Bac
                 }
                 watch = now;
             }
-            if line
+            if lines
                 .split_rn()
                 .filter(|l| {
                     !l.starts_with(b"+ ")
@@ -205,7 +205,7 @@ pub fn idle(kit: ImapWatchKit) -> impl futures::stream::Stream<Item = Result<Bac
                     .conn
                     .read_response(&mut response, RequiredResponses::UNTAGGED)
                     .await?;
-                for l in line.split_rn().chain(response.split_rn()) {
+                for l in lines.split_rn().chain(response.split_rn()) {
                     log::trace!("process_untagged {:?}", String::from_utf8_lossy(l));
                     if l.starts_with(b"+ ")
                         || l.starts_with(b"* ok")
