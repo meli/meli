@@ -51,7 +51,6 @@ pub struct FetchState {
 
 impl FetchState {
     pub async fn chunk(&mut self) -> Result<Vec<Envelope>> {
-        let mut resync_payload: Option<Vec<Envelope>> = None;
         loop {
             match self.stage {
                 FetchStage::InitialFresh => {
@@ -127,7 +126,7 @@ impl FetchState {
                     };
                     let res = self.cached_envs(max_uid, cache_batch_size).await;
                     match res {
-                        Ok(Some(cached_payload)) => {
+                        Ok(Some(mut cached_payload)) => {
                             self.stage = match max_uid.saturating_sub(cache_batch_size) {
                                 0 => FetchStage::Finished,
                                 max_uid => FetchStage::FromCache {
@@ -139,13 +138,6 @@ impl FetchState {
                                 let f = &self.uid_store.mailboxes.lock().await[&self.mailbox_hash];
                                 (Arc::clone(&f.exists), Arc::clone(&f.unseen))
                             };
-                            let cached_payload =
-                                if let Some(mut resync_payload) = resync_payload.take() {
-                                    resync_payload.extend(cached_payload);
-                                    resync_payload
-                                } else {
-                                    cached_payload
-                                };
                             unseen.lock().unwrap().insert_existing_set(
                                 cached_payload
                                     .iter()
@@ -161,6 +153,29 @@ impl FetchState {
                             mailbox_exists.lock().unwrap().insert_existing_set(
                                 cached_payload.iter().map(|env| env.hash()).collect::<_>(),
                             );
+                            if self.stage == FetchStage::Finished {
+                                let mut conn = self.connection.lock().await?;
+                                let mailbox_hash = self.mailbox_hash;
+                                let res = conn.resync(mailbox_hash).await;
+                                if let Ok(Some(payload)) = res {
+                                    unseen.lock().unwrap().insert_existing_set(
+                                        payload
+                                            .iter()
+                                            .filter_map(|env| {
+                                                if !env.is_seen() {
+                                                    Some(env.hash())
+                                                } else {
+                                                    None
+                                                }
+                                            })
+                                            .collect(),
+                                    );
+                                    mailbox_exists.lock().unwrap().insert_existing_set(
+                                        payload.iter().map(|env| env.hash()).collect::<_>(),
+                                    );
+                                    cached_payload.extend(payload);
+                                }
+                            }
                             return Ok(cached_payload);
                         }
                         Err(err) => {
@@ -213,13 +228,8 @@ impl FetchState {
                             );
                         }
                         Ok(()) => {
-                            let mailbox_hash = self.mailbox_hash;
-                            let res = conn.resync(mailbox_hash).await;
-                            if let Ok(Some(payload)) = res {
-                                self.stage = FetchStage::InitialCache;
-                                resync_payload = Some(payload);
-                                continue;
-                            }
+                            self.stage = FetchStage::InitialCache;
+                            continue;
                         }
                     }
                     self.stage = FetchStage::InitialFresh;

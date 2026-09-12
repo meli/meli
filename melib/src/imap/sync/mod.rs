@@ -254,32 +254,34 @@ impl ImapConnection {
             new_envelopes.iter().map(|env| env.hash()).collect::<_>();
         {
             let mut unseen_lck = unseen.lock().unwrap();
-            if unseen_lck.set.is_empty() {
-                let new_total = unseen_lck.len() + new_unseen.len();
-                unseen_lck.set_not_yet_seen(new_total);
-            } else {
-                for &seen_env_hash in new_envelopes_hash_set
-                    .difference(&new_unseen)
-                    .chain(new_seen.iter())
-                {
-                    unseen_lck.remove(seen_env_hash);
-                }
-
-                unseen_lck.insert_set(new_unseen);
+            for &seen_env_hash in new_envelopes_hash_set
+                .difference(&new_unseen)
+                .chain(new_seen.iter())
+            {
+                unseen_lck.remove(seen_env_hash);
             }
+
+            unseen_lck.insert_set(new_unseen);
         }
         {
             let mut exists_lck = mailbox_exists.lock().unwrap();
-            if exists_lck.set.is_empty() {
-                let new_total = exists_lck.len() + new_envelopes_hash_set.len();
-                exists_lck.set_not_yet_seen(new_total);
-            } else {
-                exists_lck.insert_set(new_envelopes_hash_set);
-            }
+            exists_lck.insert_set(new_envelopes_hash_set);
         }
         // Step 4. Remove events
         {
             let mut env_lck = self.uid_store.envelopes.lock().unwrap();
+            let mut unseen_lck = unseen.lock().unwrap();
+            let mut exists_lck = mailbox_exists.lock().unwrap();
+            let _envs = env_lck
+                .iter()
+                .filter_map(|(h, cenv)| {
+                    if cenv.mailbox_hash == mailbox_hash {
+                        Some(*h)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<BTreeSet<EnvelopeHash>>();
             for env_hash in env_lck
                 .iter()
                 .filter_map(|(h, cenv)| {
@@ -300,6 +302,8 @@ impl ImapConnection {
                         kind: RefreshEventKind::Remove(*env_hash),
                     },
                 ));
+                unseen_lck.remove(*env_hash);
+                exists_lck.remove(*env_hash);
                 env_lck.remove(env_hash);
             }
         }
@@ -562,28 +566,18 @@ impl ImapConnection {
                 new_envelopes.iter().map(|env| env.hash()).collect::<_>();
             {
                 let mut unseen_lck = unseen.lock().unwrap();
-                if unseen_lck.set.is_empty() {
-                    let new_total = unseen_lck.len() + new_unseen.len();
-                    unseen_lck.set_not_yet_seen(new_total);
-                } else {
-                    for &seen_env_hash in new_envelopes_hash_set
-                        .difference(&new_unseen)
-                        .chain(new_seen.iter())
-                    {
-                        unseen_lck.remove(seen_env_hash);
-                    }
-
-                    unseen_lck.insert_set(new_unseen);
+                for &seen_env_hash in new_envelopes_hash_set
+                    .difference(&new_unseen)
+                    .chain(new_seen.iter())
+                {
+                    unseen_lck.remove(seen_env_hash);
                 }
+
+                unseen_lck.insert_set(new_unseen);
             }
             {
                 let mut exists_lck = mailbox_exists.lock().unwrap();
-                if exists_lck.set.is_empty() {
-                    let new_total = exists_lck.len() + new_envelopes_hash_set.len();
-                    exists_lck.set_not_yet_seen(new_total);
-                } else {
-                    exists_lck.insert_set(new_envelopes_hash_set);
-                }
+                exists_lck.insert_set(new_envelopes_hash_set);
             }
         }
         {
@@ -601,6 +595,8 @@ impl ImapConnection {
             }
             {
                 let mut env_lck = self.uid_store.envelopes.lock().unwrap();
+                let mut unseen_lck = unseen.lock().unwrap();
+                let mut exists_lck = mailbox_exists.lock().unwrap();
                 let olds = env_lck
                     .iter()
                     .filter_map(|(h, cenv)| {
@@ -620,9 +616,10 @@ impl ImapConnection {
                             kind: RefreshEventKind::Remove(*env_hash),
                         },
                     ));
+                    unseen_lck.remove(*env_hash);
+                    exists_lck.remove(*env_hash);
                     env_lck.remove(env_hash);
                 }
-                drop(env_lck);
             }
         }
         // Step 5. Add events
