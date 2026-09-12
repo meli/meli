@@ -396,11 +396,35 @@ pub mod server {
                             let changes: Changes<email::EmailObject> =
                                 serde_json::value::from_value(body).unwrap();
                             eprintln!("Parsed Email/changes object {changes:?}");
-                            let Some(pos) = self
+                            let mut created = IndexSet::new();
+                            let mut updated = IndexSet::new();
+                            let mut destroyed = IndexSet::new();
+
+                            if let Some(pos) = self
                                 .email_state_changes
                                 .keys()
                                 .position(|k| *k == changes.since_state)
-                            else {
+                            {
+                                for (_, change) in &self.email_state_changes[pos..] {
+                                    match change {
+                                        StateChange::Created(id) => {
+                                            _ = created.insert(id.clone());
+                                        }
+                                        StateChange::Updated(id) => {
+                                            if !created.contains(id) {
+                                                _ = updated.insert(id.clone());
+                                            }
+                                        }
+                                        StateChange::Destroyed(id) => {
+                                            created.shift_remove(id);
+                                            updated.shift_remove(id);
+                                            destroyed.insert(id.clone());
+                                        }
+                                    }
+                                }
+                            } else if changes.since_state == self.email_state {
+                                // No changes
+                            } else {
                                 eprintln!(
                                     "Email/changes since_state={since_state:?} not found, have: \
                                      {email_state_changes:?}",
@@ -413,26 +437,6 @@ pub mod server {
                                 );
                                 continue;
                             };
-                            let mut created = IndexSet::new();
-                            let mut updated = IndexSet::new();
-                            let mut destroyed = IndexSet::new();
-                            for (_, change) in &self.email_state_changes[pos..] {
-                                match change {
-                                    StateChange::Created(id) => {
-                                        _ = created.insert(id.clone());
-                                    }
-                                    StateChange::Updated(id) => {
-                                        if !created.contains(id) {
-                                            _ = updated.insert(id.clone());
-                                        }
-                                    }
-                                    StateChange::Destroyed(id) => {
-                                        created.shift_remove(id);
-                                        updated.shift_remove(id);
-                                        destroyed.insert(id.clone());
-                                    }
-                                }
-                            }
                             let response: ChangesResponse<email::EmailObject> = ChangesResponse {
                                 account_id: changes.account_id,
                                 old_state: changes.since_state.clone(),
