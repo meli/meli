@@ -22,7 +22,7 @@
 //! Verification of `OpenPGP` signatures.
 use crate::{
     email::{
-        attachment_types::{ContentType, MultipartType},
+        attachment_types::{ContentType, MultipartType, Text},
         attachments::Attachment,
         parser::BytesExt,
     },
@@ -54,8 +54,17 @@ pub fn convert_attachment_to_rfc_spec(input: &[u8]) -> Vec<u8> {
     input.to_vec()
 }
 
-// [ref:TODO]: add cleartext support
-pub fn verify_signature(a: &Attachment) -> Result<(Vec<u8>, &Attachment)> {
+pub enum UnverifiedSignature<'a> {
+    Detached {
+        signed_part: Vec<u8>,
+        signature: &'a Attachment,
+    },
+    Cleartext {
+        text: Vec<u8>,
+    },
+}
+
+pub fn extract_unverified_signature(a: &'_ Attachment) -> Result<UnverifiedSignature<'_>> {
     match a.content_type {
         ContentType::Multipart {
             kind: MultipartType::Signed,
@@ -116,9 +125,27 @@ pub fn verify_signature(a: &Attachment) -> Result<(Vec<u8>, &Attachment)> {
                         .set_kind(ErrorKind::ValueError),
                 );
             };
-            Ok((signed_part, signature))
+            Ok(UnverifiedSignature::Detached {
+                signed_part,
+                signature,
+            })
         }
-        _ => Err(Error::new("Not a multipart/signed attachment").set_kind(ErrorKind::ValueError)),
+        ContentType::Text {
+            charset: _,
+            kind: Text::Plain,
+            parameters: _,
+        } => {
+            let text = a.decode(Default::default());
+            if text
+                .strip_prefix(b"-----BEGIN PGP SIGNED MESSAGE-----")
+                .and_then(|t| t.trim_end().strip_suffix(b"-----END PGP SIGNATURE-----"))
+                .is_none()
+            {
+                return Err(Error::new("Not a signed attachment").set_kind(ErrorKind::ValueError));
+            };
+            Ok(UnverifiedSignature::Cleartext { text })
+        }
+        _ => Err(Error::new("Not a signed attachment").set_kind(ErrorKind::ValueError)),
     }
 }
 
@@ -142,6 +169,7 @@ pub struct Signature {
     pub cert: Recipient,
     pub validity: Validity,
     pub validity_reason: Option<String>,
+    pub cleartext: bool,
 }
 
 impl From<Signature> for Result<()> {

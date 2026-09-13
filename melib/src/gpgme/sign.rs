@@ -161,10 +161,10 @@ impl VerifyResult {
         })
     }
 
-    pub fn signatures(&'_ self) -> SignaturesIter<'_> {
+    pub fn signatures(&'_ self, cleartext: bool) -> SignaturesIter<'_> {
         // SAFETY: pointer is valid
         let ptr = unsafe { self.ptr.as_ref().signatures };
-        SignaturesIter::new(ptr, self.lib.clone())
+        SignaturesIter::new(ptr, cleartext, self.lib.clone())
     }
 }
 
@@ -172,14 +172,16 @@ pub struct SignaturesIter<'a> {
     #[allow(unused)]
     lib: Arc<libloading::Library>,
     ptr: gpgme_signature_t,
+    cleartext: bool,
     _ph: std::marker::PhantomData<&'a _gpgme_signature>,
 }
 
 impl SignaturesIter<'_> {
-    pub fn new(ptr: gpgme_signature_t, lib: Arc<libloading::Library>) -> Self {
+    pub fn new(ptr: gpgme_signature_t, cleartext: bool, lib: Arc<libloading::Library>) -> Self {
         Self {
             lib,
             ptr,
+            cleartext,
             _ph: std::marker::PhantomData,
         }
     }
@@ -241,6 +243,7 @@ impl Iterator for SignaturesIter<'_> {
             cert: Recipient { keyid, status },
             validity,
             validity_reason,
+            cleartext: self.cleartext,
         })
     }
 }

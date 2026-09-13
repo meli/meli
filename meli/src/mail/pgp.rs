@@ -29,7 +29,10 @@ use std::{
 use melib::{
     email::{
         attachment_types::{ContentDisposition, ContentType, MultipartType, Text},
-        pgp::{self as melib_pgp, DecryptionMetadata, Recipient, Signature, SignaturesMetadata},
+        pgp::{
+            self as melib_pgp, DecryptionMetadata, Recipient, Signature, SignaturesMetadata,
+            UnverifiedSignature,
+        },
         Attachment, AttachmentBuilder,
     },
     error::*,
@@ -92,30 +95,59 @@ pub fn verify(a: Attachment) -> impl Future<Output = Result<SignaturesMetadata>>
     let cache = CACHE.with(|cache| cache.clone());
     async move {
         let mut hasher = DefaultHasher::new();
-        let (data, sig) =
-            melib_pgp::verify_signature(&a).chain_err_summary(|| "Could not verify signature.")?;
-        data.hash(&mut hasher);
-        sig.body().hash(&mut hasher);
-        let attachment_hash: u64 = hasher.finish();
+        let unverified_signature = melib_pgp::extract_unverified_signature(&a)
+            .chain_err_summary(|| "Could not verify signature.")?;
+        match unverified_signature {
+            UnverifiedSignature::Detached {
+                signed_part,
+                signature,
+            } => {
+                signed_part.hash(&mut hasher);
+                signature.body().hash(&mut hasher);
+                let attachment_hash: u64 = hasher.finish();
 
-        {
-            let lck = cache.lock().unwrap();
-            let in_cache: bool = lck.contains_key(&attachment_hash);
-            if in_cache {
-                return lck[&attachment_hash].clone();
+                {
+                    let lck = cache.lock().unwrap();
+                    let in_cache: bool = lck.contains_key(&attachment_hash);
+                    if in_cache {
+                        return lck[&attachment_hash].clone();
+                    }
+                }
+
+                let mut ctx = Context::new()?;
+                let signature = ctx.new_data_mem(signature.body().trim())?;
+                let signed_part = ctx.new_data_mem(&signed_part)?;
+
+                let result = ctx.verify(signature, signed_part)?.await;
+                {
+                    let mut lck = cache.lock().unwrap();
+                    lck.insert(attachment_hash, result.clone());
+                }
+                result
+            }
+            UnverifiedSignature::Cleartext { text } => {
+                text.hash(&mut hasher);
+                let attachment_hash: u64 = hasher.finish();
+
+                {
+                    let lck = cache.lock().unwrap();
+                    let in_cache: bool = lck.contains_key(&attachment_hash);
+                    if in_cache {
+                        return lck[&attachment_hash].clone();
+                    }
+                }
+
+                let mut ctx = Context::new()?;
+                let text = ctx.new_data_mem(&text)?;
+
+                let result = ctx.verify_cleartext(text)?.await.map(|(s, _)| s);
+                {
+                    let mut lck = cache.lock().unwrap();
+                    lck.insert(attachment_hash, result.clone());
+                }
+                result
             }
         }
-
-        let mut ctx = Context::new()?;
-        let sig = ctx.new_data_mem(sig.body().trim())?;
-        let data = ctx.new_data_mem(&data)?;
-
-        let result = ctx.verify(sig, data)?.await;
-        {
-            let mut lck = cache.lock().unwrap();
-            lck.insert(attachment_hash, result.clone());
-        }
-        result
     }
 }
 
@@ -132,11 +164,15 @@ pub fn signatures_into_error(metadata: SignaturesMetadata) -> Result<Option<Stri
                 },
             validity,
             validity_reason,
+            cleartext,
         } = sig;
         if let Err(err) = status {
             return Err(Error::new(format!("BAD signature from {fingerprint}"))
                 .set_source(Some(melib::src_err_arc_wrap! { err }))
                 .set_kind(ErrorKind::ValueError));
+        }
+        if cleartext {
+            comment = format!("{comment}[SAFETY WARNING: Cleartext signature!]");
         }
         if let Some(validity_reason) = validity_reason {
             comment =
@@ -367,11 +403,19 @@ mod tests {
 
     const PRIVKEY: &[u8] = b"-----BEGIN PGP PRIVATE KEY BLOCK-----\r\n\r\nxcLYBAAAAAABCACw+egZQ6eumJKq3hfKfED4dE/tL4FI5sjqont9ABVI+1GSqyi1\r\nbFBgsRjM0THllIdMbKmJtWwnKW8J+5OgNN8y6Xxv8JmM/Y5vQt2lis0fqXmG8UTz\r\n0VTWdlAXXmhUs6lSADvAaIe4RVrCsZ97L3ZQTryY7JRVcbB4khUN3Gp0yg+801SX\r\nzoFTTa+UGIRLE66jH51aa5VXu99hnv1OiH8tQrjdi8mH6uG/icq4XuIeNWMF32wH\r\nqIOOPvQcWV3M5D2vxJEj702Ku6k9OQXkAo17qRSEonWW4HtLbtmS8He1JNPc/n3d\r\nVUm+fM6NoDXPoLP7j55G9zKyqGtGAWXAj1MTABEBAAEAB/9BGIsgz9vbws8f/nUt\r\ny6pyOQY1LiYV1J3OgFl/zwoFQDvvAPoGUYL3Lez7WW9LDOj/WXC68HqJpRnsyBay\r\n9P+sUGmvGwa/73v2vNeeToHIxaOn2RMNw8+62uX20oj5ruP2/5L64Pga9Ze+yWrp\r\n+rlALNX+QfcFvr20e7c20/5sWlHg4gcyqXteRsHL2ybXSFTGtmBK7UY3Nf+QdgRl\r\nV8r5Sb9EiJXCBDLB4JwBTqdWYENPGg874pS6vF1TDmoQIT9TtgN1/ISnVz8q8SFV\r\nhPW0vabU6PnhenjZfne4baShhGR1MYp6EKVhAU7/ojqB7Fbp5BCd74yz95ciP32N\r\nDUNRBADM8eW7kMjpeB6nW+vxC8JS4R6wI6AmDxiHVSpWhj9KZCHoxgC/Uj1ssbCt\r\nvdZb/uSoigN+PRpBXlu5VkjaWgyia1T0pjlIUiw9X4m5SnLv/5UTTVlAzkV1jzCJ\r\ngJCJVliO71dbPkvEw2jP6BPunCUsKwLg35HxqgGTjThoXWC6bwQA3RBXAjgvIys2\r\ngfU3keImF8e/TprLge1I2vbWmV2j6rZCg5r/AS0upii5CvJ5/T5vfJPNgPBy8B/y\r\nRDs+6PJO1GmnlhOkG9JAIPkv0RBZvR0PMBtbp6nTY3yo1lwamBVBfY6rc0sLTzos\r\nZh2aGoLzrHNMQFMGaauORzBFpY5lU50D/AqB2KYYMUqAOvYcBnEfLDmyZv9BTVNH\r\nbR2lKkMYqv5LlvDaBxVfilE02riO4p6BaAdvzXjKeRrGNEKoHNBpOSfYCOM16NjL\r\n8hIZB1CaV3WbT5oY+jp7Mzd57d56RZOE+ERK2uz/7JX9VSsM/LbH9pJibd4e8mik\r\nDS9ntciqOH/3QwrNEHVzZXJAZXhhbXBsZS5vcmfCwLsEEwEKAG8FggAAAAAJEMwu\r\nljyZl1FjRxQAAAAAAB4AIHNhbHRAbm90YXRpb25zLnNlcXVvaWEtcGdwLm9yZ56l\r\nfAkULy8QwPhEcrlasB0N4oBn0im6wT4mwiATHZjBFiEErtwR+84tdGv4v3FmzC6W\r\nPJmXUWMAAI1tCACHuuzmgEqoIrk3QZaZwReKzNOs/einaVqItsI38AWLlyruwM+5\r\nIBYskBx7EjPk/yBMyWSR0X9WxiBpuXrxcpqlqU8NUYXEEQeo57921ol9FnAWEp2A\r\nqo11O5r26P7XDv+IDj0qX3+uAjSwmH0wJvrHloWCBooVuEaMX0VeMcuVXzqGZtHM\r\np8DB1sWJMof1Znhrx3N/tAV+RnYdzuhBIgciUZRQ5MLqrt8ks9fyIAL3btRS2nsB\r\nGdyTbzFxVkoxc4yRx2ZiNiB8OlMzGk5YoiOftkKM/mF6HTpfppF0CIhuo/q29lUC\r\nSpQDmfjksawPq3Z6LGaqw4vsj5fHEo7k47Nu\r\n=tzjb\r\n-----END PGP PRIVATE KEY BLOCK-----\r\n";
 
+    const CLEARTEXT_SIGNATURE: &[u8] = b"-----BEGIN PGP SIGNED MESSAGE-----\r\nHash: SHA512\r\n\r\nSample text for gpg signing\r\n\r\n-----BEGIN PGP SIGNATURE-----\r\n\r\nwsC7BAEBCgBvBYJqpsT9CRDMLpY8mZdRY0cUAAAAAAAeACBzYWx0QG5vdGF0aW9u\r\ncy5zZXF1b2lhLXBncC5vcme0O9QbQebgQFHUXDJ4BoXVa2gQocfWivPCQ1vnV0oE\r\nPxYhBK7cEfvOLXRr+L9xZswuljyZl1FjAABKcwf/U6P77F1e0JfG32SdlX8KRar/\r\nxxOBY4rewWFe0LX0iMICRXcoMuPDBa85V1IVY9zKxHfxXuk2Vyy7QK+UjKXPRK9X\r\nYJzN/h181kcAeuV/4FtGqbSa9cg0OWHvoA1trgppK+EaLtiQ/QOpZegOB0ACI+dv\r\nvm275yNfh3VZecUWLJ3qLxPqmB55/7/4EO56yc0Y9/dus9kACnvEI37k9AiVdniR\r\n/WXgZ9Vfr0FPLlWluwJEdRY+eNrfa4dlh+LbACDhtGE04bKyy9YzSMNVqky5gAxp\r\nOc8CN9JSZ1EJryg0qcAdFQYj4wpXQgl7Tn29eJeOGxjoozjjM6gwHUmBGQ6fSw==\r\n=XkqT\r\n-----END PGP SIGNATURE-----\r\n";
+
     rusty_fork_test! {
         #[test]
         /// Test that a generated signature is valid.
         fn test_gpg_signatures() {
             run_gpg_signatures();
+        }
+
+        #[test]
+        /// Test that we can verify and decrypt cleartext messages
+        fn test_gpg_cleartext() {
+            run_gpg_cleartext();
         }
 
         #[test]
@@ -515,7 +559,10 @@ mod tests {
         let mail = melib::Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
 
         let signatures = smol::block_on(verify(mail.body())).unwrap();
-        signatures_into_error(signatures).unwrap();
+        assert_eq!(
+            &signatures_into_error(signatures).unwrap().unwrap(),
+            "good signature by AEDC11FBCE2D746BF8BF7166CC2E963C99975163[?]"
+        );
 
         let attachments = mail.body().attachments();
 
@@ -686,7 +733,10 @@ mod tests {
             );
             let decrypted = AttachmentBuilder::new(&decrypted).build();
             let signatures = smol::block_on(verify(decrypted.clone())).unwrap();
-            signatures_into_error(signatures).unwrap();
+            assert_eq!(
+                &signatures_into_error(signatures).unwrap().unwrap(),
+                "good signature by AEDC11FBCE2D746BF8BF7166CC2E963C99975163[?]"
+            );
 
             let attachments = decrypted.attachments();
 
@@ -703,6 +753,42 @@ mod tests {
                 String::from_utf8_lossy(&melib_pgp::convert_attachment_to_rfc_spec(signed_bytes))
             );
         }
+        _ = tempdir.close();
+    }
+
+    fn run_gpg_cleartext() {
+        let Some(GpgTest {
+            _logger,
+            tempdir,
+            mut gpgme_ctx,
+        }) = setup()
+        else {
+            return;
+        };
+        // Add public key
+        gpgme_ctx
+            .import_key(gpgme_ctx.new_data_mem(PUBKEY).unwrap())
+            .unwrap();
+
+        let body: AttachmentBuilder = Attachment::new(
+            ContentType::default(),
+            Default::default(),
+            CLEARTEXT_SIGNATURE.to_vec(),
+        )
+        .into();
+
+        let mut draft = melib::Draft::default();
+        draft.attachments.insert(0, body);
+        let raw_mail = draft.finalise().unwrap();
+        let mail = melib::Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
+
+        let signatures = smol::block_on(verify(mail.body())).unwrap();
+        assert_eq!(
+            &signatures_into_error(signatures).unwrap().unwrap(),
+            "[SAFETY WARNING: Cleartext signature!]good signature by \
+             AEDC11FBCE2D746BF8BF7166CC2E963C99975163[?]"
+        );
+
         _ = tempdir.close();
     }
 }

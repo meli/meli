@@ -425,11 +425,58 @@ impl Context {
                     )
                     .set_kind(ErrorKind::External));
                 };
-                let signatures = verify_result.signatures().collect::<Vec<_>>();
+                let signatures = verify_result.signatures(false).collect::<Vec<_>>();
                 if signatures.is_empty() {
                     return Err(Error::new("No signatures found.").set_kind(ErrorKind::NotFound));
                 }
                 Ok(SignaturesMetadata { signatures })
+            };
+            ret
+        })
+    }
+
+    pub fn verify_cleartext(
+        &mut self,
+        mut text: Data,
+    ) -> Result<impl Future<Output = Result<(SignaturesMetadata, Vec<u8>)>> + Send> {
+        let mut plain_text = Data::new(self.inner.lib.clone())?;
+        unsafe {
+            gpgme_error_try(
+                &self.inner.lib,
+                call!(&self.inner.lib, gpgme_op_verify_start)(
+                    self.inner.ptr.as_ptr(),
+                    text.as_ptr(),
+                    std::ptr::null_mut(),
+                    plain_text.as_ptr(),
+                ),
+            )?;
+        }
+
+        let ctx = self.clone();
+        Ok(async move {
+            let _s = text;
+            ctx.io_state.wait_for_op().await?;
+            let ret = {
+                let Some(verify_result) = sign::VerifyResult::retrieve(&ctx.inner.lib, &ctx) else {
+                    return Err(Error::new(
+                        "Unspecified libgpgme error: gpgme_op_verify_result returned NULL.",
+                    )
+                    .set_kind(ErrorKind::External));
+                };
+                let signatures = verify_result.signatures(true).collect::<Vec<_>>();
+                if signatures.is_empty() {
+                    return Err(Error::new("No signatures found.").set_kind(ErrorKind::NotFound));
+                }
+                plain_text
+                    .seek(std::io::SeekFrom::Start(0))
+                    .chain_err_summary(|| {
+                        "libgpgme error: could not perform seek on signature data object"
+                    })?;
+                let plain_text = plain_text.into_bytes().chain_err_summary(|| {
+                    "libgpgme error: could not read plain text after successfull signature \
+                     verification"
+                })?;
+                Ok((SignaturesMetadata { signatures }, plain_text))
             };
             ret
         })
