@@ -1,0 +1,8 @@
+[profile.ci]
+fail-fast = false
+global-timeout = "10m"
+slow-timeout = { period = "10s", terminate-after = 2 }
+#
+# [[profile.ci.overrides]]
+# filter = 'test(test_notmuch_)'
+# success-output = "final"
