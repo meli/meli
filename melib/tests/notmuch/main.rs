@@ -55,7 +55,7 @@ mod tests {
     };
     use tempfile::TempDir;
 
-    macro_rules! skip_test_if_notmuch_binary_is_missing {
+    macro_rules! skip_test_if_notmuch_not_installed {
         () => {{
             if !matches!(std::process::Command::new("sh")
                 .arg("-c")
@@ -67,6 +67,44 @@ mod tests {
                     log::info!("'notmuch' binary not found in PATH, skipping test.");
                     return;
                 }
+            let mut library_file_path: Option<PathBuf> = None;
+            if cfg!(target_os = "macos") && std::env::var("DYLD_LIBRARY_PATH").is_err() {
+                if let Ok(path) = std::env::var("LD_LIBRARY_PATH") {
+                    std::env::set_var("DYLD_LIBRARY_PATH", path);
+                } else if matches!(std::process::Command::new("sh")
+                    .arg("-c")
+                    .arg("command -v brew")
+                    .stdout(std::process::Stdio::null())
+                    .stdin(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null()).output(), Ok(out) if out.status.success())
+                    {
+                        log::info!("Attempting to set DYLD_LIBRARY_PATH=\"$(brew --prefix)/lib\"");
+                        if let Ok(out) = std::process::Command::new("brew").arg("--prefix")
+                            .stdout(std::process::Stdio::piped())
+                                .stdin(std::process::Stdio::null())
+                                .stderr(std::process::Stdio::piped()).output() {
+                                    if out.status.success() {
+                                        let mut prefix_path = PathBuf::from(String::from_utf8_lossy(&out.stdout).trim().to_string());
+                                        prefix_path.push("lib");
+                                        std::env::set_var("DYLD_LIBRARY_PATH", &prefix_path);
+                                        log::info!("set DYLD_LIBRARY_PATH={}", prefix_path.display());
+                                    }
+                                }
+                    }
+                if let Ok(paths) = std::env::var("DYLD_LIBRARY_PATH") {
+                    for mut path in std::env::split_paths(&paths) {
+                        path.push(NotmuchDb::DEFAULT_DYLIB_NAME);
+                        let Ok(path) = path.canonicalize() else {
+                            continue;
+                        };
+                        if matches!(path.try_exists(), Ok(true)) {
+                            library_file_path = Some(path);
+                            break;
+                        }
+                    }
+                }
+            }
+            library_file_path
         }}
     }
 
@@ -95,6 +133,7 @@ mod tests {
 
     fn new_notmuch_backend(
         temp_dir: &TempDir,
+        library_file_path: Option<PathBuf>,
         acc_name: &str,
         event_consumer: BackendEventConsumer,
         with_root_mailbox: bool,
@@ -146,13 +185,17 @@ other_email=test2@example.com;test3@example.com
         } else {
             indexmap::indexmap! {}
         };
-        let extra = if with_root_mailbox {
-            indexmap::indexmap! {
-                "root_mailbox".into() => root_mailbox.display().to_string(),
-            }
-        } else {
-            indexmap::indexmap! {}
-        };
+        let mut extra = indexmap::indexmap! {};
+
+        if with_root_mailbox {
+            extra.insert("root_mailbox".into(), root_mailbox.display().to_string());
+        }
+        if let Some(library_file_path) = library_file_path {
+            extra.insert(
+                "library_file_path".into(),
+                library_file_path.display().to_string(),
+            );
+        }
 
         let account_conf = AccountSettings {
             name: acc_name.to_string(),
@@ -176,7 +219,7 @@ other_email=test2@example.com;test3@example.com
     /// events when altering the mail store in the filesystem.
     pub(crate) fn run_notmuch_watch() {
         let mut _logger = Logger::new_with(LogLevel::TRACE, true);
-        skip_test_if_notmuch_binary_is_missing!();
+        let library_file_path = skip_test_if_notmuch_not_installed!();
         let temp_dir = TempDir::new().unwrap();
         // Store all events in a vector, and compare them at the end with the expected
         // ones.
@@ -217,9 +260,14 @@ other_email=test2@example.com;test3@example.com
             std::env::set_var(var, &dir);
         }
 
-        let (root_mailbox, _settings, mut notmuch) =
-            new_notmuch_backend(&temp_dir, "notmuch", backend_event_consumer.clone(), true)
-                .unwrap();
+        let (root_mailbox, _settings, mut notmuch) = new_notmuch_backend(
+            &temp_dir,
+            library_file_path,
+            "notmuch",
+            backend_event_consumer.clone(),
+            true,
+        )
+        .unwrap();
 
         let is_online_fut = notmuch.is_online().unwrap();
         block_on(is_online_fut).unwrap();
@@ -319,7 +367,7 @@ hello world.
     /// when altering the mail store in the filesystem.
     pub(crate) fn run_notmuch_refresh() {
         let mut _logger = Logger::new_with(LogLevel::TRACE, true);
-        skip_test_if_notmuch_binary_is_missing!();
+        let library_file_path = skip_test_if_notmuch_not_installed!();
         let temp_dir = TempDir::new().unwrap();
         // Store all events in a vector, and compare them at the end with the expected
         // ones.
@@ -360,9 +408,14 @@ hello world.
             std::env::set_var(var, &dir);
         }
 
-        let (root_mailbox, _settings, mut notmuch) =
-            new_notmuch_backend(&temp_dir, "notmuch", backend_event_consumer.clone(), true)
-                .unwrap();
+        let (root_mailbox, _settings, mut notmuch) = new_notmuch_backend(
+            &temp_dir,
+            library_file_path,
+            "notmuch",
+            backend_event_consumer.clone(),
+            true,
+        )
+        .unwrap();
 
         let is_online_fut = notmuch.is_online().unwrap();
         block_on(is_online_fut).unwrap();
