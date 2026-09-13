@@ -51,10 +51,17 @@ use crate::{
     Context, ErrorKind, File, StatusEvent, UIEvent,
 };
 
+#[derive(Clone, Debug)]
+pub enum FilterOutputMetadata {
+    Signature(Result<melib::pgp::SignaturesMetadata>),
+    Decrypted(melib::pgp::DecryptionMetadata),
+}
+
 pub struct FilterOutput {
     attachment: Attachment,
     raw: Vec<u8>,
     notice: Option<Cow<'static, str>>,
+    metadata: Option<FilterOutputMetadata>,
 }
 
 type FilterResult = std::result::Result<FilterOutput, (Error, Vec<u8>)>;
@@ -70,10 +77,43 @@ pub enum ViewFilterContent {
     },
     Filtered {
         inner: String,
+        metadata: Option<FilterOutputMetadata>,
     },
     InlineAttachments {
         parts: Vec<ViewFilter>,
+        metadata: Option<FilterOutputMetadata>,
     },
+}
+
+impl ViewFilterContent {
+    fn empty() -> Self {
+        Self::Filtered {
+            inner: String::new(),
+            metadata: None,
+        }
+    }
+
+    pub fn metadata(&self) -> Option<&FilterOutputMetadata> {
+        let (Self::Filtered { ref metadata, .. } | Self::InlineAttachments { ref metadata, .. }) =
+            self
+        else {
+            return None;
+        };
+        metadata.as_ref()
+    }
+
+    fn set_metadata(&mut self, val: Option<FilterOutputMetadata>) {
+        let (Self::Filtered {
+            ref mut metadata, ..
+        }
+        | Self::InlineAttachments {
+            ref mut metadata, ..
+        }) = self
+        else {
+            return;
+        };
+        *metadata = val;
+    }
 }
 
 impl std::fmt::Debug for ViewFilterContent {
@@ -92,15 +132,23 @@ impl std::fmt::Debug for ViewFilterContent {
                 .debug_struct(stringify!(ViewFilterContent::Error))
                 .field("error", inner)
                 .finish(),
-            Filtered { ref inner } => fmt
+            Filtered {
+                ref inner,
+                ref metadata,
+            } => fmt
                 .debug_struct(stringify!(ViewFilterContent::Filtered))
                 .field("body_text", &inner.trim_at_boundary(18))
                 .field("body_text_len", &inner.len())
+                .field("metadata", &metadata)
                 .finish(),
-            InlineAttachments { ref parts } => fmt
+            InlineAttachments {
+                ref parts,
+                ref metadata,
+            } => fmt
                 .debug_struct(stringify!(ViewFilterContent::InlineAttachments))
                 .field("parts_no", &parts.len())
                 .field("parts", &parts)
+                .field("metadata", &metadata)
                 .finish(),
         }
     }
@@ -292,6 +340,7 @@ impl ViewFilter {
                             )
                             .into(),
                         ),
+                        metadata: None,
                     })
                 }
             }
@@ -308,9 +357,7 @@ impl ViewFilter {
             notice: None,
             headers: vec![],
             unfiltered: bytes,
-            body_text: ViewFilterContent::Filtered {
-                inner: String::new(),
-            },
+            body_text: ViewFilterContent::empty(),
             event_handler: None,
             id: ComponentId::default(),
         };
@@ -354,7 +401,10 @@ impl ViewFilter {
                         notice: None,
                         headers: vec![],
                         unfiltered: text.as_bytes().to_vec(),
-                        body_text: ViewFilterContent::Filtered { inner: text },
+                        body_text: ViewFilterContent::Filtered {
+                            inner: text,
+                            metadata: None,
+                        },
                         event_handler: None,
                         id: ComponentId::default(),
                     });
@@ -380,9 +430,7 @@ impl ViewFilter {
                     notice: None,
                     headers: vec![],
                     unfiltered: att.decode(view_settings.charset.into()),
-                    body_text: ViewFilterContent::Filtered {
-                        inner: String::new(),
-                    },
+                    body_text: ViewFilterContent::empty(),
                     event_handler: None,
                     id: ComponentId::default(),
                 });
@@ -445,6 +493,7 @@ impl ViewFilter {
                                 .unwrap_or_else(|| Self::new_placeholder(p, view_settings))
                         })
                         .collect::<Vec<Self>>(),
+                    metadata: None,
                 },
                 unfiltered: att.decode(view_settings.charset.into()),
                 event_handler: None,
@@ -467,9 +516,7 @@ impl ViewFilter {
                 size: att.size(),
                 notice: None,
                 headers: vec![],
-                body_text: ViewFilterContent::Filtered {
-                    inner: String::new(),
-                },
+                body_text: ViewFilterContent::empty(),
                 unfiltered: vec![],
                 event_handler: None,
                 id: ComponentId::default(),
@@ -517,6 +564,7 @@ impl ViewFilter {
                                     .unwrap_or_else(|| Self::new_placeholder(p, view_settings))
                             })
                             .collect::<Vec<Self>>(),
+                        metadata: None,
                     },
                     unfiltered,
                     event_handler: None,
@@ -540,20 +588,22 @@ impl ViewFilter {
                             };
                             let att = att.clone();
                             async move {
-                                let result = crate::mail::pgp::verify(att)
-                                    .await
-                                    .and_then(crate::mail::pgp::signatures_into_error);
-                                let notice = match result {
-                                    Ok(None) => None,
-                                    Ok(Some(comment)) => {
-                                        Some(format!("Signature: {comment}").into())
-                                    }
-                                    Err(err) => Some(format!("Invalid signature: {err}").into()),
+                                let result = crate::mail::pgp::verify(att).await;
+                                let (notice, metadata) = match result {
+                                    Ok(comment) => (
+                                        Some("Signed".into()),
+                                        Some(FilterOutputMetadata::Signature(Ok(comment))),
+                                    ),
+                                    Err(err) => (
+                                        Some("Has invalid signature".into()),
+                                        Some(FilterOutputMetadata::Signature(Err(err))),
+                                    ),
                                 };
                                 Ok(FilterOutput {
                                     attachment: a,
                                     raw: bytes,
                                     notice,
+                                    metadata,
                                 })
                             }
                         };
@@ -568,9 +618,7 @@ impl ViewFilter {
                             size: att.size(),
                             notice: None,
                             headers: vec![],
-                            body_text: ViewFilterContent::Filtered {
-                                inner: String::new(),
-                            },
+                            body_text: ViewFilterContent::empty(),
                             unfiltered: att.decode(Default::default()).to_vec(),
                             event_handler: None,
                             id: ComponentId::default(),
@@ -636,7 +684,7 @@ impl ViewFilter {
                         let bytes = att.decode(Default::default()).to_vec();
                         let att2 = att.clone();
                         let decrypt_fut = async {
-                            let (_metadata, bytes) = crate::mail::pgp::decrypt(att2)
+                            let (metadata, bytes) = crate::mail::pgp::decrypt(att2)
                                 .await
                                 .map_err(|err| (err, bytes))?;
                             let attachment = AttachmentBuilder::new(&bytes).build();
@@ -644,6 +692,7 @@ impl ViewFilter {
                                 attachment,
                                 raw: bytes,
                                 notice: Some("Decrypted content.".into()),
+                                metadata: Some(FilterOutputMetadata::Decrypted(metadata)),
                             })
                         };
                         let mut job_handle = context.main_loop_handler.job_executor.spawn(
@@ -657,9 +706,7 @@ impl ViewFilter {
                             size: att.size(),
                             notice: None,
                             headers: vec![],
-                            body_text: ViewFilterContent::Filtered {
-                                inner: String::new(),
-                            },
+                            body_text: ViewFilterContent::empty(),
                             unfiltered: att.decode(Default::default()).to_vec(),
                             event_handler: None,
                             id: ComponentId::default(),
@@ -700,7 +747,7 @@ impl ViewFilter {
                 let bytes = content.trim().to_string().into_bytes();
                 let att2 = att.clone();
                 let decrypt_fut = async {
-                    let (_metadata, bytes) = crate::mail::pgp::decrypt(att2)
+                    let (metadata, bytes) = crate::mail::pgp::decrypt(att2)
                         .await
                         .map_err(|err| (err, bytes))?;
                     let attachment = AttachmentBuilder::new(&bytes).build();
@@ -709,6 +756,7 @@ impl ViewFilter {
                         attachment,
                         raw: bytes,
                         notice: Some("Decrypted cleartext content.".into()),
+                        metadata: Some(FilterOutputMetadata::Decrypted(metadata)),
                     })
                 };
                 let mut job_handle = context.main_loop_handler.job_executor.spawn(
@@ -722,9 +770,7 @@ impl ViewFilter {
                     size: att.size(),
                     notice: None,
                     headers: vec![],
-                    body_text: ViewFilterContent::Filtered {
-                        inner: String::new(),
-                    },
+                    body_text: ViewFilterContent::empty(),
                     unfiltered: content.into_bytes(),
                     event_handler: None,
                     id: ComponentId::default(),
@@ -767,7 +813,10 @@ impl ViewFilter {
                         .header_iter(&env)
                         .map(|(hdr, val)| (hdr.clone(), val.into()))
                         .collect::<Vec<_>>(),
-                    body_text: ViewFilterContent::InlineAttachments { parts: vec![vf] },
+                    body_text: ViewFilterContent::InlineAttachments {
+                        parts: vec![vf],
+                        metadata: None,
+                    },
                     unfiltered,
                     event_handler: None,
                     id: ComponentId::default(),
@@ -780,7 +829,10 @@ impl ViewFilter {
                 size: att.size(),
                 notice: None,
                 headers: vec![],
-                body_text: ViewFilterContent::Filtered { inner: filtered },
+                body_text: ViewFilterContent::Filtered {
+                    inner: filtered,
+                    metadata: None,
+                },
                 unfiltered,
                 event_handler: None,
                 id: ComponentId::default(),
@@ -793,17 +845,13 @@ impl ViewFilter {
             } else {
                 Some("Attachment".into())
             };
-            (
-                notice,
-                ViewFilterContent::Filtered {
-                    inner: String::new(),
-                },
-            )
+            (notice, ViewFilterContent::empty())
         } else {
             (
                 None,
                 ViewFilterContent::Filtered {
                     inner: att.text(Text::Plain),
+                    metadata: None,
                 },
             )
         };
@@ -832,9 +880,7 @@ impl ViewFilter {
             notice: None,
             headers: vec![],
             unfiltered: att.decode(view_settings.charset.into()),
-            body_text: ViewFilterContent::Filtered {
-                inner: String::new(),
-            },
+            body_text: ViewFilterContent::empty(),
             event_handler: None,
             id: ComponentId::default(),
         }
@@ -929,12 +975,8 @@ impl ViewFilter {
                     job_id: _,
                     mut job_handle,
                     view_settings,
-                } = std::mem::replace(
-                    &mut self.body_text,
-                    ViewFilterContent::Filtered {
-                        inner: String::new(),
-                    },
-                ) {
+                } = std::mem::replace(&mut self.body_text, ViewFilterContent::empty())
+                {
                     log::trace!("job_process_event: inside if let ");
                     let job_result = job_handle.chan.try_recv();
                     self.process_job_result(job_result, &view_settings, context);
@@ -980,6 +1022,7 @@ impl ViewFilter {
                     attachment,
                     raw,
                     notice,
+                    metadata,
                 } = output;
                 self.event_handler = None;
                 log::trace!("job_process_event: OK ");
@@ -990,6 +1033,9 @@ impl ViewFilter {
                         }
                         new_self.unfiltered = raw;
                         new_self.notice = notice;
+                        if new_self.body_text.metadata().is_none() {
+                            new_self.body_text.set_metadata(metadata);
+                        }
                         *self = new_self;
                     }
                     Err(err) => {

@@ -44,7 +44,6 @@ pub use crate::view::*;
 pub mod compose;
 pub use self::compose::*;
 
-#[cfg(feature = "gpgme")]
 pub mod pgp;
 
 pub mod status;

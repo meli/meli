@@ -637,6 +637,206 @@ impl Component for EnvelopeView {
         let hdr_name_theme = crate::conf::value(context, "mail.view.headers_names");
         let hdr_area_theme = crate::conf::value(context, "mail.view.headers_area");
 
+        if self.filters.is_empty() {
+            let body = self.mail.body();
+            if body.is_html() {
+                let attachment = if let Some(sub) = match body.content_type {
+                    ContentType::Multipart {
+                        kind: MultipartType::Alternative,
+                        ref parts,
+                        ..
+                    } => parts.iter().find(|p| p.is_html()),
+                    _ => None,
+                } {
+                    sub
+                } else {
+                    &body
+                };
+                if let Ok(filter) = ViewFilter::new_html(attachment, &self.view_settings, context) {
+                    self.filters.push(filter);
+                }
+            } else if self.view_settings.auto_choose_multipart_alternative
+                && match body.content_type {
+                    ContentType::Multipart {
+                        kind: MultipartType::Alternative,
+                        ref parts,
+                        ..
+                    } => parts
+                        .iter()
+                        .all(|p| p.is_html() || (p.is_text() && p.body().trim().is_empty())),
+                    _ => false,
+                }
+            {
+                if let Ok(filter) = ViewFilter::new_html(
+                    body.content_type
+                        .parts()
+                        .unwrap()
+                        .iter()
+                        .find(|a| a.is_html())
+                        .unwrap_or(&body),
+                    &self.view_settings,
+                    context,
+                ) {
+                    self.filters.push(filter);
+                } else if let Ok(filter) =
+                    ViewFilter::new_attachment(&body, &self.view_settings, context)
+                {
+                    self.filters.push(filter);
+                }
+            } else if let Ok(filter) =
+                ViewFilter::new_attachment(&body, &self.view_settings, context)
+            {
+                self.filters.push(filter);
+            }
+        }
+
+        if !self.initialised {
+            self.initialised = true;
+            let mut text = if !self.filters.is_empty() {
+                let mut text = String::new();
+                self.body_text.clear();
+                if let Some(last) = self.filters.last() {
+                    let mut scan_stack = VecDeque::from([last]);
+                    let mut render_stack = VecDeque::new();
+                    while let Some(filter @ ViewFilter { body_text, .. }) = scan_stack.pop_front() {
+                        if let ViewFilterContent::InlineAttachments { parts, .. } = body_text {
+                            for p in parts.iter().rev() {
+                                scan_stack.push_front(p);
+                            }
+                        }
+                        render_stack.push_back(filter);
+                    }
+                    let show_attachment_idx = render_stack.len() > 1;
+
+                    let mut idx = 0;
+                    while let Some(ViewFilter {
+                        content_type,
+                        size,
+                        filter_invocation,
+                        body_text,
+                        notice,
+                        headers,
+                        ..
+                    }) = render_stack.pop_front()
+                    {
+                        if show_attachment_idx {
+                            if !text.is_empty() && !text.ends_with('\n') {
+                                text.push('\n');
+                            }
+                            text.push_str(&format!(
+                                "[-- #{idx} {content_type} {size} --]{sep}",
+                                size = melib::BytesDisplay(*size),
+                                sep = if notice.is_some() || !filter_invocation.is_empty() {
+                                    " "
+                                } else {
+                                    ""
+                                }
+                            ));
+                            idx += 1;
+                        }
+                        text.push_str(
+                            &notice
+                                .as_ref()
+                                .map(|s| s.to_string())
+                                .or_else(|| {
+                                    if filter_invocation.is_empty() {
+                                        None
+                                    } else {
+                                        Some(format!("Text filtered by `{filter_invocation}`"))
+                                    }
+                                })
+                                .unwrap_or_default(),
+                        );
+                        if !text.is_empty() {
+                            text.push('\n');
+                        }
+                        if !self.body_text.is_empty() {
+                            self.body_text.push('\n');
+                        }
+                        for (hdr, val) in headers.iter() {
+                            text.push_str(hdr.as_str());
+                            text.push_str(": ");
+                            text.push_str(val);
+                            text.push('\n');
+                        }
+                        if !headers.is_empty() {
+                            text.push('\n');
+                        }
+                        if let Some(ref metadata) = body_text.metadata() {
+                            match metadata {
+                                FilterOutputMetadata::Signature(Ok(signatures)) => {
+                                    match crate::mail::pgp::signatures_into_error(
+                                        signatures.clone(),
+                                    ) {
+                                        Ok(None) => {}
+                                        Ok(Some(t)) => {
+                                            text.push_str(&t);
+                                        }
+                                        Err(err) => {
+                                            text.push_str(&err.to_string());
+                                        }
+                                    }
+                                }
+                                FilterOutputMetadata::Signature(Err(err)) => {
+                                    text.push_str(&format!("Unverified signature: {err}\n"));
+                                }
+                                FilterOutputMetadata::Decrypted(decryption_metadata) => {
+                                    text.push_str("Encrypted for ");
+                                    for recipient in &decryption_metadata.recipients {
+                                        text.push_str(&format!(
+                                            "{}{},",
+                                            recipient.keyid,
+                                            if recipient.status.is_err() { "[?]" } else { "" }
+                                        ));
+                                    }
+                                    if text.ends_with(',') {
+                                        text.pop();
+                                    }
+                                    text.push('\n');
+                                }
+                            }
+                        }
+                        match body_text {
+                            ViewFilterContent::Filtered { inner, .. } => {
+                                let payload =
+                                    self.options.convert(&mut self.links, &self.body, inner);
+                                text.push_str(&payload);
+                                self.body_text.push_str(&payload);
+                            }
+                            ViewFilterContent::Error { inner } => text.push_str(&inner.to_string()),
+                            ViewFilterContent::Running { .. } => {
+                                text.push_str("Filter job running in background.")
+                            }
+                            ViewFilterContent::InlineAttachments { .. } => {}
+                        }
+                    }
+                }
+                text
+            } else {
+                self.options
+                    .convert(&mut self.links, &self.body, &self.body_text)
+            };
+            if !text.trim().is_empty() {
+                text.push_str("\n\n");
+            }
+            text.push_str(&self.attachment_tree);
+            while text.ends_with('\n') {
+                text.pop();
+            }
+            let cursor_pos = self.pager.cursor_pos();
+            self.view_settings.body_theme = crate::conf::value(context, "mail.view.body");
+            self.pager = Pager::from_string(
+                text,
+                context,
+                Some(cursor_pos),
+                None,
+                self.view_settings.body_theme,
+            );
+            if let Some(ref filter) = self.view_settings.pager_filter {
+                self.pager.filter(filter, context);
+            }
+        }
+
         let y: usize = {
             if self.options.contains(ViewOptions::SOURCE) {
                 grid.clear_area(area, self.view_settings.theme_default);
@@ -902,172 +1102,6 @@ impl Component for EnvelopeView {
                 }
             }
         };
-
-        if self.filters.is_empty() {
-            let body = self.mail.body();
-            if body.is_html() {
-                let attachment = if let Some(sub) = match body.content_type {
-                    ContentType::Multipart {
-                        kind: MultipartType::Alternative,
-                        ref parts,
-                        ..
-                    } => parts.iter().find(|p| p.is_html()),
-                    _ => None,
-                } {
-                    sub
-                } else {
-                    &body
-                };
-                if let Ok(filter) = ViewFilter::new_html(attachment, &self.view_settings, context) {
-                    self.filters.push(filter);
-                }
-            } else if self.view_settings.auto_choose_multipart_alternative
-                && match body.content_type {
-                    ContentType::Multipart {
-                        kind: MultipartType::Alternative,
-                        ref parts,
-                        ..
-                    } => parts
-                        .iter()
-                        .all(|p| p.is_html() || (p.is_text() && p.body().trim().is_empty())),
-                    _ => false,
-                }
-            {
-                if let Ok(filter) = ViewFilter::new_html(
-                    body.content_type
-                        .parts()
-                        .unwrap()
-                        .iter()
-                        .find(|a| a.is_html())
-                        .unwrap_or(&body),
-                    &self.view_settings,
-                    context,
-                ) {
-                    self.filters.push(filter);
-                } else if let Ok(filter) =
-                    ViewFilter::new_attachment(&body, &self.view_settings, context)
-                {
-                    self.filters.push(filter);
-                }
-            } else if let Ok(filter) =
-                ViewFilter::new_attachment(&body, &self.view_settings, context)
-            {
-                self.filters.push(filter);
-            }
-        }
-        if !self.initialised {
-            self.initialised = true;
-            let mut text = if !self.filters.is_empty() {
-                let mut text = String::new();
-                self.body_text.clear();
-                if let Some(last) = self.filters.last() {
-                    let mut scan_stack = VecDeque::from([last]);
-                    let mut render_stack = VecDeque::new();
-                    while let Some(filter @ ViewFilter { body_text, .. }) = scan_stack.pop_front() {
-                        if let ViewFilterContent::InlineAttachments { parts } = body_text {
-                            for p in parts.iter().rev() {
-                                scan_stack.push_front(p);
-                            }
-                        }
-                        render_stack.push_back(filter);
-                    }
-                    let show_attachment_idx = render_stack.len() > 1;
-
-                    let mut idx = 0;
-                    while let Some(ViewFilter {
-                        content_type,
-                        size,
-                        filter_invocation,
-                        body_text,
-                        notice,
-                        headers,
-                        ..
-                    }) = render_stack.pop_front()
-                    {
-                        if show_attachment_idx {
-                            if !text.is_empty() && !text.ends_with('\n') {
-                                text.push('\n');
-                            }
-                            text.push_str(&format!(
-                                "[-- #{idx} {content_type} {size} --]{sep}",
-                                size = melib::BytesDisplay(*size),
-                                sep = if notice.is_some() || !filter_invocation.is_empty() {
-                                    " "
-                                } else {
-                                    ""
-                                }
-                            ));
-                            idx += 1;
-                        }
-                        text.push_str(
-                            &notice
-                                .as_ref()
-                                .map(|s| s.to_string())
-                                .or_else(|| {
-                                    if filter_invocation.is_empty() {
-                                        None
-                                    } else {
-                                        Some(format!("Text filtered by `{filter_invocation}`"))
-                                    }
-                                })
-                                .unwrap_or_default(),
-                        );
-                        if !text.is_empty() {
-                            text.push('\n');
-                        }
-                        if !self.body_text.is_empty() {
-                            self.body_text.push('\n');
-                        }
-                        for (hdr, val) in headers.iter() {
-                            text.push_str(hdr.as_str());
-                            text.push_str(": ");
-                            text.push_str(val);
-                            text.push('\n');
-                        }
-                        if !headers.is_empty() {
-                            text.push('\n');
-                        }
-                        match body_text {
-                            ViewFilterContent::Filtered { inner } => {
-                                let payload =
-                                    self.options.convert(&mut self.links, &self.body, inner);
-                                text.push_str(&payload);
-                                self.body_text.push_str(&payload);
-                            }
-                            ViewFilterContent::Error { inner } => text.push_str(&inner.to_string()),
-                            ViewFilterContent::Running { .. } => {
-                                text.push_str("Filter job running in background.")
-                            }
-                            ViewFilterContent::InlineAttachments { .. } => {}
-                        }
-                    }
-                }
-                text
-            } else {
-                self.options
-                    .convert(&mut self.links, &self.body, &self.body_text)
-            };
-            if !text.trim().is_empty() {
-                text.push_str("\n\n");
-            }
-            text.push_str(&self.attachment_tree);
-            while text.ends_with('\n') {
-                text.pop();
-            }
-            let cursor_pos = self.pager.cursor_pos();
-            self.view_settings.body_theme = crate::conf::value(context, "mail.view.body");
-            self.pager = Pager::from_string(
-                text,
-                context,
-                Some(cursor_pos),
-                None,
-                self.view_settings.body_theme,
-            );
-            if let Some(ref filter) = self.view_settings.pager_filter {
-                self.pager.filter(filter, context);
-            }
-        }
-
         if let Some(s) = self.subview.as_mut() {
             if !s.is_dirty() {
                 s.set_dirty(true);

@@ -26,6 +26,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+#[cfg(feature = "gpgme")]
+use melib::gpgme::*;
 use melib::{
     email::{
         attachment_types::{ContentDisposition, ContentType, MultipartType, Text},
@@ -36,12 +38,12 @@ use melib::{
         Attachment, AttachmentBuilder,
     },
     error::*,
-    gpgme::*,
     parser::BytesExt,
 };
 
 use super::AttachmentBoxFuture;
 
+#[cfg(feature = "gpgme")]
 /// Decrypts a `multipart/encrypted` or a cleartext encrypted message.
 pub async fn decrypt(a: Attachment) -> Result<(DecryptionMetadata, Vec<u8>)> {
     let Attachment {
@@ -87,6 +89,7 @@ pub async fn decrypt(a: Attachment) -> Result<(DecryptionMetadata, Vec<u8>)> {
     ctx.decrypt(cipher)?.await
 }
 
+#[cfg(feature = "gpgme")]
 pub fn verify(a: Attachment) -> impl Future<Output = Result<SignaturesMetadata>> {
     thread_local! {
         static CACHE: Arc<Mutex<BTreeMap<u64, Result<SignaturesMetadata>>>> = Arc::new(Mutex::new(BTreeMap::new()));
@@ -196,6 +199,7 @@ pub fn signatures_into_error(metadata: SignaturesMetadata) -> Result<Option<Stri
     Ok(Some(comment))
 }
 
+#[cfg(feature = "gpgme")]
 pub fn sign_filter(
     default_key: Option<String>,
     mut sign_keys: Vec<Key>,
@@ -248,6 +252,7 @@ pub fn sign_filter(
     })
 }
 
+#[cfg(feature = "gpgme")]
 pub fn encrypt_filter(
     encrypt_for_self: Option<melib::Address>,
     default_sign_key: Option<String>,
@@ -378,7 +383,7 @@ pub fn encrypt_filter(
     })
 }
 
-#[cfg(test)]
+#[cfg(all(feature = "gpgme", test))]
 mod tests {
     // NOTE: debug stuff with `GPGME_DEBUG=9:/tmp/mygpgme.log` etc.
 
