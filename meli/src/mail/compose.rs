@@ -55,9 +55,13 @@ use edit_attachments::*;
 
 pub mod hooks;
 
+#[cfg(feature = "gpgme")]
 const TOGGLE_CHECKED_UNICODE: &str = "☑";
+#[cfg(feature = "gpgme")]
 const TOGGLE_UNCHECKED_UNICODE: &str = "☐";
+#[cfg(feature = "gpgme")]
 const TOGGLE_CHECKED_ASCII: &str = "[x]";
+#[cfg(feature = "gpgme")]
 const TOGGLE_UNCHECKED_ASCII: &str = "[ ]";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -784,13 +788,7 @@ To: {}
             account_settings!(context[&self.account_hash].shortcuts.composing).key_values();
         let mut shortcuts: ShortcutMaps = Default::default();
         shortcuts.insert(Shortcuts::COMPOSING, our_map);
-        let toggle_shortcut = Key::Char('\n');
         let edit_shortcut = &shortcuts[Shortcuts::COMPOSING]["edit"];
-        let (toggle_checked, toggle_unchecked) = if !grid.ascii_drawing {
-            (TOGGLE_CHECKED_UNICODE, TOGGLE_UNCHECKED_UNICODE)
-        } else {
-            (TOGGLE_CHECKED_ASCII, TOGGLE_UNCHECKED_ASCII)
-        };
         {
             let theme_attr = if self.focus == Focus::Attachments {
                 highlight_attr
@@ -807,7 +805,10 @@ To: {}
                     None,
                     None,
                 );
-                area = area.skip_rows(1);
+                #[cfg(feature = "gpgme")]
+                {
+                    area = area.skip_rows(1);
+                }
             } else {
                 grid.write_string(
                     &format!(
@@ -855,6 +856,12 @@ To: {}
         }
         #[cfg(feature = "gpgme")]
         {
+            let toggle_shortcut = Key::Char('\n');
+            let (toggle_checked, toggle_unchecked) = if !grid.ascii_drawing {
+                (TOGGLE_CHECKED_UNICODE, TOGGLE_UNCHECKED_UNICODE)
+            } else {
+                (TOGGLE_CHECKED_ASCII, TOGGLE_UNCHECKED_ASCII)
+            };
             let theme_attr = if self.focus == Focus::Sign {
                 highlight_attr
             } else {
