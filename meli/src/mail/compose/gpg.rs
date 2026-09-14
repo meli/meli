@@ -41,7 +41,7 @@ impl KeySelectionLoading {
         allow_remote_lookup: ActionFlag,
         context: &Context,
     ) -> Result<Self> {
-        use melib::gpgme::{self, *};
+        use melib::{email::pgp::LocateKey, gpgme};
         let mut ctx = gpgme::Context::new()?;
         if local {
             ctx.set_auto_key_locate(LocateKey::LOCAL)?;
@@ -402,7 +402,10 @@ impl Default for GpgComposeState {
 mod tests {
     use std::{borrow::Cow, ffi::CString};
 
-    use melib::gpgme::{EngineInfo, LocateKey, Protocol};
+    use melib::{
+        email::pgp::LocateKey,
+        gpgme::{EngineInfo, Protocol},
+    };
     use rusty_fork::rusty_fork_test;
 
     use super::*;

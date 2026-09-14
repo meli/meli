@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#[cfg(feature = "gpgme")]
 use std::{
     collections::{hash_map::DefaultHasher, BTreeMap},
     future::Future,
@@ -26,21 +27,22 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use melib::{
+    email::pgp::{Recipient, Signature, SignaturesMetadata},
+    error::*,
+};
 #[cfg(feature = "gpgme")]
-use melib::gpgme::*;
 use melib::{
     email::{
         attachment_types::{ContentDisposition, ContentType, MultipartType, Text},
-        pgp::{
-            self as melib_pgp, DecryptionMetadata, Recipient, Signature, SignaturesMetadata,
-            UnverifiedSignature,
-        },
+        pgp::{self as melib_pgp, DecryptionMetadata, LocateKey, UnverifiedSignature},
         Attachment, AttachmentBuilder,
     },
-    error::*,
+    gpgme::*,
     parser::BytesExt,
 };
 
+#[cfg(feature = "gpgme")]
 use super::AttachmentBoxFuture;
 
 #[cfg(feature = "gpgme")]

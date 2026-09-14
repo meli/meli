@@ -32,17 +32,13 @@ use std::{
 };
 
 use futures::FutureExt;
-use serde::{
-    de::{self, Deserialize},
-    Deserializer, Serialize, Serializer,
-};
 use smol::{
     channel::{Receiver, Sender},
     Async,
 };
 
 use crate::{
-    email::pgp::{DecryptionMetadata, Recipient, SignaturesMetadata},
+    email::pgp::{DecryptionMetadata, LocateKey, Recipient, SignaturesMetadata},
     error::{Error, ErrorKind, Result, ResultIntoError},
 };
 
@@ -92,108 +88,6 @@ pub enum GpgmeFlag {
 impl GpgmeFlag {
     const AUTO_KEY_RETRIEVE: &'static CStr = c"auto-key-retrieve";
     const AUTO_KEY_LOCATE: &'static CStr = c"auto-key-locate";
-}
-
-bitflags! {
-    #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub struct LocateKey: u8 {
-        /// Locate a key using DNS CERT, as specified in RFC-4398.
-        const CERT = 0b1;
-        /// Locate a key using DNS PKA.
-        const PKA  = 0b10;
-        /// Locate a key using DANE, as specified in draft-ietf-dane-openpgpkey-05.txt.
-        const DANE  = 0b100;
-        /// Locate a key using the Web Key Directory protocol.
-        const WKD  = 0b1000;
-        /// Using DNS Service Discovery, check the domain in question for any LDAP keyservers to use. If this fails, attempt to locate the key using the PGP Universal method of checking ‘ldap://keys.(thedomain)’.
-        const LDAP = 0b10000;
-        /// Locate a key using a keyserver.
-        const KEYSERVER  = 0b100000;
-        /// In addition, a keyserver URL as used in the dirmngr configuration may be used here to query that particular keyserver.
-        const KEYSERVER_URL = 0b1000000;
-        /// Locate the key using the local keyrings. This mechanism allows the user to select the order a local key lookup is done. Thus using ‘--auto-key-locate local’ is identical to --no-auto-key-locate.
-        const LOCAL = 0b10000000;
-        /// This flag disables the standard local key lookup, done before any of the mechanisms defined by the --auto-key-locate are tried. The position of this mechanism in the list does not matter. It is not required if local is also used.
-        const NODEFAULT = 0;
-    }
-}
-
-impl<'de> Deserialize<'de> for LocateKey {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        <String>::deserialize(deserializer).map_or_else(
-            |_| Err(de::Error::custom("LocateKey value must be a string.")),
-            |s| Self::from_string_de::<'de, D, String>(s),
-        )
-    }
-}
-
-impl Serialize for LocateKey {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(&self.to_string())
-    }
-}
-
-impl LocateKey {
-    pub fn from_string_de<'de, D, T: AsRef<str>>(s: T) -> std::result::Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        Ok(match s.as_ref().trim() {
-            s if s.eq_ignore_ascii_case("cert") => Self::CERT,
-            s if s.eq_ignore_ascii_case("pka") => Self::PKA,
-            s if s.eq_ignore_ascii_case("dane") => Self::DANE,
-            s if s.eq_ignore_ascii_case("wkd") => Self::WKD,
-            s if s.eq_ignore_ascii_case("ldap") => Self::LDAP,
-            s if s.eq_ignore_ascii_case("keyserver") => Self::KEYSERVER,
-            s if s.eq_ignore_ascii_case("keyserver-url") => Self::KEYSERVER_URL,
-            s if s.eq_ignore_ascii_case("local") => Self::LOCAL,
-            combination if combination.contains(',') => {
-                let mut ret = Self::NODEFAULT;
-                for c in combination.trim().split(',') {
-                    ret |= Self::from_string_de::<'de, D, &str>(c.trim())?;
-                }
-                ret
-            }
-            _ => {
-                return Err(de::Error::custom(
-                    r#"Takes valid auto-key-locate GPG values: "cert", "pka", "dane", "wkd", "ldap", "keyserver", "keyserver-URL", "local", "nodefault""#,
-                ))
-            }
-        })
-    }
-}
-
-impl std::fmt::Display for LocateKey {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if *self == Self::NODEFAULT {
-            write!(fmt, "clear,nodefault")
-        } else {
-            let mut accum = String::new();
-            macro_rules! is_set {
-                ($flag:expr, $string:literal) => {{
-                    if self.intersects($flag) {
-                        accum.push_str($string);
-                        accum.push(',');
-                    }
-                }};
-            }
-            is_set!(Self::CERT, "cert");
-            is_set!(Self::PKA, "pka");
-            is_set!(Self::WKD, "wkd");
-            is_set!(Self::LDAP, "ldap");
-            is_set!(Self::KEYSERVER, "keyserver");
-            is_set!(Self::KEYSERVER_URL, "keyserver-url");
-            is_set!(Self::LOCAL, "local");
-            accum.pop();
-            write!(fmt, "{accum}")
-        }
-    }
 }
 
 pub struct ContextInner {

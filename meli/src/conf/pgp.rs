@@ -82,7 +82,7 @@ pub struct PGPSettings {
         )
     )]
     #[cfg(feature = "gpgme")]
-    pub remote_lookup_mechanisms: melib::gpgme::LocateKey,
+    pub remote_lookup_mechanisms: melib::email::pgp::LocateKey,
     #[cfg(not(feature = "gpgme"))]
     #[cfg_attr(
         not(feature = "gpgme"),
@@ -92,8 +92,8 @@ pub struct PGPSettings {
 }
 
 #[cfg(feature = "gpgme")]
-fn default_lookup_mechanism() -> melib::gpgme::LocateKey {
-    melib::gpgme::LocateKey::LOCAL | melib::gpgme::LocateKey::WKD
+fn default_lookup_mechanism() -> melib::email::pgp::LocateKey {
+    melib::email::pgp::LocateKey::LOCAL | melib::email::pgp::LocateKey::WKD
 }
 
 impl Default for PGPSettings {
@@ -116,7 +116,7 @@ impl Default for PGPSettings {
     }
 }
 
-impl DotAddressable for melib::gpgme::LocateKey {}
+impl DotAddressable for melib::email::pgp::LocateKey {}
 
 impl DotAddressable for PGPSettings {
     fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
