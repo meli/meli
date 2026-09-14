@@ -97,6 +97,9 @@ impl std::fmt::Display for StatusBar {
 }
 
 impl StatusBar {
+    const MOUSE_MODE: &str = "🖱️ ";
+    const MOUSE_MODE_ASCII: &str = "(mouse)";
+
     pub fn new(context: &Context, container: Box<dyn Component>) -> Self {
         let mut progress_spinner = ProgressSpinner::new(20, context);
         match context.settings.terminal.progress_spinner_sequence.as_ref() {
@@ -209,12 +212,17 @@ impl StatusBar {
             "{} {}| {}{}{}",
             self.mode,
             if self.mouse {
+                let alt = if context.settings.terminal.ascii_drawing {
+                    Self::MOUSE_MODE_ASCII
+                } else {
+                    Self::MOUSE_MODE
+                };
                 context
                     .settings
                     .terminal
                     .mouse_flag
                     .as_deref()
-                    .unwrap_or("🖱️ ")
+                    .unwrap_or(alt)
             } else {
                 ""
             },
@@ -554,12 +562,17 @@ impl Component for StatusBar {
                         "{} {}",
                         m,
                         if self.mouse {
+                            let alt = if context.settings.terminal.ascii_drawing {
+                                Self::MOUSE_MODE_ASCII
+                            } else {
+                                Self::MOUSE_MODE
+                            };
                             context
                                 .settings
                                 .terminal
                                 .mouse_flag
                                 .as_deref()
-                                .unwrap_or("🖱️ ")
+                                .unwrap_or(alt)
                         } else {
                             ""
                         },
