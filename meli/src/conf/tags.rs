@@ -34,8 +34,8 @@ use crate::{conf::DotAddressable, terminal::Color};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TagName {
-    name: String,
-    hash: TagHash,
+    pub name: String,
+    pub hash: TagHash,
 }
 
 impl std::borrow::Borrow<TagHash> for TagName {
@@ -67,7 +67,7 @@ impl<'de> Deserialize<'de> for TagName {
 
 impl Hash for TagName {
     fn hash<H: Hasher>(&self, hasher: &mut H) {
-        self.name.hash(hasher)
+        self.hash.hash(hasher)
     }
 }
 

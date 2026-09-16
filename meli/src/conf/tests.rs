@@ -378,3 +378,33 @@ interval_ms = 51"#
         },
     );
 }
+
+#[test]
+fn test_conf_tag_rename() {
+    use melib::TagHash;
+
+    use crate::conf::tags::TagName;
+
+    let t = TagHash(6222660804048278788);
+    let rename_map = indexmap::indexmap! {
+        TagName {
+            name: "$istrusted".to_string(),
+            hash: TagHash(
+                17165945850818254125,
+            ),
+        } => "trusted".to_string(),
+        TagName {
+            name: "$x-me-annot-2".to_string(),
+            hash: TagHash(
+                6222660804048278788,
+            ),
+        } => "meannot2".to_string(),
+    };
+
+    let tagname = TagName {
+        name: "$x-me-annot-2".to_string(),
+        hash: TagHash(6222660804048278788),
+    };
+    assert_eq!(rename_map.get(&t), rename_map.get(&tagname));
+    assert_eq!(&rename_map[&TagHash(17165945850818254125,)], "trusted");
+}
