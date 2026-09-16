@@ -1317,7 +1317,7 @@ impl CompactListing {
                         self.color_cache.tag_default.fg,
                         color,
                         self.color_cache.tag_default.attrs,
-                        area_col_4,
+                        area_col_4.skip_cols(1),
                         None,
                         None,
                     );
