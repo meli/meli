@@ -220,6 +220,22 @@ impl Drop for Key {
     }
 }
 
+impl From<Key> for crate::email::pgp::Key {
+    fn from(val: Key) -> Self {
+        Self {
+            primary_uid: val.primary_uid(),
+            fingerprint: val.fingerprint().to_string(),
+            revoked: val.revoked(),
+            disabled: val.disabled(),
+            expired: val.expired(),
+            invalid: val.invalid(),
+            can_encrypt: val.can_encrypt(),
+            can_sign: val.can_sign(),
+            secret: val.secret(),
+        }
+    }
+}
+
 pub struct InvalidKeyError {
     pub fingerprint: String,
     pub reason: String,

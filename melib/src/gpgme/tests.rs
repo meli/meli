@@ -25,7 +25,7 @@ use std::{borrow::Cow, ffi::CString, future::Future};
 use rusty_fork::rusty_fork_test;
 
 use crate::{
-    gpgme::{Context, EngineInfo, Key, LocateKey, Protocol},
+    gpgme::{Context, EngineInfo, GpgmeKey, LocateKey, Protocol},
     Address, Result,
 };
 
@@ -47,7 +47,7 @@ fn run_gpgme_keylist() {
         local: bool,
         pattern: String,
         ctx: &mut Context,
-    ) -> Result<impl Future<Output = Result<Vec<Key>>>> {
+    ) -> Result<impl Future<Output = Result<Vec<GpgmeKey>>>> {
         if local {
             ctx.set_auto_key_locate(LocateKey::LOCAL)?;
         } else {
@@ -119,7 +119,7 @@ fn run_gpgme_keylist() {
     // 1. loop will fail to find any keys, so `pubkey_data` will be imported
     // 2. loop will find `PUBKEY` since it was imported in the previous iteration.
     for _ in 0..2 {
-        let keylist: Vec<Key> = smol::block_on(async {
+        let keylist: Vec<GpgmeKey> = smol::block_on(async {
             make_fut(false, true, "".to_string(), &mut gpgme_ctx)
                 .unwrap()
                 .await
@@ -136,7 +136,7 @@ fn run_gpgme_keylist() {
             gpgme_ctx.import_key(pubkey_data).unwrap();
         } else {
             // 2nd loop iteration enters here
-            let assert_key = |key: &Key| {
+            let assert_key = |key: &GpgmeKey| {
                 key.fingerprint() == "ADAB7FCC1F4DE2616ECFA402AF82244F9CD9FD55"
                     && key.primary_uid()
                         == Some(Address::new(Some("Joe Random Hacker"), "joe@example.com"))

@@ -19,12 +19,16 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
+use melib::email::pgp::{Key, LocateKey, PGPBackend};
 
-type KeylistJoinHandle = JoinHandle<Result<Vec<melib::gpgme::Key>>>;
+use super::*;
+use crate::conf::PGPBackendChoice;
+
+type KeylistJoinHandle = JoinHandle<Result<Vec<Key>>>;
 
 #[derive(Debug)]
 pub struct KeySelectionLoading {
+    pgp_backend_choice: PGPBackendChoice,
     handles: (KeylistJoinHandle, Vec<KeylistJoinHandle>),
     progress_spinner: ProgressSpinner,
     secret: bool,
@@ -35,32 +39,32 @@ pub struct KeySelectionLoading {
 
 impl KeySelectionLoading {
     pub fn new(
+        pgp_backend_choice: PGPBackendChoice,
         secret: bool,
         local: bool,
         patterns: (String, Vec<String>),
         allow_remote_lookup: ActionFlag,
         context: &Context,
     ) -> Result<Self> {
-        use melib::{email::pgp::LocateKey, gpgme};
-        let mut ctx = gpgme::Context::new()?;
+        let mut backend = pgp_backend_choice.instantiate()?;
         if local {
-            ctx.set_auto_key_locate(LocateKey::LOCAL)?;
+            backend.set_auto_key_locate(LocateKey::LOCAL)?;
         } else {
-            ctx.set_auto_key_locate(LocateKey::WKD | LocateKey::LOCAL)?;
+            backend.set_auto_key_locate(LocateKey::WKD | LocateKey::LOCAL)?;
         }
         let (pattern, other_patterns) = patterns;
-        let main_job = ctx.keylist(secret, Some(pattern.clone()))?;
+        let main_job = backend.keylist(secret, Some(pattern.clone()))?;
         let main_handle = context.main_loop_handler.job_executor.spawn(
-            "gpg::keylist".into(),
+            "pgp::keylist".into(),
             main_job,
             IsAsync::Blocking,
         );
         let other_handles = other_patterns
             .iter()
             .map(|pattern| {
-                let job = ctx.keylist(secret, Some(pattern.clone()))?;
+                let job = backend.keylist(secret, Some(pattern.clone()))?;
                 Ok(context.main_loop_handler.job_executor.spawn(
-                    "gpg::keylist".into(),
+                    "pgp::keylist".into(),
                     job,
                     IsAsync::Blocking,
                 ))
@@ -69,6 +73,7 @@ impl KeySelectionLoading {
         let mut progress_spinner = ProgressSpinner::new(8, context);
         progress_spinner.start();
         Ok(Self {
+            pgp_backend_choice,
             handles: (main_handle, other_handles),
             secret,
             local,
@@ -80,6 +85,7 @@ impl KeySelectionLoading {
 
     pub fn merge(&mut self, rhs: Self) {
         let Self {
+            pgp_backend_choice: _,
             handles: (_, ref mut other_handles),
             secret: _,
             local: _,
@@ -88,6 +94,7 @@ impl KeySelectionLoading {
             progress_spinner: _,
         } = self;
         let Self {
+            pgp_backend_choice: _,
             handles: (rhs_handle, rhs_other_handles),
             patterns: (rhs_pattern, rhs_other_patterns),
             secret: _,
@@ -108,15 +115,15 @@ pub enum KeySelection {
         inner: KeySelectionLoading,
         /// Accumulate results from intermediate results (i.e. not the main
         /// pattern)
-        keys_accumulator: Vec<melib::gpgme::Key>,
+        keys_accumulator: Vec<Key>,
     },
     Error {
         id: ComponentId,
         err: Error,
     },
     Loaded {
-        widget: Box<UIDialog<melib::gpgme::Key>>,
-        keys: Vec<melib::gpgme::Key>,
+        widget: Box<UIDialog<Key>>,
+        keys: Vec<Key>,
     },
 }
 
@@ -167,6 +174,7 @@ impl Component for KeySelection {
             Self::Loading {
                 inner:
                     KeySelectionLoading {
+                        ref pgp_backend_choice,
                         ref mut progress_spinner,
                         handles: (ref mut main_handle, ref mut other_handles),
                         secret,
@@ -197,6 +205,7 @@ impl Component for KeySelection {
                                 let id = progress_spinner.id();
                                 if allow_remote_lookup.is_true() {
                                     match KeySelectionLoading::new(
+                                        pgp_backend_choice.clone(),
                                         *secret,
                                         *local,
                                         (std::mem::take(pattern), std::mem::take(other_patterns)),
@@ -238,7 +247,7 @@ impl Component for KeySelection {
                                     });
                                     // Even in case of error, we should send a FinishedUIDialog
                                     // event so that the component parent knows we're done.
-                                    let res: Option<Vec<melib::gpgme::Key>> = None;
+                                    let res: Option<Vec<Key>> = None;
                                     context
                                         .replies
                                         .push_back(UIEvent::FinishedUIDialog(id, Box::new(res)));
@@ -260,27 +269,25 @@ impl Component for KeySelection {
                                         .map(|k| {
                                             (
                                                 k.clone(),
-                                                if let Some(primary_uid) = k.primary_uid() {
-                                                    format!("{} {}", k.fingerprint(), primary_uid)
+                                                if let Some(ref primary_uid) = k.primary_uid {
+                                                    format!("{} {}", k.fingerprint, primary_uid)
                                                 } else {
-                                                    k.fingerprint().to_string()
+                                                    k.fingerprint.clone()
                                                 },
                                             )
                                         })
-                                        .collect::<Vec<(melib::gpgme::Key, String)>>(),
+                                        .collect::<Vec<(Key, String)>>(),
                                     false,
-                                    Some(Box::new(
-                                        move |id: ComponentId, results: &[melib::gpgme::Key]| {
-                                            Some(UIEvent::FinishedUIDialog(
-                                                id,
-                                                Box::new(if results.is_empty() {
-                                                    None
-                                                } else {
-                                                    Some(results.to_vec())
-                                                }),
-                                            ))
-                                        },
-                                    )),
+                                    Some(Box::new(move |id: ComponentId, results: &[Key]| {
+                                        Some(UIEvent::FinishedUIDialog(
+                                            id,
+                                            Box::new(if results.is_empty() {
+                                                None
+                                            } else {
+                                                Some(results.to_vec())
+                                            }),
+                                        ))
+                                    })),
                                     context,
                                 ));
                                 widget.set_dirty(true);
@@ -303,7 +310,7 @@ impl Component for KeySelection {
                             });
                             // Even in case of error, we should send a FinishedUIDialog
                             // event so that the component parent knows we're done.
-                            let res: Option<Vec<melib::gpgme::Key>> = None;
+                            let res: Option<Vec<Key>> = None;
                             context
                                 .replies
                                 .push_back(UIEvent::FinishedUIDialog(self.id(), Box::new(res)));
@@ -378,15 +385,15 @@ impl Component for KeySelection {
 }
 
 #[derive(Clone, Debug)]
-pub struct GpgComposeState {
+pub struct PGPComposeState {
     pub sign_mail: Option<ActionFlag>,
     pub encrypt_mail: Option<ActionFlag>,
-    pub encrypt_keys: Vec<melib::gpgme::Key>,
+    pub encrypt_keys: Vec<Key>,
     pub encrypt_for_self: bool,
-    pub sign_keys: Vec<melib::gpgme::Key>,
+    pub sign_keys: Vec<Key>,
 }
 
-impl Default for GpgComposeState {
+impl Default for PGPComposeState {
     fn default() -> Self {
         Self {
             sign_mail: None,
@@ -398,12 +405,12 @@ impl Default for GpgComposeState {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(feature = "gpgme", test))]
 mod tests {
     use std::{borrow::Cow, ffi::CString};
 
     use melib::{
-        email::pgp::LocateKey,
+        email::pgp::{LocateKey, PGPBackend},
         gpgme::{EngineInfo, Protocol},
     };
     use rusty_fork::rusty_fork_test;
@@ -420,13 +427,13 @@ mod tests {
             ctx: &mut melib::gpgme::Context,
         ) -> Result<Self> {
             if local {
-                ctx.set_auto_key_locate(LocateKey::LOCAL)?;
+                PGPBackend::set_auto_key_locate(ctx, LocateKey::LOCAL)?;
             } else {
-                ctx.set_auto_key_locate(LocateKey::WKD | LocateKey::LOCAL)?;
+                PGPBackend::set_auto_key_locate(ctx, LocateKey::WKD | LocateKey::LOCAL)?;
             }
-            let job = ctx.keylist(secret, Some(pattern.clone()))?;
+            let job = PGPBackend::keylist(ctx, secret, Some(pattern.clone()))?;
             let handle = context.main_loop_handler.job_executor.spawn(
-                "gpg::keylist".into(),
+                "pgp::keylist".into(),
                 job,
                 IsAsync::Blocking,
             );
@@ -434,6 +441,7 @@ mod tests {
             progress_spinner.start();
             Ok(Self::Loading {
                 inner: KeySelectionLoading {
+                    pgp_backend_choice: PGPBackendChoice::GpgME,
                     handles: (handle, vec![]),
                     secret,
                     local,
@@ -572,19 +580,19 @@ mod tests {
                 gpgme_ctx.import_key(pubkey_data).unwrap();
             } else {
                 // 2nd loop iteration enters here
-                let assert_key = |key: &melib::gpgme::Key| {
-                    key.fingerprint() == "ADAB7FCC1F4DE2616ECFA402AF82244F9CD9FD55"
-                        && key.primary_uid()
+                let assert_key = |key: &Key| {
+                    key.fingerprint == "ADAB7FCC1F4DE2616ECFA402AF82244F9CD9FD55"
+                        && key.primary_uid
                             == Some(melib::Address::new(
                                 Some("Joe Random Hacker"),
                                 "joe@example.com",
                             ))
-                        && key.can_encrypt()
-                        && key.can_sign()
-                        && !key.secret()
-                        && !key.revoked()
-                        && !key.expired()
-                        && !key.invalid()
+                        && key.can_encrypt
+                        && key.can_sign
+                        && !key.secret
+                        && !key.revoked
+                        && !key.expired
+                        && !key.invalid
                 };
                 assert!(
                     matches!(

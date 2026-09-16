@@ -19,35 +19,38 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#[cfg(feature = "gpgme")]
 use std::{
     collections::{hash_map::DefaultHasher, BTreeMap},
     future::Future,
     hash::{Hash, Hasher},
+    process::{Command, Stdio},
     sync::{Arc, Mutex},
 };
 
 use melib::{
-    email::pgp::{Recipient, Signature, SignaturesMetadata},
-    error::*,
-};
-#[cfg(feature = "gpgme")]
-use melib::{
     email::{
         attachment_types::{ContentDisposition, ContentType, MultipartType, Text},
-        pgp::{self as melib_pgp, DecryptionMetadata, LocateKey, UnverifiedSignature},
+        pgp::{
+            self as melib_pgp, DecryptionMetadata, Key, LocateKey, NewSignature, PGPBackend,
+            Recipient, ResultFuture, Signature, SignaturesMetadata, UnverifiedSignature,
+        },
         Attachment, AttachmentBuilder,
     },
-    gpgme::*,
+    error::*,
     parser::BytesExt,
 };
 
-#[cfg(feature = "gpgme")]
 use super::AttachmentBoxFuture;
+use crate::{
+    conf::pgp::{PGPBackendCLI, PGPBackendChoice},
+    types::File,
+};
 
-#[cfg(feature = "gpgme")]
 /// Decrypts a `multipart/encrypted` or a cleartext encrypted message.
-pub async fn decrypt(a: Attachment) -> Result<(DecryptionMetadata, Vec<u8>)> {
+pub async fn decrypt(
+    mut backend: impl PGPBackend,
+    a: Attachment,
+) -> Result<(DecryptionMetadata, Vec<u8>)> {
     let Attachment {
         content_type:
             ContentType::Multipart {
@@ -74,9 +77,7 @@ pub async fn decrypt(a: Attachment) -> Result<(DecryptionMetadata, Vec<u8>)> {
                 // Clear text
                 let octet_stream =
                     melib::email::pgp::convert_attachment_to_rfc_spec(content.trim().as_bytes());
-                let mut ctx = Context::new()?;
-                let cipher = ctx.new_data_mem(&octet_stream)?;
-                return ctx.decrypt(cipher)?.await;
+                return backend.decrypt(&octet_stream)?.await;
             }
         }
         return Err(Error::new("No encrypted payload found").set_kind(ErrorKind::ValueError));
@@ -86,13 +87,13 @@ pub async fn decrypt(a: Attachment) -> Result<(DecryptionMetadata, Vec<u8>)> {
         .find(|p| p.content_type == "application/octet-stream")
         .ok_or_else(|| Error::new("No encrypted payload found").set_kind(ErrorKind::ValueError))?;
     let decoded_octet_stream = blob.decode(Default::default());
-    let mut ctx = Context::new()?;
-    let cipher = ctx.new_data_mem(&decoded_octet_stream)?;
-    ctx.decrypt(cipher)?.await
+    backend.decrypt(&decoded_octet_stream)?.await
 }
 
-#[cfg(feature = "gpgme")]
-pub fn verify(a: Attachment) -> impl Future<Output = Result<SignaturesMetadata>> {
+pub fn verify(
+    mut backend: impl PGPBackend,
+    a: Attachment,
+) -> impl Future<Output = Result<SignaturesMetadata>> {
     thread_local! {
         static CACHE: Arc<Mutex<BTreeMap<u64, Result<SignaturesMetadata>>>> = Arc::new(Mutex::new(BTreeMap::new()));
     }
@@ -119,11 +120,7 @@ pub fn verify(a: Attachment) -> impl Future<Output = Result<SignaturesMetadata>>
                     }
                 }
 
-                let mut ctx = Context::new()?;
-                let signature = ctx.new_data_mem(signature.body().trim())?;
-                let signed_part = ctx.new_data_mem(&signed_part)?;
-
-                let result = ctx.verify(signature, signed_part)?.await;
+                let result = backend.verify(signature.body().trim(), &signed_part)?.await;
                 {
                     let mut lck = cache.lock().unwrap();
                     lck.insert(attachment_hash, result.clone());
@@ -142,10 +139,7 @@ pub fn verify(a: Attachment) -> impl Future<Output = Result<SignaturesMetadata>>
                     }
                 }
 
-                let mut ctx = Context::new()?;
-                let text = ctx.new_data_mem(&text)?;
-
-                let result = ctx.verify_cleartext(text)?.await.map(|(s, _)| s);
+                let result = backend.verify_cleartext(&text)?.await;
                 {
                     let mut lck = cache.lock().unwrap();
                     lck.insert(attachment_hash, result.clone());
@@ -201,17 +195,17 @@ pub fn signatures_into_error(metadata: SignaturesMetadata) -> Result<Option<Stri
     Ok(Some(comment))
 }
 
-#[cfg(feature = "gpgme")]
 pub fn sign_filter(
+    choice: PGPBackendChoice,
     default_key: Option<String>,
     mut sign_keys: Vec<Key>,
 ) -> Result<impl FnOnce(AttachmentBuilder) -> AttachmentBoxFuture + Send> {
     Ok(move |a: AttachmentBuilder| -> AttachmentBoxFuture {
         Box::pin(async move {
+            let mut backend = choice.instantiate()?;
             if let Some(default_key) = default_key {
-                let mut ctx = Context::new()?;
-                ctx.set_auto_key_locate(LocateKey::LOCAL)?;
-                let keys = ctx.keylist(false, Some(default_key.clone()))?.await?;
+                backend.set_auto_key_locate(LocateKey::LOCAL)?;
+                let keys = backend.keylist(false, Some(default_key.clone()))?.await?;
                 if keys.is_empty() {
                     return Err(Error::new(format!(
                         "Could not locate sign key with ID `{default_key}`"
@@ -225,10 +219,8 @@ pub fn sign_filter(
                 ));
             }
             let a: Attachment = a.into();
-            let mut ctx = Context::new()?;
             let signed_data = melib_pgp::convert_attachment_to_rfc_spec(a.into_raw().as_bytes());
-            let data = ctx.new_data_mem(&signed_data)?;
-            let (sig_metadata, sig_bytes) = ctx.sign(sign_keys, data, false)?.await?;
+            let (sig_metadata, sig_bytes) = backend.sign(sign_keys, &signed_data, false)?.await?;
             let sig_attachment =
                 Attachment::new(ContentType::PGPSignature, Default::default(), sig_bytes);
             let a: AttachmentBuilder = a.into();
@@ -254,8 +246,8 @@ pub fn sign_filter(
     })
 }
 
-#[cfg(feature = "gpgme")]
 pub fn encrypt_filter(
+    choice: PGPBackendChoice,
     encrypt_for_self: Option<melib::Address>,
     default_sign_key: Option<String>,
     mut sign_keys: Option<Vec<Key>>,
@@ -264,10 +256,10 @@ pub fn encrypt_filter(
 ) -> Result<impl FnOnce(AttachmentBuilder) -> AttachmentBoxFuture + Send> {
     Ok(move |a: AttachmentBuilder| -> AttachmentBoxFuture {
         Box::pin(async move {
+            let mut backend = choice.instantiate()?;
             if let Some(default_key) = default_sign_key {
-                let mut ctx = Context::new()?;
-                ctx.set_auto_key_locate(LocateKey::LOCAL)?;
-                let keys = ctx.keylist(true, Some(default_key.clone()))?.await?;
+                backend.set_auto_key_locate(LocateKey::LOCAL)?;
+                let keys = backend.keylist(true, Some(default_key.clone()))?.await?;
                 if keys.is_empty() {
                     return Err(Error::new(format!(
                         "Could not locate sign key with ID `{default_key}`"
@@ -287,9 +279,8 @@ pub fn encrypt_filter(
                 }
             }
             if let Some(default_key) = default_encrypt_key {
-                let mut ctx = Context::new()?;
-                ctx.set_auto_key_locate(LocateKey::LOCAL)?;
-                let keys = ctx.keylist(false, Some(default_key.clone()))?.await?;
+                backend.set_auto_key_locate(LocateKey::LOCAL)?;
+                let keys = backend.keylist(false, Some(default_key.clone()))?.await?;
                 if keys.is_empty() {
                     return Err(Error::new(format!(
                         "Could not locate encryption key with ID `{default_key}`"
@@ -303,9 +294,8 @@ pub fn encrypt_filter(
                 ));
             }
             if let Some(encrypt_for_self) = encrypt_for_self {
-                let mut ctx = Context::new()?;
-                ctx.set_auto_key_locate(LocateKey::LOCAL)?;
-                let keys = ctx
+                backend.set_auto_key_locate(LocateKey::LOCAL)?;
+                let keys = backend
                     .keylist(false, Some(encrypt_for_self.to_string()))?
                     .await?;
                 if keys.is_empty() {
@@ -321,11 +311,8 @@ pub fn encrypt_filter(
             }
             let a: Attachment = if let Some(sign_keys) = sign_keys {
                 let a: Attachment = a.into();
-                let mut ctx = Context::new()?;
-                let data = ctx.new_data_mem(&melib_pgp::convert_attachment_to_rfc_spec(
-                    a.into_raw().as_bytes(),
-                ))?;
-                let (sig_metadata, sig_bytes) = ctx.sign(sign_keys, data, false)?.await?;
+                let data = melib_pgp::convert_attachment_to_rfc_spec(a.into_raw().as_bytes());
+                let (sig_metadata, sig_bytes) = backend.sign(sign_keys, &data, false)?.await?;
                 let sig_attachment =
                     Attachment::new(ContentType::PGPSignature, Default::default(), sig_bytes);
                 let a: AttachmentBuilder = a.into();
@@ -348,8 +335,7 @@ pub fn encrypt_filter(
             } else {
                 a.into()
             };
-            let mut ctx = Context::new()?;
-            let data = ctx.new_data_mem(a.into_raw().as_bytes())?;
+            let data = a.into_raw().into_bytes();
 
             let enc_attachment = {
                 let mut a = Attachment::new(
@@ -358,7 +344,7 @@ pub fn encrypt_filter(
                         parameters: vec![],
                     },
                     Default::default(),
-                    ctx.encrypt(encrypt_keys, data)?.await?,
+                    backend.encrypt(encrypt_keys, &data)?.await?,
                 );
                 a.content_disposition =
                     ContentDisposition::from(br#"attachment; filename="msg.asc""#);
@@ -383,6 +369,410 @@ pub fn encrypt_filter(
             .into())
         })
     })
+}
+
+impl PGPBackendChoice {
+    #[inline]
+    pub fn instantiate(&'_ self) -> Result<PGPBackendInstance<'_>> {
+        self.try_into()
+    }
+}
+
+pub enum PGPBackendInstance<'a> {
+    #[cfg(feature = "gpgme")]
+    GpgME { ctx: melib::gpgme::Context },
+    CLI {
+        auto_key_locate: LocateKey,
+        cli: &'a PGPBackendCLI,
+    },
+}
+
+impl<'a> TryFrom<&'a PGPBackendChoice> for PGPBackendInstance<'a> {
+    type Error = Error;
+
+    fn try_from(choice: &'a PGPBackendChoice) -> Result<Self> {
+        match choice {
+            #[cfg(feature = "gpgme")]
+            PGPBackendChoice::GpgME => Ok(Self::GpgME {
+                ctx: melib::gpgme::Context::new()?,
+            }),
+            #[cfg(not(feature = "gpgme"))]
+            PGPBackendChoice::GpgME => Err(Error::new(
+                "Cannot instantiate GpgME backend: meli must be compiled with libgpgme. Try \
+                 choosing another PGP backend.",
+            )
+            .set_kind(ErrorKind::Configuration)),
+            PGPBackendChoice::CLI(ref cli) => Ok(Self::CLI {
+                auto_key_locate: LocateKey::default(),
+                cli,
+            }),
+        }
+    }
+}
+
+impl<'a> PGPBackend for PGPBackendInstance<'a> {
+    fn set_auto_key_locate(&mut self, val: LocateKey) -> Result<()> {
+        match self {
+            #[cfg(feature = "gpgme")]
+            Self::GpgME { ctx } => {
+                ctx.set_auto_key_locate(val)?;
+                Ok(())
+            }
+            Self::CLI {
+                auto_key_locate, ..
+            } => {
+                *auto_key_locate = val;
+                Ok(())
+            }
+        }
+    }
+
+    fn get_auto_key_locate(&self) -> Result<LocateKey> {
+        match self {
+            #[cfg(feature = "gpgme")]
+            Self::GpgME { ctx } => ctx.get_auto_key_locate(),
+            Self::CLI {
+                auto_key_locate, ..
+            } => Ok(*auto_key_locate),
+        }
+    }
+
+    fn get_key(&self, secret: bool, pattern: String) -> ResultFuture<Key> {
+        match self {
+            #[cfg(feature = "gpgme")]
+            Self::GpgME { ctx } => PGPBackend::get_key(ctx, secret, pattern),
+            Self::CLI {
+                ref auto_key_locate,
+                cli,
+                ..
+            } => {
+                let get_key_command = cli.get_key_command.to_string();
+                let auto_key_locate = *auto_key_locate;
+                Ok(Box::pin(async move {
+                    melib::smol::unblock(move || {
+                        let auto_key_locate = auto_key_locate.to_string();
+                        let mut envs = vec![("AUTO_KEY_LOCATE", auto_key_locate.as_str())];
+                        if secret {
+                            envs.push(("SECRET", ""));
+                        }
+                        let output = Command::new(&get_key_command)
+                            .envs(envs)
+                            .arg(&pattern)
+                            .stdin(Stdio::null())
+                            .stdout(Stdio::piped())
+                            .stderr(Stdio::piped())
+                            .output()
+                            .chain_err_summary(|| format!("Could not launch {get_key_command}"))?;
+                        if !output.status.success() {
+                            return Err(format!("{get_key_command} exited with {output:?}").into());
+                        }
+                        if let Ok(err) = serde_json::from_slice::<String>(&output.stdout) {
+                            return Err(err.into());
+                        }
+                        Ok(
+                            serde_json::from_slice::<Key>(&output.stdout).map_err(|err| {
+                                format!(
+                                    "Could not deserialize key response from {get_key_command}: \
+                                     {err}"
+                                )
+                            })?,
+                        )
+                    })
+                    .await
+                }))
+            }
+        }
+    }
+
+    fn verify(&mut self, signature: &[u8], text: &[u8]) -> ResultFuture<SignaturesMetadata> {
+        match self {
+            #[cfg(feature = "gpgme")]
+            Self::GpgME { ctx } => PGPBackend::verify(ctx, signature, text),
+            Self::CLI {
+                ref auto_key_locate,
+                cli,
+                ..
+            } => {
+                let verify_command = cli.verify_command.to_string();
+                let auto_key_locate = *auto_key_locate;
+                let signature = File::create_temp_file(signature, None, None, None, true)?;
+                let text = File::create_temp_file(text, None, None, None, true)?;
+                Ok(Box::pin(async move {
+                    melib::smol::unblock(move || {
+                        let output = Command::new(&verify_command)
+                            .arg(signature.path())
+                            .arg(text.path())
+                            .env("AUTO_KEY_LOCATE", auto_key_locate.to_string())
+                            .stdin(Stdio::null())
+                            .stdout(Stdio::piped())
+                            .stderr(Stdio::piped())
+                            .output()
+                            .chain_err_summary(|| format!("Could not launch {verify_command}"))?;
+                        if !output.status.success() {
+                            return Err(format!("{verify_command} exited with {output:?}").into());
+                        }
+                        if let Ok(err) = serde_json::from_slice::<String>(&output.stdout) {
+                            return Err(err.into());
+                        }
+                        let signatures: Vec<Signature> = serde_json::from_slice(&output.stdout)
+                            .map_err(|err| {
+                                format!(
+                                    "Could not deserialize signature response from \
+                                     {verify_command}: {err}"
+                                )
+                            })?;
+                        Ok(SignaturesMetadata { signatures })
+                    })
+                    .await
+                }))
+            }
+        }
+    }
+
+    fn verify_cleartext(&mut self, text: &[u8]) -> ResultFuture<SignaturesMetadata> {
+        match self {
+            #[cfg(feature = "gpgme")]
+            Self::GpgME { ctx } => PGPBackend::verify_cleartext(ctx, text),
+            Self::CLI {
+                ref auto_key_locate,
+                cli,
+                ..
+            } => {
+                let verify_command = cli.verify_command.to_string();
+                let auto_key_locate = *auto_key_locate;
+                let text = File::create_temp_file(text, None, None, None, true)?;
+                Ok(Box::pin(async move {
+                    melib::smol::unblock(move || {
+                        let output = Command::new(&verify_command)
+                            .arg(text.path())
+                            .env("AUTO_KEY_LOCATE", auto_key_locate.to_string())
+                            .env("CLEARTEXT", "")
+                            .stdin(Stdio::null())
+                            .stdout(Stdio::piped())
+                            .stderr(Stdio::piped())
+                            .output()
+                            .chain_err_summary(|| format!("Could not launch {verify_command}"))?;
+                        if !output.status.success() {
+                            return Err(format!("{verify_command} exited with {output:?}").into());
+                        }
+                        if let Ok(err) = serde_json::from_slice::<String>(&output.stdout) {
+                            return Err(err.into());
+                        }
+                        let signatures: Vec<Signature> = serde_json::from_slice(&output.stdout)
+                            .map_err(|err| {
+                                format!(
+                                    "Could not deserialize signature response from \
+                                     {verify_command}: {err}"
+                                )
+                            })?;
+                        Ok(SignaturesMetadata { signatures })
+                    })
+                    .await
+                }))
+            }
+        }
+    }
+
+    fn keylist(&self, secret: bool, pattern: Option<String>) -> ResultFuture<Vec<Key>> {
+        match self {
+            #[cfg(feature = "gpgme")]
+            Self::GpgME { ctx } => PGPBackend::keylist(ctx, secret, pattern),
+            Self::CLI {
+                ref auto_key_locate,
+                cli,
+                ..
+            } => {
+                let keylist_command = cli.keylist_command.to_string();
+                let auto_key_locate = *auto_key_locate;
+                Ok(Box::pin(async move {
+                    melib::smol::unblock(move || {
+                        let auto_key_locate = auto_key_locate.to_string();
+                        let mut envs = vec![("AUTO_KEY_LOCATE", auto_key_locate.as_str())];
+                        if secret {
+                            envs.push(("SECRET", ""));
+                        }
+                        let mut cmd = Command::new(&keylist_command);
+                        if let Some(ref pattern) = pattern {
+                            cmd.arg(pattern);
+                        }
+                        let output = cmd
+                            .envs(envs)
+                            .stdin(Stdio::null())
+                            .stdout(Stdio::piped())
+                            .stderr(Stdio::piped())
+                            .output()
+                            .chain_err_summary(|| format!("Could not launch {keylist_command}"))?;
+                        if !output.status.success() {
+                            return Err(format!("{keylist_command} exited with {output:?}").into());
+                        }
+                        if let Ok(err) = serde_json::from_slice::<String>(&output.stdout) {
+                            return Err(err.into());
+                        }
+                        Ok(
+                            serde_json::from_slice::<Vec<Key>>(&output.stdout).map_err(|err| {
+                                format!(
+                                    "Could not deserialize keys response from {keylist_command}: \
+                                     {err}"
+                                )
+                            })?,
+                        )
+                    })
+                    .await
+                }))
+            }
+        }
+    }
+
+    fn sign(
+        &mut self,
+        sign_keys: Vec<Key>,
+        text: &[u8],
+        is_binary: bool,
+    ) -> ResultFuture<(NewSignature, Vec<u8>)> {
+        match self {
+            #[cfg(feature = "gpgme")]
+            Self::GpgME { ctx } => PGPBackend::sign(ctx, sign_keys, text, is_binary),
+            Self::CLI {
+                ref auto_key_locate,
+                cli,
+                ..
+            } => {
+                let sign_command = cli.sign_command.to_string();
+                let auto_key_locate = *auto_key_locate;
+                let text = File::create_temp_file(text, None, None, None, true)?;
+                Ok(Box::pin(async move {
+                    melib::smol::unblock(move || {
+                        let mut cmd = Command::new(&sign_command);
+                        cmd.env("AUTO_KEY_LOCATE", auto_key_locate.to_string())
+                            .arg(text.path());
+                        if is_binary {
+                            cmd.env("IS_BINARY", "");
+                        }
+                        for key in sign_keys {
+                            cmd.arg(&key.fingerprint);
+                        }
+                        let output = cmd
+                            .stdin(Stdio::null())
+                            .stdout(Stdio::piped())
+                            .stderr(Stdio::piped())
+                            .output()
+                            .chain_err_summary(|| format!("Could not launch {sign_command}"))?;
+                        if !output.status.success() {
+                            return Err(format!("{sign_command} exited with {output:?}").into());
+                        }
+                        if let Ok(err) = serde_json::from_slice::<String>(&output.stdout) {
+                            return Err(err.into());
+                        }
+                        use serde::de::Deserialize;
+                        Ok(
+                            serde_json::from_slice::<[serde_json::Value; 2]>(&output.stdout)
+                                .and_then(|[n, b]| {
+                                    Ok((NewSignature::deserialize(n)?, <Vec<u8>>::deserialize(b)?))
+                                })
+                                .map_err(|err| {
+                                    format!(
+                                        "Could not deserialize new signature response from \
+                                         {sign_command}: {err}"
+                                    )
+                                })?,
+                        )
+                    })
+                    .await
+                }))
+            }
+        }
+    }
+
+    fn encrypt(&mut self, encrypt_keys: Vec<Key>, plain: &[u8]) -> ResultFuture<Vec<u8>> {
+        match self {
+            #[cfg(feature = "gpgme")]
+            Self::GpgME { ctx } => PGPBackend::encrypt(ctx, encrypt_keys, plain),
+            Self::CLI {
+                ref auto_key_locate,
+                cli,
+                ..
+            } => {
+                let encrypt_command = cli.encrypt_command.to_string();
+                let auto_key_locate = *auto_key_locate;
+                let plain = File::create_temp_file(plain, None, None, None, true)?;
+                Ok(Box::pin(async move {
+                    melib::smol::unblock(move || {
+                        let mut cmd = Command::new(&encrypt_command);
+                        cmd.env("AUTO_KEY_LOCATE", auto_key_locate.to_string())
+                            .arg(plain.path());
+                        for key in encrypt_keys {
+                            cmd.arg(&key.fingerprint);
+                        }
+                        let output = cmd
+                            .stdin(Stdio::null())
+                            .stdout(Stdio::piped())
+                            .stderr(Stdio::piped())
+                            .output()
+                            .chain_err_summary(|| format!("Could not launch {encrypt_command}"))?;
+                        if !output.status.success() {
+                            return Err(format!("{encrypt_command} exited with {output:?}").into());
+                        }
+                        if let Ok(err) = serde_json::from_slice::<String>(&output.stdout) {
+                            return Err(err.into());
+                        }
+                        Ok(
+                            serde_json::from_slice::<Vec<u8>>(&output.stdout).map_err(|err| {
+                                format!(
+                                    "Could not deserialize encryption bytes response from \
+                                     {encrypt_command}: {err}"
+                                )
+                            })?,
+                        )
+                    })
+                    .await
+                }))
+            }
+        }
+    }
+
+    fn decrypt(&mut self, cipher: &[u8]) -> ResultFuture<(DecryptionMetadata, Vec<u8>)> {
+        match self {
+            #[cfg(feature = "gpgme")]
+            Self::GpgME { ctx } => PGPBackend::decrypt(ctx, cipher),
+            Self::CLI {
+                ref auto_key_locate,
+                cli,
+                ..
+            } => {
+                let decrypt_command = cli.decrypt_command.to_string();
+                let auto_key_locate = *auto_key_locate;
+                let cipher = File::create_temp_file(cipher, None, None, None, true)?;
+                Ok(Box::pin(async move {
+                    melib::smol::unblock(move || {
+                        let output = Command::new(&decrypt_command)
+                            .env("AUTO_KEY_LOCATE", auto_key_locate.to_string())
+                            .arg(cipher.path())
+                            .stdin(Stdio::null())
+                            .stdout(Stdio::piped())
+                            .stderr(Stdio::piped())
+                            .output()
+                            .chain_err_summary(|| format!("Could not launch {decrypt_command}"))?;
+                        if !output.status.success() {
+                            return Err(format!("{decrypt_command} exited with {output:?}").into());
+                        }
+                        if let Ok(err) = serde_json::from_slice::<String>(&output.stdout) {
+                            return Err(err.into());
+                        }
+                        Ok((
+                            DecryptionMetadata::default(),
+                            serde_json::from_slice::<Vec<u8>>(&output.stdout).map_err(|err| {
+                                format!(
+                                    "Could not deserialize decryption response from \
+                                     {decrypt_command}: {err}"
+                                )
+                            })?,
+                        ))
+                    })
+                    .await
+                }))
+            }
+        }
+    }
 }
 
 #[cfg(all(feature = "gpgme", test))]
@@ -429,6 +819,11 @@ mod tests {
         /// Test that we can encrypt/decrypt
         fn test_gpg_encryption() {
             run_gpg_encryption();
+        }
+
+        #[test]
+        fn test_gpg_cli() {
+            run_gpg_cli();
         }
     }
 
@@ -528,7 +923,8 @@ mod tests {
             .unwrap()
             .into_iter()
             .find(|key| key.fingerprint() == "AEDC11FBCE2D746BF8BF7166CC2E963C99975163")
-            .unwrap();
+            .unwrap()
+            .into();
 
         let mut draft = melib::Draft::default();
         draft.set_body("foobar\r\n\r\n".into());
@@ -547,11 +943,20 @@ mod tests {
         .into();
 
         // Verify that we cannot use a keypair to sign if we don't have its secret key:
-        let err = smol::block_on((sign_filter(None, vec![pubkey.clone()]).unwrap())(
-            body_attachment.clone(),
-        ))
+        let err = smol::block_on((sign_filter(
+            PGPBackendChoice::GpgME,
+            None,
+            vec![pubkey.clone()],
+        )
+        .unwrap())(body_attachment.clone()))
         .unwrap_err();
-        assert!(err.summary.starts_with("Unusable secret key"), "{err}");
+        assert!(
+            err.summary.starts_with(
+                "libgpgpme: No secret key found with key id \
+                 AEDC11FBCE2D746BF8BF7166CC2E963C99975163."
+            ),
+            "{err}"
+        );
 
         // Add private key
         gpgme_ctx
@@ -559,13 +964,15 @@ mod tests {
             .unwrap();
 
         let body: AttachmentBuilder =
-            smol::block_on((sign_filter(None, vec![pubkey]).unwrap())(body_attachment)).unwrap();
+            smol::block_on((sign_filter(PGPBackendChoice::GpgME, None, vec![pubkey])
+                .unwrap())(body_attachment))
+            .unwrap();
         draft.attachments.insert(0, body);
         let raw_mail = draft.finalise().unwrap();
         //eprintln!("{raw_mail}");
         let mail = melib::Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
 
-        let signatures = smol::block_on(verify(mail.body())).unwrap();
+        let signatures = smol::block_on(verify(gpgme_ctx.clone(), mail.body())).unwrap();
         assert_eq!(
             &signatures_into_error(signatures).unwrap().unwrap(),
             "good signature by AEDC11FBCE2D746BF8BF7166CC2E963C99975163[?]"
@@ -628,6 +1035,7 @@ mod tests {
         else {
             return;
         };
+
         // Add private key
         gpgme_ctx
             .import_key(gpgme_ctx.new_data_mem(PRIVKEY).unwrap())
@@ -638,7 +1046,8 @@ mod tests {
             .unwrap()
             .into_iter()
             .find(|key| key.fingerprint() == "AEDC11FBCE2D746BF8BF7166CC2E963C99975163")
-            .unwrap();
+            .unwrap()
+            .into();
 
         {
             let mut draft = melib::Draft::default();
@@ -659,6 +1068,7 @@ mod tests {
 
             let body: AttachmentBuilder =
                 smol::block_on((encrypt_filter(
+                    PGPBackendChoice::GpgME,
                     None,
                     None,
                     None,
@@ -673,7 +1083,8 @@ mod tests {
             let mail = melib::Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
 
             let (decrypted_metadata, decrypted) =
-                smol::block_on(decrypt(mail.body())).expect("Could not decrypt email");
+                smol::block_on(decrypt(gpgme_ctx.clone(), mail.body()))
+                    .expect("Could not decrypt email");
 
             assert_eq!(
                 decrypted_metadata,
@@ -710,6 +1121,7 @@ mod tests {
             .into();
             let body: AttachmentBuilder =
                 smol::block_on((encrypt_filter(
+                    PGPBackendChoice::GpgME,
                     None,
                     None,
                     Some(vec![pubkey.clone()]),
@@ -724,7 +1136,8 @@ mod tests {
             let mail = melib::Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
 
             let (decrypted_metadata, decrypted) =
-                smol::block_on(decrypt(mail.body())).expect("Could not decrypt email");
+                smol::block_on(decrypt(gpgme_ctx.clone(), mail.body()))
+                    .expect("Could not decrypt email");
 
             assert_eq!(
                 decrypted_metadata,
@@ -739,7 +1152,7 @@ mod tests {
                 }
             );
             let decrypted = AttachmentBuilder::new(&decrypted).build();
-            let signatures = smol::block_on(verify(decrypted.clone())).unwrap();
+            let signatures = smol::block_on(verify(gpgme_ctx.clone(), decrypted.clone())).unwrap();
             assert_eq!(
                 &signatures_into_error(signatures).unwrap().unwrap(),
                 "good signature by AEDC11FBCE2D746BF8BF7166CC2E963C99975163[?]"
@@ -789,13 +1202,206 @@ mod tests {
         let raw_mail = draft.finalise().unwrap();
         let mail = melib::Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
 
-        let signatures = smol::block_on(verify(mail.body())).unwrap();
+        let signatures = smol::block_on(verify(
+            PGPBackendChoice::default().instantiate().unwrap(),
+            mail.body(),
+        ))
+        .unwrap();
         assert_eq!(
             &signatures_into_error(signatures).unwrap().unwrap(),
             "[SAFETY WARNING: Cleartext signature!]good signature by \
              AEDC11FBCE2D746BF8BF7166CC2E963C99975163[?]"
         );
 
+        _ = tempdir.close();
+    }
+
+    fn run_gpg_cli() {
+        let Some(GpgTest {
+            _logger,
+            tempdir,
+            mut gpgme_ctx,
+        }) = setup()
+        else {
+            return;
+        };
+
+        let find_cmd = |cmd| {
+            Command::new("sh")
+                .arg("-c")
+                .arg(format!("command -v {cmd}"))
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .stdin(Stdio::null())
+                .spawn()
+                .map_err(|err| err.to_string())
+                .and_then(|find| find.wait_with_output().map_err(|err| err.to_string()))
+                .and_then(|output| {
+                    if output.status.success() {
+                        Ok(output)
+                    } else {
+                        Err(format!("{output:?}"))
+                    }
+                })
+        };
+
+        if let Err(err) = find_cmd("gpg") {
+            eprintln!("gpg binary not found, skipping test: {err:?}");
+            return;
+        }
+        if let Err(err) = find_cmd("python3") {
+            eprintln!("python3 binary not found, skipping test: {err:?}");
+            return;
+        }
+
+        let gpg_verify = tempdir.path().join("gpg_verify.py");
+        let gpg_sign = tempdir.path().join("gpg_sign.py");
+        let gpg_encrypt = tempdir.path().join("gpg_encrypt.py");
+        let gpg_decrypt = tempdir.path().join("gpg_decrypt.py");
+        let gpg_get_key = tempdir.path().join("gpg_get_key.py");
+        let gpg_keylist = tempdir.path().join("gpg_keylist.py");
+
+        for (path, source) in &[
+            (
+                &gpg_verify,
+                include_bytes!("../../../contrib/pgp-cli-backends/gpg/gpg_verify.py").as_slice(),
+            ),
+            (
+                &gpg_sign,
+                include_bytes!("../../../contrib/pgp-cli-backends/gpg/gpg_sign.py").as_slice(),
+            ),
+            (
+                &gpg_encrypt,
+                include_bytes!("../../../contrib/pgp-cli-backends/gpg/gpg_encrypt.py").as_slice(),
+            ),
+            (
+                &gpg_decrypt,
+                include_bytes!("../../../contrib/pgp-cli-backends/gpg/gpg_decrypt.py").as_slice(),
+            ),
+            (
+                &gpg_get_key,
+                include_bytes!("../../../contrib/pgp-cli-backends/gpg/gpg_get_key.py").as_slice(),
+            ),
+            (
+                &gpg_keylist,
+                include_bytes!("../../../contrib/pgp-cli-backends/gpg/gpg_keylist.py").as_slice(),
+            ),
+        ] {
+            std::fs::write(path, source).unwrap();
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(path).unwrap().permissions();
+            perms.set_mode(perms.mode() | 0o700);
+            std::fs::set_permissions(path, perms).unwrap();
+        }
+        let cli = PGPBackendChoice::CLI(
+            PGPBackendCLI {
+                verify_command: gpg_verify.display().to_string(),
+                sign_command: gpg_sign.display().to_string(),
+                encrypt_command: gpg_encrypt.display().to_string(),
+                decrypt_command: gpg_decrypt.display().to_string(),
+                get_key_command: gpg_get_key.display().to_string(),
+                keylist_command: gpg_keylist.display().to_string(),
+            }
+            .into(),
+        );
+        // Add public key
+        gpgme_ctx
+            .import_key(gpgme_ctx.new_data_mem(PUBKEY).unwrap())
+            .unwrap();
+
+        // Retrieve public key
+        let pubkey: Key = smol::block_on(
+            cli.instantiate()
+                .unwrap()
+                .get_key(false, "AEDC11FBCE2D746BF8BF7166CC2E963C99975163".into())
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            pubkey.fingerprint,
+            "AEDC11FBCE2D746BF8BF7166CC2E963C99975163"
+        );
+
+        // Add private key
+        gpgme_ctx
+            .import_key(gpgme_ctx.new_data_mem(PRIVKEY).unwrap())
+            .unwrap();
+
+        // Sign and verify
+        {
+            let mut draft = melib::Draft::default();
+            draft.set_body("foobar\r\n\r\n".into());
+            draft
+                .try_set_header("From", "user@example.org".into())
+                .unwrap();
+            draft
+                .try_set_header("To", "user@example.org".into())
+                .unwrap();
+
+            let body_attachment: AttachmentBuilder = Attachment::new(
+                ContentType::default(),
+                Default::default(),
+                std::mem::take(&mut draft.body).into_bytes(),
+            )
+            .into();
+
+            let body: AttachmentBuilder =
+                smol::block_on((sign_filter(cli.clone(), None, vec![pubkey.clone()])
+                    .unwrap())(body_attachment))
+                .unwrap();
+            draft.attachments.insert(0, body);
+            let raw_mail = draft.finalise().unwrap();
+            //eprintln!("{raw_mail}");
+            let mail = melib::Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
+            let gpgme_signatures = smol::block_on(verify(gpgme_ctx.clone(), mail.body())).unwrap();
+            let cli_signatures =
+                smol::block_on(verify(cli.instantiate().unwrap(), mail.body())).unwrap();
+            assert_eq!(
+                &signatures_into_error(cli_signatures).unwrap().unwrap(),
+                &signatures_into_error(gpgme_signatures).unwrap().unwrap(),
+            );
+        }
+
+        // Encrypt and decrypt
+        {
+            let mut draft = melib::Draft::default();
+            draft.set_body("foobar\r\n\r\n".into());
+            draft
+                .try_set_header("From", "user@example.org".into())
+                .unwrap();
+            draft
+                .try_set_header("To", "user@example.org".into())
+                .unwrap();
+
+            let body_attachment: AttachmentBuilder = Attachment::new(
+                ContentType::default(),
+                Default::default(),
+                std::mem::take(&mut draft.body).into_bytes(),
+            )
+            .into();
+            let body: AttachmentBuilder = smol::block_on((encrypt_filter(
+                cli.clone(),
+                None,
+                None,
+                None,
+                None,
+                vec![pubkey],
+            )
+            .unwrap())(body_attachment))
+            .unwrap();
+
+            draft.attachments.insert(0, body);
+            let raw_mail = draft.finalise().unwrap();
+            let mail = melib::Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
+
+            let (_, decrypted) = smol::block_on(decrypt(cli.instantiate().unwrap(), mail.body()))
+                .expect("Could not decrypt email");
+            assert_eq!(
+                &String::from_utf8_lossy(&decrypted),
+                "Content-Transfer-Encoding: 8bit\r\nContent-Type: text/plain; \
+                 charset=\"utf-8\"\r\n\r\nfoobar\r\n\r\n"
+            );
+        }
         _ = tempdir.close();
     }
 }

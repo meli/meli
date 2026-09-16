@@ -2069,12 +2069,12 @@ ID of key to be used for encryption
 .Pq Em optional
 Allow remote lookups
 .Pq Em false \" default value
-.\" pub remote_lookup_mechanisms: melib::gpgme::LocateKey,
+.\" pub remote_lookup_mechanisms: melib::email::pgp::LocateKey,
 .It Ic remote_lookup_mechanisms Ar LocateKey
 .Pq Em optional
 Remote lookup mechanisms.
 Use comma to separate values.
-.Pq Em Local,WKD \" default value
+.Pq Em local,wkd \" default value
 .Pp
 Possible mechanisms:
 .Bl -dash -compact
@@ -2094,6 +2094,42 @@ Possible mechanisms:
 .Em keyserver-url
 .It
 .Em local
+.El
+.\" pub backend: PGPBackendChoice,
+.It Ic backend Ar PGPBackendChoice
+.Pq Em optional
+  PGP backend to use.
+.Pq Em gpgme \" default value
+.Pp
+Possible values:
+.Bl -dash -compact
+.It
+libgpgme backend
+.Po
+requires that
+.Xr meli 1
+has been compiled with support for libgpgme,
+check output of
+.Cm compiled-with
+CLI subcommand
+.Pc Ns
+:
+.Bd -literal
+backend = "gpgme"
+.Ed
+.It
+CLI backend
+Example:
+.Bd -literal
+backend = { verify_command = "gpg_verify.py", sign_command = "gpg_sign.py", encrypt_command = "gpg_encrypt.py", decrypt_command = "gpg_decrypt.py", get_key_command = "gpg_get_key.py", keylist_command = "gpg_keylist.py" }
+.Ed
+For example scripts and their invocation and input/output formats, in the
+.Sy meli
+repository under the
+.Pa contrib/pgp-cli-backends/gpg
+directory you can find python scripts that work with the
+.Xr gpg 1
+binary.
 .El
 .El
 .\"

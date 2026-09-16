@@ -20,6 +20,10 @@
  */
 
 use melib::{conf::ActionFlag, Error, Result};
+use serde::{
+    de::{Deserialize, Deserializer},
+    ser::{Serialize, Serializer},
+};
 
 use crate::conf::{default_values::*, DotAddressable};
 
@@ -74,24 +78,17 @@ pub struct PGPSettings {
 
     /// Remote lookup mechanisms.
     /// Default: "local,wkd"
-    #[cfg_attr(
-        feature = "gpgme",
-        serde(
-            default = "default_lookup_mechanism",
-            alias = "remote-lookup-mechanisms"
-        )
+    #[serde(
+        default = "default_lookup_mechanism",
+        alias = "remote-lookup-mechanisms"
     )]
-    #[cfg(feature = "gpgme")]
     pub remote_lookup_mechanisms: melib::email::pgp::LocateKey,
-    #[cfg(not(feature = "gpgme"))]
-    #[cfg_attr(
-        not(feature = "gpgme"),
-        serde(default, alias = "remote-lookup-mechanisms")
-    )]
-    pub remote_lookup_mechanisms: String,
+    /// PGP backend to use.
+    /// Default: "gpgpme"
+    #[serde(default)]
+    pub backend: PGPBackendChoice,
 }
 
-#[cfg(feature = "gpgme")]
 fn default_lookup_mechanism() -> melib::email::pgp::LocateKey {
     melib::email::pgp::LocateKey::LOCAL | melib::email::pgp::LocateKey::WKD
 }
@@ -108,15 +105,14 @@ impl Default for PGPSettings {
             decrypt_key: None,
             encrypt_key: None,
             allow_remote_lookup: action_internal_value_false::<ActionFlag>(),
-            #[cfg(feature = "gpgme")]
             remote_lookup_mechanisms: default_lookup_mechanism(),
-            #[cfg(not(feature = "gpgme"))]
-            remote_lookup_mechanisms: String::new(),
+            backend: Default::default(),
         }
     }
 }
 
 impl DotAddressable for melib::email::pgp::LocateKey {}
+impl DotAddressable for PGPBackendChoice {}
 
 impl DotAddressable for PGPSettings {
     fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
@@ -133,10 +129,8 @@ impl DotAddressable for PGPSettings {
                     "decrypt_key" => self.decrypt_key.lookup(field, tail),
                     "encrypt_key" => self.encrypt_key.lookup(field, tail),
                     "allow_remote_lookup" => self.allow_remote_lookup.lookup(field, tail),
-                    #[cfg(feature = "gpgme")]
                     "remote_lookup_mechanisms" => self.remote_lookup_mechanisms.lookup(field, tail),
-                    #[cfg(not(feature = "gpgme"))]
-                    "remote_lookup_mechanisms" => self.remote_lookup_mechanisms.lookup(field, tail),
+                    "backend" => self.backend.lookup(field, tail),
                     other => Err(Error::new(format!(
                         "{parent_field} has no field named {other}"
                     ))),
@@ -146,5 +140,103 @@ impl DotAddressable for PGPSettings {
                 .map_err(|err| err.to_string())?
                 .to_string()),
         }
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub enum PGPBackendChoice {
+    #[default]
+    GpgME,
+    CLI(Box<PGPBackendCLI>),
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+pub struct PGPBackendCLI {
+    pub verify_command: String,
+    pub sign_command: String,
+    pub encrypt_command: String,
+    pub decrypt_command: String,
+    pub get_key_command: String,
+    pub keylist_command: String,
+}
+
+impl Serialize for PGPBackendChoice {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Self::GpgME => "gpgme".serialize(serializer),
+            Self::CLI(ref cli) => cli.serialize(serializer),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for PGPBackendChoice {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct V;
+
+        impl<'de> serde::de::Visitor<'de> for V {
+            type Value = PGPBackendChoice;
+
+            fn expecting(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+                fmt.write_str(
+                    r#"either "gpgme" or a map of { verify_command, sign_command, encrypt_command, decrypt_command, get_key_command, keylist_command }"#,
+                )
+            }
+
+            fn visit_string<E: serde::de::Error>(
+                self,
+                value: String,
+            ) -> std::result::Result<Self::Value, E> {
+                if value.eq_ignore_ascii_case("gpgme") {
+                    return Ok(PGPBackendChoice::GpgME);
+                }
+                Err(serde::de::Error::invalid_value(
+                    serde::de::Unexpected::Str(&value),
+                    &"expected `gpgme`",
+                ))
+            }
+
+            fn visit_str<E: serde::de::Error>(
+                self,
+                value: &str,
+            ) -> std::result::Result<Self::Value, E> {
+                if value.eq_ignore_ascii_case("gpgme") {
+                    return Ok(PGPBackendChoice::GpgME);
+                }
+                Err(serde::de::Error::invalid_value(
+                    serde::de::Unexpected::Str(value),
+                    &"expected `gpgme`",
+                ))
+            }
+
+            fn visit_borrowed_str<E: serde::de::Error>(
+                self,
+                value: &str,
+            ) -> std::result::Result<Self::Value, E> {
+                if value.eq_ignore_ascii_case("gpgme") {
+                    return Ok(PGPBackendChoice::GpgME);
+                }
+                Err(serde::de::Error::invalid_value(
+                    serde::de::Unexpected::Str(value),
+                    &"expected `gpgme`",
+                ))
+            }
+
+            fn visit_map<V>(self, map: V) -> std::result::Result<Self::Value, V::Error>
+            where
+                V: serde::de::MapAccess<'de>,
+            {
+                let cli: PGPBackendCLI =
+                    Deserialize::deserialize(serde::de::value::MapAccessDeserializer::new(map))?;
+                Ok(PGPBackendChoice::CLI(Box::new(cli)))
+            }
+        }
+
+        deserializer.deserialize_any(V)
     }
 }

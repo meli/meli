@@ -1140,9 +1140,7 @@ pub fn toggle(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     for (tok, action) in [
         ("thread_snooze", Listing(ToggleThreadSnooze)),
         ("mouse", ToggleMouse),
-        #[cfg(feature = "gpgme")]
         ("sign", Tab(ComposerAction(ComposerTabAction::ToggleSign))),
-        #[cfg(feature = "gpgme")]
         (
             "encrypt",
             Tab(ComposerAction(ComposerTabAction::ToggleEncrypt)),

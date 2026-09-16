@@ -63,4 +63,14 @@ macro_rules! convert_to_typedefs {
     };
 }
 
+/// Retrieve the error code from an error value
+pub fn gpgme_err_code(err: gpg_error_t) -> Option<gpg_err_code_t> {
+    let val = err & (65536 - 1);
+    if val > gpg_err_code_t::GPG_ERR_EXFULL as u32 {
+        None
+    } else {
+        Some(unsafe { std::mem::transmute::<u32, gpg_err_code_t>(val) })
+    }
+}
+
 include!("bindings_funcs.rs");

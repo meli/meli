@@ -26,7 +26,7 @@
 use std::{ffi::CStr, ptr::NonNull, sync::Arc};
 
 use crate::{
-    email::pgp::{Recipient, Signature, Summary, Validity},
+    email::pgp::{HashAlgorithm, Recipient, Signature, Summary, Validity},
     error::{Error, ErrorKind},
     gpgme::bindings::*,
 };
@@ -68,7 +68,7 @@ pub struct NewSignature {
     /// The public key algorithm used to create the signature
     pub pubkey_algo: gpgme_pubkey_algo_t,
     /// The hash algorithm used to create the signature
-    pub hash_algo: std::result::Result<HashAlgorithm, (gpgme_hash_algo_t, String)>,
+    pub hash_algo: HashAlgorithm,
     /// Signature creation time.  */
     pub timestamp: ::core::ffi::c_long,
     /// The fingerprint of the signature
@@ -80,12 +80,18 @@ pub struct NewSignature {
 
 impl NewSignature {
     pub fn micalg(&self) -> String {
-        let mut s = match self.hash_algo {
-            Ok(ref h) => format!("pgp-{h}"),
-            Err((_, ref s)) => format!("pgp-{s}"),
-        };
+        let mut s = format!("pgp-{}", self.hash_algo);
         s.make_ascii_lowercase();
         s
+    }
+}
+
+impl From<NewSignature> for crate::email::pgp::NewSignature {
+    fn from(val: NewSignature) -> Self {
+        Self {
+            fingerprint: val.fingerprint,
+            hash_algorithm: val.hash_algo,
+        }
     }
 }
 
@@ -114,21 +120,25 @@ impl Iterator for NewSignaturesIter<'_> {
         // SAFETY: pointer is valid
         let new_sig_ref = unsafe { new_sig.as_ref() };
         self.ptr = new_sig_ref.next;
-        let hash_algo = new_sig_ref.hash_algo.try_into().map_err(|alg| {
-            let algo_name_ptr = unsafe { call!(&self.lib, gpgme_hash_algo_name)(alg) };
-            if algo_name_ptr.is_null() {
+        let Ok(hash_algo) = new_sig_ref.hash_algo.try_into() else {
+            let algo_name_ptr =
+                unsafe { call!(&self.lib, gpgme_hash_algo_name)(new_sig_ref.hash_algo) };
+            let algo_name = if algo_name_ptr.is_null() {
                 // This should never happen because `alg` was given to us by libgpgme itself, but
                 // whatever.
-                return (alg, String::from("UNKNOWN"));
-            }
-            // SAFETY: gpgme guarantees it returns a valid statically-allocated string
-            (
-                alg,
+                String::from("UNKNOWN")
+            } else {
+                // SAFETY: gpgme guarantees it returns a valid statically-allocated string
                 unsafe { CStr::from_ptr(algo_name_ptr) }
                     .to_string_lossy()
-                    .to_string(),
-            )
-        });
+                    .to_string()
+            };
+            log::warn!(
+                "received unrecognized gpgme_hash_algo_t value: {:?} ({algo_name}",
+                new_sig_ref.hash_algo
+            );
+            return self.next();
+        };
         Some(NewSignature {
             type_: new_sig_ref.type_,
             pubkey_algo: new_sig_ref.pubkey_algo,
@@ -248,25 +258,6 @@ impl Iterator for SignaturesIter<'_> {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum HashAlgorithm {
-    None = 0,
-    MD5 = 1,
-    SHA1 = 2,
-    RMD160 = 3,
-    MD2 = 5,
-    TIGER = 6,
-    HAVAL = 7,
-    SHA256 = 8,
-    SHA384 = 9,
-    SHA512 = 10,
-    SHA224 = 11,
-    MD4 = 301,
-    CRC32 = 302,
-    CRC32RFC1510 = 303,
-    CRC24RFC2440 = 304,
-}
-
 impl TryFrom<gpgme_hash_algo_t> for HashAlgorithm {
     type Error = gpgme_hash_algo_t;
 
@@ -290,65 +281,6 @@ impl TryFrom<gpgme_hash_algo_t> for HashAlgorithm {
             gpgme_hash_algo_t::GPGME_MD_CRC32_RFC1510 => Self::CRC32RFC1510,
             gpgme_hash_algo_t::GPGME_MD_CRC24_RFC2440 => Self::CRC24RFC2440,
             _ => return Err(v),
-        };
-        Ok(retval)
-    }
-}
-
-/// Format [`HashAlgorithm`] according to RFCs
-///
-/// - <https://datatracker.ietf.org/doc/html/rfc2440#section-9.4>
-/// - <https://datatracker.ietf.org/doc/html/rfc4880#section-9.4>
-/// - <https://datatracker.ietf.org/doc/html/rfc9580#section-9.5>
-/// - libgpgme source for the rest
-impl std::fmt::Display for HashAlgorithm {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Self::None => write!(fmt, "NULL"),
-            Self::MD5 => write!(fmt, "MD5"),
-            Self::SHA1 => write!(fmt, "SHA1"),
-            Self::RMD160 => write!(fmt, "RIPEMD160"),
-            Self::MD2 => write!(fmt, "MD2"),
-            Self::TIGER => write!(fmt, "TIGER192"),
-            Self::HAVAL => write!(fmt, "HAVAL"),
-            Self::SHA256 => write!(fmt, "SHA256"),
-            Self::SHA384 => write!(fmt, "SHA384"),
-            Self::SHA512 => write!(fmt, "SHA512"),
-            Self::SHA224 => write!(fmt, "SHA224"),
-            Self::MD4 => write!(fmt, "MD4"),
-            Self::CRC32 => write!(fmt, "CRC32"),
-            Self::CRC32RFC1510 => write!(fmt, "CRC32RFC1510"),
-            Self::CRC24RFC2440 => write!(fmt, "CRC24RFC2440"),
-        }
-    }
-}
-
-impl std::str::FromStr for HashAlgorithm {
-    type Err = ();
-
-    fn from_str(mut v: &str) -> std::result::Result<Self, Self::Err> {
-        if let Some(stripped) = v.strip_prefix("pgp") {
-            v = stripped;
-        }
-        let retval = match v.trim() {
-            v if v.eq_ignore_ascii_case("NULL") => Self::None,
-            v if v.eq_ignore_ascii_case("MD5") => Self::MD5,
-            v if v.eq_ignore_ascii_case("SHA1") => Self::SHA1,
-            v if v.eq_ignore_ascii_case("RIPEMD160") => Self::RMD160,
-            v if v.eq_ignore_ascii_case("MD2") => Self::MD2,
-            v if v.eq_ignore_ascii_case("TIGER192") => Self::TIGER,
-            v if v.eq_ignore_ascii_case("HAVAL") || v.eq_ignore_ascii_case("HAVAL-5-160") => {
-                Self::HAVAL
-            }
-            v if v.eq_ignore_ascii_case("SHA256") => Self::SHA256,
-            v if v.eq_ignore_ascii_case("SHA384") => Self::SHA384,
-            v if v.eq_ignore_ascii_case("SHA512") => Self::SHA512,
-            v if v.eq_ignore_ascii_case("SHA224") => Self::SHA224,
-            v if v.eq_ignore_ascii_case("MD4") => Self::MD4,
-            v if v.eq_ignore_ascii_case("CRC32") => Self::CRC32,
-            v if v.eq_ignore_ascii_case("CRC32RFC1510") => Self::CRC32RFC1510,
-            v if v.eq_ignore_ascii_case("CRC24RFC2440") => Self::CRC24RFC2440,
-            _ => return Err(()),
         };
         Ok(retval)
     }

@@ -36,6 +36,7 @@ bindgen \
   --allowlist-function gpgme_data_write \
   --allowlist-function gpgme_get_armor \
   --allowlist-function gpgme_get_ctx_flag \
+  --allowlist-function gpgme_get_key \
   --allowlist-function gpgme_get_offline \
   --allowlist-function gpgme_get_pinentry_mode \
   --allowlist-function gpgme_hash_algo_name \

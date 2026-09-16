@@ -27,7 +27,7 @@ use melib::{
 };
 
 use crate::{
-    conf::shortcuts::EnvelopeViewShortcuts,
+    conf::{pgp::PGPBackendChoice, shortcuts::EnvelopeViewShortcuts},
     jobs::{JobId, JoinHandle},
     types::{Link, LinkKind},
     ShortcutMap, ThemeAttribute,
@@ -50,6 +50,7 @@ pub struct ViewSettings {
     pub auto_verify_signatures: ActionFlag,
     pub auto_decrypt: ActionFlag,
     pub charset: Option<Charset>,
+    pub pgp_backend_choice: PGPBackendChoice,
 }
 
 impl Default for ViewSettings {
@@ -69,6 +70,7 @@ impl Default for ViewSettings {
             auto_verify_signatures: ActionFlag::InternalVal(true),
             auto_decrypt: ActionFlag::InternalVal(true),
             charset: None,
+            pgp_backend_choice: Default::default(),
         }
     }
 }

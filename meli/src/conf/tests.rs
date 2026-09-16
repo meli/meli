@@ -408,3 +408,78 @@ fn test_conf_tag_rename() {
     assert_eq!(rename_map.get(&t), rename_map.get(&tagname));
     assert_eq!(&rename_map[&TagHash(17165945850818254125,)], "trusted");
 }
+
+#[test]
+fn test_conf_pgp_backend() {
+    use serde_test2::{assert_de_tokens, assert_tokens, Token};
+
+    use crate::conf::pgp::{PGPBackendCLI, PGPBackendChoice};
+
+    let cli = PGPBackendChoice::CLI(
+        PGPBackendCLI {
+            verify_command: "foo".to_string(),
+            sign_command: "foo".to_string(),
+            encrypt_command: "foo".to_string(),
+            decrypt_command: "foo".to_string(),
+            get_key_command: "foo".to_string(),
+            keylist_command: "foo".to_string(),
+        }
+        .into(),
+    );
+    assert_tokens(
+        &cli,
+        &[
+            Token::Struct {
+                name: "PGPBackendCLI",
+                len: 6,
+            },
+            Token::Str("verify_command"),
+            Token::Str("foo"),
+            Token::Str("sign_command"),
+            Token::Str("foo"),
+            Token::Str("encrypt_command"),
+            Token::Str("foo"),
+            Token::Str("decrypt_command"),
+            Token::Str("foo"),
+            Token::Str("get_key_command"),
+            Token::Str("foo"),
+            Token::Str("keylist_command"),
+            Token::Str("foo"),
+            Token::StructEnd,
+        ],
+    );
+    assert_tokens(&PGPBackendChoice::GpgME, &[Token::Str("gpgme")]);
+    assert_de_tokens(&PGPBackendChoice::GpgME, &[Token::Str("GpgME")]);
+
+    assert_eq!(
+        toml::from_str::<indexmap::IndexMap<String, PGPBackendChoice>>(
+            &toml::to_string(&indexmap::indexmap! { "backend" => cli.clone()}).unwrap()
+        )
+        .unwrap(),
+        toml::from_str::<indexmap::IndexMap<String, PGPBackendChoice>>(
+            r#"[backend]
+verify_command = "foo"
+sign_command = "foo"
+encrypt_command = "foo"
+decrypt_command = "foo"
+get_key_command = "foo"
+keylist_command = "foo"
+"#
+        )
+        .unwrap()
+    );
+
+    assert_eq!(
+        &toml::to_string(&indexmap::indexmap! { "backend" => PGPBackendChoice::GpgME }).unwrap(),
+        "backend = \"gpgme\"\n"
+    );
+    assert_eq!(
+        toml::from_str::<indexmap::IndexMap<String, PGPBackendChoice>>(
+            "backend = { verify_command = \"foo\", sign_command = \"foo\", encrypt_command = \
+             \"foo\", decrypt_command = \"foo\", get_key_command = \"foo\", keylist_command = \
+             \"foo\" }"
+        )
+        .unwrap(),
+        indexmap::indexmap! { "backend".to_string() => cli }
+    );
+}

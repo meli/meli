@@ -68,6 +68,12 @@ convert_to_typedefs! {
         fname: *const ::core::ffi::c_char,
         copy: ::core::ffi::c_int,
     ) -> gpgme_error_t;
+    pub fn gpgme_get_key(
+        ctx: gpgme_ctx_t,
+        fpr: *const ::core::ffi::c_char,
+        r_key: *mut gpgme_key_t,
+        secret: ::core::ffi::c_int,
+    ) -> gpgme_error_t;
     pub fn gpgme_key_ref(key: gpgme_key_t);
     pub fn gpgme_key_unref(key: gpgme_key_t);
     pub fn gpgme_op_encrypt_result(ctx: gpgme_ctx_t) -> gpgme_encrypt_result_t;

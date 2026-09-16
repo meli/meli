@@ -74,9 +74,7 @@ pub enum FileAction {
 pub enum ComposerTabAction {
     DiscardDraft,
     SaveDraft,
-    #[cfg(feature = "gpgme")]
     ToggleSign,
-    #[cfg(feature = "gpgme")]
     ToggleEncrypt,
     AddAttachment(FileAction),
     AddAttachmentPipe(String),
