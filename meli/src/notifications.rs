@@ -493,8 +493,7 @@ impl Component for DisplayMessageBox {
                 false,
                 false,
             );
-            let box_displ_area = create_box(grid, self.cached_area);
-            for row in grid.bounds_iter(box_displ_area) {
+            for row in grid.bounds_iter(self.cached_area) {
                 for c in row {
                     grid[c]
                         .set_ch(' ')
@@ -503,6 +502,7 @@ impl Component for DisplayMessageBox {
                         .set_attrs(noto_colors.attrs);
                 }
             }
+            let box_displ_area = create_box(grid, self.cached_area);
             let mut lines_no = 0;
             for (idx, line) in msg_lines
                 .into_iter()
