@@ -42,7 +42,6 @@ use melib::{
     search::Query,
     Logger, ShellExpandTrait, SortField, SortOrder,
 };
-use serde::{Deserialize, Serialize};
 
 use crate::{conf::deserializers::non_empty_opt_string, terminal::Color};
 
