@@ -48,7 +48,7 @@ impl KeySelectionLoading {
         context: &Context,
     ) -> Result<Self> {
         let mut backend = pgp_backend_choice.instantiate()?;
-        if local {
+        if local || allow_remote_lookup.is_false() {
             backend.set_auto_key_locate(LocateKey::LOCAL)?;
         } else {
             backend.set_auto_key_locate(LocateKey::WKD | LocateKey::LOCAL)?;

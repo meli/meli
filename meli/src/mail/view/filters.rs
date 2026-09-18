@@ -54,7 +54,7 @@ use crate::{
 #[derive(Clone, Debug)]
 pub enum FilterOutputMetadata {
     Signature(Result<melib::pgp::SignaturesMetadata>),
-    Decrypted(melib::pgp::DecryptionMetadata),
+    Decrypted(melib::pgp::SignaturesMetadata),
 }
 
 pub struct FilterOutput {

@@ -27,6 +27,7 @@ use std::{borrow::Cow, ffi::CStr, ptr::NonNull, sync::Arc};
 use crate::{
     email::Address,
     gpgme::{bindings::*, gpgme_error_to_string},
+    pgp::Validity,
 };
 
 #[derive(Clone)]
@@ -125,6 +126,32 @@ impl Key {
             return Cow::Borrowed("");
         };
         unsafe { CStr::from_ptr(fpr_pr.as_ptr()) }.to_string_lossy()
+    }
+
+    pub fn ownertrust(&self) -> Validity {
+        let as_ref = unsafe { self.inner.ptr.as_ref() };
+        as_ref.owner_trust.into()
+    }
+
+    pub fn setownertrust(&self, ctx: &super::Context, validity: Validity) -> crate::Result<()> {
+        let value = match validity {
+            Validity::Unknown => todo!(),
+            Validity::Undefined => c"undefined",
+            Validity::Never => c"never",
+            Validity::Marginal => c"marginal",
+            Validity::Full => c"full",
+            Validity::Ultimate => c"ultimate",
+        };
+        unsafe {
+            super::gpgme_error_try(
+                &self.lib,
+                call!(&self.lib, gpgme_op_setownertrust)(
+                    ctx.inner.ptr.as_ptr(),
+                    self.inner.ptr.as_ptr(),
+                    value.as_ptr(),
+                ),
+            )
+        }
     }
 }
 

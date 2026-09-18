@@ -45,12 +45,15 @@ bindgen \
   --allowlist-function gpgme_new \
   --allowlist-function gpgme_op_decrypt_result \
   --allowlist-function gpgme_op_decrypt_start \
+  --allowlist-function gpgme_op_decrypt_verify_start \
   --allowlist-function gpgme_op_encrypt_result \
+  --allowlist-function gpgme_op_encrypt_sign_start \
   --allowlist-function gpgme_op_encrypt_start \
   --allowlist-function gpgme_op_import \
   --allowlist-function gpgme_op_import_result \
   --allowlist-function gpgme_op_keylist_end \
   --allowlist-function gpgme_op_keylist_start \
+  --allowlist-function gpgme_op_setownertrust \
   --allowlist-function gpgme_op_sign_result \
   --allowlist-function gpgme_op_sign_start \
   --allowlist-function gpgme_op_verify_result \

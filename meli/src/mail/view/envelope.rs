@@ -754,19 +754,23 @@ impl Component for EnvelopeView {
                                 FilterOutputMetadata::Signature(Err(err)) => {
                                     text.push_str(&format!("Unverified signature: {err}\n"));
                                 }
-                                FilterOutputMetadata::Decrypted(decryption_metadata) => {
-                                    text.push_str("Encrypted for ");
-                                    for recipient in &decryption_metadata.recipients {
-                                        text.push_str(&format!(
-                                            "{}{},",
-                                            recipient.keyid,
-                                            if recipient.status.is_err() { "[?]" } else { "" }
-                                        ));
+                                FilterOutputMetadata::Decrypted(signatures) => {
+                                    if signatures.is_empty() {
+                                        text.push_str("Encrypted");
+                                    } else {
+                                        text.push_str("Encrypted and signed ");
+                                        match crate::mail::pgp::signatures_into_error(
+                                            signatures.clone(),
+                                        ) {
+                                            Ok(None) => {}
+                                            Ok(Some(t)) => {
+                                                text.push_str(&t);
+                                            }
+                                            Err(err) => {
+                                                text.push_str(&err.to_string());
+                                            }
+                                        }
                                     }
-                                    if text.ends_with(',') {
-                                        text.pop();
-                                    }
-                                    text.push('\n');
                                 }
                             }
                         }

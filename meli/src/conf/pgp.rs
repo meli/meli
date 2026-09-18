@@ -145,12 +145,13 @@ impl DotAddressable for PGPSettings {
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub enum PGPBackendChoice {
-    #[default]
     GpgME,
+    #[default]
+    Sequoia,
     CLI(Box<PGPBackendCLI>),
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Hash, Eq, PartialEq, Serialize)]
 pub struct PGPBackendCLI {
     pub verify_command: String,
     pub sign_command: String,
@@ -167,6 +168,7 @@ impl Serialize for PGPBackendChoice {
     {
         match self {
             Self::GpgME => "gpgme".serialize(serializer),
+            Self::Sequoia => "sequoia".serialize(serializer),
             Self::CLI(ref cli) => cli.serialize(serializer),
         }
     }
@@ -184,7 +186,7 @@ impl<'de> Deserialize<'de> for PGPBackendChoice {
 
             fn expecting(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
                 fmt.write_str(
-                    r#"either "gpgme" or a map of { verify_command, sign_command, encrypt_command, decrypt_command, get_key_command, keylist_command }"#,
+                    r#"either "gpgme", "sequoia", or a map of { verify_command, sign_command, encrypt_command, decrypt_command, get_key_command, keylist_command }"#,
                 )
             }
 
@@ -202,9 +204,12 @@ impl<'de> Deserialize<'de> for PGPBackendChoice {
                 if value.eq_ignore_ascii_case("gpgme") {
                     return Ok(PGPBackendChoice::GpgME);
                 }
+                if value.eq_ignore_ascii_case("sequoia") {
+                    return Ok(PGPBackendChoice::Sequoia);
+                }
                 Err(serde::de::Error::invalid_value(
                     serde::de::Unexpected::Str(value),
-                    &"`gpgme`",
+                    &"expected `gpgme` or `sequoia`",
                 ))
             }
 

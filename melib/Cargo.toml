@@ -24,10 +24,11 @@ http = ["isahc", "dep:http", "url/serde", "dep:http"]
 http-static = ["isahc", "isahc/static-curl"]
 imap = ["imap-codec", "imap-types", "tls"]
 jmap = ["http"]
-nntp = ["tls"]
 maildir = ["notify"]
 mbox-notify = ["notify"]
+nntp = ["tls"]
 notmuch = ["maildir"]
+sequoia = ["dep:sqz"]
 smtp = ["tls"]
 sqlite3 = ["sqlite3-static"]
 sqlite3-static = ["rusqlite", "rusqlite/bundled-full"]
@@ -69,6 +70,7 @@ serde_path_to_error = { version = "0.1" }
 smallvec = { workspace = true }
 smol = { version = "2" }
 socket2 = { version = "0.6", features = [] }
+sqz = { version = "0.1.0", optional = true, default-features = false, features = ["crypto-nettle"] }
 unicode-segmentation = { version = "1.2.1", default-features = false }
 url = { version = "2.5", optional = true }
 uuid = { version = "^1", features = ["serde", "v4", "v5"] }

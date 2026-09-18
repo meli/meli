@@ -2146,7 +2146,7 @@ Possible mechanisms:
 .It Ic backend Ar PGPBackendChoice
 .Pq Em optional
   PGP backend to use.
-.Pq Em gpgme \" default value
+.Pq Em sequoia \" default value
 .Pp
 Possible values:
 .Bl -dash -compact
@@ -2177,6 +2177,20 @@ repository under the
 directory you can find python scripts that work with the
 .Xr gpg 1
 binary.
+.It
+sequoia backend
+.Po
+requires that
+.Xr meli 1
+has been compiled with support for sequoia,
+check output of
+.Cm compiled-with
+CLI subcommand
+.Pc Ns
+:
+.Bd -literal
+backend = "sequoia"
+.Ed
 .El
 .El
 .\"

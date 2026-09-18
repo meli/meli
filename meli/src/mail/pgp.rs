@@ -31,8 +31,8 @@ use melib::{
     email::{
         attachment_types::{ContentDisposition, ContentType, MultipartType, Text},
         pgp::{
-            self as melib_pgp, DecryptionMetadata, Key, LocateKey, NewSignature, PGPBackend,
-            Recipient, ResultFuture, Signature, SignaturesMetadata, UnverifiedSignature,
+            self as melib_pgp, Key, LocateKey, NewSignature, PGPBackend, Recipient, ResultFuture,
+            Signature, SignaturesMetadata, UnverifiedSignature,
         },
         Attachment, AttachmentBuilder,
     },
@@ -50,7 +50,7 @@ use crate::{
 pub async fn decrypt(
     mut backend: impl PGPBackend,
     a: Attachment,
-) -> Result<(DecryptionMetadata, Vec<u8>)> {
+) -> Result<(SignaturesMetadata, Vec<u8>)> {
     let Attachment {
         content_type:
             ContentType::Multipart {
@@ -107,6 +107,7 @@ pub fn verify(
                 signed_part,
                 signature,
             } => {
+                backend.hash(&mut hasher);
                 signed_part.hash(&mut hasher);
                 signature.body().hash(&mut hasher);
                 let attachment_hash: u64 = hasher.finish();
@@ -127,6 +128,7 @@ pub fn verify(
                 result
             }
             UnverifiedSignature::Cleartext { text } => {
+                backend.hash(&mut hasher);
                 text.hash(&mut hasher);
                 let attachment_hash: u64 = hasher.finish();
 
@@ -296,7 +298,7 @@ pub fn encrypt_filter(
             if let Some(encrypt_for_self) = encrypt_for_self {
                 backend.set_auto_key_locate(LocateKey::LOCAL)?;
                 let keys = backend
-                    .keylist(false, Some(encrypt_for_self.to_string()))?
+                    .keylist(false, Some(encrypt_for_self.get_email().to_string()))?
                     .await?;
                 if keys.is_empty() {
                     return Err(Error::new(format!(
@@ -309,33 +311,7 @@ pub fn encrypt_filter(
                     }
                 }
             }
-            let a: Attachment = if let Some(sign_keys) = sign_keys {
-                let a: Attachment = a.into();
-                let raw = a.into_raw();
-                let data = melib::utils::canonicalize_crlf(raw.as_bytes());
-                let (sig_metadata, sig_bytes) = backend.sign(sign_keys, &data, false)?.await?;
-                let sig_attachment =
-                    Attachment::new(ContentType::PGPSignature, Default::default(), sig_bytes);
-                let a: AttachmentBuilder = a.into();
-                let parts = vec![a, sig_attachment.into()];
-                let boundary = ContentType::make_boundary(&parts);
-                let micalg = sig_metadata.micalg().into_bytes();
-                Attachment::new(
-                    ContentType::Multipart {
-                        boundary: boundary.into_bytes(),
-                        kind: MultipartType::Signed,
-                        parts: parts.into_iter().map(|a| a.into()).collect::<Vec<_>>(),
-                        parameters: vec![
-                            (b"micalg".into(), micalg),
-                            (b"protocol".into(), b"\"application/pgp-signature\"".into()),
-                        ],
-                    },
-                    Default::default(),
-                    vec![],
-                )
-            } else {
-                a.into()
-            };
+            let a: Attachment = a.into();
             let data = a.into_raw().into_bytes();
 
             let enc_attachment = {
@@ -345,7 +321,9 @@ pub fn encrypt_filter(
                         parameters: vec![],
                     },
                     Default::default(),
-                    backend.encrypt(encrypt_keys, &data)?.await?,
+                    backend
+                        .encrypt(encrypt_keys, sign_keys.unwrap_or_default(), &data)?
+                        .await?,
                 );
                 a.content_disposition =
                     ContentDisposition::from(br#"attachment; filename="msg.asc""#);
@@ -382,10 +360,24 @@ impl PGPBackendChoice {
 pub enum PGPBackendInstance<'a> {
     #[cfg(feature = "gpgme")]
     GpgME { ctx: melib::gpgme::Context },
+    #[cfg(feature = "sequoia")]
+    Sequoia { ctx: melib::sequoia::Context },
     CLI {
         auto_key_locate: LocateKey,
         cli: &'a PGPBackendCLI,
     },
+}
+
+impl<'a> Hash for PGPBackendInstance<'a> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            #[cfg(feature = "gpgme")]
+            Self::GpgME { ctx } => ctx.hash(state),
+            #[cfg(feature = "sequoia")]
+            Self::Sequoia { ctx } => ctx.hash(state),
+            Self::CLI { cli, .. } => cli.hash(state),
+        }
+    }
 }
 
 impl<'a> TryFrom<&'a PGPBackendChoice> for PGPBackendInstance<'a> {
@@ -400,6 +392,16 @@ impl<'a> TryFrom<&'a PGPBackendChoice> for PGPBackendInstance<'a> {
             #[cfg(not(feature = "gpgme"))]
             PGPBackendChoice::GpgME => Err(Error::new(
                 "Cannot instantiate GpgME backend: meli must be compiled with libgpgme. Try \
+                 choosing another PGP backend.",
+            )
+            .set_kind(ErrorKind::Configuration)),
+            #[cfg(feature = "sequoia")]
+            PGPBackendChoice::Sequoia => Ok(Self::Sequoia {
+                ctx: melib::sequoia::Context::new()?,
+            }),
+            #[cfg(not(feature = "sequoia"))]
+            PGPBackendChoice::Sequoia => Err(Error::new(
+                "Cannot instantiate Sequoia backend: meli must be compiled with sequoia. Try \
                  choosing another PGP backend.",
             )
             .set_kind(ErrorKind::Configuration)),
@@ -418,6 +420,10 @@ impl<'a> PGPBackend for PGPBackendInstance<'a> {
             Self::GpgME { ctx } => {
                 ctx.set_auto_key_locate(val)?;
             }
+            #[cfg(feature = "sequoia")]
+            Self::Sequoia { ctx } => {
+                ctx.set_auto_key_locate(val)?;
+            }
             Self::CLI {
                 auto_key_locate, ..
             } => {
@@ -431,6 +437,8 @@ impl<'a> PGPBackend for PGPBackendInstance<'a> {
         match self {
             #[cfg(feature = "gpgme")]
             Self::GpgME { ctx } => ctx.get_auto_key_locate(),
+            #[cfg(feature = "sequoia")]
+            Self::Sequoia { ctx } => ctx.get_auto_key_locate(),
             Self::CLI {
                 auto_key_locate, ..
             } => Ok(*auto_key_locate),
@@ -441,6 +449,8 @@ impl<'a> PGPBackend for PGPBackendInstance<'a> {
         match self {
             #[cfg(feature = "gpgme")]
             Self::GpgME { ctx } => PGPBackend::get_key(ctx, secret, pattern),
+            #[cfg(feature = "sequoia")]
+            Self::Sequoia { ctx } => PGPBackend::get_key(ctx, secret, pattern),
             Self::CLI {
                 ref auto_key_locate,
                 cli,
@@ -488,6 +498,8 @@ impl<'a> PGPBackend for PGPBackendInstance<'a> {
         match self {
             #[cfg(feature = "gpgme")]
             Self::GpgME { ctx } => PGPBackend::verify(ctx, signature, text),
+            #[cfg(feature = "sequoia")]
+            Self::Sequoia { ctx } => PGPBackend::verify(ctx, signature, text),
             Self::CLI {
                 ref auto_key_locate,
                 cli,
@@ -533,6 +545,8 @@ impl<'a> PGPBackend for PGPBackendInstance<'a> {
         match self {
             #[cfg(feature = "gpgme")]
             Self::GpgME { ctx } => PGPBackend::verify_cleartext(ctx, text),
+            #[cfg(feature = "sequoia")]
+            Self::Sequoia { ctx } => PGPBackend::verify_cleartext(ctx, text),
             Self::CLI {
                 ref auto_key_locate,
                 cli,
@@ -577,6 +591,8 @@ impl<'a> PGPBackend for PGPBackendInstance<'a> {
         match self {
             #[cfg(feature = "gpgme")]
             Self::GpgME { ctx } => PGPBackend::keylist(ctx, secret, pattern),
+            #[cfg(feature = "sequoia")]
+            Self::Sequoia { ctx } => PGPBackend::keylist(ctx, secret, pattern),
             Self::CLI {
                 ref auto_key_locate,
                 cli,
@@ -632,6 +648,8 @@ impl<'a> PGPBackend for PGPBackendInstance<'a> {
         match self {
             #[cfg(feature = "gpgme")]
             Self::GpgME { ctx } => PGPBackend::sign(ctx, sign_keys, text, is_binary),
+            #[cfg(feature = "sequoia")]
+            Self::Sequoia { ctx } => PGPBackend::sign(ctx, sign_keys, text, is_binary),
             Self::CLI {
                 ref auto_key_locate,
                 cli,
@@ -683,10 +701,17 @@ impl<'a> PGPBackend for PGPBackendInstance<'a> {
         }
     }
 
-    fn encrypt(&mut self, encrypt_keys: Vec<Key>, plain: &[u8]) -> ResultFuture<Vec<u8>> {
+    fn encrypt(
+        &mut self,
+        encrypt_keys: Vec<Key>,
+        sign_keys: Vec<Key>,
+        plain: &[u8],
+    ) -> ResultFuture<Vec<u8>> {
         match self {
             #[cfg(feature = "gpgme")]
-            Self::GpgME { ctx } => PGPBackend::encrypt(ctx, encrypt_keys, plain),
+            Self::GpgME { ctx } => PGPBackend::encrypt(ctx, encrypt_keys, sign_keys, plain),
+            #[cfg(feature = "sequoia")]
+            Self::Sequoia { ctx } => PGPBackend::encrypt(ctx, encrypt_keys, sign_keys, plain),
             Self::CLI {
                 ref auto_key_locate,
                 cli,
@@ -730,10 +755,12 @@ impl<'a> PGPBackend for PGPBackendInstance<'a> {
         }
     }
 
-    fn decrypt(&mut self, cipher: &[u8]) -> ResultFuture<(DecryptionMetadata, Vec<u8>)> {
+    fn decrypt(&mut self, cipher: &[u8]) -> ResultFuture<(SignaturesMetadata, Vec<u8>)> {
         match self {
             #[cfg(feature = "gpgme")]
             Self::GpgME { ctx } => PGPBackend::decrypt(ctx, cipher),
+            #[cfg(feature = "sequoia")]
+            Self::Sequoia { ctx } => PGPBackend::decrypt(ctx, cipher),
             Self::CLI {
                 ref auto_key_locate,
                 cli,
@@ -759,7 +786,7 @@ impl<'a> PGPBackend for PGPBackendInstance<'a> {
                             return Err(err.into());
                         }
                         Ok((
-                            DecryptionMetadata::default(),
+                            SignaturesMetadata::default(),
                             serde_json::from_slice::<Vec<u8>>(&output.stdout).map_err(|err| {
                                 format!(
                                     "Could not deserialize decryption response from \
@@ -787,7 +814,9 @@ mod tests {
 
     use melib::{
         gpgme::{EngineInfo, Protocol},
-        log, smol,
+        log,
+        pgp::{Summary, Validity},
+        smol,
         utils::logging::{LogLevel, Logger},
     };
     use rusty_fork::rusty_fork_test;
@@ -796,9 +825,76 @@ mod tests {
 
     // Keys generated with <https://github.com/epilys/gen-rfc9500-gpg-keys>
 
-    const PUBKEY: &[u8] = b"-----BEGIN PGP PUBLIC KEY BLOCK-----\r\n\r\nxsBNBAAAAAABCACw+egZQ6eumJKq3hfKfED4dE/tL4FI5sjqont9ABVI+1GSqyi1\r\nbFBgsRjM0THllIdMbKmJtWwnKW8J+5OgNN8y6Xxv8JmM/Y5vQt2lis0fqXmG8UTz\r\n0VTWdlAXXmhUs6lSADvAaIe4RVrCsZ97L3ZQTryY7JRVcbB4khUN3Gp0yg+801SX\r\nzoFTTa+UGIRLE66jH51aa5VXu99hnv1OiH8tQrjdi8mH6uG/icq4XuIeNWMF32wH\r\nqIOOPvQcWV3M5D2vxJEj702Ku6k9OQXkAo17qRSEonWW4HtLbtmS8He1JNPc/n3d\r\nVUm+fM6NoDXPoLP7j55G9zKyqGtGAWXAj1MTABEBAAHNEHVzZXJAZXhhbXBsZS5v\r\ncmfCwLsEEwEKAG8FggAAAAAJEMwuljyZl1FjRxQAAAAAAB4AIHNhbHRAbm90YXRp\r\nb25zLnNlcXVvaWEtcGdwLm9yZ56lfAkULy8QwPhEcrlasB0N4oBn0im6wT4mwiAT\r\nHZjBFiEErtwR+84tdGv4v3FmzC6WPJmXUWMAAI1tCACHuuzmgEqoIrk3QZaZwReK\r\nzNOs/einaVqItsI38AWLlyruwM+5IBYskBx7EjPk/yBMyWSR0X9WxiBpuXrxcpql\r\nqU8NUYXEEQeo57921ol9FnAWEp2Aqo11O5r26P7XDv+IDj0qX3+uAjSwmH0wJvrH\r\nloWCBooVuEaMX0VeMcuVXzqGZtHMp8DB1sWJMof1Znhrx3N/tAV+RnYdzuhBIgci\r\nUZRQ5MLqrt8ks9fyIAL3btRS2nsBGdyTbzFxVkoxc4yRx2ZiNiB8OlMzGk5YoiOf\r\ntkKM/mF6HTpfppF0CIhuo/q29lUCSpQDmfjksawPq3Z6LGaqw4vsj5fHEo7k47Nu\r\n=1oV4\r\n-----END PGP PUBLIC KEY BLOCK-----\r\n";
+    const PUBKEY: &[u8] = br"-----BEGIN PGP PUBLIC KEY BLOCK-----
 
-    const PRIVKEY: &[u8] = b"-----BEGIN PGP PRIVATE KEY BLOCK-----\r\n\r\nxcLYBAAAAAABCACw+egZQ6eumJKq3hfKfED4dE/tL4FI5sjqont9ABVI+1GSqyi1\r\nbFBgsRjM0THllIdMbKmJtWwnKW8J+5OgNN8y6Xxv8JmM/Y5vQt2lis0fqXmG8UTz\r\n0VTWdlAXXmhUs6lSADvAaIe4RVrCsZ97L3ZQTryY7JRVcbB4khUN3Gp0yg+801SX\r\nzoFTTa+UGIRLE66jH51aa5VXu99hnv1OiH8tQrjdi8mH6uG/icq4XuIeNWMF32wH\r\nqIOOPvQcWV3M5D2vxJEj702Ku6k9OQXkAo17qRSEonWW4HtLbtmS8He1JNPc/n3d\r\nVUm+fM6NoDXPoLP7j55G9zKyqGtGAWXAj1MTABEBAAEAB/9BGIsgz9vbws8f/nUt\r\ny6pyOQY1LiYV1J3OgFl/zwoFQDvvAPoGUYL3Lez7WW9LDOj/WXC68HqJpRnsyBay\r\n9P+sUGmvGwa/73v2vNeeToHIxaOn2RMNw8+62uX20oj5ruP2/5L64Pga9Ze+yWrp\r\n+rlALNX+QfcFvr20e7c20/5sWlHg4gcyqXteRsHL2ybXSFTGtmBK7UY3Nf+QdgRl\r\nV8r5Sb9EiJXCBDLB4JwBTqdWYENPGg874pS6vF1TDmoQIT9TtgN1/ISnVz8q8SFV\r\nhPW0vabU6PnhenjZfne4baShhGR1MYp6EKVhAU7/ojqB7Fbp5BCd74yz95ciP32N\r\nDUNRBADM8eW7kMjpeB6nW+vxC8JS4R6wI6AmDxiHVSpWhj9KZCHoxgC/Uj1ssbCt\r\nvdZb/uSoigN+PRpBXlu5VkjaWgyia1T0pjlIUiw9X4m5SnLv/5UTTVlAzkV1jzCJ\r\ngJCJVliO71dbPkvEw2jP6BPunCUsKwLg35HxqgGTjThoXWC6bwQA3RBXAjgvIys2\r\ngfU3keImF8e/TprLge1I2vbWmV2j6rZCg5r/AS0upii5CvJ5/T5vfJPNgPBy8B/y\r\nRDs+6PJO1GmnlhOkG9JAIPkv0RBZvR0PMBtbp6nTY3yo1lwamBVBfY6rc0sLTzos\r\nZh2aGoLzrHNMQFMGaauORzBFpY5lU50D/AqB2KYYMUqAOvYcBnEfLDmyZv9BTVNH\r\nbR2lKkMYqv5LlvDaBxVfilE02riO4p6BaAdvzXjKeRrGNEKoHNBpOSfYCOM16NjL\r\n8hIZB1CaV3WbT5oY+jp7Mzd57d56RZOE+ERK2uz/7JX9VSsM/LbH9pJibd4e8mik\r\nDS9ntciqOH/3QwrNEHVzZXJAZXhhbXBsZS5vcmfCwLsEEwEKAG8FggAAAAAJEMwu\r\nljyZl1FjRxQAAAAAAB4AIHNhbHRAbm90YXRpb25zLnNlcXVvaWEtcGdwLm9yZ56l\r\nfAkULy8QwPhEcrlasB0N4oBn0im6wT4mwiATHZjBFiEErtwR+84tdGv4v3FmzC6W\r\nPJmXUWMAAI1tCACHuuzmgEqoIrk3QZaZwReKzNOs/einaVqItsI38AWLlyruwM+5\r\nIBYskBx7EjPk/yBMyWSR0X9WxiBpuXrxcpqlqU8NUYXEEQeo57921ol9FnAWEp2A\r\nqo11O5r26P7XDv+IDj0qX3+uAjSwmH0wJvrHloWCBooVuEaMX0VeMcuVXzqGZtHM\r\np8DB1sWJMof1Znhrx3N/tAV+RnYdzuhBIgciUZRQ5MLqrt8ks9fyIAL3btRS2nsB\r\nGdyTbzFxVkoxc4yRx2ZiNiB8OlMzGk5YoiOftkKM/mF6HTpfppF0CIhuo/q29lUC\r\nSpQDmfjksawPq3Z6LGaqw4vsj5fHEo7k47Nu\r\n=tzjb\r\n-----END PGP PRIVATE KEY BLOCK-----\r\n";
+xsBNBAAAAAABCACw+egZQ6eumJKq3hfKfED4dE/tL4FI5sjqont9ABVI+1GSqyi1
+bFBgsRjM0THllIdMbKmJtWwnKW8J+5OgNN8y6Xxv8JmM/Y5vQt2lis0fqXmG8UTz
+0VTWdlAXXmhUs6lSADvAaIe4RVrCsZ97L3ZQTryY7JRVcbB4khUN3Gp0yg+801SX
+zoFTTa+UGIRLE66jH51aa5VXu99hnv1OiH8tQrjdi8mH6uG/icq4XuIeNWMF32wH
+qIOOPvQcWV3M5D2vxJEj702Ku6k9OQXkAo17qRSEonWW4HtLbtmS8He1JNPc/n3d
+VUm+fM6NoDXPoLP7j55G9zKyqGtGAWXAj1MTABEBAAHCwL4EHwEKAHIFgmqwA58J
+EMwuljyZl1FjRxQAAAAAAB4AIHNhbHRAbm90YXRpb25zLnNlcXVvaWEtcGdwLm9y
+Z6O5Y4S0HyXDKFGauzW0rj+twitM3GHMI19Yx6dcilxCApsnFiEErtwR+84tdGv4
+v3FmzC6WPJmXUWMAAOXvCACZUwjphdH7a0/NaQpgEUZ9ivliZIOra9FyNB6Yonc9
+wFnlkE7+V0XfiVyZin1rs35at3B81cRBzHGqF4AzhkbYH3yEfzFZ4BBZn3osqH+o
+BFJWzYfHsmV6FRbNOVOUzhQyA1g0bo2QbdRwaUWu9Wcvn+kdQ9x2mc+bmpm8Rm0M
+MbomWKpmh/56dJCqRUn7ybQQYjfZQQGiCLpkLY+sP6S9Lx4D7xlHO9RkvUKWSQ7F
+kKIzqZTr4H6gdXuZOaTzDq1ZPOclVJlRrwVcLwWjNanEfIrWVZe6J1wX98IXoY+o
+K/JIs56XjMNodrih7I2so3EUITV1c4pZ0mhN0J9WWJoszRB1c2VyQGV4YW1wbGUu
+b3JnwsC7BBMBCgBvBYIAAAAACRDMLpY8mZdRY0cUAAAAAAAeACBzYWx0QG5vdGF0
+aW9ucy5zZXF1b2lhLXBncC5vcmehx6kpeoqLZCvewYfbkx/DcWvhW61UtbUcnD2o
+4dFa2xYhBK7cEfvOLXRr+L9xZswuljyZl1FjAACCNwgAoTYd6zE8dTfXdj/Ga57N
+/XVWONJWc+gW0a2Bt9u76OZTs1H38sg7gFbp/Oxzz27mTrZ/87349IwzujdsGRkQ
+nCf93NeOEa4Ts0DsqzZyc6uKBwvlKaHxBMnLoswV8oosrkyZzmw37EZxI75OqJJK
+xy1i2v2xBF0WQ8xKs8cCxt3XoDs4sD0eBnXRhyHYpF3pIux4klDd4Bi7cklj5q5v
+QDVHRF4NA6RAwd1MXagYUmaYRmokv/yt/mMN/kSppa7WetQ9MYJtAH+BOCVi5dhn
+fbOuVxt+TMw6QHT2qpTiIHs1pNBleIth4rAev7g+9KUgkWKNtSAQCZZOcx7I+/Uv
+SQ==
+=vXlr
+-----END PGP PUBLIC KEY BLOCK-----
+";
+
+    const PRIVKEY: &[u8] = br"-----BEGIN PGP PRIVATE KEY BLOCK-----
+
+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
+5LiEsB1TygJ+T0kBbxm1T12mT20r+kTJV97FUA==
+=F94H
+-----END PGP PRIVATE KEY BLOCK-----
+";
 
     const CLEARTEXT_SIGNATURE: &[u8] = b"-----BEGIN PGP SIGNED MESSAGE-----\r\nHash: SHA512\r\n\r\nSample text for gpg signing\r\n\r\n-----BEGIN PGP SIGNATURE-----\r\n\r\nwsC7BAEBCgBvBYJqpsT9CRDMLpY8mZdRY0cUAAAAAAAeACBzYWx0QG5vdGF0aW9u\r\ncy5zZXF1b2lhLXBncC5vcme0O9QbQebgQFHUXDJ4BoXVa2gQocfWivPCQ1vnV0oE\r\nPxYhBK7cEfvOLXRr+L9xZswuljyZl1FjAABKcwf/U6P77F1e0JfG32SdlX8KRar/\r\nxxOBY4rewWFe0LX0iMICRXcoMuPDBa85V1IVY9zKxHfxXuk2Vyy7QK+UjKXPRK9X\r\nYJzN/h181kcAeuV/4FtGqbSa9cg0OWHvoA1trgppK+EaLtiQ/QOpZegOB0ACI+dv\r\nvm275yNfh3VZecUWLJ3qLxPqmB55/7/4EO56yc0Y9/dus9kACnvEI37k9AiVdniR\r\n/WXgZ9Vfr0FPLlWluwJEdRY+eNrfa4dlh+LbACDhtGE04bKyy9YzSMNVqky5gAxp\r\nOc8CN9JSZ1EJryg0qcAdFQYj4wpXQgl7Tn29eJeOGxjoozjjM6gwHUmBGQ6fSw==\r\n=XkqT\r\n-----END PGP SIGNATURE-----\r\n";
 
@@ -825,6 +921,12 @@ mod tests {
         fn test_gpg_cli() {
             run_gpg_cli();
         }
+
+        #[cfg(feature = "sequoia")]
+        #[test]
+        fn test_gpg_and_sequoia() {
+            run_gpg_and_sequoia();
+        }
     }
 
     struct GpgTest {
@@ -837,6 +939,14 @@ mod tests {
         let _logger = Logger::new_with(LogLevel::TRACE, true);
         let tempdir = tempfile::tempdir().unwrap();
         {
+            #[allow(unused_unsafe)]
+            unsafe {
+                std::env::set_var("HOME", tempdir.path());
+            }
+            #[allow(unused_unsafe)]
+            unsafe {
+                std::env::set_var("SEQUOIA_HOME", tempdir.path());
+            }
             #[allow(unused_unsafe)]
             unsafe {
                 std::env::set_var("GNUPGHOME", tempdir.path());
@@ -975,7 +1085,7 @@ mod tests {
         let signatures = smol::block_on(verify(gpgme_ctx.clone(), mail.body())).unwrap();
         assert_eq!(
             &signatures_into_error(signatures).unwrap().unwrap(),
-            "good signature by AEDC11FBCE2D746BF8BF7166CC2E963C99975163[?]"
+            "good signature by AEDC11FBCE2D746BF8BF7166CC2E963C99975163[q]"
         );
 
         let attachments = mail.body().attachments();
@@ -1088,15 +1198,7 @@ mod tests {
 
             assert_eq!(
                 decrypted_metadata,
-                DecryptionMetadata {
-                    recipients: vec![Recipient {
-                        keyid: "CC2E963C99975163".into(),
-                        status: Ok((),),
-                    },],
-                    file_name: None,
-                    session_key: None,
-                    is_mime: false,
-                }
+                SignaturesMetadata { signatures: vec![] }
             );
             assert_eq!(
                 body_attachment.build().into_raw(),
@@ -1113,12 +1215,20 @@ mod tests {
             draft
                 .try_set_header("To", "user@example.org".into())
                 .unwrap();
-            let body_attachment: AttachmentBuilder = Attachment::new(
+            let unsigned_body_attachment: AttachmentBuilder = Attachment::new(
                 ContentType::default(),
                 Default::default(),
                 std::mem::take(&mut draft.body).into_bytes(),
             )
             .into();
+            let signed_body_attachment: AttachmentBuilder =
+                smol::block_on((sign_filter(
+                    PGPBackendChoice::GpgME,
+                    None,
+                    vec![pubkey.clone()],
+                )
+                .unwrap())(unsigned_body_attachment.clone()))
+                .unwrap();
             let body: AttachmentBuilder =
                 smol::block_on((encrypt_filter(
                     PGPBackendChoice::GpgME,
@@ -1128,7 +1238,7 @@ mod tests {
                     None,
                     vec![pubkey],
                 )
-                .unwrap())(body_attachment.clone()))
+                .unwrap())(signed_body_attachment))
                 .unwrap();
 
             draft.attachments.insert(0, body);
@@ -1141,21 +1251,24 @@ mod tests {
 
             assert_eq!(
                 decrypted_metadata,
-                DecryptionMetadata {
-                    recipients: vec![Recipient {
-                        keyid: "CC2E963C99975163".into(),
-                        status: Ok((),),
-                    },],
-                    file_name: None,
-                    session_key: None,
-                    is_mime: false,
+                SignaturesMetadata {
+                    signatures: vec![Signature {
+                        summary: Summary::empty(),
+                        cert: Recipient {
+                            keyid: "AEDC11FBCE2D746BF8BF7166CC2E963C99975163".into(),
+                            status: Ok(())
+                        },
+                        validity: Validity::Unknown,
+                        validity_reason: None,
+                        cleartext: false
+                    }]
                 }
             );
             let decrypted = AttachmentBuilder::new(&decrypted).build();
             let signatures = smol::block_on(verify(gpgme_ctx.clone(), decrypted.clone())).unwrap();
             assert_eq!(
                 &signatures_into_error(signatures).unwrap().unwrap(),
-                "good signature by AEDC11FBCE2D746BF8BF7166CC2E963C99975163[?]"
+                "good signature by AEDC11FBCE2D746BF8BF7166CC2E963C99975163[q]"
             );
 
             let attachments = decrypted.attachments();
@@ -1168,7 +1281,7 @@ mod tests {
 
             assert_eq!(
                 String::from_utf8_lossy(&melib::utils::canonicalize_crlf(
-                    &body_attachment.build().into_raw().into_bytes()
+                    &unsigned_body_attachment.build().into_raw().into_bytes()
                 )),
                 String::from_utf8_lossy(&melib::utils::canonicalize_crlf(signed_bytes))
             );
@@ -1210,7 +1323,7 @@ mod tests {
         assert_eq!(
             &signatures_into_error(signatures).unwrap().unwrap(),
             "[SAFETY WARNING: Cleartext signature!]good signature by \
-             AEDC11FBCE2D746BF8BF7166CC2E963C99975163[?]"
+             AEDC11FBCE2D746BF8BF7166CC2E963C99975163[q]"
         );
 
         _ = tempdir.close();
@@ -1326,6 +1439,9 @@ mod tests {
         gpgme_ctx
             .import_key(gpgme_ctx.new_data_mem(PRIVKEY).unwrap())
             .unwrap();
+        let _seckey: melib::gpgme::GpgmeKey =
+            smol::block_on(gpgme_ctx.get_key(true, "AEDC11FBCE2D746BF8BF7166CC2E963C99975163"))
+                .unwrap();
 
         // Sign and verify
         {
@@ -1400,6 +1516,228 @@ mod tests {
                 &String::from_utf8_lossy(&decrypted),
                 "Content-Transfer-Encoding: 8bit\r\nContent-Type: text/plain; \
                  charset=\"utf-8\"\r\n\r\nfoobar\r\n\r\n"
+            );
+        }
+        _ = tempdir.close();
+    }
+
+    #[cfg(feature = "sequoia")]
+    fn run_gpg_and_sequoia() {
+        let Some(GpgTest {
+            _logger,
+            tempdir,
+            mut gpgme_ctx,
+        }) = setup()
+        else {
+            return;
+        };
+
+        // Add public key
+        gpgme_ctx
+            .import_key(gpgme_ctx.new_data_mem(PUBKEY).unwrap())
+            .unwrap();
+
+        // Retrieve public key
+        let pubkey: Key = smol::block_on(
+            gpgme_ctx
+                .clone()
+                .get_key(false, "AEDC11FBCE2D746BF8BF7166CC2E963C99975163"),
+        )
+        .unwrap()
+        .into();
+        assert_eq!(
+            pubkey.fingerprint,
+            "AEDC11FBCE2D746BF8BF7166CC2E963C99975163"
+        );
+
+        // Add private key
+        gpgme_ctx
+            .import_key(gpgme_ctx.new_data_mem(PRIVKEY).unwrap())
+            .unwrap();
+        // Import key in sequoia
+        {
+            let sq = melib::sequoia::Context::new().unwrap();
+            let sq = sq.sq;
+            let sec_key = String::from_utf8_lossy(PRIVKEY).parse().unwrap();
+            let local_trust_root = sq.local_trust_root().unwrap();
+            let outcome = sq
+                .pki_certify()
+                .certify(
+                    &local_trust_root,
+                    &sec_key,
+                    &sec_key
+                        .userids()
+                        .map(|u| u.component().clone())
+                        .collect::<Vec<_>>(),
+                )
+                .unwrap();
+            sq.key_import().import_key(outcome.into_cert()).unwrap();
+            let _ = sq
+                .lookup()
+                .lookup_one(
+                    "AEDC11FBCE2D746BF8BF7166CC2E963C99975163"
+                        .parse::<melib::sequoia::sqz::openpgp::Fingerprint>()
+                        .unwrap(),
+                )
+                .unwrap();
+        }
+
+        // Sign and verify
+        {
+            let mut draft = melib::Draft::default();
+            draft.set_body("foobar\r\n\r\n".into());
+            draft
+                .try_set_header("From", "user@example.org".into())
+                .unwrap();
+            draft
+                .try_set_header("To", "user@example.org".into())
+                .unwrap();
+
+            let body_attachment: AttachmentBuilder = Attachment::new(
+                ContentType::default(),
+                Default::default(),
+                std::mem::take(&mut draft.body).into_bytes(),
+            )
+            .into();
+
+            let body: AttachmentBuilder = smol::block_on((sign_filter(
+                PGPBackendChoice::Sequoia,
+                None,
+                vec![pubkey.clone()],
+            )
+            .unwrap())(body_attachment))
+            .unwrap();
+            draft.attachments.insert(0, body);
+            let raw_mail = draft.finalise().unwrap();
+            //eprintln!("{raw_mail}");
+            let mail = melib::Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
+            let signatures = smol::block_on(verify(
+                PGPBackendChoice::Sequoia.instantiate().unwrap(),
+                mail.body(),
+            ))
+            .unwrap();
+            assert_eq!(
+                &signatures_into_error(signatures).unwrap().unwrap(),
+                "good signature by AEDC11FBCE2D746BF8BF7166CC2E963C99975163:VALID[u]"
+            );
+        }
+
+        // Encrypt and decrypt
+        {
+            let mut draft = melib::Draft::default();
+            draft.set_body("foobar\r\n\r\n".into());
+            draft
+                .try_set_header("From", "user@example.org".into())
+                .unwrap();
+            draft
+                .try_set_header("To", "user@example.org".into())
+                .unwrap();
+
+            let body_attachment: AttachmentBuilder = Attachment::new(
+                ContentType::default(),
+                Default::default(),
+                std::mem::take(&mut draft.body).into_bytes(),
+            )
+            .into();
+            let body: AttachmentBuilder = smol::block_on((encrypt_filter(
+                PGPBackendChoice::Sequoia,
+                None,
+                Some("AEDC11FBCE2D746BF8BF7166CC2E963C99975163".into()),
+                None,
+                None,
+                vec![pubkey.clone()],
+            )
+            .unwrap())(body_attachment))
+            .unwrap();
+
+            draft.attachments.insert(0, body);
+            let raw_mail = draft.finalise().unwrap();
+            let mail = melib::Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
+
+            let (signatures, decrypted) = smol::block_on(decrypt(
+                PGPBackendChoice::Sequoia.instantiate().unwrap(),
+                mail.body(),
+            ))
+            .expect("Could not decrypt email");
+            assert_eq!(
+                &String::from_utf8_lossy(&decrypted),
+                "Content-Transfer-Encoding: 8bit\r\nContent-Type: text/plain; \
+                 charset=\"utf-8\"\r\n\r\nfoobar\r\n\r\n"
+            );
+            assert_eq!(
+                &signatures_into_error(signatures).unwrap().unwrap(),
+                "good signature by AEDC11FBCE2D746BF8BF7166CC2E963C99975163:VALID[u]"
+            );
+        }
+        // Sign, then encrypt and decrypt
+        {
+            let mut draft = melib::Draft::default();
+            draft.set_body("foobar\r\n\r\n".into());
+            draft
+                .try_set_header("From", "user@example.org".into())
+                .unwrap();
+            draft
+                .try_set_header("To", "user@example.org".into())
+                .unwrap();
+
+            let body_attachment: AttachmentBuilder = Attachment::new(
+                ContentType::default(),
+                Default::default(),
+                std::mem::take(&mut draft.body).into_bytes(),
+            )
+            .into();
+            let body_attachment: AttachmentBuilder =
+                smol::block_on((sign_filter(
+                    PGPBackendChoice::Sequoia,
+                    None,
+                    vec![pubkey.clone()],
+                )
+                .unwrap())(body_attachment))
+                .unwrap();
+            let body: AttachmentBuilder = smol::block_on((encrypt_filter(
+                PGPBackendChoice::Sequoia,
+                None,
+                Some("AEDC11FBCE2D746BF8BF7166CC2E963C99975163".into()),
+                None,
+                None,
+                vec![pubkey],
+            )
+            .unwrap())(body_attachment))
+            .unwrap();
+
+            draft.attachments.insert(0, body);
+            let raw_mail = draft.finalise().unwrap();
+            let mail = melib::Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
+
+            let (metadata, decrypted) = smol::block_on(decrypt(
+                PGPBackendChoice::Sequoia.instantiate().unwrap(),
+                mail.body(),
+            ))
+            .expect("Could not decrypt email");
+            assert_eq!(
+                metadata,
+                SignaturesMetadata {
+                    signatures: vec![Signature {
+                        summary: Summary::VALID,
+                        cert: Recipient {
+                            keyid: "AEDC11FBCE2D746BF8BF7166CC2E963C99975163".into(),
+                            status: Ok(())
+                        },
+                        validity: Validity::Ultimate,
+                        validity_reason: None,
+                        cleartext: false
+                    }]
+                }
+            );
+            let decrypted = AttachmentBuilder::new(&decrypted).build();
+            let signatures = smol::block_on(verify(
+                PGPBackendChoice::Sequoia.instantiate().unwrap(),
+                decrypted,
+            ))
+            .unwrap();
+            assert_eq!(
+                &signatures_into_error(signatures).unwrap().unwrap(),
+                "good signature by AEDC11FBCE2D746BF8BF7166CC2E963C99975163:VALID[u]"
             );
         }
         _ = tempdir.close();

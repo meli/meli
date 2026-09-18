@@ -23,7 +23,7 @@ use std::{borrow::Cow, fmt::Write as IoWrite};
 
 use melib::{
     attachment_types::Charset, conf::ActionFlag, email::headers::HeaderName, error::*,
-    pgp::DecryptionMetadata, Attachment, Result,
+    pgp::SignaturesMetadata, Attachment, Result,
 };
 
 use crate::{
@@ -375,7 +375,7 @@ pub enum AttachmentDisplay {
     },
     EncryptedPending {
         inner: Box<Attachment>,
-        handle: JoinHandle<Result<(DecryptionMetadata, Vec<u8>)>>,
+        handle: JoinHandle<Result<(SignaturesMetadata, Vec<u8>)>>,
     },
     EncryptedFailed {
         inner: Box<Attachment>,

@@ -29,6 +29,7 @@ default = [
     "http",
     "dbus-notifications",
     "gpgme",
+    "sequoia",
     "cli-docs",
     "jmap",
     "static",
@@ -42,6 +43,7 @@ dbus-notifications = ["dep:notify-rust"]
 cli-docs = ["dep:flate2"]
 # svgscreenshot = ["dep:svg_crate"]
 gpgme = ["melib/gpgme"]
+sequoia = ["melib/sequoia"]
 # Static / vendoring features.
 tls-static = ["melib/tls-static"]
 http-static = ["melib/http-static"]

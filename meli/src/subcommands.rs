@@ -121,6 +121,8 @@ pub fn compiled_with() -> Result<()> {
     println!("cli-docs");
     #[cfg(feature = "gpgme")]
     println!("gpgme");
+    #[cfg(feature = "sequoia")]
+    println!("sequoia");
     Ok(())
 }
 
