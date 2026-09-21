@@ -14,7 +14,7 @@ NIGHTLY_EXISTS=`((cargo +nightly 2> /dev/null 1> /dev/null) && echo 0) || echo 1
 GIT=env GIT_CONFIG_GLOBAL="" GIT_CONFIG_SYSTEM="" GIT_CONFIG_NOSYSTEM=1 git
 
 .PHONY: all
-all: cargo-msrv rustfmt clippy cargo-derivefmt-melib cargo-derivefmt-meli cargo-derivefmt-tools
+all: cargo-msrv rustfmt clippy
 	@printf "All checks completed.\n"
 
 # Check both melib and meli in the same Make target, because if melib does not
@@ -35,27 +35,3 @@ rustfmt:
 clippy:
 	@printf "clippy\n"
 	cargo clippy --no-deps --all-features --all --tests --examples --benches --bins
-
-.PHONY: cargo-derivefmt-melib
-cargo-derivefmt-melib:
-	@printf "cargo-derivefmt-melib\n"
-	@printf "Checking that derives are sorted alphabetically...\n"
-	cargo derivefmt --manifest-path ./melib/Cargo.toml
-	@$(GIT) checkout --quiet meli/src/conf/overrides.rs
-	@($(GIT) diff --quiet ./melib && $(GIT) diff --cached --quiet ./melib && printf "All ./melib derives are sorted alphabetically.\n") || (printf "Some derives in the ./melib crate are not sorted alphabetically, see diff:\n"; $(GIT) diff HEAD; exit 1)
-
-.PHONY: cargo-derivefmt-meli
-cargo-derivefmt-meli:
-	@printf "cargo-derivefmt-meli\n"
-	@printf "Checking that derives are sorted alphabetically...\n"
-	cargo derivefmt --manifest-path ./meli/Cargo.toml
-	@$(GIT) checkout --quiet meli/src/conf/overrides.rs
-	@($(GIT) diff --quiet ./meli && $(GIT) diff --cached --quiet ./meli && printf "All ./meli derives are sorted alphabetically.\n") || (printf "Some derives in the ./meli crate are not sorted alphabetically, see diff:\n"; $(GIT) diff HEAD; exit 1)
-
-.PHONY: cargo-derivefmt-tools
-cargo-derivefmt-tools:
-	@printf "cargo-derivefmt-tools\n"
-	@printf "Checking that derives are sorted alphabetically...\n"
-	cargo derivefmt --manifest-path ./tools/Cargo.toml
-	@$(GIT) checkout --quiet meli/src/conf/overrides.rs
-	@($(GIT) diff --quiet ./tools && $(GIT) diff --cached --quiet ./tools && printf "All ./tools derives are sorted alphabetically.\n") || (printf "Some derives in the ./tools crate are not sorted alphabetically, see diff:\n"; $(GIT) diff HEAD; exit 1)

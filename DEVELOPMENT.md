@@ -39,7 +39,7 @@ The CI workflows are written to execute the following `Makefile`s:
   build-rustdoc` and also runs cargo tests with `cargo-nextest` and `rustdoc`
   tests with `make test-docs`.
 - [`.gitea/Makefile.lint`](.gitea/Makefile.lint)
-  Performs linter checks with `rustfmt`, `clippy`, `cargo-msrv` and `cargo-derivefmt`.
+  Performs linter checks with `rustfmt`, `clippy`, `cargo-msrv`.
 - [`.gitea/Makefile.manifest-lint`](.gitea/Makefile.manifest-lint)
   Performs linter checks for manifest files with `cargo-sort` and the
   [`check_debian_changelog.sh`](./scripts/check_debian_changelog.sh) script.
