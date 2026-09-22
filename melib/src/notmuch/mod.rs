@@ -76,8 +76,7 @@ pub use tags::*;
 pub use thread::*;
 
 #[derive(Debug)]
-#[repr(transparent)]
-pub struct DbPointer(pub NonNull<ffi::notmuch_database_t>);
+pub struct DbPointer(pub NonNull<ffi::notmuch_database_t>, Arc<NotmuchLibrary>);
 
 unsafe impl Send for DbPointer {}
 unsafe impl Sync for DbPointer {}
@@ -89,7 +88,21 @@ impl DbPointer {
     }
 }
 
-#[derive(Debug)]
+impl Drop for DbPointer {
+    fn drop(&mut self) {
+        unsafe {
+            if let Err(err) = try_call!(self.1, (self.1.database_close())(self.0.as_mut())) {
+                log::error!("Could not call C notmuch_database_close: {err}");
+                return;
+            }
+            if let Err(err) = try_call!(self.1, (self.1.database_destroy())(self.0.as_mut())) {
+                log::error!("Could not call C notmuch_database_destroy: {err}");
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct DbConnection {
     pub lib: Arc<NotmuchLibrary>,
     pub inner: Arc<Mutex<DbPointer>>,
@@ -118,20 +131,16 @@ impl DbConnection {
                 path.display()
             )));
         }
-        #[cfg(debug_assertions)]
-        let database = DbPointer(
-            NonNull::new(database)
-                .expect("notmuch_database_open returned a NULL pointer and status = 0"),
-        );
-        #[cfg(not(debug_assertions))]
-        let database = NonNull::new(database).map(DbPointer).ok_or_else(|| {
-            Error::new("notmuch_database_open returned a NULL pointer and status = 0")
-                .set_kind(ErrorKind::LinkedLibrary("notmuch"))
-                .set_details(
-                    "libnotmuch exhibited an unexpected and unrecoverable error. Make sure your \
-                     libnotmuch version is compatible with this release.",
-                )
-        })?;
+        let database = NonNull::new(database)
+            .map(|ptr| DbPointer(ptr, lib.clone()))
+            .ok_or_else(|| {
+                Error::new("notmuch_database_open returned a NULL pointer and status = 0")
+                    .set_kind(ErrorKind::LinkedLibrary("notmuch"))
+                    .set_details(
+                        "libnotmuch exhibited an unexpected and unrecoverable error. Make sure \
+                         your libnotmuch version is compatible with this release.",
+                    )
+            })?;
         let ret = Self {
             lib,
             inner: Arc::new(Mutex::new(database)),
@@ -397,21 +406,6 @@ impl std::error::Error for NotmuchError {
 impl From<NotmuchError> for Error {
     fn from(err: NotmuchError) -> Self {
         Self::new(err.0)
-    }
-}
-
-impl Drop for DbConnection {
-    fn drop(&mut self) {
-        let mut inner = self.inner.lock().unwrap();
-        unsafe {
-            if let Err(err) = try_call!(self.lib, (self.lib.database_close())(inner.as_mut())) {
-                log::error!("Could not call C notmuch_database_close: {err}");
-                return;
-            }
-            if let Err(err) = try_call!(self.lib, (self.lib.database_destroy())(inner.as_mut())) {
-                log::error!("Could not call C notmuch_database_destroy: {err}");
-            }
-        }
     }
 }
 
