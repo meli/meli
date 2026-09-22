@@ -1009,7 +1009,14 @@ impl MailBackend for NotmuchDb {
             } else {
                 String::new()
             };
+            let wasnt_empty = !query_s.trim().is_empty();
+            if wasnt_empty {
+                query_s.push_str(" AND (");
+            }
             melib_query.query_to_string(&mut query_s)?;
+            if wasnt_empty {
+                query_s.push(')');
+            }
             let query: Query = Query::new(&database, &query_s)?;
             Ok(query.search()?.map(|message| message.env_hash()).collect())
         }))
@@ -1037,7 +1044,11 @@ impl MailBackend for NotmuchDb {
             } else {
                 String::new()
             };
-            let query_s = format!("{mailbox_query_s}{query_str}");
+            let query_s = if mailbox_query_s.trim().is_empty() {
+                query_str
+            } else {
+                format!("{mailbox_query_s} AND ({query_str})")
+            };
             let query: Query = Query::new(&database, &query_s)?;
             Ok(query.search()?.map(|message| message.env_hash()).collect())
         }))
