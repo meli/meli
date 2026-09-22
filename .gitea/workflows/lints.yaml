@@ -42,7 +42,7 @@ jobs:
         name: install OS dependencies
         run: |
           apt-get update
-          apt-get install -y libdbus-1-dev pkg-config mandoc libssl-dev
+          apt-get install -y libdbus-1-dev pkg-config mandoc libssl-dev clang nettle-dev capnproto libsqlite3-dev
       - name: Find meli MSRV from meli/Cargo.toml.
         run: |
           echo MELI_MSRV=$(grep -m1 rust-version meli/Cargo.toml | head -n1 | cut -d'"' -f 2 | head -n1) >> $GITHUB_ENV
