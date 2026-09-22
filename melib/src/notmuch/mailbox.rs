@@ -22,36 +22,29 @@
 use std::sync::{Arc, Mutex, RwLock};
 
 use crate::{
-    backends::{BackendMailbox, Mailbox, MailboxHash, MailboxPermissions, SpecialUsageMailbox},
+    backends::{
+        BackendMailbox, LazyCountSet, Mailbox, MailboxHash, MailboxPermissions, SpecialUsageMailbox,
+    },
     error::Result,
-    notmuch::{DbConnection, Query},
 };
 
 #[derive(Clone, Debug, Default)]
 pub struct NotmuchMailbox {
-    pub(super) hash: MailboxHash,
-    pub(super) children: Vec<MailboxHash>,
-    pub(super) parent: Option<MailboxHash>,
-    pub(super) name: String,
-    pub(super) path: String,
-    pub(super) query_str: String,
-    pub(super) usage: Arc<RwLock<SpecialUsageMailbox>>,
-    pub(super) total: Arc<Mutex<usize>>,
-    pub(super) unseen: Arc<Mutex<usize>>,
+    pub hash: MailboxHash,
+    pub children: Vec<MailboxHash>,
+    pub parent: Option<MailboxHash>,
+    pub name: String,
+    pub path: String,
+    pub query_str: String,
+    pub usage: Arc<RwLock<SpecialUsageMailbox>>,
+    pub total: Arc<Mutex<LazyCountSet>>,
+    pub unseen: Arc<Mutex<LazyCountSet>>,
 }
 
 impl NotmuchMailbox {
     /// Get the actual notmuch query used to build this mailbox.
     pub fn query_value(&self) -> &str {
         &self.query_str
-    }
-
-    /// Query the database to update total and unread message counts.
-    pub fn update_counts(&self, database: &DbConnection) -> Result<()> {
-        *self.total.lock().unwrap() = Query::new(database, &self.query_str)?.count()? as usize;
-        *self.unseen.lock().unwrap() =
-            Query::new(database, &format!("{} tag:unread", self.query_str))?.count()? as usize;
-        Ok(())
     }
 }
 
@@ -102,7 +95,7 @@ impl BackendMailbox for NotmuchMailbox {
     }
 
     fn count(&self) -> Result<(usize, usize)> {
-        Ok((*self.unseen.lock()?, *self.total.lock()?))
+        Ok((self.unseen.lock()?.len(), self.total.lock()?.len()))
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

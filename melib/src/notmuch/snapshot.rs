@@ -21,7 +21,7 @@
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     ffi::CString,
     sync::{Arc, RwLock},
 };
@@ -43,7 +43,7 @@ pub struct Snapshot {
     /// Index from [`EnvelopeHash`] to `Message-ID`.
     pub message_id_index: HashMap<EnvelopeHash, CString>,
     /// Index of which mailboxes an envelope is in.
-    pub env_to_mailbox_index: HashMap<EnvelopeHash, SmallVec<[MailboxHash; 16]>>,
+    pub env_to_mailbox_index: HashMap<EnvelopeHash, HashSet<MailboxHash>>,
     /// Mutex copy of [`Collection::tag_index`] associated with this account.
     pub tag_index: Arc<RwLock<BTreeMap<TagHash, String>>>,
     pub account_hash: AccountHash,
@@ -61,7 +61,7 @@ impl Snapshot {
         self.env_to_mailbox_index
             .entry(env_hash)
             .or_default()
-            .push(mailbox_hash);
+            .insert(mailbox_hash);
         let mut env = Envelope::new(env_hash);
         self.message_id_index
             .insert(env_hash, message.msg_id_cstr().into());
@@ -104,27 +104,5 @@ impl Snapshot {
             .set_datetime(message.date())
             .set_flags(flags);
         env
-    }
-
-    /// Remove `env_hash` from inner caches and return any associated refresh
-    /// events.
-    pub fn remove_envelope(&mut self, env_hash: EnvelopeHash) -> Vec<RefreshEvent> {
-        let mut events = vec![];
-        for mailbox_hash in self
-            .env_to_mailbox_index
-            .entry(env_hash)
-            .or_default()
-            .drain(..)
-        {
-            // [ref:TODO]: fix total/unseen counts for mailbox
-            events.push(RefreshEvent {
-                account_hash: self.account_hash,
-                mailbox_hash,
-                kind: RefreshEventKind::Remove(env_hash),
-            });
-        }
-        self.message_id_index.remove(&env_hash);
-        self.env_to_mailbox_index.remove(&env_hash);
-        events
     }
 }

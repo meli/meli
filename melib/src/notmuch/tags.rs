@@ -48,46 +48,9 @@ impl<'m> TagIterator<'m> {
     }
 
     pub fn collect_flags_and_tags(self) -> (Flag, Vec<String>) {
-        fn flags(fs_path: NonNull<std::ffi::c_char>) -> Flag {
-            let path = unsafe { CStr::from_ptr(fs_path.as_ptr()) };
-            let mut flag = Flag::default();
-            let mut ptr = path.to_bytes().len().saturating_sub(1);
-            let mut is_valid = true;
-            while !path.to_bytes()[..ptr + 1].ends_with(b":2,") {
-                match path.to_bytes()[ptr] {
-                    b'D' => flag |= Flag::DRAFT,
-                    b'F' => flag |= Flag::FLAGGED,
-                    b'P' => flag |= Flag::PASSED,
-                    b'R' => flag |= Flag::REPLIED,
-                    b'S' => flag |= Flag::SEEN,
-                    b'T' => flag |= Flag::TRASHED,
-                    _ => {
-                        is_valid = false;
-                        break;
-                    }
-                }
-                if ptr == 0 {
-                    is_valid = false;
-                    break;
-                }
-                ptr -= 1;
-            }
-
-            if !is_valid {
-                return Flag::default();
-            }
-
-            flag
-        }
-        let fs_path = unsafe {
-            // SAFETY;
-            // all used pointers here are NonNull<wrapped>, and the cast to *mut _
-            // afterwards is only to wrap the retval into a NonNull as well.
-            (self.message.lib.message_get_filename())(self.message.message.as_ptr())
-        } as *mut std::ffi::c_char;
-
         let tags = self.collect::<Vec<&CStr>>();
         let mut flag = Flag::default();
+        flag.set(Flag::SEEN, true);
         let mut vec = vec![];
         for t in tags {
             match t.to_bytes() {
@@ -115,10 +78,7 @@ impl<'m> TagIterator<'m> {
             }
         }
 
-        (
-            flag | NonNull::new(fs_path).map(flags).unwrap_or_default(),
-            vec,
-        )
+        (flag, vec)
     }
 }
 
