@@ -192,13 +192,7 @@ impl<'de> Deserialize<'de> for PGPBackendChoice {
                 self,
                 value: String,
             ) -> std::result::Result<Self::Value, E> {
-                if value.eq_ignore_ascii_case("gpgme") {
-                    return Ok(PGPBackendChoice::GpgME);
-                }
-                Err(serde::de::Error::invalid_value(
-                    serde::de::Unexpected::Str(&value),
-                    &"expected `gpgme`",
-                ))
+                self.visit_str(&value)
             }
 
             fn visit_str<E: serde::de::Error>(
@@ -210,7 +204,7 @@ impl<'de> Deserialize<'de> for PGPBackendChoice {
                 }
                 Err(serde::de::Error::invalid_value(
                     serde::de::Unexpected::Str(value),
-                    &"expected `gpgme`",
+                    &"`gpgme`",
                 ))
             }
 
@@ -218,13 +212,7 @@ impl<'de> Deserialize<'de> for PGPBackendChoice {
                 self,
                 value: &str,
             ) -> std::result::Result<Self::Value, E> {
-                if value.eq_ignore_ascii_case("gpgme") {
-                    return Ok(PGPBackendChoice::GpgME);
-                }
-                Err(serde::de::Error::invalid_value(
-                    serde::de::Unexpected::Str(value),
-                    &"expected `gpgme`",
-                ))
+                self.visit_str(value)
             }
 
             fn visit_map<V>(self, map: V) -> std::result::Result<Self::Value, V::Error>
