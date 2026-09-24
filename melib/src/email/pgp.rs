@@ -21,6 +21,8 @@
 
 //! `OpenPGP` signatures and encryption.
 
+use std::hash::{Hash, Hasher};
+
 use futures::future::BoxFuture;
 use serde::{
     de::{self, Deserialize, Deserializer, SeqAccess},
@@ -626,6 +628,12 @@ impl PartialEq for Key {
 }
 
 impl Eq for Key {}
+
+impl Hash for Key {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.fingerprint.hash(state);
+    }
+}
 
 impl std::fmt::Display for Key {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {

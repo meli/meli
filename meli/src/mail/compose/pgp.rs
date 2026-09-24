@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use indexmap::IndexSet;
 use melib::email::pgp::{Key, LocateKey, PGPBackend};
 
 use super::*;
@@ -115,7 +116,7 @@ pub enum KeySelection {
         inner: KeySelectionLoading,
         /// Accumulate results from intermediate results (i.e. not the main
         /// pattern)
-        keys_accumulator: Vec<Key>,
+        keys_accumulator: IndexSet<Key>,
     },
     Error {
         id: ComponentId,
@@ -123,7 +124,7 @@ pub enum KeySelection {
     },
     Loaded {
         widget: Box<UIDialog<Key>>,
-        keys: Vec<Key>,
+        keys: IndexSet<Key>,
     },
 }
 
@@ -131,7 +132,7 @@ impl From<KeySelectionLoading> for KeySelection {
     fn from(inner: KeySelectionLoading) -> Self {
         Self::Loading {
             inner,
-            keys_accumulator: vec![],
+            keys_accumulator: IndexSet::new(),
         }
     }
 }
@@ -254,7 +255,9 @@ impl Component for KeySelection {
                                 }
                                 return false;
                             }
-                            keys_accumulator.extend(keys);
+                            for key in keys {
+                                keys_accumulator.insert(key);
+                            }
                             if !is_main {
                                 other_handles.retain(|h| h.job_id != *id);
                                 return false;
@@ -409,6 +412,7 @@ impl Default for PGPComposeState {
 mod tests {
     use std::{borrow::Cow, ffi::CString};
 
+    use indexmap::IndexSet;
     use melib::{
         email::pgp::{LocateKey, PGPBackend},
         gpgme::{EngineInfo, Protocol},
@@ -449,7 +453,7 @@ mod tests {
                     allow_remote_lookup,
                     progress_spinner,
                 },
-                keys_accumulator: vec![],
+                keys_accumulator: IndexSet::new(),
             })
         }
     }
