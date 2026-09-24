@@ -726,6 +726,51 @@ impl ListingTrait for ThreadListing {
         self.rows.restore_selection(previous_selection);
     }
 
+    fn select(
+        &mut self,
+        search_term: &str,
+        results: Result<Vec<EnvelopeHash>>,
+        context: &mut Context,
+    ) {
+        let account = &context.accounts[&self.cursor_pos.0];
+        match results {
+            Ok(results) => {
+                let threads = account.collection.get_threads(self.cursor_pos.1);
+                for env_hash in results {
+                    if !account.collection.contains_key(&env_hash) {
+                        continue;
+                    }
+                    let Some(env_thread_node_hash) = threads.envelope_to_thread_node.get(&env_hash)
+                    else {
+                        continue;
+                    };
+                    let Some(thread_node) = threads.thread_nodes.get(env_thread_node_hash) else {
+                        continue;
+                    };
+                    let thread = threads.find_group(thread_node.group);
+                    if self.rows.all_threads.contains(&thread) {
+                        self.selection_mut()
+                            .entry(env_hash)
+                            .and_modify(|entry| *entry = true);
+                    }
+                }
+            }
+            Err(err) => {
+                self.cursor_pos.2 = 0;
+                self.new_cursor_pos.2 = 0;
+                let message =
+                    format!("Encountered an error while searching for `{search_term}`: {err}.");
+                log::error!("{}", message);
+                context.replies.push_back(UIEvent::Notification {
+                    title: Some("Could not perform search".into()),
+                    source: None,
+                    body: message.into(),
+                    kind: Some(crate::types::NotificationType::Error(err.kind)),
+                });
+            }
+        }
+    }
+
     fn view_area(&self) -> Option<Area> {
         self.view_area
     }
@@ -1206,51 +1251,6 @@ impl ThreadListing {
         self.rows_drawn.update(idx, 1);
         *self.rows.entries.get_mut(idx).unwrap() = ((thread_hash, env_hash), entry_strings);
         self.draw_rows(context, idx, idx);
-    }
-
-    fn select(
-        &mut self,
-        search_term: &str,
-        results: Result<Vec<EnvelopeHash>>,
-        context: &mut Context,
-    ) {
-        let account = &context.accounts[&self.cursor_pos.0];
-        match results {
-            Ok(results) => {
-                let threads = account.collection.get_threads(self.cursor_pos.1);
-                for env_hash in results {
-                    if !account.collection.contains_key(&env_hash) {
-                        continue;
-                    }
-                    let Some(env_thread_node_hash) = threads.envelope_to_thread_node.get(&env_hash)
-                    else {
-                        continue;
-                    };
-                    let Some(thread_node) = threads.thread_nodes.get(env_thread_node_hash) else {
-                        continue;
-                    };
-                    let thread = threads.find_group(thread_node.group);
-                    if self.rows.all_threads.contains(&thread) {
-                        self.selection_mut()
-                            .entry(env_hash)
-                            .and_modify(|entry| *entry = true);
-                    }
-                }
-            }
-            Err(err) => {
-                self.cursor_pos.2 = 0;
-                self.new_cursor_pos.2 = 0;
-                let message =
-                    format!("Encountered an error while searching for `{search_term}`: {err}.");
-                log::error!("{}", message);
-                context.replies.push_back(UIEvent::Notification {
-                    title: Some("Could not perform search".into()),
-                    source: None,
-                    body: message.into(),
-                    kind: Some(crate::types::NotificationType::Error(err.kind)),
-                });
-            }
-        }
     }
 
     fn draw_relative_numbers(&self, grid: &mut CellBuffer, area: Area, top_idx: usize) {
@@ -1799,7 +1799,7 @@ impl Component for ThreadListing {
                         self.cursor_pos.1,
                     ) {
                         Ok(job) => {
-                            let mut handle = context.accounts[&self.cursor_pos.0]
+                            let handle = context.accounts[&self.cursor_pos.0]
                                 .main_loop_handler
                                 .job_executor
                                 .spawn(
@@ -1807,11 +1807,7 @@ impl Component for ThreadListing {
                                     job,
                                     context.accounts[&self.cursor_pos.0].is_async(),
                                 );
-                            if let Ok(Some(search_result)) = try_recv_timeout!(&mut handle.chan) {
-                                self.select(search_term, search_result, context);
-                            } else {
-                                self.select_job = Some((search_term.to_string(), handle));
-                            }
+                            self.select_job = Some((search_term.to_string(), handle));
                         }
                         Err(err) => {
                             context.replies.push_back(UIEvent::Notification {

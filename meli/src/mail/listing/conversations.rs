@@ -119,6 +119,8 @@ pub struct ConversationsListing {
 
     #[allow(clippy::type_complexity)]
     search_job: Option<(String, JoinHandle<Result<Vec<EnvelopeHash>>>)>,
+    #[allow(clippy::type_complexity)]
+    select_job: Option<(String, JoinHandle<Result<Vec<EnvelopeHash>>>)>,
     filter_term: String,
     filtered_selection: Vec<ThreadHash>,
     filtered_order: HashMap<ThreadHash, usize>,
@@ -576,6 +578,51 @@ impl ListingTrait for ConversationsListing {
         self.rows.restore_selection(previous_selection);
     }
 
+    fn select(
+        &mut self,
+        search_term: &str,
+        results: Result<Vec<EnvelopeHash>>,
+        context: &mut Context,
+    ) {
+        let account = &context.accounts[&self.cursor_pos.0];
+        match results {
+            Ok(results) => {
+                let threads = account.collection.get_threads(self.cursor_pos.1);
+                for env_hash in results {
+                    if !account.collection.contains_key(&env_hash) {
+                        continue;
+                    }
+                    let Some(env_thread_node_hash) = threads.envelope_to_thread_node.get(&env_hash)
+                    else {
+                        continue;
+                    };
+                    let Some(thread_node) = threads.thread_nodes.get(env_thread_node_hash) else {
+                        continue;
+                    };
+                    let thread = threads.find_group(thread_node.group);
+                    if self.rows.all_threads.contains(&thread) {
+                        self.selection_mut()
+                            .entry(env_hash)
+                            .and_modify(|entry| *entry = true);
+                    }
+                }
+            }
+            Err(err) => {
+                self.cursor_pos.2 = 0;
+                self.new_cursor_pos.2 = 0;
+                let message =
+                    format!("Encountered an error while searching for `{search_term}`: {err}.");
+                log::error!("{}", message);
+                context.replies.push_back(UIEvent::Notification {
+                    title: Some("Could not perform search".into()),
+                    source: None,
+                    body: message.into(),
+                    kind: Some(crate::types::NotificationType::Error(err.kind)),
+                });
+            }
+        }
+    }
+
     fn view_area(&self) -> Option<Area> {
         self.view_area
     }
@@ -678,6 +725,7 @@ impl ConversationsListing {
             rows: RowsState::default(),
             error: Ok(()),
             search_job: None,
+            select_job: None,
             filter_term: String::new(),
             filtered_selection: Vec::new(),
             filtered_order: HashMap::default(),
@@ -1504,11 +1552,52 @@ impl Component for ConversationsListing {
                                 .main_loop_handler
                                 .job_executor
                                 .spawn(
-                                    "search".into(),
+                                    format!(
+                                        "{raw}search for {filter_term:?}",
+                                        raw = if *raw_search { "raw " } else { "" },
+                                    )
+                                    .into(),
                                     job,
                                     context.accounts[&self.cursor_pos.0].is_async(),
                                 );
                             self.search_job = Some((filter_term.to_string(), handle));
+                        }
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::Notification {
+                                title: Some("Could not perform search".into()),
+                                source: None,
+                                body: err.to_string().into(),
+                                kind: Some(crate::types::NotificationType::Error(err.kind)),
+                            });
+                        }
+                    };
+                    self.set_dirty(true);
+                    return true;
+                }
+                Action::Listing(Select {
+                    term: ref search_term,
+                    raw_search,
+                }) if !self.unfocused() => {
+                    match context.accounts[&self.cursor_pos.0].search(
+                        search_term,
+                        *raw_search,
+                        self.sort,
+                        self.cursor_pos.1,
+                    ) {
+                        Ok(job) => {
+                            let handle = context.accounts[&self.cursor_pos.0]
+                                .main_loop_handler
+                                .job_executor
+                                .spawn(
+                                    format!(
+                                        "{raw}select-by-search for {search_term:?}",
+                                        raw = if *raw_search { "raw " } else { "" },
+                                    )
+                                    .into(),
+                                    job,
+                                    context.accounts[&self.cursor_pos.0].is_async(),
+                                );
+                            self.select_job = Some((search_term.to_string(), handle));
                         }
                         Err(err) => {
                             context.replies.push_back(UIEvent::Notification {

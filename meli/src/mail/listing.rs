@@ -1101,7 +1101,13 @@ pub trait ListingTrait: Component {
     fn prev_entry(&mut self, context: &mut Context);
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context);
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context);
-    fn filter(&mut self, _filter_term: String, _results: Vec<EnvelopeHash>, _context: &Context) {}
+    fn filter(&mut self, filter_term: String, results: Vec<EnvelopeHash>, context: &Context);
+    fn select(
+        &mut self,
+        search_term: &str,
+        results: Result<Vec<EnvelopeHash>>,
+        context: &mut Context,
+    );
     fn unfocused(&self) -> bool;
     fn view_area(&self) -> Option<Area>;
     fn set_modifier_active(&mut self, _new_val: bool);

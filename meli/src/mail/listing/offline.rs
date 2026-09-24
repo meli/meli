@@ -88,6 +88,16 @@ impl ListingTrait for OfflineListing {
     ) {
     }
 
+    fn filter(&mut self, _filter_term: String, _results: Vec<EnvelopeHash>, _context: &Context) {}
+
+    fn select(
+        &mut self,
+        _search_term: &str,
+        _results: Result<Vec<EnvelopeHash>>,
+        _context: &mut Context,
+    ) {
+    }
+
     fn draw_list(&mut self, _: &mut CellBuffer, _: Area, _: &mut Context) {}
 
     fn view_area(&self) -> Option<Area> {
