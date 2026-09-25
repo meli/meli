@@ -492,7 +492,7 @@ impl ImapConnection {
             //    already have.
             // 3. tag2 UID FETCH 1:<lastseenuid> FLAGS
 
-            let sequence_set = if lastseenuid == 0 {
+            let sequence_set = if lastseenuid < 2 {
                 (1..).try_into()?
             } else {
                 (1..lastseenuid).try_into()?
