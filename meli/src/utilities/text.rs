@@ -258,7 +258,7 @@ impl Component for TextField {
         );
     }
 
-    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, _: &mut Context) -> bool {
         match *event {
             UIEvent::InsertInput(Key::Char('\t')) => {
                 if let Some(suggestion) = self
@@ -283,9 +283,6 @@ impl Component for TextField {
                     let len = self.inner.as_str().len();
                     self.inner.set_cursor(len);
                 }
-                context
-                    .replies
-                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
             }
             UIEvent::InsertInput(Key::Up) => {
                 if let Some(ac) = self.autocomplete.as_mut() {

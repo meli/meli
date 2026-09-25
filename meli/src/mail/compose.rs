@@ -1394,6 +1394,11 @@ impl Component for Composer {
                 self.update_draft();
                 self.has_changes = true;
             }
+            if matches!(event, UIEvent::InsertInput(Key::Char('\n'))) {
+                context
+                    .replies
+                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
+            }
             self.set_dirty(true);
             return true;
         }

@@ -182,17 +182,8 @@ fn run_app(mut opt: Opt) -> Result<()> {
                                     }
                                 }
                                 UIMode::Command => {
-                                    match k {
-                                        Key::Char('\n') => {
-                                            state.mode = UIMode::Normal;
-                                            state.rcv_event(UIEvent::ChangeMode(UIMode::Normal));
-                                            state.redraw();
-                                        },
-                                        k => {
-                                            state.rcv_event(UIEvent::CmdInput(k));
-                                            state.redraw();
-                                        },
-                                    }
+                                    state.rcv_event(UIEvent::CmdInput(k));
+                                    state.redraw();
                                 },
                                 UIMode::Embedded => {
                                     state.rcv_event(UIEvent::EmbeddedInput((k,r)));

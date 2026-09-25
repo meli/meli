@@ -801,10 +801,10 @@ where
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Hash, Debug, Eq, PartialEq)]
 pub struct AutoCompleteEntry {
     pub entry: String,
-    pub description: String,
+    pub description: Cow<'static, str>,
 }
 
 impl AutoCompleteEntry {
@@ -817,27 +817,25 @@ impl From<String> for AutoCompleteEntry {
     fn from(val: String) -> Self {
         Self {
             entry: val,
-            description: String::new(),
+            description: Cow::Borrowed(""),
         }
     }
 }
 
-impl From<&(&str, &str, TokenStream)> for AutoCompleteEntry {
-    fn from(val: &(&str, &str, TokenStream)) -> Self {
-        let (a, b, _) = val;
+impl From<(String, &'static str)> for AutoCompleteEntry {
+    fn from((entry, b): (String, &'static str)) -> Self {
         Self {
-            entry: a.to_string(),
-            description: b.to_string(),
+            entry,
+            description: Cow::Borrowed(b),
         }
     }
 }
 
 impl From<(String, String)> for AutoCompleteEntry {
-    fn from(val: (String, String)) -> Self {
-        let (a, b) = val;
+    fn from((entry, b): (String, String)) -> Self {
         Self {
-            entry: a,
-            description: b,
+            entry,
+            description: Cow::Owned(b),
         }
     }
 }
@@ -845,8 +843,8 @@ impl From<(String, String)> for AutoCompleteEntry {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AutoComplete {
     entries: Vec<AutoCompleteEntry>,
-    cursor: usize,
-
+    cursor: Option<usize>,
+    reversed: bool,
     dirty: bool,
     id: ComponentId,
 }
@@ -858,7 +856,7 @@ impl std::fmt::Display for AutoComplete {
 }
 
 impl Component for AutoComplete {
-    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+    fn draw(&mut self, grid: &mut CellBuffer, mut area: Area, context: &mut Context) {
         if self.entries.is_empty() {
             return;
         };
@@ -868,18 +866,33 @@ impl Component for AutoComplete {
         if rows == 0 {
             return;
         }
-        let page_no = (self.cursor.saturating_sub(1)).wrapping_div(rows);
-        let top_idx = page_no * rows;
-        let x_offset = usize::from(rows < self.entries.len());
+        context.dirty_areas.push_back(area);
+        let top_idx = self
+            .cursor
+            .map(|c| c.wrapping_div(rows))
+            .map(|page_no| page_no * rows)
+            .unwrap_or_default();
 
-        grid.clear_area(area, crate::conf::value(context, "theme_default"));
+        if top_idx + rows > self.entries.len() {
+            if self.reversed {
+                area = area.skip_rows(rows - (self.entries.len() - top_idx));
+            } else {
+                area = area.skip_rows_from_end(rows - (self.entries.len() - top_idx));
+            }
+        }
+        let rows = area.height();
+
         let width = self
             .entries
             .iter()
-            .map(|a| a.entry.grapheme_len() + a.description.grapheme_len() + 2)
+            .skip(top_idx)
+            .take(rows)
+            .map(|a| a.entry.grapheme_len() + a.description.as_ref().grapheme_len() + 2)
             .max()
             .unwrap_or(0)
             + 1;
+        let area = area.take_cols(width);
+        grid.clear_area(area, crate::conf::value(context, "theme_default"));
         // [ref:hardcoded_color_value]
         let theme_attr = ThemeAttribute {
             fg: Color::Byte(23),
@@ -887,57 +900,66 @@ impl Component for AutoComplete {
             attrs: Attr::DEFAULT,
         };
         grid.change_theme(area, theme_attr);
-        for (i, e) in self.entries.iter().skip(top_idx).enumerate() {
+        let mut rev_iter = self
+            .entries
+            .iter()
+            .enumerate()
+            .skip(top_idx)
+            .take(rows)
+            .rev();
+        let mut normal_iter = self.entries.iter().enumerate().skip(top_idx).take(rows);
+        let iter: &mut dyn Iterator<Item = (usize, &AutoCompleteEntry)> = if self.reversed {
+            &mut rev_iter
+        } else {
+            &mut normal_iter
+        };
+        let highlight = crate::conf::value(context, "highlight");
+        for (row, (i, e)) in iter.enumerate() {
+            let theme_attr = if Some(i) == self.cursor {
+                grid.change_theme(area.nth_row(row), highlight);
+                highlight
+            } else {
+                ThemeAttribute {
+                    fg: Color::Byte(23),
+                    bg: Color::Byte(7),
+                    attrs: Attr::DEFAULT,
+                }
+            };
             let (x, _) = grid.write_string(
                 &e.entry,
-                Color::Byte(23),
-                Color::Byte(7),
-                Attr::DEFAULT,
-                area.nth_row(i).take_cols(width),
+                theme_attr.fg,
+                theme_attr.bg,
+                theme_attr.attrs,
+                area.nth_row(row),
                 None,
                 None,
             );
             grid.write_string(
-                &e.description,
-                Color::Byte(23),
-                Color::Byte(7),
-                Attr::ITALICS,
-                area.nth_row(i).skip_cols(x + 2).take_cols(width),
-                None,
-                None,
-            );
-            grid.write_string(
-                "▒",
-                Color::Byte(23),
-                Color::Byte(7),
-                Attr::DEFAULT,
-                area.nth_row(i).skip_cols(width - 1),
+                e.description.as_ref(),
+                theme_attr.fg,
+                theme_attr.bg,
+                theme_attr.attrs | Attr::ITALICS,
+                area.nth_row(row).skip_cols(x + 2),
                 None,
                 None,
             );
         }
 
-        /* Highlight cursor */
-        if self.cursor > 0 {
-            let highlight = crate::conf::value(context, "highlight");
-
-            grid.change_theme(
-                area.nth_row((self.cursor - 1) % rows)
-                    .skip_cols(width.saturating_sub(1 + x_offset)),
-                highlight,
-            );
-        }
         if rows < self.entries.len() {
+            let pos = if self.reversed {
+                self.entries.len().saturating_sub(top_idx)
+            } else {
+                top_idx
+            };
             ScrollBar { show_arrows: false }.draw(
                 grid,
-                area.take_rows(x_offset),
+                area.skip_cols(area.width().saturating_sub(1)),
                 context,
-                self.cursor.saturating_sub(1),
+                if pos <= rows { 0 } else { pos },
                 rows,
                 self.entries.len(),
             );
         }
-        context.dirty_areas.push_back(area);
     }
 
     fn process_event(&mut self, _event: &mut UIEvent, _context: &mut Context) -> bool {
@@ -961,12 +983,17 @@ impl AutoComplete {
     pub fn new(entries: Vec<AutoCompleteEntry>) -> Box<Self> {
         let mut ret = Self {
             entries: Vec::new(),
-            cursor: 0,
+            cursor: None,
             dirty: true,
+            reversed: false,
             id: ComponentId::default(),
         };
         ret.set_suggestions(entries);
         Box::new(ret)
+    }
+
+    pub fn set_reversed(&mut self, reversed: bool) {
+        self.reversed = reversed;
     }
 
     pub fn set_suggestions(&mut self, entries: Vec<AutoCompleteEntry>) -> bool {
@@ -975,38 +1002,84 @@ impl AutoComplete {
         }
 
         self.entries = entries;
-        self.cursor = 0;
+        self.cursor = None;
         true
     }
 
     pub fn inc_cursor(&mut self) {
-        if self.cursor < self.entries.len() {
-            self.cursor += 1;
-            self.set_dirty(true);
+        if let Some(ref mut cursor) = self.cursor {
+            if *cursor + 1 < self.entries.len() {
+                *cursor += 1;
+                self.set_dirty(true);
+            }
+        } else if self.entries.is_empty() {
+            self.cursor = None;
+        } else {
+            self.cursor = Some(0);
         }
     }
     pub fn dec_cursor(&mut self) {
-        self.cursor = self.cursor.saturating_sub(1);
-        self.set_dirty(true);
+        if let Some(ref mut cursor) = self.cursor {
+            if *cursor == 0 {
+                self.cursor = None;
+            } else {
+                *cursor -= 1;
+            }
+            self.set_dirty(true);
+        }
     }
 
-    pub fn cursor(&self) -> usize {
-        self.cursor
-    }
-
-    pub fn set_cursor(&mut self, val: usize) {
-        debug_assert!(val <= self.entries.len());
-        self.cursor = val;
+    pub fn cursor(&self) -> Option<usize> {
+        let val = self.cursor?;
+        if self.reversed {
+            Some(self.entries.len().saturating_sub(val))
+        } else {
+            Some(val)
+        }
     }
 
     pub fn get_suggestion(&mut self) -> Option<String> {
-        if self.entries.is_empty() || self.cursor == 0 {
+        let cursor = self.cursor.take()?;
+        if self.entries.is_empty() {
             return None;
         }
-        let ret = self.entries.remove(self.cursor - 1);
+        let ret = self.entries.remove(cursor);
         self.entries.clear();
-        self.cursor = 0;
         Some(ret.entry)
+    }
+
+    /// Generate a completion to the common prefix of all suggestions.
+    pub fn tab(&self) -> Option<String> {
+        // https://users.rust-lang.org/t/how-to-find-common-prefix-of-two-byte-slices-effectively/25815/4
+
+        fn mismatch(xs: &[u8], ys: &[u8]) -> usize {
+            mismatch_chunks::<128>(xs, ys)
+        }
+
+        fn mismatch_chunks<const N: usize>(xs: &[u8], ys: &[u8]) -> usize {
+            let off = std::iter::zip(xs.chunks_exact(N), ys.chunks_exact(N))
+                .take_while(|(x, y)| x == y)
+                .count()
+                * N;
+            off + std::iter::zip(&xs[off..], &ys[off..])
+                .take_while(|(x, y)| x == y)
+                .count()
+        }
+
+        if self.entries.is_empty() {
+            return None;
+        }
+        if self.entries.len() == 1 {
+            return Some(self.entries[0].entry.clone());
+        }
+        let mut entries = self.entries.clone();
+        entries.sort_by(|a, b| a.entry.cmp(&b.entry));
+        let mismatch = mismatch(
+            entries[0].entry.as_bytes(),
+            entries[entries.len() - 1].entry.as_bytes(),
+        );
+
+        Some(entries[0].entry[..mismatch].to_string())
     }
 
     pub fn suggestions(&self) -> &Vec<AutoCompleteEntry> {
@@ -1071,8 +1144,8 @@ impl ScrollBar {
         let visible_rows = std::cmp::min(visible_rows, length);
         let ascii_drawing = grid.ascii_drawing;
         let ratio: f64 = (height as f64) / (length as f64);
-        let scrollbar_height = std::cmp::max((ratio * (visible_rows as f64)) as usize, 1);
-        let scrollbar_offset = (ratio * (pos as f64)) as usize;
+        let scrollbar_height = (1.max((ratio * (visible_rows as f64)) as usize)).min(height);
+        let scrollbar_offset = (height - scrollbar_height).min((ratio * (pos as f64)) as usize);
         let mut area2 = area;
 
         if self.show_arrows {

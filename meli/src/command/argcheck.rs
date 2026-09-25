@@ -36,7 +36,7 @@ impl<const MIN: u8, const MAX: u8> ArgCheck<MIN, MAX> {
     }
 
     #[inline]
-    pub fn start(&mut self, input: &[u8]) -> Result<(), CommandError> {
+    pub fn start(&mut self, input: &str) -> Result<(), CommandError> {
         let Self::Start { __func__ } = *self else {
             unreachable!(
                 "ArgCheck::start called with invalid variant: {}",
@@ -71,7 +71,7 @@ impl<const MIN: u8, const MAX: u8> ArgCheck<MIN, MAX> {
     }
 
     #[inline]
-    pub fn inc(&mut self, input: &[u8]) -> Result<(), CommandError> {
+    pub fn inc(&mut self, input: &str) -> Result<(), CommandError> {
         let Self::BeforeArgument { __func__, so_far } = *self else {
             unreachable!(
                 "ArgCheck::inc called with invalid variant: {}",
@@ -107,7 +107,7 @@ impl<const MIN: u8, const MAX: u8> ArgCheck<MIN, MAX> {
     }
 
     #[inline]
-    pub fn finish(&mut self, input: &[u8]) -> Result<(), CommandError> {
+    pub fn finish(&mut self, input: &str) -> Result<(), CommandError> {
         let Self::BeforeArgument { __func__, so_far } = *self else {
             unreachable!(
                 "ArgCheck::finish called with invalid variant: {}",
@@ -149,8 +149,8 @@ macro_rules! arg_init {
 
 //macro_rules! arg_value_check {
 //    ($tag:literal, $input:expr) => {{
-//        if tag::<&'_ str, &'_ [u8],
-// melib::nom::error::Error<&[u8]>>($tag)($input).is_err() {            return
+//        if tag::<&'_ str, &'_ str,
+// melib::nom::error::Error<&str>>($tag)($input).is_err() {            return
 // Ok((                $input,
 //                Err(CommandError::BadValue {
 //                    inner: $tag.to_string().into(),

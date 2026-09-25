@@ -21,10 +21,13 @@
 
 //! Various useful utilities.
 
-use std::collections::HashSet;
+use std::{
+    collections::HashSet,
+    process::{Command, Stdio},
+};
 
 use indexmap::IndexMap;
-use melib::{text::Reflow, ShellExpandTrait};
+use melib::text::Reflow;
 
 use super::*;
 use crate::{components::ExtendShortcutsMaps, jobs::JobId, melib::text::TextProcessing};
@@ -87,6 +90,7 @@ pub struct StatusBar {
     scroll_contexts: IndexMap<ComponentId, ScrollContext>,
 
     auto_complete: Box<AutoComplete>,
+    complgen: crate::command::completions::CompletionsGenerator,
     cmd_history: Vec<String>,
 }
 
@@ -115,6 +119,18 @@ impl StatusBar {
             None => {}
         }
 
+        let mut auto_complete = AutoComplete::new(Vec::new());
+        auto_complete.set_reversed(true);
+        let mut complgen = crate::command::completions::CompletionsGenerator::default();
+        for acc in context.accounts.values() {
+            complgen.add_account(
+                acc.name().to_string(),
+                acc.mailbox_entries
+                    .values()
+                    .map(|e| e.path.clone())
+                    .collect(),
+            );
+        }
         Self {
             container,
             status: String::with_capacity(256),
@@ -128,7 +144,8 @@ impl StatusBar {
             mouse: context.settings.terminal.use_mouse.is_true(),
             height: 1,
             id: ComponentId::default(),
-            auto_complete: AutoComplete::new(Vec::new()),
+            auto_complete,
+            complgen,
             progress_spinner,
             in_progress_jobs: HashSet::default(),
             done_jobs: HashSet::default(),
@@ -281,246 +298,58 @@ impl Component for StatusBar {
         match self.mode {
             UIMode::Normal => {}
             UIMode::Command => {
-                let area = area.nth_row(total_rows.saturating_sub(self.height));
-                self.draw_command_bar(grid, area, context);
-                /* don't autocomplete for less than 3 characters */
+                let command_area = area.nth_row(total_rows.saturating_sub(self.height));
+                self.draw_command_bar(grid, command_area, context);
+                // don't autocomplete for less than 3 characters
                 if self.ex_buffer.as_str().split_graphemes().len() <= 2 {
+                    if !self.auto_complete.suggestions().is_empty() {
+                        self.auto_complete.set_suggestions(vec![]);
+                        // redraw self.container because we got rid of an autocomplete box, and it
+                        // must be drawn over
+                        self.container.set_dirty(true);
+                    }
                     return;
                 }
 
-                let mut unique_suggestions: HashSet<&str> = HashSet::default();
-                let mut suggestions: Vec<AutoCompleteEntry> = self
+                let mut suggestions = self.complgen.generate(self.ex_buffer.as_str());
+                let mut unique_history_suggestions: indexmap::IndexSet<&str> =
+                    suggestions.iter().map(|e| e.entry.as_str()).collect();
+                let hist_suggestions: Vec<AutoCompleteEntry> = self
                     .cmd_history
                     .iter()
                     .rev()
                     .filter_map(|h| {
                         let sug = self.ex_buffer.as_str();
-                        if h.starts_with(sug) && !unique_suggestions.contains(sug) {
-                            unique_suggestions.insert(sug);
-                            Some(h.clone().into())
+                        if h.starts_with(sug) && unique_history_suggestions.insert(h.trim()) {
+                            Some(AutoCompleteEntry {
+                                entry: h.trim().to_string(),
+                                description: "history".into(),
+                            })
                         } else {
                             None
                         }
                     })
                     .collect();
-                let command_completion_suggestions =
-                    crate::command::command_completion_suggestions(self.ex_buffer.as_str());
+                suggestions.extend(hist_suggestions);
 
-                suggestions.extend(command_completion_suggestions.iter().filter_map(|e| {
-                    if unique_suggestions.insert(e.as_str()) {
-                        Some(e.clone().into())
-                    } else {
-                        None
-                    }
-                }));
-                /*
-                suggestions.extend(crate::command::COMMAND_COMPLETION.iter().filter_map(|e| {
-                    if e.0.starts_with(self.ex_buffer.as_str()) {
-                        Some(e.into())
-                    } else {
-                        None
-                    }
-                }));
-                */
-                if let Some(p) = self.ex_buffer.as_str().split_whitespace().last() {
-                    let path = std::path::Path::new(p);
-                    suggestions.extend(
-                        path.complete(true, p.ends_with('/'))
-                            .into_iter()
-                            .map(|m| format!("{}{}", self.ex_buffer.as_str(), m).into()),
-                    );
-                }
+                self.container.set_dirty(true);
                 if suggestions.is_empty() && !self.auto_complete.suggestions().is_empty() {
                     self.auto_complete.set_suggestions(suggestions);
-                    /* redraw self.container because we have got ridden of an autocomplete
-                     * box, and it must be drawn over */
-                    self.container.set_dirty(true);
                     return;
                 }
-                /* redraw self.container because we have less suggestions than before */
-                if suggestions.len() < self.auto_complete.suggestions().len() {
-                    self.container.set_dirty(true);
-                }
 
-                suggestions.sort_by(|a, b| a.entry.cmp(&b.entry));
                 suggestions.dedup_by(|a, b| a.entry == b.entry);
-                if self.auto_complete.set_suggestions(suggestions) {
-                    let len = self.auto_complete.suggestions().len() - 1;
-                    self.auto_complete.set_cursor(len);
-
-                    self.container.set_dirty(true);
-                }
-                /*
-                let hist_height = std::cmp::min(15, self.auto_complete.suggestions().len());
-                    let hist_area = if status_bar_height < self.auto_complete.suggestions().len() {
-                        let hist_area = (
-                            (
-                                get_x(upper_left),
-                                std::cmp::min(
-                                    get_y(bottom_right) - status_bar_height - hist_height + 1,
-                                    get_y(pos_dec(bottom_right, (0, status_bar_height))),
-                                ),
-                            ),
-                            pos_dec(bottom_right, (0, status_bar_height)),
-                        );
-                        ScrollBar::default().set_show_arrows(false).draw(
-                            grid,
-                            hist_area,
-                            context,
-                            self.auto_complete.cursor(),
-                            hist_height,
-                            self.auto_complete.suggestions().len(),
-                        );
-                        grid.change_theme(hist_area, crate::conf::value(context, "status.history"));
-                        context.dirty_areas.push_back(hist_area);
-                        hist_area
-                    } else {
-                        (
-                            get_x(upper_left),
-                            std::cmp::min(
-                                get_y(bottom_right) - status_bar_height - hist_height + 1,
-                                get_y(pos_dec(bottom_right, (0, status_bar_height))),
-                            ),
-                        ),
-                        pos_dec(bottom_right, (0, status_bar_height)),
-                    )
-                };
-                let offset = if hist_height
-                    > (self.auto_complete.suggestions().len() - self.auto_complete.cursor())
-                {
-                    self.auto_complete.suggestions().len() - hist_height
-                } else {
-                    self.auto_complete.cursor()
-                };
-
-                grid.clear_area(hist_area, crate::conf::value(context, "theme_default"));
-                let history_hints = crate::conf::value(context, "status.history.hints");
-                if hist_height > 0 {
-                    grid.change_theme(hist_area, history_hints);
-                }
-                for (y_offset, s) in self
+                self.auto_complete.set_suggestions(suggestions);
+                let hist_height = self
                     .auto_complete
                     .suggestions()
-                    .iter()
-                    .skip(offset)
-                    .take(hist_height)
-                    .enumerate()
-                {
-                    let (x, y) = grid.write_string(
-                        s.as_str(),
-                        history_hints.fg,
-                        history_hints.bg,
-                        history_hints.attrs,
-                        (
-                            set_y(
-                                upper_left!(hist_area),
-                                get_y(bottom_right!(hist_area)) - hist_height + y_offset + 1,
-                            ),
-                            bottom_right!(hist_area),
-                        ),
-                        Some(get_x(upper_left!(hist_area))),
-                    );
-                    grid.write_string(
-                        &s.description,
-                        history_hints.fg,
-                        history_hints.bg,
-                        history_hints.attrs,
-                        ((x + 2, y), bottom_right!(hist_area)),
-                        None,
-                    );
-                    if y_offset + offset == self.auto_complete.cursor() {
-                        grid.change_theme(
-                            (
-                                get_x(upper_left),
-                                std::cmp::min(
-                                    get_y(bottom_right) - status_bar_height - hist_height + 1,
-                                    get_y(pos_dec(bottom_right, (0, status_bar_height))),
-                                ),
-                            ),
-                            pos_dec(bottom_right, (0, status_bar_height)),
-                        )
-                    };
-                    let offset = if hist_height
-                        > (self.auto_complete.suggestions().len() - self.auto_complete.cursor())
-                    {
-                        self.auto_complete.suggestions().len() - hist_height
-                    } else {
-                        self.auto_complete.cursor()
-                    };
-                    grid.clear_area(hist_area, crate::conf::value(context, "theme_default"));
-                    let history_hints = crate::conf::value(context, "status.history.hints");
-                    if hist_height > 0 {
-                        grid.change_theme(hist_area, history_hints);
-                    }
-                    for (y_offset, s) in self
-                        .auto_complete
-                        .suggestions()
-                        .iter()
-                        .skip(offset)
-                        .take(hist_height)
-                        .enumerate()
-                    {
-                        let (x, y) = grid.write_string(
-                            s.as_str(),
-                            grid,
-                            history_hints.fg,
-                            history_hints.bg,
-                            history_hints.attrs,
-                            (
-                                set_y(
-                                    hist_area.upper_left(),
-                                    get_y(hist_area.bottom_right()) - hist_height + y_offset + 1,
-                                ),
-                                hist_area.bottom_right(),
-                            ),
-                            Some(get_x(hist_area.upper_left())),
-                        );
-                        grid.write_string(
-                            &s.description,
-                            grid,
-                            history_hints.fg,
-                            history_hints.bg,
-                            history_hints.attrs,
-                            ((x + 2, y), hist_area.bottom_right()),
-                            None,
-                        );
-                        if y_offset + offset == self.auto_complete.cursor() {
-                            grid.change_theme(
-                                (
-                                    set_y(
-                                        hist_area.upper_left(),
-                                        get_y(hist_area.bottom_right()) - hist_height
-                                            + y_offset
-                                            + 1,
-                                    ),
-                                    set_y(
-                                        hist_area.bottom_right(),
-                                        get_y(hist_area.bottom_right()) - hist_height
-                                            + y_offset
-                                            + 1,
-                                    ),
-                                ),
-                                history_hints,
-                            );
-                            grid.write_string(
-                                &s.as_str()[self.ex_buffer.as_str().len()..],
-                                history_hints.fg,
-                                history_hints.bg,
-                                history_hints.attrs,
-                                (
-                                    (
-                                        get_x(upper_left)
-                                            + self.ex_buffer.as_str().split_graphemes().len(),
-                                        get_y(bottom_right) - status_bar_height + 1,
-                                    ),
-                                    set_y(bottom_right, get_y(bottom_right) - status_bar_height + 1),
-                                ),
-                                None,
-                            );
-                        }
-                    }
-                    context.dirty_areas.push_back(hist_area);
-                    */
+                    .len()
+                    .min(15)
+                    .min(area.height());
+                let hist_area = area
+                    .skip_rows_from_end(2)
+                    .skip_rows(area.height().saturating_sub(hist_height + 2));
+                self.auto_complete.draw(grid, hist_area, context);
             }
             _ => {}
         }
@@ -554,6 +383,17 @@ impl Component for StatusBar {
                 self.set_dirty(true);
                 self.container.set_dirty(true);
             }
+            UIEvent::AccountStatusChange(account_hash, _) => {
+                if let Some(acc) = context.accounts.get(account_hash) {
+                    self.complgen.add_account(
+                        acc.name().to_string(),
+                        acc.mailbox_entries
+                            .values()
+                            .map(|e| e.path.clone())
+                            .collect(),
+                    );
+                }
+            }
             UIEvent::ChangeMode(m) => {
                 let offset = self.status.find('|').unwrap_or(self.status.len());
                 self.status.replace_range(
@@ -584,18 +424,6 @@ impl Component for StatusBar {
                 match m {
                     UIMode::Normal => {
                         self.height = 1;
-                        if !self.ex_buffer.is_empty() {
-                            context
-                                .replies
-                                .push_back(UIEvent::Command(self.ex_buffer.as_str().to_string()));
-                        }
-                        if parse_command(self.ex_buffer.as_str().as_bytes()).is_ok()
-                            && self.cmd_history.last().map(String::as_str)
-                                != Some(self.ex_buffer.as_str())
-                        {
-                            crate::command::history::log_cmd(self.ex_buffer.as_str().to_string());
-                            self.cmd_history.push(self.ex_buffer.as_str().to_string());
-                        }
                         self.ex_buffer.clear();
                         self.ex_buffer_cmd_history_pos.take();
                     }
@@ -608,16 +436,7 @@ impl Component for StatusBar {
                 };
             }
             UIEvent::CmdInput(Key::Char('\t')) => {
-                if let Some(suggestion) = self.auto_complete.get_suggestion().or_else(|| {
-                    if self.auto_complete.cursor() == 0 {
-                        self.auto_complete
-                            .suggestions()
-                            .last()
-                            .map(|e| e.entry.clone())
-                    } else {
-                        None
-                    }
-                }) {
+                if let Some(suggestion) = self.auto_complete.tab() {
                     let mut utext = UText::new(suggestion);
                     let len = utext.as_str().len();
                     utext.set_cursor(len);
@@ -625,6 +444,34 @@ impl Component for StatusBar {
                     self.set_dirty(true);
                     self.ex_buffer = TextField::new(utext, None);
                 }
+                return true;
+            }
+            UIEvent::CmdInput(Key::Char('\n')) => {
+                let command = if self.auto_complete.cursor().is_some() {
+                    if let Some(suggestion) = self.auto_complete.get_suggestion() {
+                        suggestion
+                    } else {
+                        self.ex_buffer.as_str().to_string()
+                    }
+                } else {
+                    self.ex_buffer.as_str().to_string()
+                };
+                self.set_dirty(true);
+                if !command.is_empty() {
+                    if parse_command(&command).is_ok()
+                        && self.cmd_history.last().map(String::as_str) != Some(command.as_str())
+                    {
+                        crate::command::history::log_cmd(command.clone());
+                        self.cmd_history.push(command.clone());
+                    }
+                    context.replies.push_back(UIEvent::Command(command));
+                }
+                self.ex_buffer.clear();
+                self.ex_buffer_cmd_history_pos.take();
+                context
+                    .replies
+                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
+                return true;
             }
             UIEvent::CmdInput(Key::Char(c)) => {
                 self.dirty = true;
@@ -645,11 +492,11 @@ impl Component for StatusBar {
                 return true;
             }
             UIEvent::CmdInput(Key::Up) => {
-                self.auto_complete.dec_cursor();
-                self.dirty = true;
+                self.auto_complete.inc_cursor();
+                self.set_dirty(true);
             }
             UIEvent::CmdInput(Key::Down) => {
-                self.auto_complete.inc_cursor();
+                self.auto_complete.dec_cursor();
                 self.set_dirty(true);
             }
             UIEvent::CmdInput(Key::Left) => {
@@ -702,6 +549,73 @@ impl Component for StatusBar {
                     self.dirty = true;
                 }
 
+                return true;
+            }
+            UIEvent::CmdInput(Key::Ctrl('g')) => {
+                // Edit command bar contents in editor
+                let editor = match std::env::var("VISUAL").or_else(|_| std::env::var("EDITOR")) {
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some(err.to_string().into()),
+                            source: None,
+                            body: "$VISUAL or $EDITOR is not set. You can change an envvar's \
+                                   value without restarting meli with setenv."
+                                .into(),
+                            kind: Some(NotificationType::Error(melib::error::ErrorKind::None)),
+                        });
+                        self.set_dirty(true);
+                        return true;
+                    }
+                    Ok(v) => v,
+                };
+                let f = match File::create_temp_file(
+                    self.ex_buffer.as_str().as_bytes(),
+                    None,
+                    None,
+                    Some("txt"),
+                    true,
+                ) {
+                    Ok(f) => f,
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::Notification {
+                            title: None,
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(NotificationType::Error(err.kind)),
+                        });
+                        self.set_dirty(true);
+                        return true;
+                    }
+                };
+                let initial_value = self.ex_buffer.as_str().to_string();
+                self.ex_buffer.clear();
+                let editor_command = format!("{} \"$@\"", editor);
+                context.replies.push_back(UIEvent::ProcessRequest {
+                    owner: self.id,
+                    command: {
+                        let mut cmd = Command::new("sh");
+                        cmd.arg("-c")
+                            .arg(&editor_command)
+                            .arg(&editor)
+                            .arg(f.path())
+                            .stdin(Stdio::inherit())
+                            .stdout(Stdio::inherit())
+                            .stderr(Stdio::inherit());
+                        cmd
+                    },
+                    spawn: Some(Default::default()),
+                    result_cb: ProcessResultFn(Box::new(move |output| {
+                        if output.is_ok() {
+                            if let Ok(s) = f.read_to_string() {
+                                Some(Box::new(UIEvent::CmdInput(Key::Paste(s))))
+                            } else {
+                                Some(Box::new(UIEvent::CmdInput(Key::Paste(initial_value))))
+                            }
+                        } else {
+                            Some(Box::new(UIEvent::CmdInput(Key::Paste(initial_value))))
+                        }
+                    })),
+                });
                 return true;
             }
             UIEvent::CmdInput(k @ Key::Backspace) | UIEvent::CmdInput(k @ Key::Ctrl(_)) => {

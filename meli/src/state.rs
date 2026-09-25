@@ -1003,7 +1003,7 @@ impl State {
         match event {
             // Command type is handled only by State.
             UIEvent::Command(cmd) => {
-                match parse_command(cmd.as_bytes()) {
+                match parse_command(&cmd) {
                     Ok(action) => {
                         if action.needs_confirmation() {
                             let new = Box::new(UIConfirmationDialog::new(

@@ -19,7 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
+use std::borrow::Cow;
+
+use melib::nom;
 
 #[derive(Clone, Debug)]
 pub enum CommandError {
@@ -43,15 +45,15 @@ pub enum CommandError {
     },
 }
 
-impl<'a> From<nom::Err<melib::nom::error::Error<&'a [u8]>>> for CommandError {
-    fn from(res: nom::Err<melib::nom::error::Error<&'a [u8]>>) -> Self {
+impl<'a> From<nom::Err<melib::nom::error::Error<&'a str>>> for CommandError {
+    fn from(res: nom::Err<melib::nom::error::Error<&'a str>>) -> Self {
         match res {
             nom::Err::Incomplete(_) => Self::Parsing {
                 inner: res.to_string().into(),
                 kind: "".into(),
             },
             nom::Err::Error(e) | nom::Err::Failure(e) => Self::Parsing {
-                inner: String::from_utf8_lossy(e.input).to_string().into(),
+                inner: e.input.to_string().into(),
                 kind: format!("{:?}", e.code).into(),
             },
         }
