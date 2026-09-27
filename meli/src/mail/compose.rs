@@ -2275,12 +2275,14 @@ impl Component for Composer {
                     return true;
                 }
 
-                let editor_command = format!("{} {}", editor, f.path().display());
+                let editor_command = format!("{} \"$@\"", editor);
                 context.replies.push_back(UIEvent::ProcessRequest {
                     owner: self.id,
                     command: {
                         let mut cmd = Command::new("sh");
                         cmd.args(["-c", &editor_command])
+                            .arg(&editor)
+                            .arg(f.path())
                             .stdin(Stdio::inherit())
                             .stdout(Stdio::inherit())
                             .stderr(Stdio::inherit());
