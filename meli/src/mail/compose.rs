@@ -2161,20 +2161,20 @@ impl Component for Composer {
                 if self.mode.is_edit()
                     && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit"]) =>
             {
-                /* Edit draft in $EDITOR */
+                // Edit draft in editor
                 let editor = if let Some(editor_command) =
                     account_settings!(context[&self.account_hash].composing.editor_command).as_ref()
                 {
                     editor_command.to_string()
                 } else {
-                    match std::env::var("EDITOR") {
+                    match std::env::var("VISUAL").or_else(|_| std::env::var("EDITOR")) {
                         Err(err) => {
                             context.replies.push_back(UIEvent::Notification {
                                 title: Some(err.to_string().into()),
                                 source: None,
-                                body: "$EDITOR is not set. You can change an envvar's value with \
-                                       setenv or set composing.editor_command setting in your \
-                                       configuration."
+                                body: "$VISUAL or $EDITOR is not set. You can change an envvar's \
+                                       value with setenv or set composing.editor_command setting \
+                                       in your configuration."
                                     .into(),
                                 kind: Some(NotificationType::Error(melib::error::ErrorKind::None)),
                             });
