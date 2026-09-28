@@ -106,7 +106,7 @@ send_mail = 'false'
 identity="username@example.com"
 server_username = "null"
 server_hostname = "example.com"
-server_password_command = "false"
+server_password = { command = "false" }
     "#;
 
 #[test]

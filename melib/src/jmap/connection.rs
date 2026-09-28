@@ -34,7 +34,7 @@ use url::Url;
 
 use crate::{
     email::parser::BytesExt,
-    error::{Error, ErrorKind, NetworkErrorKind, Result},
+    error::{Error, ErrorKind, NetworkErrorKind, Result, ResultIntoError},
     jmap::{
         argument::Argument,
         capabilities::*,
@@ -51,16 +51,47 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct JmapConnection {
+pub struct JmapClient {
     pub request_no: Arc<AtomicUsize>,
-    pub client: Arc<HttpClient>,
+    pub http_client: Arc<HttpClient>,
     pub server_conf: JmapServerConf,
     pub store: Arc<Store>,
 }
 
+#[derive(Debug)]
+pub enum JmapConnection {
+    Offline {
+        server_conf: JmapServerConf,
+        store: Arc<Store>,
+    },
+    Connected {
+        inner: JmapClient,
+    },
+}
+
 impl JmapConnection {
-    pub fn new(server_conf: &JmapServerConf, store: Arc<Store>) -> Result<Self> {
-        let client = HttpClient::builder()
+    pub fn new(server_conf: JmapServerConf, store: Arc<Store>) -> Self {
+        Self::Offline { server_conf, store }
+    }
+
+    pub async fn client(&mut self) -> Result<&mut JmapClient> {
+        match self {
+            Self::Offline { server_conf, store } => {
+                let inner = JmapClient::new(server_conf, store).await?;
+                *self = Self::Connected { inner };
+                let Self::Connected { ref mut inner } = self else {
+                    unreachable!()
+                };
+                Ok(inner)
+            }
+            Self::Connected { ref mut inner } => Ok(inner),
+        }
+    }
+}
+
+impl JmapClient {
+    pub async fn new(server_conf: &JmapServerConf, store: &Arc<Store>) -> Result<Self> {
+        let http_client = HttpClient::builder()
             .dns_cache(DnsCache::Forever)
             .connection_cache_size(8)
             .connection_cache_ttl(Duration::from_secs(30 * 60))
@@ -75,33 +106,37 @@ impl JmapConnection {
             .tcp_nodelay()
             .tcp_keepalive(Duration::new(60 * 9, 0))
             .redirect_policy(RedirectPolicy::Limit(10));
-        let client = if let Some(dur) = server_conf.timeout.filter(|dur| *dur != Duration::ZERO) {
-            client
-                .timeout(dur)
-                .connect_timeout(dur + Duration::from_secs(300))
-        } else {
-            client
-        };
-        let client = if server_conf.use_token {
-            client
+        let http_client =
+            if let Some(dur) = server_conf.timeout.filter(|dur| *dur != Duration::ZERO) {
+                http_client
+                    .timeout(dur)
+                    .connect_timeout(dur + Duration::from_secs(300))
+            } else {
+                http_client
+            };
+        let username = server_conf
+            .username
+            .value_with_timeout(server_conf.timeout.unwrap_or(Duration::from_millis(100)))
+            .await?;
+        let password = server_conf
+            .password
+            .value_with_timeout(server_conf.timeout.unwrap_or(Duration::from_millis(100)))
+            .await?;
+        let http_client = if server_conf.use_token {
+            http_client
                 .authentication(isahc::auth::Authentication::none())
-                .default_header(
-                    http::header::AUTHORIZATION,
-                    format!("Bearer {}", server_conf.server_password),
-                )
+                .default_header(http::header::AUTHORIZATION, format!("Bearer {password}"))
         } else {
-            client
+            http_client
                 .authentication(isahc::auth::Authentication::basic())
-                .credentials(isahc::auth::Credentials::new(
-                    &server_conf.server_username,
-                    &server_conf.server_password,
-                ))
+                .credentials(isahc::auth::Credentials::new(&username, &password))
         };
-        let client = client.build()?;
+        let http_client = http_client.build()?;
         let server_conf = server_conf.clone();
+        let store = store.clone();
         Ok(Self {
             request_no: Arc::new(AtomicUsize::new(0)),
-            client: Arc::new(client),
+            http_client: Arc::new(http_client),
             server_conf,
             store,
         })
@@ -118,35 +153,50 @@ impl JmapConnection {
             uri
         }
 
-        let mut jmap_session_resource_url = to_well_known(&self.server_conf.server_url);
+        let mut url = self
+            .server_conf
+            .url
+            .value_with_timeout(
+                self.server_conf
+                    .timeout
+                    .unwrap_or(Duration::from_millis(100)),
+            )
+            .await?
+            .parse::<Url>()
+            .chain_err_summary(|| {
+                format!(
+                    "{}: JMAP backend connection failed",
+                    self.store.account_name
+                )
+            })
+            .chain_err_kind(ErrorKind::Configuration)?;
+        let mut jmap_session_resource_url = to_well_known(&url);
 
         let mut resp = match self.get_async(&jmap_session_resource_url).await {
             Err(err) => 'block: {
-                if matches!(err.kind, ErrorKind::Network(NetworkErrorKind::ProtocolViolation) if self.server_conf.server_url.scheme() == "http")
+                if matches!(err.kind, ErrorKind::Network(NetworkErrorKind::ProtocolViolation) if url.scheme() == "http")
                 {
                     // attempt recovery by trying https://
-                    self.server_conf.server_url.set_scheme("https").expect(
+                    url.set_scheme("https").expect(
                         "set_scheme to https must succeed here because we checked earlier that \
                          current scheme is http",
                     );
-                    jmap_session_resource_url = to_well_known(&self.server_conf.server_url);
+                    jmap_session_resource_url = to_well_known(&url);
                     if let Ok(s) = self.get_async(&jmap_session_resource_url).await {
                         log::error!(
                             "Account {} server URL should start with `https`. Please correct your \
-                             configuration value. Its current value is `{}`.",
+                             configuration value. Its current value is `{url}`.",
                             self.store.account_name,
-                            self.server_conf.server_url
                         );
                         break 'block s;
                     }
                 }
 
                 let err = Error::new(format!(
-                    "Could not connect to JMAP server endpoint for {}. Is your server url setting \
-                     correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource \
+                    "Could not connect to JMAP server endpoint for {url}. Is your server url \
+                     setting correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource \
                      discovery via /.well-known/jmap is supported. DNS SRV records are not \
                      supported)\n\nError connecting to server: {err}",
-                    self.server_conf.server_url
                 ))
                 .set_source(Some(Arc::new(err)));
                 _ = self.store.online_status.set(None, Err(err.clone())).await;
@@ -160,8 +210,8 @@ impl JmapConnection {
             let kind: crate::error::NetworkErrorKind = resp.status().into();
             let res_text = resp.text().await.unwrap_or_default();
             let mut err = Error::new(format!(
-                "Could not connect to JMAP server endpoint for {}. Reply from server: {res_text}",
-                self.server_conf.server_url
+                "Could not connect to JMAP server endpoint for {url}. Reply from server: \
+                 {res_text}",
             ))
             .set_kind(kind.into());
             if resp.status() == 401 {
@@ -236,11 +286,10 @@ impl JmapConnection {
         let res_text = match resp.text().await {
             Err(err) => {
                 let err = Error::new(format!(
-                    "Could not connect to JMAP server endpoint for {}. Is your server url setting \
-                     correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource \
+                    "Could not connect to JMAP server endpoint for {url}. Is your server url \
+                     setting correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource \
                      discovery via /.well-known/jmap is supported. DNS SRV records are not \
                      supported)\n\nReply from server: {err}",
-                    self.server_conf.server_url
                 ))
                 .set_source(Some(Arc::new(err)));
                 _ = self
@@ -256,11 +305,10 @@ impl JmapConnection {
         let session: Session = match deserialize_from_str(&res_text) {
             Err(err) => {
                 let err = Error::new(format!(
-                    "Could not connect to JMAP server endpoint for {}. Is your server url setting \
-                     correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource \
+                    "Could not connect to JMAP server endpoint for {url}. Is your server url \
+                     setting correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource \
                      discovery via /.well-known/jmap is supported. DNS SRV records are not \
                      supported)\n\nReply from server: {res_text}",
-                    self.server_conf.server_url
                 ))
                 .set_source(Some(Arc::new(err)));
                 _ = self
@@ -276,8 +324,8 @@ impl JmapConnection {
             ($cap:ident) => {{
                 if !session.capabilities.contains_key($cap::URI) {
                     let err = Error::new(format!(
-                        "Server {} did not return {name} ({uri}). Returned capabilities were: {}",
-                        self.server_conf.server_url,
+                        "Server {url} did not return {name} ({uri}). Returned capabilities were: \
+                         {}",
                         session
                             .capabilities
                             .keys()
@@ -613,18 +661,19 @@ impl JmapConnection {
 
     pub async fn get_async(&self, url: &Url) -> Result<isahc::Response<isahc::AsyncBody>> {
         let mut resp = if cfg!(feature = "jmap-trace") {
-            let res = self.client.get_async(url.as_str()).await;
+            let res = self.http_client.get_async(url.as_str()).await;
             log::trace!("get_async(): url `{}` response {:?}", url, res);
             res?
         } else {
-            self.client.get_async(url.as_str()).await?
+            self.http_client.get_async(url.as_str()).await?
         };
         if !resp.status().is_success() {
             let kind: crate::error::NetworkErrorKind = resp.status().into();
             let res_text = resp.text().await.unwrap_or_default();
             let err = Error::new(format!(
-                "Could not connect to JMAP server endpoint for {}. Reply from server: {res_text}",
-                self.server_conf.server_url
+                "Could not connect to JMAP server endpoint {url} for {}. Reply from server: \
+                 {res_text}",
+                self.store.account_name
             ))
             .set_kind(kind.into());
             _ = self
@@ -649,18 +698,22 @@ impl JmapConnection {
                 String::from_utf8_lossy(&request)
             );
         }
-        let mut resp = if let Some(api_url) = api_url {
-            self.client.post_async(api_url.as_str(), request).await?
+        let api_url = if let Some(api_url) = api_url {
+            api_url.clone()
         } else {
-            let api_url = self.session_guard().await?.api_url.clone();
-            self.client.post_async(api_url.as_str(), request).await?
+            Url::clone(&self.session_guard().await?.api_url)
         };
+        let mut resp = self
+            .http_client
+            .post_async(api_url.as_str(), request)
+            .await?;
         if !resp.status().is_success() {
             let kind: crate::error::NetworkErrorKind = resp.status().into();
             let res_text = resp.text().await.unwrap_or_default();
             let err = Error::new(format!(
-                "Could not connect to JMAP server endpoint for {}. Reply from server: {res_text}",
-                self.server_conf.server_url
+                "Could not connect to JMAP server endpoint {api_url} for {}. Reply from server: \
+                 {res_text}",
+                self.store.account_name
             ))
             .set_kind(kind.into());
             _ = self

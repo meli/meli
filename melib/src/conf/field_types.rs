@@ -186,6 +186,24 @@ pub enum Secret {
 }
 
 impl Secret {
+    /// Prepopulate value in memory if `store_in_memory` is true.
+    pub fn prepopulate(&mut self, timeout: Option<std::time::Duration>) -> Result<(), Error> {
+        if let Self::Evaluate {
+            command: _,
+            store_in_memory: true,
+        } = self
+        {
+            if let Some(timeout) = timeout {
+                let value = futures::executor::block_on(self.value_with_timeout(timeout))?;
+                *self = Self::Value(value);
+            } else {
+                let value = self.value()?;
+                *self = Self::Value(value);
+            }
+        }
+        Ok(())
+    }
+
     pub fn value(&self) -> Result<String, Error> {
         match self {
             Self::Value(val) => Ok(val.clone()),

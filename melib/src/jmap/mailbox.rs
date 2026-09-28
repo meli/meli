@@ -37,7 +37,7 @@ use crate::{
         methods::{Changes, ChangesResponse, Get, GetResponse, MethodResponse, ResultField, Set},
         objects::{Id, Object, State},
         protocol::{Method, Request},
-        JmapConnection, JmapMailbox,
+        JmapClient, JmapMailbox,
     },
     BackendEvent, LazyCountSet, MailboxHash, RefreshEvent, RefreshEventKind,
 };
@@ -218,7 +218,7 @@ impl Method<MailboxObject> for MailboxChanges {
     const NAME: &'static str = "Mailbox/changes";
 }
 
-impl JmapConnection {
+impl JmapClient {
     pub async fn mailbox_changed(
         &self,
         new_state: State<MailboxObject>,

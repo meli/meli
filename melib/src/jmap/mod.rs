@@ -42,12 +42,7 @@ use isahc::AsyncReadResponseExt;
 use serde_json::{json, Value};
 use url::Url;
 
-use crate::{
-    backends::prelude::*,
-    email::*,
-    error::{Error, ErrorKind, Result},
-    utils::futures::timeout,
-};
+use crate::{backends::prelude::*, email::*, utils::futures::timeout};
 
 #[macro_export]
 macro_rules! _impl {
@@ -131,16 +126,13 @@ pub fn deserialize_from_str<'de, T: serde::de::Deserialize<'de>>(s: &'de str) ->
 #[derive(Debug, Default)]
 pub struct EnvelopeCache {
     bytes: Option<String>,
-    // headers: Option<String>,
-    // body: Option<String>,
-    // flags: Option<Flag>,
 }
 
 #[derive(Clone, Debug)]
 pub struct JmapServerConf {
-    pub server_url: Url,
-    pub server_username: String,
-    pub server_password: String,
+    pub url: Secret,
+    pub username: Secret,
+    pub password: Secret,
     pub use_token: bool,
     pub danger_accept_invalid_certs: bool,
     pub timeout: Option<Duration>,
@@ -188,47 +180,6 @@ macro_rules! get_conf_val {
                 ))
             })
     };
-}
-
-impl JmapServerConf {
-    pub fn new(s: &AccountSettings) -> Result<Self> {
-        let use_token: bool = get_conf_val!(s["use_token"], false, "true or false")?;
-
-        if use_token
-            && !(s.extra.contains_key("server_password_command")
-                ^ s.extra.contains_key("server_password"))
-        {
-            return Err(Error::new(format!(
-                "({}) `use_token` use requires either the `server_password_command` set with a \
-                 command that returns an Bearer token of your account, or `server_password` with \
-                 the API Bearer token as a string. Consult documentation for guidance.",
-                s.name,
-            )));
-        }
-        Ok(Self {
-            server_url: get_conf_val!(s["server_url"], Url, "a string containing a URL")?,
-            server_username: get_conf_val!(s["server_username"], String, "a string")?,
-            server_password: s.server_password()?,
-            use_token,
-            danger_accept_invalid_certs: get_conf_val!(
-                s["danger_accept_invalid_certs"],
-                false,
-                "true or false"
-            )?,
-            timeout: get_conf_val!(
-                s["timeout"],
-                16_u64,
-                "integers setting an amount of seconds (a value of zero disables the timeout)"
-            )
-            .map(|t| {
-                if t == 0 {
-                    None
-                } else {
-                    Some(Duration::from_secs(t))
-                }
-            })?,
-        })
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -480,9 +431,10 @@ impl MailBackend for JmapType {
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
             let mut conn = connection.lock().await;
-            conn.connect().await?;
-            if let Some(ev) = conn.email_changed(None).await? {
-                conn.add_backend_event(ev);
+            let client = conn.client().await?;
+            client.connect().await?;
+            if let Some(ev) = client.email_changed(None).await? {
+                client.add_backend_event(ev);
             }
             Ok(())
         }))
@@ -491,18 +443,11 @@ impl MailBackend for JmapType {
     fn watch(&mut self) -> ResultStream<BackendEvent> {
         let connection = self.connection.clone();
         let store = self.store.clone();
-        let event_source = JmapConnection::new(
-            &JmapServerConf {
-                timeout: None,
-                ..self.server_conf.clone()
-            },
-            store.clone(),
-        )?;
+        let server_conf = self.server_conf.clone();
         Ok(Box::pin(try_fn_stream(|emitter| async move {
             let mut event_source = {
-                let mut conn = connection.lock().await;
-                conn.connect().await?;
-                eventsource::EventSourceConnection::new(&event_source).await?
+                connection.lock().await.client().await?.connect().await?;
+                eventsource::EventSourceConnection::new(server_conf, store.clone()).await?
             };
             {
                 let stream = event_source.next_event();
@@ -526,8 +471,9 @@ impl MailBackend for JmapType {
                         log::debug!("watch: got changed {changed:?}");
 
                         let accounts = {
-                            let conn = connection.lock().await;
-                            let session_guard = conn.session_guard().await?;
+                            let mut conn = connection.lock().await;
+                            let client = conn.client().await?;
+                            let session_guard = client.session_guard().await?;
                             session_guard.accounts.keys().cloned().collect::<Vec<_>>()
                         };
                         for account in accounts {
@@ -546,8 +492,11 @@ impl MailBackend for JmapType {
                                     != Some(current_state.as_str())
                                 {
                                     let mailbox_changes = {
-                                        let conn = connection.lock().await;
-                                        conn.mailbox_changed(current_state.into()).await
+                                        let mut conn = connection.lock().await;
+                                        conn.client()
+                                            .await?
+                                            .mailbox_changed(current_state.into())
+                                            .await
                                     };
                                     if let Some(backend_event) = mailbox_changes? {
                                         emitter.emit(backend_event).await;
@@ -566,8 +515,13 @@ impl MailBackend for JmapType {
                                     != Some(current_state.as_str())
                                 {
                                     let email_changes = {
-                                        let conn = connection.lock().await;
-                                        conn.email_changed(Some(current_state.into())).await
+                                        connection
+                                            .lock()
+                                            .await
+                                            .client()
+                                            .await?
+                                            .email_changed(Some(current_state.into()))
+                                            .await
                                     };
                                     if let Some(backend_event) = email_changes? {
                                         emitter.emit(backend_event).await;
@@ -592,9 +546,10 @@ impl MailBackend for JmapType {
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
             let mut conn = connection.lock().await;
-            conn.connect().await?;
+            let client = conn.client().await?;
+            client.connect().await?;
             if store.mailboxes.read().unwrap().is_empty() {
-                let new_mailboxes = conn.get_mailboxes(None).await?;
+                let new_mailboxes = client.get_mailboxes(None).await?;
                 *store.mailboxes.write().unwrap() = new_mailboxes;
             }
 
@@ -625,16 +580,17 @@ impl MailBackend for JmapType {
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
             let mut conn = connection.lock().await;
-            conn.connect().await?;
+            let client = conn.client().await?;
+            client.connect().await?;
             /*
              * 1. upload binary blob, get blobId
              * 2. Email/import
              */
             let (upload_url, mail_account_id) = {
-                let g = conn.session_guard().await?;
+                let g = client.session_guard().await?;
                 (g.upload_url.clone(), g.mail_account_id())
             };
-            let res_text = conn
+            let res_text = client
                 .post_async(
                     Some(&url_template::upload_request_format(
                         &upload_url,
@@ -659,12 +615,12 @@ impl MailBackend for JmapType {
 
             let upload_response: UploadResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
-                    _ = conn.store.online_status.set(None, Err(err.clone())).await;
+                    _ = client.store.online_status.set(None, Err(err.clone())).await;
                     return Err(err);
                 }
                 Ok(s) => s,
             };
-            let mut req = Request::new(conn.request_no.clone());
+            let mut req = Request::new(client.request_no.clone());
             let creation_id: Id<email::EmailObject> = "1".to_string().into();
 
             let import_call: email::EmailImport = email::EmailImport::new()
@@ -679,7 +635,7 @@ impl MailBackend for JmapType {
 
             req.add_call(&import_call);
 
-            let res_text = conn
+            let res_text = client
                 .post_async(None, serde_json::to_string(&req)?)
                 .await?
                 .text()
@@ -687,7 +643,7 @@ impl MailBackend for JmapType {
 
             let mut v: MethodResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
-                    _ = conn.store.online_status.set(None, Err(err.clone())).await;
+                    _ = client.store.online_status.set(None, Err(err.clone())).await;
                     return Err(err);
                 }
                 Ok(s) => s,
@@ -744,8 +700,9 @@ impl MailBackend for JmapType {
 
         Ok(Box::pin(async move {
             let mut conn = connection.lock().await;
-            conn.connect().await?;
-            let mail_account_id = conn.session_guard().await?.mail_account_id();
+            let client = conn.client().await?;
+            client.connect().await?;
+            let mail_account_id = client.session_guard().await?.mail_account_id();
             let email_call = email::EmailQuery::new(
                 Query::new()
                     .account_id(mail_account_id)
@@ -754,10 +711,10 @@ impl MailBackend for JmapType {
             )
             .collapse_threads(false);
 
-            let mut req = Request::new(conn.request_no.clone());
+            let mut req = Request::new(client.request_no.clone());
             req.add_call(&email_call);
 
-            let res_text = conn
+            let res_text = client
                 .post_async(None, serde_json::to_string(&req)?)
                 .await?
                 .text()
@@ -765,7 +722,7 @@ impl MailBackend for JmapType {
 
             let mut v: MethodResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
-                    _ = conn.store.online_status.set(None, Err(err.clone())).await;
+                    _ = client.store.online_status.set(None, Err(err.clone())).await;
                     return Err(err);
                 }
                 Ok(s) => s,
@@ -798,7 +755,8 @@ impl MailBackend for JmapType {
         Ok(Box::pin(async move {
             let mailbox_state = store.mailbox_state.lock().await.clone();
             let mut conn = connection.lock().await;
-            let mail_account_id = conn.session_guard().await?.mail_account_id();
+            let client = conn.client().await?;
+            let mail_account_id = client.session_guard().await?.mail_account_id();
             let mailbox_set_call = mailbox::MailboxSet::new(
                 Set::<mailbox::MailboxObject>::new(mailbox_state)
                     .account_id(mail_account_id)
@@ -811,10 +769,10 @@ impl MailBackend for JmapType {
                     })),
             );
 
-            let mut req = Request::new(conn.request_no.clone());
+            let mut req = Request::new(client.request_no.clone());
             let _prev_seq = req.add_call(&mailbox_set_call);
             // [ref:FIXME]: inspect Set response for errors in `notCreated` field.
-            let new_mailboxes = conn.get_mailboxes(Some(req)).await?;
+            let new_mailboxes = client.get_mailboxes(Some(req)).await?;
 
             let new_mailbox: Mailbox = new_mailboxes
                 .iter()
@@ -840,7 +798,8 @@ impl MailBackend for JmapType {
         Ok(Box::pin(async move {
             let mailbox_state = store.mailbox_state.lock().await.clone();
             let mut conn = connection.lock().await;
-            let mail_account_id = conn.session_guard().await?.mail_account_id();
+            let client = conn.client().await?;
+            let mail_account_id = client.session_guard().await?.mail_account_id();
             let mailbox_set_call = mailbox::MailboxSet::new(
                 Set::<mailbox::MailboxObject>::new(mailbox_state)
                     .account_id(mail_account_id)
@@ -856,10 +815,10 @@ impl MailBackend for JmapType {
                     })),
             );
 
-            let mut req = Request::new(conn.request_no.clone());
+            let mut req = Request::new(client.request_no.clone());
             let _prev_seq = req.add_call(&mailbox_set_call);
             // [ref:FIXME]: inspect Set response for errors in `notCreated` field.
-            let new_mailboxes = conn.get_mailboxes(Some(req)).await?;
+            let new_mailboxes = client.get_mailboxes(Some(req)).await?;
             *store.mailboxes.write().unwrap() = new_mailboxes;
 
             let new_mailboxes: HashMap<MailboxHash, Mailbox> = store
@@ -897,7 +856,8 @@ impl MailBackend for JmapType {
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
             let mut conn = connection.lock().await;
-            let mail_account_id = conn.session_guard().await?.mail_account_id();
+            let client = conn.client().await?;
+            let mail_account_id = client.session_guard().await?.mail_account_id();
             let mailbox_state = store.mailbox_state.lock().await.clone();
 
             let mailbox_set_call = mailbox::MailboxSet::new(
@@ -906,10 +866,10 @@ impl MailBackend for JmapType {
                     .destroy(Some(vec![mailbox_id.into()])),
             );
 
-            let mut req = Request::new(conn.request_no.clone());
+            let mut req = Request::new(client.request_no.clone());
             let _prev_seq = req.add_call(&mailbox_set_call);
 
-            let res_text = conn
+            let res_text = client
                 .post_async(None, serde_json::to_string(&req)?)
                 .await?
                 .text()
@@ -940,7 +900,7 @@ impl MailBackend for JmapType {
                     )));
                 }
             }
-            conn.add_backend_event(
+            client.add_backend_event(
                 RefreshEvent {
                     account_hash: store.account_hash,
                     mailbox_hash,
@@ -948,7 +908,7 @@ impl MailBackend for JmapType {
                 }
                 .into(),
             );
-            let new_mailboxes = conn.get_mailboxes(None).await?;
+            let new_mailboxes = client.get_mailboxes(None).await?;
             *store.mailboxes.write().unwrap() = new_mailboxes;
 
             let new_mailboxes: HashMap<MailboxHash, Mailbox> = store
@@ -981,8 +941,9 @@ impl MailBackend for JmapType {
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
             let mailbox_state = store.mailbox_state.lock().await.clone();
-            let conn = connection.lock().await;
-            let mail_account_id = conn.session_guard().await?.mail_account_id();
+            let mut conn = connection.lock().await;
+            let client = conn.client().await?;
+            let mail_account_id = client.session_guard().await?.mail_account_id();
             let mailbox_set_call = mailbox::MailboxSet::new(
                 Set::<mailbox::MailboxObject>::new(mailbox_state)
                     .account_id(mail_account_id)
@@ -995,11 +956,11 @@ impl MailBackend for JmapType {
                     })),
             );
 
-            let mut req = Request::new(conn.request_no.clone());
+            let mut req = Request::new(client.request_no.clone());
             let _prev_seq = req.add_call(&mailbox_set_call);
-            let res_text = conn.send_request(serde_json::to_string(&req)?).await?;
+            let res_text = client.send_request(serde_json::to_string(&req)?).await?;
             let v: MethodResponse = deserialize_from_str(&res_text)?;
-            conn.store.online_status.update_timestamp(None).await;
+            client.store.online_status.update_timestamp(None).await;
             let SetResponse::<mailbox::MailboxObject> {
                 new_state,
                 not_updated,
@@ -1007,7 +968,7 @@ impl MailBackend for JmapType {
             } = SetResponse::<mailbox::MailboxObject>::try_from(
                 *v.method_responses.last().unwrap(),
             )?;
-            *conn.store.mailbox_state.lock().await = Some(new_state);
+            *client.store.mailbox_state.lock().await = Some(new_state);
             if let Some(ids) = not_updated {
                 if !ids.is_empty() {
                     return Err(Error::new(format!(
@@ -1087,9 +1048,10 @@ impl MailBackend for JmapType {
                 }
             }
             let batch_len = update_map.len();
-            let conn = connection.lock().await;
-            let mail_account_id = conn.session_guard().await?.mail_account_id();
-            let state = conn.store.email_state.lock().await.clone();
+            let mut conn = connection.lock().await;
+            let client = conn.client().await?;
+            let mail_account_id = client.session_guard().await?.mail_account_id();
+            let state = client.store.email_state.lock().await.clone();
 
             let email_set_call = email::EmailSet::new(
                 Set::<email::EmailObject>::new(state)
@@ -1097,10 +1059,10 @@ impl MailBackend for JmapType {
                     .update(Some(update_map)),
             );
 
-            let mut req = Request::new(conn.request_no.clone());
+            let mut req = Request::new(client.request_no.clone());
             let _prev_seq = req.add_call(&email_set_call);
 
-            let res_text = conn
+            let res_text = client
                 .post_async(None, serde_json::to_string(&req)?)
                 .await?
                 .text()
@@ -1108,7 +1070,7 @@ impl MailBackend for JmapType {
 
             let mut v: MethodResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
-                    _ = conn.store.online_status.set(None, Err(err.clone())).await;
+                    _ = client.store.online_status.set(None, Err(err.clone())).await;
                     return Err(err);
                 }
                 Ok(s) => s,
@@ -1119,7 +1081,7 @@ impl MailBackend for JmapType {
                 new_state,
                 ..
             } = SetResponse::<email::EmailObject>::try_from(v.method_responses.remove(0))?;
-            *conn.store.email_state.lock().await = Some(new_state);
+            *client.store.email_state.lock().await = Some(new_state);
             if let Some(ids) = not_updated {
                 if !ids.is_empty() {
                     return Err(Error::new(format!(
@@ -1211,9 +1173,10 @@ impl MailBackend for JmapType {
                 }
             }
             let batch_len = update_map.len();
-            let conn = connection.lock().await;
-            let mail_account_id = conn.session_guard().await?.mail_account_id();
-            let state = conn.store.email_state.lock().await.clone();
+            let mut conn = connection.lock().await;
+            let client = conn.client().await?;
+            let mail_account_id = client.session_guard().await?.mail_account_id();
+            let state = client.store.email_state.lock().await.clone();
 
             let email_set_call = email::EmailSet::new(
                 Set::<email::EmailObject>::new(state)
@@ -1221,7 +1184,7 @@ impl MailBackend for JmapType {
                     .update(Some(update_map)),
             );
 
-            let mut req = Request::new(conn.request_no.clone());
+            let mut req = Request::new(client.request_no.clone());
             req.add_call(&email_set_call);
             let email_call = email::EmailGet::new(
                 Get::new()
@@ -1232,7 +1195,7 @@ impl MailBackend for JmapType {
 
             req.add_call(&email_call);
 
-            let res_text = conn
+            let res_text = client
                 .post_async(None, serde_json::to_string(&req)?)
                 .await?
                 .text()
@@ -1240,7 +1203,7 @@ impl MailBackend for JmapType {
 
             let mut v: MethodResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
-                    _ = conn.store.online_status.set(None, Err(err.clone())).await;
+                    _ = client.store.online_status.set(None, Err(err.clone())).await;
                     return Err(err);
                 }
                 Ok(s) => s,
@@ -1257,7 +1220,7 @@ impl MailBackend for JmapType {
                 }
             }
 
-            *conn.store.email_state.lock().await = Some(new_state);
+            *client.store.email_state.lock().await = Some(new_state);
             if !updated_map.is_empty() {
                 let mut tag_index_lck = store.collection.tag_index.write().unwrap();
                 for op in flags.iter() {
@@ -1287,7 +1250,7 @@ impl MailBackend for JmapType {
                         }
                     });
 
-                    conn.add_backend_event(
+                    client.add_backend_event(
                         RefreshEvent {
                             account_hash: store.account_hash,
                             mailbox_hash,
@@ -1340,9 +1303,10 @@ impl MailBackend for JmapType {
                 }
             }
             let batch_len = destroy_vec.len();
-            let conn = connection.lock().await;
-            let mail_account_id = conn.session_guard().await?.mail_account_id();
-            let state = conn.store.email_state.lock().await.clone();
+            let mut conn = connection.lock().await;
+            let client = conn.client().await?;
+            let mail_account_id = client.session_guard().await?.mail_account_id();
+            let state = client.store.email_state.lock().await.clone();
 
             let email_set_call = email::EmailSet::new(
                 Set::<email::EmailObject>::new(state)
@@ -1350,10 +1314,10 @@ impl MailBackend for JmapType {
                     .destroy(Some(destroy_vec)),
             );
 
-            let mut req = Request::new(conn.request_no.clone());
+            let mut req = Request::new(client.request_no.clone());
             let _prev_seq = req.add_call(&email_set_call);
 
-            let res_text = conn
+            let res_text = client
                 .post_async(None, serde_json::to_string(&req)?)
                 .await?
                 .text()
@@ -1361,7 +1325,7 @@ impl MailBackend for JmapType {
 
             let mut v: MethodResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
-                    _ = conn.store.online_status.set(None, Err(err.clone())).await;
+                    _ = client.store.online_status.set(None, Err(err.clone())).await;
                     return Err(err);
                 }
                 Ok(s) => s,
@@ -1372,14 +1336,14 @@ impl MailBackend for JmapType {
                 new_state,
                 ..
             } = SetResponse::<email::EmailObject>::try_from(v.method_responses.remove(0))?;
-            *conn.store.email_state.lock().await = Some(new_state);
+            *client.store.email_state.lock().await = Some(new_state);
             if let Some(ref ids) = not_destroyed {
                 for id in ids.keys() {
                     destroyed_map.swap_remove(id);
                 }
             }
             if !destroyed_map.is_empty() {
-                conn.add_backend_event(BackendEvent::RefreshBatch(
+                client.add_backend_event(BackendEvent::RefreshBatch(
                     destroyed_map
                         .values()
                         .map(|h| RefreshEvent {
@@ -1463,17 +1427,18 @@ impl MailBackend for JmapType {
                     }
                 })
             };
-            let conn = connection.lock().await;
-            let mail_account_id = conn.session_guard().await?.mail_account_id();
+            let mut conn = connection.lock().await;
+            let client = conn.client().await?;
+            let mail_account_id = client.session_guard().await?.mail_account_id();
 
             // [ref:TODO] smarter identity detection based on From: ?
-            let Some(identity_id) = conn.session_guard().await?.mail_identity_id() else {
+            let Some(identity_id) = client.session_guard().await?.mail_identity_id() else {
                 return Err(Error::new(
                     "You need to setup an Identity in the JMAP server.",
                 ));
             };
-            let upload_url = { conn.session_guard().await?.upload_url.clone() };
-            let res_text = conn
+            let upload_url = { client.session_guard().await?.upload_url.clone() };
+            let res_text = client
                 .post_async(
                     Some(&url_template::upload_request_format(
                         &upload_url,
@@ -1487,13 +1452,13 @@ impl MailBackend for JmapType {
 
             let upload_response: UploadResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
-                    _ = conn.store.online_status.set(None, Err(err.clone())).await;
+                    _ = client.store.online_status.set(None, Err(err.clone())).await;
                     return Err(err);
                 }
                 Ok(s) => s,
             };
             {
-                let mut req = Request::new(conn.request_no.clone());
+                let mut req = Request::new(client.request_no.clone());
                 let creation_id: Id<email::EmailObject> = "newid".into();
                 let import_call: email::EmailImport = email::EmailImport::new()
                     .account_id(mail_account_id.clone())
@@ -1511,14 +1476,14 @@ impl MailBackend for JmapType {
 
                 req.add_call(&import_call);
 
-                let res_text = conn
+                let res_text = client
                     .post_async(None, serde_json::to_string(&req)?)
                     .await?
                     .text()
                     .await?;
                 let v: MethodResponse = match deserialize_from_str(&res_text) {
                     Err(err) => {
-                        _ = conn.store.online_status.set(None, Err(err.clone())).await;
+                        _ = client.store.online_status.set(None, Err(err.clone())).await;
                         return Err(err);
                     }
                     Ok(s) => s,
@@ -1536,7 +1501,7 @@ impl MailBackend for JmapType {
                         .to_string(),
                 );
 
-                let mut req = Request::new(conn.request_no.clone());
+                let mut req = Request::new(client.request_no.clone());
                 let subm_set_call = submission::EmailSubmissionSet::new(
                     Set::<submission::EmailSubmissionObject>::new(None)
                         .account_id(mail_account_id.clone())
@@ -1560,7 +1525,7 @@ impl MailBackend for JmapType {
 
                 req.add_call(&subm_set_call);
 
-                let res_text = conn
+                let res_text = client
                     .post_async(None, serde_json::to_string(&req)?)
                     .await?
                     .text()
@@ -1569,7 +1534,7 @@ impl MailBackend for JmapType {
                 // [ref:TODO] parse/return any error.
                 let _: MethodResponse = match deserialize_from_str(&res_text) {
                     Err(err) => {
-                        _ = conn.store.online_status.set(None, Err(err.clone())).await;
+                        _ = client.store.online_status.set(None, Err(err.clone())).await;
                         return Err(err);
                     }
                     Ok(s) => s,
@@ -1590,7 +1555,43 @@ impl JmapType {
             std::time::Instant::now(),
             Err(Error::new("Account is uninitialised.")),
         ))));
-        let server_conf = JmapServerConf::new(s)?;
+
+        let mut url = get_conf_val!(s["server_url"], Secret, "Secret containing the server URL")?;
+        let use_token: bool = get_conf_val!(s["use_token"], false, "true or false")?;
+        let danger_accept_invalid_certs =
+            get_conf_val!(s["danger_accept_invalid_certs"], false, "true or false")?;
+
+        let timeout = get_conf_val!(
+            s["timeout"],
+            16_u64,
+            "integers setting an amount of seconds (a value of zero disables the timeout)"
+        )
+        .map(|t| {
+            if t == 0 {
+                None
+            } else {
+                Some(Duration::from_secs(t))
+            }
+        })?;
+
+        let mut password: Secret = get_conf_val!(s["server_password"], Secret, "Secret")?;
+        let mut username: Secret = get_conf_val!(s["server_username"], Secret, "Secret")?;
+
+        for secret in [&mut url, &mut password, &mut username] {
+            secret
+                .prepopulate(timeout)
+                .chain_err_summary(|| format!("{}: JMAP backend creation failed", s.name.as_str()))
+                .chain_err_kind(ErrorKind::Configuration)?;
+        }
+
+        let server_conf = JmapServerConf {
+            url,
+            username,
+            password,
+            use_token,
+            danger_accept_invalid_certs,
+            timeout,
+        };
 
         let account_hash = AccountHash::from_bytes(s.name.as_bytes());
         let store = Arc::new(Store {
@@ -1616,42 +1617,29 @@ impl JmapType {
 
         Ok(Box::new(Self {
             connection: Arc::new(FutureMutex::new(JmapConnection::new(
-                &server_conf,
+                server_conf.clone(),
                 store.clone(),
-            )?)),
+            ))),
             store,
             server_conf,
         }))
     }
 
     pub fn validate_config(s: &mut AccountSettings) -> Result<()> {
-        s.validator::<Url>("server_url", "a string containing a URL")
+        s.validator::<Secret>("server_url", "Secret containing the server URL")
+            .validation_fn(|secret| {
+                if let Secret::Value(ref v) = secret {
+                    Url::from_str(v)?;
+                }
+                Ok(())
+            })
             .validate()?;
-        s.validator::<String>("server_username", "string")
+        s.validator::<Secret>("server_username", "Secret")
+            .validate()?;
+        s.validator::<Secret>("server_password", "Secret")
             .validate()?;
         s.validator::<bool>("use_token", "true or false")
             .ignore_missing()?;
-        let server_password = s
-            .validator::<String>("server_password", "string")
-            .validate();
-        let server_password_command = s
-            .validator::<String>("server_password_command", "string")
-            .validate();
-        if matches!(
-            (server_password.as_ref(), server_password_command.as_ref()),
-            (Ok(_), Ok(_))
-        ) {
-            return Err(Error::new(format!(
-                "{}: both server_password and server_password_command are set, cannot choose",
-                s.name
-            ))
-            .set_kind(ErrorKind::Configuration));
-        }
-        if matches!(server_password, Err(ref err) if err.kind == ErrorKind::NotFound) {
-            server_password_command?;
-        } else {
-            server_password?;
-        }
 
         s.validator::<bool>("danger_accept_invalid_certs", "true or false")
             .ignore_missing()?;

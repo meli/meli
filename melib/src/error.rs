@@ -550,6 +550,14 @@ impl From<std::fmt::Error> for Error {
 }
 
 #[cfg(feature = "http")]
+impl From<url::ParseError> for Error {
+    #[inline]
+    fn from(val: url::ParseError) -> Self {
+        Self::from_inner(Arc::new(val)).set_kind(ErrorKind::ValueError)
+    }
+}
+
+#[cfg(feature = "http")]
 impl From<isahc::Error> for Error {
     #[inline]
     fn from(val: isahc::Error) -> Self {

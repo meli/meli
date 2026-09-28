@@ -26,7 +26,7 @@ use std::{
 
 use super::{ImapConnection, ImapProtocol, ImapServerConf, UIDStore};
 use crate::{
-    conf::AccountSettings,
+    backends::prelude::*,
     email::parser::IResult,
     error::{Error, Result},
     get_conf_val,
@@ -57,10 +57,10 @@ impl ManageSieveConnection {
         s: &AccountSettings,
         event_consumer: crate::backends::BackendEventConsumer,
     ) -> Result<Self> {
-        let server_hostname: String = get_conf_val!(s["server_hostname"])?;
-        let server_username: String = get_conf_val!(s["server_username"])?;
-        let server_password: String = get_conf_val!(s["server_password"])?;
-        let server_port: u16 = get_conf_val!(s["server_port"], 4190)?;
+        let mut hostname: Secret = get_conf_val!(s["server_hostname"])?;
+        let mut username: Secret = get_conf_val!(s["server_username"])?;
+        let mut password: Secret = get_conf_val!(s["server_password"])?;
+        let port: u16 = get_conf_val!(s["server_port"], 4190)?;
         let danger_accept_invalid_certs: bool =
             get_conf_val!(s["danger_accept_invalid_certs"], false)?;
         let timeout = get_conf_val!(s["timeout"], 16_u64)?;
@@ -69,11 +69,22 @@ impl ManageSieveConnection {
         } else {
             Some(std::time::Duration::from_secs(timeout))
         };
+        for secret in [&mut hostname, &mut password, &mut username] {
+            secret
+                .prepopulate(timeout)
+                .chain_err_summary(|| {
+                    format!(
+                        "{}: IMAP ManageSieve backend creation failed",
+                        s.name.as_str()
+                    )
+                })
+                .chain_err_kind(ErrorKind::Configuration)?;
+        }
         let server_conf = ImapServerConf {
-            server_hostname,
-            server_username,
-            server_password,
-            server_port,
+            hostname,
+            username,
+            password,
+            port,
             use_starttls: true,
             use_tls: true,
             danger_accept_invalid_certs,

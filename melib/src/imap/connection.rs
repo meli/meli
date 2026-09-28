@@ -382,7 +382,10 @@ impl ImapStream {
         uid_store: &UIDStore,
         send_state_changes: bool,
     ) -> Result<(Capabilities, Self)> {
-        let path = &server_conf.server_hostname;
+        let hostname = server_conf
+            .hostname
+            .value_with_timeout(server_conf.timeout.unwrap_or(Duration::from_millis(100)))
+            .await?;
 
         let stream = if server_conf.use_tls {
             if send_state_changes {
@@ -402,7 +405,7 @@ impl ImapStream {
                 .chain_err_kind(ErrorKind::Network(NetworkErrorKind::InvalidTLSConnection))?;
 
             let mut socket = AsyncWrapper::new({
-                let addr = (path.clone(), server_conf.server_port);
+                let addr = (hostname.clone(), server_conf.port);
                 let timeout = server_conf.timeout;
                 let conn = Connection::new_tcp(
                     smol::unblock(move || tcp_stream_connect(addr, timeout)).await?,
@@ -418,7 +421,7 @@ impl ImapStream {
             })?;
             if server_conf.use_starttls {
                 let err_fn = || {
-                    if server_conf.server_port == 993 {
+                    if server_conf.port == 993 {
                         "STARTTLS failed. Server port is set to 993, which normally uses TLS. \
                          Maybe try disabling use_starttls."
                     } else {
@@ -470,13 +473,13 @@ impl ImapStream {
                 }
                 if !broken {
                     return Err(Error::new(format!(
-                        "Could not initiate STARTTLS negotiation to {path}."
+                        "Could not initiate STARTTLS negotiation to {hostname}."
                     )));
                 }
             }
 
             {
-                let path = Arc::new(path.to_string());
+                let path = Arc::new(hostname.to_string());
                 let conn = smol::unblock({
                     let socket = socket.into_inner()?;
                     let path = Arc::clone(&path);
@@ -515,7 +518,7 @@ impl ImapStream {
             }
         } else {
             AsyncWrapper::new({
-                let addr = (path.clone(), server_conf.server_port);
+                let addr = (hostname.clone(), server_conf.port);
                 let timeout = server_conf.timeout;
                 let conn = Connection::new_tcp(
                     smol::unblock(move || tcp_stream_connect(addr, timeout)).await?,
@@ -548,10 +551,15 @@ impl ImapStream {
         };
         if matches!(server_conf.protocol, ImapProtocol::ManageSieve) {
             ret.read_response(&mut res).await?;
-            let credentials = format!(
-                "\0{}\0{}",
-                server_conf.server_username, server_conf.server_password
-            );
+            let username = server_conf
+                .username
+                .value_with_timeout(server_conf.timeout.unwrap_or(Duration::from_millis(100)))
+                .await?;
+            let password = server_conf
+                .password
+                .value_with_timeout(server_conf.timeout.unwrap_or(Duration::from_millis(100)))
+                .await?;
+            let credentials = format!("\0{username}\0{password}");
             ret.send_command(CommandBody::authenticate(AuthMechanism::Plain))
                 .await?;
             ret.wait_for_continuation_request().await?;
@@ -596,14 +604,14 @@ impl ImapStream {
                 .find(|l| l.starts_with(b"* CAPABILITY"))
                 .ok_or_else(|| {
                     Error::new(format!(
-                        "Could not connect to {}: could not parse CAPABILITY response: `{}`",
-                        server_conf.server_hostname,
+                        "Could not connect to {hostname}: could not parse CAPABILITY response: \
+                         `{}`",
                         String::from_utf8_lossy(&res).as_ref().trim_at_boundary(40)
                     ))
                     .set_details("Response does not start with `* CAPABILITY`.")
                     .set_kind(ErrorKind::ProtocolError)
                 })
-                .and_then(|res| parse_capabilities(res, &server_conf.server_hostname));
+                .and_then(|res| parse_capabilities(res, &hostname));
 
             match capabilities {
                 Err(err) => {
@@ -619,8 +627,7 @@ impl ImapStream {
             .any(|cap| cap.eq_ignore_ascii_case(b"IMAP4rev1"))
         {
             return Err(Error::new(format!(
-                "Could not connect to {}: server is not IMAP4rev1 compliant",
-                server_conf.server_hostname
+                "Could not connect to {hostname}: server is not IMAP4rev1 compliant",
             ))
             .set_kind(ErrorKind::ProtocolNotSupported));
         }
@@ -646,9 +653,8 @@ impl ImapStream {
                     .any(|cap| cap.eq_ignore_ascii_case(b"AUTH=XOAUTH2"))
                 {
                     return Err(Error::new(format!(
-                        "Could not connect to {}: OAUTH2 is enabled but server did not return \
-                         AUTH=XOAUTH2 capability. Returned capabilities were: {}",
-                        server_conf.server_hostname,
+                        "Could not connect to {hostname}: OAUTH2 is enabled but server did not \
+                         return AUTH=XOAUTH2 capability. Returned capabilities were: {}",
                         capabilities
                             .iter()
                             .map(|capability| String::from_utf8_lossy(capability).to_string())
@@ -657,11 +663,15 @@ impl ImapStream {
                     ))
                     .set_kind(ErrorKind::Authentication));
                 }
+                let password = server_conf
+                    .password
+                    .value_with_timeout(server_conf.timeout.unwrap_or(Duration::from_millis(100)))
+                    .await?;
                 if has_sasl_ir {
                     let xoauth2 = base64
-                        .decode(&server_conf.server_password)
+                        .decode(&password)
                         .chain_err_summary(|| {
-                            "Could not decode `server_password` from base64. Is the value correct?"
+                            "Could not decode `password` from base64. Is the value correct?"
                         })
                         .chain_err_kind(ErrorKind::Configuration)?;
                     ret.send_command(CommandBody::authenticate_with_ir(
@@ -673,8 +683,7 @@ impl ImapStream {
                     ret.send_command(CommandBody::authenticate(AuthMechanism::XOAuth2))
                         .await?;
                     ret.wait_for_continuation_request().await?;
-                    ret.send_literal(server_conf.server_password.as_bytes())
-                        .await?;
+                    ret.send_literal(password.as_bytes()).await?;
                 }
             }
             ImapProtocol::IMAP {
@@ -685,9 +694,8 @@ impl ImapStream {
                     .any(|cap| cap.eq_ignore_ascii_case(b"AUTH=ANONYMOUS"))
                 {
                     return Err(Error::new(format!(
-                        "Could not connect to {}: AUTH=ANONYMOUS is enabled but server did not \
-                         return AUTH=ANONYMOUS capability. Returned capabilities were: {}",
-                        server_conf.server_hostname,
+                        "Could not connect to {hostname}: AUTH=ANONYMOUS is enabled but server \
+                         did not return AUTH=ANONYMOUS capability. Returned capabilities were: {}",
                         capabilities
                             .iter()
                             .map(|capability| String::from_utf8_lossy(capability).to_string())
@@ -704,10 +712,15 @@ impl ImapStream {
                 .iter()
                 .any(|cap| cap.eq_ignore_ascii_case(b"AUTH=PLAIN")) =>
             {
-                let credentials = format!(
-                    "\0{}\0{}",
-                    server_conf.server_username, server_conf.server_password
-                );
+                let username = server_conf
+                    .username
+                    .value_with_timeout(server_conf.timeout.unwrap_or(Duration::from_millis(100)))
+                    .await?;
+                let password = server_conf
+                    .password
+                    .value_with_timeout(server_conf.timeout.unwrap_or(Duration::from_millis(100)))
+                    .await?;
+                let credentials = format!("\0{username}\0{password}");
                 if has_sasl_ir {
                     ret.send_command(CommandBody::authenticate_with_ir(
                         AuthMechanism::Plain,
@@ -728,16 +741,23 @@ impl ImapStream {
                     .any(|cap| cap.eq_ignore_ascii_case(b"LOGINDISABLED"))
                 {
                     return Err(Error::new(format!(
-                        "Could not connect to {}: server does not accept the LOGIN command \
-                         [LOGINDISABLED]",
-                        server_conf.server_hostname
+                        "Could not connect to {hostname}: server does not accept the LOGIN \
+                         command [LOGINDISABLED]",
                     ))
                     .set_kind(ErrorKind::Authentication));
                 }
-                let username = AString::try_from(server_conf.server_username.as_str())
-                    .chain_err_kind(ErrorKind::Bug)?;
-                let password = AString::try_from(server_conf.server_password.as_str())
-                    .chain_err_kind(ErrorKind::Bug)?;
+                let username = server_conf
+                    .username
+                    .value_with_timeout(server_conf.timeout.unwrap_or(Duration::from_millis(100)))
+                    .await?;
+                let password = server_conf
+                    .password
+                    .value_with_timeout(server_conf.timeout.unwrap_or(Duration::from_millis(100)))
+                    .await?;
+                let username =
+                    AString::try_from(username.as_str()).chain_err_kind(ErrorKind::Bug)?;
+                let password =
+                    AString::try_from(password.as_str()).chain_err_kind(ErrorKind::Bug)?;
 
                 ret.send_command(CommandBody::Login {
                     username,
@@ -755,7 +775,7 @@ impl ImapStream {
             for l in res.split_rn() {
                 if l.starts_with(b"* CAPABILITY") {
                     got_new_capabilities = true;
-                    capabilities.extend(parse_capabilities(l, &server_conf.server_hostname)?);
+                    capabilities.extend(parse_capabilities(l, &hostname)?);
                 }
 
                 if l.starts_with(tag_start.as_bytes()) {
@@ -779,7 +799,7 @@ impl ImapStream {
             // check for lazy servers.
             ret.send_command(CommandBody::Capability).await?;
             ret.read_response(&mut res).await?;
-            capabilities.extend(parse_capabilities(&res, &server_conf.server_hostname)?);
+            capabilities.extend(parse_capabilities(&res, &hostname)?);
         }
 
         if matches!(

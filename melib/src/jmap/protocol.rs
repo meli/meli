@@ -40,7 +40,7 @@ use crate::{
         filters::Filter,
         methods::{Get, GetResponse, MethodResponse, Query},
         objects::{Object, State},
-        JmapConnection, Store,
+        JmapClient, JmapConnection, Store,
     },
     Flag, MailboxHash,
 };
@@ -115,13 +115,10 @@ pub enum EmailFetchState {
 }
 
 impl EmailFetcher {
-    pub async fn must_update_state(
-        conn: &JmapConnection,
-        state: State<EmailObject>,
-    ) -> Result<bool> {
+    pub async fn must_update_state(client: &JmapClient, state: State<EmailObject>) -> Result<bool> {
         {
             let (is_empty, is_equal) = {
-                let current_state_lck = conn.store.email_state.lock().await;
+                let current_state_lck = client.store.email_state.lock().await;
                 (
                     current_state_lck.is_none(),
                     current_state_lck.as_ref() == Some(&state),
@@ -129,10 +126,10 @@ impl EmailFetcher {
             };
             if is_empty {
                 debug!("{:?}: inserting state {}", EmailObject::NAME, &state);
-                *conn.store.email_state.lock().await = Some(state);
+                *client.store.email_state.lock().await = Some(state);
             } else if !is_equal {
-                if let Some(ev) = conn.email_changed(Some(state)).await? {
-                    conn.add_backend_event(ev);
+                if let Some(ev) = client.email_changed(Some(state)).await? {
+                    client.add_backend_event(ev);
                 }
             }
             Ok(is_empty || !is_equal)
@@ -148,8 +145,9 @@ impl EmailFetcher {
                 }
                 EmailFetchState::Ongoing { mut position } => {
                     let mut conn = self.connection.lock().await;
-                    conn.connect().await?;
-                    let mail_account_id = conn.session_guard().await?.mail_account_id();
+                    let client = conn.client().await?;
+                    client.connect().await?;
+                    let mail_account_id = client.session_guard().await?.mail_account_id();
                     let mailbox_id = self.store.mailboxes.read().unwrap()[&mailbox_hash]
                         .id
                         .clone();
@@ -164,7 +162,7 @@ impl EmailFetcher {
                     )
                     .collapse_threads(false);
 
-                    let mut req = Request::new(conn.request_no.clone());
+                    let mut req = Request::new(client.request_no.clone());
                     let prev_seq = req.add_call(&email_query_call);
 
                     let email_call: EmailGet = EmailGet::new(
@@ -180,10 +178,10 @@ impl EmailFetcher {
                     );
 
                     let _prev_seq = req.add_call(&email_call);
-                    let res_text = conn.send_request(serde_json::to_string(&req)?).await?;
+                    let res_text = client.send_request(serde_json::to_string(&req)?).await?;
                     let mut v: MethodResponse = match deserialize_from_str(&res_text) {
                         Err(err) => {
-                            _ = conn.store.online_status.set(None, Err(err.clone())).await;
+                            _ = client.store.online_status.set(None, Err(err.clone())).await;
                             return Err(err);
                         }
                         Ok(v) => v,
@@ -193,7 +191,7 @@ impl EmailFetcher {
                         GetResponse::<EmailObject>::try_from(v.method_responses.pop().unwrap())?;
                     let GetResponse::<EmailObject> { list, state, .. } = e;
 
-                    if Self::must_update_state(&conn, state).await? {
+                    if Self::must_update_state(client, state).await? {
                         self.state = EmailFetchState::Start;
                         continue;
                     }

@@ -146,7 +146,6 @@ use notify::{event::EventKind as NotifyEvent, RecommendedWatcher, RecursiveMode,
 use crate::{
     backends::prelude::*,
     email::{parser::BytesExt, *},
-    error::{Error, ErrorKind, Result, WrapResultIntoError},
     text::Truncate,
     utils::{lock::*, shellexpand::ShellExpandTrait},
 };

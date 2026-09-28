@@ -29,11 +29,7 @@ use std::{
 };
 
 use super::{Configuration, HashIndex};
-use crate::{
-    backends::prelude::*,
-    error::{Error, Result, ResultIntoError},
-    utils::shellexpand::ShellExpandTrait,
-};
+use crate::{backends::prelude::*, utils::shellexpand::ShellExpandTrait};
 
 type HashIndexes = Arc<Mutex<HashMap<MailboxHash, HashIndex>>>;
 

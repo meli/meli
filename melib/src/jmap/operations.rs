@@ -60,12 +60,13 @@ impl JmapOp {
         }
         let blob_id = self.store.blob_id_store.lock().await[&self.hash].clone();
         let mut conn = self.connection.lock().await;
-        conn.connect().await?;
+        let client = conn.client().await?;
+        client.connect().await?;
         let (download_url, mail_account_id) = {
-            let g = self.store.online_status.session_guard().await?;
+            let g = client.session_guard().await?;
             (g.download_url.clone(), g.mail_account_id())
         };
-        let res_text = conn
+        let res_text = client
             .get_async(&download_request_format(
                 &download_url,
                 &mail_account_id,

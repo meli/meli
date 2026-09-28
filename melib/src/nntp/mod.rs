@@ -49,15 +49,13 @@ pub use connection::*;
 use crate::{
     backends::prelude::*,
     email::{address::MessageID, Mail},
-    error::{Error, ErrorKind, Result, ResultIntoError},
     parser::BytesExt,
-    utils::futures::timeout,
 };
 pub type UID = usize;
 
 macro_rules! get_conf_val {
-    ($s:ident[$var:literal]) => {
-        $s.deserialize_extra_field::<_>($var)
+    ($s:ident[$var:literal]: $t:ty) => {
+        $s.deserialize_extra_field::<$t>($var)
             .and_then(|opt| {
                 opt.map(Ok)
                     .ok_or_else(|| Error::new($var).set_kind(ErrorKind::NotFound))?
@@ -107,16 +105,16 @@ pub static SUPPORTED_CAPABILITIES: &[&str] = &[
 
 #[derive(Clone, Debug)]
 pub struct NntpServerConf {
-    pub server_hostname: String,
-    pub server_username: String,
-    pub server_password: String,
-    pub server_port: u16,
+    pub hostname: Secret,
+    pub username: Secret,
+    pub password: Secret,
+    pub port: u16,
     pub use_starttls: bool,
     pub use_tls: bool,
     pub require_auth: bool,
     pub danger_accept_invalid_certs: bool,
     pub extension_use: NntpExtensionUse,
-    pub timeout_dur: Option<Duration>,
+    pub timeout: Option<Duration>,
 }
 
 type Capabilities = HashSet<String>;
@@ -264,7 +262,7 @@ impl MailBackend for NntpType {
         let is_online_fut = self.is_online()?;
         let uid_store = self.uid_store.clone();
         let connection = self.connection.clone();
-        let timeout_dur = self.server_conf.timeout_dur;
+        let timeout = self.server_conf.timeout;
         Ok(Box::pin(async move {
             is_online_fut.await?;
             // To get updates, either issue NEWNEWS if it's supported by the server, and
@@ -291,7 +289,7 @@ impl MailBackend for NntpType {
                 )
             };
             let mut res = String::with_capacity(8 * 1024);
-            let mut conn = timeout(timeout_dur, connection.lock()).await?;
+            let mut conn = crate::utils::futures::timeout(timeout, connection.lock()).await?;
             if let Some(mut latest_article) = latest_article {
                 let mut unseen = LazyCountSet::new();
                 let timestamp = latest_article - 10 * 60;
@@ -374,10 +372,10 @@ impl MailBackend for NntpType {
         let is_online_fut = self.is_online()?;
         let uid_store = self.uid_store.clone();
         let connection = self.connection.clone();
-        let timeout_dur = self.server_conf.timeout_dur;
+        let timeout = self.server_conf.timeout;
         Ok(Box::pin(async move {
             is_online_fut.await?;
-            Self::nntp_mailboxes(&connection, timeout_dur).await?;
+            Self::nntp_mailboxes(&connection, timeout).await?;
             let mailboxes_lck = uid_store.mailboxes.lock().await;
             let ret = mailboxes_lck
                 .iter()
@@ -389,10 +387,10 @@ impl MailBackend for NntpType {
 
     fn is_online(&mut self) -> ResultFuture<()> {
         let connection = self.connection.clone();
-        let timeout_dur = self.server_conf.timeout_dur;
+        let timeout = self.server_conf.timeout;
         Ok(Box::pin(async move {
-            let mut conn = timeout(timeout_dur, connection.lock()).await?;
-            match timeout(timeout_dur, conn.connect()).await {
+            let mut conn = crate::utils::futures::timeout(timeout, connection.lock()).await?;
+            match crate::utils::futures::timeout(timeout, conn.connect()).await {
                 Ok(Ok(())) => Ok(()),
                 Err(err) | Ok(Err(err)) => {
                     conn.stream = Err(err.clone());
@@ -599,10 +597,10 @@ impl MailBackend for NntpType {
     ) -> ResultFuture<()> {
         let is_online_fut = self.is_online()?;
         let connection = self.connection.clone();
-        let timeout_dur = self.server_conf.timeout_dur;
+        let timeout = self.server_conf.timeout;
         Ok(Box::pin(async move {
             is_online_fut.await?;
-            let mut conn = timeout(timeout_dur, connection.lock()).await?;
+            let mut conn = crate::utils::futures::timeout(timeout, connection.lock()).await?;
             let stream = conn.stream.as_ref()?;
             if !stream.supports_submission {
                 return Err(
@@ -670,13 +668,23 @@ impl NntpType {
         is_subscribed: IsSubscribedFn,
         event_consumer: BackendEventConsumer,
     ) -> Result<Box<Self>> {
-        let server_hostname = get_conf_val!(s["server_hostname"])?;
-        let server_port = get_conf_val!(s["server_port"], 119)?;
-        let use_tls = get_conf_val!(s["use_tls"], server_port == 563)?;
+        let require_auth = get_conf_val!(s["require_auth"], false)?;
+        let mut hostname = get_conf_val!(s["server_hostname"]: Secret)?;
+        let mut username = if require_auth {
+            get_conf_val!(s["server_username"]: Secret)?
+        } else {
+            get_conf_val!(s["server_username"], Secret::Value(String::new()))?
+        };
+        let mut password = if require_auth {
+            get_conf_val!(s["server_password"]: Secret)?
+        } else {
+            get_conf_val!(s["server_password"], Secret::Value(String::new()))?
+        };
+        let port = get_conf_val!(s["server_port"], 119)?;
+        let use_tls = get_conf_val!(s["use_tls"], port == 563)?;
         let use_starttls = use_tls && get_conf_val!(s["use_starttls"], false)?;
         let danger_accept_invalid_certs: bool =
             get_conf_val!(s["danger_accept_invalid_certs"], false)?;
-        let require_auth = get_conf_val!(s["require_auth"], false)?;
         let store_flags_locally = get_conf_val!(s["store_flags_locally"], true)?;
         #[cfg(not(feature = "sqlite3"))]
         if store_flags_locally {
@@ -687,7 +695,7 @@ impl NntpType {
             )));
         }
 
-        let timeout_dur = {
+        let timeout = {
             let timeout = get_conf_val!(s["timeout"], 16_u64)?;
             if timeout == 0 {
                 None
@@ -695,30 +703,25 @@ impl NntpType {
                 Some(Duration::from_secs(timeout))
             }
         };
+        for secret in [&mut hostname, &mut password, &mut username] {
+            secret
+                .prepopulate(timeout)
+                .chain_err_summary(|| format!("{}: NNTP backend creation failed", s.name.as_str()))
+                .chain_err_kind(ErrorKind::Configuration)?;
+        }
         let server_conf = NntpServerConf {
-            server_hostname,
-            server_username: if require_auth {
-                get_conf_val!(s["server_username"])?
-            } else {
-                get_conf_val!(s["server_username"], String::new())?
-            },
-            server_password: if require_auth
-                || s.extra.contains_key("server_password")
-                || s.extra.contains_key("server_password_command")
-            {
-                s.server_password()?
-            } else {
-                get_conf_val!(s["server_password"], String::new())?
-            },
+            hostname,
+            username,
+            password,
             require_auth,
-            server_port,
+            port,
             use_tls,
             use_starttls,
             danger_accept_invalid_certs,
             extension_use: NntpExtensionUse {
                 deflate: get_conf_val!(s["use_deflate"], true)?,
             },
-            timeout_dur,
+            timeout,
         };
         let account_hash = AccountHash::from_bytes(s.name.as_bytes());
         let account_name = s.name.to_string().into();
@@ -765,10 +768,10 @@ impl NntpType {
 
     pub async fn nntp_mailboxes(
         connection: &Arc<FutureMutex<NntpConnection>>,
-        timeout_dur: Option<Duration>,
+        timeout: Option<Duration>,
     ) -> Result<()> {
         let mut res = String::with_capacity(8 * 1024);
-        let mut conn = timeout(timeout_dur, connection.lock()).await?;
+        let mut conn = crate::utils::futures::timeout(timeout, connection.lock()).await?;
         let mut mailboxes = {
             let mailboxes_lck = conn.uid_store.mailboxes.lock().await;
             mailboxes_lck
@@ -876,35 +879,34 @@ impl NntpType {
             ))
             .set_kind(ErrorKind::Configuration));
         }
-        s.validator::<bool>("require_auth", "bool")
-            .ignore_missing()?;
-        s.validator::<String>("server_hostname", "string")
+        let require_auth = s
+            .validator::<bool>("require_auth", "bool")
+            .default_value(false)
             .validate()?;
-        s.validator::<String>("server_username", "string")
-            .ignore_missing()?;
-        if !s.extra.contains_key("server_password_command") {
-            s.validator::<String>("server_password", "string")
+        s.validator::<Secret>("server_hostname", "Secret")
+            .validate()?;
+        if require_auth {
+            s.validator::<Secret>("server_username", "Secret")
+                .validate()?;
+            s.validator::<Secret>("server_password", "Secret")
+                .validate()?;
+        } else {
+            s.validator::<Secret>("server_username", "Secret")
                 .ignore_missing()?;
-        } else if s.extra.contains_key("server_password") {
-            return Err(Error::new(format!(
-                "{}: both server_password and server_password_command are set, cannot choose",
-                s.name.as_str(),
-            ))
-            .set_kind(ErrorKind::Configuration));
+            s.validator::<Secret>("server_password", "Secret")
+                .ignore_missing()?;
         }
-        s.validator::<String>("server_password_command", "string")
-            .ignore_missing()?;
-        let server_port = s
+        let port = s
             .validator::<u16>("server_port", "u16")
             .default_value(119)
             .validate()?;
         let use_tls = s
             .validator::<bool>("use_tls", "bool")
-            .default_value(server_port == 563)
+            .default_value(port == 563)
             .validate()?;
         let use_starttls = s
             .validator::<bool>("use_starttls", "bool")
-            .default_value(server_port != 563)
+            .default_value(port != 563)
             .validate()?;
         if !use_tls && use_starttls {
             return Err(Error::new(format!(
@@ -946,10 +948,10 @@ impl NntpType {
         msg_id: MessageID,
     ) -> ResultFuture<Mail> {
         let connection = self.connection.clone();
-        let timeout_dur = self.server_conf.timeout_dur;
+        let timeout = self.server_conf.timeout;
         Ok(Box::pin(async move {
-            let mut conn = timeout(timeout_dur, connection.lock()).await?;
-            timeout(timeout_dur, conn.connect()).await??;
+            let mut conn = crate::utils::futures::timeout(timeout, connection.lock()).await?;
+            crate::utils::futures::timeout(timeout, conn.connect()).await??;
             let mut res = String::with_capacity(8 * 1024);
             conn.select_group(mailbox_hash, false, &mut res).await?;
             conn.send_command(format!("ARTICLE {}", msg_id.display_brackets()).as_bytes())

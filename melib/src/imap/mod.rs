@@ -115,10 +115,10 @@ pub struct EnvelopeCache {
 
 #[derive(Clone, Debug)]
 pub struct ImapServerConf {
-    pub server_hostname: String,
-    pub server_username: String,
-    pub server_password: String,
-    pub server_port: u16,
+    pub hostname: Secret,
+    pub username: Secret,
+    pub password: Secret,
+    pub port: u16,
     pub use_starttls: bool,
     pub use_tls: bool,
     pub danger_accept_invalid_certs: bool,
@@ -1443,27 +1443,23 @@ impl ImapType {
         is_subscribed: IsSubscribedFn,
         event_consumer: BackendEventConsumer,
     ) -> Result<Box<Self>> {
-        let server_hostname: String = get_conf_val!(s["server_hostname"])?;
-        let server_username: String = get_conf_val!(s["server_username"])?;
+        let mut hostname: Secret = get_conf_val!(s["server_hostname"])?;
+        let mut username: Secret = get_conf_val!(s["server_username"])?;
+        let mut password: Secret = get_conf_val!(s["server_password"])?;
         let use_oauth2: bool = get_conf_val!(s["use_oauth2"], false)?;
 
-        if use_oauth2
-            && !s.extra.contains_key("server_password_command")
-            && !s.extra.contains_key("server_password")
-        {
+        if use_oauth2 && !s.extra.contains_key("server_password") {
             return Err(Error::new(format!(
-                "({}) `use_oauth2` use requires either `server_password` set or \
-                 `server_password_command` set with a command that returns an OAUTH2 token. \
-                 Consult documentation for guidance.",
+                "({}) `use_oauth2` use requires either `server_password` set with a command that \
+                 returns an OAUTH2 token. Consult documentation for guidance.",
                 s.name,
             ))
             .set_kind(ErrorKind::Configuration));
         }
 
-        let server_password = s.server_password()?;
-        let server_port = get_conf_val!(s["server_port"], 143)?;
+        let port = get_conf_val!(s["server_port"], 143)?;
         let use_tls = get_conf_val!(s["use_tls"], true)?;
-        let use_starttls = use_tls && get_conf_val!(s["use_starttls"], server_port != 993)?;
+        let use_starttls = use_tls && get_conf_val!(s["use_starttls"], port != 993)?;
         let danger_accept_invalid_certs: bool =
             get_conf_val!(s["danger_accept_invalid_certs"], false)?;
         #[cfg(feature = "sqlite3")]
@@ -1483,12 +1479,18 @@ impl ImapType {
         } else {
             Some(Duration::from_secs(timeout))
         };
+        for secret in [&mut hostname, &mut password, &mut username] {
+            secret
+                .prepopulate(timeout)
+                .chain_err_summary(|| format!("{}: IMAP backend creation failed", s.name.as_str()))
+                .chain_err_kind(ErrorKind::Configuration)?;
+        }
         let use_connection_pool = get_conf_val!(s["use_connection_pool"], true)?;
         let server_conf = ImapServerConf {
-            server_hostname,
-            server_username,
-            server_password,
-            server_port,
+            hostname,
+            username,
+            password,
+            port,
             use_tls,
             use_starttls,
             danger_accept_invalid_certs,
@@ -1705,39 +1707,24 @@ impl ImapType {
     }
 
     pub fn validate_config(s: &mut AccountSettings) -> Result<()> {
-        s.validator::<String>("server_hostname", "string")
+        s.validator::<Secret>("server_hostname", "Secret")
             .validate()?;
-        s.validator::<String>("server_username", "string")
+        s.validator::<Secret>("server_username", "Secret")
             .validate()?;
         let use_oauth2: bool = s
             .validator::<bool>("use_oauth2", "bool")
             .default_value(false)
             .validate()?;
-        if use_oauth2
-            && !s.extra.contains_key("server_password_command")
-            && !s.extra.contains_key("server_password")
-        {
+        if use_oauth2 && !s.extra.contains_key("server_password") {
             return Err(Error::new(format!(
-                "{}: `use_oauth2` use requires either `server_password` set or \
-                 `server_password_command` set with a command that returns an OAUTH2 token. \
-                 Consult documentation for guidance.",
+                "{}: `use_oauth2` use requires either `server_password` set with a command that \
+                 returns an OAUTH2 token. Consult documentation for guidance.",
                 s.name,
             ))
             .set_kind(ErrorKind::Configuration));
         }
-        if !s.extra.contains_key("server_password_command") {
-            s.validator::<String>("server_password", "string")
-                .validate()?;
-        } else if s.extra.contains_key("server_password") {
-            return Err(Error::new(format!(
-                "{}: both server_password and server_password_command are set, cannot choose",
-                s.name.as_str(),
-            ))
-            .set_kind(ErrorKind::Configuration));
-        } else {
-            s.validator::<String>("server_password_command", "string")
-                .validate()?;
-        }
+        s.validator::<Secret>("server_password", "Secret")
+            .ignore_missing()?;
         s.validator::<u16>("server_port", "u16").ignore_missing()?;
         let use_tls = s
             .validator::<bool>("use_tls", "bool")

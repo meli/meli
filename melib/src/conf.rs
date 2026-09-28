@@ -47,6 +47,7 @@ pub trait ExtraSetting: serde::de::DeserializeOwned {
 
 impl<'a> ExtraSetting for Cow<'a, str> {}
 impl ExtraSetting for String {}
+impl ExtraSetting for field_types::Secret {}
 
 macro_rules! impl_extra_setting_from_str {
     ($($t:ty),*$(,)?) => {
@@ -67,8 +68,6 @@ macro_rules! impl_extra_setting_from_str {
 }
 
 impl_extra_setting_from_str! { bool, u16, u64 }
-#[cfg(feature = "http")]
-impl_extra_setting_from_str! { url::Url }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct AccountSettings {
@@ -157,39 +156,6 @@ impl AccountSettings {
 
     pub fn mutt_alias_file(&self) -> Result<Option<Cow<'_, str>>> {
         self.extra_field_as_str("mutt_alias_file")
-    }
-
-    /// Get the server password, either directly from the `server_password`
-    /// settings value, or by running the `server_password_command` and reading
-    /// the output.
-    pub fn server_password(&self) -> Result<String> {
-        if let Some(cmd) = self.extra_field_as_str("server_password_command")? {
-            let output = std::process::Command::new("sh")
-                .args(["-c", &cmd])
-                .stdin(std::process::Stdio::piped())
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .output()?;
-
-            if output.status.success() {
-                Ok(std::str::from_utf8(&output.stdout)?.trim_end().to_string())
-            } else {
-                Err(Error::new(format!(
-                    "({}) server_password_command `{}` returned {}: {}",
-                    self.name,
-                    cmd,
-                    output.status,
-                    String::from_utf8_lossy(&output.stderr)
-                )))
-            }
-        } else if let Some(pass) = self.extra_field_as_str("server_password")? {
-            Ok(pass.into_owned())
-        } else {
-            Err(Error::new(
-                "Configuration error: connection requires either server_password or \
-                 server_password_command",
-            ))
-        }
     }
 
     pub fn validator<'a, D: ExtraSetting>(

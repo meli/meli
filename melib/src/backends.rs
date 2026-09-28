@@ -54,9 +54,12 @@ pub mod prelude {
         RefreshEventKind, TagHash,
     };
     pub use crate::{
-        conf::AccountSettings,
+        conf::{AccountSettings, Secret},
         email::{Envelope, EnvelopeHash, Flag},
-        error::{Error, ErrorKind, NetworkErrorKind, Result},
+        error::{
+            Error, ErrorKind, IntoError, NetworkErrorKind, Result, ResultIntoError,
+            WrapResultIntoError,
+        },
         search::Query,
         Collection, HeaderName, LogLevel, SpecialUsageMailbox,
     };

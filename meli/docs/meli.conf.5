@@ -408,18 +408,14 @@ format = "notmuch"
 .Em IMAP
 specific options are:
 .Bl -tag -width 36n
-.It Ic server_hostname Ar String
+.It Ic server_hostname Ar Secret
 example:
 .Qq mail.example.com
-.It Ic server_username Ar String
+.It Ic server_username Ar Secret
 Server username
-.It Ic server_password Ar String
+.It Ic server_password Ar Secret
 Server password
-.It Ic server_password_command Ar String
-.Pq Em optional
-Use instead of
-.Ic server_password
-.It Ic server_port Ar number
+.It Ic server_port Ar 16\-bit number
 .Pq Em optional
 The port to connect to
 .Pq Em 143 \" default value
@@ -482,9 +478,9 @@ support
 Use
 .Em OAUTH2
 authentication.
-Can only be used with
-.Ic server_password_command
-which should return a base64-encoded
+Can be used with
+.Ic server_password
+that returns a base64-encoded
 .Em OAUTH2
 token ready to be passed to
 .Em IMAP Ns
@@ -585,7 +581,7 @@ and follow the instructions.
 Note down the refresh token.
 .It
 In
-.Ic server_password_command
+.Ic server_password
 enter a command like this
 .Pq after adjusting binary paths and credentials Ns
 :
@@ -607,7 +603,7 @@ format = "imap"
 server_hostname='imap.gmail.com'
 server_username="username@gmail.com"
 use_oauth2 = true
-server_password_command = "TOKEN=$(py...th2_string --quiet --access_token=$TOKEN"
+server_password = { command = "..." }
 server_port="993"
 listing.index_style = "Conversations"
 identity = "username@gmail.com"
@@ -622,19 +618,15 @@ composing.store_sent_mail = false
 .Em JMAP
 specific options
 .Bl -tag -width 36n
-.It Ic server_url Ar String
+.It Ic server_url Ar Secret
 example:
 .Qq http://mail.example.com
 .Qq http://mail.example.com:8080
 .Qq https://mail.example.com
-.It Ic server_username Ar String
+.It Ic server_username Ar Secret
 Server username
-.It Ic server_password Ar String
+.It Ic server_password Ar Secret
 Server password
-.It Ic server_password_command Ar String
-.Pq Em optional
-Use instead of
-.Ic server_password
 .It Ic use_token Ar boolean
 Authenticate using the API Bearer token method.
 If enabled, the token value must be provided as the configured password.
@@ -707,12 +699,12 @@ mailboxes."Python mailing list" = { path = "~/.mail/python.mbox", subscribe = tr
 .Em NNTP
 specific options
 .Bl -tag -width 36n
-.It Ic server_hostname Ar String
+.It Ic server_hostname Ar Secret
 example:
 .Qq nntp.example.com
-.It Ic server_username Ar String
+.It Ic server_username Ar Secret
 Server username
-.It Ic server_password Ar String
+.It Ic server_password Ar Secret
 Server password
 .It Ic require_auth Ar boolean
 .Pq Em optional

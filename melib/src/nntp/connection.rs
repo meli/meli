@@ -27,7 +27,13 @@ use crate::{
     utils::connections::{std_net::connect as tcp_stream_connect, Connection},
 };
 extern crate native_tls;
-use std::{collections::HashSet, future::Future, pin::Pin, sync::Arc, time::Instant};
+use std::{
+    collections::HashSet,
+    future::Future,
+    pin::Pin,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use futures::io::{AsyncReadExt, AsyncWriteExt};
 use native_tls::TlsConnector;
@@ -73,10 +79,13 @@ pub struct NntpConnection {
 
 impl NntpStream {
     pub async fn new_connection(server_conf: &NntpServerConf) -> Result<(Capabilities, Self)> {
-        let path = &server_conf.server_hostname;
+        let hostname = server_conf
+            .hostname
+            .value_with_timeout(server_conf.timeout.unwrap_or(Duration::from_millis(100)))
+            .await?;
 
         let stream = {
-            let addr = (path.as_str(), server_conf.server_port);
+            let addr = (hostname.as_str(), server_conf.port);
             AsyncWrapper::new({
                 let conn = Connection::new_tcp(tcp_stream_connect(
                     addr,
@@ -117,8 +126,8 @@ impl NntpStream {
                     .await?;
                 if !res.starts_with("101 ") {
                     return Err(Error::new(format!(
-                        "Could not connect to {}: expected CAPABILITIES response but got: {res}",
-                        server_conf.server_hostname
+                        "Could not connect to {hostname}: expected CAPABILITIES response but got: \
+                         {res}",
                     ))
                     .set_kind(ErrorKind::ProtocolError));
                 }
@@ -129,8 +138,7 @@ impl NntpStream {
                     .any(|cap| cap.eq_ignore_ascii_case("VERSION 2"))
                 {
                     return Err(Error::new(format!(
-                        "Could not connect to {}: server is not NNTP VERSION 2 compliant",
-                        server_conf.server_hostname
+                        "Could not connect to {hostname}: server is not NNTP VERSION 2 compliant",
                     ))
                     .set_kind(ErrorKind::ProtocolNotSupported));
                 }
@@ -139,9 +147,8 @@ impl NntpStream {
                     .any(|cap| cap.eq_ignore_ascii_case("STARTTLS"))
                 {
                     return Err(Error::new(format!(
-                        "Could not connect to {}: server does not support STARTTLS but it was \
-                         required by user configuration",
-                        server_conf.server_hostname
+                        "Could not connect to {hostname}: server does not support STARTTLS but it \
+                         was required by user configuration",
                     ))
                     .set_kind(ErrorKind::NotSupported));
                 }
@@ -151,14 +158,14 @@ impl NntpStream {
                     .await?;
                 if !res.starts_with("382 ") {
                     return Err(Error::new(format!(
-                        "Could not connect to {}: could not begin TLS negotiation, got: {res}",
-                        server_conf.server_hostname
+                        "Could not connect to {hostname}: could not begin TLS negotiation, got: \
+                         {res}",
                     )));
                 }
             }
 
             {
-                let path = Arc::new(path.to_string());
+                let path = Arc::new(hostname.to_string());
                 let conn = smol::unblock({
                     let socket = ret.stream.into_inner()?;
                     let path = Arc::clone(&path);
@@ -205,14 +212,6 @@ impl NntpStream {
                 .chain_err_summary(|| format!("Could not initiate TLS negotiation to {path}."))?;
             }
         }
-        //ret.send_command(
-        //    format!(
-        //        "LOGIN \"{}\" \"{}\"",
-        //        &server_conf.server_username, &server_conf.server_password
-        //    )
-        //    .as_bytes(),
-        //)
-        //.await?;
         if let Err(err) = ret
             .stream
             .get_ref()
@@ -229,8 +228,7 @@ impl NntpStream {
             .await?;
         if !res.starts_with("101 ") {
             return Err(Error::new(format!(
-                "Could not connect to {}: expected CAPABILITIES response but got: {res}",
-                server_conf.server_hostname
+                "Could not connect to {hostname}: expected CAPABILITIES response but got: {res}",
             )));
         }
         let capabilities: HashSet<String> =
@@ -240,8 +238,7 @@ impl NntpStream {
             .any(|cap| cap.eq_ignore_ascii_case("VERSION 2"))
         {
             return Err(Error::new(format!(
-                "Could not connect to {}: server is not NNTP compliant",
-                server_conf.server_hostname
+                "Could not connect to {hostname}: server is not NNTP compliant",
             )));
         }
         if !capabilities
@@ -253,19 +250,23 @@ impl NntpStream {
 
         if server_conf.require_auth {
             if capabilities.iter().any(|c| c.starts_with("AUTHINFO USER")) {
-                ret.send_command(
-                    format!("AUTHINFO USER {}", server_conf.server_username).as_bytes(),
-                )
-                .await?;
+                let username = server_conf
+                    .username
+                    .value_with_timeout(server_conf.timeout.unwrap_or(Duration::from_millis(100)))
+                    .await?;
+                let password = server_conf
+                    .password
+                    .value_with_timeout(server_conf.timeout.unwrap_or(Duration::from_millis(100)))
+                    .await?;
+                ret.send_command(format!("AUTHINFO USER {username}").as_bytes())
+                    .await?;
                 ret.read_response(&mut res, false, command_to_replycodes("AUTHINFO USER"))
                     .await
                     .chain_err_summary(|| format!("Authentication state error: {res}"))
                     .chain_err_kind(ErrorKind::Authentication)?;
                 if res.starts_with("381 ") {
-                    ret.send_command(
-                        format!("AUTHINFO PASS {}", server_conf.server_password).as_bytes(),
-                    )
-                    .await?;
+                    ret.send_command(format!("AUTHINFO PASS {password}").as_bytes())
+                        .await?;
                     ret.read_response(&mut res, false, command_to_replycodes("AUTHINFO PASS"))
                         .await
                         .chain_err_summary(|| format!("Authentication state error: {res}"))
@@ -286,9 +287,8 @@ impl NntpStream {
                 .await
                 .chain_err_summary(|| {
                     format!(
-                        "Could not use COMPRESS DEFLATE in account `{}`: server replied with \
+                        "Could not use COMPRESS DEFLATE with `{hostname}`: server replied with \
                          `{res}`",
-                        server_conf.server_hostname
                     )
                 })?;
             let Self {

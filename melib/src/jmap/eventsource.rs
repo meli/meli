@@ -33,7 +33,7 @@ use url::Url;
 
 use crate::{
     error::Result,
-    jmap::{url_template::event_source_request_format, JmapConnection, JmapServerConf, Store},
+    jmap::{url_template::event_source_request_format, JmapClient, JmapServerConf, Store},
 };
 
 /// A single Server-Sent Event.
@@ -183,7 +183,7 @@ impl Event {
 ///
 /// Read events by iterating over the client.
 pub struct EventSourceConnection {
-    pub client: Arc<HttpClient>,
+    pub http_client: Arc<HttpClient>,
     pub store: Arc<Store>,
     pub server_conf: JmapServerConf,
     url: Url,
@@ -192,17 +192,20 @@ pub struct EventSourceConnection {
 }
 
 impl EventSourceConnection {
-    pub async fn new(conn: &JmapConnection) -> Result<Self> {
+    pub async fn new(server_conf: JmapServerConf, store: Arc<Store>) -> Result<Self> {
+        let client = JmapClient::new(&server_conf, &store).await?;
         let url = {
-            let g = conn.session_guard().await?;
+            let g = client.session_guard().await?;
             g.event_source_url.clone()
         };
         let url = event_source_request_format(&url, "*", "no", "300")?;
 
+        let JmapClient { http_client, .. } = client;
+
         Ok(Self {
-            client: conn.client.clone(),
-            server_conf: conn.server_conf.clone(),
-            store: conn.store.clone(),
+            http_client,
+            server_conf,
+            store,
             url,
             last_event_id: None,
             retry: None,
@@ -230,27 +233,39 @@ impl EventSourceConnection {
                         isahc::config::SslOption::NONE
                     })
                     .redirect_policy(RedirectPolicy::Limit(10));
+                let username = self
+                    .server_conf
+                    .username
+                    .value_with_timeout(
+                        self.server_conf
+                            .timeout
+                            .unwrap_or(Duration::from_millis(100)),
+                    )
+                    .await?;
+                let password = self
+                    .server_conf
+                    .password
+                    .value_with_timeout(
+                        self.server_conf
+                            .timeout
+                            .unwrap_or(Duration::from_millis(100)),
+                    )
+                    .await?;
                 request = if self.server_conf.use_token {
                     request
                         .authentication(isahc::auth::Authentication::none())
-                        .header(
-                            http::header::AUTHORIZATION,
-                            format!("Bearer {}", self.server_conf.server_password),
-                        )
+                        .header(http::header::AUTHORIZATION, format!("Bearer {password}"))
                 } else {
                     request
                         .authentication(isahc::auth::Authentication::basic())
-                        .credentials(isahc::auth::Credentials::new(
-                            &self.server_conf.server_username,
-                            &self.server_conf.server_password,
-                        ))
+                        .credentials(isahc::auth::Credentials::new(&username, &password))
                 };
                 if let Some(ref id) = self.last_event_id {
                     request = request.header("Last-Event-ID", id.as_str());
                 }
                 let request = request.body(()).map_err(|err| err.to_string())?;
 
-                let mut response = self.client.send_async(request).await?;
+                let mut response = self.http_client.send_async(request).await?;
                 // Check status code and Content-Type.
                 {
                     let status = response.status();

@@ -1147,7 +1147,7 @@ dependencies = [
 
 [[package]]
 name = "meli"
-version = "0.8.13"
+version = "0.9.0"
 dependencies = [
  "aho-corasick",
  "assert_cmd",
@@ -1181,6 +1181,7 @@ dependencies = [
  "tempfile",
  "termion",
  "toml",
+ "toml_edit",
  "xdg",
 ]
 

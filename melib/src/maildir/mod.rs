@@ -50,7 +50,6 @@ use utilities::{MaildirFilePathExt, MaildirMailbox, MaildirMailboxPathExt, Maild
 
 use crate::{
     backends::{prelude::*, RefreshEventKind::*},
-    error::{Error, ErrorKind, IntoError, Result, ResultIntoError},
     utils::shellexpand::ShellExpandTrait,
 };
 
