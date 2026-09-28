@@ -1347,27 +1347,38 @@ impl MailBackend for MboxType {
 
 macro_rules! get_conf_val {
     ($s:ident[$var:literal]) => {
-        $s.extra.get($var).ok_or_else(|| {
-            Error::new(format!(
-                "Configuration error ({}): mbox backend requires the field `{}` set",
-                $s.name.as_str(),
-                $var
-            ))
-        })
-    };
-    ($s:ident[$var:literal], $default:expr) => {
-        $s.extra
-            .get($var)
-            .map(|v| {
-                <_>::from_str(v).map_err(|e| {
+        $s.deserialize_extra_field::<_>($var)
+            .and_then(|opt| {
+                opt.map(Ok)
+                    .ok_or_else(|| Error::new($var).set_kind(ErrorKind::NotFound))?
+            })
+            .map_err(|err| {
+                if matches!(err.kind, ErrorKind::NotFound) {
                     Error::new(format!(
-                        "Configuration error ({}): Invalid value for field `{}`: {v}\n{e}",
+                        "{}: mbox backend requires the field `{}` set",
                         $s.name.as_str(),
                         $var
                     ))
-                })
+                    .set_kind(ErrorKind::Configuration)
+                } else {
+                    err.set_summary(format!(
+                        "{}: mbox backend has invalid configuration",
+                        $s.name.as_str(),
+                    ))
+                    .set_kind(ErrorKind::Configuration)
+                }
             })
-            .unwrap_or_else(|| Ok($default))
+    };
+    ($s:ident[$var:literal], $default:expr) => {
+        $s.deserialize_extra_field::<_>($var)
+            .map_err(|err| {
+                err.set_summary(format!(
+                    "{}: mbox backend has invalid configuration",
+                    $s.name.as_str(),
+                ))
+                .set_kind(ErrorKind::Configuration)
+            })
+            .map(|opt| opt.unwrap_or_else(|| $default))
     };
 }
 
@@ -1514,31 +1525,6 @@ impl MboxType {
     }
 
     pub fn validate_config(s: &mut AccountSettings) -> Result<()> {
-        macro_rules! get_conf_val {
-            ($s:ident[$var:literal]) => {
-                $s.extra.swap_remove($var).ok_or_else(|| {
-                    Error::new(format!(
-                        "Configuration error ({}): mbox backend requires the field `{}` set",
-                        $s.name.as_str(),
-                        $var
-                    ))
-                })
-            };
-            ($s:ident[$var:literal], $default:expr) => {
-                $s.extra
-                    .swap_remove($var)
-                    .map(|v| {
-                        <_>::from_str(&v).map_err(|e| {
-                            Error::new(format!(
-                                "Configuration error ({}): Invalid value for field `{}`: {v}\n{e}",
-                                $s.name.as_str(),
-                                $var
-                            ))
-                        })
-                    })
-                    .unwrap_or_else(|| Ok($default))
-            };
-        }
         let path = Path::new(s.root_mailbox.as_str()).expand();
         if !path.try_exists().unwrap_or(false) {
             return Err(Error::new(format!(
@@ -1547,12 +1533,12 @@ impl MboxType {
                 s.name
             )));
         }
-        let prefer_mbox_type: Result<String> =
-            get_conf_val!(s["prefer_mbox_type"], "auto".to_string());
+        let prefer_mbox_type = s
+            .validator::<String>("prefer_mbox_type", "MboxFormat or auto")
+            .default_value("auto".to_string())
+            .validate()?;
 
-        let prefer_mbox_type = prefer_mbox_type?;
-        if prefer_mbox_type.as_str() == "auto" {
-        } else {
+        if prefer_mbox_type.as_str() != "auto" {
             MboxFormat::from_str(&prefer_mbox_type).wrap_err(|| {
                 format!(
                     "{} invalid `prefer_mbox_type` value: `{prefer_mbox_type}`",

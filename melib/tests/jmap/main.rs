@@ -1012,10 +1012,10 @@ mod tests {
             mailboxes: indexmap::indexmap! {},
             manual_refresh: false,
             extra: indexmap::indexmap! {
-                "server_url".to_string() => format!("http://{}:{}", local_addr.ip(), local_addr.port()),
-                "server_username".to_string() => "user".to_string(),
-                "server_password".to_string() => "password".to_string(),
-                "use_token".to_string() => "true".to_string(),
+                "server_url".to_string() => format!("http://{}:{}", local_addr.ip(), local_addr.port()).into(),
+                "server_username".to_string() => "user".to_string().into(),
+                "server_password".to_string() => "password".to_string().into(),
+                "use_token".to_string() => "true".to_string().into(),
             },
         };
 
@@ -1234,10 +1234,10 @@ hello world.
             mailboxes: indexmap::indexmap! {},
             manual_refresh: false,
             extra: indexmap::indexmap! {
-                "server_url".to_string() => format!("http://{}:{}", local_addr.ip(), local_addr.port()),
-                "server_username".to_string() => "user".to_string(),
-                "server_password".to_string() => "password".to_string(),
-                "use_token".to_string() => "true".to_string(),
+                "server_url".to_string() => format!("http://{}:{}", local_addr.ip(), local_addr.port()).into(),
+                "server_username".to_string() => "user".to_string().into(),
+                "server_password".to_string() => "password".to_string().into(),
+                "use_token".to_string() => "true".to_string().into(),
             },
         };
 

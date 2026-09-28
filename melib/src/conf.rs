@@ -22,7 +22,7 @@
 //! Basic mail account configuration to use with
 //! [`backends`](./backends/index.html)
 
-use std::path::Path;
+use std::{borrow::Cow, path::Path};
 
 use indexmap::IndexMap;
 
@@ -38,6 +38,37 @@ mod field_types;
 mod tests;
 
 pub use field_types::*;
+
+pub trait ExtraSetting: serde::de::DeserializeOwned {
+    fn deserialize_extra(value: &serde_json::Value) -> Result<Self> {
+        Ok(serde::de::Deserialize::deserialize(value.clone())?)
+    }
+}
+
+impl<'a> ExtraSetting for Cow<'a, str> {}
+impl ExtraSetting for String {}
+
+macro_rules! impl_extra_setting_from_str {
+    ($($t:ty),*$(,)?) => {
+        $(impl ExtraSetting for $t {
+            fn deserialize_extra(v: &serde_json::Value) -> Result<Self> {
+                Ok(serde::de::Deserialize::deserialize(v.clone()).or_else(|err| {
+                    if let Ok(s) = serde::de::Deserialize::deserialize(v.clone()) {
+                        let s: Cow<'_, str> = s;
+                        if let Ok(v) = <$t as std::str::FromStr>::from_str(s.as_ref()) {
+                            return Ok(v);
+                        }
+                    }
+                    Err(err)
+                })?)
+            }
+        })*
+    };
+}
+
+impl_extra_setting_from_str! { bool, u16, u64 }
+#[cfg(feature = "http")]
+impl_extra_setting_from_str! { url::Url }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct AccountSettings {
@@ -62,7 +93,7 @@ pub struct AccountSettings {
     #[serde(default)]
     pub manual_refresh: bool,
     #[serde(flatten)]
-    pub extra: IndexMap<String, String>,
+    pub extra: IndexMap<String, serde_json::Value>,
 }
 
 impl AccountSettings {
@@ -92,23 +123,49 @@ impl AccountSettings {
             .collect()
     }
 
-    pub fn vcard_folder(&self) -> Option<&str> {
-        self.extra.get("vcard_folder").map(String::as_str)
+    pub fn deserialize_extra_field<'de, 'a: 'de, D: ExtraSetting>(
+        &'a self,
+        extra_field: &str,
+    ) -> Result<Option<D>> {
+        let Some(v) = self.extra.get(extra_field) else {
+            return Ok(None);
+        };
+        <D>::deserialize_extra(v)
+            .map_err(|err| {
+                Error::new(format!(
+                    "Could not deserialize {extra_field} as {type_name}",
+                    type_name = std::any::type_name::<D>()
+                ))
+                .set_source(Some(crate::src_err_arc_wrap! { err }))
+                .set_kind(ErrorKind::Configuration)
+            })
+            .map(|v| Some(v))
     }
 
-    pub fn notmuch_address_book_query(&self) -> Option<&str> {
-        self.extra
-            .get("notmuch_address_book_query")
-            .map(String::as_str)
+    #[inline]
+    fn extra_field_as_str(&'_ self, extra_field: &str) -> Result<Option<Cow<'_, str>>> {
+        self.deserialize_extra_field::<Cow<'_, str>>(extra_field)
+    }
+
+    pub fn vcard_folder(&'_ self) -> Result<Option<Cow<'_, str>>> {
+        self.extra_field_as_str("vcard_folder")
+    }
+
+    pub fn notmuch_address_book_query(&self) -> Result<Option<Cow<'_, str>>> {
+        self.extra_field_as_str("notmuch_address_book_query")
+    }
+
+    pub fn mutt_alias_file(&self) -> Result<Option<Cow<'_, str>>> {
+        self.extra_field_as_str("mutt_alias_file")
     }
 
     /// Get the server password, either directly from the `server_password`
     /// settings value, or by running the `server_password_command` and reading
     /// the output.
     pub fn server_password(&self) -> Result<String> {
-        if let Some(cmd) = self.extra.get("server_password_command") {
+        if let Some(cmd) = self.extra_field_as_str("server_password_command")? {
             let output = std::process::Command::new("sh")
-                .args(["-c", cmd])
+                .args(["-c", &cmd])
                 .stdin(std::process::Stdio::piped())
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped())
@@ -125,8 +182,8 @@ impl AccountSettings {
                     String::from_utf8_lossy(&output.stderr)
                 )))
             }
-        } else if let Some(pass) = self.extra.get("server_password") {
-            Ok(pass.to_owned())
+        } else if let Some(pass) = self.extra_field_as_str("server_password")? {
+            Ok(pass.into_owned())
         } else {
             Err(Error::new(
                 "Configuration error: connection requires either server_password or \
@@ -135,10 +192,25 @@ impl AccountSettings {
         }
     }
 
+    pub fn validator<'a, D: ExtraSetting>(
+        &'a mut self,
+        extra_field: &'static str,
+        expected_type: &'static str,
+    ) -> FieldValidatorBuilder<'a, D, fn(&D) -> Result<()>> {
+        FieldValidatorBuilder {
+            inner: self,
+            extra_field,
+            expected_type,
+            validation_fn: None,
+            default_value: None,
+        }
+    }
+
     pub fn validate_config(&mut self) -> Result<()> {
         {
-            if let Some(folder) = self.extra.swap_remove("vcard_folder") {
-                let path = Path::new(&folder).expand();
+            if let Some(folder) = self.vcard_folder()? {
+                let path = Path::new(folder.as_ref()).expand();
+                _ = self.extra.swap_remove("vcard_folder");
 
                 if !matches!(path.try_exists(), Ok(true)) {
                     return Err(Error::new(format!(
@@ -157,11 +229,13 @@ impl AccountSettings {
                     .set_kind(ErrorKind::Configuration));
                 }
             }
+            self.notmuch_address_book_query()?;
             _ = self.extra.swap_remove("notmuch_address_book_query");
         }
         {
-            if let Some(mutt_alias_file) = self.extra.swap_remove("mutt_alias_file") {
-                let path = Path::new(&mutt_alias_file).expand();
+            if let Some(mutt_alias_file) = self.mutt_alias_file()? {
+                let path = Path::new(mutt_alias_file.as_ref()).expand();
+                _ = self.extra.swap_remove("mutt_alias_file");
 
                 if !matches!(path.try_exists(), Ok(true)) {
                     return Err(Error::new(format!(
@@ -238,4 +312,96 @@ pub const fn false_val() -> bool {
 
 pub const fn none<T>() -> Option<T> {
     None
+}
+
+#[must_use]
+pub struct FieldValidatorBuilder<'a, D: ExtraSetting, ValidationFn: FnOnce(&D) -> Result<()>> {
+    inner: &'a mut AccountSettings,
+    extra_field: &'static str,
+    expected_type: &'static str,
+    validation_fn: Option<ValidationFn>,
+    default_value: Option<D>,
+}
+
+impl<'a, D: ExtraSetting> FieldValidatorBuilder<'a, D, fn(&D) -> Result<()>> {
+    #[inline]
+    pub fn validation_fn<F: FnOnce(&D) -> Result<()>>(
+        self,
+        validation_fn: F,
+    ) -> FieldValidatorBuilder<'a, D, F> {
+        let Self {
+            inner,
+            extra_field,
+            expected_type,
+            validation_fn: _,
+            default_value,
+        } = self;
+        FieldValidatorBuilder::<'a, D, F> {
+            inner,
+            extra_field,
+            expected_type,
+            validation_fn: Some(validation_fn),
+            default_value,
+        }
+    }
+}
+
+impl<'a, D: ExtraSetting, ValidationFn: FnOnce(&D) -> Result<()>>
+    FieldValidatorBuilder<'a, D, ValidationFn>
+{
+    #[inline]
+    pub fn default_value(self, default_value: D) -> Self {
+        Self {
+            default_value: Some(default_value),
+            ..self
+        }
+    }
+
+    #[inline]
+    #[must_use = "A validation result must be inspected"]
+    pub fn ignore_missing(self) -> Result<Option<D>> {
+        self.validate().map(|v| Some(v)).or_else(|err| {
+            if matches!(err.kind, ErrorKind::NotFound) {
+                return Ok(None);
+            }
+            Err(err)
+        })
+    }
+
+    #[inline]
+    #[must_use = "A validation result must be inspected"]
+    pub fn validate(self) -> Result<D> {
+        let Self {
+            inner,
+            extra_field,
+            expected_type,
+            validation_fn,
+            default_value,
+        } = self;
+        let Some(raw_value) = inner.extra.swap_remove(extra_field) else {
+            if let Some(default_value) = default_value {
+                return Ok(default_value);
+            }
+            return Err(Error::new(format!(
+                "{name}: {format} backend requires field `{extra_field}` set",
+                name = inner.name,
+                format = inner.format
+            ))
+            .set_kind(ErrorKind::NotFound));
+        };
+        match <D>::deserialize_extra(&raw_value) {
+            Ok(v) => {
+                if let Some(validation_fn) = validation_fn {
+                    validation_fn(&v).map_err(|err| err.set_summary(inner.name.to_string()))?;
+                }
+                Ok(v)
+            }
+            Err(err) => Err(Error::new(format!(
+                "{name}: field `{extra_field}` expects value of type {expected_type}",
+                name = inner.name,
+            ))
+            .set_source(Some(crate::src_err_arc_wrap! { err }))
+            .set_kind(ErrorKind::Configuration)),
+        }
+    }
 }

@@ -89,7 +89,7 @@ fn new_maildir_backend(
         .collect(),
         manual_refresh: true,
         extra: indexmap::indexmap! {
-            "root_mailbox".into() => root_mailbox.display().to_string(),
+            "root_mailbox".into() => root_mailbox.display().to_string().into(),
         },
     };
 

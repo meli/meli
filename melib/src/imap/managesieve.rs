@@ -20,7 +20,6 @@
  */
 
 use std::{
-    str::FromStr,
     sync::{Arc, Mutex},
     time::SystemTime,
 };
@@ -58,10 +57,10 @@ impl ManageSieveConnection {
         s: &AccountSettings,
         event_consumer: crate::backends::BackendEventConsumer,
     ) -> Result<Self> {
-        let server_hostname = get_conf_val!(s["server_hostname"])?;
-        let server_username = get_conf_val!(s["server_username"])?;
-        let server_password = get_conf_val!(s["server_password"])?;
-        let server_port = get_conf_val!(s["server_port"], 4190)?;
+        let server_hostname: String = get_conf_val!(s["server_hostname"])?;
+        let server_username: String = get_conf_val!(s["server_username"])?;
+        let server_password: String = get_conf_val!(s["server_password"])?;
+        let server_port: u16 = get_conf_val!(s["server_port"], 4190)?;
         let danger_accept_invalid_certs: bool =
             get_conf_val!(s["danger_accept_invalid_certs"], false)?;
         let timeout = get_conf_val!(s["timeout"], 16_u64)?;
@@ -71,9 +70,9 @@ impl ManageSieveConnection {
             Some(std::time::Duration::from_secs(timeout))
         };
         let server_conf = ImapServerConf {
-            server_hostname: server_hostname.to_string(),
-            server_username: server_username.to_string(),
-            server_password: server_password.to_string(),
+            server_hostname,
+            server_username,
+            server_password,
             server_port,
             use_starttls: true,
             use_tls: true,

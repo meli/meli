@@ -1381,15 +1381,15 @@ mod tests {
             mailboxes: indexmap::indexmap! {},
             manual_refresh: false,
             extra: indexmap::indexmap! {
-                "server_hostname".to_string() => local_addr.ip().to_string(),
-                "server_username".to_string() => "user".to_string(),
-                "server_password".to_string() => "password".to_string(),
-                "server_port".to_string() => local_addr.port().to_string(),
-                "use_starttls".to_string() => "false".to_string(),
-                "use_tls".to_string() => "false".to_string(),
+                "server_hostname".to_string() => local_addr.ip().to_string().into(),
+                "server_username".to_string() => "user".to_string().into(),
+                "server_password".to_string() => "password".to_string().into(),
+                "server_port".to_string() => local_addr.port().to_string().into(),
+                "use_starttls".to_string() => "false".to_string().into(),
+                "use_tls".to_string() => "false".to_string().into(),
                 // Important for testing, because we expect only one connection to be used.
-                "use_connection_pool".to_string() => "false".to_string(),
-                "timeout".to_string() => 0_u64.to_string(),
+                "use_connection_pool".to_string() => "false".to_string().into(),
+                "timeout".to_string() => 0_u64.to_string().into(),
             },
         };
 

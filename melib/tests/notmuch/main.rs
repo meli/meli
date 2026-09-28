@@ -188,12 +188,15 @@ other_email=test2@example.com;test3@example.com
         let mut extra = indexmap::indexmap! {};
 
         if with_root_mailbox {
-            extra.insert("root_mailbox".into(), root_mailbox.display().to_string());
+            extra.insert(
+                "root_mailbox".into(),
+                root_mailbox.display().to_string().into(),
+            );
         }
         if let Some(library_file_path) = library_file_path {
             extra.insert(
                 "library_file_path".into(),
-                library_file_path.display().to_string(),
+                library_file_path.display().to_string().into(),
             );
         }
 

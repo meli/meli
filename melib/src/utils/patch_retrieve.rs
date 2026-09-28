@@ -69,12 +69,12 @@ mod nttp {
     impl PublicInboxNNTP {
         fn nntp_connection(&self, list: &str) -> Result<Box<NntpType>> {
             let mut extra = indexmap::indexmap! {
-                "server_hostname".into() => self.server_hostname.clone(),
-                "require_auth".into() => false.to_string(),
-                "store_flags_locally".into() => false.to_string(),
+                "server_hostname".into() => self.server_hostname.clone().into(),
+                "require_auth".into() => false.to_string().into(),
+                "store_flags_locally".into() => false.to_string().into(),
             };
             if let Some(port) = self.port {
-                extra.insert("server_port".to_string(), port.to_string());
+                extra.insert("server_port".to_string(), port.to_string().into());
             }
             let groupname = Self::groupname(list);
             let event_consumer = BackendEventConsumer::new(Arc::new(|_, _| {}));

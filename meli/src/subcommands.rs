@@ -175,7 +175,7 @@ pub fn view(
             ..AccountSettings::default()
         };
         ac.extra
-            .insert("prefer_mbox_type".into(), mbox_format.to_string());
+            .insert("prefer_mbox_type".into(), mbox_format.to_string().into());
         settings.accounts.insert("mbox".into(), ac.into());
 
         let mut state = State::new(Some(settings), sender, receiver)?;

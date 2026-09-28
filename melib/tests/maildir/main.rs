@@ -95,7 +95,7 @@ fn new_maildir_backend(
     };
     let extra = if with_root_mailbox {
         indexmap::indexmap! {
-            "root_mailbox".into() => root_mailbox.display().to_string(),
+            "root_mailbox".into() => root_mailbox.display().to_string().into(),
         }
     } else {
         indexmap::indexmap! {}

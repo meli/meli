@@ -445,10 +445,12 @@ impl NotmuchDb {
         event_consumer: BackendEventConsumer,
     ) -> Result<Box<Self>> {
         let mut dlpath = Cow::Borrowed(Self::DEFAULT_DYLIB_NAME);
-        let custom_dlpath = if let Some(lib_path) = s.extra.get("library_file_path") {
-            let expanded_path = Path::new(lib_path).expand();
+        let custom_dlpath = if let Some(lib_path) =
+            s.deserialize_extra_field::<Cow<'_, str>>("library_file_path")?
+        {
+            let expanded_path = Path::new(lib_path.as_ref()).expand();
             let expanded_path_string = expanded_path.display().to_string();
-            dlpath = if &expanded_path_string != lib_path
+            dlpath = if expanded_path_string != lib_path.as_ref()
                 && expanded_path.try_exists().unwrap_or(false)
             {
                 Cow::Owned(expanded_path_string)
@@ -633,22 +635,26 @@ impl NotmuchDb {
         path.pop();
 
         let account_name = s.name.to_string();
-        if let Some(lib_path) = s.extra.swap_remove("library_file_path") {
-            let expanded_path = Path::new(&lib_path).expand();
-            if (!Path::new(&lib_path).try_exists().unwrap_or(false)
-                || Path::new(&lib_path).is_dir())
-                && !Path::new(&expanded_path).try_exists().unwrap_or(false)
-                || Path::new(&expanded_path).is_dir()
-            {
-                return Err(Error::new(format!(
-                    "Notmuch `library_file_path` setting value `{lib_path}` for account {} does \
-                     not exist or is a directory.",
-                    s.name
-                ))
-                .set_related_path(Some(lib_path))
-                .set_kind(ErrorKind::Configuration));
-            }
-        }
+        s.validator::<Cow<'_, str>>("library_file_path", "string")
+            .validation_fn(|value| {
+                let lib_path: &str = value.as_ref();
+
+                let expanded_path = Path::new(lib_path).expand();
+                if (!Path::new(lib_path).try_exists().unwrap_or(false)
+                    || Path::new(lib_path).is_dir())
+                    && !Path::new(&expanded_path).try_exists().unwrap_or(false)
+                    || Path::new(&expanded_path).is_dir()
+                {
+                    return Err(Error::new(format!(
+                        "Notmuch `library_file_path` setting value `{lib_path}` does not exist or \
+                         is a directory.",
+                    ))
+                    .set_related_path(Some(lib_path))
+                    .set_kind(ErrorKind::Configuration));
+                }
+                Ok(())
+            })
+            .ignore_missing()?;
         if s.mailboxes.is_empty() {
             return Err(Error::new(format!(
                 "Notmuch account `{account_name}` requires mailboxes explicitly set, since they \

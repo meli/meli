@@ -131,29 +131,25 @@ type Capabilities = indexmap::IndexSet<Box<[u8]>>;
 #[macro_export]
 macro_rules! get_conf_val {
     ($s:ident[$var:literal]) => {
-        $s.extra.get($var).ok_or_else(|| {
+        $s.deserialize_extra_field::<_>($var)?.ok_or_else(|| {
             Error::new(format!(
-                "Configuration error ({}): IMAP connection requires the field `{}` set",
+                "{}: IMAP connection requires the field `{}` set",
                 $s.name.as_str(),
                 $var
             ))
+            .set_kind($crate::error::ErrorKind::Configuration)
         })
     };
     ($s:ident[$var:literal], $default:expr) => {
-        $s.extra
-            .get($var)
-            .map(|v| {
-                <_>::from_str(v).map_err(|e| {
-                    Error::new(format!(
-                        "Configuration error ({}): Invalid value for field `{}`: {}\n{}",
-                        $s.name.as_str(),
-                        $var,
-                        v,
-                        e
-                    ))
-                })
+        $s.deserialize_extra_field::<_>($var)
+            .map(|opt| opt.unwrap_or_else(|| $default))
+            .map_err(|err| {
+                err.set_summary(format!(
+                    "{name}: Invalid value for field `{field}`",
+                    name = $s.name.as_str(),
+                    field = $var,
+                ))
             })
-            .unwrap_or_else(|| Ok($default))
     };
 }
 
@@ -1447,8 +1443,8 @@ impl ImapType {
         is_subscribed: IsSubscribedFn,
         event_consumer: BackendEventConsumer,
     ) -> Result<Box<Self>> {
-        let server_hostname = get_conf_val!(s["server_hostname"])?;
-        let server_username = get_conf_val!(s["server_username"])?;
+        let server_hostname: String = get_conf_val!(s["server_hostname"])?;
+        let server_username: String = get_conf_val!(s["server_username"])?;
         let use_oauth2: bool = get_conf_val!(s["use_oauth2"], false)?;
 
         if use_oauth2
@@ -1489,8 +1485,8 @@ impl ImapType {
         };
         let use_connection_pool = get_conf_val!(s["use_connection_pool"], true)?;
         let server_conf = ImapServerConf {
-            server_hostname: server_hostname.to_string(),
-            server_username: server_username.to_string(),
+            server_hostname,
+            server_username,
             server_password,
             server_port,
             use_tls,
@@ -1709,46 +1705,20 @@ impl ImapType {
     }
 
     pub fn validate_config(s: &mut AccountSettings) -> Result<()> {
-        let mut keys: HashSet<&'static str> = Default::default();
-        macro_rules! get_conf_val {
-            ($s:ident[$var:literal]) => {{
-                keys.insert($var);
-                $s.extra.swap_remove($var).ok_or_else(|| {
-                    Error::new(format!(
-                        "Configuration error ({}): IMAP connection requires the field `{}` set",
-                        $s.name.as_str(),
-                        $var
-                    ))
-                })
-            }};
-            ($s:ident[$var:literal], $default:expr) => {{
-                keys.insert($var);
-                $s.extra
-                    .swap_remove($var)
-                    .map(|v| {
-                        <_>::from_str(&v).map_err(|e| {
-                            Error::new(format!(
-                                "Configuration error ({}): Invalid value for field `{}`: {}\n{}",
-                                $s.name.as_str(),
-                                $var,
-                                v,
-                                e
-                            ))
-                        })
-                    })
-                    .unwrap_or_else(|| Ok($default))
-            }};
-        }
-        get_conf_val!(s["server_hostname"])?;
-        get_conf_val!(s["server_username"])?;
-        let use_oauth2: bool = get_conf_val!(s["use_oauth2"], false)?;
-        keys.insert("server_password_command");
+        s.validator::<String>("server_hostname", "string")
+            .validate()?;
+        s.validator::<String>("server_username", "string")
+            .validate()?;
+        let use_oauth2: bool = s
+            .validator::<bool>("use_oauth2", "bool")
+            .default_value(false)
+            .validate()?;
         if use_oauth2
             && !s.extra.contains_key("server_password_command")
             && !s.extra.contains_key("server_password")
         {
             return Err(Error::new(format!(
-                "({}) `use_oauth2` use requires either `server_password` set or \
+                "{}: `use_oauth2` use requires either `server_password` set or \
                  `server_password_command` set with a command that returns an OAUTH2 token. \
                  Consult documentation for guidance.",
                 s.name,
@@ -1756,60 +1726,65 @@ impl ImapType {
             .set_kind(ErrorKind::Configuration));
         }
         if !s.extra.contains_key("server_password_command") {
-            get_conf_val!(s["server_password"])?;
+            s.validator::<String>("server_password", "string")
+                .validate()?;
         } else if s.extra.contains_key("server_password") {
             return Err(Error::new(format!(
-                "Configuration error ({}): both server_password and server_password_command are \
-                 set, cannot choose",
+                "{}: both server_password and server_password_command are set, cannot choose",
+                s.name.as_str(),
+            ))
+            .set_kind(ErrorKind::Configuration));
+        } else {
+            s.validator::<String>("server_password_command", "string")
+                .validate()?;
+        }
+        s.validator::<u16>("server_port", "u16").ignore_missing()?;
+        let use_tls = s
+            .validator::<bool>("use_tls", "bool")
+            .default_value(true)
+            .validate()?;
+        let use_starttls = s
+            .validator::<bool>("use_starttls", "bool")
+            .default_value(false)
+            .validate()?;
+        if !use_tls && use_starttls {
+            return Err(Error::new(format!(
+                "{}: incompatible use_tls and use_starttls values: use_tls = false, use_starttls \
+                 = true",
                 s.name.as_str(),
             ))
             .set_kind(ErrorKind::Configuration));
         }
-        let _ = get_conf_val!(s["server_password_command"]);
-        get_conf_val!(s["server_port"], 143)?;
-        let use_tls = get_conf_val!(s["use_tls"], true)?;
-        let use_starttls = get_conf_val!(s["use_starttls"], false)?;
-        if !use_tls && use_starttls {
-            return Err(Error::new(format!(
-                "Configuration error ({}): incompatible use_tls and use_starttls values: use_tls \
-                 = false, use_starttls = true",
-                s.name.as_str(),
-            )));
+        s.validator::<bool>("danger_accept_invalid_certs", "bool")
+            .ignore_missing()?;
+        if cfg!(feature = "sqlite3") {
+            s.validator::<bool>("offline_cache", "bool")
+                .ignore_missing()?;
+        } else {
+            s.validator::<bool>("offline_cache", "bool")
+                .validation_fn(|value| {
+                    if *value {
+                        return Err(Error::new(
+                            "offline_cache is true but melib is not compiled with sqlite3",
+                        )
+                        .set_kind(ErrorKind::Configuration));
+                    }
+
+                    Ok(())
+                })
+                .ignore_missing()?;
         }
-        get_conf_val!(s["danger_accept_invalid_certs"], false)?;
-        #[cfg(feature = "sqlite3")]
-        get_conf_val!(s["offline_cache"], true)?;
-        #[cfg(not(feature = "sqlite3"))]
-        {
-            let keep_offline_cache = get_conf_val!(s["offline_cache"], false)?;
-            if keep_offline_cache {
-                return Err(Error::new(format!(
-                    "({}) offline_cache is true but melib is not compiled with sqlite3",
-                    s.name,
-                )));
-            }
-        }
-        get_conf_val!(s["use_idle"], true)?;
-        get_conf_val!(s["use_condstore"], true)?;
-        get_conf_val!(s["use_deflate"], true)?;
-        get_conf_val!(s["use_auth_anonymous"], false)?;
-        get_conf_val!(s["use_id"], false)?;
-        let _timeout = get_conf_val!(s["timeout"], 16_u64)?;
-        get_conf_val!(s["use_connection_pool"], true)?;
-        let extra_keys = s
-            .extra
-            .keys()
-            .map(String::as_str)
-            .collect::<HashSet<&str>>();
-        let diff = extra_keys.difference(&keys).collect::<Vec<&&str>>();
-        if !diff.is_empty() {
-            return Err(Error::new(format!(
-                "Configuration error ({}): the following flags are set but are not recognized: \
-                 {:?}.",
-                s.name.as_str(),
-                diff
-            )));
-        }
+        s.validator::<bool>("use_idle", "bool").ignore_missing()?;
+        s.validator::<bool>("use_condstore", "bool")
+            .ignore_missing()?;
+        s.validator::<bool>("use_deflate", "bool")
+            .ignore_missing()?;
+        s.validator::<bool>("use_auth_anonymous", "bool")
+            .ignore_missing()?;
+        s.validator::<bool>("use_id", "bool").ignore_missing()?;
+        s.validator::<u64>("timeout", "u64").ignore_missing()?;
+        s.validator::<bool>("use_connection_pool", "bool")
+            .ignore_missing()?;
         Ok(())
     }
 

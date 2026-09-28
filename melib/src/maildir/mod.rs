@@ -65,21 +65,22 @@ pub struct Configuration {
     pub settings: AccountSettings,
 }
 
+const RENAME_REGEX_FIELDNAME: &str = "rename_regex";
+
 impl Configuration {
     pub fn new(settings: &AccountSettings) -> Result<Self> {
-        const RENAME_REGEX_FIELDNAME: &str = "rename_regex";
-
-        let rename_regex = if let Some(v) = settings.extra.get(RENAME_REGEX_FIELDNAME).map(|v| {
-            Regex::new(v).map_err(|e| {
-                Error::new(format!(
-                    "Configuration error ({}): Invalid value for field \
-                     `{RENAME_REGEX_FIELDNAME}`: {v}",
-                    settings.name.as_str(),
-                ))
-                .set_source(Some(crate::src_err_arc_wrap!(e)))
-                .set_kind(ErrorKind::ValueError)
-            })
-        }) {
+        let rename_regex = if let Some(v) = settings
+            .deserialize_extra_field::<Cow<'_, str>>(RENAME_REGEX_FIELDNAME)?
+            .map(|v| {
+                Regex::new(v.as_ref()).map_err(|e| {
+                    Error::new(format!(
+                        "{}: Invalid value for field `{RENAME_REGEX_FIELDNAME}`: {v}",
+                        settings.name.as_str(),
+                    ))
+                    .set_source(Some(crate::src_err_arc_wrap!(e)))
+                    .set_kind(ErrorKind::Configuration)
+                })
+            }) {
             Some(v?)
         } else {
             None
@@ -935,8 +936,7 @@ impl MaildirType {
             )));
         }
         _ = Configuration::new(s)?;
-        _ = s.extra.swap_remove("rename_regex");
-
+        _ = s.extra.swap_remove(RENAME_REGEX_FIELDNAME);
         Ok(())
     }
 

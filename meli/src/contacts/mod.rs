@@ -34,7 +34,9 @@ pub fn export_to_vcard(card: &Card, account_hash: AccountHash, context: &mut Con
         .settings
         .account
         .vcard_folder()
-        .map(|s| std::path::Path::new(s).to_path_buf());
+        .ok()
+        .flatten()
+        .map(|s| std::path::Path::new(s.as_ref()).to_path_buf());
     let filename = format!(
         "{prefix}{name}{suffix}{space}{additionalname}",
         prefix = card.name_prefix(),

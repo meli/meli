@@ -40,6 +40,7 @@ pub trait DotAddressable: serde::Serialize {
 
 impl DotAddressable for bool {}
 
+impl DotAddressable for serde_json::Value {}
 impl DotAddressable for String {}
 impl DotAddressable for (String, String) {}
 impl DotAddressable for char {}

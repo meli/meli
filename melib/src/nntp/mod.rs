@@ -57,32 +57,38 @@ pub type UID = usize;
 
 macro_rules! get_conf_val {
     ($s:ident[$var:literal]) => {
-        $s.extra.get($var).ok_or_else(|| {
-            Error::new(format!(
-                "{}: NNTP connection requires the field `{}` set",
-                $s.name.as_str(),
-                $var
-            ))
-            .set_kind(ErrorKind::Configuration)
-        })
-    };
-    ($s:ident[$var:literal], $default:expr) => {
-        $s.extra
-            .get($var)
-            .map(|v| {
-                <_>::from_str(v).map_err(|e| {
+        $s.deserialize_extra_field::<_>($var)
+            .and_then(|opt| {
+                opt.map(Ok)
+                    .ok_or_else(|| Error::new($var).set_kind(ErrorKind::NotFound))?
+            })
+            .map_err(|err| {
+                if matches!(err.kind, ErrorKind::NotFound) {
                     Error::new(format!(
+                        "{}: NNTP connection requires the field `{}` set",
+                        $s.name.as_str(),
+                        $var
+                    ))
+                    .set_kind(ErrorKind::Configuration)
+                } else {
+                    err.set_summary(format!(
                         "{}: NNTP connection has invalid configuration",
                         $s.name.as_str(),
                     ))
                     .set_kind(ErrorKind::Configuration)
-                    .set_source(Some(Arc::new(
-                        Error::new(format!("Invalid value for field `{v}`: {e}\n{}", $var))
-                            .set_kind(ErrorKind::ValueError),
-                    )))
-                })
+                }
             })
-            .unwrap_or_else(|| Ok($default))
+    };
+    ($s:ident[$var:literal], $default:expr) => {
+        $s.deserialize_extra_field::<_>($var)
+            .map_err(|err| {
+                err.set_summary(format!(
+                    "{}: NNTP connection has invalid configuration",
+                    $s.name.as_str(),
+                ))
+                .set_kind(ErrorKind::Configuration)
+            })
+            .map(|opt| opt.unwrap_or_else(|| $default))
     };
 }
 
@@ -690,9 +696,9 @@ impl NntpType {
             }
         };
         let server_conf = NntpServerConf {
-            server_hostname: server_hostname.to_string(),
+            server_hostname,
             server_username: if require_auth {
-                get_conf_val!(s["server_username"])?.to_string()
+                get_conf_val!(s["server_username"])?
             } else {
                 get_conf_val!(s["server_username"], String::new())?
             },
@@ -858,43 +864,11 @@ impl NntpType {
     }
 
     pub fn validate_config(s: &mut AccountSettings) -> Result<()> {
-        let mut keys: HashSet<&'static str> = Default::default();
-        macro_rules! get_conf_val {
-            ($s:ident[$var:literal]) => {{
-                keys.insert($var);
-                $s.extra.swap_remove($var).ok_or_else(|| {
-                    Error::new(format!(
-                        "{}: NNTP connection requires the field `{}` set",
-                        $s.name.as_str(),
-                        $var
-                    ))
-                    .set_kind(ErrorKind::Configuration)
-                })
-            }};
-            ($s:ident[$var:literal], $default:expr) => {{
-                keys.insert($var);
-                $s.extra
-                    .swap_remove($var)
-                    .map(|v| {
-                        <_>::from_str(&v).map_err(|e| {
-                            Error::new(format!(
-                                "{}: NNTP connection has invalid configuration",
-                                $s.name.as_str(),
-                            ))
-                            .set_kind(ErrorKind::Configuration)
-                            .set_source(Some(Arc::new(
-                                Error::new(format!("Invalid value for field `{}`: {v}\n{e}", $var))
-                                    .set_kind(ErrorKind::ValueError),
-                            )))
-                        })
-                    })
-                    .unwrap_or_else(|| Ok($default))
-            }};
-        }
-        #[cfg(feature = "sqlite3")]
-        get_conf_val!(s["store_flags_locally"], true)?;
-        #[cfg(not(feature = "sqlite3"))]
-        if get_conf_val!(s["store_flags_locally"], false)? {
+        let store_flags_locally = s.validator::<bool>("store_flags_locally", "bool");
+        if cfg!(feature = "sqlite3") {
+            store_flags_locally.ignore_missing()?;
+        } else if cfg!(not(feature = "sqlite3")) && store_flags_locally.ignore_missing()?.is_some()
+        {
             return Err(Error::new(format!(
                 "{}: store_flags_locally is on but this copy of melib isn't built with sqlite3 \
                  support.",
@@ -902,11 +876,15 @@ impl NntpType {
             ))
             .set_kind(ErrorKind::Configuration));
         }
-        get_conf_val!(s["require_auth"], false)?;
-        get_conf_val!(s["server_hostname"])?;
-        get_conf_val!(s["server_username"], String::new())?;
+        s.validator::<bool>("require_auth", "bool")
+            .ignore_missing()?;
+        s.validator::<String>("server_hostname", "string")
+            .validate()?;
+        s.validator::<String>("server_username", "string")
+            .ignore_missing()?;
         if !s.extra.contains_key("server_password_command") {
-            get_conf_val!(s["server_password"], String::new())?;
+            s.validator::<String>("server_password", "string")
+                .ignore_missing()?;
         } else if s.extra.contains_key("server_password") {
             return Err(Error::new(format!(
                 "{}: both server_password and server_password_command are set, cannot choose",
@@ -914,10 +892,20 @@ impl NntpType {
             ))
             .set_kind(ErrorKind::Configuration));
         }
-        let _ = get_conf_val!(s["server_password_command"]);
-        let server_port = get_conf_val!(s["server_port"], 119)?;
-        let use_tls = get_conf_val!(s["use_tls"], server_port == 563)?;
-        let use_starttls = get_conf_val!(s["use_starttls"], server_port != 563)?;
+        s.validator::<String>("server_password_command", "string")
+            .ignore_missing()?;
+        let server_port = s
+            .validator::<u16>("server_port", "u16")
+            .default_value(119)
+            .validate()?;
+        let use_tls = s
+            .validator::<bool>("use_tls", "bool")
+            .default_value(server_port == 563)
+            .validate()?;
+        let use_starttls = s
+            .validator::<bool>("use_starttls", "bool")
+            .default_value(server_port != 563)
+            .validate()?;
         if !use_tls && use_starttls {
             return Err(Error::new(format!(
                 "{}: incompatible use_tls and use_starttls values: use_tls = false, use_starttls \
@@ -926,15 +914,12 @@ impl NntpType {
             ))
             .set_kind(ErrorKind::Configuration));
         }
-        get_conf_val!(s["use_deflate"], false)?;
-        get_conf_val!(s["danger_accept_invalid_certs"], false)?;
-        get_conf_val!(s["timeout"], 16_u64)?;
-        let extra_keys = s
-            .extra
-            .keys()
-            .map(String::as_str)
-            .collect::<HashSet<&str>>();
-        let diff = extra_keys.difference(&keys).collect::<Vec<&&str>>();
+        s.validator::<bool>("use_deflate", "bool")
+            .ignore_missing()?;
+        s.validator::<bool>("danger_accept_invalid_certs", "bool")
+            .ignore_missing()?;
+        s.validator::<u64>("timeout", "u64").ignore_missing()?;
+        let diff = s.extra.keys().collect::<HashSet<&String>>();
         if !diff.is_empty() {
             return Err(Error::new(format!(
                 "{} the following flags are set but are not recognized: {diff:?}.",

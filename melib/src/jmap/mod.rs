@@ -148,9 +148,9 @@ pub struct JmapServerConf {
 
 macro_rules! get_conf_val {
     ($s:ident[$var:literal]) => {
-        $s.extra.get($var).ok_or_else(|| {
+        $s.deserialize_extra_field::<_>($var)?.ok_or_else(|| {
             Error::new(format!(
-                "Configuration error ({}): JMAP connection requires the field `{}` set",
+                "{}: JMAP connection requires the field `{}` set",
                 $s.name.as_str(),
                 $var
             ))
@@ -158,39 +158,35 @@ macro_rules! get_conf_val {
         })
     };
     ($s:ident[$var:literal], $t:ty, $hd: literal) => {
-        get_conf_val!($s[$var]).and_then(|v| {
-            <$t>::from_str(&v).map_err(|e| {
-                Error::new(format!(
-                    "Configuration error ({}): Invalid value for field `{}` which accepts \
-                     {human_desc}: {}\n{}",
-                    $s.name.as_str(),
-                    $var,
-                    v,
-                    e,
+        $s.deserialize_extra_field::<$t>($var)
+            .map_err(|err| {
+                err.set_summary(format!(
+                    "{name}: Invalid value for field `{field}` which accepts {human_desc}",
+                    name = $s.name.as_str(),
+                    field = $var,
                     human_desc = $hd,
                 ))
-                .set_kind(ErrorKind::ValueError)
+            })?
+            .ok_or_else(|| {
+                Error::new(format!(
+                    "{}: JMAP connection requires the field `{}` set",
+                    $s.name.as_str(),
+                    $var
+                ))
+                .set_kind(ErrorKind::Configuration)
             })
-        })
     };
     ($s:ident[$var:literal], $default:expr, $hd: literal) => {
-        $s.extra
-            .get($var)
-            .map(|v| {
-                <_>::from_str(v).map_err(|e| {
-                    Error::new(format!(
-                        "Configuration error ({}): Invalid value for field `{}` which accepts \
-                         {human_desc}: {}\n{}",
-                        $s.name.as_str(),
-                        $var,
-                        v,
-                        e,
-                        human_desc = $hd,
-                    ))
-                    .set_kind(ErrorKind::ValueError)
-                })
+        $s.deserialize_extra_field::<_>($var)
+            .map(|opt| opt.unwrap_or_else(|| $default))
+            .map_err(|err| {
+                err.set_summary(format!(
+                    "{name}: Invalid value for field `{field}` which accepts {human_desc}",
+                    name = $s.name.as_str(),
+                    field = $var,
+                    human_desc = $hd,
+                ))
             })
-            .unwrap_or_else(|| Ok($default))
     };
 }
 
@@ -1629,67 +1625,41 @@ impl JmapType {
     }
 
     pub fn validate_config(s: &mut AccountSettings) -> Result<()> {
-        macro_rules! get_conf_val {
-            ($s:ident[$var:literal]) => {
-                $s.extra.swap_remove($var).ok_or_else(|| {
-                    Error::new(format!(
-                        "Configuration error ({}): JMAP connection requires the field `{}` set",
-                        $s.name.as_str(),
-                        $var
-                    ))
-                    .set_kind(ErrorKind::Configuration)
-                })
-            };
-            ($s:ident[$var:literal], $t:ty, $hd: literal) => {
-                get_conf_val!($s[$var]).and_then(|v| {
-                    <$t>::from_str(&v).map_err(|e| {
-                        Error::new(format!(
-                            "Configuration error ({}): Invalid value for field `{}` which accepts \
-                             {human_desc}: {}\n{}",
-                            $s.name.as_str(),
-                            $var,
-                            v,
-                            e,
-                            human_desc = $hd,
-                        ))
-                        .set_kind(ErrorKind::ValueError)
-                    })
-                })
-            };
-            ($s:ident[$var:literal], $default:expr, $hd: literal) => {
-                $s.extra
-                    .swap_remove($var)
-                    .map(|v| {
-                        <_>::from_str(&v).map_err(|e| {
-                            Error::new(format!(
-                                "Configuration error ({}): Invalid value for field `{}` which \
-                                 accepts {human_desc}: {}\n{}",
-                                $s.name.as_str(),
-                                $var,
-                                v,
-                                e,
-                                human_desc = $hd,
-                            ))
-                            .set_kind(ErrorKind::ValueError)
-                        })
-                    })
-                    .unwrap_or_else(|| Ok($default))
-            };
+        s.validator::<Url>("server_url", "a string containing a URL")
+            .validate()?;
+        s.validator::<String>("server_username", "string")
+            .validate()?;
+        s.validator::<bool>("use_token", "true or false")
+            .ignore_missing()?;
+        let server_password = s
+            .validator::<String>("server_password", "string")
+            .validate();
+        let server_password_command = s
+            .validator::<String>("server_password_command", "string")
+            .validate();
+        if matches!(
+            (server_password.as_ref(), server_password_command.as_ref()),
+            (Ok(_), Ok(_))
+        ) {
+            return Err(Error::new(format!(
+                "{}: both server_password and server_password_command are set, cannot choose",
+                s.name
+            ))
+            .set_kind(ErrorKind::Configuration));
         }
-        get_conf_val!(s["server_url"], Url, "a string containing a URL")?;
-        get_conf_val!(s["server_username"])?;
+        if matches!(server_password, Err(ref err) if err.kind == ErrorKind::NotFound) {
+            server_password_command?;
+        } else {
+            server_password?;
+        }
 
-        get_conf_val!(s["use_token"], false, "true or false")?;
-        // either of these two needed
-        get_conf_val!(s["server_password"])
-            .or_else(|_| get_conf_val!(s["server_password_command"]))?;
-
-        get_conf_val!(s["danger_accept_invalid_certs"], false, "true or false")?;
-        get_conf_val!(
-            s["timeout"],
-            16_u64,
-            "integers setting an amount of seconds (a value of zero disables the timeout)"
-        )?;
+        s.validator::<bool>("danger_accept_invalid_certs", "true or false")
+            .ignore_missing()?;
+        s.validator::<u64>(
+            "timeout",
+            "integers setting an amount of seconds (a value of zero disables the timeout)",
+        )
+        .ignore_missing()?;
         Ok(())
     }
 }

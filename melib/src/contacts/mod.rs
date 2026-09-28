@@ -92,100 +92,119 @@ impl Contacts {
 
     pub fn with_account(s: &crate::conf::AccountSettings) -> Self {
         let mut ret = Self::new(s.name.clone());
-        if let Some(mutt_alias_file) = s.extra.get("mutt_alias_file") {
-            match std::fs::read_to_string(Path::new(mutt_alias_file).expand())
-                .map_err(|err| err.to_string())
-                .and_then(|contents| {
-                    contents
-                        .lines()
-                        .map(|line| mutt::parse_mutt_contact().parse(line).map(|(_, c)| c))
-                        .collect::<Result<Vec<Card>, &str>>()
-                        .map_err(|err| err.to_string())
-                }) {
-                Ok(cards) => {
-                    for c in cards {
-                        ret.add_card(c);
+        match s.mutt_alias_file() {
+            Ok(None) => {}
+            Ok(Some(mutt_alias_file)) => {
+                match std::fs::read_to_string(Path::new(mutt_alias_file.as_ref()).expand())
+                    .map_err(|err| err.to_string())
+                    .and_then(|contents| {
+                        contents
+                            .lines()
+                            .map(|line| mutt::parse_mutt_contact().parse(line).map(|(_, c)| c))
+                            .collect::<Result<Vec<Card>, &str>>()
+                            .map_err(|err| err.to_string())
+                    }) {
+                    Ok(cards) => {
+                        for c in cards {
+                            ret.add_card(c);
+                        }
                     }
-                }
-                Err(err) => {
-                    log::warn!(
-                        "Could not load mutt alias file {:?}: {}",
-                        mutt_alias_file,
-                        err
-                    );
-                }
-            }
-        }
-        if let Some(vcard_path) = s.vcard_folder() {
-            let expanded_path = Path::new(vcard_path).expand();
-            match vcard::load_cards(&expanded_path) {
-                Ok(cards) => {
-                    for c in cards {
-                        ret.add_card(c);
-                    }
-                }
-                Err(err) => {
-                    log::warn!("Could not load vcards from {:?}: {}", vcard_path, err);
-                    if expanded_path.display().to_string() != vcard_path {
+                    Err(err) => {
                         log::warn!(
-                            "Note: vcard_folder was expanded from {} to {}",
-                            vcard_path,
-                            expanded_path.display()
+                            "Could not load mutt alias file {:?}: {}",
+                            mutt_alias_file,
+                            err
                         );
                     }
                 }
             }
+            Err(err) => {
+                log::warn!("Could not parse mutt_alias_file value: {err}");
+            }
         }
+        match s.vcard_folder() {
+            Ok(None) => {}
+            Ok(Some(vcard_path)) => {
+                let expanded_path = Path::new(vcard_path.as_ref()).expand();
+                match vcard::load_cards(&expanded_path) {
+                    Ok(cards) => {
+                        for c in cards {
+                            ret.add_card(c);
+                        }
+                    }
+                    Err(err) => {
+                        log::warn!("Could not load vcards from {vcard_path:?}: {err}");
+                        if expanded_path.display().to_string() != vcard_path {
+                            log::warn!(
+                                "Note: vcard_folder was expanded from {vcard_path} to {}",
+                                expanded_path.display()
+                            );
+                        }
+                    }
+                }
+            }
+            Err(err) => {
+                log::warn!("Could not parse vcard_folder value: {err}");
+            }
+        };
         use std::process::Command;
-        if let Some(notmuch_addressbook_query) = s.notmuch_address_book_query() {
-            match Command::new("sh")
-                .args([
-                    "-c",
-                    &format!("notmuch address --format=json {notmuch_addressbook_query}"),
-                ])
-                .stdin(std::process::Stdio::null())
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .output()
-            {
-                Ok(notmuch_addresses) => {
-                    if notmuch_addresses.status.success() {
-                        match std::str::from_utf8(&notmuch_addresses.stdout) {
-                            Ok(notmuch_address_out) => {
-                                match notmuchcontact::parse_notmuch_contacts(notmuch_address_out) {
-                                    Ok(contacts) => {
-                                        for c in contacts {
-                                            ret.add_card(c.clone());
+        match s.notmuch_address_book_query() {
+            Ok(None) => {}
+            Ok(Some(notmuch_addressbook_query)) => {
+                match Command::new("sh")
+                    .args([
+                        "-c",
+                        &format!("notmuch address --format=json {notmuch_addressbook_query}"),
+                    ])
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped())
+                    .output()
+                {
+                    Ok(notmuch_addresses) => {
+                        if notmuch_addresses.status.success() {
+                            match std::str::from_utf8(&notmuch_addresses.stdout) {
+                                Ok(notmuch_address_out) => {
+                                    match notmuchcontact::parse_notmuch_contacts(
+                                        notmuch_address_out,
+                                    ) {
+                                        Ok(contacts) => {
+                                            for c in contacts {
+                                                ret.add_card(c.clone());
+                                            }
+                                        }
+                                        Err(err) => {
+                                            log::warn!(
+                                                "Unable to parse notmuch contact result into \
+                                                 cards: {} {}",
+                                                notmuch_address_out,
+                                                err
+                                            );
                                         }
                                     }
-                                    Err(err) => {
-                                        log::warn!(
-                                            "Unable to parse notmuch contact result into cards: \
-                                             {} {}",
-                                            notmuch_address_out,
-                                            err
-                                        );
-                                    }
+                                }
+                                Err(err) => {
+                                    log::warn!(
+                                        "Unable to read from notmuch address query: {} {}",
+                                        notmuch_addressbook_query,
+                                        err
+                                    );
                                 }
                             }
-                            Err(err) => {
-                                log::warn!(
-                                    "Unable to read from notmuch address query: {} {}",
-                                    notmuch_addressbook_query,
-                                    err
-                                );
-                            }
+                        } else {
+                            log::warn!(
+                                "Error ({}) running notmuch address: {} {}",
+                                notmuch_addresses.status,
+                                String::from_utf8_lossy(&notmuch_addresses.stdout),
+                                String::from_utf8_lossy(&notmuch_addresses.stderr)
+                            );
                         }
-                    } else {
-                        log::warn!(
-                            "Error ({}) running notmuch address: {} {}",
-                            notmuch_addresses.status,
-                            String::from_utf8_lossy(&notmuch_addresses.stdout),
-                            String::from_utf8_lossy(&notmuch_addresses.stderr)
-                        );
                     }
+                    Err(e) => log::warn!("Unable to run notmuch address command: {}", e),
                 }
-                Err(e) => log::warn!("Unable to run notmuch address command: {}", e),
+            }
+            Err(err) => {
+                log::warn!("Could not parse notmuch_address_book_query value: {err}");
             }
         }
         ret

@@ -126,7 +126,7 @@ fn test_conf_config_parse() {
     let err = FileSettings::validate(new_file.path.clone(), true).unwrap_err();
     assert_eq!(
         err.summary.as_ref(),
-        "Unrecognised configuration values: {\"index_style\": \"Compact\"}"
+        "Unrecognised configuration keys: [\"index_style\"]"
     );
 
     /* Test IMAP config */

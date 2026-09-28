@@ -323,7 +323,12 @@ impl From<FileAccount> for AccountConf {
             subscribed_mailboxes: x.subscribed_mailboxes.clone(),
             mailboxes,
             manual_refresh: x.manual_refresh,
-            extra: x.extra.clone().into_iter().collect(),
+            extra: x
+                .extra
+                .clone()
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
         };
 
         let mailbox_confs = x.mailboxes.clone();
@@ -482,14 +487,14 @@ impl FileSettings {
                     .into_iter()
                     .map(|(k, v)| (k, v.mailbox_conf))
                     .collect(),
-                extra: extra.into_iter().collect(),
+                extra: extra.into_iter().map(|(k, v)| (k, v.into())).collect(),
             };
             s.validate_config()?;
             backends.validate_config(&lowercase_format, &mut s)?;
             if !s.extra.is_empty() {
                 return Err(Error::new(format!(
-                    "Unrecognised configuration values: {:?}",
-                    s.extra
+                    "Unrecognised configuration keys: {:?}",
+                    s.extra.keys().collect::<Vec<_>>()
                 ))
                 .set_kind(ErrorKind::Configuration));
             }
@@ -584,14 +589,14 @@ impl FileSettings {
                     .into_iter()
                     .map(|(k, v)| (k, v.mailbox_conf))
                     .collect(),
-                extra: extra.into_iter().collect(),
+                extra: extra.into_iter().map(|(k, v)| (k, v.into())).collect(),
             };
             s.validate_config()?;
             backends.validate_config(&lowercase_format, &mut s)?;
             if !s.extra.is_empty() {
                 return Err(Error::new(format!(
-                    "Unrecognised configuration values: {:?}",
-                    s.extra
+                    "Unrecognised configuration keys: {:?}",
+                    s.extra.keys().collect::<Vec<_>>()
                 ))
                 .set_kind(ErrorKind::Configuration));
             }
