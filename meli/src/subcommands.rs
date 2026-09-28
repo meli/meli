@@ -232,7 +232,7 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
             return Err("Try again with a valid account name.".into());
         }
         let file_account_conf = conf.accounts[account].clone();
-        let account_conf: conf::AccountConf = file_account_conf.clone().into();
+        let account_conf: conf::AccountConf = file_account_conf.clone().try_into()?;
         Ok((file_account_conf, account_conf))
     }
 

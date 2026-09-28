@@ -189,7 +189,6 @@ impl FileMailboxConf {
     }
 }
 
-use crate::conf::deserializers::extra_settings;
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct FileAccount {
     pub root_mailbox: String,
@@ -221,13 +220,10 @@ pub struct FileAccount {
     #[serde(flatten)]
     pub conf_override: MailUIConf,
     #[serde(flatten)]
-    #[serde(
-        deserialize_with = "extra_settings",
-        skip_serializing_if = "IndexMap::is_empty"
-    )]
+    #[serde(skip_serializing_if = "IndexMap::is_empty")]
     /// Use custom deserializer to convert any given value (eg `bool`, number,
     /// etc) to `String`.
-    pub extra: IndexMap<String, String>,
+    pub extra: IndexMap<String, toml::Value>,
 }
 
 impl FileAccount {
@@ -300,8 +296,11 @@ impl From<melib::AccountSettings> for AccountConf {
         }
     }
 }
-impl From<FileAccount> for AccountConf {
-    fn from(x: FileAccount) -> Self {
+
+impl TryFrom<FileAccount> for AccountConf {
+    type Error = Error;
+
+    fn try_from(x: FileAccount) -> Result<Self> {
         let format = x.format.to_lowercase();
         let root_mailbox = x.root_mailbox.clone();
         let identity = x.identity.clone();
@@ -327,12 +326,12 @@ impl From<FileAccount> for AccountConf {
                 .extra
                 .clone()
                 .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
+                .map(|(k, v)| Ok((k, json_from_toml(v)?)))
+                .collect::<Result<IndexMap<_, _>>>()?,
         };
 
         let mailbox_confs = x.mailboxes.clone();
-        Self {
+        Ok(Self {
             send_mail: x.send_mail.clone(),
             default_mailbox: None,
             sent_mailbox: None,
@@ -340,7 +339,33 @@ impl From<FileAccount> for AccountConf {
             conf: x,
             mailbox_confs,
             ..Self::from(account)
-        }
+        })
+    }
+}
+
+fn json_from_toml(t: toml::Value) -> Result<serde_json::Value> {
+    match t {
+        toml::Value::String(s) => Ok(serde_json::Value::String(s)),
+        toml::Value::Integer(i) => Ok(serde_json::Value::Number(i.into())),
+        toml::Value::Float(f) => Ok(serde_json::Value::Number(
+            serde_json::Number::from_f64(f).ok_or_else(|| {
+                Error::new("Infinite or NaN values are not supported")
+                    .set_kind(ErrorKind::ValueError)
+            })?,
+        )),
+        toml::Value::Boolean(b) => Ok(serde_json::Value::Bool(b)),
+        toml::Value::Datetime(d) => Ok(serde_json::Value::String(d.to_string())),
+        toml::Value::Array(arr) => Ok(serde_json::Value::Array(
+            arr.into_iter()
+                .map(json_from_toml)
+                .collect::<Result<Vec<_>>>()?,
+        )),
+        toml::Value::Table(table) => Ok(serde_json::Value::Object(serde_json::Map::from_iter(
+            table
+                .into_iter()
+                .map(|(k, v)| Ok((k, json_from_toml(v)?)))
+                .collect::<Result<Vec<(_, _)>>>()?,
+        ))),
     }
 }
 
@@ -487,7 +512,10 @@ impl FileSettings {
                     .into_iter()
                     .map(|(k, v)| (k, v.mailbox_conf))
                     .collect(),
-                extra: extra.into_iter().map(|(k, v)| (k, v.into())).collect(),
+                extra: extra
+                    .into_iter()
+                    .map(|(k, v)| Ok((k, json_from_toml(v)?)))
+                    .collect::<Result<IndexMap<_, _>>>()?,
             };
             s.validate_config()?;
             backends.validate_config(&lowercase_format, &mut s)?;
@@ -589,7 +617,10 @@ impl FileSettings {
                     .into_iter()
                     .map(|(k, v)| (k, v.mailbox_conf))
                     .collect(),
-                extra: extra.into_iter().map(|(k, v)| (k, v.into())).collect(),
+                extra: extra
+                    .into_iter()
+                    .map(|(k, v)| Ok((k, json_from_toml(v)?)))
+                    .collect::<Result<IndexMap<_, _>>>()?,
             };
             s.validate_config()?;
             backends.validate_config(&lowercase_format, &mut s)?;
@@ -637,7 +668,7 @@ impl Settings {
         let mut s: IndexMap<String, AccountConf> = IndexMap::new();
 
         for (id, x) in fs.accounts {
-            let mut ac = AccountConf::from(x);
+            let mut ac = AccountConf::try_from(x)?;
             ac.account.name.clone_from(&id);
 
             s.insert(id, ac);
@@ -720,42 +751,6 @@ mod deserializers {
         } else {
             Ok(s.into())
         }
-    }
-
-    use toml::Value;
-    fn any_of<'de, D>(deserializer: D) -> std::result::Result<String, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let v: Value = Deserialize::deserialize(deserializer)?;
-        if let Some(s) = v.as_str() {
-            return Ok(s.to_string());
-        }
-        let mut ret = v.to_string();
-        if (ret.starts_with('"') && ret.ends_with('"'))
-            || (ret.starts_with('\"') && ret.ends_with('\''))
-        {
-            ret.drain(0..1).count();
-            ret.drain(ret.len() - 1..).count();
-        }
-        Ok(ret)
-    }
-
-    use indexmap::IndexMap;
-    pub(in crate::conf) fn extra_settings<'de, D>(
-        deserializer: D,
-    ) -> std::result::Result<IndexMap<String, String>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        /* Why is this needed? If the user gives a configuration value such as key =
-         * true, the parsing will fail since it expects string values. We
-         * want to accept key = true as well as key = "true". */
-        #[derive(Deserialize)]
-        struct Wrapper(#[serde(deserialize_with = "any_of")] String);
-
-        let v = <IndexMap<String, Wrapper>>::deserialize(deserializer)?;
-        Ok(v.into_iter().map(|(k, Wrapper(v))| (k, v)).collect())
     }
 }
 
