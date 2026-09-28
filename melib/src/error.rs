@@ -137,6 +137,16 @@ impl ErrorKind {
     }
 }
 
+/// Helper function for ignoring not found errors with
+/// `.or_else(ignore_not_found)?`.
+#[inline(always)]
+pub fn ignore_not_found(err: Error) -> Result<()> {
+    if matches!(err.kind, ErrorKind::NotFound) {
+        return Ok(());
+    }
+    Err(err)
+}
+
 #[macro_export]
 macro_rules! src_err_arc_wrap {
     ($err:expr) => {{

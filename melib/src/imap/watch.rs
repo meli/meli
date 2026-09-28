@@ -28,8 +28,8 @@ use imap_codec::imap_types::search::SearchKey;
 use super::*;
 use crate::{
     backends::SpecialUsageMailbox,
-    error::Result,
-    imap::{email::common_attributes, sync::cache::ignore_not_found},
+    error::{ignore_not_found, Result},
+    imap::email::common_attributes,
 };
 
 /// Arguments for IMAP watching functions

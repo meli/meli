@@ -73,7 +73,7 @@ use crate::{
     collection::Collection,
     conf::AccountSettings,
     email::{parser::BytesExt, *},
-    error::{Error, ErrorKind, Result, ResultIntoError},
+    error::{ignore_not_found, Error, ErrorKind, Result, ResultIntoError},
     imap::{protocol_parser::id_ext::IDResponse, sync::cache::ImapCache},
     text::Truncate,
     utils::futures::timeout,
@@ -991,7 +991,7 @@ impl MailBackend for ImapType {
             if let Err(err) = conn
                 .uid_store
                 .update_flags(env_hashes, mailbox_hash, flags)
-                .or_else(sync::cache::ignore_not_found)
+                .or_else(ignore_not_found)
             {
                 imap_log!(error, conn, "Failed to update cache: {}", err);
             }
