@@ -542,14 +542,9 @@ impl ListingTrait for PlainListing {
             if !account.collection.contains_key(&env_hash) {
                 continue;
             }
-            if self.filtered_order.contains_key(&env_hash) {
-                continue;
-            }
-            if self.rows.contains_env(env_hash) {
-                self.filtered_selection.push(env_hash);
-                self.filtered_order
-                    .insert(env_hash, self.filtered_selection.len() - 1);
-            }
+            self.filtered_selection.push(env_hash);
+            self.filtered_order
+                .insert(env_hash, self.filtered_selection.len() - 1);
         }
         if !self.filtered_selection.is_empty() {
             self.new_cursor_pos.2 = self.cursor_pos.2.min(self.filtered_selection.len() - 1);

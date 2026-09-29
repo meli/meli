@@ -555,11 +555,9 @@ impl ListingTrait for ConversationsListing {
             if self.filtered_order.contains_key(&thread) {
                 continue;
             }
-            if self.rows.all_threads.contains(&thread) {
-                self.filtered_selection.push(thread);
-                self.filtered_order
-                    .insert(thread, self.filtered_selection.len().saturating_sub(1));
-            }
+            self.filtered_selection.push(thread);
+            self.filtered_order
+                .insert(thread, self.filtered_selection.len().saturating_sub(1));
         }
         if !self.filtered_selection.is_empty() {
             threads.group_inner_sort_by(
