@@ -236,17 +236,16 @@ impl MailListingTrait for PlainListing {
                 return;
             }
         }
-        self.local_collection = context.accounts[&self.cursor_pos.0]
-            .collection
-            .get_mailbox(self.cursor_pos.1)
-            .iter()
-            .cloned()
-            .collect();
         let env_lck = context.accounts[&self.cursor_pos.0]
             .collection
             .envelopes
             .read()
             .unwrap();
+        self.local_collection = context.accounts[&self.cursor_pos.0]
+            .collection
+            .get_mailbox(self.cursor_pos.1)
+            .map(|envs| envs.iter().cloned().collect())
+            .unwrap_or_default();
         let sort = self.sort;
         self.local_collection.sort_by(|a, b| match sort {
             (SortField::Date, SortOrder::Desc) => {
@@ -295,7 +294,23 @@ impl MailListingTrait for PlainListing {
         items: Box<dyn Iterator<Item = ThreadHash>>,
     ) {
         let account = &context.accounts[&self.cursor_pos.0];
-        let threads = account.collection.get_threads(self.cursor_pos.1);
+        self.length = 0;
+        let Some(threads) = account.collection.get_threads(self.cursor_pos.1) else {
+            self.redraw_list(context, Box::new(std::iter::empty()));
+            let message: String = account[&self.new_cursor_pos.1].status();
+            _ = self.data_columns.columns[0].resize_with_context(message.len(), 1, context);
+            let area = self.data_columns.columns[0].area();
+            self.data_columns.columns[0].grid_mut().write_string(
+                message.as_str(),
+                self.color_cache.theme_default.fg,
+                self.color_cache.theme_default.bg,
+                self.color_cache.theme_default.attrs,
+                area,
+                None,
+                None,
+            );
+            return;
+        };
         let roots = items
             .filter_map(|r| threads.groups[&r].root().map(|r| r.root))
             .collect::<_>();
@@ -366,7 +381,9 @@ impl ListingTrait for PlainListing {
         };
 
         let account = &context.accounts[&self.cursor_pos.0];
-        let envelope: EnvelopeRef = account.collection.get_env(i);
+        let Some(envelope) = account.collection.get_env(i) else {
+            return;
+        };
 
         let row_attr = row_attr!(
             self.color_cache,
@@ -557,11 +574,10 @@ impl ListingTrait for PlainListing {
         let account = &context.accounts[&self.cursor_pos.0];
         match results {
             Ok(results) => {
-                let threads = account.collection.get_threads(self.cursor_pos.1);
+                let Some(threads) = account.collection.get_threads(self.cursor_pos.1) else {
+                    return;
+                };
                 for env_hash in results {
-                    if !account.collection.contains_key(&env_hash) {
-                        continue;
-                    }
                     let Some(env_thread_node_hash) = threads.envelope_to_thread_node.get(&env_hash)
                     else {
                         continue;
@@ -796,21 +812,12 @@ impl PlainListing {
         .grapheme_width();
         let mut itoa_buffer = itoa::Buffer::new();
         for i in iter {
-            if !context.accounts[&self.cursor_pos.0].contains_key(i)
-                || !threads.envelope_to_thread.contains_key(&i)
-            {
-                //let mailbox = &account[&self.cursor_pos.1];
-                //log::debug!("key = {}", i);
-                //log::debug!(
-                //    "name = {} {}",
-                //    mailbox.name(),
-                //    context.accounts[&self.cursor_pos.0].name()
-                //);
-                //log::debug!("{:#?}", context.accounts);
-
+            let (Some(thread), Some(envelope)) = (
+                threads.as_ref().and_then(|t| t.envelope_to_thread.get(&i)),
+                context.accounts[&self.cursor_pos.0].collection.get_env(i),
+            ) else {
                 continue;
-            }
-            let envelope: EnvelopeRef = context.accounts[&self.cursor_pos.0].collection.get_env(i);
+            };
             use melib::search::QueryTrait;
             if let Some(filter_query) = mailbox_settings!(
                 context[&self.cursor_pos.0][&self.cursor_pos.1]
@@ -876,12 +883,8 @@ impl PlainListing {
             min_width.4 = min_width.4.max(
                 entry_strings.subject.grapheme_width() + 1 + entry_strings.tags.grapheme_width(),
             ); /* tags + subject */
-            self.rows.insert_thread(
-                threads.envelope_to_thread[&i],
-                (threads.envelope_to_thread[&i], i),
-                smallvec::smallvec![i],
-                entry_strings,
-            );
+            self.rows
+                .insert_thread(*thread, (*thread, i), smallvec::smallvec![i], entry_strings);
 
             self.length += 1;
         }
@@ -1134,12 +1137,10 @@ impl PlainListing {
     fn update_line(&mut self, context: &Context, env_hash: EnvelopeHash) {
         let account = &context.accounts[&self.cursor_pos.0];
 
-        if !account.contains_key(env_hash) {
-            /* The envelope has been renamed or removed, so wait for the appropriate
-             * event to arrive */
+        let Some(envelope) = account.collection.get_env(env_hash) else {
+            // The envelope has been renamed or removed, so wait for the appropriate event to arrive
             return;
-        }
-        let envelope: EnvelopeRef = account.collection.get_env(env_hash);
+        };
         let thread_hash = self.rows.env_to_thread[&env_hash];
         let idx = self.rows.env_order[&env_hash];
         let row_attr = row_attr!(
@@ -1615,16 +1616,18 @@ impl Component for PlainListing {
 
             if !self.rows.row_updates.is_empty() {
                 while let Some(env_hash) = self.rows.row_updates.pop() {
-                    if !self.rows.env_to_thread.contains_key(&env_hash) {
+                    let (Some(envelope), true) = (
+                        context.accounts[&self.cursor_pos.0]
+                            .collection
+                            .get_env(env_hash),
+                        self.rows.env_to_thread.contains_key(&env_hash),
+                    ) else {
                         self.refresh_mailbox(context, true);
                         self.set_dirty(true);
                         break;
-                    }
+                    };
                     self.update_line(context, env_hash);
                     let row: usize = self.rows.env_order[&env_hash];
-                    let envelope: EnvelopeRef = context.accounts[&self.cursor_pos.0]
-                        .collection
-                        .get_env(env_hash);
                     let row_attr = row_attr!(
                         self.color_cache,
                         even: row % 2 == 0,
@@ -1780,16 +1783,6 @@ impl Component for PlainListing {
                 self.set_dirty(true);
             }
             UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
-                let account = &context.accounts[&self.cursor_pos.0];
-                if !account.collection.contains_key(new_hash)
-                    || !account
-                        .collection
-                        .get_mailbox(self.cursor_pos.1)
-                        .contains(new_hash)
-                {
-                    return false;
-                }
-
                 self.rows.rename_env(*old_hash, *new_hash);
                 for h in self.filtered_selection.iter_mut() {
                     if *h == *old_hash {
@@ -1807,16 +1800,6 @@ impl Component for PlainListing {
                 }
             }
             UIEvent::EnvelopeUpdate(ref env_hash) => {
-                let account = &context.accounts[&self.cursor_pos.0];
-                if !account.collection.contains_key(env_hash)
-                    || !account
-                        .collection
-                        .get_mailbox(self.cursor_pos.1)
-                        .contains(env_hash)
-                {
-                    return false;
-                }
-
                 self.rows.row_updates.push(*env_hash);
                 self.set_dirty(true);
             }

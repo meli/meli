@@ -937,7 +937,7 @@ pub trait MailListingTrait: ListingTrait {
                                 let bytes: Vec<Vec<u8>> = try_join_all(futures?).await?;
                                 let envs: Vec<_> = envs_to_set
                                     .iter()
-                                    .map(|&env_hash| collection.get_env(env_hash))
+                                    .filter_map(|&env_hash| collection.get_env(env_hash))
                                     .collect();
                                 if path.is_dir() {
                                     let mut filename = if envs.len() == 1 {

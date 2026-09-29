@@ -574,7 +574,8 @@ impl Account {
                     && self
                         .collection
                         .get_mailbox(mailbox_hash)
-                        .contains(&env_hash)
+                        .map(|m| m.contains(&env_hash))
+                        .unwrap_or(false)
                 {
                     return;
                 }
@@ -630,7 +631,9 @@ impl Account {
                 }
 
                 {
-                    let threads = self.collection.get_threads(mailbox_hash);
+                    let Some(threads) = self.collection.get_threads(mailbox_hash) else {
+                        return;
+                    };
                     let Some(thread_node_hash) = threads.envelope_to_thread_node.get(&env_hash)
                     else {
                         return;
@@ -696,7 +699,9 @@ impl Account {
                 }
 
                 let thread_hash = {
-                    let threads = self.collection.get_threads(mailbox_hash);
+                    let Some(threads) = self.collection.get_threads(mailbox_hash) else {
+                        return;
+                    };
                     let Some(thread_node_hash) = threads.envelope_to_thread_node.get(&env_hash)
                     else {
                         return;
@@ -1290,10 +1295,12 @@ impl Account {
                     let query = melib::search::Query::try_from(search_term)?;
                     let mut ret = Vec::with_capacity(512);
                     let envelopes = self.collection.envelopes.read().unwrap();
-                    for &env_hash in self.collection.get_mailbox(mailbox_hash).iter() {
-                        if let Some(envelope) = envelopes.get(&env_hash) {
-                            if envelope.is_match(&query) {
-                                ret.push(env_hash);
+                    if let Some(mailbox) = self.collection.get_mailbox(mailbox_hash) {
+                        for &env_hash in mailbox.iter() {
+                            if let Some(envelope) = envelopes.get(&env_hash) {
+                                if envelope.is_match(&query) {
+                                    ret.push(env_hash);
+                                }
                             }
                         }
                     }

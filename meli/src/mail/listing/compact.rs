@@ -249,16 +249,20 @@ impl MailListingTrait for CompactListing {
             }
         }
 
-        let threads = context.accounts[&self.cursor_pos.0]
+        let roots = if let Some(threads) = context.accounts[&self.cursor_pos.0]
             .collection
-            .get_threads(self.cursor_pos.1);
-        let mut roots = threads.roots();
-        threads.group_inner_sort_by(
-            &mut roots,
-            self.sort,
-            &context.accounts[&self.cursor_pos.0].collection.envelopes,
-        );
-        drop(threads);
+            .get_threads(self.cursor_pos.1)
+        {
+            let mut roots = threads.roots();
+            threads.group_inner_sort_by(
+                &mut roots,
+                self.sort,
+                &context.accounts[&self.cursor_pos.0].collection.envelopes,
+            );
+            roots
+        } else {
+            Default::default()
+        };
 
         let previous_selection = self.rows.clear(same_mailbox);
         self.redraw_threads_list(
@@ -293,9 +297,23 @@ impl MailListingTrait for CompactListing {
         items: Box<dyn Iterator<Item = ThreadHash>>,
     ) {
         let account = &context.accounts[&self.cursor_pos.0];
-        let threads = account.collection.get_threads(self.cursor_pos.1);
-
         self.length = 0;
+        let Some(threads) = account.collection.get_threads(self.cursor_pos.1) else {
+            let message: String = account[&self.new_cursor_pos.1].status();
+            _ = self.data_columns.columns[0].resize_with_context(message.len(), 1, context);
+            let area = self.data_columns.columns[0].area();
+            self.data_columns.columns[0].grid_mut().write_string(
+                message.as_str(),
+                self.color_cache.theme_default.fg,
+                self.color_cache.theme_default.bg,
+                self.color_cache.theme_default.attrs,
+                area,
+                None,
+                None,
+            );
+            return;
+        };
+
         let mut min_width = (0, 0, 0, 0, 0);
         #[allow(clippy::type_complexity)]
         let mut row_widths: (
@@ -359,20 +377,12 @@ impl MailListingTrait for CompactListing {
             } else {
                 continue 'items_for_loop;
             };
-            if !context.accounts[&self.cursor_pos.0].contains_key(root_env_hash) {
-                //log::debug!("key = {}", root_env_hash);
-                //log::debug!(
-                //    "name = {} {}",
-                //    account[&self.cursor_pos.1].name(),
-                //    context.accounts[&self.cursor_pos.0].name()
-                //);
-                //log::debug!("{:#?}", context.accounts);
-
-                continue;
-            }
-            let root_envelope: EnvelopeRef = context.accounts[&self.cursor_pos.0]
+            let Some(root_envelope) = context.accounts[&self.cursor_pos.0]
                 .collection
-                .get_env(root_env_hash);
+                .get_env(root_env_hash)
+            else {
+                continue;
+            };
             use melib::search::QueryTrait;
             if let Some(filter_query) = mailbox_settings!(
                 context[&self.cursor_pos.0][&self.cursor_pos.1]
@@ -398,13 +408,13 @@ impl MailListingTrait for CompactListing {
                         threads.thread_nodes()[&h].show_subject(),
                     ))
                 })
-                .map(|(env_hash, show_subject)| {
-                    (
+                .filter_map(|(env_hash, show_subject)| {
+                    Some((
                         context.accounts[&self.cursor_pos.0]
                             .collection
-                            .get_env(env_hash),
+                            .get_env(env_hash)?,
                         show_subject,
-                    )
+                    ))
                 })
             {
                 if show_subject {
@@ -615,7 +625,9 @@ impl ListingTrait for CompactListing {
         };
 
         let account = &context.accounts[&self.cursor_pos.0];
-        let threads = account.collection.get_threads(self.cursor_pos.1);
+        let Some(threads) = account.collection.get_threads(self.cursor_pos.1) else {
+            return;
+        };
         let thread = threads.thread_ref(thread_hash);
 
         let row_attr = row_attr!(
@@ -770,11 +782,11 @@ impl ListingTrait for CompactListing {
         }
 
         let account = &context.accounts[&self.cursor_pos.0];
-        let threads = account.collection.get_threads(self.cursor_pos.1);
+        let Some(threads) = account.collection.get_threads(self.cursor_pos.1) else {
+            self.redraw_threads_list(context, Box::new(std::iter::empty()));
+            return;
+        };
         for env_hash in results {
-            if !account.collection.contains_key(&env_hash) {
-                continue;
-            }
             let Some(env_thread_node_hash) = threads.envelope_to_thread_node.get(&env_hash) else {
                 continue;
             };
@@ -819,23 +831,23 @@ impl ListingTrait for CompactListing {
         let account = &context.accounts[&self.cursor_pos.0];
         match results {
             Ok(results) => {
-                let threads = account.collection.get_threads(self.cursor_pos.1);
-                for env_hash in results {
-                    if !account.collection.contains_key(&env_hash) {
-                        continue;
-                    }
-                    let Some(env_thread_node_hash) = threads.envelope_to_thread_node.get(&env_hash)
-                    else {
-                        continue;
-                    };
-                    let Some(thread_node) = threads.thread_nodes.get(env_thread_node_hash) else {
-                        continue;
-                    };
-                    let thread = threads.find_group(thread_node.group);
-                    if self.rows.all_threads.contains(&thread) {
-                        self.selection_mut()
-                            .entry(env_hash)
-                            .and_modify(|entry| *entry = true);
+                if let Some(threads) = account.collection.get_threads(self.cursor_pos.1) {
+                    for env_hash in results {
+                        let Some(env_thread_node_hash) =
+                            threads.envelope_to_thread_node.get(&env_hash)
+                        else {
+                            continue;
+                        };
+                        let Some(thread_node) = threads.thread_nodes.get(env_thread_node_hash)
+                        else {
+                            continue;
+                        };
+                        let thread = threads.find_group(thread_node.group);
+                        if self.rows.all_threads.contains(&thread) {
+                            self.selection_mut()
+                                .entry(env_hash)
+                                .and_modify(|entry| *entry = true);
+                        }
                     }
                 }
             }
@@ -1072,15 +1084,15 @@ impl CompactListing {
     fn update_line(&mut self, context: &Context, env_hash: EnvelopeHash) {
         let account = &context.accounts[&self.cursor_pos.0];
 
-        if !account.contains_key(env_hash) {
-            /* The envelope has been renamed or removed, so wait for the appropriate
-             * event to arrive */
+        let Some(envelope) = account.collection.get_env(env_hash) else {
+            // The envelope has been renamed or removed, so wait for the appropriate event to arrive
             return;
-        }
+        };
         let tags_lck = account.collection.tag_index.read().unwrap();
-        let envelope: EnvelopeRef = account.collection.get_env(env_hash);
         let thread_hash = self.rows.env_to_thread[&env_hash];
-        let threads = account.collection.get_threads(self.cursor_pos.1);
+        let Some(threads) = account.collection.get_threads(self.cursor_pos.1) else {
+            return;
+        };
         let thread = threads.thread_ref(thread_hash);
         let idx = self.rows.thread_order[&thread_hash];
         let row_attr = row_attr!(
@@ -1115,13 +1127,13 @@ impl CompactListing {
                     .message()
                     .map(|env_hash| (env_hash, threads.thread_nodes()[&h].show_subject()))
             })
-            .map(|(env_hash, show_subject)| {
-                (
+            .filter_map(|(env_hash, show_subject)| {
+                Some((
                     context.accounts[&self.cursor_pos.0]
                         .collection
-                        .get_env(env_hash),
+                        .get_env(env_hash)?,
                     show_subject,
-                )
+                ))
             })
         {
             if show_subject {
@@ -1411,7 +1423,9 @@ impl CompactListing {
         let width = self.data_columns.widths[0];
         let area = area.take_cols(width);
         let account = &context.accounts[&self.cursor_pos.0];
-        let threads = account.collection.get_threads(self.cursor_pos.1);
+        let Some(threads) = account.collection.get_threads(self.cursor_pos.1) else {
+            return;
+        };
         for i in 0..area.height() {
             let idx = top_idx + i;
             if idx >= self.length {
@@ -1904,7 +1918,9 @@ impl Component for CompactListing {
             }
             UIEvent::EnvelopeRename(_, ref new_hash) => {
                 let account = &context.accounts[&self.cursor_pos.0];
-                let threads = account.collection.get_threads(self.cursor_pos.1);
+                let Some(threads) = account.collection.get_threads(self.cursor_pos.1) else {
+                    return false;
+                };
                 if !account.collection.contains_key(new_hash) {
                     return false;
                 }
@@ -1932,7 +1948,9 @@ impl Component for CompactListing {
             }
             UIEvent::EnvelopeUpdate(ref env_hash) => {
                 let account = &context.accounts[&self.cursor_pos.0];
-                let threads = account.collection.get_threads(self.cursor_pos.1);
+                let Some(threads) = account.collection.get_threads(self.cursor_pos.1) else {
+                    return false;
+                };
                 if !account.collection.contains_key(env_hash) {
                     return false;
                 }

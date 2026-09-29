@@ -400,30 +400,42 @@ impl Collection {
     }
 
     #[inline]
-    pub fn get_env(&'_ self, hash: EnvelopeHash) -> EnvelopeRef<'_> {
+    pub fn get_env(&'_ self, hash: EnvelopeHash) -> Option<EnvelopeRef<'_>> {
         let guard: RwLockReadGuard<'_, _> = self.envelopes.read().unwrap();
-        EnvelopeRef { guard, hash }
+        if !guard.contains_key(&hash) {
+            return None;
+        }
+        Some(EnvelopeRef { guard, hash })
     }
 
     #[inline]
-    pub fn get_env_mut(&'_ self, hash: EnvelopeHash) -> EnvelopeRefMut<'_> {
+    pub fn get_env_mut(&'_ self, hash: EnvelopeHash) -> Option<EnvelopeRefMut<'_>> {
         let guard = self.envelopes.write().unwrap();
-        EnvelopeRefMut { guard, hash }
+        if !guard.contains_key(&hash) {
+            return None;
+        }
+        Some(EnvelopeRefMut { guard, hash })
     }
 
     #[inline]
-    pub fn get_threads(&'_ self, hash: MailboxHash) -> RwRef<'_, MailboxHash, Threads> {
+    pub fn get_threads(&'_ self, hash: MailboxHash) -> Option<RwRef<'_, MailboxHash, Threads>> {
         let guard = self.threads.read().unwrap();
-        RwRef { guard, hash }
+        if !guard.contains_key(&hash) {
+            return None;
+        }
+        Some(RwRef { guard, hash })
     }
 
     #[inline]
     pub fn get_mailbox(
         &'_ self,
         hash: MailboxHash,
-    ) -> RwRef<'_, MailboxHash, HashSet<EnvelopeHash>> {
+    ) -> Option<RwRef<'_, MailboxHash, HashSet<EnvelopeHash>>> {
         let guard = self.mailboxes.read().unwrap();
-        RwRef { guard, hash }
+        if !guard.contains_key(&hash) {
+            return None;
+        }
+        Some(RwRef { guard, hash })
     }
 
     #[inline]

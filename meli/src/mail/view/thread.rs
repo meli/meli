@@ -226,7 +226,9 @@ impl ThreadView {
         }
 
         let collection = context.accounts[&self.coordinates.0].collection.clone();
-        let threads = collection.get_threads(self.coordinates.1);
+        let Some(threads) = collection.get_threads(self.coordinates.1) else {
+            return;
+        };
 
         if !threads.groups.contains_key(&self.thread_group) {
             return;
@@ -247,7 +249,9 @@ impl ThreadView {
                 if Some(msg_hash) == expanded_hash {
                     continue;
                 }
-                let env_ref = collection.get_env(msg_hash);
+                let Some(env_ref) = collection.get_env(msg_hash) else {
+                    continue;
+                };
                 total_entries.push((msg_hash, env_ref.timestamp));
             };
         }
@@ -269,7 +273,9 @@ impl ThreadView {
             let entry = if let Some(msg_hash) = threads.thread_nodes()[&thread_node_hash].message()
             {
                 let (is_seen, timestamp) = {
-                    let env_ref = collection.get_env(msg_hash);
+                    let Some(env_ref) = collection.get_env(msg_hash) else {
+                        continue;
+                    };
                     if !env_ref.is_seen()
                         && (earliest_unread == 0 || env_ref.timestamp < earliest_unread)
                     {
@@ -335,14 +341,17 @@ impl ThreadView {
         let mut width = 0;
 
         for e in &mut self.entries {
-            let envelope: EnvelopeRef = context.accounts[&self.coordinates.0]
+            let Some(env_ref) = context.accounts[&self.coordinates.0]
                 .collection
-                .get_env(e.msg_hash);
+                .get_env(e.msg_hash)
+            else {
+                continue;
+            };
             let thread_node = &threads.thread_nodes()[&e.index.1];
-            let from = Address::display_name_slice(envelope.from(), None);
-            let date = timestamp_to_string(envelope.date(), Some("%Y-%m-%d %H:%M\0"), true);
+            let from = Address::display_name_slice(env_ref.from(), None);
+            let date = timestamp_to_string(env_ref.date(), Some("%Y-%m-%d %H:%M\0"), true);
             e.heading = if thread_node.show_subject() {
-                let subject = envelope.subject();
+                let subject = env_ref.subject();
                 format!(
                     "{date} {subject:`>indent$} {from}",
                     indent = 2 * e.index.0 + subject.grapheme_width(),
@@ -600,7 +609,9 @@ impl ThreadView {
         if self.dirty {
             grid.clear_area(area, theme_default);
             let account = &context.accounts[&self.coordinates.0];
-            let threads = account.collection.get_threads(self.coordinates.1);
+            let Some(threads) = account.collection.get_threads(self.coordinates.1) else {
+                return;
+            };
             let thread_root = threads.thread_iter(self.thread_group).next().unwrap().1;
             let thread_node = &threads.thread_nodes()[&thread_root];
             let i = thread_node.message().unwrap_or_else(|| {
@@ -610,20 +621,20 @@ impl ThreadView {
                 }
                 threads.thread_nodes()[&iter_ptr].message().unwrap()
             });
-            let envelope: EnvelopeRef = account.collection.get_env(i);
-
-            let (_, y) = grid.write_string(
-                &envelope.subject(),
-                theme_default.fg,
-                theme_default.bg,
-                theme_default.attrs,
-                area,
-                None,
-                Some(0),
-            );
-            context.dirty_areas.push_back(area);
-            grid.clear_area(area.nth_col(mid), theme_default);
-            grid.clear_area(area.skip(mid, y + 1), theme_default);
+            if let Some(env_ref) = account.collection.get_env(i) {
+                let (_, y) = grid.write_string(
+                    &env_ref.subject(),
+                    theme_default.fg,
+                    theme_default.bg,
+                    theme_default.attrs,
+                    area,
+                    None,
+                    Some(0),
+                );
+                context.dirty_areas.push_back(area);
+                grid.clear_area(area.nth_col(mid), theme_default);
+                grid.clear_area(area.skip(mid, y + 1), theme_default);
+            }
         };
         let area = area.skip_rows(2);
         let (width, height) = self.content.area().size();
@@ -665,7 +676,9 @@ impl ThreadView {
         if self.dirty {
             grid.clear_area(area, theme_default);
             let account = &context.accounts[&self.coordinates.0];
-            let threads = account.collection.get_threads(self.coordinates.1);
+            let Some(threads) = account.collection.get_threads(self.coordinates.1) else {
+                return;
+            };
             let thread_root = threads.thread_iter(self.thread_group).next().unwrap().1;
             let thread_node = &threads.thread_nodes()[&thread_root];
             let i = thread_node.message().unwrap_or_else(|| {
@@ -675,18 +688,18 @@ impl ThreadView {
                 }
                 threads.thread_nodes()[&iter_ptr].message().unwrap()
             });
-            let envelope: EnvelopeRef = account.collection.get_env(i);
-
-            grid.write_string(
-                &envelope.subject(),
-                theme_default.fg,
-                theme_default.bg,
-                theme_default.attrs,
-                area,
-                None,
-                Some(0),
-            );
-            context.dirty_areas.push_back(area);
+            if let Some(env_ref) = account.collection.get_env(i) {
+                grid.write_string(
+                    &env_ref.subject(),
+                    theme_default.fg,
+                    theme_default.bg,
+                    theme_default.attrs,
+                    area,
+                    None,
+                    Some(0),
+                );
+                context.dirty_areas.push_back(area);
+            }
         };
 
         let area = area.skip_rows(2);
@@ -1018,7 +1031,10 @@ impl Component for ThreadView {
                 for e in self.entries.iter_mut() {
                     if e.msg_hash == *old_hash {
                         e.msg_hash = *new_hash;
-                        let seen: bool = account.collection.get_env(*new_hash).is_seen();
+                        let Some(seen) = account.collection.get_env(*new_hash).map(|e| e.is_seen())
+                        else {
+                            continue;
+                        };
                         e.dirty = e.seen != seen;
                         e.seen = seen;
                         e.mailview.process_event(
@@ -1035,7 +1051,10 @@ impl Component for ThreadView {
                 let account = &context.accounts[&self.coordinates.0];
                 for e in self.entries.iter_mut() {
                     if e.msg_hash == *env_hash {
-                        let seen: bool = account.collection.get_env(*env_hash).is_seen();
+                        let Some(seen) = account.collection.get_env(*env_hash).map(|e| e.is_seen())
+                        else {
+                            continue;
+                        };
                         e.dirty = e.seen != seen;
                         e.seen = seen;
                         e.mailview
@@ -1193,7 +1212,7 @@ impl Component for ThreadView {
                         let bytes: Vec<Vec<u8>> = try_join_all(futures?).await?;
                         let envs: Vec<_> = envs_to_set
                             .iter()
-                            .map(|&env_hash| collection.get_env(env_hash))
+                            .filter_map(|&env_hash| collection.get_env(env_hash))
                             .collect();
                         if path.is_dir() {
                             let mut filename = if envs.len() == 1 {

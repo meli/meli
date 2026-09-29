@@ -271,13 +271,12 @@ impl Composer {
 
     pub fn edit(
         account_hash: AccountHash,
-        env_hash: EnvelopeHash,
+        envelope: &Envelope,
         bytes: &[u8],
         context: &Context,
     ) -> Result<Self> {
         let mut ret = Self::with_account(account_hash, context);
-        let envelope: EnvelopeRef = context.accounts[&account_hash].collection.get_env(env_hash);
-        ret.draft = Draft::edit(&envelope, bytes, Text::Plain)?;
+        ret.draft = Draft::edit(envelope, bytes, Text::Plain)?;
         let mut past_date_warn_hook = hooks::PASTDATEWARN;
         if let Err(err) = past_date_warn_hook(context, &ret.draft) {
             ret.mode = ViewMode::PerformAction {
@@ -314,14 +313,14 @@ impl Composer {
     }
 
     pub fn reply_to(
-        coordinates @ (account_hash, _, _): (AccountHash, MailboxHash, EnvelopeHash),
+        (account_hash, mailbox_hash): (AccountHash, MailboxHash),
+        envelope: &Envelope,
         reply_body: String,
         context: &Context,
         mut reply_to_all: bool,
     ) -> Self {
         let mut ret = Self::with_account(account_hash, context);
         let account = &context.accounts[&account_hash];
-        let envelope = account.collection.get_env(coordinates.2);
         let subject = {
             let subject = envelope.subject();
             let prefix_list = account_settings!(
@@ -383,11 +382,11 @@ impl Composer {
             }
         }
 
-        let ours = context.accounts[&coordinates.0]
+        let ours = context.accounts[&account_hash]
             .settings
             .account()
             .main_identity_address();
-        let extra_ours = context.accounts[&coordinates.0]
+        let extra_ours = context.accounts[&account_hash]
             .settings
             .account()
             .extra_identity_addresses();
@@ -409,7 +408,7 @@ impl Composer {
         if reply_to_all {
             let mut to = IndexSet::new();
 
-            if let Some(actions) = list_management::ListActions::detect(&envelope) {
+            if let Some(actions) = list_management::ListActions::detect(envelope) {
                 if let Some(post) = actions.post {
                     if let list_management::ListAction::Email(list_post_addr) = post[0] {
                         if let Ok(list_address) =
@@ -489,23 +488,21 @@ impl Composer {
             quoted
         };
 
-        ret.account_hash = coordinates.0;
-        ret.reply_context = Some((coordinates.1, coordinates.2));
+        ret.account_hash = account_hash;
+        ret.reply_context = Some((mailbox_hash, envelope.hash()));
         ret
     }
 
     pub fn reply_to_select(
-        coordinates @ (account_hash, _, _): (AccountHash, MailboxHash, EnvelopeHash),
+        coordinates: (AccountHash, MailboxHash),
+        parent_message: &Envelope,
         reply_body: String,
         context: &Context,
     ) -> Self {
-        let mut ret = Self::reply_to(coordinates, reply_body, context, false);
-        let account = &context.accounts[&account_hash];
-        let parent_message = account.collection.get_env(coordinates.2);
-        /* If message is from a mailing list and we detect a List-Post header, ask
-         * user if they want to reply to the mailing list or the submitter of
-         * the message */
-        if let Some(actions) = list_management::ListActions::detect(&parent_message) {
+        let mut ret = Self::reply_to(coordinates, parent_message, reply_body, context, false);
+        // If message is from a mailing list and we detect a List-Post header, ask user if they
+        // want to reply to the mailing list or the submitter of the message
+        if let Some(actions) = list_management::ListActions::detect(parent_message) {
             if let Some(post) = actions.post {
                 if let list_management::ListAction::Email(list_post_addr) = post[0] {
                     if let Ok((_, mailto)) = melib::email::parser::generic::mailto(list_post_addr) {
@@ -543,23 +540,25 @@ impl Composer {
     }
 
     pub fn reply_to_author(
-        coordinates: (AccountHash, MailboxHash, EnvelopeHash),
+        coordinates: (AccountHash, MailboxHash),
+        envelope: &Envelope,
         reply_body: String,
         context: &Context,
     ) -> Self {
-        Self::reply_to(coordinates, reply_body, context, false)
+        Self::reply_to(coordinates, envelope, reply_body, context, false)
     }
 
     pub fn reply_to_all(
-        coordinates: (AccountHash, MailboxHash, EnvelopeHash),
+        coordinates: (AccountHash, MailboxHash),
+        envelope: &Envelope,
         reply_body: String,
         context: &Context,
     ) -> Self {
-        Self::reply_to(coordinates, reply_body, context, true)
+        Self::reply_to(coordinates, envelope, reply_body, context, true)
     }
 
     pub fn forward(
-        coordinates: (AccountHash, MailboxHash, EnvelopeHash),
+        coordinates: (AccountHash, MailboxHash),
         bytes: &[u8],
         env: &Envelope,
         as_attachment: bool,
@@ -3022,7 +3021,11 @@ hello world.
             .collection
             .insert(envelope, mailbox_hash);
         let composer = Composer::reply_to(
-            (account_hash, mailbox_hash, envelope_hash),
+            (account_hash, mailbox_hash),
+            &context.accounts[0]
+                .collection
+                .get_env(envelope_hash)
+                .unwrap(),
             String::new(),
             &context,
             false,
@@ -3051,7 +3054,11 @@ hello world.
             .collection
             .insert(envelope, mailbox_hash);
         let composer = Composer::reply_to(
-            (account_hash, mailbox_hash, envelope_hash),
+            (account_hash, mailbox_hash),
+            &context.accounts[0]
+                .collection
+                .get_env(envelope_hash)
+                .unwrap(),
             String::new(),
             &context,
             false,

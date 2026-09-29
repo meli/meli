@@ -178,9 +178,10 @@ impl MailView {
     }
 
     fn perform_action(&mut self, action: PendingReplyAction, context: &mut Context) {
-        let Some(coordinates) = self.coordinates else {
+        let Some((account_hash, mailbox_hash, _)) = self.coordinates else {
             return;
         };
+        let coordinates = (account_hash, mailbox_hash);
         let (bytes, reply_body, env) = match self.state {
             MailViewState::Init {
                 ref mut pending_action,
@@ -206,16 +207,19 @@ impl MailView {
         let composer = match action {
             PendingReplyAction::Reply => Box::new(Composer::reply_to_select(
                 coordinates,
+                env,
                 reply_body.to_string(),
                 context,
             )),
             PendingReplyAction::ReplyToAuthor => Box::new(Composer::reply_to_author(
                 coordinates,
+                env,
                 reply_body.to_string(),
                 context,
             )),
             PendingReplyAction::ReplyToAll => Box::new(Composer::reply_to_all(
                 coordinates,
+                env,
                 reply_body.to_string(),
                 context,
             )),
@@ -254,7 +258,7 @@ impl MailView {
             return;
         };
         let account = &context.accounts[&coordinates.0];
-        if !account.contains_key(coordinates.2) {
+        let Some(envelope) = account.collection.get_env(coordinates.2) else {
             context.replies.push_back(UIEvent::Notification {
                 title: None,
                 source: None,
@@ -262,7 +266,7 @@ impl MailView {
                 kind: None,
             });
             return;
-        }
+        };
         // First retrieve user's identities, and remove them from the final address
         // list.
         let mut seen = {
@@ -272,7 +276,6 @@ impl MailView {
             ret.insert(account.settings.account().main_identity_address());
             ret
         };
-        let envelope: EnvelopeRef = account.collection.get_env(coordinates.2);
 
         let mut entries: IndexMap<Card, (Card, String)> = IndexMap::default();
         for addr in envelope
@@ -336,7 +339,12 @@ impl Component for MailView {
         {
             {
                 let account = &mut context.accounts[&coordinates.0];
-                if !account.collection.get_env(coordinates.2).is_seen() {
+                if !account
+                    .collection
+                    .get_env(coordinates.2)
+                    .map(|e| e.is_seen())
+                    .unwrap_or(true)
+                {
                     if let Err(err) = account.set_flags(
                         coordinates.2.into(),
                         coordinates.1,
@@ -577,9 +585,21 @@ impl Component for MailView {
                                       * thread panicked */
                                 }
                                 Ok(Some(result)) => {
-                                    match result.and_then(|bytes| {
-                                        Composer::edit(account_hash, env_hash, &bytes, context)
-                                    }) {
+                                    match result
+                                        .and_then(|bytes| {
+                                            Ok((
+                                                bytes,
+                                                context.accounts[&account_hash]
+                                                    .collection
+                                                    .get_env(env_hash)
+                                                    .ok_or_else(|| {
+                                                        Error::new("E-mail not found")
+                                                    })?,
+                                            ))
+                                        })
+                                        .and_then(|(bytes, env)| {
+                                            Composer::edit(account_hash, &env, &bytes, context)
+                                        }) {
                                         Ok(composer) => {
                                             context.replies.push_back(UIEvent::Action(Tab(New(
                                                 Some(Box::new(composer)),
@@ -644,12 +664,11 @@ impl Component for MailView {
             }
             UIEvent::Action(MailingListAction(ref e)) => {
                 let account = &context.accounts[&coordinates.0];
-                if !account.contains_key(coordinates.2) {
-                    /* The envelope has been renamed or removed, so wait for the appropriate
-                     * event to arrive */
+                let Some(envelope) = account.collection.get_env(coordinates.2) else {
+                    // The envelope has been renamed or removed, so wait for the appropriate event
+                    // to arrive
                     return true;
-                }
-                let envelope: EnvelopeRef = account.collection.get_env(coordinates.2);
+                };
                 let detect = list_management::ListActions::detect(&envelope);
                 if let Some(ref actions) = detect {
                     match e {
