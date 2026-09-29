@@ -60,17 +60,15 @@ impl Account {
             let name = self.name.clone();
             let backend = self.backend.clone();
             let fut = async move {
-                crate::sqlite3::AccountCache::remove(
-                    name.clone(),
-                    old_hash.unwrap_or_else(|| env.hash()),
-                )
-                .await?;
-
-                crate::sqlite3::AccountCache::insert(env, backend, name).await?;
+                if let Some(old_hash) = old_hash {
+                    crate::sqlite3::AccountCache::update(name, old_hash, env, backend).await?;
+                } else {
+                    crate::sqlite3::AccountCache::insert(name, env, backend).await?;
+                }
                 Ok(())
             };
             let handle = self.main_loop_handler.job_executor.spawn(
-                "sqlite3::remove".into(),
+                "sqlite3::update_env".into(),
                 fut,
                 crate::sqlite3::AccountCache::is_async(),
             );
@@ -78,6 +76,29 @@ impl Account {
                 handle.job_id,
                 JobRequest::Generic {
                     name: format!("Update envelope {msg_id} in sqlite3 cache").into(),
+                    handle,
+                    log_level: LogLevel::TRACE,
+                    on_finish: None,
+                },
+            );
+        }
+    }
+
+    #[cfg(feature = "sqlite3")]
+    pub(super) fn rename_cached_env(&mut self, old_hash: EnvelopeHash, new_hash: EnvelopeHash) {
+        if self.settings.conf.search_backend == SearchBackend::Sqlite3 {
+            let name = self.name.clone();
+            let fut =
+                async move { crate::sqlite3::AccountCache::rename(name, old_hash, new_hash).await };
+            let handle = self.main_loop_handler.job_executor.spawn(
+                "sqlite3::rename".into(),
+                fut,
+                crate::sqlite3::AccountCache::is_async(),
+            );
+            self.insert_job(
+                handle.job_id,
+                JobRequest::Generic {
+                    name: "Update envelope in sqlite3 cache".into(),
                     handle,
                     log_level: LogLevel::TRACE,
                     on_finish: None,
