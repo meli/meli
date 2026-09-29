@@ -640,7 +640,7 @@ impl MailBackend for NotmuchDb {
         }
         impl FetchState {
             async fn fetch(&mut self) -> Result<Option<Vec<Envelope>>> {
-                let chunk_size = 250;
+                let chunk_size = 1000;
                 let mut snapshot = self.snapshot.write().unwrap();
                 let mut ret: Vec<Envelope> = Vec::with_capacity(chunk_size);
                 let mut done: bool = false;
