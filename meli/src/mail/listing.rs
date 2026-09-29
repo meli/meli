@@ -760,9 +760,8 @@ pub trait MailListingTrait: ListingTrait {
                 ListingAction::SendToTrash => {
                     use melib::backends::SpecialUsageMailbox;
 
-                    let Some(trash_mbox_hash) = account
-                        .special_use_mailbox(SpecialUsageMailbox::Trash)
-                        .or_else(|| account.special_use_mailbox(SpecialUsageMailbox::Junk))
+                    let Some(trash_mbox_hash) =
+                        account.special_use_mailbox(SpecialUsageMailbox::Trash)
                     else {
                         context.replies.push_back(UIEvent::Notification {
                             title: Some("Could not send mail to trash".into()),
