@@ -23,7 +23,6 @@ use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
     io::{BufReader, Read},
-    ops::{Deref, DerefMut},
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
 };
@@ -62,48 +61,28 @@ impl MaildirOp {
 
     pub fn path(&self) -> Option<PathBuf> {
         let map = self.hash_index.lock().unwrap();
-        let map = map.get(&self.mailbox_hash)?;
-        log::trace!("looking for {} in {} map", self.hash, self.mailbox_hash);
-        let mut hash = self.hash;
-        loop {
-            let Some(p) = map.get(&hash) else {
-                log::trace!("doesn't contain it though len = {}\n{:#?}", map.len(), map);
-                for e in map.iter() {
-                    log::debug!("{:#?}", e);
-                }
-                return None;
-            };
-            if let Some(ref modif) = p.modified {
-                match modif {
-                    PathMod::Path(ref path) => return Some(path.to_path_buf()),
-                    PathMod::Hash(next_hash) => {
-                        hash = *next_hash;
-                    }
-                }
-            } else if p.removed {
-                return None;
-            } else {
-                return Some(p.buf.to_path_buf());
-            }
-        }
+        map.get(&self.mailbox_hash)?.index.get(&self.hash).cloned()
     }
 
     pub async fn as_bytes(&self) -> Result<Vec<u8>> {
         let _self = self.clone();
 
+        let Some(path) = self.path() else {
+            return Err(Error::new("Not found")
+                .set_summary(format!("Message with hash {} was not found.", self.hash))
+                .set_kind(ErrorKind::NotFound));
+        };
         smol::unblock(move || {
-            let Some(path) = _self.path() else {
-                return Err(Error::new("Not found")
-                    .set_summary(format!("Message with hash {} was not found.", _self.hash))
-                    .set_kind(ErrorKind::NotFound));
-            };
             let file = std::fs::OpenOptions::new()
                 .read(true)
                 .write(false)
-                .open(path)?;
+                .open(&path)
+                .chain_err_related_path(&path)?;
             let mut buf_reader = BufReader::new(file);
             let mut contents = Vec::new();
-            buf_reader.read_to_end(&mut contents)?;
+            buf_reader
+                .read_to_end(&mut contents)
+                .chain_err_related_path(&path)?;
             Ok(contents)
         })
         .await
@@ -121,8 +100,8 @@ pub struct MaildirMailbox {
     pub usage: Arc<RwLock<SpecialUsageMailbox>>,
     pub is_subscribed: bool,
     pub permissions: MailboxPermissions,
-    pub total: Arc<Mutex<usize>>,
-    pub unseen: Arc<Mutex<usize>>,
+    pub total: Arc<Mutex<LazyCountSet>>,
+    pub unseen: Arc<Mutex<LazyCountSet>>,
 }
 
 impl MaildirMailbox {
@@ -207,8 +186,8 @@ impl MaildirMailbox {
                 delete_mailbox: !read_only,
                 change_permissions: false,
             },
-            unseen: Arc::new(Mutex::new(0)),
-            total: Arc::new(Mutex::new(0)),
+            unseen: Arc::new(Mutex::new(LazyCountSet::new())),
+            total: Arc::new(Mutex::new(LazyCountSet::new())),
         };
         if !accept_invalid {
             ret.is_valid()?;
@@ -268,8 +247,8 @@ impl MaildirMailbox {
                 delete_mailbox: !read_only,
                 change_permissions: false,
             },
-            unseen: Arc::new(Mutex::new(0)),
-            total: Arc::new(Mutex::new(0)),
+            unseen: Arc::new(Mutex::new(LazyCountSet::new())),
+            total: Arc::new(Mutex::new(LazyCountSet::new())),
         };
         if !accept_invalid {
             ret.is_valid()?;
@@ -332,7 +311,7 @@ impl BackendMailbox for MaildirMailbox {
     }
 
     fn count(&self) -> Result<(usize, usize)> {
-        Ok((*self.unseen.lock()?, *self.total.lock()?))
+        Ok((self.unseen.lock()?.len(), self.total.lock()?.len()))
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -568,45 +547,6 @@ impl MaildirMailboxPathExt for Path {
             path.pop();
         }
         Ok(())
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum PathMod {
-    Path(PathBuf),
-    Hash(EnvelopeHash),
-}
-
-#[derive(Debug, Default)]
-pub struct MaildirPath {
-    pub buf: PathBuf,
-    pub modified: Option<PathMod>,
-    pub removed: bool,
-}
-
-impl Deref for MaildirPath {
-    type Target = PathBuf;
-
-    fn deref(&self) -> &Self::Target {
-        assert!(!(self.removed && self.modified.is_none()));
-        &self.buf
-    }
-}
-
-impl DerefMut for MaildirPath {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        assert!(!(self.removed && self.modified.is_none()));
-        &mut self.buf
-    }
-}
-
-impl From<PathBuf> for MaildirPath {
-    fn from(val: PathBuf) -> Self {
-        Self {
-            buf: val,
-            modified: None,
-            removed: false,
-        }
     }
 }
 

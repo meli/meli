@@ -26,7 +26,6 @@
 
 use std::{
     collections::{HashMap, HashSet, VecDeque},
-    fs,
     io::{self, Write},
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
@@ -46,7 +45,7 @@ pub mod watch;
 mod tests;
 
 use cache::{Cache, HashIndex};
-use utilities::{MaildirFilePathExt, MaildirMailbox, MaildirMailboxPathExt, MaildirOp, PathMod};
+use utilities::{MaildirFilePathExt, MaildirMailbox, MaildirMailboxPathExt, MaildirOp};
 
 use crate::{
     backends::{prelude::*, RefreshEventKind::*},
@@ -322,10 +321,21 @@ impl MailBackend for MaildirType {
             };
             mailbox.fs_path.clone()
         };
-        let refresh_fut = self.refresh(mailbox_hash)?;
+        let account_hash = self.account_hash;
+        let sender = self.event_consumer.clone();
+        let mut cache = self.cache.clone();
         Ok(Box::pin(async move {
-            _ = Self::save_to_mailbox(path, bytes, flags)?;
-            refresh_fut.await?;
+            let path = Self::save_to_mailbox(path, bytes, flags)?;
+            let (_m, env) = cache.create(&path)?;
+            debug_assert_eq!(_m, mailbox_hash);
+            (sender)(
+                account_hash,
+                BackendEvent::Refresh(RefreshEvent {
+                    account_hash,
+                    mailbox_hash,
+                    kind: Create(Box::new(env)),
+                }),
+            );
             Ok(())
         }))
     }
@@ -350,41 +360,34 @@ impl MailBackend for MaildirType {
         }
         let cache = self.cache.clone();
         let config = self.config.clone();
-        let refresh_fut = self.refresh(mailbox_hash)?;
+        let account_hash = self.account_hash;
+        let sender = self.event_consumer.clone();
 
         Ok(Box::pin(async move {
             {
-                let mut hash_indexes_lck = cache.hash_indexes.lock().unwrap();
-                let hash_index = hash_indexes_lck.entry(mailbox_hash).or_default();
-
                 for env_hash in env_hashes.iter() {
-                    let path = {
-                        if !hash_index.contains_key(&env_hash) {
-                            continue;
-                        }
-                        if let Some(modif) = &hash_index[&env_hash].modified {
-                            match modif {
-                                PathMod::Path(ref path) => path.clone(),
-                                PathMod::Hash(hash) => hash_index[hash].to_path_buf(),
-                            }
-                        } else {
-                            hash_index[&env_hash].to_path_buf()
-                        }
-                    };
-                    let mut new_flags = path.flags();
-                    for op in flag_ops.iter() {
-                        if let FlagOp::Set(f) | FlagOp::UnSet(f) = op {
-                            new_flags.set(*f, op.as_bool());
-                        }
+                    if let Some((new_flags, new_hash)) =
+                        cache.set_flags(env_hash, mailbox_hash, &flag_ops, &config)?
+                    {
+                        (sender)(
+                            account_hash,
+                            BackendEvent::Refresh(RefreshEvent {
+                                account_hash,
+                                mailbox_hash,
+                                kind: Rename(env_hash, new_hash),
+                            }),
+                        );
+                        (sender)(
+                            account_hash,
+                            BackendEvent::Refresh(RefreshEvent {
+                                account_hash,
+                                mailbox_hash,
+                                kind: NewFlags(new_hash, (new_flags, vec![])),
+                            }),
+                        );
                     }
-
-                    let new_name: PathBuf = path.set_flags(new_flags, &config)?;
-                    log::debug!("renaming {path:?} to {new_name:?}");
-                    fs::rename(path, &new_name)?;
-                    log::debug!("success in rename");
                 }
             }
-            refresh_fut.await?;
             Ok(())
         }))
     }
@@ -403,32 +406,21 @@ impl MailBackend for MaildirType {
         {
             return Err(Error::new("Invalid mailbox hash").set_kind(ErrorKind::ValueError));
         }
-        let refresh_fut = self.refresh(mailbox_hash)?;
         let cache = self.cache.clone();
+        let account_hash = self.account_hash;
+        let sender = self.event_consumer.clone();
         Ok(Box::pin(async move {
-            {
-                let mut hash_indexes_lck = cache.hash_indexes.lock().unwrap();
-                let hash_index = hash_indexes_lck.entry(mailbox_hash).or_default();
-
-                for env_hash in env_hashes.iter() {
-                    let path = {
-                        if !hash_index.contains_key(&env_hash) {
-                            continue;
-                        }
-                        if let Some(modif) = &hash_index[&env_hash].modified {
-                            match modif {
-                                PathMod::Path(ref path) => path.clone(),
-                                PathMod::Hash(hash) => hash_index[hash].to_path_buf(),
-                            }
-                        } else {
-                            hash_index[&env_hash].to_path_buf()
-                        }
-                    };
-
-                    fs::remove_file(&path)?;
-                }
+            for env_hash in env_hashes.iter() {
+                cache.remove_env_and_file(env_hash)?;
+                (sender)(
+                    account_hash,
+                    BackendEvent::Refresh(RefreshEvent {
+                        account_hash,
+                        mailbox_hash,
+                        kind: Remove(env_hash),
+                    }),
+                );
             }
-            refresh_fut.await?;
             Ok(())
         }))
     }
@@ -456,50 +448,23 @@ impl MailBackend for MaildirType {
             mailboxes_lck[&destination_mailbox_hash].fs_path().into()
         };
         dest_dir.push("cur");
-        let refresh_fut: BoxFuture<'static, crate::Result<()>> = {
-            if move_ {
-                let source_refresh_fut = self.refresh(source_mailbox_hash)?;
-                let dest_refresh_fut = self.refresh(destination_mailbox_hash)?;
-                Box::pin(async move {
-                    source_refresh_fut.await?;
-                    dest_refresh_fut.await?;
-                    Ok(())
-                })
-            } else {
-                let dest_refresh_fut = self.refresh(destination_mailbox_hash)?;
-                Box::pin(async move {
-                    dest_refresh_fut.await?;
-                    Ok(())
-                })
-            }
-        };
-        let cache = self.cache.clone();
+        let mut cache = self.cache.clone();
         let config = self.config.clone();
+        let account_hash = self.account_hash;
+        let sender = self.event_consumer.clone();
         Ok(Box::pin(async move {
+            if source_mailbox_hash == destination_mailbox_hash {
+                return Ok(());
+            }
             {
-                let mut hash_indexes_lck = cache.hash_indexes.lock().unwrap();
-                let hash_index = hash_indexes_lck.entry(source_mailbox_hash).or_default();
-
                 for env_hash in env_hashes.iter() {
-                    let path_src = {
-                        if !hash_index.contains_key(&env_hash) {
-                            continue;
-                        }
-                        if let Some(modif) = &hash_index[&env_hash].modified {
-                            match modif {
-                                PathMod::Path(ref path) => path.clone(),
-                                PathMod::Hash(hash) => hash_index[hash].to_path_buf(),
-                            }
-                        } else {
-                            hash_index[&env_hash].to_path_buf()
-                        }
+                    let Some(path_src) = cache.hash_to_path(&env_hash) else {
+                        continue;
                     };
                     let dest_path = path_src.place_in_dir(&dest_dir, &config)?;
-                    hash_index.entry(env_hash).or_default().modified =
-                        Some(PathMod::Path(dest_path.clone()));
                     if move_ {
                         log::trace!("renaming {path_src:?} to {dest_path:?}");
-                        fs::rename(&path_src, &dest_path)
+                        std::fs::rename(&path_src, &dest_path)
                             .chain_err_summary(|| {
                                 format!(
                                     "Could not rename {} to {}",
@@ -508,10 +473,20 @@ impl MailBackend for MaildirType {
                                 )
                             })
                             .chain_err_related_path(&path_src)?;
+                        if cache.remove_env_hash(env_hash) {
+                            (sender)(
+                                account_hash,
+                                BackendEvent::Refresh(RefreshEvent {
+                                    account_hash,
+                                    mailbox_hash: source_mailbox_hash,
+                                    kind: Remove(env_hash),
+                                }),
+                            );
+                        }
                         log::trace!("success in rename");
                     } else {
                         log::trace!("copying {path_src:?} to {dest_path:?}");
-                        fs::copy(&path_src, &dest_path)
+                        std::fs::copy(&path_src, &dest_path)
                             .chain_err_summary(|| {
                                 format!(
                                     "Could not copy {} to {}",
@@ -522,9 +497,18 @@ impl MailBackend for MaildirType {
                             .chain_err_related_path(&path_src)?;
                         log::trace!("success in copy");
                     }
+                    let (_m, env) = cache.create(&dest_path)?;
+                    debug_assert_eq!(_m, destination_mailbox_hash);
+                    (sender)(
+                        account_hash,
+                        BackendEvent::Refresh(RefreshEvent {
+                            account_hash,
+                            mailbox_hash: destination_mailbox_hash,
+                            kind: Create(Box::new(env)),
+                        }),
+                    );
                 }
             }
-            refresh_fut.await?;
 
             Ok(())
         }))
@@ -682,7 +666,7 @@ impl MaildirType {
                 )));
             }
             let mut children = Vec::new();
-            for mut f in fs::read_dir(&p).unwrap() {
+            for mut f in std::fs::read_dir(&p).unwrap() {
                 'entries: for f in f.iter_mut() {
                     {
                         let path = f.path();
@@ -895,7 +879,7 @@ impl MaildirType {
             path.push(filename);
         }
         log::trace!("saving at {}", path.display());
-        let file = fs::File::create(&path)
+        let file = std::fs::File::create(&path)
             .chain_err_summary(|| format!("Could not create {}", path.display()))
             .chain_err_related_path(&path)?;
         let metadata = file
