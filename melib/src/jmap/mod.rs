@@ -1244,9 +1244,9 @@ impl MailBackend for JmapType {
                     let mailbox_hash = mailbox_id.into_hash();
                     mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
                         if new_flags.0.contains(Flag::SEEN) {
-                            mbox.unread_emails.lock().unwrap().remove(env_hash);
+                            mbox.counters.lock().unwrap().unseen.remove(env_hash);
                         } else {
-                            mbox.unread_emails.lock().unwrap().insert_new(env_hash);
+                            mbox.counters.lock().unwrap().unseen.insert_new(env_hash);
                         }
                     });
 

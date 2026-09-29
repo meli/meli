@@ -23,7 +23,8 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use crate::{
     backends::{
-        BackendMailbox, LazyCountSet, Mailbox, MailboxHash, MailboxPermissions, SpecialUsageMailbox,
+        BackendMailbox, Mailbox, MailboxCounters, MailboxHash, MailboxPermissions,
+        SpecialUsageMailbox,
     },
     error::*,
     imap::protocol_parser::SelectResponse,
@@ -44,8 +45,7 @@ pub struct ImapMailbox {
     pub is_subscribed: bool,
 
     pub permissions: Arc<Mutex<MailboxPermissions>>,
-    pub exists: Arc<Mutex<LazyCountSet>>,
-    pub unseen: Arc<Mutex<LazyCountSet>>,
+    pub counters: Arc<Mutex<MailboxCounters>>,
     pub warm: Arc<Mutex<bool>>,
 }
 
@@ -120,7 +120,8 @@ impl BackendMailbox for ImapMailbox {
     }
 
     fn count(&self) -> Result<(usize, usize)> {
-        Ok((self.unseen.lock()?.len(), self.exists.lock()?.len()))
+        let counters = self.counters.lock()?;
+        Ok((counters.unseen.len(), counters.total.len()))
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

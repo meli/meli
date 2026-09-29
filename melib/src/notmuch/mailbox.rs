@@ -23,7 +23,8 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use crate::{
     backends::{
-        BackendMailbox, LazyCountSet, Mailbox, MailboxHash, MailboxPermissions, SpecialUsageMailbox,
+        BackendMailbox, Mailbox, MailboxCounters, MailboxHash, MailboxPermissions,
+        SpecialUsageMailbox,
     },
     error::Result,
 };
@@ -37,8 +38,7 @@ pub struct NotmuchMailbox {
     pub path: String,
     pub query_str: String,
     pub usage: Arc<RwLock<SpecialUsageMailbox>>,
-    pub total: Arc<Mutex<LazyCountSet>>,
-    pub unseen: Arc<Mutex<LazyCountSet>>,
+    pub counters: Arc<Mutex<MailboxCounters>>,
 }
 
 impl NotmuchMailbox {
@@ -95,7 +95,8 @@ impl BackendMailbox for NotmuchMailbox {
     }
 
     fn count(&self) -> Result<(usize, usize)> {
-        Ok((self.unseen.lock()?.len(), self.total.lock()?.len()))
+        let counters = self.counters.lock()?;
+        Ok((counters.unseen.len(), counters.total.len()))
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

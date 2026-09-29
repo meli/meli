@@ -273,7 +273,7 @@ pub async fn examine_updates(
             }
         }
 
-        let current_exists = mailbox.exists.lock().unwrap().len();
+        let current_exists = mailbox.counters.lock().unwrap().total.len();
         if mailbox.is_cold() {
             /* Mailbox hasn't been loaded yet */
             let has_list_status: bool = conn
@@ -308,17 +308,14 @@ pub async fn examine_updates(
                     }
                     if let Ok(status) = protocol_parser::status_response(l).map(|(_, v)| v) {
                         if Some(mailbox_hash) == status.mailbox {
+                            let mut counters = mailbox.counters.lock().unwrap();
                             if let Some(total) = status.messages {
-                                if let Ok(mut exists_lck) = mailbox.exists.lock() {
-                                    exists_lck.clear();
-                                    exists_lck.set_not_yet_seen(total);
-                                }
+                                counters.total.clear();
+                                counters.total.set_not_yet_seen(total);
                             }
                             if let Some(total) = status.unseen {
-                                if let Ok(mut unseen_lck) = mailbox.unseen.lock() {
-                                    unseen_lck.clear();
-                                    unseen_lck.set_not_yet_seen(total);
-                                }
+                                counters.unseen.clear();
+                                counters.unseen.set_not_yet_seen(total);
                             }
                             break;
                         }
@@ -330,14 +327,11 @@ pub async fn examine_updates(
                 conn.read_response(&mut response, RequiredResponses::SEARCH)
                     .await?;
                 let unseen_count = protocol_parser::search_results(&response)?.1.len();
-                if let Ok(mut exists_lck) = mailbox.exists.lock() {
-                    exists_lck.clear();
-                    exists_lck.set_not_yet_seen(select_response.exists);
-                }
-                if let Ok(mut unseen_lck) = mailbox.unseen.lock() {
-                    unseen_lck.clear();
-                    unseen_lck.set_not_yet_seen(unseen_count);
-                }
+                let mut counters = mailbox.counters.lock().unwrap();
+                counters.total.clear();
+                counters.total.set_not_yet_seen(select_response.exists);
+                counters.unseen.clear();
+                counters.unseen.set_not_yet_seen(unseen_count);
             }
             mailbox.set_warm(true);
             return Ok(None);
@@ -399,11 +393,12 @@ pub async fn examine_updates(
             }
             let mut tag_lck = conn.uid_store.collection.tag_index.write().unwrap();
             if let Some((flags, keywords)) = flags {
+                let mut counters = mailbox.counters.lock().unwrap();
                 env.set_flags(*flags);
                 if !env.is_seen() {
-                    mailbox.unseen.lock().unwrap().insert_new(env.hash());
+                    counters.unseen.insert_new(env.hash());
                 }
-                mailbox.exists.lock().unwrap().insert_new(env.hash());
+                counters.total.insert_new(env.hash());
                 for f in keywords {
                     let hash = TagHash::from_bytes(f.as_bytes());
                     tag_lck.entry(hash).or_insert_with(|| f.to_string());

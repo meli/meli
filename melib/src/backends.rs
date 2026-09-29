@@ -50,8 +50,8 @@ pub mod prelude {
     pub use super::{
         AccountHash, BackendEvent, BackendEventConsumer, BackendMailbox, EnvelopeHashBatch, FlagOp,
         IsSubscribedFn, LazyCountSet, MailBackend, MailBackendCapabilities,
-        MailBackendExtensionStatus, Mailbox, MailboxHash, MailboxPermissions, RefreshEvent,
-        RefreshEventKind, TagHash,
+        MailBackendExtensionStatus, Mailbox, MailboxCounters, MailboxHash, MailboxPermissions,
+        RefreshEvent, RefreshEventKind, TagHash,
     };
     pub use crate::{
         conf::{AccountSettings, Secret},
@@ -843,6 +843,12 @@ impl EnvelopeHashBatch {
     pub fn to_set(&self) -> BTreeSet<EnvelopeHash> {
         self.into()
     }
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct MailboxCounters {
+    pub unseen: LazyCountSet,
+    pub total: LazyCountSet,
 }
 
 #[derive(Clone, Default)]

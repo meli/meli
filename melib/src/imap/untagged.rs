@@ -102,8 +102,9 @@ impl ImapConnection {
                                 .remove(&(mailbox_hash, deleted_uid));
                             {
                                 if let Some(mbx) = mboxes.get_mut(&mailbox_hash) {
-                                    mbx.exists.lock().unwrap().remove(deleted_hash);
-                                    mbx.unseen.lock().unwrap().remove(deleted_hash);
+                                    let mut counters = mbx.counters.lock().unwrap();
+                                    counters.total.remove(deleted_hash);
+                                    counters.unseen.remove(deleted_hash);
                                 }
                             }
                             self.uid_store
@@ -154,8 +155,9 @@ impl ImapConnection {
                 {
                     let mut mboxes = self.uid_store.mailboxes.lock().await;
                     if let Some(mbx) = mboxes.get_mut(&mailbox_hash) {
-                        mbx.exists.lock().unwrap().remove(deleted_hash);
-                        mbx.unseen.lock().unwrap().remove(deleted_hash);
+                        let mut counters = mbx.counters.lock().unwrap();
+                        counters.total.remove(deleted_hash);
+                        counters.unseen.remove(deleted_hash);
                     }
                 }
                 self.uid_store
@@ -235,8 +237,9 @@ impl ImapConnection {
                                 .remove(&(mailbox_hash, deleted_uid));
                             {
                                 if let Some(mbx) = mboxes.get_mut(&mailbox_hash) {
-                                    mbx.exists.lock().unwrap().remove(deleted_hash);
-                                    mbx.unseen.lock().unwrap().remove(deleted_hash);
+                                    let mut counters = mbx.counters.lock().unwrap();
+                                    counters.total.remove(deleted_hash);
+                                    counters.unseen.remove(deleted_hash);
                                 }
                             }
                             self.uid_store
@@ -356,19 +359,22 @@ impl ImapConnection {
                     if let Some(value) = references {
                         env.set_references(value);
                     }
-                    let mut tag_lck = self.uid_store.collection.tag_index.write().unwrap();
-                    if let Some((flags, keywords)) = flags {
-                        env.set_flags(*flags);
-                        if !env.is_seen() {
-                            mailbox.unseen.lock().unwrap().insert_new(env.hash());
+                    {
+                        let mut tag_lck = self.uid_store.collection.tag_index.write().unwrap();
+                        let mut counters = mailbox.counters.lock().unwrap();
+                        if let Some((flags, keywords)) = flags {
+                            env.set_flags(*flags);
+                            if !env.is_seen() {
+                                counters.unseen.insert_new(env.hash());
+                            }
+                            for f in keywords {
+                                let hash = TagHash::from_bytes(f.as_bytes());
+                                tag_lck.entry(hash).or_insert_with(|| f.to_string());
+                                env.tags_mut().insert(hash);
+                            }
                         }
-                        for f in keywords {
-                            let hash = TagHash::from_bytes(f.as_bytes());
-                            tag_lck.entry(hash).or_insert_with(|| f.to_string());
-                            env.tags_mut().insert(hash);
-                        }
+                        counters.total.insert_new(env.hash());
                     }
-                    mailbox.exists.lock().unwrap().insert_new(env.hash());
                     recreate_msn |= !self
                         .msn_index
                         .entry(mailbox_hash)
@@ -478,10 +484,11 @@ impl ImapConnection {
                                 env.set_references(value);
                             }
                             let mut tag_lck = self.uid_store.collection.tag_index.write().unwrap();
+                            let mut counters = mailbox.counters.lock().unwrap();
                             if let Some((flags, keywords)) = flags {
                                 env.set_flags(*flags);
                                 if !env.is_seen() {
-                                    mailbox.unseen.lock().unwrap().insert_new(env.hash());
+                                    counters.unseen.insert_new(env.hash());
                                 }
                                 for f in keywords {
                                     let hash = TagHash::from_bytes(f.as_bytes());
@@ -489,7 +496,7 @@ impl ImapConnection {
                                     env.tags_mut().insert(hash);
                                 }
                             }
-                            mailbox.exists.lock().unwrap().insert_new(env.hash());
+                            counters.total.insert_new(env.hash());
                         }
                         {
                             if let Err(err) = self
@@ -626,16 +633,17 @@ impl ImapConnection {
                     } {
                         if !flags.0.intersects(crate::email::Flag::SEEN) {
                             for mbx in self.uid_store.mailboxes.lock().await.values_mut() {
-                                if mbx.exists.lock().unwrap().contains(&env_hash) {
-                                    mbx.unseen.lock().unwrap().insert_new(env_hash);
+                                let mut counters = mbx.counters.lock().unwrap();
+                                if counters.total.contains(&env_hash) {
+                                    counters.unseen.insert_new(env_hash);
                                 }
                             }
                         } else {
                             for mbx in self.uid_store.mailboxes.lock().await.values_mut() {
-                                mbx.unseen.lock().unwrap().remove(env_hash);
+                                mbx.counters.lock().unwrap().unseen.remove(env_hash);
                             }
                         }
-                        mailbox.exists.lock().unwrap().insert_new(env_hash);
+                        mailbox.counters.lock().unwrap().total.insert_new(env_hash);
                         if let Some(modseq) = modseq {
                             self.uid_store
                                 .modseq

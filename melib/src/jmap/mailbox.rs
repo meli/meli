@@ -39,7 +39,7 @@ use crate::{
         protocol::{Method, Request},
         JmapClient, JmapMailbox,
     },
-    BackendEvent, LazyCountSet, MailboxHash, RefreshEvent, RefreshEventKind,
+    BackendEvent, MailboxCounters, MailboxHash, RefreshEvent, RefreshEventKind,
 };
 
 impl Id<MailboxObject> {
@@ -488,16 +488,17 @@ fn mailbox_object_into_backend_mailbox(
         role,
         sort_order,
         total_emails,
-        total_threads,
+        total_threads: _,
         unread_emails,
-        unread_threads,
+        unread_threads: _,
     } = m;
-    let mut total_emails_set = LazyCountSet::default();
-    total_emails_set.set_not_yet_seen(total_emails.try_into().unwrap_or(0));
-    let total_emails = total_emails_set;
-    let mut unread_emails_set = LazyCountSet::default();
-    unread_emails_set.set_not_yet_seen(unread_emails.try_into().unwrap_or(0));
-    let unread_emails = unread_emails_set;
+    let mut counters: MailboxCounters = Default::default();
+    counters
+        .total
+        .set_not_yet_seen(total_emails.try_into().unwrap_or(0));
+    counters
+        .unseen
+        .set_not_yet_seen(unread_emails.try_into().unwrap_or(0));
     let hash = id.into_hash();
     let parent_hash = parent_id.clone().map(|id| id.into_hash());
     (
@@ -515,10 +516,7 @@ fn mailbox_object_into_backend_mailbox(
             role,
             usage: Default::default(),
             sort_order,
-            total_emails: Arc::new(Mutex::new(total_emails)),
-            total_threads,
-            unread_emails: Arc::new(Mutex::new(unread_emails)),
-            unread_threads,
+            counters: Arc::new(Mutex::new(counters)),
         },
     )
 }

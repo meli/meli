@@ -239,8 +239,9 @@ impl MailBackend for NntpType {
             is_online_fut.await?;
             {
                 let f = &state.uid_store.mailboxes.lock().await[&state.mailbox_hash];
-                f.exists.lock().unwrap().clear();
-                f.unseen.lock().unwrap().clear();
+                let mut counters = f.counters.lock().unwrap();
+                counters.total.clear();
+                counters.unseen.clear();
             };
             loop {
                 match state.fetch_envs().await {
@@ -291,7 +292,7 @@ impl MailBackend for NntpType {
             let mut res = String::with_capacity(8 * 1024);
             let mut conn = crate::utils::futures::timeout(timeout, connection.lock()).await?;
             if let Some(mut latest_article) = latest_article {
-                let mut unseen = LazyCountSet::new();
+                let mut unseen = BTreeSet::new();
                 let timestamp = latest_article - 10 * 60;
                 let datetime_str = crate::utils::datetime::timestamp_to_string_utc(
                     timestamp,
@@ -332,10 +333,10 @@ impl MailBackend for NntpType {
                             if let Some(s) = store_lck.as_ref() {
                                 env.set_flags(s.flags(env.hash(), mailbox_hash, num)?);
                                 if !env.is_seen() {
-                                    unseen.insert_new(env.hash());
+                                    unseen.insert(env.hash());
                                 }
                             } else {
-                                unseen.insert_new(env.hash());
+                                unseen.insert(env.hash());
                             }
                             env_hash_set.insert(env.hash());
                             message_id_lck.insert(env.message_id().clone(), env.hash());
@@ -355,11 +356,9 @@ impl MailBackend for NntpType {
                     {
                         let f = &uid_store.mailboxes.lock().await[&mailbox_hash];
                         *f.latest_article.lock().unwrap() = Some(latest_article);
-                        f.exists
-                            .lock()
-                            .unwrap()
-                            .insert_existing_set(env_hash_set.clone());
-                        f.unseen.lock().unwrap().insert_set(unseen.set);
+                        let mut counters = f.counters.lock().unwrap();
+                        counters.total.insert_existing_set(env_hash_set.clone());
+                        counters.unseen.insert_set(unseen);
                     }
                     return Ok(());
                 }
@@ -483,9 +482,9 @@ impl MailBackend for NntpType {
                             let mut current_val = s.flags(*env_hash, mailbox_hash, *uid)?;
                             current_val.set(f, <bool>::from(&op));
                             if !current_val.intersects(Flag::SEEN) {
-                                fsets.unseen.lock().unwrap().insert_new(*env_hash);
+                                fsets.counters.lock().unwrap().unseen.insert_new(*env_hash);
                             } else {
-                                fsets.unseen.lock().unwrap().remove(*env_hash);
+                                fsets.counters.lock().unwrap().unseen.remove(*env_hash);
                             }
                             s.set_flags(*env_hash, mailbox_hash, *uid, current_val)?;
                             (uid_store.event_consumer)(
@@ -736,8 +735,7 @@ impl NntpType {
                     high_watermark: Arc::new(Mutex::new(0)),
                     low_watermark: Arc::new(Mutex::new(0)),
                     latest_article: Arc::new(Mutex::new(None)),
-                    exists: Default::default(),
-                    unseen: Default::default(),
+                    counters: Default::default(),
                 },
             );
         }
@@ -859,8 +857,7 @@ impl NntpType {
                     high_watermark: Arc::new(Mutex::new(usize::from_str(s[1]).unwrap_or(0))),
                     low_watermark: Arc::new(Mutex::new(usize::from_str(s[2]).unwrap_or(0))),
                     latest_article: Arc::new(Mutex::new(None)),
-                    exists: Default::default(),
-                    unseen: Default::default(),
+                    counters: Default::default(),
                 });
         }
         Ok(())
@@ -996,7 +993,7 @@ impl FetchState {
         let mailbox_hash = *mailbox_hash;
         let mut res = String::with_capacity(8 * 1024);
         let mut conn = connection.lock().await;
-        let mut unseen = LazyCountSet::new();
+        let mut unseen = BTreeSet::new();
 
         if total_low_high.is_none() {
             conn.select_group(mailbox_hash, true, &mut res).await?;
@@ -1027,7 +1024,7 @@ impl FetchState {
             *total_low_high = Some((total, low, high));
             {
                 let f = &uid_store.mailboxes.lock().await[&mailbox_hash];
-                f.exists.lock().unwrap().set_not_yet_seen(total);
+                f.counters.lock().unwrap().total.set_not_yet_seen(total);
             };
         }
 
@@ -1073,10 +1070,10 @@ impl FetchState {
                 if let Some(s) = store_lck.as_ref() {
                     env.set_flags(s.flags(env.hash(), mailbox_hash, num)?);
                     if !env.is_seen() {
-                        unseen.insert_new(env.hash());
+                        unseen.insert(env.hash());
                     }
                 } else {
-                    unseen.insert_new(env.hash());
+                    unseen.insert(env.hash());
                 }
                 message_id_lck.insert(env.message_id().clone(), env.hash());
                 hash_index_lck.insert(env.hash(), (num, mailbox_hash));
@@ -1093,11 +1090,9 @@ impl FetchState {
             let hash_set: BTreeSet<EnvelopeHash> = ret.iter().map(|env| env.hash()).collect();
             let f = &uid_store.mailboxes.lock().await[&mailbox_hash];
             *f.latest_article.lock().unwrap() = latest_article;
-            f.exists
-                .lock()
-                .unwrap()
-                .insert_existing_set(hash_set.clone());
-            *f.unseen.lock().unwrap() = unseen;
+            let mut counters = f.counters.lock().unwrap();
+            counters.total.insert_existing_set(hash_set.clone());
+            counters.unseen.insert_existing_set(unseen);
         };
         Ok(Some(ret))
     }

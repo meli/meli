@@ -100,8 +100,7 @@ pub struct MaildirMailbox {
     pub usage: Arc<RwLock<SpecialUsageMailbox>>,
     pub is_subscribed: bool,
     pub permissions: MailboxPermissions,
-    pub total: Arc<Mutex<LazyCountSet>>,
-    pub unseen: Arc<Mutex<LazyCountSet>>,
+    pub counters: Arc<Mutex<MailboxCounters>>,
 }
 
 impl MaildirMailbox {
@@ -186,8 +185,7 @@ impl MaildirMailbox {
                 delete_mailbox: !read_only,
                 change_permissions: false,
             },
-            unseen: Arc::new(Mutex::new(LazyCountSet::new())),
-            total: Arc::new(Mutex::new(LazyCountSet::new())),
+            counters: Default::default(),
         };
         if !accept_invalid {
             ret.is_valid()?;
@@ -247,8 +245,7 @@ impl MaildirMailbox {
                 delete_mailbox: !read_only,
                 change_permissions: false,
             },
-            unseen: Arc::new(Mutex::new(LazyCountSet::new())),
-            total: Arc::new(Mutex::new(LazyCountSet::new())),
+            counters: Default::default(),
         };
         if !accept_invalid {
             ret.is_valid()?;
@@ -311,7 +308,8 @@ impl BackendMailbox for MaildirMailbox {
     }
 
     fn count(&self) -> Result<(usize, usize)> {
-        Ok((self.unseen.lock()?.len(), self.total.lock()?.len()))
+        let counters = self.counters.lock()?;
+        Ok((counters.unseen.len(), counters.total.len()))
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

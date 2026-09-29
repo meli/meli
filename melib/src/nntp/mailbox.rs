@@ -23,7 +23,8 @@ use std::sync::{Arc, Mutex};
 
 use crate::{
     backends::{
-        BackendMailbox, LazyCountSet, Mailbox, MailboxHash, MailboxPermissions, SpecialUsageMailbox,
+        BackendMailbox, Mailbox, MailboxCounters, MailboxHash, MailboxPermissions,
+        SpecialUsageMailbox,
     },
     error::*,
     UnixTimestamp,
@@ -33,13 +34,9 @@ use crate::{
 pub struct NntpMailbox {
     pub(super) hash: MailboxHash,
     pub(super) nntp_path: String,
-
     pub high_watermark: Arc<Mutex<usize>>,
     pub low_watermark: Arc<Mutex<usize>>,
-
-    pub exists: Arc<Mutex<LazyCountSet>>,
-    pub unseen: Arc<Mutex<LazyCountSet>>,
-
+    pub counters: Arc<Mutex<MailboxCounters>>,
     pub latest_article: Arc<Mutex<Option<UnixTimestamp>>>,
 }
 
@@ -95,7 +92,8 @@ impl BackendMailbox for NntpMailbox {
     }
 
     fn count(&self) -> Result<(usize, usize)> {
-        Ok((self.unseen.lock()?.len(), self.exists.lock()?.len()))
+        let counters = self.counters.lock()?;
+        Ok((counters.unseen.len(), counters.total.len()))
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

@@ -1551,10 +1551,9 @@ hello world 3.
             wait_handle.join().unwrap();
             {
                 let mailbox = imap.uid_store.mailboxes.lock().await;
-                let exists_lck = mailbox.values().next().unwrap().exists.lock().unwrap();
-                assert_eq!(exists_lck.len(), 3);
-                let unseen_lck = mailbox.values().next().unwrap().unseen.lock().unwrap();
-                assert_eq!(unseen_lck.len(), 3);
+                let counters = mailbox.values().next().unwrap().counters.lock().unwrap();
+                assert_eq!(counters.total.len(), 3);
+                assert_eq!(counters.unseen.len(), 3);
             }
             {
                 let mut fetch_fut = imap.fetch(inbox_hash).unwrap().into_future();
@@ -1630,10 +1629,9 @@ hello world 3.
             };
             {
                 let mailbox = imap.uid_store.mailboxes.lock().await;
-                let exists_lck = mailbox.values().next().unwrap().exists.lock().unwrap();
-                assert_eq!(exists_lck.len(), 2);
-                let unseen_lck = mailbox.values().next().unwrap().unseen.lock().unwrap();
-                assert_eq!(unseen_lck.len(), 2);
+                let counters = mailbox.values().next().unwrap().counters.lock().unwrap();
+                assert_eq!(counters.total.len(), 2);
+                assert_eq!(counters.unseen.len(), 2);
             }
             {
                 let mut fetch_fut = imap.fetch(inbox_hash).unwrap().into_future();
@@ -1796,10 +1794,9 @@ hello world 3.
                     }
                     {
                         let mailbox = imap.uid_store.mailboxes.lock().await;
-                        let exists_lck = mailbox.values().next().unwrap().exists.lock().unwrap();
-                        assert_eq!(exists_lck.len(), 3);
-                        let unseen_lck = mailbox.values().next().unwrap().unseen.lock().unwrap();
-                        assert_eq!(unseen_lck.len(), 3);
+                        let counters = mailbox.values().next().unwrap().counters.lock().unwrap();
+                        assert_eq!(counters.total.len(), 3);
+                        assert_eq!(counters.unseen.len(), 3);
                     }
                     envelopes.sort_by_key(|env| env.date());
                     imap.delete_messages(envelopes[0].hash.into(), inbox_hash)
@@ -1821,10 +1818,9 @@ hello world 3.
                 }
                 {
                     let mailbox = imap.uid_store.mailboxes.lock().await;
-                    let exists_lck = mailbox.values().next().unwrap().exists.lock().unwrap();
-                    assert_eq!(exists_lck.len(), 2);
-                    let unseen_lck = mailbox.values().next().unwrap().unseen.lock().unwrap();
-                    assert_eq!(unseen_lck.len(), 2);
+                    let counters = mailbox.values().next().unwrap().counters.lock().unwrap();
+                    assert_eq!(counters.total.len(), 2);
+                    assert_eq!(counters.unseen.len(), 2);
                 }
                 {
                     let mut fetch_fut = imap.fetch(inbox_hash).unwrap().into_future();
@@ -1882,10 +1878,9 @@ hello world 3.
                     }
                     {
                         let mailbox = imap.uid_store.mailboxes.lock().await;
-                        let exists_lck = mailbox.values().next().unwrap().exists.lock().unwrap();
-                        assert_eq!(exists_lck.len(), 2);
-                        let unseen_lck = mailbox.values().next().unwrap().unseen.lock().unwrap();
-                        assert_eq!(unseen_lck.len(), 2);
+                        let counters = mailbox.values().next().unwrap().counters.lock().unwrap();
+                        assert_eq!(counters.total.len(), 2);
+                        assert_eq!(counters.unseen.len(), 2);
                     }
                     envelopes.sort_by_key(|env| env.date());
                     for env in &mut envelopes {
@@ -1954,10 +1949,9 @@ hello world 3.
                     }
                     {
                         let mailbox = imap.uid_store.mailboxes.lock().await;
-                        let exists_lck = mailbox.values().next().unwrap().exists.lock().unwrap();
-                        assert_eq!(exists_lck.len(), 1);
-                        let unseen_lck = mailbox.values().next().unwrap().unseen.lock().unwrap();
-                        assert_eq!(unseen_lck.len(), 1);
+                        let counters = mailbox.values().next().unwrap().counters.lock().unwrap();
+                        assert_eq!(counters.total.len(), 1);
+                        assert_eq!(counters.unseen.len(), 1);
                     }
                     envelopes.sort_by_key(|env| env.date());
                     let deleted_hash = envelopes

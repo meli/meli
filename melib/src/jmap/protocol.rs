@@ -209,11 +209,9 @@ impl EmailFetcher {
                     }
                     let mut mailboxes_lck = self.store.mailboxes.write().unwrap();
                     mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
-                        mbox.total_emails.lock().unwrap().insert_existing_set(total);
-                        mbox.unread_emails
-                            .lock()
-                            .unwrap()
-                            .insert_existing_set(unread);
+                        let mut counters = mbox.counters.lock().unwrap();
+                        counters.total.insert_existing_set(total);
+                        counters.unseen.insert_existing_set(unread);
                     });
                     position += self.batch_size;
                     self.state = EmailFetchState::Ongoing { position };

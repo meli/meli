@@ -96,9 +96,10 @@ impl Cache {
         hi.index.insert(env_hash, path.to_path_buf());
         hi.reverse_index.insert(path.to_path_buf(), env_hash);
         mi.insert(env.hash(), mailbox_hash);
-        mailbox.total.lock().unwrap().insert_new(env_hash);
+        let mut counters = mailbox.counters.lock().unwrap();
+        counters.total.insert_new(env_hash);
         if !env.is_seen() {
-            mailbox.unseen.lock().unwrap().insert_new(env_hash);
+            counters.unseen.insert_new(env_hash);
         }
         Ok((mailbox_hash, env))
     }
@@ -115,8 +116,9 @@ impl Cache {
         hi.entry(mailbox_hash)
             .or_default()
             .remove_env_hash(&env_hash);
-        mailbox.total.lock().unwrap().remove(env_hash);
-        mailbox.unseen.lock().unwrap().remove(env_hash);
+        let mut counters = mailbox.counters.lock().unwrap();
+        counters.total.remove(env_hash);
+        counters.unseen.remove(env_hash);
         Some((mailbox_hash, env_hash))
     }
 
@@ -133,8 +135,9 @@ impl Cache {
         hi.entry(mailbox_hash)
             .or_default()
             .remove_env_hash(&env_hash);
-        mailbox.total.lock().unwrap().remove(env_hash);
-        mailbox.unseen.lock().unwrap().remove(env_hash);
+        let mut counters = mailbox.counters.lock().unwrap();
+        counters.total.remove(env_hash);
+        counters.unseen.remove(env_hash);
         true
     }
 
@@ -161,8 +164,9 @@ impl Cache {
         hi.entry(mailbox_hash)
             .or_default()
             .remove_env_hash(&env_hash);
-        mailbox.total.lock().unwrap().remove(env_hash);
-        mailbox.unseen.lock().unwrap().remove(env_hash);
+        let mut counters = mailbox.counters.lock().unwrap();
+        counters.total.remove(env_hash);
+        counters.unseen.remove(env_hash);
         Ok(())
     }
 
@@ -223,13 +227,12 @@ impl Cache {
         hash_index.remove_env_hash(&env_hash);
         mi.remove(&env_hash);
         mi.insert(new_hash, mailbox_hash);
-        let mut total = mailbox.total.lock().unwrap();
-        let mut unseen = mailbox.unseen.lock().unwrap();
-        total.remove(env_hash);
-        total.insert_new(new_hash);
-        unseen.remove(env_hash);
+        let mut counters = mailbox.counters.lock().unwrap();
+        counters.total.remove(env_hash);
+        counters.total.insert_new(new_hash);
+        counters.unseen.remove(env_hash);
         if !new_flags.contains(Flag::SEEN) {
-            unseen.insert_new(new_hash);
+            counters.unseen.insert_new(new_hash);
         }
         Ok(Some((new_flags, new_hash)))
     }

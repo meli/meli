@@ -484,16 +484,16 @@ impl MailBackend for ImapType {
             {
                 let f = &state.uid_store.mailboxes.lock().await[&mailbox_hash];
                 f.set_warm(true);
-                if let Ok(mut exists) = f.exists.lock() {
-                    let total = exists.len();
-                    exists.clear();
-                    exists.set_not_yet_seen(total);
+                {
+                    let mut counters = f.counters.lock().unwrap();
+                    let total = counters.total.len();
+                    counters.total.clear();
+                    counters.total.set_not_yet_seen(total);
+                    let unseen = counters.unseen.len();
+                    counters.unseen.clear();
+                    counters.unseen.set_not_yet_seen(unseen);
                 }
-                if let Ok(mut unseen) = f.unseen.lock() {
-                    let total = unseen.len();
-                    unseen.clear();
-                    unseen.set_not_yet_seen(total);
-                }
+
                 if f.no_select {
                     emitter.emit(vec![]).await;
                     return Ok(());
@@ -908,9 +908,9 @@ impl MailBackend for ImapType {
                     .await?;
                 if set_seen {
                     for f in conn.uid_store.mailboxes.lock().await.values() {
-                        if let Ok(mut unseen) = f.unseen.lock() {
+                        if let Ok(mut counters) = f.counters.lock() {
                             for env_hash in env_hashes.iter() {
-                                unseen.remove(env_hash);
+                                counters.unseen.remove(env_hash);
                             }
                         };
                     }
@@ -976,8 +976,12 @@ impl MailBackend for ImapType {
                     .await?;
                 if set_unseen {
                     for f in conn.uid_store.mailboxes.lock().await.values() {
-                        if let (Ok(mut unseen), Ok(exists)) = (f.unseen.lock(), f.exists.lock()) {
-                            for env_hash in env_hashes.iter().filter(|h| exists.contains(h)) {
+                        if let Ok(mut counters) = f.counters.lock() {
+                            let MailboxCounters {
+                                ref total,
+                                ref mut unseen,
+                            } = *counters;
+                            for env_hash in env_hashes.iter().filter(|h| total.contains(h)) {
                                 unseen.insert_new(env_hash);
                             }
                         };
@@ -1669,11 +1673,12 @@ impl ImapType {
                 if let Some(mailbox_hash) = status.mailbox {
                     if mailboxes.contains_key(&mailbox_hash) {
                         let entry = mailboxes.entry(mailbox_hash).or_default();
+                        let mut counters = entry.counters.lock().unwrap();
                         if let Some(total) = status.messages {
-                            entry.exists.lock().unwrap().set_not_yet_seen(total);
+                            counters.total.set_not_yet_seen(total);
                         }
                         if let Some(total) = status.unseen {
-                            entry.unseen.lock().unwrap().set_not_yet_seen(total);
+                            counters.unseen.set_not_yet_seen(total);
                         }
                     }
                 }

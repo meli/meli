@@ -581,10 +581,11 @@ impl JmapClient {
                     for mailbox_hash in mailbox_hashes {
                         let mut mailboxes_lck = self.store.mailboxes.write().unwrap();
                         mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
+                            let mut counters = mbox.counters.lock().unwrap();
                             if !env.is_seen() {
-                                mbox.unread_emails.lock().unwrap().insert_new(env.hash());
+                                counters.unseen.insert_new(env.hash());
                             }
-                            mbox.total_emails.lock().unwrap().insert_new(env.hash());
+                            counters.total.insert_new(env.hash());
                         });
                         events.push(RefreshEvent {
                             account_hash: self.store.account_hash,
@@ -611,9 +612,9 @@ impl JmapClient {
                             let mailbox_hash = mailbox_id.into_hash();
                             mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
                                 if new_flags.0.contains(Flag::SEEN) {
-                                    mbox.unread_emails.lock().unwrap().remove(*env_hash);
+                                    mbox.counters.lock().unwrap().unseen.remove(*env_hash);
                                 } else {
-                                    mbox.unread_emails.lock().unwrap().insert_new(*env_hash);
+                                    mbox.counters.lock().unwrap().unseen.insert_new(*env_hash);
                                 }
                             });
                             events.push(RefreshEvent {

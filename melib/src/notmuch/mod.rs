@@ -171,22 +171,17 @@ impl DbConnection {
         snapshot: &mut Snapshot,
         account_hash: AccountHash,
     ) -> Result<Option<BackendEvent>> {
-        let mailbox_queries = mailboxes
-            .read()
-            .unwrap()
+        let mailboxes_lck = mailboxes.read().unwrap();
+        let mailbox_queries = mailboxes_lck
             .iter()
             .map(|(k, v)| {
-                (
-                    *k,
-                    (v.total.lock().unwrap().set.clone(), v.query_str.to_string()),
-                )
+                let total = v.counters.lock().unwrap().total.set.clone();
+                (*k, (total, v.query_str.to_string()))
             })
             .collect::<HashMap<MailboxHash, (BTreeSet<EnvelopeHash>, String)>>();
         let mut events = IndexMap::new();
         for (mailbox_hash, (mut current, query_str)) in mailbox_queries {
-            let mailboxes_lck = mailboxes.read().unwrap();
-            let mut total_lck = mailboxes_lck[&mailbox_hash].total.lock().unwrap();
-            let mut unseen_lck = mailboxes_lck[&mailbox_hash].unseen.lock().unwrap();
+            let mut counters = mailboxes_lck[&mailbox_hash].counters.lock().unwrap();
 
             let query: Query = Query::new(self, &query_str)?;
 
@@ -194,16 +189,20 @@ impl DbConnection {
                 let env_hash = message.env_hash();
                 if !current.remove(&env_hash) {
                     let env = snapshot.insert_envelope(&message, mailbox_hash);
-                    total_lck.insert_new(env.hash());
+                    counters.total.insert_new(env.hash());
                     if !env.is_seen() {
-                        unseen_lck.insert_new(env.hash());
+                        counters.unseen.insert_new(env.hash());
                     }
                     events.insert(
                         (mailbox_hash, env.hash()),
                         RefreshEventKind::Create(Box::new(env)),
                     );
                 } else {
+                    counters.unseen.remove(env_hash);
                     let (flags, tags) = message.tags().collect_flags_and_tags();
+                    if !flags.contains(Flag::SEEN) {
+                        counters.unseen.insert_new(env_hash);
+                    };
                     let prev_message =
                         Message::find_message(&snapshot.connection, message.msg_id_cstr())?;
                     let (prev_flags, prev_tags) = prev_message.tags().collect_flags_and_tags();
@@ -222,8 +221,8 @@ impl DbConnection {
                     .entry(removed_hash)
                     .or_default()
                     .remove(&mailbox_hash);
-                total_lck.remove(removed_hash);
-                unseen_lck.remove(removed_hash);
+                counters.total.remove(removed_hash);
+                counters.unseen.remove(removed_hash);
                 events.insert(
                     (mailbox_hash, removed_hash),
                     RefreshEventKind::Remove(removed_hash),
@@ -457,8 +456,7 @@ impl NotmuchDb {
                         parent: None,
                         query_str: query_str.to_string(),
                         usage: Arc::new(RwLock::new(SpecialUsageMailbox::Normal)),
-                        total: Arc::new(Mutex::new(LazyCountSet::new())),
-                        unseen: Arc::new(Mutex::new(LazyCountSet::new())),
+                        counters: Default::default(),
                     },
                 );
             } else {
@@ -660,7 +658,8 @@ impl MailBackend for NotmuchDb {
                 {
                     let mailboxes_lck = self.mailboxes.read().unwrap();
                     let mailbox = mailboxes_lck.get(&self.mailbox_hash).unwrap();
-                    mailbox.unseen.lock().unwrap().insert_set(
+                    let mut counters = mailbox.counters.lock().unwrap();
+                    counters.unseen.insert_set(
                         ret.iter()
                             .filter_map(|env| {
                                 if !env.is_seen() {
@@ -671,10 +670,8 @@ impl MailBackend for NotmuchDb {
                             })
                             .collect(),
                     );
-                    mailbox
+                    counters
                         .total
-                        .lock()
-                        .unwrap()
                         .insert_set(ret.iter().map(|env| env.hash()).collect());
                 }
                 if done && ret.is_empty() {
@@ -696,10 +693,10 @@ impl MailBackend for NotmuchDb {
             let mailbox = mailboxes_lck.get(&mailbox_hash).unwrap();
             let query: Query = Query::new(&database, mailbox.query_str.as_str())?;
             {
-                let mut total_lck = mailbox.total.lock().unwrap();
-                total_lck.clear();
-                total_lck.set_not_yet_seen(query.count()? as usize);
-                mailbox.unseen.lock().unwrap().clear()
+                let mut counters = mailbox.counters.lock().unwrap();
+                counters.total.clear();
+                counters.total.set_not_yet_seen(query.count()? as usize);
+                counters.unseen.clear()
             }
             let mut snapshot = snapshot.write().unwrap();
             v = query

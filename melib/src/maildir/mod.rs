@@ -1032,8 +1032,7 @@ impl MaildirType {
             usage: Default::default(),
             is_subscribed: true,
             permissions: Default::default(),
-            unseen: Default::default(),
-            total: Default::default(),
+            counters: Default::default(),
         };
 
         mailboxes_lck.insert(mailbox_hash, new_mailbox);

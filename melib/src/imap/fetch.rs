@@ -134,31 +134,35 @@ impl FetchState {
                                     batch: batch + 1,
                                 },
                             };
-                            let (mailbox_exists, unseen) = {
+                            let counters = {
                                 let f = &self.uid_store.mailboxes.lock().await[&self.mailbox_hash];
-                                (Arc::clone(&f.exists), Arc::clone(&f.unseen))
+                                f.counters.clone()
                             };
-                            unseen.lock().unwrap().insert_existing_set(
-                                cached_payload
-                                    .iter()
-                                    .filter_map(|env| {
-                                        if !env.is_seen() {
-                                            Some(env.hash())
-                                        } else {
-                                            None
-                                        }
-                                    })
-                                    .collect(),
-                            );
-                            mailbox_exists.lock().unwrap().insert_existing_set(
-                                cached_payload.iter().map(|env| env.hash()).collect::<_>(),
-                            );
+                            {
+                                let mut counters = counters.lock().unwrap();
+                                counters.unseen.insert_existing_set(
+                                    cached_payload
+                                        .iter()
+                                        .filter_map(|env| {
+                                            if !env.is_seen() {
+                                                Some(env.hash())
+                                            } else {
+                                                None
+                                            }
+                                        })
+                                        .collect(),
+                                );
+                                counters.total.insert_existing_set(
+                                    cached_payload.iter().map(|env| env.hash()).collect::<_>(),
+                                );
+                            }
                             if self.stage == FetchStage::Finished {
                                 let mut conn = self.connection.lock().await?;
                                 let mailbox_hash = self.mailbox_hash;
                                 let res = conn.resync(mailbox_hash).await;
                                 if let Ok(Some(payload)) = res {
-                                    unseen.lock().unwrap().insert_existing_set(
+                                    let mut counters = counters.lock().unwrap();
+                                    counters.unseen.insert_existing_set(
                                         payload
                                             .iter()
                                             .filter_map(|env| {
@@ -170,7 +174,7 @@ impl FetchState {
                                             })
                                             .collect(),
                                     );
-                                    mailbox_exists.lock().unwrap().insert_existing_set(
+                                    counters.total.insert_existing_set(
                                         payload.iter().map(|env| env.hash()).collect::<_>(),
                                     );
                                     cached_payload.extend(payload);
@@ -247,14 +251,9 @@ impl FetchState {
                     } = self;
                     let mailbox_hash = *mailbox_hash;
                     let mut our_unseen: BTreeSet<EnvelopeHash> = BTreeSet::default();
-                    let (mailbox_path, mailbox_exists, no_select, unseen) = {
+                    let (mailbox_path, counters, no_select) = {
                         let f = &uid_store.mailboxes.lock().await[&mailbox_hash];
-                        (
-                            f.imap_path().to_string(),
-                            Arc::clone(&f.exists),
-                            f.no_select,
-                            Arc::clone(&f.unseen),
-                        )
+                        (f.imap_path().to_string(), f.counters.clone(), f.no_select)
                     };
                     if no_select {
                         self.stage = FetchStage::Finished;
@@ -390,18 +389,22 @@ impl FetchState {
                                 .insert((mailbox_hash, uid), env.hash());
                             envelopes.push(env);
                         }
-                        unseen.lock().unwrap().insert_existing_set(our_unseen);
-                        mailbox_exists.lock().unwrap().insert_existing_set(
-                            envelopes.iter().map(|env| env.hash()).collect::<_>(),
-                        );
+                        {
+                            let mut counters = counters.lock().unwrap();
+                            counters.unseen.insert_existing_set(our_unseen);
+                            counters.total.insert_existing_set(
+                                envelopes.iter().map(|env| env.hash()).collect::<_>(),
+                            );
+                        }
                         if recreate_msn {
                             conn.create_uid_msn_cache(mailbox_hash).await?;
                         }
                         drop(conn);
                     }
                     if max_uid_left <= 1 {
-                        unseen.lock().unwrap().set_not_yet_seen(0);
-                        mailbox_exists.lock().unwrap().set_not_yet_seen(0);
+                        let mut counters = counters.lock().unwrap();
+                        counters.unseen.set_not_yet_seen(0);
+                        counters.total.set_not_yet_seen(0);
                         *stage = FetchStage::Finished;
                     } else {
                         *stage = FetchStage::FreshFetch {
