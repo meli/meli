@@ -302,9 +302,13 @@ impl MailView {
             "select contacts to add",
             entries.into_iter().map(|(_, v)| v).collect(),
             false,
-            Some(Box::new(move |id: ComponentId, results: &[Card]| {
-                Some(UIEvent::FinishedUIDialog(id, Box::new(results.to_vec())))
-            })),
+            Some(Box::new(
+                move |id: ComponentId, results: &[Card], context| {
+                    context
+                        .replies
+                        .push_back(UIEvent::FinishedUIDialog(id, Box::new(results.to_vec())));
+                },
+            )),
             context,
         )));
         self.dirty = true;
@@ -532,11 +536,13 @@ impl Component for MailView {
                             ],
                             true,
                             Some(Box::new(
-                                move |id: ComponentId, result: &[Option<PendingReplyAction>]| {
-                                    Some(UIEvent::FinishedUIDialog(
+                                move |id: ComponentId,
+                                      result: &[Option<PendingReplyAction>],
+                                      context| {
+                                    context.replies.push_back(UIEvent::FinishedUIDialog(
                                         id,
                                         Box::new(result.first().cloned().flatten()),
-                                    ))
+                                    ));
                                 },
                             )),
                             context,

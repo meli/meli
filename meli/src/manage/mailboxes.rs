@@ -683,8 +683,11 @@ impl Component for MailboxManager {
                     ],
                     true,
                     Some(Box::new(
-                        move |id: ComponentId, results: &[MailboxAction]| {
-                            Some(UIEvent::FinishedUIDialog(id, Box::new(results.to_vec())))
+                        move |id: ComponentId, results: &[MailboxAction], context| {
+                            context.replies.push_back(UIEvent::FinishedUIDialog(
+                                id,
+                                Box::new(results.to_vec()),
+                            ))
                         },
                     )),
                     context,

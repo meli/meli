@@ -1010,12 +1010,14 @@ impl State {
                                 "Are you sure?",
                                 vec![(true, "yes".to_string()), (false, "no".to_string())],
                                 true,
-                                Some(Box::new(move |id: ComponentId, result: bool| {
-                                    Some(UIEvent::FinishedUIDialog(
-                                        id,
-                                        Box::new(if result { Some(action) } else { None }),
-                                    ))
-                                })),
+                                Some(Box::new(
+                                    move |id: ComponentId, result: bool, context: &mut Context| {
+                                        context.replies.push_back(UIEvent::FinishedUIDialog(
+                                            id,
+                                            Box::new(if result { Some(action) } else { None }),
+                                        ));
+                                    },
+                                )),
                                 &self.context,
                             ));
 

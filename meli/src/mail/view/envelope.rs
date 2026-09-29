@@ -1817,8 +1817,11 @@ impl Component for EnvelopeView {
                     entries,
                     true,
                     Some(Box::new(
-                        move |id: ComponentId, results: &[Option<Charset>]| {
-                            Some(UIEvent::FinishedUIDialog(id, Box::new(results.to_vec())))
+                        move |id: ComponentId, results: &[Option<Charset>], context| {
+                            context.replies.push_back(UIEvent::FinishedUIDialog(
+                                id,
+                                Box::new(results.to_vec()),
+                            ));
                         },
                     )),
                     context,

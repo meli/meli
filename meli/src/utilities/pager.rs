@@ -902,11 +902,15 @@ impl Component for Pager {
                             "select filter",
                             filters,
                             true,
-                            Some(Box::new(move |_id: ComponentId, results: &[String]| {
-                                Some(UIEvent::Action(View(Filter(Some(
-                                    results.first().cloned()?,
-                                )))))
-                            })),
+                            Some(Box::new(
+                                move |_id: ComponentId, results: &[String], context| {
+                                    if let Some(result) = results.first().cloned() {
+                                        context
+                                            .replies
+                                            .push_back(UIEvent::Action(View(Filter(Some(result)))));
+                                    }
+                                },
+                            )),
                             context,
                         )),
                         parent: Some(self.id()),

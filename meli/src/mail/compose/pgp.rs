@@ -281,16 +281,18 @@ impl Component for KeySelection {
                                         })
                                         .collect::<Vec<(Key, String)>>(),
                                     false,
-                                    Some(Box::new(move |id: ComponentId, results: &[Key]| {
-                                        Some(UIEvent::FinishedUIDialog(
-                                            id,
-                                            Box::new(if results.is_empty() {
-                                                None
-                                            } else {
-                                                Some(results.to_vec())
-                                            }),
-                                        ))
-                                    })),
+                                    Some(Box::new(
+                                        move |id: ComponentId, results: &[Key], context| {
+                                            context.replies.push_back(UIEvent::FinishedUIDialog(
+                                                id,
+                                                Box::new(if results.is_empty() {
+                                                    None
+                                                } else {
+                                                    Some(results.to_vec())
+                                                }),
+                                            ));
+                                        },
+                                    )),
                                     context,
                                 ));
                                 widget.set_dirty(true);

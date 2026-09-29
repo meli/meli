@@ -285,8 +285,10 @@ impl Composer {
                     vec![(true, "yes".to_string()), (false, "no".to_string())],
                     /* only one choice */
                     true,
-                    Some(Box::new(move |id: ComponentId, result: bool| {
-                        Some(UIEvent::FinishedUIDialog(id, Box::new(result)))
+                    Some(Box::new(move |id: ComponentId, result: bool, context| {
+                        context
+                            .replies
+                            .push_back(UIEvent::FinishedUIDialog(id, Box::new(result)));
                     })),
                     context,
                 ),
@@ -518,18 +520,20 @@ impl Composer {
                             "select recipients",
                             addresses,
                             false,
-                            Some(Box::new(move |id: ComponentId, results: &[Address]| {
-                                Some(UIEvent::FinishedUIDialog(
-                                    id,
-                                    Box::new(
-                                        results
-                                            .iter()
-                                            .map(|a| a.to_string())
-                                            .collect::<Vec<String>>()
-                                            .join(", "),
-                                    ),
-                                ))
-                            })),
+                            Some(Box::new(
+                                move |id: ComponentId, results: &[Address], context| {
+                                    context.replies.push_back(UIEvent::FinishedUIDialog(
+                                        id,
+                                        Box::new(
+                                            results
+                                                .iter()
+                                                .map(|a| a.to_string())
+                                                .collect::<Vec<String>>()
+                                                .join(", "),
+                                        ),
+                                    ));
+                                },
+                            )),
                             context,
                         ));
                     }
@@ -1461,12 +1465,14 @@ impl Component for Composer {
                                         ),
                                     ],
                                     true,
-                                    Some(Box::new(move |id: ComponentId, results: &[char]| {
-                                        Some(UIEvent::FinishedUIDialog(
-                                            id,
-                                            Box::new(results.first().cloned().unwrap_or('c')),
-                                        ))
-                                    })),
+                                    Some(Box::new(
+                                        move |id: ComponentId, results: &[char], context| {
+                                            context.replies.push_back(UIEvent::FinishedUIDialog(
+                                                id,
+                                                Box::new(results.first().cloned().unwrap_or('c')),
+                                            ));
+                                        },
+                                    )),
                                     context,
                                 ),
                                 handle,
@@ -1762,8 +1768,10 @@ impl Component for Composer {
                         vec![(true, "yes".to_string()), (false, "no".to_string())],
                         /* only one choice */
                         true,
-                        Some(Box::new(move |id: ComponentId, result: bool| {
-                            Some(UIEvent::FinishedUIDialog(id, Box::new(result)))
+                        Some(Box::new(move |id: ComponentId, result: bool, context| {
+                            context
+                                .replies
+                                .push_back(UIEvent::FinishedUIDialog(id, Box::new(result)));
                         })),
                         context,
                     ),
@@ -2024,8 +2032,10 @@ impl Component for Composer {
                         vec![(true, "yes".to_string()), (false, "no".to_string())],
                         /* only one choice */
                         true,
-                        Some(Box::new(move |id: ComponentId, result: bool| {
-                            Some(UIEvent::FinishedUIDialog(id, Box::new(result)))
+                        Some(Box::new(move |id: ComponentId, result: bool, context| {
+                            context
+                                .replies
+                                .push_back(UIEvent::FinishedUIDialog(id, Box::new(result)));
                         })),
                         context,
                     ),
@@ -2059,8 +2069,10 @@ impl Component for Composer {
                         vec![(true, "yes".to_string()), (false, "no".to_string())],
                         /* only one choice */
                         true,
-                        Some(Box::new(move |id: ComponentId, result: bool| {
-                            Some(UIEvent::FinishedUIDialog(id, Box::new(result)))
+                        Some(Box::new(move |id: ComponentId, result: bool, context| {
+                            context
+                                .replies
+                                .push_back(UIEvent::FinishedUIDialog(id, Box::new(result)))
                         })),
                         context,
                     ),
@@ -2690,12 +2702,14 @@ impl Component for Composer {
                     ('n', "cancel".to_string()),
                 ],
                 true,
-                Some(Box::new(move |id: ComponentId, results: &[char]| {
-                    Some(UIEvent::FinishedUIDialog(
-                        id,
-                        Box::new(results.first().copied().unwrap_or('n')),
-                    ))
-                })),
+                Some(Box::new(
+                    move |id: ComponentId, results: &[char], context| {
+                        context.replies.push_back(UIEvent::FinishedUIDialog(
+                            id,
+                            Box::new(results.first().copied().unwrap_or('n')),
+                        ));
+                    },
+                )),
                 context,
             ),
         );
@@ -2738,12 +2752,14 @@ impl Component for Composer {
                     ('n', "cancel".to_string()),
                 ],
                 true,
-                Some(Box::new(move |id: ComponentId, results: &[char]| {
-                    Some(UIEvent::FinishedUIDialog(
-                        id,
-                        Box::new(results.first().copied().unwrap_or('n')),
-                    ))
-                })),
+                Some(Box::new(
+                    move |id: ComponentId, results: &[char], context| {
+                        context.replies.push_back(UIEvent::FinishedUIDialog(
+                            id,
+                            Box::new(results.first().copied().unwrap_or('n')),
+                        ));
+                    },
+                )),
                 context,
             ),
         );

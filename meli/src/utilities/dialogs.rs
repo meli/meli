@@ -70,13 +70,11 @@ pub struct Selector<
 
 pub type UIConfirmationDialog = Selector<
     bool,
-    Option<Box<dyn FnOnce(ComponentId, bool) -> Option<UIEvent> + 'static + Sync + Send>>,
+    Option<Box<dyn FnOnce(ComponentId, bool, &mut Context) + 'static + Sync + Send>>,
 >;
 
-pub type UIDialog<T> = Selector<
-    T,
-    Option<Box<dyn FnOnce(ComponentId, &[T]) -> Option<UIEvent> + 'static + Sync + Send>>,
->;
+pub type UIDialog<T> =
+    Selector<T, Option<Box<dyn FnOnce(ComponentId, &[T], &mut Context) + 'static + Sync + Send>>>;
 
 impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + Send>
     std::fmt::Debug for Selector<T, F>
@@ -119,8 +117,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
             (UIEvent::Input(Key::Char('\n')), _) if self.single_only => {
                 /* User can only select one entry, so Enter key finalises the selection */
                 self.done = true;
-                if let Some(event) = self.done() {
-                    context.replies.push_back(event);
+                if self.done(context) {
                     self.unrealize(context);
                 }
                 return true;
@@ -135,8 +132,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
             }
             (UIEvent::Input(Key::Char('\n')), SelectorCursor::Ok) if !self.single_only => {
                 self.done = true;
-                if let Some(event) = self.done() {
-                    context.replies.push_back(event);
+                if self.done(context) {
                     self.unrealize(context);
                 }
                 return true;
@@ -149,7 +145,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
                     self.unrealize(context);
                 }
                 self.done = true;
-                _ = self.done();
+                self.done(context);
                 self.cancel(context);
                 self.set_dirty(true);
                 return false;
@@ -159,8 +155,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
                     e.1 = false;
                 }
                 self.done = true;
-                if let Some(event) = self.done() {
-                    context.replies.push_back(event);
+                if self.done(context) {
                     self.unrealize(context);
                 }
                 return true;
@@ -338,8 +333,7 @@ impl Component for UIConfirmationDialog {
             (UIEvent::Input(Key::Char('\n')), _) if self.single_only => {
                 /* User can only select one entry, so Enter key finalises the selection */
                 self.done = true;
-                if let Some(event) = self.done() {
-                    context.replies.push_back(event);
+                if self.done(context) {
                     self.unrealize(context);
                 }
                 self.set_dirty(true);
@@ -356,8 +350,7 @@ impl Component for UIConfirmationDialog {
             }
             (UIEvent::Input(Key::Char('\n')), SelectorCursor::Ok) if !self.single_only => {
                 self.done = true;
-                if let Some(event) = self.done() {
-                    context.replies.push_back(event);
+                if self.done(context) {
                     self.unrealize(context);
                 }
                 self.set_dirty(true);
@@ -372,7 +365,7 @@ impl Component for UIConfirmationDialog {
                     self.unrealize(context);
                 }
                 self.done = true;
-                _ = self.done();
+                self.done(context);
                 self.cancel(context);
                 self.set_dirty(true);
                 self.initialized = false;
@@ -383,8 +376,7 @@ impl Component for UIConfirmationDialog {
                     e.1 = false;
                 }
                 self.done = true;
-                if let Some(event) = self.done() {
-                    context.replies.push_back(event);
+                if self.done(context) {
                     self.unrealize(context);
                 }
                 self.set_dirty(true);
@@ -827,25 +819,28 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
 }
 
 impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> UIDialog<T> {
-    fn done(&mut self) -> Option<UIEvent> {
+    fn done(&mut self, context: &mut Context) -> bool {
         let Self {
             ref mut done_fn,
             ref mut entries,
             ref id,
             ..
         } = self;
-        done_fn.take().and_then(|done_fn| {
-            done_fn(
-                *id,
-                entries
-                    .iter()
-                    .filter(|v| v.1)
-                    .map(|(id, _)| id)
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .as_slice(),
-            )
-        })
+        let Some(done_fn) = done_fn.take() else {
+            return false;
+        };
+        done_fn(
+            *id,
+            entries
+                .iter()
+                .filter(|v| v.1)
+                .map(|(id, _)| id)
+                .cloned()
+                .collect::<Vec<_>>()
+                .as_slice(),
+            context,
+        );
+        true
     }
 
     fn cancel(&self, context: &mut Context) {
@@ -857,24 +852,27 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> UIDialog<T>
 }
 
 impl UIConfirmationDialog {
-    fn done(&mut self) -> Option<UIEvent> {
+    fn done(&mut self, context: &mut Context) -> bool {
         let Self {
             ref mut done_fn,
             ref mut entries,
             ref id,
             ..
         } = self;
-        done_fn.take().and_then(|done_fn| {
-            done_fn(
-                *id,
-                entries
-                    .iter()
-                    .filter(|v| v.1)
-                    .map(|(id, _)| id)
-                    .cloned()
-                    .any(std::convert::identity),
-            )
-        })
+        let Some(done_fn) = done_fn.take() else {
+            return false;
+        };
+        done_fn(
+            *id,
+            entries
+                .iter()
+                .filter(|v| v.1)
+                .map(|(id, _)| id)
+                .cloned()
+                .any(std::convert::identity),
+            context,
+        );
+        true
     }
 
     fn cancel(&self, context: &mut Context) {

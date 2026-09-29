@@ -333,12 +333,14 @@ impl Component for ContactManager {
                     ('n', "cancel".to_string()),
                 ],
                 true,
-                Some(Box::new(move |id, results: &[char]| {
-                    if matches!(results.first(), Some(&'y')) {
-                        Some(UIEvent::ComponentUnrealize(parent_id))
-                    } else {
-                        Some(UIEvent::ComponentUnrealize(id))
-                    }
+                Some(Box::new(move |id, results: &[char], context| {
+                    context
+                        .replies
+                        .push_back(if matches!(results.first(), Some(&'y')) {
+                            UIEvent::ComponentUnrealize(parent_id)
+                        } else {
+                            UIEvent::ComponentUnrealize(id)
+                        });
                 })),
                 context,
             )));
