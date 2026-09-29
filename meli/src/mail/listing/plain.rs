@@ -135,7 +135,7 @@ pub struct PlainListing {
     length: usize,
     sort: (SortField, SortOrder),
     subsort: (SortField, SortOrder),
-    rows: RowsState<(ThreadHash, EnvelopeHash)>,
+    rows: RowsState,
     /// Cache current view.
     data_columns: DataColumns<5>,
 

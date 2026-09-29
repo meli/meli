@@ -114,7 +114,7 @@ pub struct ConversationsListing {
     length: usize,
     sort: (SortField, SortOrder),
     subsort: (SortField, SortOrder),
-    rows: RowsState<(ThreadHash, EnvelopeHash)>,
+    rows: RowsState,
     error: std::result::Result<(), String>,
 
     #[allow(clippy::type_complexity)]

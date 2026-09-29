@@ -51,7 +51,7 @@ pub const DEFAULT_SNOOZED_FLAG: &str = concat!("💤", emoji_text_presentation_s
 pub const DEFAULT_HIGHLIGHT_SELF_FLAG: &str = concat!("✸", emoji_text_presentation_selector!());
 
 #[derive(Debug, Default)]
-pub struct RowsState<T> {
+pub struct RowsState {
     pub selection: HashMap<EnvelopeHash, bool>,
     pub row_updates: SmallVec<[EnvelopeHash; 8]>,
     // [ref:FIXME]: env vec should have at least one element guaranteed
@@ -60,13 +60,13 @@ pub struct RowsState<T> {
     pub thread_order: HashMap<ThreadHash, usize>,
     pub env_order: HashMap<EnvelopeHash, usize>,
     #[allow(clippy::type_complexity)]
-    pub entries: Vec<(T, EntryStrings)>,
+    pub entries: Vec<((ThreadHash, EnvelopeHash), EntryStrings)>,
     pub all_threads: HashSet<ThreadHash>,
     pub all_envelopes: HashSet<EnvelopeHash>,
     pub row_attr_cache: HashMap<usize, ThemeAttribute>,
 }
 
-impl<T> RowsState<T> {
+impl RowsState {
     #[inline(always)]
     #[must_use]
     pub fn clear(&mut self, take_selection: bool) -> Option<HashMap<EnvelopeHash, bool>> {
@@ -116,7 +116,7 @@ impl<T> RowsState<T> {
     pub fn insert_thread(
         &mut self,
         thread: ThreadHash,
-        metadata: T,
+        metadata: (ThreadHash, EnvelopeHash),
         mut env_hashes: SmallVec<[EnvelopeHash; 8]>,
         entry_strings: EntryStrings,
     ) {
@@ -222,6 +222,8 @@ impl<T> RowsState<T> {
         self.row_updates.push(new_hash);
         if let Some(row) = self.env_order.remove(&old_hash) {
             self.env_order.insert(new_hash, row);
+            let entry = &mut self.entries[row].0;
+            entry.1 = new_hash;
         }
         if let Some(thread) = self.env_to_thread.remove(&old_hash) {
             self.env_to_thread.insert(new_hash, thread);

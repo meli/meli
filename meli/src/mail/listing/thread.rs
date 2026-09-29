@@ -147,7 +147,7 @@ pub struct ThreadListing {
     filtered_order: HashMap<ThreadHash, usize>,
     data_columns: DataColumns<5>,
     rows_drawn: SegmentTree,
-    rows: RowsState<(ThreadHash, EnvelopeHash)>,
+    rows: RowsState,
     seen_cache: IndexMap<EnvelopeHash, bool>,
     /// If we must redraw on next redraw event
     dirty: bool,

@@ -139,7 +139,7 @@ pub struct CompactListing {
     /// Cache current view.
     data_columns: DataColumns<5>,
     rows_drawn: SegmentTree,
-    rows: RowsState<(ThreadHash, EnvelopeHash)>,
+    rows: RowsState,
 
     #[allow(clippy::type_complexity)]
     search_job: Option<(String, JoinHandle<Result<Vec<EnvelopeHash>>>)>,
