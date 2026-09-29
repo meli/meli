@@ -35,6 +35,11 @@ rusty_fork_test! {
     fn test_imap_fetch() {
         tests::run_imap_fetch();
     }
+
+    #[test]
+    fn test_imap_auth_mechanisms() {
+        tests::run_imap_auth_mechanisms();
+    }
 }
 
 pub mod server {
@@ -59,9 +64,9 @@ pub mod server {
         encode::{Encoder as _, Fragment},
         imap_types, CommandCodec, ResponseCodec,
     };
-    use imap_types::{
-        auth::AuthMechanism,
-        core::{LiteralMode, NString, Vec1},
+    pub use imap_types::{
+        auth::{AuthMechanism, AuthMechanismOther},
+        core::{Atom, LiteralMode, NString, Vec1},
         fetch::MessageDataItem,
         response::{Capability, Code, CommandContinuationRequest, Data, Response, Status},
     };
@@ -104,14 +109,13 @@ pub mod server {
             uid
         }
 
-        fn recv(&mut self, server_event: ServerEvent) -> StreamEvent {
+        fn recv(&mut self, server_event: ServerStateEvent) -> StreamEvent {
             match server_event {
-                ServerEvent::Quit => StreamEvent::Quit,
-                ServerEvent::New(new_mail) => {
+                ServerStateEvent::New(new_mail) => {
                     let uid = self.insert(new_mail);
                     StreamEvent::Untagged(UntaggedEvent::New(uid))
                 }
-                ServerEvent::Delete(uid, on_success) => {
+                ServerStateEvent::Delete(uid, on_success) => {
                     eprintln!(
                         "removing uid = {uid} mail = {:?}",
                         self.envelopes.shift_remove(&uid)
@@ -119,7 +123,7 @@ pub mod server {
                     _ = on_success.send(true);
                     StreamEvent::Untagged(UntaggedEvent::Delete(uid))
                 }
-                ServerEvent::Expunge(reply) => {
+                ServerStateEvent::Expunge(reply) => {
                     let uids = self
                         .envelopes
                         .iter()
@@ -141,7 +145,7 @@ pub mod server {
 
                     StreamEvent::Untagged(UntaggedEvent::Deletes(uids))
                 }
-                ServerEvent::WaitForCommand(cmd, notifier) => {
+                ServerStateEvent::WaitForCommand(cmd, notifier) => {
                     StreamEvent::WaitForCommand(cmd, notifier)
                 }
             }
@@ -240,6 +244,22 @@ pub mod server {
 
     #[derive(Debug)]
     pub enum ServerEvent {
+        State(ServerStateEvent),
+        ChangeCapabilities {
+            capabilities: Vec1<Capability<'static>>,
+            authenticated_capabilities: Vec1<Capability<'static>>,
+        },
+        Quit,
+    }
+
+    impl From<ServerStateEvent> for ServerEvent {
+        fn from(val: ServerStateEvent) -> Self {
+            Self::State(val)
+        }
+    }
+
+    #[derive(Debug)]
+    pub enum ServerStateEvent {
         New(Box<Mail>),
         Delete(UID, futures::channel::oneshot::Sender<bool>),
         Expunge(futures::channel::oneshot::Sender<Vec<UID>>),
@@ -247,7 +267,6 @@ pub mod server {
             &'static str,
             Arc<Mutex<Option<futures::channel::oneshot::Sender<()>>>>,
         ),
-        Quit,
     }
 
     #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -257,7 +276,7 @@ pub mod server {
         Deletes(Vec<UID>),
     }
 
-    #[derive(Clone)]
+    #[derive(Clone, Debug)]
     enum StreamEvent {
         Untagged(UntaggedEvent),
         WaitForCommand(
@@ -271,6 +290,8 @@ pub mod server {
     pub struct ImapServerConfig {
         pub capabilities: Vec1<Capability<'static>>,
         pub authenticated_capabilities: Vec1<Capability<'static>>,
+        pub hostname: String,
+        pub port: u16,
     }
 
     pub struct ImapServer {
@@ -306,6 +327,9 @@ pub mod server {
             ]
             .try_into()
             .unwrap();
+            let local_addr = listener.as_ref().local_addr().unwrap();
+            let hostname = local_addr.ip().to_string();
+            let port = local_addr.port();
             Self {
                 listener,
                 command_sender,
@@ -314,6 +338,8 @@ pub mod server {
                 config: ImapServerConfig {
                     capabilities,
                     authenticated_capabilities,
+                    hostname,
+                    port,
                 },
             }
         }
@@ -330,7 +356,7 @@ pub mod server {
                         command_sender,
                         mut command_receiver,
                         state,
-                        config,
+                        mut config,
                     } = self;
 
                     let mut streams: HashMap<usize, StreamHandle> = HashMap::new();
@@ -363,9 +389,25 @@ pub mod server {
                     'server_loop: loop {
                         while let Some(server_event) = queue.pop_front() {
                             let quit = matches!(server_event, ServerEvent::Quit);
-                            let event = state.lock().unwrap().recv(server_event);
-                            for stream in streams.values_mut() {
-                                stream.sender.unbounded_send(event.clone()).unwrap();
+                            let event = match server_event {
+                                ServerEvent::Quit => StreamEvent::Quit,
+                                ServerEvent::ChangeCapabilities {
+                                    capabilities,
+                                    authenticated_capabilities,
+                                } => {
+                                    config.capabilities = capabilities;
+                                    config.authenticated_capabilities = authenticated_capabilities;
+                                    StreamEvent::Quit
+                                }
+                                ServerEvent::State(other) => state.lock().unwrap().recv(other),
+                            };
+                            for (i, stream) in streams.values_mut().enumerate() {
+                                if stream.sender.unbounded_send(event.clone()).is_err() {
+                                    eprintln!(
+                                        "Did not send event {event:?} to stream {i} because it \
+                                         disconnected"
+                                    );
+                                }
                             }
                             if quit {
                                 break 'server_loop;
@@ -714,10 +756,48 @@ pub mod server {
                             initial_response,
                         } => {
                             if !session_state.is_authenticated() {
-                                assert_eq!(mechanism, AuthMechanism::Plain);
-                                let initial_response = initial_response.expect("password");
-                                let password = initial_response.declassify();
-                                assert_eq!(password.as_ref(), b"\0user\0password");
+                                assert!(
+                                    config
+                                        .capabilities
+                                        .as_ref()
+                                        .iter()
+                                        .any(|c| *c == Capability::Auth(mechanism.clone())),
+                                    "{:?}",
+                                    config.capabilities
+                                );
+                                match mechanism {
+                                    AuthMechanism::Plain => {
+                                        let initial_response = initial_response.expect("password");
+                                        let password = initial_response.declassify();
+                                        assert_eq!(password.as_ref(), b"\0user\0password");
+                                    }
+                                    AuthMechanism::OAuthBearer => {
+                                        let initial_response = initial_response.expect("password");
+                                        let password = initial_response.declassify();
+                                        #[rustfmt::skip]
+                                        let expected_response =
+                                            format!(
+                                                "n,a=user,\x01host=127.0.0.1\x01port={port}\x01auth=Bearer password\x01\x01",
+                                                port = config.port
+                                            );
+                                        assert_eq!(password.as_ref(), expected_response.as_bytes());
+                                    }
+                                    other @ AuthMechanism::Other(_)
+                                        if other.as_ref() == "ANONYMOUS" =>
+                                    {
+                                        if let Some(initial_response) = initial_response {
+                                            // Got optional trace information.
+                                            let trace = String::from_utf8_lossy(
+                                                initial_response.declassify(),
+                                            );
+                                            eprintln!(
+                                                "AUTHENTICATE ANONYMOUS with trace information \
+                                                 {trace}"
+                                            );
+                                        }
+                                    }
+                                    other => panic!("unimplemented auth method {other:?}"),
+                                }
                                 *session_state = SessionState::Authenticated;
                             } else {
                                 panic!();
@@ -896,7 +976,7 @@ pub mod server {
                                 // 6.4.1.  CLOSE Command
                                 let (s, r) = futures::channel::oneshot::channel();
                                 server_sender
-                                    .unbounded_send(ServerEvent::Expunge(s))
+                                    .unbounded_send(ServerStateEvent::Expunge(s).into())
                                     .unwrap();
                                 let expunged = r.await.unwrap();
                                 eprintln!("CLOSE silently expunged following uids: {expunged:?}");
@@ -922,7 +1002,7 @@ pub mod server {
                                 {
                                     let (s, r) = futures::channel::oneshot::channel();
                                     server_sender
-                                        .unbounded_send(ServerEvent::Expunge(s))
+                                        .unbounded_send(ServerStateEvent::Expunge(s).into())
                                         .unwrap();
                                     let expunged = r.await.unwrap();
                                     for uid in &expunged {
@@ -1234,7 +1314,7 @@ pub mod server {
                 match event {
                     StreamEvent::Quit => {
                         if let Some(idle_cmd_id) = idle_cmd_id.take() {
-                            eprintln!("IDLE loop_handler received ServerEvent::Quit from 'main");
+                            eprintln!("IDLE loop_handler received StreamEvent::Quit from 'main");
                             tcp_stream
                                 .write_all(b"* BYE cruel world\r\n")
                                 .await
@@ -1245,7 +1325,7 @@ pub mod server {
                                 .await
                                 .unwrap();
                         } else {
-                            eprintln!("main loop_handler received ServerEvent::Quit");
+                            eprintln!("main loop_handler received StreamEvent::Quit");
                             tcp_stream
                                 .write_all(b"* BYE cruel world\r\n")
                                 .await
@@ -1316,7 +1396,7 @@ pub mod tests {
         server_state: Arc<Mutex<ServerState>>,
         server_sender: UnboundedSender<ServerEvent>,
         account_conf: AccountSettings,
-        imap_server_handle: std::thread::JoinHandle<()>,
+        imap_server: ImapServer,
     }
 
     fn setup(initial_envelopes: Vec<Mail>) -> ImapTest {
@@ -1363,12 +1443,11 @@ pub mod tests {
         let local_addr = listener.local_addr().unwrap();
         let (server_sender, server_receiver) = unbounded();
         let listener = smol::Async::new(listener).unwrap();
-        let imap_server_handle = ImapServer::new(
+        let imap_server = ImapServer::new(
             listener,
             (server_sender.clone(), server_receiver),
             Arc::clone(&server_state),
-        )
-        .spawn();
+        );
 
         let account_conf = AccountSettings {
             name: "test".to_string(),
@@ -1400,7 +1479,7 @@ pub mod tests {
             _temp_dir: temp_dir,
             server_state,
             server_sender,
-            imap_server_handle,
+            imap_server,
             account_conf,
         }
     }
@@ -1414,9 +1493,10 @@ pub mod tests {
             server_state,
             server_sender,
             account_conf,
-            imap_server_handle,
+            imap_server,
         } = setup(vec![]);
 
+        let imap_server_handle = imap_server.spawn();
         let backend_event_queue = Arc::new(Mutex::new(VecDeque::with_capacity(16)));
 
         let backend_event_consumer = {
@@ -1507,22 +1587,25 @@ hello world 3.
                     block_on(async move {
                         let (w_s, w_r) = futures::channel::oneshot::channel();
                         server_sender
-                            .unbounded_send(ServerEvent::WaitForCommand(
-                                "IDLE",
-                                Arc::new(Mutex::new(Some(w_s))),
-                            ))
+                            .unbounded_send(
+                                ServerStateEvent::WaitForCommand(
+                                    "IDLE",
+                                    Arc::new(Mutex::new(Some(w_s))),
+                                )
+                                .into(),
+                            )
                             .unwrap();
                         eprintln!("waiting for IDLE..");
                         _ = w_r.await;
                         eprintln!("done waiting for IDLE");
                         server_sender
-                            .unbounded_send(ServerEvent::New(new_mail.clone()))
+                            .unbounded_send(ServerStateEvent::New(new_mail.clone()).into())
                             .unwrap();
                         server_sender
-                            .unbounded_send(ServerEvent::New(new_mail_2.clone()))
+                            .unbounded_send(ServerStateEvent::New(new_mail_2.clone()).into())
                             .unwrap();
                         server_sender
-                            .unbounded_send(ServerEvent::New(new_mail_3.clone()))
+                            .unbounded_send(ServerStateEvent::New(new_mail_3.clone()).into())
                             .unwrap();
                     });
                 }
@@ -1606,10 +1689,10 @@ hello world 3.
                 };
                 // Simulate another client deleting an email
                 server_sender
-                    .unbounded_send(ServerEvent::Delete(
-                        uid,
-                        futures::channel::oneshot::channel().0,
-                    ))
+                    .unbounded_send(
+                        ServerStateEvent::Delete(uid, futures::channel::oneshot::channel().0)
+                            .into(),
+                    )
                     .unwrap();
             }
             let watch_fut = {
@@ -1755,12 +1838,14 @@ hello world 3.
             server_state,
             server_sender,
             account_conf,
-            imap_server_handle,
+            imap_server,
         } = setup(vec![
             new_mail.clone(),
             new_mail_2.clone(),
             new_mail_3.clone(),
         ]);
+
+        let imap_server_handle = imap_server.spawn();
 
         let fut = async move {
             // Do initial fetch, verify that we see those 3 e-mails.
@@ -1914,7 +1999,7 @@ hello world 3.
             {
                 let (s, r) = futures::channel::oneshot::channel();
                 server_sender
-                    .unbounded_send(ServerEvent::Delete(uid_to_delete, s))
+                    .unbounded_send(ServerStateEvent::Delete(uid_to_delete, s).into())
                     .unwrap();
                 r.await.unwrap();
             }
@@ -2002,6 +2087,197 @@ hello world 3.
                         assert_eq!(*env_hash, deleted_hash);
                     }
                 }
+            }
+            server_sender.unbounded_send(ServerEvent::Quit).unwrap();
+            imap_server_handle.join().unwrap();
+        };
+        std::thread::spawn(move || {
+            block_on(fut);
+        })
+        .join()
+        .unwrap();
+    }
+
+    /// Test that various auth mechanisms work as expected
+    pub(crate) fn run_imap_auth_mechanisms() {
+        let ImapTest {
+            _logger,
+            _temp_dir,
+            server_state: _,
+            server_sender,
+            mut account_conf,
+            mut imap_server,
+        } = setup(vec![]);
+
+        imap_server.config.capabilities = vec![
+            Capability::Imap4Rev1,
+            Capability::Auth(AuthMechanism::OAuthBearer),
+            Capability::SaslIr,
+            Capability::Id,
+        ]
+        .try_into()
+        .unwrap();
+        imap_server.config.authenticated_capabilities = vec![
+            Capability::Imap4Rev1,
+            Capability::Id,
+            Capability::Idle,
+            Capability::Enable,
+        ]
+        .try_into()
+        .unwrap();
+
+        let hostname = imap_server.config.hostname.clone();
+
+        let fut = async move {
+            let imap_server_handle = imap_server.spawn();
+            let backend_event_queue = Arc::new(Mutex::new(VecDeque::with_capacity(16)));
+            // Try AUTH=OAUTHBEARER: it will fail because the connection is not TLS encrypted
+            {
+                account_conf
+                    .extra
+                    .insert("use_oauth2".into(), "true".into());
+                let backend_event_consumer = {
+                    let backend_event_queue = Arc::clone(&backend_event_queue);
+
+                    BackendEventConsumer::new(Arc::new(move |ah, be| {
+                        eprintln!("BackendEventConsumer: ah {ah:?} be {be:?}");
+                        backend_event_queue.lock().unwrap().push_back((ah, be));
+                    }))
+                };
+                let mut imap =
+                    ImapType::new(&account_conf, Default::default(), backend_event_consumer)
+                        .unwrap();
+                let tls_err = imap.is_online().unwrap().await.unwrap_err();
+                assert_eq!(
+                    &tls_err.summary,
+                    &format!(
+                        "Cannot authenticate to {hostname} with AUTH=OAUTHBEARER: it is not \
+                         encrypted with TLS which is required"
+                    )
+                );
+                assert_eq!(tls_err.kind, ErrorKind::Configuration);
+                account_conf.extra.shift_remove("use_oauth2");
+            }
+            // Try AUTH=PLAIN, it should succeed
+            server_sender
+                .unbounded_send(ServerEvent::ChangeCapabilities {
+                    capabilities: vec![
+                        Capability::Imap4Rev1,
+                        Capability::Auth(AuthMechanism::Plain),
+                        Capability::SaslIr,
+                        Capability::Id,
+                    ]
+                    .try_into()
+                    .unwrap(),
+                    authenticated_capabilities: vec![
+                        Capability::Imap4Rev1,
+                        Capability::Id,
+                        Capability::Idle,
+                        Capability::Enable,
+                    ]
+                    .try_into()
+                    .unwrap(),
+                })
+                .unwrap();
+            {
+                let backend_event_consumer = {
+                    let backend_event_queue = Arc::clone(&backend_event_queue);
+
+                    BackendEventConsumer::new(Arc::new(move |ah, be| {
+                        eprintln!("BackendEventConsumer: ah {ah:?} be {be:?}");
+                        backend_event_queue.lock().unwrap().push_back((ah, be));
+                    }))
+                };
+                let mut imap =
+                    ImapType::new(&account_conf, Default::default(), backend_event_consumer)
+                        .unwrap();
+                imap.is_online().unwrap().await.unwrap();
+            }
+            // Try AUTH=ANONYMOUS, it should succeed
+            server_sender
+                .unbounded_send(ServerEvent::ChangeCapabilities {
+                    capabilities: vec![
+                        Capability::Imap4Rev1,
+                        Capability::Auth(AuthMechanism::from(Atom::try_from("ANONYMOUS").unwrap())),
+                        Capability::SaslIr,
+                        Capability::Id,
+                    ]
+                    .try_into()
+                    .unwrap(),
+                    authenticated_capabilities: vec![
+                        Capability::Imap4Rev1,
+                        Capability::Id,
+                        Capability::Idle,
+                        Capability::Enable,
+                    ]
+                    .try_into()
+                    .unwrap(),
+                })
+                .unwrap();
+            {
+                account_conf
+                    .extra
+                    .insert("use_auth_anonymous".into(), "true".into());
+                let backend_event_consumer = {
+                    let backend_event_queue = Arc::clone(&backend_event_queue);
+
+                    BackendEventConsumer::new(Arc::new(move |ah, be| {
+                        eprintln!("BackendEventConsumer: ah {ah:?} be {be:?}");
+                        backend_event_queue.lock().unwrap().push_back((ah, be));
+                    }))
+                };
+                let mut imap =
+                    ImapType::new(&account_conf, Default::default(), backend_event_consumer)
+                        .unwrap();
+                imap.is_online().unwrap().await.unwrap();
+                account_conf.extra.shift_remove("use_auth_anonymous");
+            }
+            // Try authenticating without any AUTH capabilities and LOGINDISABLED, this should fail
+            server_sender
+                .unbounded_send(ServerEvent::ChangeCapabilities {
+                    capabilities: vec![
+                        Capability::Imap4Rev1,
+                        Capability::LoginDisabled,
+                        Capability::SaslIr,
+                        Capability::Id,
+                    ]
+                    .try_into()
+                    .unwrap(),
+                    authenticated_capabilities: vec![
+                        Capability::Imap4Rev1,
+                        Capability::Id,
+                        Capability::Idle,
+                        Capability::Enable,
+                    ]
+                    .try_into()
+                    .unwrap(),
+                })
+                .unwrap();
+            {
+                let backend_event_consumer = {
+                    let backend_event_queue = Arc::clone(&backend_event_queue);
+
+                    BackendEventConsumer::new(Arc::new(move |ah, be| {
+                        eprintln!("BackendEventConsumer: ah {ah:?} be {be:?}");
+                        backend_event_queue.lock().unwrap().push_back((ah, be));
+                    }))
+                };
+                let mut imap =
+                    ImapType::new(&account_conf, Default::default(), backend_event_consumer)
+                        .unwrap();
+                let login_disabled_err = imap.is_online().unwrap().await.unwrap_err();
+                assert_eq!(
+                    &login_disabled_err.summary,
+                    &format!(
+                        "Could not connect to {hostname}: server does not accept the LOGIN command"
+                    )
+                );
+                assert_eq!(
+                    &login_disabled_err.details.as_deref().unwrap(),
+                    &"Server has the capability LOGINDISABLED set. Returned capabilities were: \
+                      IMAP4REV1 LOGINDISABLED SASL-IR ID"
+                );
+                assert_eq!(login_disabled_err.kind, ErrorKind::Configuration);
             }
             server_sender.unbounded_send(ServerEvent::Quit).unwrap();
             imap_server_handle.join().unwrap();

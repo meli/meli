@@ -85,6 +85,7 @@ pub type MessageSequenceNumber = ImapNum;
 
 pub static SUPPORTED_CAPABILITIES: &[&str] = &[
     "AUTH=ANONYMOUS",
+    "AUTH=OAUTHBEARER",
     "AUTH=PLAIN",
     "AUTH=XOAUTH2",
     "COMPRESS=DEFLATE",
@@ -233,6 +234,7 @@ pub struct UIDStore {
     pub server_id: Arc<Mutex<Option<IDResponse>>>,
     pub keep_offline_cache: AtomicBool,
     pub offline_cache: Arc<Mutex<Option<Box<dyn ImapCache>>>>,
+    pub preauth_capabilities: Arc<Mutex<Capabilities>>,
     pub capabilities: Arc<Mutex<Capabilities>>,
     pub hash_index: Arc<Mutex<HashMap<EnvelopeHash, (UID, MailboxHash)>>>,
     pub uid_index: Arc<Mutex<HashMap<(MailboxHash, UID), EnvelopeHash>>>,
@@ -268,6 +270,7 @@ impl UIDStore {
             server_id: Default::default(),
             keep_offline_cache: AtomicBool::new(keep_offline_cache),
             offline_cache: Arc::new(Mutex::new(None)),
+            preauth_capabilities: Default::default(),
             capabilities: Default::default(),
             uidvalidity: Default::default(),
             envelopes: Default::default(),
@@ -321,19 +324,20 @@ pub struct ImapType {
 
 impl MailBackend for ImapType {
     fn capabilities(&mut self) -> MailBackendCapabilities {
-        let mut extensions = self
+        let capability_names = self
             .uid_store
-            .capabilities
+            .preauth_capabilities
             .lock()
             .unwrap()
             .iter()
-            .map(|c| {
-                (
-                    String::from_utf8_lossy(c).into(),
-                    MailBackendExtensionStatus::Unsupported { comment: None },
-                )
-            })
+            .chain(self.uid_store.capabilities.lock().unwrap().iter())
+            .map(|c| String::from_utf8_lossy(c).into())
+            .collect::<IndexSet<String>>();
+        let mut extensions = capability_names
+            .into_iter()
+            .map(|c| (c, MailBackendExtensionStatus::Unsupported { comment: None }))
             .collect::<Vec<(String, MailBackendExtensionStatus)>>();
+        extensions.sort_by(|a, b| a.0.cmp(&b.0));
         let mut supports_raw_search = false;
         if let ImapProtocol::IMAP {
             extension_use:
@@ -447,7 +451,6 @@ impl MailBackend for ImapType {
                 }
             }
         }
-        extensions.sort_by(|a, b| a.0.cmp(&b.0));
         let metadata = self
             .uid_store
             .server_id

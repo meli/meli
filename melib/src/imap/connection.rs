@@ -44,7 +44,7 @@ use imap_codec::{
     imap_types::{
         auth::AuthMechanism,
         command::{Command, CommandBody},
-        core::{AString, Literal, LiteralMode, Tag, Vec1},
+        core::{AString, Atom, Literal, LiteralMode, Tag, Vec1},
         extensions::{compress::CompressionAlgorithm, enable::CapabilityEnable},
         flag::Flag as ImapCodecFlag,
         mailbox::Mailbox,
@@ -377,7 +377,8 @@ pub struct ImapConnection {
 }
 
 impl ImapStream {
-    pub async fn new_connection(
+    /// Connects and sets up TLS if necessary, but does not perform authentication.
+    pub async fn new(
         server_conf: &ImapServerConf,
         id: Cow<'static, str>,
         uid_store: &UIDStore,
@@ -526,7 +527,7 @@ impl ImapStream {
             .get_ref()
             .set_keepalive(Some(Duration::new(60 * 35, 0)))
         {
-            log::warn!("Could not set TCP keepalive in IMAP connection: {}", err);
+            log::warn!("Could not set TCP keepalive in IMAP connection: {err}");
         }
         let mut res = Vec::with_capacity(8 * 1024);
         let mut ret = Self {
@@ -540,22 +541,21 @@ impl ImapStream {
         };
         if matches!(server_conf.protocol, ImapProtocol::ManageSieve) {
             ret.read_response(&mut res).await?;
-            let username = server_conf
-                .username
-                .value_with_timeout(server_conf.timeout.unwrap_or(Duration::from_millis(100)))
-                .await?;
-            let password = server_conf
-                .password
-                .value_with_timeout(server_conf.timeout.unwrap_or(Duration::from_millis(100)))
-                .await?;
-            let credentials = format!("\0{username}\0{password}");
-            ret.send_command(CommandBody::authenticate(AuthMechanism::Plain))
-                .await?;
-            ret.wait_for_continuation_request().await?;
-            ret.send_literal(base64.encode(credentials).as_bytes())
-                .await?;
-            ret.read_response(&mut res).await?;
-            return Ok((Default::default(), ret));
+            if !res.split_rn().into_iter().any(|l| l.starts_with(b"OK")) {
+                return Err(Error::new(format!(
+                    "Could not connect to ManageSieve server {hostname}"
+                ))
+                .set_details(format!(
+                    "Server did not reply with `OK`, it replied with: {:?}",
+                    String::from_utf8_lossy(&res)
+                )));
+            }
+            let capabilities = res
+                .split_rn()
+                .filter(|l| !l.starts_with(b"OK"))
+                .map(|v| v.to_vec().into_boxed_slice())
+                .collect();
+            return Ok((capabilities, ret));
         }
 
         if send_state_changes {
@@ -587,7 +587,7 @@ impl ImapStream {
                 })
         }
 
-        let mut capabilities: IndexSet<Box<[u8]>> = {
+        let capabilities: IndexSet<Box<[u8]>> = {
             let capabilities = res
                 .split_rn()
                 .find(|l| l.starts_with(b"* CAPABILITY"))
@@ -620,202 +620,7 @@ impl ImapStream {
             ))
             .set_kind(ErrorKind::ProtocolNotSupported));
         }
-        let has_sasl_ir: bool = capabilities
-            .iter()
-            .any(|cap| cap.eq_ignore_ascii_case(b"SASL-IR"));
 
-        if send_state_changes {
-            (uid_store.event_consumer)(
-                uid_store.account_hash,
-                BackendEvent::AccountStateChange {
-                    message: "Attempting authentication.".into(),
-                },
-            );
-        }
-        match server_conf.protocol {
-            ImapProtocol::IMAP {
-                extension_use: ImapExtensionUse { oauth2, .. },
-            } if oauth2 => {
-                // [ref:FIXME]: differentiate between OAUTH2 and XOAUTH2
-                if !capabilities
-                    .iter()
-                    .any(|cap| cap.eq_ignore_ascii_case(b"AUTH=XOAUTH2"))
-                {
-                    return Err(Error::new(format!(
-                        "Could not connect to {hostname}: OAUTH2 is enabled but server did not \
-                         return AUTH=XOAUTH2 capability. Returned capabilities were: {}",
-                        capabilities
-                            .iter()
-                            .map(|capability| String::from_utf8_lossy(capability).to_string())
-                            .collect::<Vec<String>>()
-                            .join(" ")
-                    ))
-                    .set_kind(ErrorKind::Authentication));
-                }
-                let password = server_conf
-                    .password
-                    .value_with_timeout(server_conf.timeout.unwrap_or(Duration::from_millis(100)))
-                    .await?;
-                if has_sasl_ir {
-                    let xoauth2 = base64
-                        .decode(&password)
-                        .chain_err_summary(|| {
-                            "Could not decode `password` from base64. Is the value correct?"
-                        })
-                        .chain_err_kind(ErrorKind::Configuration)?;
-                    ret.send_command(CommandBody::authenticate_with_ir(
-                        AuthMechanism::XOAuth2,
-                        &xoauth2,
-                    ))
-                    .await?;
-                } else {
-                    ret.send_command(CommandBody::authenticate(AuthMechanism::XOAuth2))
-                        .await?;
-                    ret.wait_for_continuation_request().await?;
-                    ret.send_literal(password.as_bytes()).await?;
-                }
-            }
-            ImapProtocol::IMAP {
-                extension_use: ImapExtensionUse { auth_anonymous, .. },
-            } if auth_anonymous => {
-                if !capabilities
-                    .iter()
-                    .any(|cap| cap.eq_ignore_ascii_case(b"AUTH=ANONYMOUS"))
-                {
-                    return Err(Error::new(format!(
-                        "Could not connect to {hostname}: AUTH=ANONYMOUS is enabled but server \
-                         did not return AUTH=ANONYMOUS capability. Returned capabilities were: {}",
-                        capabilities
-                            .iter()
-                            .map(|capability| String::from_utf8_lossy(capability).to_string())
-                            .collect::<Vec<String>>()
-                            .join(" ")
-                    ))
-                    .set_kind(ErrorKind::Authentication));
-                }
-                ret.send_command_raw(b"AUTHENTICATE ANONYMOUS").await?;
-                ret.wait_for_continuation_request().await?;
-                ret.send_literal(b"c2lyaGM=").await?;
-            }
-            _ if capabilities
-                .iter()
-                .any(|cap| cap.eq_ignore_ascii_case(b"AUTH=PLAIN")) =>
-            {
-                let username = server_conf
-                    .username
-                    .value_with_timeout(server_conf.timeout.unwrap_or(Duration::from_millis(100)))
-                    .await?;
-                let password = server_conf
-                    .password
-                    .value_with_timeout(server_conf.timeout.unwrap_or(Duration::from_millis(100)))
-                    .await?;
-                let credentials = format!("\0{username}\0{password}");
-                if has_sasl_ir {
-                    ret.send_command(CommandBody::authenticate_with_ir(
-                        AuthMechanism::Plain,
-                        credentials.as_bytes(),
-                    ))
-                    .await?;
-                } else {
-                    ret.send_command(CommandBody::authenticate(AuthMechanism::Plain))
-                        .await?;
-                    ret.wait_for_continuation_request().await?;
-                    ret.send_literal(base64.encode(credentials).as_bytes())
-                        .await?;
-                }
-            }
-            _ => {
-                if capabilities
-                    .iter()
-                    .any(|cap| cap.eq_ignore_ascii_case(b"LOGINDISABLED"))
-                {
-                    return Err(Error::new(format!(
-                        "Could not connect to {hostname}: server does not accept the LOGIN \
-                         command [LOGINDISABLED]",
-                    ))
-                    .set_kind(ErrorKind::Authentication));
-                }
-                let username = server_conf
-                    .username
-                    .value_with_timeout(server_conf.timeout.unwrap_or(Duration::from_millis(100)))
-                    .await?;
-                let password = server_conf
-                    .password
-                    .value_with_timeout(server_conf.timeout.unwrap_or(Duration::from_millis(100)))
-                    .await?;
-                let username =
-                    AString::try_from(username.as_str()).chain_err_kind(ErrorKind::Bug)?;
-                let password =
-                    AString::try_from(password.as_str()).chain_err_kind(ErrorKind::Bug)?;
-
-                ret.send_command(CommandBody::Login {
-                    username,
-                    password: Secret::new(password),
-                })
-                .await?;
-            }
-        }
-        let tag_start = format!("M{} ", (ret.cmd_id - 1));
-        let mut got_new_capabilities = false;
-
-        loop {
-            ret.read_lines(&mut res, None, false).await?;
-            let mut should_break = false;
-            for l in res.split_rn() {
-                if l.starts_with(b"* CAPABILITY") {
-                    got_new_capabilities = true;
-                    capabilities.extend(parse_capabilities(l, &hostname)?);
-                }
-
-                if l.starts_with(tag_start.as_bytes()) {
-                    if !l[tag_start.len()..].trim().starts_with(b"OK ") {
-                        return Err(Error::new(format!(
-                            "Could not connect. Server replied with '{}'",
-                            String::from_utf8_lossy(l[tag_start.len()..].trim())
-                        ))
-                        .set_kind(ErrorKind::Authentication));
-                    }
-                    should_break = true;
-                }
-            }
-            if should_break {
-                break;
-            }
-        }
-
-        if !got_new_capabilities {
-            // sending CAPABILITY after LOGIN automatically is an RFC recommendation, so
-            // check for lazy servers.
-            ret.send_command(CommandBody::Capability).await?;
-            ret.read_response(&mut res).await?;
-            capabilities.extend(parse_capabilities(&res, &hostname)?);
-        }
-
-        if matches!(
-            server_conf.protocol,
-            ImapProtocol::IMAP {
-                extension_use: ImapExtensionUse { id: true, .. },
-                ..
-            }
-        ) && capabilities.contains(b"ID".as_slice())
-        {
-            ret.send_command(CommandBody::Id { parameters: None })
-                .await?;
-            ret.read_response(&mut res).await?;
-            match id_ext_response(&res) {
-                Err(err) => {
-                    log::warn!(
-                        "Could not parse ID command response from server. Consider turning ID use \
-                         off. Error was: {}",
-                        err
-                    );
-                }
-                Ok((_, None)) => {}
-                Ok((_, res @ Some(_))) => {
-                    *uid_store.server_id.lock().unwrap() = res;
-                }
-            }
-        }
         Ok((capabilities, ret))
     }
 
@@ -1053,7 +858,7 @@ impl ImapConnection {
                     return Ok(());
                 }
             }
-            let new_stream = ImapStream::new_connection(
+            let new_stream = ImapStream::new(
                 &self.server_conf,
                 self.id.clone(),
                 &self.uid_store,
@@ -1066,7 +871,10 @@ impl ImapConnection {
                 *self.uid_store.is_online.lock().unwrap() = (SystemTime::now(), Ok(()));
             }
             let (capabilities, stream) = new_stream?;
+            *self.uid_store.preauth_capabilities.lock().unwrap() = capabilities.clone();
+            *self.uid_store.capabilities.lock().unwrap() = capabilities.clone();
             self.stream = Ok(stream);
+            self.authenticate().await?;
             match self.stream.as_ref()?.protocol {
                 ImapProtocol::IMAP {
                     extension_use:
@@ -1163,7 +971,6 @@ impl ImapConnection {
                 }
                 ImapProtocol::ManageSieve => {}
             }
-            *self.uid_store.capabilities.lock().unwrap() = capabilities;
             Ok(())
         })
     }
@@ -1526,6 +1333,466 @@ impl ImapConnection {
             .await?;
         let msn_index = self.msn_index.entry(mailbox_hash).or_default();
         msn_index.recreate_from_search_results(&response)
+    }
+
+    pub async fn authenticate(&mut self) -> Result<()> {
+        let hostname = self
+            .server_conf
+            .hostname
+            .value_with_timeout(
+                self.server_conf
+                    .timeout
+                    .unwrap_or(Duration::from_millis(100)),
+            )
+            .await?;
+        match self.server_conf.protocol {
+            ImapProtocol::ManageSieve => {
+                let username = self
+                    .server_conf
+                    .username
+                    .value_with_timeout(
+                        self.server_conf
+                            .timeout
+                            .unwrap_or(Duration::from_millis(100)),
+                    )
+                    .await?;
+                let password = self
+                    .server_conf
+                    .password
+                    .value_with_timeout(
+                        self.server_conf
+                            .timeout
+                            .unwrap_or(Duration::from_millis(100)),
+                    )
+                    .await?;
+                let credentials = format!("\0{username}\0{password}");
+                self.send_command_raw(
+                    format!(
+                        "AUTHENTICATE \"PLAIN\" \"{}\"",
+                        base64.encode(credentials.as_bytes())
+                    )
+                    .as_bytes(),
+                )
+                .await?;
+                let mut response = Vec::new();
+                self.stream
+                    .as_mut()?
+                    .read_lines(&mut response, None, false)
+                    .await?;
+                if !response.starts_with(b"OK") {
+                    return Err(Error::new(format!(
+                        "Could not connect to managasieve server {hostname}: server replied to \
+                         AUTHENTICATE PLAIN with: {}",
+                        String::from_utf8_lossy(&response)
+                    ))
+                    .set_kind(ErrorKind::Authentication));
+                }
+                Ok(())
+            }
+            ImapProtocol::IMAP {
+                extension_use:
+                    ImapExtensionUse {
+                        auth_anonymous,
+                        oauth2,
+                        ..
+                    },
+            } => {
+                let mut response = Vec::new();
+                let mut capabilities = self.uid_store.capabilities.lock().unwrap().clone();
+                let has_sasl_ir: bool = capabilities
+                    .iter()
+                    .any(|cap| cap.eq_ignore_ascii_case(b"SASL-IR"));
+                if self.send_state_changes {
+                    (self.uid_store.event_consumer)(
+                        self.uid_store.account_hash,
+                        BackendEvent::AccountStateChange {
+                            message: "Attempting authentication.".into(),
+                        },
+                    );
+                }
+
+                if oauth2 {
+                    let is_xoauth2 = if capabilities
+                        .iter()
+                        .any(|cap| cap.eq_ignore_ascii_case(b"AUTH=OAUTHBEARER"))
+                    {
+                        false
+                    } else if capabilities
+                        .iter()
+                        .any(|cap| cap.eq_ignore_ascii_case(b"AUTH=XOAUTH2"))
+                    {
+                        true
+                    } else {
+                        return Err(Error::new(format!(
+                            "Could not connect to {hostname}: OAUTH2 is enabled but server did \
+                             not return AUTH=OAUTHBEARER or AUTH=XOAUTH2 capability. Returned \
+                             capabilities were: {}",
+                            capabilities
+                                .iter()
+                                .map(|capability| String::from_utf8_lossy(capability).to_string())
+                                .collect::<Vec<String>>()
+                                .join(" ")
+                        ))
+                        .set_kind(ErrorKind::Authentication));
+                    };
+                    if !self.server_conf.use_tls {
+                        return Err(Error::new(format!(
+                            "Cannot authenticate to {hostname} with {}: it is not encrypted with \
+                             TLS which is required",
+                            if is_xoauth2 {
+                                "AUTH=XOAUTH2"
+                            } else {
+                                "AUTH=OAUTHBEARER"
+                            }
+                        ))
+                        .set_kind(ErrorKind::Configuration));
+                    }
+                    let port = self.server_conf.port;
+                    let username = self
+                        .server_conf
+                        .username
+                        .value_with_timeout(
+                            self.server_conf
+                                .timeout
+                                .unwrap_or(Duration::from_millis(100)),
+                        )
+                        .await?;
+                    let password = self
+                        .server_conf
+                        .password
+                        .value_with_timeout(
+                            self.server_conf
+                                .timeout
+                                .unwrap_or(Duration::from_millis(100)),
+                        )
+                        .await?;
+                    // Check if user supplied a base64-encoded oauth2 string instead of the raw token
+                    // and recover if possible
+                    let password = if let Some(decoded) = base64
+                        .decode(&password)
+                        .ok()
+                        .and_then(|b| String::from_utf8(b).ok())
+                    {
+                        if is_xoauth2 {
+                            decoded
+                                .strip_prefix(&format!("user={username}\x01auth=Bearer "))
+                                .and_then(|v| v.strip_suffix("\x01\x01"))
+                                .map(|v| v.to_string())
+                                .unwrap_or_else(|| password)
+                        } else {
+                            decoded
+                                .strip_prefix(&format!(
+                                    "n,a={username},\x01host={hostname}\x01port={port}\\
+                                     x01auth=Bearer "
+                                ))
+                                .and_then(|v| v.strip_suffix("\x01\x01"))
+                                .map(|v| v.to_string())
+                                .unwrap_or_else(|| password)
+                        }
+                    } else {
+                        password
+                    };
+                    let (mechanism, secret) = if is_xoauth2 {
+                        // user=someuser@example.com^Aauth=Bearer ya29.vF9dft4qmTc2Nvb3RlckBhdHRhdmlzdGEuY29tCg^A^A
+                        (
+                            AuthMechanism::XOAuth2,
+                            format!("user={username}\x01auth=Bearer {password}\x01\x01",)
+                                .into_bytes(),
+                        )
+                    } else {
+                        // n,a=user@example.com,^Ahost=server.example.com^Aport=143^Aauth=Bearer vF9dft4qmTc2Nvb3RlckBhbHRhdmlzdGEuY29tCg==^A^A
+                        #[rustfmt::skip]
+                        let auth_string = format!(
+                            "n,a={username},\x01host={hostname}\x01port={port}\x01auth=Bearer {password}\x01\x01",
+                        );
+                        (AuthMechanism::OAuthBearer, auth_string.into_bytes())
+                    };
+                    if has_sasl_ir {
+                        self.send_command(CommandBody::authenticate_with_ir(mechanism, &secret))
+                            .await?;
+                    } else {
+                        self.send_command(CommandBody::authenticate(mechanism))
+                            .await?;
+                        self.wait_for_continuation_request().await?;
+                        self.send_literal(base64.encode(&secret).as_bytes()).await?;
+                    }
+                    // Server will respond with a base64 literal on failure, so read response
+                    // directly instead of parsing it as an IMAP response.
+                    self.stream
+                        .as_mut()?
+                        .read_lines(&mut response, None, false)
+                        .await?;
+                    let tag_start = format!("M{} OK", (self.stream.as_ref()?.cmd_id - 1));
+                    if !response
+                        .split_rn()
+                        .into_iter()
+                        .any(|l| l.starts_with(tag_start.as_bytes()))
+                    {
+                        let res = response.strip_prefix(b"+ ").unwrap_or(&response).trim_end();
+                        let failure_response = base64
+                            .decode(res)
+                            .ok()
+                            .map(|b| String::from_utf8_lossy(&b).into_owned())
+                            .unwrap_or_else(|| String::from_utf8_lossy(res).into_owned());
+                        // Cancel AUTHENTICATE
+                        if is_xoauth2 {
+                            self.send_literal(b"\r\n").await?;
+                        } else {
+                            self.send_literal(b"*\r\n").await?;
+                        }
+                        return Err(Error::new(format!(
+                            "Cannot authenticate to {hostname} with {}",
+                            if is_xoauth2 {
+                                "AUTH=XOAUTH2"
+                            } else {
+                                "AUTH=OAUTHBEARER"
+                            }
+                        ))
+                        .set_details(format!("Server_replied with {failure_response}"))
+                        .set_kind(ErrorKind::Authentication));
+                    }
+                } else if auth_anonymous {
+                    if !capabilities
+                        .iter()
+                        .any(|cap| cap.eq_ignore_ascii_case(b"AUTH=ANONYMOUS"))
+                    {
+                        return Err(Error::new(format!(
+                            "Could not connect to {hostname}: AUTH=ANONYMOUS is enabled but \
+                             server did not return AUTH=ANONYMOUS capability. Returned \
+                             capabilities were: {}",
+                            capabilities
+                                .iter()
+                                .map(|capability| String::from_utf8_lossy(capability).to_string())
+                                .collect::<Vec<String>>()
+                                .join(" ")
+                        ))
+                        .set_kind(ErrorKind::Authentication));
+                    }
+                    self.send_command(CommandBody::authenticate(AuthMechanism::from(
+                        Atom::try_from("ANONYMOUS").expect("atom"),
+                    )))
+                    .await?;
+                    self.stream
+                        .as_mut()?
+                        .read_lines(&mut response, None, false)
+                        .await?;
+                    let tag_start = format!("M{} OK", (self.stream.as_ref()?.cmd_id - 1));
+                    if !response
+                        .split_rn()
+                        .into_iter()
+                        .any(|l| l.starts_with(tag_start.as_bytes()))
+                    {
+                        let failure_response = String::from_utf8_lossy(&response);
+                        return Err(Error::new(format!(
+                            "Cannot authenticate to {hostname} with AUTH=ANONYMOUS",
+                        ))
+                        .set_details(format!("Server_replied with {failure_response}"))
+                        .set_kind(ErrorKind::Authentication));
+                    }
+                } else if capabilities
+                    .iter()
+                    .any(|cap| cap.eq_ignore_ascii_case(b"AUTH=PLAIN"))
+                {
+                    let username = self
+                        .server_conf
+                        .username
+                        .value_with_timeout(
+                            self.server_conf
+                                .timeout
+                                .unwrap_or(Duration::from_millis(100)),
+                        )
+                        .await?;
+                    let password = self
+                        .server_conf
+                        .password
+                        .value_with_timeout(
+                            self.server_conf
+                                .timeout
+                                .unwrap_or(Duration::from_millis(100)),
+                        )
+                        .await?;
+                    let credentials = format!("\0{username}\0{password}");
+                    if has_sasl_ir {
+                        self.send_command(CommandBody::authenticate_with_ir(
+                            AuthMechanism::Plain,
+                            credentials.as_bytes(),
+                        ))
+                        .await?;
+                    } else {
+                        self.send_command(CommandBody::authenticate(AuthMechanism::Plain))
+                            .await?;
+                        self.wait_for_continuation_request().await?;
+                        self.send_literal(base64.encode(credentials).as_bytes())
+                            .await?;
+                    }
+                    self.stream
+                        .as_mut()?
+                        .read_lines(&mut response, None, false)
+                        .await?;
+                    let tag_start = format!("M{} OK", (self.stream.as_ref()?.cmd_id - 1));
+                    if !response
+                        .split_rn()
+                        .into_iter()
+                        .any(|l| l.starts_with(tag_start.as_bytes()))
+                    {
+                        let failure_response = String::from_utf8_lossy(&response);
+                        return Err(Error::new(format!(
+                            "Cannot authenticate to {hostname} with AUTH=PLAIN",
+                        ))
+                        .set_details(format!("Server_replied with {failure_response}"))
+                        .set_kind(ErrorKind::Authentication));
+                    }
+                } else {
+                    // Fallback to LOGIN
+                    if capabilities
+                        .iter()
+                        .any(|cap| cap.eq_ignore_ascii_case(b"LOGINDISABLED"))
+                    {
+                        return Err(Error::new(format!(
+                            "Could not connect to {hostname}: server does not accept the LOGIN \
+                             command",
+                        ))
+                        .set_details(format!(
+                            "Server has the capability LOGINDISABLED set. Returned capabilities \
+                             were: {}",
+                            capabilities
+                                .iter()
+                                .map(|capability| String::from_utf8_lossy(capability).to_string())
+                                .collect::<Vec<String>>()
+                                .join(" ")
+                        ))
+                        .set_kind(ErrorKind::Configuration));
+                    }
+                    let username = self
+                        .server_conf
+                        .username
+                        .value_with_timeout(
+                            self.server_conf
+                                .timeout
+                                .unwrap_or(Duration::from_millis(100)),
+                        )
+                        .await?;
+                    let password = self
+                        .server_conf
+                        .password
+                        .value_with_timeout(
+                            self.server_conf
+                                .timeout
+                                .unwrap_or(Duration::from_millis(100)),
+                        )
+                        .await?;
+                    let username =
+                        AString::try_from(username.as_str()).chain_err_kind(ErrorKind::Bug)?;
+                    let password =
+                        AString::try_from(password.as_str()).chain_err_kind(ErrorKind::Bug)?;
+
+                    self.send_command(CommandBody::Login {
+                        username,
+                        password: Secret::new(password),
+                    })
+                    .await?;
+                    self.stream
+                        .as_mut()?
+                        .read_lines(&mut response, None, false)
+                        .await?;
+                    let tag_start = format!("M{} OK", (self.stream.as_ref()?.cmd_id - 1));
+                    if !response
+                        .split_rn()
+                        .into_iter()
+                        .any(|l| l.starts_with(tag_start.as_bytes()))
+                    {
+                        let failure_response = String::from_utf8_lossy(&response);
+                        return Err(Error::new(format!(
+                            "Cannot authenticate to {hostname} with LOGIN",
+                        ))
+                        .set_details(format!("Server_replied with {failure_response}"))
+                        .set_kind(ErrorKind::Authentication));
+                    }
+                }
+                let mut new_capabilities = IndexSet::new();
+                for l in response
+                    .split_rn()
+                    .filter(|l| l.starts_with(b"* CAPABILITY"))
+                {
+                    new_capabilities.extend(
+                        protocol_parser::capabilities(l)
+                            .map(|(_, v)| v.into_iter().map(|v| v.to_vec().into_boxed_slice()))
+                            .map_err(|err| {
+                                Error::new(format!(
+                                    "Could not connect to {hostname}: could not parse CAPABILITY \
+                                     response: `{}`",
+                                    String::from_utf8_lossy(l).as_ref().trim_at_boundary(40)
+                                ))
+                                .set_source(Some(Box::new(Error::from(err))))
+                                .set_kind(ErrorKind::ProtocolError)
+                            })?,
+                    );
+                }
+                if new_capabilities.is_empty() {
+                    self.send_command(CommandBody::Capability).await?;
+                    self.read_response(&mut response, RequiredResponses::CAPABILITY)
+                        .await?;
+                    for l in response
+                        .split_rn()
+                        .filter(|l| l.starts_with(b"* CAPABILITY"))
+                    {
+                        new_capabilities.extend(
+                            protocol_parser::capabilities(l)
+                                .map(|(_, v)| v.into_iter().map(|v| v.to_vec().into_boxed_slice()))
+                                .map_err(|err| {
+                                    Error::new(format!(
+                                        "Could not connect to {hostname}: could not parse \
+                                         CAPABILITY response: `{}`",
+                                        String::from_utf8_lossy(l).as_ref().trim_at_boundary(40)
+                                    ))
+                                    .set_source(Some(Box::new(Error::from(err))))
+                                    .set_kind(ErrorKind::ProtocolError)
+                                })?,
+                        );
+                    }
+                }
+                capabilities = new_capabilities.clone();
+                *self.uid_store.capabilities.lock().unwrap() = new_capabilities;
+                if self.send_state_changes {
+                    (self.uid_store.event_consumer)(
+                        self.uid_store.account_hash,
+                        BackendEvent::AccountStateChange {
+                            message: "Authenticated.".into(),
+                        },
+                    );
+                }
+                if matches!(
+                    self.server_conf.protocol,
+                    ImapProtocol::IMAP {
+                        extension_use: ImapExtensionUse { id: true, .. },
+                        ..
+                    }
+                ) && capabilities.contains(b"ID".as_slice())
+                {
+                    self.send_command(CommandBody::Id { parameters: None })
+                        .await?;
+                    match self
+                        .stream
+                        .as_mut()?
+                        .read_response(&mut response)
+                        .await
+                        .and_then(|()| Ok(id_ext_response(&response)?))
+                    {
+                        Ok((_, res @ Some(_))) => {
+                            *self.uid_store.server_id.lock().unwrap() = res;
+                        }
+                        Ok((_, None)) => {}
+                        Err(err) => {
+                            log::warn!(
+                                "Could not parse ID command response from {hostname} server. \
+                                 Consider turning ID use off. Error was: {err}"
+                            );
+                        }
+                    }
+                }
+                Ok(())
+            }
+        }
     }
 }
 

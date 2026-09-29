@@ -675,7 +675,7 @@ enter a command like this
 .Pq after adjusting binary paths and credentials Ns
 :
 .sp
-.Cm TOKEN=$(python3 oauth2.py --user=xxx@gmail.com --quiet --client_id=1038[...].apps.googleusercontent.com --client_secret=VWFn8LIKAMC-MsjBMhJeOplZ --refresh_token=1/Yzm6MRy4q1xi7Dx2DuWXNgT6s37OrP_DW_IoyTum4YA) && python3 oauth2.py --user=xxx@gmail.com --generate_oauth2_string --quiet --access_token=$TOKEN
+.Cm python3 oauth2.py --user=xxx@gmail.com --quiet --client_id=1038[...].apps.googleusercontent.com --client_secret=VWFn8LIKAMC-MsjBMhJeOplZ --refresh_token=1/Yzm6MRy4q1xi7Dx2DuWXNgT6s37OrP_DW_IoyTum4YA
 .It
 On startup,
 .Sy meli
@@ -692,7 +692,7 @@ format = "imap"
 server_hostname='imap.gmail.com'
 server_username="username@gmail.com"
 use_oauth2 = true
-server_password = { command = "..." }
+server_password = { command = "python3 oauth2.py ..." }
 server_port="993"
 listing.index_style = "Conversations"
 identity = "username@gmail.com"
