@@ -23,7 +23,11 @@
 
 use std::{path::PathBuf, sync::Arc};
 
-use melib::{email::mailto::Mailto, Flag, SortField, SortOrder};
+use melib::{
+    email::{mailto::Mailto, MessageID},
+    mbox::MboxFormat,
+    Flag, SortField, SortOrder,
+};
 
 use crate::components::{Component, ComponentId};
 
@@ -45,8 +49,14 @@ pub enum ListingAction {
     SetThreaded,
     SetCompact,
     SetConversations,
-    Search { term: String, raw_search: bool },
-    Select { term: String, raw_search: bool },
+    Search {
+        term: String,
+        raw_search: bool,
+    },
+    Select {
+        term: String,
+        raw_search: bool,
+    },
     SetSeen,
     SetUnseen,
     SendToTrash,
@@ -55,7 +65,13 @@ pub enum ListingAction {
     MoveTo(MailboxPath),
     MoveToOtherAccount(AccountName, MailboxPath),
     Import(PathBuf, MailboxPath),
-    ExportMbox(Option<melib::mbox::MboxFormat>, PathBuf),
+    PublicInboxImport {
+        thread: bool,
+        account: AccountName,
+        mailbox_path: MailboxPath,
+        message_id: MessageID,
+    },
+    ExportMbox(Option<MboxFormat>, PathBuf),
     Delete,
     OpenInNewTab,
     Tag(TagAction),
@@ -108,7 +124,7 @@ pub enum ViewAction {
     PipeAttachment(usize, String, Vec<String>),
     ExportMail(String),
     ExportThread(String),
-    ExportThreadMbox(Option<melib::mbox::MboxFormat>, PathBuf),
+    ExportThreadMbox(Option<MboxFormat>, PathBuf),
     AddAddressesToContacts,
 }
 

@@ -1937,6 +1937,147 @@ impl Component for Listing {
                             }
                             return true;
                         }
+                        Action::Listing(ListingAction::PublicInboxImport {
+                            thread,
+                            account,
+                            mailbox_path,
+                            message_id,
+                        }) => {
+                            let (a, m): (AccountHash, MailboxHash) = match context
+                                .accounts
+                                .iter()
+                                .position(|(_, acc)| acc.name() == account)
+                                .ok_or_else(|| {
+                                    Error::new(format!("Account {account} was not found."))
+                                        .set_kind(ErrorKind::NotFound)
+                                })
+                                .and_then(|account_index| {
+                                    Ok((
+                                        context.accounts[account_index].hash,
+                                        context.accounts[account_index]
+                                            .mailbox_by_path(mailbox_path)?,
+                                    ))
+                                }) {
+                                Ok((a, m)) => (a, m),
+                                Err(err) => {
+                                    context.replies.push_back(UIEvent::Notification {
+                                        title: None,
+                                        source: Some(err),
+                                        body: "Could not import e-mail from public-inbox".into(),
+                                        kind: Some(NotificationType::Error(ErrorKind::None)),
+                                    });
+                                    return true;
+                                }
+                            };
+                            let (sender, mut receiver) = crate::jobs::oneshot::channel();
+                            #[cfg(not(feature = "http"))]
+                            let fut = async move {
+                                _ = sender;
+                                Err(Error::new(
+                                    "meli is not compiled with HTTP support (required for \
+                                     accessing public-inbox)",
+                                )
+                                .set_kind(ErrorKind::NotSupported))
+                            };
+                            #[cfg(feature = "http")]
+                            let fut = {
+                                let thread = *thread;
+                                let message_id = message_id.clone();
+                                async move {
+                                    use melib::utils::patch_retrieve::{
+                                        PatchSource, PublicInboxHTTP,
+                                    };
+                                    let lore = PublicInboxHTTP::new("https://lore.kernel.org")?;
+                                    if thread {
+                                        let msgs = lore.fetch_thread("all", message_id)?.await?;
+                                        _ = sender.send(msgs);
+                                    } else {
+                                        let msg = lore.fetch("all", message_id)?.await?;
+                                        _ = sender.send(vec![msg]);
+                                    }
+                                    Ok(())
+                                }
+                            };
+                            let handle = context.main_loop_handler.job_executor.spawn(
+                                "public-inbox-import".into(),
+                                fut,
+                                IsAsync::Async,
+                            );
+                            let on_finish = CallbackFn(Box::new({
+                                move |context: &mut Context| {
+                                    let Ok(Some(msgs)) = receiver.try_recv() else {
+                                        return;
+                                    };
+                                    if msgs.is_empty() {
+                                        return;
+                                    }
+                                    let question = format!(
+                                        "Import {num} e-mail{plural}?",
+                                        num = msgs.len(),
+                                        plural = if msgs.len() == 1 { "" } else { "s" }
+                                    );
+                                    let on_confirm_cb = Box::new(
+                                            move |_: ComponentId, result: bool, context: &mut Context| {
+                                                if !result {
+                                                    return;
+                                                }
+                                                let Some(account) = context.accounts.get_mut(&a)
+                                                else {
+                                                    return;
+                                                };
+                                                for msg in msgs {
+                                                    if let Err(err) =
+                                                        account.save(&msg.bytes, m, None)
+                                                    {
+                                                        context.replies.push_back(
+                                                            UIEvent::Notification {
+                                                                title: None,
+                                                                source: Some(err),
+                                                                body: "Could not import e-mail from public-inbox"
+                                                                    .into(),
+                                                                    kind: Some(
+                                                                        NotificationType::Error(
+                                                                            ErrorKind::None,
+                                                                        ),
+                                                                    ),
+                                                            },
+                                                        );
+                                                        return;
+                                                    }
+                                                }
+                                            },
+                                        );
+                                    context.replies.push_back(UIEvent::GlobalUIDialog {
+                                        value: Box::new(UIConfirmationDialog::new(
+                                            question,
+                                            vec![
+                                                (true, "yes".to_string()),
+                                                (false, "no".to_string()),
+                                            ],
+                                            true,
+                                            Some(on_confirm_cb),
+                                            context,
+                                        )),
+                                        parent: None,
+                                    });
+                                }
+                            }));
+                            context.accounts[&a].insert_job(
+                                handle.job_id,
+                                JobRequest::Generic {
+                                    name: format!(
+                                        "{message_id}{thread} import",
+                                        thread = if *thread { " thread " } else { "" }
+                                    )
+                                    .into(),
+                                    handle,
+                                    on_finish: Some(on_finish),
+                                    log_level: LogLevel::INFO,
+                                },
+                            );
+
+                            return true;
+                        }
                         Action::Listing(a @ ListingAction::SetSeen)
                         | Action::Listing(a @ ListingAction::SetUnseen)
                         | Action::Listing(a @ ListingAction::Delete)

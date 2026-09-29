@@ -124,6 +124,11 @@ define_commands!([
         parser: parser::import
     },
     {
+        desc: "public-inbox [import/import-thread] ACCOUNT_NAME MAILBOX_PATH MESSAGE_ID",
+        tokens: &[Literal("public-inbox"), Alternatives(&["import", "import-thread"]), AccountName, MailboxPath, QuotedStringValue],
+        parser: parser::public_inbox_import
+    },
+    {
         desc: "close non-sticky tabs",
         tokens: &[Literal("close")],
         parser: parser::close

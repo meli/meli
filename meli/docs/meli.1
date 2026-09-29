@@ -600,6 +600,14 @@ rename mailbox
 .It Cm delete\-mailbox Ar ACCOUNT Ar MAILBOX_PATH
 deletes mailbox in the mail backend.
 This action is irreversible.
+.It Cm public\-inbox import Ar ACCOUNT Ar MAILBOX_PATH Ar MESSAGE_ID
+Retrieve an e-mail from
+.Lk https://lore.kernel.org
+with a specific message ID and import it.
+.It Cm public\-inbox import-thread Ar ACCOUNT Ar MAILBOX_PATH Ar MESSAGE_ID
+Retrieve a thread from
+.Lk https://lore.kernel.org
+containing a specific message ID and import it.
 .El
 .Ss Mail view commands
 .HorizontalRule

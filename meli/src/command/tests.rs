@@ -20,7 +20,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
-use melib::Flag;
+use melib::{email::MessageID, Flag};
 
 use crate::{
     command::{
@@ -243,6 +243,49 @@ fn test_command_parsers() {
         matches!(parsed, Ok(Action::Listing(ListingAction::Tag(TagAction::Add(ref tagname)))) if tagname == "newsletters"),
         "{:?}",
         parsed
+    );
+
+    let (rest, parsed) =
+        parser::public_inbox_import("public-inbox import foo \"bar\" message@example.com").unwrap();
+    assert_eq!(rest, "");
+    assert!(
+        matches!(
+            parsed,
+            Ok(Action::Listing(ListingAction::PublicInboxImport {
+                thread,
+                ref account,
+                ref mailbox_path,
+                ref message_id,
+            })) if (thread, account.as_str(), mailbox_path.as_str(), message_id) == (false, "foo", "bar", &MessageID::new("message@example.com"))
+        ),
+        "{:?}",
+        parsed
+    );
+    let (rest, parsed) =
+        parser::public_inbox_import("public-inbox import-thread foo bar <message@example.com>")
+            .unwrap();
+    assert_eq!(rest, "");
+    assert!(
+        matches!(
+            parsed,
+            Ok(Action::Listing(ListingAction::PublicInboxImport {
+                thread,
+                ref account,
+                ref mailbox_path,
+                ref message_id,
+            })) if (thread, account.as_str(), mailbox_path.as_str(), message_id) == (true, "foo", "bar", &MessageID::new("message@example.com"))
+        ),
+        "{:?}",
+        parsed
+    );
+
+    let (rest, parsed) =
+        parser::public_inbox_import("public-inbox import-foo foo bar <message@example.com>")
+            .unwrap();
+    assert_eq!(rest, "");
+    assert_eq!(
+        &parsed.unwrap_err().to_string(),
+        "Bad value/argument: import-foo. Possible values are: import, import-thread"
     );
 }
 
