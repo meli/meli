@@ -212,16 +212,40 @@ impl Context {
     }
 
     #[cfg(test)]
-    pub fn new_mock(dir: &tempfile::TempDir) -> Self {
+    pub fn new_mock(temp_dir: &tempfile::TempDir) -> Self {
         use crate::conf::tests::{ConfigFile, IMAP_CONFIG};
 
+        for var in [
+            "HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_CONFIG_DIRS",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_DIRS",
+            "XDG_DATA_HOME",
+            "MELI_CONFIG",
+        ] {
+            std::env::remove_var(var);
+        }
+        for (var, dir) in [
+            ("HOME", temp_dir.path().to_path_buf()),
+            ("XDG_CACHE_HOME", temp_dir.path().join(".cache")),
+            ("XDG_STATE_HOME", temp_dir.path().join(".local/state")),
+            ("XDG_CONFIG_HOME", temp_dir.path().join(".config")),
+            ("XDG_DATA_HOME", temp_dir.path().join(".local/share")),
+        ] {
+            std::fs::create_dir_all(&dir).unwrap_or_else(|err| {
+                panic!("Could not create {} path, {}: {}", var, dir.display(), err);
+            });
+            std::env::set_var(var, &dir);
+        }
         let (sender, receiver) =
             crossbeam::channel::bounded(32 * ::std::mem::size_of::<ThreadEvent>());
         let job_executor = Arc::new(JobExecutor::new(sender.clone()));
         let input_thread = unbounded();
         let input_thread_pipe = crate::types::pipe().unwrap();
         let backends = Backends::new();
-        let config_file = ConfigFile::new(IMAP_CONFIG, dir).unwrap();
+        let config_file = ConfigFile::new(IMAP_CONFIG, temp_dir).unwrap();
         std::env::set_var("MELI_CONFIG", &config_file.path);
         let settings = Box::new(Settings::new().unwrap());
         let accounts = vec![{
@@ -229,7 +253,7 @@ impl Context {
             let mut account_conf = crate::conf::AccountConf::default();
             account_conf.conf.format = "maildir".to_string();
             account_conf.account.format = "maildir".to_string();
-            account_conf.account.root_mailbox = dir.path().display().to_string();
+            account_conf.account.root_mailbox = temp_dir.path().display().to_string();
             let sender = sender.clone();
             let account_hash = AccountHash::from_bytes(name.as_bytes());
             Account::new(
