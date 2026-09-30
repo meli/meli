@@ -76,7 +76,7 @@ impl ImapConnection {
                     .get_mut(&mailbox_hash)
                     .and_then(|msn_index| msn_index.expunge(&n))
                 else {
-                    debug!(
+                    log::debug!(
                         "Received expunge {} but mailbox msn index is {:?}",
                         n,
                         self.msn_index.get(&mailbox_hash)
@@ -538,7 +538,7 @@ impl ImapConnection {
                                     .lock()
                                     .unwrap()
                                     .insert((mailbox_hash, uid), envelope.hash());
-                                debug!(
+                                log::debug!(
                                     "Create event {} {} {}",
                                     envelope.hash(),
                                     envelope.subject(),
@@ -557,9 +557,8 @@ impl ImapConnection {
                         Ok(events.try_into().ok())
                     }
                     Err(err) => {
-                        debug!(
-                            "UID SEARCH RECENT err: {}\nresp: {}",
-                            err,
+                        log::debug!(
+                            "UID SEARCH RECENT err: {err}\nresp: {}",
                             String::from_utf8_lossy(&response)
                         );
                         Ok(None)
@@ -605,9 +604,11 @@ impl ImapConnection {
                             Ok(_) => {
                                 return Ok(None);
                             }
-                            Err(e) => {
-                                debug!("SEARCH error failed: {}", e);
-                                debug!(String::from_utf8_lossy(&response));
+                            Err(err) => {
+                                log::debug!(
+                                    "SEARCH error failed: {err}. Response: {}",
+                                    String::from_utf8_lossy(&response)
+                                );
                                 return Ok(None);
                             }
                         }
@@ -620,7 +621,7 @@ impl ImapConnection {
                     if recreate_msn {
                         self.create_uid_msn_cache(mailbox_hash).await?;
                     }
-                    debug!("fetch uid {} {:?}", uid, flags);
+                    log::debug!("fetch uid {} {:?}", uid, flags);
                     if let Some(env_hash) = {
                         let temp = self
                             .uid_store

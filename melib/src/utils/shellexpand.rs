@@ -252,8 +252,7 @@ pub mod impls {
         }) {
             Ok(dir) => dir,
             Err(err) => {
-                debug!(prefix);
-                debug!(err);
+                log::trace!("Completions::IsInvalid: prefix = {prefix:?} err = {err:?}");
                 return Completions::IsInvalid;
             }
         };

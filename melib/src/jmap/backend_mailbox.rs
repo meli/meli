@@ -86,7 +86,7 @@ impl BackendMailbox for JmapMailbox {
             Some("drafts") => SpecialUsageMailbox::Drafts,
             Some("sent") => SpecialUsageMailbox::Sent,
             Some(other) => {
-                debug!(
+                log::debug!(
                     "unknown JMAP mailbox role for mailbox {}: {}",
                     self.path(),
                     other

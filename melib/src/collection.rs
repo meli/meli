@@ -85,7 +85,6 @@ impl Collection {
     }
 
     pub fn remove(&self, envelope_hash: EnvelopeHash, mailbox_hash: MailboxHash) {
-        debug!("DEBUG: Removing {}", envelope_hash);
         self.envelopes.write().unwrap().remove(&envelope_hash);
         self.mailboxes
             .write()

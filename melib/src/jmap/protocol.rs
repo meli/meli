@@ -125,7 +125,7 @@ impl EmailFetcher {
                 )
             };
             if is_empty {
-                debug!("{:?}: inserting state {}", EmailObject::NAME, &state);
+                log::debug!("{:?}: inserting state {state}", EmailObject::NAME);
                 *client.store.email_state.lock().await = Some(state);
             } else if !is_equal {
                 if let Some(ev) = client.email_changed(Some(state)).await? {

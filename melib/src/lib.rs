@@ -98,45 +98,6 @@
 //! Other exports are
 //! - Basic mail account configuration to use with [`backends`] (see module
 //!   [`conf`])
-//! - A `debug` macro that works like `std::dbg` but for multiple threads. (see
-//!   [`debug` macro](debug!))
-
-#[macro_use]
-pub mod dbg {
-
-    #[allow(clippy::redundant_closure)]
-    #[macro_export]
-    macro_rules! debug {
-        ($val:literal) => {
-            {
-                if cfg!(feature="debug-tracing") {
-                    $crate::log::debug!($val);
-                }
-                $val
-            }
-        };
-        ($val:expr) => {
-            if cfg!(feature="debug-tracing") {
-                let stringify = stringify!($val);
-                // Use of `match` here is intentional because it affects the lifetimes
-                // of temporaries - https://stackoverflow.com/a/48732525/1063961
-                match $val {
-                    tmp => {
-                        $crate::log::debug!("{} = {:?}", stringify, tmp);
-                        tmp
-                    }
-                }
-            } else {
-                $val
-            }
-        };
-        ($fmt:literal, $($arg:tt)*) => {
-            if cfg!(feature="debug-tracing") {
-                $crate::log::debug!($fmt, $($arg)*);
-            }
-        };
-    }
-}
 
 pub mod text;
 

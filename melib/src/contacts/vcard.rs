@@ -314,7 +314,7 @@ pub fn load_cards(p: &std::path::Path) -> Result<Vec<Card>> {
     }
     for c in &ret {
         if c.is_err() {
-            debug!(&c);
+            log::debug!("Error parsing contact from {}: {c:?}", p.display());
         }
     }
     if is_any_valid {

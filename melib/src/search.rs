@@ -352,7 +352,7 @@ pub mod query_parser {
                 match_literal_anycase("!"),
             ))
             .parse(input)
-            .and_then(|(last_input, _)| query().parse(debug!(last_input)))
+            .and_then(|(last_input, _)| query().parse(last_input))
         }
     }
 
@@ -360,7 +360,7 @@ pub mod query_parser {
         move |input| {
             whitespace_wrap(match_literal_anycase("and"))
                 .parse(input)
-                .and_then(|(last_input, _)| query().parse(debug!(last_input)))
+                .and_then(|(last_input, _)| query().parse(last_input))
         }
     }
 

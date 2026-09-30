@@ -358,10 +358,11 @@ impl MaildirFilePathExt for Path {
                 'S' => flag |= Flag::SEEN,
                 'T' => flag |= Flag::TRASHED,
                 _ => {
-                    debug!(
-                        "DEBUG: in MaildirFilePathExt::flags(), encountered unknown flag marker \
-                         {:?}, path is {}",
-                        f, path
+                    log::debug!(
+                        "in MaildirFilePathExt::flags(), encountered unknown flag marker {:?}, \
+                         path is {}",
+                        f,
+                        path
                     );
                 }
             }
