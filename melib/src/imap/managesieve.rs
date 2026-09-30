@@ -63,6 +63,7 @@ impl ManageSieveConnection {
         let port: u16 = get_conf_val!(s["server_port"], 4190)?;
         let danger_accept_invalid_certs: bool =
             get_conf_val!(s["danger_accept_invalid_certs"], false)?;
+        let trace: bool = get_conf_val!(s["trace"], false)?;
         let timeout = get_conf_val!(s["timeout"], 16_u64)?;
         let timeout = if timeout == 0 {
             None
@@ -87,6 +88,7 @@ impl ManageSieveConnection {
             port,
             use_starttls: true,
             use_tls: true,
+            trace,
             danger_accept_invalid_certs,
             protocol: ImapProtocol::ManageSieve,
             timeout,

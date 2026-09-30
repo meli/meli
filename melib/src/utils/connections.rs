@@ -52,23 +52,23 @@ pub const CONNECTION_ATTEMPT_DELAY: std::time::Duration = std::time::Duration::f
 pub enum Connection {
     Tcp {
         inner: std::net::TcpStream,
-        id: Option<&'static str>,
+        id: Option<Cow<'static, str>>,
         trace: bool,
     },
     Fd {
         inner: OwnedFd,
-        id: Option<&'static str>,
+        id: Option<Cow<'static, str>>,
         trace: bool,
     },
     #[cfg(feature = "tls")]
     Tls {
         inner: native_tls::TlsStream<Self>,
-        id: Option<&'static str>,
+        id: Option<Cow<'static, str>>,
         trace: bool,
     },
     Deflate {
         inner: DeflateEncoder<DeflateDecoder<Box<Self>>>,
-        id: Option<&'static str>,
+        id: Option<Cow<'static, str>>,
         trace: bool,
     },
 }
@@ -204,7 +204,12 @@ impl Connection {
 
     pub fn deflate(mut self) -> Self {
         let trace = self.is_trace_enabled();
-        let id = self.id();
+        let id = match self {
+            Fd { ref mut id, .. } | Tcp { ref mut id, .. } => id.take(),
+            #[cfg(feature = "tls")]
+            Tls { ref mut id, .. } => id.take(),
+            Deflate { ref mut id, .. } => id.take(),
+        };
         self.set_trace(false);
         Self::Deflate {
             inner: DeflateEncoder::new(
@@ -219,7 +224,12 @@ impl Connection {
     #[cfg(feature = "tls")]
     pub fn new_tls(mut inner: native_tls::TlsStream<Self>) -> Self {
         let trace = inner.get_ref().is_trace_enabled();
-        let id = inner.get_ref().id();
+        let id = match inner.get_mut() {
+            Fd { ref mut id, .. } | Tcp { ref mut id, .. } => id.take(),
+            #[cfg(feature = "tls")]
+            Tls { ref mut id, .. } => id.take(),
+            Deflate { ref mut id, .. } => id.take(),
+        };
         if trace {
             inner.get_mut().set_trace(false);
         }
@@ -250,7 +260,8 @@ impl Connection {
         self
     }
 
-    pub fn with_id(mut self, val: &'static str) -> Self {
+    pub fn with_id(mut self, val: impl Into<Cow<'static, str>>) -> Self {
+        let val = val.into();
         match self {
             Tcp { ref mut id, .. } => *id = Some(val),
             #[cfg(feature = "tls")]
@@ -486,12 +497,12 @@ impl Connection {
         }
     }
 
-    fn id(&self) -> Option<&'static str> {
+    fn id(&self) -> Option<&str> {
         match self {
-            Fd { id, .. } | Tcp { id, .. } => *id,
+            Fd { id, .. } | Tcp { id, .. } => id.as_deref(),
             #[cfg(feature = "tls")]
-            Tls { id, .. } => *id,
-            Deflate { id, .. } => *id,
+            Tls { id, .. } => id.as_deref(),
+            Deflate { id, .. } => id.as_deref(),
         }
     }
 }

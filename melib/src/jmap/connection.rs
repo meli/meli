@@ -537,7 +537,7 @@ impl JmapClient {
                 .await?
                 .text()
                 .await?;
-            if cfg!(feature = "jmap-trace") {
+            if self.server_conf.trace {
                 log::trace!("email_since_state(): response {res_text:?}");
             }
             let mut v: MethodResponse = match deserialize_from_str(&res_text) {
@@ -642,11 +642,11 @@ impl JmapClient {
     }
 
     pub async fn send_request(&self, request: String) -> Result<String> {
-        if cfg!(feature = "jmap-trace") {
+        if self.server_conf.trace {
             log::trace!("send_request(): request {:?}", request);
         }
         let res_text = self.post_async(None, request).await?.text().await?;
-        if cfg!(feature = "jmap-trace") {
+        if self.server_conf.trace {
             log::trace!("send_request(): response {:?}", res_text);
         }
         let _: MethodResponse = match deserialize_from_str(&res_text) {
@@ -661,7 +661,7 @@ impl JmapClient {
     }
 
     pub async fn get_async(&self, url: &Url) -> Result<isahc::Response<isahc::AsyncBody>> {
-        let mut resp = if cfg!(feature = "jmap-trace") {
+        let mut resp = if self.server_conf.trace {
             let res = self.http_client.get_async(url.as_str()).await;
             log::trace!("get_async(): url `{}` response {:?}", url, res);
             res?
@@ -693,7 +693,7 @@ impl JmapClient {
         request: T,
     ) -> Result<isahc::Response<isahc::AsyncBody>> {
         let request: Vec<u8> = request.into();
-        if cfg!(feature = "jmap-trace") {
+        if self.server_conf.trace {
             log::trace!(
                 "post_async(): request {:?}",
                 String::from_utf8_lossy(&request)
@@ -704,10 +704,11 @@ impl JmapClient {
         } else {
             Url::clone(&self.session_guard().await?.api_url)
         };
-        let mut resp = self
-            .http_client
-            .post_async(api_url.as_str(), request)
-            .await?;
+        let resp = self.http_client.post_async(api_url.as_str(), request).await;
+        if self.server_conf.trace {
+            log::trace!("post_async(): response {resp:?}",);
+        }
+        let mut resp = resp?;
         if !resp.status().is_success() {
             let kind: crate::error::NetworkErrorKind = resp.status().into();
             let res_text = resp.text().await.unwrap_or_default();

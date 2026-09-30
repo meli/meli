@@ -281,9 +281,6 @@ impl JmapClient {
                 .await?
                 .text()
                 .await?;
-            if cfg!(feature = "jmap-trace") {
-                log::trace!("mailbox_since_state(): response {res_text:?}");
-            }
             let mut v: MethodResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
                     _ = self.store.online_status.set(None, Err(err.clone())).await;

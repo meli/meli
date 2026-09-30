@@ -410,14 +410,8 @@ impl ImapStream {
                 let conn = Connection::new_tcp(
                     smol::unblock(move || tcp_stream_connect(addr, timeout)).await?,
                 );
-                #[cfg(feature = "imap-trace")]
-                {
-                    conn.trace(true).with_id("imap")
-                }
-                #[cfg(not(feature = "imap-trace"))]
-                {
-                    conn
-                }
+                conn.trace(server_conf.trace)
+                    .with_id(format!("imap-{}", uid_store.account_name))
             })?;
             if server_conf.use_starttls {
                 let err_fn = || {
@@ -523,14 +517,8 @@ impl ImapStream {
                 let conn = Connection::new_tcp(
                     smol::unblock(move || tcp_stream_connect(addr, timeout)).await?,
                 );
-                #[cfg(feature = "imap-trace")]
-                {
-                    conn.trace(true).with_id("imap")
-                }
-                #[cfg(not(feature = "imap-trace"))]
-                {
-                    conn
-                }
+                conn.trace(server_conf.trace)
+                    .with_id(format!("imap-{}", uid_store.account_name))
             })?
         };
         if let Err(err) = stream

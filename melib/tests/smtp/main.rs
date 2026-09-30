@@ -380,6 +380,7 @@ pub mod tests {
             auth: SmtpAuth::None,
             security: SmtpSecurity::None,
             extensions: Default::default(),
+            trace: true,
         };
         let _smtp_handle = thread::spawn(move || block_on(server.serve()));
         let new_mail = r#"From: "some name" <some@example.com>

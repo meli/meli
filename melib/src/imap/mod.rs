@@ -121,6 +121,7 @@ pub struct ImapServerConf {
     pub port: u16,
     pub use_starttls: bool,
     pub use_tls: bool,
+    pub trace: bool,
     pub danger_accept_invalid_certs: bool,
     pub protocol: ImapProtocol,
     pub timeout: Option<Duration>,
@@ -1461,6 +1462,7 @@ impl ImapType {
             .set_kind(ErrorKind::Configuration));
         }
 
+        let trace = get_conf_val!(s["trace"], false)?;
         let port = get_conf_val!(s["server_port"], 143)?;
         let use_tls = get_conf_val!(s["use_tls"], true)?;
         let use_starttls = use_tls && get_conf_val!(s["use_starttls"], port != 993)?;
@@ -1497,6 +1499,7 @@ impl ImapType {
             port,
             use_tls,
             use_starttls,
+            trace,
             danger_accept_invalid_certs,
             protocol: ImapProtocol::IMAP {
                 extension_use: ImapExtensionUse {
@@ -1747,6 +1750,7 @@ impl ImapType {
             ))
             .set_kind(ErrorKind::Configuration));
         }
+        s.validator::<bool>("trace", "bool").ignore_missing()?;
         s.validator::<bool>("danger_accept_invalid_certs", "bool")
             .ignore_missing()?;
         if cfg!(feature = "sqlite3") {

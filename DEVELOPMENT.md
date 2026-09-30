@@ -78,7 +78,7 @@ This means you will have to to redirect `stderr` to a file like `meli 2> trace.l
 Tracing is opt-in by build features:
 
 ```sh
-cargo build --features=debug-tracing,imap-trace,smtp-trace
+cargo build --features=debug-tracing
 ```
 
 ## use `.git-blame-ignore-revs` file _optional_

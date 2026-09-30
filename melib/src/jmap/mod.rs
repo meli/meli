@@ -134,6 +134,7 @@ pub struct JmapServerConf {
     pub username: Secret,
     pub password: Secret,
     pub use_token: bool,
+    pub trace: bool,
     pub danger_accept_invalid_certs: bool,
     pub timeout: Option<Duration>,
 }
@@ -1558,6 +1559,7 @@ impl JmapType {
 
         let mut url = get_conf_val!(s["server_url"], Secret, "Secret containing the server URL")?;
         let use_token: bool = get_conf_val!(s["use_token"], false, "true or false")?;
+        let trace = get_conf_val!(s["trace"], false, "true or false")?;
         let danger_accept_invalid_certs =
             get_conf_val!(s["danger_accept_invalid_certs"], false, "true or false")?;
 
@@ -1589,6 +1591,7 @@ impl JmapType {
             username,
             password,
             use_token,
+            trace,
             danger_accept_invalid_certs,
             timeout,
         };
@@ -1641,6 +1644,8 @@ impl JmapType {
         s.validator::<bool>("use_token", "true or false")
             .ignore_missing()?;
 
+        s.validator::<bool>("trace", "true or false")
+            .ignore_missing()?;
         s.validator::<bool>("danger_accept_invalid_certs", "true or false")
             .ignore_missing()?;
         s.validator::<u64>(

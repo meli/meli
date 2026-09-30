@@ -112,6 +112,7 @@ pub struct NntpServerConf {
     pub use_starttls: bool,
     pub use_tls: bool,
     pub require_auth: bool,
+    pub trace: bool,
     pub danger_accept_invalid_certs: bool,
     pub extension_use: NntpExtensionUse,
     pub timeout: Option<Duration>,
@@ -682,6 +683,7 @@ impl NntpType {
         let port = get_conf_val!(s["server_port"], 119)?;
         let use_tls = get_conf_val!(s["use_tls"], port == 563)?;
         let use_starttls = use_tls && get_conf_val!(s["use_starttls"], false)?;
+        let trace: bool = get_conf_val!(s["trace"], false)?;
         let danger_accept_invalid_certs: bool =
             get_conf_val!(s["danger_accept_invalid_certs"], false)?;
         let store_flags_locally = get_conf_val!(s["store_flags_locally"], true)?;
@@ -716,6 +718,7 @@ impl NntpType {
             port,
             use_tls,
             use_starttls,
+            trace,
             danger_accept_invalid_certs,
             extension_use: NntpExtensionUse {
                 deflate: get_conf_val!(s["use_deflate"], true)?,
@@ -915,6 +918,7 @@ impl NntpType {
         }
         s.validator::<bool>("use_deflate", "bool")
             .ignore_missing()?;
+        s.validator::<bool>("trace", "bool").ignore_missing()?;
         s.validator::<bool>("danger_accept_invalid_certs", "bool")
             .ignore_missing()?;
         s.validator::<u64>("timeout", "u64").ignore_missing()?;

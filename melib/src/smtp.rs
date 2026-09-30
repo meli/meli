@@ -42,6 +42,7 @@
 //!     },
 //!     envelope_from: String::new(),
 //!     extensions: SmtpExtensionSupport::default(),
+//!     trace: true,
 //!     auth: SmtpAuth::Auto {
 //!         username: Secret::Value("l15".into()),
 //!         password: Secret::Evaluate {
@@ -172,6 +173,8 @@ pub struct SmtpServerConf {
     pub security: SmtpSecurity,
     #[serde(default)]
     pub extensions: SmtpExtensionSupport,
+    #[serde(default)]
+    pub trace: bool,
 }
 
 //example: "SIZE 52428800", "8BITMIME", "PIPELINING", "CHUNKING", "PRDR",
@@ -264,9 +267,9 @@ impl SmtpConnection {
                     let conn = Connection::new_tcp(tcp_stream_connect(
                         addr,
                         Some(std::time::Duration::new(4, 0)),
-                    )?);
-                    #[cfg(feature = "smtp-trace")]
-                    let conn = conn.trace(true).with_id("smtp");
+                    )?)
+                    .trace(server_conf.trace)
+                    .with_id("smtp");
 
                     AsyncWrapper::new(conn)?
                 };
@@ -322,9 +325,7 @@ impl SmtpConnection {
                 }
 
                 let mut ret = {
-                    let socket = socket.into_inner()?;
-                    #[cfg(feature = "smtp-trace")]
-                    let socket = socket.trace(false);
+                    let socket = socket.into_inner()?.trace(false);
                     let _path = path.clone();
 
                     socket.set_nonblocking(false)?;
@@ -351,15 +352,9 @@ impl SmtpConnection {
                     }
                         */
                     AsyncWrapper::new({
-                        let conn = Connection::new_tls(conn);
-                        #[cfg(feature = "smtp-trace")]
-                        {
-                            conn.trace(true).with_id("smtp")
-                        }
-                        #[cfg(not(feature = "smtp-trace"))]
-                        {
-                            conn
-                        }
+                        Connection::new_tls(conn)
+                            .trace(server_conf.trace)
+                            .with_id("smtp")
                     })?
                 };
                 if matches!(server_conf.security, SmtpSecurity::Tls { .. }) {
@@ -378,18 +373,12 @@ impl SmtpConnection {
             SmtpSecurity::None => {
                 let addr = (path.as_str(), server_conf.port);
                 let mut ret = AsyncWrapper::new({
-                    let conn = Connection::new_tcp(tcp_stream_connect(
+                    Connection::new_tcp(tcp_stream_connect(
                         addr,
                         Some(std::time::Duration::new(4, 0)),
-                    )?);
-                    #[cfg(feature = "smtp-trace")]
-                    {
-                        conn.trace(true).with_id("smtp")
-                    }
-                    #[cfg(not(feature = "smtp-trace"))]
-                    {
-                        conn
-                    }
+                    )?)
+                    .trace(server_conf.trace)
+                    .with_id("smtp")
                 })?;
                 res.clear();
                 let reply = read_lines(
