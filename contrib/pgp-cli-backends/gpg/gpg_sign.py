@@ -89,39 +89,55 @@ SIG_CREATED = r"^\[GNUPG:\] SIG_CREATED (?P<type>[DCS])\w* (?P<pk_algo>\d+) (?P<
 sig = re.compile(SIG_CREATED, flags=re.M).search(status)
 fingerprint = sig.group("keyfpr")
 
-match int(sig.group("hash_algo")):
-    case 0:
-        hash_algo = "None"
-    case 1:
-        hash_algo = "MD5"
-    case 2:
-        hash_algo = "SHA1"
-    case 3:
-        hash_algo = "RMD160"
-    case 5:
-        hash_algo = "MD2"
-    case 6:
-        hash_algo = "TIGER"
-    case 7:
-        hash_algo = "HAVAL"
-    case 8:
-        hash_algo = "SHA256"
-    case 9:
-        hash_algo = "SHA384"
-    case 10:
-        hash_algo = "SHA512"
-    case 11:
-        hash_algo = "SHA224"
-    case 301:
-        hash_algo = "MD4"
-    case 302:
-        hash_algo = "CRC32"
-    case 303:
-        hash_algo = "CRC32RFC1510"
-    case 304:
-        hash_algo = "CRC24RFC2440"
-    case other:
-        hash_algo = str(other)
+try:
+    hash_algo = int(sig.group("hash_algo"))
+except ValueError as exc:
+    print(
+        json.dumps(
+            {
+                "returncode": 0,
+                "cmd": None,
+                "stdout": s.stdout.decode("utf-8"),
+                "stderr": s.stderr.decode("utf-8"),
+                "status_fd": status,
+                "logger_fd": logger,
+            }
+        )
+    )
+    sys.exit(1)
+
+if hash_algo == 0:
+    hash_algo = "None"
+elif hash_algo == 1:
+    hash_algo = "MD5"
+elif hash_algo == 2:
+    hash_algo = "SHA1"
+elif hash_algo == 3:
+    hash_algo = "RMD160"
+elif hash_algo == 5:
+    hash_algo = "MD2"
+elif hash_algo == 6:
+    hash_algo = "TIGER"
+elif hash_algo == 7:
+    hash_algo = "HAVAL"
+elif hash_algo == 8:
+    hash_algo = "SHA256"
+elif hash_algo == 9:
+    hash_algo = "SHA384"
+elif hash_algo == 10:
+    hash_algo = "SHA512"
+elif hash_algo == 11:
+    hash_algo = "SHA224"
+elif hash_algo == 301:
+    hash_algo = "MD4"
+elif hash_algo == 302:
+    hash_algo = "CRC32"
+elif hash_algo == 303:
+    hash_algo = "CRC32RFC1510"
+elif hash_algo == 304:
+    hash_algo = "CRC24RFC2440"
+else:
+    hash_algo = str(other)
 
 print(
     json.dumps(

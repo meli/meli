@@ -102,11 +102,8 @@ else:
             fingerprint = fpr
             continue
         fields = line.split(":")
-        match fields[0]:
-            case "uid":
-                primary_uid = fields[9]
-            case _:
-                continue
+        if fields[0] == "uid":
+            primary_uid = fields[9]
 
     # TODO: decode user id (it's escaped)
     # TODO: secret, capabilities, revoked, expired
