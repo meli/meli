@@ -35,7 +35,7 @@ use melib::{
     list_management,
     parser::BytesExt,
     pgp::Key as PGPKey,
-    Address, Contacts, Draft, HeaderName, SpecialUsageMailbox, SubjectPrefix, UnixTimestamp,
+    Address, Draft, HeaderName, SpecialUsageMailbox, SubjectPrefix, UnixTimestamp,
 };
 use nix::sys::wait::WaitStatus;
 
@@ -54,6 +54,8 @@ pub mod edit_attachments;
 use edit_attachments::*;
 
 pub mod hooks;
+
+mod fields;
 
 const TOGGLE_CHECKED_UNICODE: &str = "☑";
 const TOGGLE_UNCHECKED_UNICODE: &str = "☐";
@@ -663,20 +665,7 @@ To: {}
                 self.form.push_cl((
                     k.clone(),
                     headers[k].to_string(),
-                    Box::new(move |c, term| {
-                        c.accounts[&account_hash]
-                            .mailbox_entries
-                            .values()
-                            .filter_map(|v| {
-                                if v.path.starts_with(term) {
-                                    Some(v.path.to_string())
-                                } else {
-                                    None
-                                }
-                            })
-                            .map(AutoCompleteEntry::from)
-                            .collect::<Vec<AutoCompleteEntry>>()
-                    }),
+                    fields::newsgroups_complete_fn(account_hash),
                 ));
             } else {
                 self.form.push((k.clone(), headers[k].to_string()));
@@ -694,67 +683,20 @@ To: {}
                 self.form.push_cl((
                     k.clone(),
                     headers[k].to_string(),
-                    Box::new(move |c, term| {
-                        let book: &Contacts = &c.accounts[&account_hash].contacts;
-                        let results: Vec<String> = book.search(term);
-                        results
-                            .into_iter()
-                            .map(AutoCompleteEntry::from)
-                            .collect::<Vec<AutoCompleteEntry>>()
-                    }),
+                    fields::generic_address_complete_fn(account_hash),
                 ));
             } else if k == HeaderName::FROM {
                 self.form.push_cl((
                     k.clone(),
                     headers[k].to_string(),
-                    Box::new(move |c, _term| {
-                        c.accounts
-                            .values()
-                            .map(|acc| {
-                                let addr = acc.settings.account.main_identity_address();
-                                let desc = match account_settings!(c[&acc.hash()].send_mail) {
-                                    crate::conf::composing::SendMail::ShellCommand(ref cmd) => {
-                                        let mut cmd = cmd.as_str();
-                                        cmd.truncate_at_boundary(10);
-                                        format!("{} [exec: {}]", acc.name(), cmd)
-                                    }
-                                    #[cfg(feature = "smtp")]
-                                    crate::conf::composing::SendMail::Smtp(ref inner) => {
-                                        let hostname = match inner.hostname {
-                                            melib::conf::Secret::Value(ref val) => {
-                                                Some(val.as_str())
-                                            }
-                                            melib::conf::Secret::Evaluate { .. } => None,
-                                        };
-                                        if let Some(mut hostname) = hostname {
-                                            hostname.truncate_at_boundary(10);
-                                            format!("{} [smtp: {}]", acc.name(), hostname)
-                                        } else {
-                                            format!("{} [smtp]", acc.name())
-                                        }
-                                    }
-                                    crate::conf::composing::SendMail::ServerSubmission => {
-                                        format!("{} [server submission]", acc.name())
-                                    }
-                                };
-
-                                (addr.to_string(), desc)
-                            })
-                            .map(AutoCompleteEntry::from)
-                            .collect::<Vec<AutoCompleteEntry>>()
-                    }),
+                    fields::from_complete_fn(account_hash),
                 ));
             } else {
                 self.form.push((k.clone(), headers[k].to_string()));
             }
         }
         if let Field::Text(ref mut field) = self.form.values_mut()[&HeaderName::DATE] {
-            field.set_validate_fn(Some(Arc::new(|d| -> bool {
-                let Ok(t) = melib::email::parser::dates::rfc5322_date(d.as_bytes()) else {
-                    return false;
-                };
-                t != 0
-            })));
+            field.set_validate_fn(fields::date_validate_fn());
         }
         for k in [
             HeaderName::FROM,
@@ -763,12 +705,7 @@ To: {}
             HeaderName::BCC,
         ] {
             if let Field::Text(ref mut field) = self.form.values_mut()[&k] {
-                field.set_validate_fn(Some(Arc::new(|i| -> bool {
-                    matches!(
-                        melib::email::parser::address::group_list(i.as_bytes()),
-                        Ok((&[], _))
-                    )
-                })));
+                field.set_validate_fn(fields::generic_address_validate_fn());
             }
         }
     }
