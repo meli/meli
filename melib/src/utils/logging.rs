@@ -240,17 +240,7 @@ impl Logger {
             }
         };
 
-        if cfg!(feature = "debug-tracing") {
-            log::set_max_level(
-                if matches!(LevelFilter::from(logger.log_level()), LevelFilter::Off) {
-                    LevelFilter::Off
-                } else {
-                    LevelFilter::Trace
-                },
-            )
-        } else {
-            log::set_max_level(LevelFilter::from(logger.log_level()));
-        }
+        log::set_max_level(LevelFilter::from(logger.log_level()));
 
         INIT_STDERR_LOGGING.call_once(|| {
             log::set_boxed_logger(Box::new(logger.clone())).unwrap();

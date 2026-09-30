@@ -65,7 +65,7 @@ Or run a specific check in a specific `Makefile`:
 make -f .gitea/Makefile.lint clippy
 ```
 
-## Trace logs
+## Trace logs in `stderr`
 
 Enable trace logs to `stderr` with:
 
@@ -75,11 +75,9 @@ export MELI_DEBUG_STDERR=yes
 
 This means you will have to to redirect `stderr` to a file like `meli 2> trace.log`.
 
-Tracing is opt-in by build features:
+Tracing is configured with the `log.maximum_level` configuration option.
 
-```sh
-cargo build --features=debug-tracing
-```
+Use `log.maximum_level = "TRACE"` for maximum trace logs.
 
 ## use `.git-blame-ignore-revs` file _optional_
 

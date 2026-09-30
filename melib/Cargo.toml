@@ -19,7 +19,6 @@ path = "src/lib.rs"
 [features]
 default = ["imap", "nntp", "maildir", "mbox-notify", "smtp"]
 
-debug-tracing = []
 gpgme = []
 http = ["isahc", "url/serde"]
 http-static = ["isahc", "isahc/static-curl"]

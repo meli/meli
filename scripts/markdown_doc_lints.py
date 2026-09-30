@@ -242,7 +242,7 @@ if __name__ == "__main__":
 
     success &= validate_default_features(readme_md, readme_md_contents, features)
 
-    for to_remove in ["default", "debug-tracing"]:
+    for to_remove in ["default"]:
         if to_remove in features:
             del features[to_remove]
 

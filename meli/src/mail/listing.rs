@@ -1660,7 +1660,6 @@ impl Component for Listing {
                 }
                 return true;
             }
-            #[cfg(feature = "debug-tracing")]
             UIEvent::IntraComm {
                 from,
                 to,
