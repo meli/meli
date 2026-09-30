@@ -22,7 +22,11 @@
 
 use std::sync::Arc;
 
-use melib::{text::Truncate, AccountHash, Contacts};
+use melib::{
+    parser::BytesExt,
+    text::{TextProcessing, Truncate},
+    AccountHash, Contacts,
+};
 
 use crate::{account_settings, utilities::AutoCompleteFn, AutoCompleteEntry, ValidateFn};
 
@@ -85,11 +89,29 @@ pub(super) fn from_complete_fn(_: AccountHash) -> AutoCompleteFn {
 #[inline]
 pub(super) fn generic_address_complete_fn(account_hash: AccountHash) -> AutoCompleteFn {
     Box::new(move |c, term| {
+        let mut valid = vec![];
+        let mut rest = term.as_bytes();
+        while let Ok((input, m)) = melib::email::parser::address::mailbox(rest) {
+            valid.push(m);
+            if !input.starts_with(b",") {
+                break;
+            }
+            rest = &input[1..];
+        }
+        let rest = String::from_utf8_lossy(rest.ltrim());
+        if rest.grapheme_len() <= 2 {
+            return vec![];
+        }
         let book: &Contacts = &c.accounts[&account_hash].contacts;
-        let results = book.search(term);
+        let results = book.search(&rest);
+        let stripped_term = term.strip_suffix(rest.as_ref()).unwrap();
         results
             .into_iter()
-            .map(|c| c.as_address().to_string())
+            .map(|card| card.as_address())
+            .filter(|addr| !valid.contains(addr))
+            .map(|addr| addr.to_string())
+            .map(|r| format!("{stripped_term}{r}"))
+            .filter(|c| c != term)
             .map(AutoCompleteEntry::from)
             .collect::<Vec<AutoCompleteEntry>>()
     })
@@ -113,4 +135,87 @@ pub(super) fn generic_address_validate_fn() -> Option<ValidateFn> {
             Ok((&[], _))
         )
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use rusty_fork::rusty_fork_test;
+
+    use super::*;
+
+    rusty_fork_test! {
+        #[test]
+        fn test_compose_address_complete() {
+            run_compose_address_complete();
+        }
+    }
+
+    fn run_compose_address_complete() {
+        use melib::contacts::Card;
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let mut context = crate::Context::new_mock(&tempdir);
+        let card_a = Card {
+            email: "foo@example.com".into(),
+            ..Card::default()
+        };
+        let card_b = Card {
+            name: "Bar Jr".into(),
+            email: "bar@example.com".into(),
+            ..Card::default()
+        };
+        let card_c = Card {
+            name: "Nightmare D. Macdonald".into(),
+            email: "nightd@example.com".into(),
+            ..Card::default()
+        };
+        let account_hash = context.accounts[0].hash;
+        context.accounts[0].contacts.add_card(card_a);
+        context.accounts[0].contacts.add_card(card_b);
+        context.accounts[0].contacts.add_card(card_c);
+
+        let complete_fn = generic_address_complete_fn(account_hash);
+
+        // Ensure no completion without matches
+        assert_eq!(complete_fn(&context, "aaaaaaaaa"), vec![]);
+        // Ensure first completion without name
+        assert_eq!(
+            complete_fn(&context, "foo"),
+            vec![AutoCompleteEntry {
+                entry: "foo@example.com".into(),
+                description: "".into()
+            }]
+        );
+        // Ensure first completion is not quoted if not necessary
+        assert_eq!(
+            complete_fn(&context, "bar"),
+            vec![AutoCompleteEntry {
+                entry: "Bar Jr <bar@example.com>".into(),
+                description: "".into()
+            }]
+        );
+        // Ensure first completion is properly quoted if necessary
+        assert_eq!(
+            complete_fn(&context, "Nightmare"),
+            vec![AutoCompleteEntry {
+                entry: "\"Nightmare D. Macdonald\" <nightd@example.com>".into(),
+                description: "".into()
+            }]
+        );
+        // Ensure a full match and adding comma, whitespace are not completed
+        assert_eq!(complete_fn(&context, "foo@example.com"), vec![]);
+        assert_eq!(complete_fn(&context, "foo@example.com,"), vec![]);
+        assert_eq!(complete_fn(&context, "foo@example.com, "), vec![]);
+
+        // Ensure followup completion is properly quoted if necessary
+        assert_eq!(
+            complete_fn(&context, "foo@example.com, Nightm"),
+            vec![AutoCompleteEntry {
+                entry: "foo@example.com, \"Nightmare D. Macdonald\" <nightd@example.com>".into(),
+                description: "".into()
+            }]
+        );
+        // Ensure values are not repeated
+        assert_eq!(complete_fn(&context, "foo@example.com, foo"), vec![]);
+    }
 }
