@@ -475,10 +475,6 @@ impl ImapLineSplit for str {
     }
 }
 
-macro_rules! to_str (
-    ($v:expr) => (unsafe{ std::str::from_utf8_unchecked($v) })
-);
-
 /*macro_rules! dbg_dmp (
   ($i: expr, $submac:ident!( $($args:tt)* )) => (
     {
@@ -720,7 +716,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<'_, FetchResponse<'_>> {
                 take_while::<_, &[u8], (&[u8], nom::error::ErrorKind)>(is_digit)(&input[i..])
             {
                 i += (input.len() - i - rest.len()) + 1;
-                ret.modseq = u64::from_str(to_str!(modseq))
+                ret.modseq = u64::from_str(&String::from_utf8_lossy(modseq))
                     .ok()
                     .and_then(std::num::NonZeroU64::new)
                     .map(ModSequence);
@@ -918,7 +914,7 @@ pub fn uid_fetch_flags_response(input: &[u8]) -> IResult<&[u8], (UID, (Flag, Vec
     let (input, uid_flags) = permutation((
         preceded(
             alt((tag("UID "), tag(" UID "))),
-            map_res(digit1, |s| UID::from_str(to_str!(s))),
+            map_res(digit1, |s| UID::from_str(&String::from_utf8_lossy(s))),
         ),
         preceded(
             alt((tag("FLAGS "), tag(" FLAGS "))),

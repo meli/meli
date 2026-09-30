@@ -560,7 +560,7 @@ impl ImapConnection {
                         debug!(
                             "UID SEARCH RECENT err: {}\nresp: {}",
                             err,
-                            to_str!(&response)
+                            String::from_utf8_lossy(&response)
                         );
                         Ok(None)
                     }
@@ -607,7 +607,7 @@ impl ImapConnection {
                             }
                             Err(e) => {
                                 debug!("SEARCH error failed: {}", e);
-                                debug!(to_str!(&response));
+                                debug!(String::from_utf8_lossy(&response));
                                 return Ok(None);
                             }
                         }

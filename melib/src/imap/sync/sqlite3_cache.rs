@@ -234,7 +234,7 @@ impl ImapCache for Sqlite3Cache {
                 .and_modify(|entry| *entry = uidvalidity)
                 .or_insert(uidvalidity);
             let mut tag_lck = self.uid_store.collection.tag_index.write().unwrap();
-            for f in to_str!(&flags).split('\0') {
+            for f in String::from_utf8_lossy(&flags).split('\0') {
                 let hash = TagHash::from_bytes(f.as_bytes());
                 tag_lck.entry(hash).or_insert_with(|| f.to_string());
             }
