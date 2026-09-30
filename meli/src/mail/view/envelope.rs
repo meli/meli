@@ -1498,24 +1498,27 @@ impl Component for EnvelopeView {
                     return true;
                 };
 
-                context.replies.push_back(UIEvent::ProcessRequest {
-                    owner: self.id,
-                    command: {
-                        let mut cmd = Command::new("sh");
-                        cmd.args(["-c", command])
-                            .stdin(Stdio::inherit())
-                            .stdout(Stdio::piped())
-                            .stderr(Stdio::piped());
-                        cmd
-                    },
-                    spawn: Some(Default::default()),
-                    result_cb: ProcessResultFn(Box::new(move |output| {
-                        if let Ok(ref output) = output {
-                            log::trace!("picker output:\n{output:?}");
-                        }
-                        Some(Box::new(EnvelopeViewMessage::FilePickerExit(a_i, output)))
-                    })),
-                });
+                context
+                    .replies
+                    .push_back(UIEvent::ProcessRequest(Box::new(ProcessRequest {
+                        owner: self.id,
+                        command: {
+                            let mut cmd = Command::new("sh");
+                            cmd.args(["-c", command])
+                                .stdin(Stdio::inherit())
+                                .stdout(Stdio::piped())
+                                .stderr(Stdio::piped());
+                            cmd
+                        },
+                        spawn: Some(Default::default()),
+                        result_cb: ProcessResultFn(Box::new(move |output| {
+                            if let Ok(ref output) = output {
+                                log::trace!("picker output:\n{output:?}");
+                            }
+                            Some(Box::new(EnvelopeViewMessage::FilePickerExit(a_i, output)))
+                        })),
+                        temporary_files: vec![],
+                    })));
                 return true;
             }
             UIEvent::Action(View(ViewAction::PipeAttachment(a_i, ref bin, ref args))) => {
@@ -1535,34 +1538,37 @@ impl Component for EnvelopeView {
 
                 let bin = bin.clone();
                 let args = args.clone();
-                context.replies.push_back(UIEvent::ProcessRequest {
-                    owner: self.id,
-                    command: {
-                        let mut cmd = Command::new(&bin);
-                        cmd.args(&args)
-                            .stdin(Stdio::piped())
-                            .stdout(Stdio::inherit())
-                            .stderr(Stdio::inherit());
-                        cmd
-                    },
-                    spawn: Some(SpawnInteractionFn(Box::new(move |mut child| {
-                        let Some(mut stdin) = child.stdin.take() else {
-                            let _ = child.wait();
-                            return Err(Error::new(format!(
-                                "Could not open standard input of {bin}"
-                            ))
-                            .set_kind(ErrorKind::External));
-                        };
-                        stdin.write_all(&bytes).chain_err_summary(|| {
-                            format!("Could not write to standard input of {bin}")
-                        })?;
+                context
+                    .replies
+                    .push_back(UIEvent::ProcessRequest(Box::new(ProcessRequest {
+                        owner: self.id,
+                        command: {
+                            let mut cmd = Command::new(&bin);
+                            cmd.args(&args)
+                                .stdin(Stdio::piped())
+                                .stdout(Stdio::inherit())
+                                .stderr(Stdio::inherit());
+                            cmd
+                        },
+                        spawn: Some(SpawnInteractionFn(Box::new(move |mut child| {
+                            let Some(mut stdin) = child.stdin.take() else {
+                                let _ = child.wait();
+                                return Err(Error::new(format!(
+                                    "Could not open standard input of {bin}"
+                                ))
+                                .set_kind(ErrorKind::External));
+                            };
+                            stdin.write_all(&bytes).chain_err_summary(|| {
+                                format!("Could not write to standard input of {bin}")
+                            })?;
 
-                        Ok(child)
-                    }))),
-                    result_cb: ProcessResultFn(Box::new(|output| {
-                        Some(Box::new(EnvelopeViewMessage::PipeAttachmentExit(output)))
-                    })),
-                });
+                            Ok(child)
+                        }))),
+                        result_cb: ProcessResultFn(Box::new(|output| {
+                            Some(Box::new(EnvelopeViewMessage::PipeAttachmentExit(output)))
+                        })),
+                        temporary_files: vec![],
+                    })));
 
                 return true;
             }

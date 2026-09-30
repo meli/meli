@@ -1250,12 +1250,14 @@ impl State {
                 self.process_realizations();
                 return;
             }
-            UIEvent::ProcessRequest {
-                owner,
-                mut command,
-                spawn,
-                result_cb,
-            } => {
+            UIEvent::ProcessRequest(process_request) => {
+                let ProcessRequest {
+                    owner,
+                    mut command,
+                    spawn,
+                    result_cb,
+                    temporary_files: _,
+                } = *process_request;
                 log::trace!(
                     "Executing: {:?} {:?}",
                     command.get_program(),

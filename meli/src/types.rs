@@ -320,6 +320,15 @@ impl std::fmt::Display for NotificationType {
 }
 
 #[derive(Debug)]
+pub struct ProcessRequest {
+    pub owner: ComponentId,
+    pub command: std::process::Command,
+    pub spawn: Option<SpawnInteractionFn>,
+    pub result_cb: ProcessResultFn,
+    pub temporary_files: Vec<Arc<File>>,
+}
+
+#[derive(Debug)]
 pub enum UIEvent {
     Input(Key),
     CmdInput(Key),
@@ -327,12 +336,7 @@ pub enum UIEvent {
     EmbeddedInput((Key, Vec<u8>)),
     Resize,
     Fork(ForkedProcess),
-    ProcessRequest {
-        owner: ComponentId,
-        command: std::process::Command,
-        spawn: Option<SpawnInteractionFn>,
-        result_cb: ProcessResultFn,
-    },
+    ProcessRequest(Box<ProcessRequest>),
     ChangeMailbox(usize),
     ChangeMode(UIMode),
     Command(String),

@@ -24,6 +24,7 @@
 use std::{
     collections::HashSet,
     process::{Command, Stdio},
+    sync::Arc,
 };
 
 use indexmap::IndexMap;
@@ -575,7 +576,7 @@ impl Component for StatusBar {
                     Some("txt"),
                     true,
                 ) {
-                    Ok(f) => f,
+                    Ok(f) => Arc::new(f),
                     Err(err) => {
                         context.replies.push_back(UIEvent::Notification {
                             title: None,
@@ -590,32 +591,38 @@ impl Component for StatusBar {
                 let initial_value = self.ex_buffer.as_str().to_string();
                 self.ex_buffer.clear();
                 let editor_command = format!("{} \"$@\"", editor);
-                context.replies.push_back(UIEvent::ProcessRequest {
-                    owner: self.id,
-                    command: {
-                        let mut cmd = Command::new("sh");
-                        cmd.arg("-c")
-                            .arg(&editor_command)
-                            .arg(&editor)
-                            .arg(f.path())
-                            .stdin(Stdio::inherit())
-                            .stdout(Stdio::inherit())
-                            .stderr(Stdio::inherit());
-                        cmd
-                    },
-                    spawn: Some(Default::default()),
-                    result_cb: ProcessResultFn(Box::new(move |output| {
-                        if output.is_ok() {
-                            if let Ok(s) = f.read_to_string() {
-                                Some(Box::new(UIEvent::CmdInput(Key::Paste(s))))
-                            } else {
-                                Some(Box::new(UIEvent::CmdInput(Key::Paste(initial_value))))
+                context
+                    .replies
+                    .push_back(UIEvent::ProcessRequest(Box::new(ProcessRequest {
+                        owner: self.id,
+                        command: {
+                            let mut cmd = Command::new("sh");
+                            cmd.arg("-c")
+                                .arg(&editor_command)
+                                .arg(&editor)
+                                .arg(f.path())
+                                .stdin(Stdio::inherit())
+                                .stdout(Stdio::inherit())
+                                .stderr(Stdio::inherit());
+                            cmd
+                        },
+                        spawn: Some(Default::default()),
+                        result_cb: ProcessResultFn(Box::new({
+                            let f = f.clone();
+                            move |output| {
+                                if output.is_ok() {
+                                    if let Ok(s) = f.read_to_string() {
+                                        Some(Box::new(UIEvent::CmdInput(Key::Paste(s))))
+                                    } else {
+                                        Some(Box::new(UIEvent::CmdInput(Key::Paste(initial_value))))
+                                    }
+                                } else {
+                                    Some(Box::new(UIEvent::CmdInput(Key::Paste(initial_value))))
+                                }
                             }
-                        } else {
-                            Some(Box::new(UIEvent::CmdInput(Key::Paste(initial_value))))
-                        }
-                    })),
-                });
+                        })),
+                        temporary_files: vec![f],
+                    })));
                 return true;
             }
             UIEvent::CmdInput(k @ Key::Backspace) | UIEvent::CmdInput(k @ Key::Ctrl(_)) => {
