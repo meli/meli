@@ -32,6 +32,7 @@ use uuid::Uuid;
 
 use crate::{
     contacts::CardId,
+    email::Address,
     utils::datetime::{now, timestamp_to_string, UnixTimestamp},
 };
 
@@ -191,6 +192,30 @@ impl Card {
                 .build()
                 .unwrap(),
         )
+    }
+
+    /// Return an [`Address`] for this card.
+    pub fn as_address(&self) -> Address {
+        Address::new(
+            if self.name.is_empty() {
+                None
+            } else {
+                Some(self.name.clone())
+            },
+            self.email.clone(),
+        )
+    }
+}
+
+impl From<&Card> for Address {
+    fn from(c: &Card) -> Self {
+        c.as_address()
+    }
+}
+
+impl From<Card> for Address {
+    fn from(c: Card) -> Self {
+        c.as_address()
     }
 }
 
