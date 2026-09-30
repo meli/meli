@@ -222,21 +222,11 @@ impl Contacts {
         self.cards.contains_key(&card_id)
     }
 
-    pub fn search(&self, term: &str) -> Vec<String> {
+    pub fn search(&self, term: &str) -> Vec<Card> {
         self.cards
             .values()
             .filter(|c| c.email.contains(term) || c.name.contains(term))
-            .map(|c| {
-                crate::email::Address::new(
-                    if c.name.is_empty() {
-                        None
-                    } else {
-                        Some(c.name.clone())
-                    },
-                    c.email.clone(),
-                )
-                .to_string()
-            })
+            .cloned()
             .collect()
     }
 }

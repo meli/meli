@@ -86,9 +86,10 @@ pub(super) fn from_complete_fn(_: AccountHash) -> AutoCompleteFn {
 pub(super) fn generic_address_complete_fn(account_hash: AccountHash) -> AutoCompleteFn {
     Box::new(move |c, term| {
         let book: &Contacts = &c.accounts[&account_hash].contacts;
-        let results: Vec<String> = book.search(term);
+        let results = book.search(term);
         results
             .into_iter()
+            .map(|c| c.as_address().to_string())
             .map(AutoCompleteEntry::from)
             .collect::<Vec<AutoCompleteEntry>>()
     })
