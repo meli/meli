@@ -88,6 +88,9 @@ format = "mbox"
 send_mail = 'false'
 listing.index_style = "Compact"
 identity="username@hostname.local"
+
+[log]
+maximum_level = "TRACE"
 "#;
 
 pub const EXTRA_CONFIG: &str = r#"
@@ -107,6 +110,9 @@ identity="username@example.com"
 server_username = "null"
 server_hostname = "example.com"
 server_password = { command = "false" }
+
+[log]
+maximum_level = "TRACE"
     "#;
 
 #[test]
