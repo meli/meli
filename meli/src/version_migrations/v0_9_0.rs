@@ -141,8 +141,15 @@ impl Migration for ServerPasswordCommand {
         "Transform `server_password_command` to new syntax?"
     }
 
-    fn is_applicable(&self, _: &Path) -> Option<bool> {
-        None
+    fn is_applicable(&self, config: &Path) -> Option<bool> {
+        for c in get_included_configs(config).ok()? {
+            let raw = std::fs::read_to_string(&c).ok()?;
+            if raw.contains("server_password_command") {
+                return Some(true);
+            }
+        }
+
+        Some(false)
     }
 
     fn perform(&self, config: &Path, dry_run: bool, verbose: bool) -> Result<()> {
