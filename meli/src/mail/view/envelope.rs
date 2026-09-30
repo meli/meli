@@ -1415,19 +1415,21 @@ impl Component for EnvelopeView {
                     return true;
                 };
                 if let Some(attachment) = self.open_attachment(lidx, context) {
-                    if crate::mailcap::MailcapEntry::execute(self.id, attachment, context).is_ok() {
-                        self.set_dirty(true);
-                    } else {
-                        context.replies.push_back(UIEvent::Notification {
-                            title: None,
-                            source: None,
-                            body: format!(
-                                "no mailcap entry found for {}",
-                                attachment.content_type()
-                            )
-                            .into(),
-                            kind: None,
-                        });
+                    match crate::mailcap::MailcapEntry::execute(self.id, attachment) {
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::Notification {
+                                title: None,
+                                source: None,
+                                body: err.to_string().into(),
+                                kind: Some(NotificationType::Error(err.kind)),
+                            });
+                        }
+                        Ok(p) => {
+                            context
+                                .replies
+                                .push_back(UIEvent::ProcessRequest(Box::new(p)));
+                            self.set_dirty(true);
+                        }
                     }
                 }
                 return true;
