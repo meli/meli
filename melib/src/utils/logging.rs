@@ -258,6 +258,7 @@ impl Logger {
 
     /// Change log level.
     pub fn change_log_level(&self, new_level: LogLevel) {
+        log::set_max_level(LevelFilter::from(new_level));
         self.level.store(new_level as u8, Ordering::SeqCst)
     }
 
