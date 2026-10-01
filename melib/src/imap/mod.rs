@@ -611,47 +611,40 @@ impl MailBackend for ImapType {
                 }
                 _ => false,
             };
-            enum WatchKit {
-                Idle(BoxStream<'static, Result<BackendEvent>>),
-                Poll(BoxStream<'static, Result<BackendEvent>>),
-            }
-            let mut watch_kit = if has_idle {
-                WatchKit::Idle(Box::pin(idle(ImapWatchKit {
-                    conn: ImapConnection::new_connection(
-                        &server_conf,
-                        format!(
-                            "{}-watch-IDLE",
-                            uid_store.account_name.as_ref().trim_at_boundary(25)
-                        )
-                        .into(),
-                        uid_store.clone(),
-                        false,
-                    ),
-                    main_conn: main_conn.clone(),
-                    uid_store: uid_store.clone(),
-                })))
-            } else {
-                WatchKit::Poll(Box::pin(poll_with_examine(ImapWatchKit {
-                    conn: ImapConnection::new_connection(
-                        &server_conf,
-                        format!(
-                            "{}-watch-poll_with_EXAMINE",
-                            uid_store.account_name.as_ref().trim_at_boundary(25)
-                        )
-                        .into(),
-                        uid_store.clone(),
-                        false,
-                    ),
-                    main_conn: main_conn.clone(),
-                    uid_store: uid_store.clone(),
-                })))
-            };
-            while let Some(ev) = {
-                match watch_kit {
-                    WatchKit::Idle(ref mut idle) => idle.next().await,
-                    WatchKit::Poll(ref mut poll) => poll.next().await,
-                }
-            } {
+
+            let mut watch_kit: Pin<Box<dyn Stream<Item = Result<BackendEvent>> + Send>> =
+                if has_idle {
+                    Box::pin(idle(ImapWatchKit {
+                        conn: ImapConnection::new_connection(
+                            &server_conf,
+                            format!(
+                                "{}-watch-IDLE",
+                                uid_store.account_name.as_ref().trim_at_boundary(25)
+                            )
+                            .into(),
+                            uid_store.clone(),
+                            false,
+                        ),
+                        main_conn: main_conn.clone(),
+                        uid_store: uid_store.clone(),
+                    }))
+                } else {
+                    Box::pin(poll_with_examine(ImapWatchKit {
+                        conn: ImapConnection::new_connection(
+                            &server_conf,
+                            format!(
+                                "{}-watch-poll_with_EXAMINE",
+                                uid_store.account_name.as_ref().trim_at_boundary(25)
+                            )
+                            .into(),
+                            uid_store.clone(),
+                            false,
+                        ),
+                        main_conn: main_conn.clone(),
+                        uid_store: uid_store.clone(),
+                    }))
+                };
+            while let Some(ev) = watch_kit.next().await {
                 match ev {
                     Ok(ok) => emitter.emit(ok).await,
                     Err(err) => {
