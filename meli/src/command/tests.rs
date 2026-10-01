@@ -364,8 +364,13 @@ fn test_command_completions_generate() {
         ]
     );
 
-    // A complete command should not generate a suggestion
-    assert_eq!(gen.generate("set seen"), vec![]);
+    assert_eq!(
+        gen.generate("set seen"),
+        vec![AutoCompleteEntry {
+            entry: "set seen".into(),
+            description: "set [seen/unseen], toggles message's Seen flag".into()
+        },]
+    );
     assert_eq!(
         gen.generate("set "),
         vec![

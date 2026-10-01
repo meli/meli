@@ -146,7 +146,15 @@ impl CompletionsGenerator {
                 // Last lexeme is a match, see if we can generate any more suggestions out of
                 // it.
                 Ok((lex_token, token, data)) => {
-                    self.complete_lex_token(&data, lex_token, token, &mut suggestions, desc, input);
+                    self.complete_lex_token(
+                        &data,
+                        lex_token,
+                        token,
+                        &mut suggestions,
+                        desc,
+                        input,
+                        false,
+                    );
                 }
                 // Ignore invalid matches
                 Err(MatchError::Invalid) => {}
@@ -170,6 +178,7 @@ impl CompletionsGenerator {
                             &mut suggestions,
                             desc,
                             input,
+                            true,
                         );
                         if skip_next_token {
                             continue;
@@ -231,7 +240,13 @@ impl CompletionsGenerator {
                                 true,
                             );
                         }
-                        _ => {}
+                        Token::RestOfStringValue
+                        | Token::QuotedStringValue
+                        | Token::Filepath
+                        | Token::NewFilepath
+                        | Token::IndexValue
+                        | Token::AttachmentIndexValue
+                        | Token::MailboxIndexValue => {}
                     }
                 }
                 // Input ends with whitespace and we can match `next_token`
@@ -295,7 +310,13 @@ impl CompletionsGenerator {
                                 true,
                             );
                         }
-                        _ => {}
+                        Token::RestOfStringValue
+                        | Token::QuotedStringValue
+                        | Token::Filepath
+                        | Token::NewFilepath
+                        | Token::IndexValue
+                        | Token::AttachmentIndexValue
+                        | Token::MailboxIndexValue => {}
                     }
                     if let Some((lex_token, token)) = data.previous_match.take() {
                         self.complete_lex_token(
@@ -306,6 +327,7 @@ impl CompletionsGenerator {
                             desc,
                             // MatchError::Next has a trailing whitespace so trim it.
                             input.trim_end(),
+                            true,
                         );
                     }
                 }
@@ -388,7 +410,43 @@ impl CompletionsGenerator {
                             false,
                         );
                     }
-                    _ => {}
+                    Token::NewMailboxPath => {
+                        self.complete_mailbox_path(
+                            &data,
+                            Some(lex_token.value()),
+                            &mut suggestions,
+                            |mbox| {
+                                (
+                                    format!(
+                                        "{input}{mbox}",
+                                        input = input.strip_suffix(lex_token.raw()).unwrap(),
+                                        mbox = quote_if_necessary(mbox)
+                                    ),
+                                    *desc,
+                                )
+                                    .into()
+                            },
+                            Some(|mbox| {
+                                (
+                                    format!(
+                                        "{input}{mbox}",
+                                        input = input.strip_suffix(lex_token.raw()).unwrap(),
+                                        mbox = lex_token.incomplete(mbox)
+                                    ),
+                                    *desc,
+                                )
+                                    .into()
+                            }),
+                            true,
+                        );
+                    }
+                    Token::RestOfStringValue
+                    | Token::QuotedStringValue
+                    | Token::Filepath
+                    | Token::NewFilepath
+                    | Token::IndexValue
+                    | Token::AttachmentIndexValue
+                    | Token::MailboxIndexValue => {}
                 },
                 // Same as before, except that lexeme is an unclosed quoted string
                 Err(MatchError::Incomplete {
@@ -492,7 +550,40 @@ impl CompletionsGenerator {
                                     false,
                                 );
                             }
-                            _ => {}
+                            Token::NewMailboxPath => {
+                                self.complete_mailbox_path(
+                                    &data,
+                                    Some(value),
+                                    &mut suggestions,
+                                    |mbox| {
+                                        (
+                                            format!(
+                                                "{input}{mbox}",
+                                                input = input.strip_suffix(raw).unwrap(),
+                                                mbox = quote(mbox)
+                                            ),
+                                            *desc,
+                                        )
+                                            .into()
+                                    },
+                                    Some(|mbox| {
+                                        (
+                                            format!(
+                                                "{input}\"{mbox}",
+                                                input = input.strip_suffix(raw).unwrap(),
+                                            ),
+                                            *desc,
+                                        )
+                                            .into()
+                                    }),
+                                    true,
+                                );
+                            }
+                            Token::QuotedStringValue
+                            | Token::RestOfStringValue
+                            | Token::IndexValue
+                            | Token::AttachmentIndexValue
+                            | Token::MailboxIndexValue => {}
                         }
                     }
                 }
@@ -501,6 +592,7 @@ impl CompletionsGenerator {
         suggestions.into_iter().collect::<Vec<AutoCompleteEntry>>()
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn complete_lex_token(
         &self,
         data: &MatcherMetadata<'_, '_, '_>,
@@ -509,9 +601,48 @@ impl CompletionsGenerator {
         suggestions: &mut IndexSet<AutoCompleteEntry>,
         desc: &'static str,
         input: &str,
+        is_previous_match: bool,
     ) {
         if !lex_token.is_whitespace() {
             match token {
+                Token::QuotedStringValue
+                | Token::RestOfStringValue
+                | Token::IndexValue
+                | Token::AttachmentIndexValue
+                | Token::MailboxIndexValue => {}
+                Token::Alternatives(lits) => {
+                    for lit in lits.iter() {
+                        if lit.starts_with(lex_token.value())
+                            && ((is_previous_match && *lit != lex_token.value())
+                                || !is_previous_match)
+                        {
+                            suggestions.insert(
+                                (
+                                    format!(
+                                        "{input}{lit}",
+                                        input = input.strip_suffix(lex_token.raw()).unwrap(),
+                                    ),
+                                    desc,
+                                )
+                                    .into(),
+                            );
+                        }
+                    }
+                }
+                Token::Literal(lit) => {
+                    if (is_previous_match && *lit != lex_token.value()) || !is_previous_match {
+                        suggestions.insert(
+                            (
+                                format!(
+                                    "{input}{lit}",
+                                    input = input.strip_suffix(lex_token.raw()).unwrap(),
+                                ),
+                                desc,
+                            )
+                                .into(),
+                        );
+                    }
+                }
                 Token::NewFilepath | Token::Filepath => {
                     suggestions.extend(
                         Path::new(lex_token.value())
@@ -599,7 +730,6 @@ impl CompletionsGenerator {
                         true,
                     );
                 }
-                _ => {}
             }
         }
     }
