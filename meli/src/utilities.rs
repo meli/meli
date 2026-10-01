@@ -301,37 +301,29 @@ impl Component for StatusBar {
             UIMode::Command => {
                 let command_area = area.nth_row(total_rows.saturating_sub(self.height));
                 self.draw_command_bar(grid, command_area, context);
-                // don't autocomplete for less than 3 characters
-                if self.ex_buffer.as_str().split_graphemes().len() <= 2 {
-                    if !self.auto_complete.suggestions().is_empty() {
-                        self.auto_complete.set_suggestions(vec![]);
-                        // redraw self.container because we got rid of an autocomplete box, and it
-                        // must be drawn over
-                        self.container.set_dirty(true);
-                    }
-                    return;
-                }
 
                 let mut suggestions = self.complgen.generate(self.ex_buffer.as_str());
                 let mut unique_history_suggestions: indexmap::IndexSet<&str> =
                     suggestions.iter().map(|e| e.entry.as_str()).collect();
-                let hist_suggestions: Vec<AutoCompleteEntry> = self
-                    .cmd_history
-                    .iter()
-                    .rev()
-                    .filter_map(|h| {
-                        let sug = self.ex_buffer.as_str();
-                        if h.starts_with(sug) && unique_history_suggestions.insert(h.trim()) {
-                            Some(AutoCompleteEntry {
-                                entry: h.trim().to_string(),
-                                description: "history".into(),
-                            })
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-                suggestions.extend(hist_suggestions);
+                if !self.ex_buffer.as_str().is_empty() {
+                    let hist_suggestions: Vec<AutoCompleteEntry> = self
+                        .cmd_history
+                        .iter()
+                        .rev()
+                        .filter_map(|h| {
+                            let sug = self.ex_buffer.as_str();
+                            if h.starts_with(sug) && unique_history_suggestions.insert(h.trim()) {
+                                Some(AutoCompleteEntry {
+                                    entry: h.trim().to_string(),
+                                    description: "history".into(),
+                                })
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+                    suggestions.extend(hist_suggestions);
+                }
 
                 self.container.set_dirty(true);
                 if suggestions.is_empty() && !self.auto_complete.suggestions().is_empty() {

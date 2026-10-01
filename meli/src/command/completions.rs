@@ -127,15 +127,42 @@ impl CompletionsGenerator {
                 lex_iter: &mut lexer,
             };
             // Reduce matches to get either first error or last matching token
-            let result = matcher.into_iter().reduce(|acc, elem| {
-                acc?;
-                elem
-            });
-            if let Some(result) = result {
-                match result {
-                    // Last lexeme is a match, see if we can generate any more suggestions out of
-                    // it.
-                    Ok((lex_token, token, data)) => {
+            let result = matcher
+                .into_iter()
+                .reduce(|acc, elem| {
+                    acc?;
+                    elem
+                })
+                .unwrap_or_else(|| {
+                    Err(MatchError::Next {
+                        next_token: token_stream.tokens.first().expect("non-empty token stream"),
+                        data: MatcherMetadata {
+                            acc_match: None,
+                            previous_match: None,
+                        },
+                    })
+                });
+            match result {
+                // Last lexeme is a match, see if we can generate any more suggestions out of
+                // it.
+                Ok((lex_token, token, data)) => {
+                    self.complete_lex_token(&data, lex_token, token, &mut suggestions, desc, input);
+                }
+                // Ignore invalid matches
+                Err(MatchError::Invalid) => {}
+                // If we append a space to input we might be able to generate suggestions
+                Err(MatchError::WhitespaceAndNext {
+                    next_token,
+                    mut data,
+                }) => {
+                    // Check previous token match for more suggestions before generating
+                    // suggestions for after adding space
+                    if let Some((lex_token, token)) = data.previous_match.take() {
+                        let skip_next_token = matches!(token, Token::Filepath)
+                            && !Path::new(lex_token.value())
+                                .expand_tilde()
+                                .try_exists()
+                                .unwrap_or(false);
                         self.complete_lex_token(
                             &data,
                             lex_token,
@@ -144,368 +171,328 @@ impl CompletionsGenerator {
                             desc,
                             input,
                         );
-                    }
-                    // Ignore invalid matches
-                    Err(MatchError::Invalid) => {}
-                    // If we append a space to input we might be able to generate suggestions
-                    Err(MatchError::WhitespaceAndNext {
-                        next_token,
-                        mut data,
-                    }) => {
-                        // Check previous token match for more suggestions before generating
-                        // suggestions for after adding space
-                        if let Some((lex_token, token)) = data.previous_match.take() {
-                            let skip_next_token = matches!(token, Token::Filepath)
-                                && !Path::new(lex_token.value())
-                                    .expand_tilde()
-                                    .try_exists()
-                                    .unwrap_or(false);
-                            self.complete_lex_token(
-                                &data,
-                                lex_token,
-                                token,
-                                &mut suggestions,
-                                desc,
-                                input,
-                            );
-                            if skip_next_token {
-                                continue;
-                            }
-                        }
-                        match next_token {
-                            Token::Literal(lit) => {
-                                suggestions.insert((format!("{input} {lit}"), *desc).into());
-                            }
-                            Token::Alternatives(lits) => {
-                                for lit in *lits {
-                                    suggestions.insert((format!("{input} {lit}"), *desc).into());
-                                }
-                            }
-                            Token::AccountName => {
-                                for acc in self.mailboxes.keys() {
-                                    suggestions.insert(
-                                        (
-                                            format!("{input} {acc}", acc = quote_if_necessary(acc)),
-                                            *desc,
-                                        )
-                                            .into(),
-                                    );
-                                }
-                            }
-                            Token::MailboxPath => {
-                                self.complete_mailbox_path(
-                                    &data,
-                                    None,
-                                    &mut suggestions,
-                                    |mbox| {
-                                        (
-                                            format!(
-                                                "{input} {mbox}",
-                                                mbox = quote_if_necessary(mbox)
-                                            ),
-                                            *desc,
-                                        )
-                                            .into()
-                                    },
-                                    None::<fn(_) -> AutoCompleteEntry>,
-                                    false,
-                                );
-                            }
-                            Token::NewMailboxPath => {
-                                self.complete_mailbox_path(
-                                    &data,
-                                    None,
-                                    &mut suggestions,
-                                    |mbox| {
-                                        (
-                                            format!(
-                                                "{input} {mbox}",
-                                                mbox = quote_incomplete_if_necessary(&format!(
-                                                    "{mbox}/"
-                                                ))
-                                            ),
-                                            *desc,
-                                        )
-                                            .into()
-                                    },
-                                    None::<fn(_) -> AutoCompleteEntry>,
-                                    true,
-                                );
-                            }
-                            _ => {}
+                        if skip_next_token {
+                            continue;
                         }
                     }
-                    // Input ends with whitespace and we can match `next_token`
-                    Err(MatchError::Next {
-                        next_token,
-                        mut data,
-                    }) => {
-                        match next_token {
-                            Token::Literal(lit) => {
-                                suggestions.insert((format!("{input}{lit}"), *desc).into());
-                            }
-                            Token::Alternatives(lits) => {
-                                for lit in *lits {
-                                    suggestions.insert((format!("{input}{lit}"), *desc).into());
-                                }
-                            }
-                            Token::AccountName => {
-                                for acc in self.mailboxes.keys() {
-                                    suggestions.insert(
-                                        (
-                                            format!("{input}{acc}", acc = quote_if_necessary(acc)),
-                                            *desc,
-                                        )
-                                            .into(),
-                                    );
-                                }
-                            }
-                            Token::MailboxPath => {
-                                self.complete_mailbox_path(
-                                    &data,
-                                    None,
-                                    &mut suggestions,
-                                    |mbox| {
-                                        (
-                                            format!(
-                                                "{input}{mbox}",
-                                                mbox = quote_if_necessary(mbox)
-                                            ),
-                                            *desc,
-                                        )
-                                            .into()
-                                    },
-                                    None::<fn(_) -> AutoCompleteEntry>,
-                                    false,
-                                );
-                            }
-                            Token::NewMailboxPath => {
-                                self.complete_mailbox_path(
-                                    &data,
-                                    None,
-                                    &mut suggestions,
-                                    |mbox| {
-                                        (
-                                            format!(
-                                                "{input}{mbox}",
-                                                mbox = quote_incomplete_if_necessary(&format!(
-                                                    "{mbox}/"
-                                                ))
-                                            ),
-                                            *desc,
-                                        )
-                                            .into()
-                                    },
-                                    None::<fn(_) -> AutoCompleteEntry>,
-                                    true,
-                                );
-                            }
-                            _ => {}
-                        }
-                        if let Some((lex_token, token)) = data.previous_match.take() {
-                            self.complete_lex_token(
-                                &data,
-                                lex_token,
-                                token,
-                                &mut suggestions,
-                                desc,
-                                // MatchError::Next has a trailing whitespace so trim it.
-                                input.trim_end(),
-                            );
-                        }
-                    }
-                    // Input can only be valid if extra stuff is added
-                    Err(MatchError::Incomplete {
-                        lexeme: Ok(lex_token),
-                        token,
-                        data,
-                    }) => match token {
+                    match next_token {
                         Token::Literal(lit) => {
-                            suggestions.insert(
-                                (
-                                    format!(
-                                        "{}{}",
-                                        input.strip_suffix(lex_token.raw()).unwrap(),
-                                        lit
-                                    ),
-                                    *desc,
-                                )
-                                    .into(),
-                            );
+                            suggestions.insert((format!("{input} {lit}"), *desc).into());
                         }
                         Token::Alternatives(lits) => {
                             for lit in *lits {
-                                if lit.starts_with(lex_token.value()) && *lit != lex_token.value() {
-                                    suggestions.insert(
-                                        (
-                                            format!(
-                                                "{}{}",
-                                                input.strip_suffix(lex_token.raw()).unwrap(),
-                                                lit
-                                            ),
-                                            *desc,
-                                        )
-                                            .into(),
-                                    );
-                                }
+                                suggestions.insert((format!("{input} {lit}"), *desc).into());
                             }
                         }
                         Token::AccountName => {
                             for acc in self.mailboxes.keys() {
-                                if acc.starts_with(lex_token.value()) && acc != lex_token.value() {
-                                    suggestions.insert(
-                                        (
-                                            format!(
-                                                "{input}{acc}",
-                                                input =
-                                                    input.strip_suffix(lex_token.raw()).unwrap(),
-                                                acc = quote_if_necessary(acc)
-                                            ),
-                                            *desc,
-                                        )
-                                            .into(),
-                                    );
-                                }
+                                suggestions.insert(
+                                    (
+                                        format!("{input} {acc}", acc = quote_if_necessary(acc)),
+                                        *desc,
+                                    )
+                                        .into(),
+                                );
                             }
                         }
                         Token::MailboxPath => {
                             self.complete_mailbox_path(
                                 &data,
-                                Some(lex_token.value()),
+                                None,
+                                &mut suggestions,
+                                |mbox| {
+                                    (
+                                        format!("{input} {mbox}", mbox = quote_if_necessary(mbox)),
+                                        *desc,
+                                    )
+                                        .into()
+                                },
+                                None::<fn(_) -> AutoCompleteEntry>,
+                                false,
+                            );
+                        }
+                        Token::NewMailboxPath => {
+                            self.complete_mailbox_path(
+                                &data,
+                                None,
                                 &mut suggestions,
                                 |mbox| {
                                     (
                                         format!(
-                                            "{input}{mbox}",
-                                            input = input.strip_suffix(lex_token.raw()).unwrap(),
-                                            mbox = quote_if_necessary(mbox)
+                                            "{input} {mbox}",
+                                            mbox =
+                                                quote_incomplete_if_necessary(&format!("{mbox}/"))
                                         ),
                                         *desc,
                                     )
                                         .into()
                                 },
-                                Some(|mbox| {
+                                None::<fn(_) -> AutoCompleteEntry>,
+                                true,
+                            );
+                        }
+                        _ => {}
+                    }
+                }
+                // Input ends with whitespace and we can match `next_token`
+                Err(MatchError::Next {
+                    next_token,
+                    mut data,
+                }) => {
+                    match next_token {
+                        Token::Literal(lit) => {
+                            suggestions.insert((format!("{input}{lit}"), *desc).into());
+                        }
+                        Token::Alternatives(lits) => {
+                            for lit in *lits {
+                                suggestions.insert((format!("{input}{lit}"), *desc).into());
+                            }
+                        }
+                        Token::AccountName => {
+                            for acc in self.mailboxes.keys() {
+                                suggestions.insert(
+                                    (
+                                        format!("{input}{acc}", acc = quote_if_necessary(acc)),
+                                        *desc,
+                                    )
+                                        .into(),
+                                );
+                            }
+                        }
+                        Token::MailboxPath => {
+                            self.complete_mailbox_path(
+                                &data,
+                                None,
+                                &mut suggestions,
+                                |mbox| {
+                                    (
+                                        format!("{input}{mbox}", mbox = quote_if_necessary(mbox)),
+                                        *desc,
+                                    )
+                                        .into()
+                                },
+                                None::<fn(_) -> AutoCompleteEntry>,
+                                false,
+                            );
+                        }
+                        Token::NewMailboxPath => {
+                            self.complete_mailbox_path(
+                                &data,
+                                None,
+                                &mut suggestions,
+                                |mbox| {
                                     (
                                         format!(
                                             "{input}{mbox}",
-                                            input = input.strip_suffix(lex_token.raw()).unwrap(),
-                                            mbox = lex_token.incomplete(mbox)
+                                            mbox =
+                                                quote_incomplete_if_necessary(&format!("{mbox}/"))
                                         ),
                                         *desc,
                                     )
                                         .into()
-                                }),
-                                false,
+                                },
+                                None::<fn(_) -> AutoCompleteEntry>,
+                                true,
                             );
                         }
                         _ => {}
-                    },
-                    // Same as before, except that lexeme is an unclosed quoted string
-                    Err(MatchError::Incomplete {
-                        lexeme: Err(lex_token_err),
-                        token,
-                        data,
-                    }) => {
-                        if let (Some(raw), Some(value)) =
-                            (lex_token_err.raw(), lex_token_err.value())
-                        {
-                            match token {
-                                Token::Literal(lit) => {
-                                    suggestions.insert(
-                                        (
-                                            format!(
-                                                "{input}{lit}",
-                                                input = input.strip_suffix(raw).unwrap(),
-                                            ),
-                                            *desc,
-                                        )
-                                            .into(),
-                                    );
-                                }
-                                Token::Alternatives(lits) => {
-                                    for lit in *lits {
-                                        if lit.starts_with(value) && *lit != value {
-                                            suggestions.insert(
-                                                (
-                                                    format!(
-                                                        "{input}{lit}",
-                                                        input = input.strip_suffix(raw).unwrap(),
-                                                    ),
-                                                    *desc,
-                                                )
-                                                    .into(),
-                                            );
-                                        }
-                                    }
-                                }
-                                Token::NewFilepath | Token::Filepath => {
-                                    suggestions.extend(
-                                        Path::new(value)
-                                            .complete(true, value.ends_with('/'))
-                                            .into_iter()
-                                            .take(self.maximum_filesystem_matches)
-                                            .map(|m| {
-                                                (
-                                                    format!(
-                                                        "{input}\"{value}{m}\"",
-                                                        input = input.strip_suffix(raw).unwrap(),
-                                                        value = value,
-                                                        m = m.replace('"', "\\\""),
-                                                    ),
-                                                    *desc,
-                                                )
-                                                    .into()
-                                            }),
-                                    );
-                                }
-                                Token::AccountName => {
-                                    for acc in self.mailboxes.keys() {
-                                        if acc.starts_with(value) && acc != value {
-                                            suggestions.insert(
-                                                (
-                                                    format!(
-                                                        "{input}{acc}",
-                                                        input = input.strip_suffix(raw).unwrap(),
-                                                        acc = quote(acc)
-                                                    ),
-                                                    *desc,
-                                                )
-                                                    .into(),
-                                            );
-                                        }
-                                    }
-                                }
-                                Token::MailboxPath => {
-                                    self.complete_mailbox_path(
-                                        &data,
-                                        Some(value),
-                                        &mut suggestions,
-                                        |mbox| {
+                    }
+                    if let Some((lex_token, token)) = data.previous_match.take() {
+                        self.complete_lex_token(
+                            &data,
+                            lex_token,
+                            token,
+                            &mut suggestions,
+                            desc,
+                            // MatchError::Next has a trailing whitespace so trim it.
+                            input.trim_end(),
+                        );
+                    }
+                }
+                // Input can only be valid if extra stuff is added
+                Err(MatchError::Incomplete {
+                    lexeme: Ok(lex_token),
+                    token,
+                    data,
+                }) => match token {
+                    Token::Literal(lit) => {
+                        suggestions.insert(
+                            (
+                                format!("{}{}", input.strip_suffix(lex_token.raw()).unwrap(), lit),
+                                *desc,
+                            )
+                                .into(),
+                        );
+                    }
+                    Token::Alternatives(lits) => {
+                        for lit in *lits {
+                            if lit.starts_with(lex_token.value()) && *lit != lex_token.value() {
+                                suggestions.insert(
+                                    (
+                                        format!(
+                                            "{}{}",
+                                            input.strip_suffix(lex_token.raw()).unwrap(),
+                                            lit
+                                        ),
+                                        *desc,
+                                    )
+                                        .into(),
+                                );
+                            }
+                        }
+                    }
+                    Token::AccountName => {
+                        for acc in self.mailboxes.keys() {
+                            if acc.starts_with(lex_token.value()) && acc != lex_token.value() {
+                                suggestions.insert(
+                                    (
+                                        format!(
+                                            "{input}{acc}",
+                                            input = input.strip_suffix(lex_token.raw()).unwrap(),
+                                            acc = quote_if_necessary(acc)
+                                        ),
+                                        *desc,
+                                    )
+                                        .into(),
+                                );
+                            }
+                        }
+                    }
+                    Token::MailboxPath => {
+                        self.complete_mailbox_path(
+                            &data,
+                            Some(lex_token.value()),
+                            &mut suggestions,
+                            |mbox| {
+                                (
+                                    format!(
+                                        "{input}{mbox}",
+                                        input = input.strip_suffix(lex_token.raw()).unwrap(),
+                                        mbox = quote_if_necessary(mbox)
+                                    ),
+                                    *desc,
+                                )
+                                    .into()
+                            },
+                            Some(|mbox| {
+                                (
+                                    format!(
+                                        "{input}{mbox}",
+                                        input = input.strip_suffix(lex_token.raw()).unwrap(),
+                                        mbox = lex_token.incomplete(mbox)
+                                    ),
+                                    *desc,
+                                )
+                                    .into()
+                            }),
+                            false,
+                        );
+                    }
+                    _ => {}
+                },
+                // Same as before, except that lexeme is an unclosed quoted string
+                Err(MatchError::Incomplete {
+                    lexeme: Err(lex_token_err),
+                    token,
+                    data,
+                }) => {
+                    if let (Some(raw), Some(value)) = (lex_token_err.raw(), lex_token_err.value()) {
+                        match token {
+                            Token::Literal(lit) => {
+                                suggestions.insert(
+                                    (
+                                        format!(
+                                            "{input}{lit}",
+                                            input = input.strip_suffix(raw).unwrap(),
+                                        ),
+                                        *desc,
+                                    )
+                                        .into(),
+                                );
+                            }
+                            Token::Alternatives(lits) => {
+                                for lit in *lits {
+                                    if lit.starts_with(value) && *lit != value {
+                                        suggestions.insert(
                                             (
                                                 format!(
-                                                    "{input}{mbox}",
+                                                    "{input}{lit}",
                                                     input = input.strip_suffix(raw).unwrap(),
-                                                    mbox = quote(mbox)
                                                 ),
                                                 *desc,
                                             )
-                                                .into()
-                                        },
-                                        Some(|mbox| {
+                                                .into(),
+                                        );
+                                    }
+                                }
+                            }
+                            Token::NewFilepath | Token::Filepath => {
+                                suggestions.extend(
+                                    Path::new(value)
+                                        .complete(true, value.ends_with('/'))
+                                        .into_iter()
+                                        .take(self.maximum_filesystem_matches)
+                                        .map(|m| {
                                             (
                                                 format!(
-                                                    "{input}\"{mbox}",
+                                                    "{input}\"{value}{m}\"",
                                                     input = input.strip_suffix(raw).unwrap(),
+                                                    value = value,
+                                                    m = m.replace('"', "\\\""),
                                                 ),
                                                 *desc,
                                             )
                                                 .into()
                                         }),
-                                        false,
-                                    );
-                                }
-                                _ => {}
+                                );
                             }
+                            Token::AccountName => {
+                                for acc in self.mailboxes.keys() {
+                                    if acc.starts_with(value) && acc != value {
+                                        suggestions.insert(
+                                            (
+                                                format!(
+                                                    "{input}{acc}",
+                                                    input = input.strip_suffix(raw).unwrap(),
+                                                    acc = quote(acc)
+                                                ),
+                                                *desc,
+                                            )
+                                                .into(),
+                                        );
+                                    }
+                                }
+                            }
+                            Token::MailboxPath => {
+                                self.complete_mailbox_path(
+                                    &data,
+                                    Some(value),
+                                    &mut suggestions,
+                                    |mbox| {
+                                        (
+                                            format!(
+                                                "{input}{mbox}",
+                                                input = input.strip_suffix(raw).unwrap(),
+                                                mbox = quote(mbox)
+                                            ),
+                                            *desc,
+                                        )
+                                            .into()
+                                    },
+                                    Some(|mbox| {
+                                        (
+                                            format!(
+                                                "{input}\"{mbox}",
+                                                input = input.strip_suffix(raw).unwrap(),
+                                            ),
+                                            *desc,
+                                        )
+                                            .into()
+                                    }),
+                                    false,
+                                );
+                            }
+                            _ => {}
                         }
                     }
                 }

@@ -312,7 +312,7 @@ fn test_command_error_display() {
 #[test]
 fn test_command_completions_generate() {
     let mut gen = CompletionsGenerator::default();
-    assert_eq!(gen.generate(""), vec![]);
+    assert!(!gen.generate("").is_empty());
     assert_eq!(
         gen.generate("set se"),
         vec![AutoCompleteEntry {
