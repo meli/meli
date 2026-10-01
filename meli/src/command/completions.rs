@@ -155,6 +155,11 @@ impl CompletionsGenerator {
                         // Check previous token match for more suggestions before generating
                         // suggestions for after adding space
                         if let Some((lex_token, token)) = data.previous_match.take() {
+                            let skip_next_token = matches!(token, Token::Filepath)
+                                && !Path::new(lex_token.value())
+                                    .expand_tilde()
+                                    .try_exists()
+                                    .unwrap_or(false);
                             self.complete_lex_token(
                                 &data,
                                 lex_token,
@@ -163,6 +168,9 @@ impl CompletionsGenerator {
                                 desc,
                                 input,
                             );
+                            if skip_next_token {
+                                continue;
+                            }
                         }
                         match next_token {
                             Token::Literal(lit) => {
@@ -430,7 +438,7 @@ impl CompletionsGenerator {
                                         }
                                     }
                                 }
-                                Token::Filepath => {
+                                Token::NewFilepath | Token::Filepath => {
                                     suggestions.extend(
                                         Path::new(value)
                                             .complete(true, value.ends_with('/'))
@@ -517,7 +525,7 @@ impl CompletionsGenerator {
     ) {
         if !lex_token.is_whitespace() {
             match token {
-                Token::Filepath => {
+                Token::NewFilepath | Token::Filepath => {
                     suggestions.extend(
                         Path::new(lex_token.value())
                             .complete(true, lex_token.value().ends_with('/'))
@@ -807,7 +815,7 @@ impl<'a, 'b, 'c> Iterator for Matcher<'a, 'b, 'c> {
                     }
                 }
             }
-            Token::Filepath => {}
+            Token::NewFilepath | Token::Filepath => {}
             Token::Alternatives(lits) => {
                 if lits.iter().all(|lit| *lit != lexeme_value) {
                     self.pos = self.token_stream.tokens.len();

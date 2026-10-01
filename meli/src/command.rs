@@ -75,6 +75,7 @@ use Token::*;
 pub enum Token {
     Literal(&'static str),
     Filepath,
+    NewFilepath,
     Alternatives(&'static [&'static str]),
     AccountName,
     MailboxPath,
@@ -280,7 +281,7 @@ define_commands!([
     },
     {
         desc: "save-attachment INDEX PATH",
-        tokens: &[Literal("save-attachment"), AttachmentIndexValue, Filepath],
+        tokens: &[Literal("save-attachment"), AttachmentIndexValue, NewFilepath],
         parser: parser::save_attachment
     },
     {
@@ -295,17 +296,17 @@ define_commands!([
     },
     {
         desc: "export-mail PATH",
-        tokens: &[Literal("export-mail"), Filepath],
+        tokens: &[Literal("export-mail"), NewFilepath],
         parser: parser::export_mail
     },
     {
         desc: "export-thread PATH",
-        tokens: &[Literal("export-thread"), Filepath],
+        tokens: &[Literal("export-thread"), NewFilepath],
         parser: parser::export_thread
     },
     {
         desc: "export-thread-mbox PATH",
-        tokens: &[Literal("export-thread-mbox"), Filepath],
+        tokens: &[Literal("export-thread-mbox"), NewFilepath],
         parser: parser::export_thread_mbox
     },
     {
