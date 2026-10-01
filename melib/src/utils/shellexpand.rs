@@ -22,6 +22,7 @@
 //! A [`ShellExpandTrait`] to expand paths like a shell.
 
 use std::{
+    borrow::Cow,
     ffi::OsStr,
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
@@ -128,13 +129,14 @@ impl ShellExpandTrait for Path {
     }
 
     fn complete(&self, force: bool, treat_as_dir: bool) -> Completions {
+        let path = self.expand_tilde();
         #[cfg(not(target_os = "linux"))]
         {
-            impls::inner_complete_generic(self, force, treat_as_dir)
+            impls::inner_complete_generic(&path, force, treat_as_dir)
         }
         #[cfg(target_os = "linux")]
         {
-            impls::inner_complete_linux(self, force, treat_as_dir)
+            impls::inner_complete_linux(&path, force, treat_as_dir)
         }
     }
 }
