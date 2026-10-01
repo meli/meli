@@ -92,17 +92,15 @@ impl std::io::Write for Terminal {
                 | &[0x1b, 0x5b, b'H']
                 | &[0x1b, 0x5b, b'F'] => {
                     self.stdin.write_all(&[0x1b, 0x4f, buf[2]])?;
-                    Ok(buf.len())
                 }
                 _ => {
                     self.stdin.write_all(buf)?;
-                    Ok(buf.len())
                 }
             }
         } else {
             self.stdin.write_all(buf)?;
-            Ok(buf.len())
         }
+        Ok(buf.len())
     }
 
     fn flush(&mut self) -> std::io::Result<()> {

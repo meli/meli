@@ -416,15 +416,14 @@ impl<'a> PGPBackend for PGPBackendInstance<'a> {
             #[cfg(feature = "gpgme")]
             Self::GpgME { ctx } => {
                 ctx.set_auto_key_locate(val)?;
-                Ok(())
             }
             Self::CLI {
                 auto_key_locate, ..
             } => {
                 *auto_key_locate = val;
-                Ok(())
             }
         }
+        Ok(())
     }
 
     fn get_auto_key_locate(&self) -> Result<LocateKey> {
