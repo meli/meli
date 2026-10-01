@@ -1293,7 +1293,19 @@ impl State {
                     self.context.restore_input();
                     (result_cb.0)(result)
                 } else {
-                    (result_cb.0)(command.output().map_err(Into::into))
+                    (result_cb.0)(command.output().map_err(Into::into).and_then(|output| {
+                        let status = output.status;
+                        if status.success() {
+                            return Ok(output);
+                        }
+                        Err(Error::new(match status.code() {
+                            Some(code) => {
+                                format!("Process exited with status code: {code}")
+                            }
+                            None => "Process terminated by signal".to_string(),
+                        })
+                        .set_details(format!("Captured output was: {output:?}")))
+                    }))
                 };
                 if let Some(content) = content {
                     if content.is::<UIEvent>() {
