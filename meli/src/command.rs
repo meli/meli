@@ -87,6 +87,7 @@ pub enum Token {
     IndexValue,
 }
 
+#[rustfmt::skip]
 define_commands!([
     {
         desc: "set [plain/threaded/compact/conversations] changes the mail listing view",
@@ -103,6 +104,24 @@ define_commands!([
             Alternatives(&["seen", "unseen"])
         ],
         parser: parser::set
+    },
+    {
+        desc: "flag [set/unset/toggle] [passed/replied/seen/read/junk/trash/trashed/draft/flagged]",
+        tokens: &[
+            Literal("flag"),
+            Alternatives(&["set", "unset", "toggle"]),
+            Alternatives(&["passed",
+                "replied",
+                "seen",
+                "read",
+                "junk",
+                "trash",
+                "trashed",
+                "draft",
+                "flagged",
+            ])
+        ],
+        parser: parser::flag
     },
     {
         desc: "delete message",
@@ -193,6 +212,16 @@ define_commands!([
         desc: "printenv VAR",
         tokens: &[Literal("printenv"), QuotedStringValue],
         parser: parser::printenv
+    },
+    {
+        desc: "cd PATH, change process directory",
+        tokens: &[Literal("cd"), Filepath],
+        parser: parser::change_currentdir
+    },
+    {
+        desc: "pwd, print current directory",
+        tokens: &[Literal("pwd")],
+        parser: parser::currentdir
     },
     {
         desc: "mailto MAILTO_ADDRESS",
