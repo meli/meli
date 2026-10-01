@@ -56,6 +56,8 @@ impl IntoIterator for Completions {
 
 /// Utility trait to expand paths like an interactive shell does.
 pub trait ShellExpandTrait {
+    /// Expands `~` to the content of `${HOME}`.
+    fn expand_tilde(&self) -> Cow<'_, Path>;
     /// Expands `~` to the content of `${HOME}` and environment variables to
     /// their content.
     fn expand(&self) -> PathBuf;
@@ -72,6 +74,24 @@ pub trait ShellExpandTrait {
 }
 
 impl ShellExpandTrait for Path {
+    fn expand_tilde(&self) -> Cow<'_, Path> {
+        if self.starts_with(Self::new("~")) {
+            if let Ok(home_dir) = std::env::var("HOME") {
+                let mut path = PathBuf::from(home_dir);
+                path.extend(self.components().skip(1));
+                Cow::Owned(path)
+            } else {
+                // POSIX says that if HOME is unset, the results of tilde expansion is
+                // unspecified.
+                // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_06_01
+                // Abort expansion.
+                Cow::Borrowed(self)
+            }
+        } else {
+            Cow::Borrowed(self)
+        }
+    }
+
     fn expand(&self) -> PathBuf {
         // [ref:TODO]: ShellExpandTrait: add support for parameters in braces ${ }
         // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_06_02
