@@ -35,6 +35,7 @@ use crate::components::{Component, ComponentId};
 pub enum FlagAction {
     Set(Flag),
     Unset(Flag),
+    Toggle(Flag),
 }
 
 #[derive(Debug, Eq, PartialEq)]

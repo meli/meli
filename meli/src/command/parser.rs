@@ -225,7 +225,7 @@ pub fn parse_command(input: &str) -> Result<Action, CommandError> {
     .and_then(|(_, v)| v)
 }
 
-pub(super) fn flag<'a>(input: &'a str) -> IResult<&'a str, Result<Action, CommandError>> {
+pub(super) fn flag(input: &str) -> IResult<&str, Result<Action, CommandError>> {
     use melib::Flag;
 
     fn parse_flag(s: &str) -> Option<Flag> {
@@ -243,53 +243,42 @@ pub(super) fn flag<'a>(input: &'a str) -> IResult<&'a str, Result<Action, Comman
         }
     }
 
-    preceded(
-        tag("flag"),
-        alt((
-            |input: &'a str| -> IResult<&'a str, Result<Action, CommandError>> {
-                let mut check = arg_init! { min_arg:2, max_arg: 2, flag};
-                let (input, _) = tag("set")(input.trim())?;
-                arg_chk!(start check, input);
-                let (input, _) = is_a(" ")(input)?;
-                arg_chk!(inc check, input);
-                let flag_input = input;
-                let (input, flag) = quoted_argument(flag_input)?;
-                arg_chk!(finish check, input);
-                let (input, _) = eof(input)?;
-                let Some(flag) = parse_flag(flag.value()) else {
-                    return Ok((
-                        flag_input,
-                        Err(CommandError::BadValue {
-                            inner: format!("{flag} is not a valid flag name").into(),
-                            suggestions: Some(FLAG_SUGGESTIONS),
-                        }),
-                    ));
-                };
-                Ok((input, Ok(Listing(Flag(FlagAction::Set(flag))))))
-            },
-            |input: &'a str| -> IResult<&'a str, Result<Action, CommandError>> {
-                let mut check = arg_init! { min_arg:2, max_arg: 2, flag};
-                let (input, _) = tag("unset")(input.trim())?;
-                arg_chk!(start check, input);
-                let (input, _) = is_a(" ")(input)?;
-                arg_chk!(inc check, input);
-                let flag_input = input;
-                let (input, flag) = quoted_argument(flag_input)?;
-                arg_chk!(finish check, input);
-                let (input, _) = eof(input)?;
-                let Some(flag) = parse_flag(flag.value()) else {
-                    return Ok((
-                        flag_input,
-                        Err(CommandError::BadValue {
-                            inner: format!("{flag} is not a valid flag name").into(),
-                            suggestions: Some(FLAG_SUGGESTIONS),
-                        }),
-                    ));
-                };
-                Ok((input, Ok(Listing(Flag(FlagAction::Unset(flag))))))
-            },
-        )),
-    )(input.trim())
+    let mut check = arg_init! { min_arg:3, max_arg: 3, flag };
+    let (input, _) = tag("flag")(input)?;
+    arg_chk!(start check, input);
+    let (input, _) = is_a(" ")(input)?;
+    arg_chk!(inc check, input);
+    let (input, subcommand) = literal_argument(input)?;
+    arg_chk!(inc check, input);
+    let (input, _) = is_a(" ")(input)?;
+    let flag_input = input;
+    let (input, flag) = quoted_argument(flag_input)?;
+    arg_chk!(finish check, input);
+    let (input, _) = eof(input)?;
+    let Some(flag) = parse_flag(flag.value()) else {
+        return Ok((
+            flag_input,
+            Err(CommandError::BadValue {
+                inner: format!("{flag} is not a valid flag name").into(),
+                suggestions: Some(FLAG_SUGGESTIONS),
+            }),
+        ));
+    };
+    let flag_action = match subcommand {
+        "set" => FlagAction::Set(flag),
+        "unset" => FlagAction::Unset(flag),
+        "toggle" => FlagAction::Toggle(flag),
+        other => {
+            return Ok((
+                input,
+                Err(CommandError::BadValue {
+                    inner: other.to_string().into(),
+                    suggestions: Some(&["set", "unset", "toggle"]),
+                }),
+            ));
+        }
+    };
+    Ok((input, Ok(Listing(Flag(flag_action)))))
 }
 
 pub(super) fn set(input: &str) -> IResult<&str, Result<Action, CommandError>> {

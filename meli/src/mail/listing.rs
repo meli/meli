@@ -729,6 +729,70 @@ pub trait MailListingTrait: ListingTrait {
                         });
                     }
                 }
+                ListingAction::Flag(FlagAction::Toggle(flag)) => {
+                    let flag = *flag;
+                    let collection = account.collection.clone();
+                    let backend = account.backend.clone();
+                    let handle = account.main_loop_handler.job_executor.spawn(
+                        "toggle-flag".into(),
+                        Box::pin(async move {
+                            let envs: Vec<_> = envs_to_set
+                                .iter()
+                                .filter_map(|&env_hash| collection.get_env(env_hash))
+                                .map(|env| (env.hash(), env.flags()))
+                                .collect();
+                            if let Ok(set) = envs
+                                .iter()
+                                .filter_map(|(env_hash, flags)| {
+                                    if !flags.contains(flag) {
+                                        Some(*env_hash)
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect::<Vec<_>>()
+                                .try_into()
+                            {
+                                let fut = backend.lock().unwrap().set_flags(
+                                    set,
+                                    mailbox_hash,
+                                    vec![FlagOp::Set(flag)],
+                                )?;
+                                fut.await?;
+                            }
+                            if let Ok(unset) = envs
+                                .iter()
+                                .filter_map(|(env_hash, flags)| {
+                                    if flags.contains(flag) {
+                                        Some(*env_hash)
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect::<Vec<_>>()
+                                .try_into()
+                            {
+                                let fut = backend.lock().unwrap().set_flags(
+                                    unset,
+                                    mailbox_hash,
+                                    vec![FlagOp::UnSet(flag)],
+                                )?;
+                                fut.await?;
+                            }
+                            Ok(())
+                        }),
+                        IsAsync::Async,
+                    );
+                    account.insert_job(
+                        handle.job_id,
+                        JobRequest::Generic {
+                            name: format!("toggle {flag:?}").into(),
+                            handle,
+                            on_finish: None,
+                            log_level: LogLevel::INFO,
+                        },
+                    );
+                }
                 ListingAction::Tag(TagAction::Add(ref tag_str)) => {
                     if let Err(err) = account.set_flags(
                         env_hashes,
