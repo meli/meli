@@ -821,6 +821,19 @@ impl TryFrom<&[EnvelopeHash]> for EnvelopeHashBatch {
     }
 }
 
+impl TryFrom<Vec<EnvelopeHash>> for EnvelopeHashBatch {
+    type Error = ();
+
+    /// Convert a non-empty `EnvelopeHash` vector.
+    fn try_from(mut value: Vec<EnvelopeHash>) -> std::result::Result<Self, Self::Error> {
+        if value.is_empty() {
+            return Err(());
+        }
+        let first = value.remove(0);
+        Ok(Self { first, rest: value })
+    }
+}
+
 impl From<&EnvelopeHashBatch> for BTreeSet<EnvelopeHash> {
     fn from(val: &EnvelopeHashBatch) -> Self {
         val.iter().collect()
