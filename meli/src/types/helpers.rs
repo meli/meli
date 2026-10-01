@@ -239,12 +239,12 @@ pub fn sanitize_filename(value: &mut Cow<'_, str>) {
     sanitize_separator(value);
 
     replace_all!(regex!(r"(?m)[[:space:]]+"), "_");
-    replace_all!(regex!(r"(?m)[[:punct:]]+"), "-");
+    replace_all!(regex!(r#"(?m)[!"'/\\]+"#), "-");
     replace_all!(regex!(r"(?m)[[:cntrl:]]*"), "");
     replace_all!(regex!(r"(?m)[[:blank:]]*"), "");
-    replace_all!(regex!(r"^[[:punct:]]*"), "");
+    replace_all!(regex!(r#"^[!"'/\\]*"#), "");
     replace_all!(regex!(r"(?m)__+"), "_");
-    replace_all!(regex!(r"[[:punct:]]*$"), "");
+    replace_all!(regex!(r#"[!"'/\\]*$"#), "");
 }
 
 #[cfg(test)]
@@ -311,7 +311,7 @@ mod tests {
         assert_eq!(
             filename,
             Cow::<'static, str>::Owned(
-                "meli-meli-issues-712-comment-4492-git-meli-email-org".to_string()
+                "meli_meli_issues_712_comment_4492@git.meli-email.org".to_string()
             )
         );
         let mut filename = Cow::Borrowed(PATH_SEP_FILENAME);
@@ -327,7 +327,11 @@ mod tests {
         sanitize_filename(&mut filename);
         assert_eq!(
             filename,
-            Cow::<'static, str>::Owned("Re-Some-long-subject-User-Dot-Name-user1-example-com-Sent-from-my-bPad-2024-09-07-on-a-sunny-Saturday".to_string())
+            Cow::<'static, str>::Owned(
+                "Re:_Some_long_subject_-_-User_Dot._Name-_<user1@example.\
+                 com>_Sent_from_my_bPad_2024-09-07,_on_a_sunny_Saturday"
+                    .to_string()
+            )
         );
     }
 }
