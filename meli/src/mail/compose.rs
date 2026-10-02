@@ -1355,11 +1355,22 @@ impl Component for Composer {
                 })
                 .process_event(event, context)
                 {
+                    let button_result = widget.buttons.result();
                     if matches!(
-                        widget.buttons.result(),
+                        button_result,
                         Some(FormButtonAction::Cancel | FormButtonAction::Accept)
                     ) {
                         self.mode = ViewMode::Edit;
+                    } else if matches!(
+                        button_result,
+                        Some(FormButtonAction::Other("add-attachment"))
+                    ) {
+                        context.replies.push_back(UIEvent::CmdInput(Key::Paste(
+                            "add-attachment ".to_string(),
+                        )));
+                        context
+                            .replies
+                            .push_back(UIEvent::ChangeMode(UIMode::Command));
                     }
                     self.set_dirty(true);
                     return true;

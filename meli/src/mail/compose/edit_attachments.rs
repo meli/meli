@@ -58,8 +58,9 @@ impl EditAttachments {
             // cursor_left_shortcut
             context.settings.shortcuts.general.scroll_left.clone(),
         );
+        buttons.push(("Add".into(), FormButtonAction::Other("add-attachment")));
         buttons.set_focus(true);
-        buttons.set_cursor(1);
+        buttons.set_cursor(2);
         Self {
             account_hash,
             mode: EditAttachmentMode::Overview,
