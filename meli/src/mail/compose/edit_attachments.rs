@@ -120,6 +120,10 @@ impl EditAttachmentsRefMut<'_, '_> {
         );
 
         ret.add_button(("Reset".into(), FormButtonAction::Reset));
+        ret.add_button((
+            "Remove".into(),
+            FormButtonAction::Other("remove-attachment"),
+        ));
         ret.add_button(("Cancel".into(), FormButtonAction::Cancel));
         ret.push(("Filename".into(), filename.unwrap_or_default().to_string()));
         ret.push(("Mime type".into(), mime_type.to_string()));
@@ -250,6 +254,18 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
                         if let Some(inner) = self.new_edit_widget(no, context) {
                             self.inner.mode = EditAttachmentMode::Edit { inner, no };
                         }
+                    }
+                    Some(FormButtonAction::Other("remove-attachment")) => {
+                        let no = *no;
+                        self.inner.mode = EditAttachmentMode::Overview;
+                        context
+                            .replies
+                            .push_back(UIEvent::CmdInput(Key::Paste(format!(
+                                "remove-attachment {no}"
+                            ))));
+                        context
+                            .replies
+                            .push_back(UIEvent::ChangeMode(UIMode::Command));
                     }
                     Some(_) | None => {}
                 }
