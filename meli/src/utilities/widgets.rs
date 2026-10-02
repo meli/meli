@@ -893,13 +893,8 @@ impl Component for AutoComplete {
             .unwrap_or(0)
             + 1;
         let area = area.take_cols(width);
+        let theme_attr = crate::conf::value(context, "widgets.autocomplete");
         grid.clear_area(area, crate::conf::value(context, "theme_default"));
-        // [ref:hardcoded_color_value]
-        let theme_attr = ThemeAttribute {
-            fg: Color::Byte(23),
-            bg: Color::Byte(7),
-            attrs: Attr::DEFAULT,
-        };
         grid.change_theme(area, theme_attr);
         let mut rev_iter = self
             .entries
@@ -920,11 +915,7 @@ impl Component for AutoComplete {
                 grid.change_theme(area.nth_row(row), highlight);
                 highlight
             } else {
-                ThemeAttribute {
-                    fg: Color::Byte(23),
-                    bg: Color::Byte(7),
-                    attrs: Attr::DEFAULT,
-                }
+                theme_attr
             };
             let (x, _) = grid.write_string(
                 &e.entry,

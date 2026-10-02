@@ -277,6 +277,7 @@ pub const DEFAULT_KEYS: &[&str] = &[
     "widgets.form.field",
     "widgets.form.highlighted",
     "widgets.options.highlighted",
+    "widgets.autocomplete",
     "mail.sidebar",
     "mail.sidebar_divider",
     "mail.sidebar_account_name",
@@ -1171,6 +1172,7 @@ impl Default for Themes {
         add!("widgets.form.field");
         add!("widgets.form.highlighted", light = { bg: Color::Byte(246) }, dark = { bg: Color::Byte(246) });
         add!("widgets.options.highlighted", light = { bg: Color::Byte(8) }, dark = { bg: Color::Byte(8) });
+        add!("widgets.autocomplete", light = { fg: Color::Byte(23), bg: Color::Byte(7), attrs: Attr::DEFAULT }, dark = { fg: Color::Byte(23), bg: Color::Byte(7), attrs: Attr::DEFAULT });
 
         /* Mail Sidebar */
 
