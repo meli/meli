@@ -591,10 +591,11 @@ impl MailBackend for NntpType {
 
     fn submit(
         &mut self,
-        mut bytes: Vec<u8>,
+        bytes: Vec<u8>,
         mailbox_hash: Option<MailboxHash>,
         _flags: Option<Flag>,
     ) -> ResultFuture<()> {
+        let mut bytes = crate::utils::canonicalize_crlf(&bytes).into_owned();
         let is_online_fut = self.is_online()?;
         let connection = self.connection.clone();
         let timeout = self.server_conf.timeout;
@@ -607,7 +608,6 @@ impl MailBackend for NntpType {
                     Error::new("Server prohibits posting.").set_kind(ErrorKind::NotSupported)
                 );
             }
-            // [ref:TODO] normalize CRLF in `bytes`
             let mut res = String::with_capacity(8 * 1024);
             if let Some((mailbox_hash, path)) = mailbox_hash
                 .map_or_else(
