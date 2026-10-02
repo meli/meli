@@ -1134,10 +1134,6 @@ impl MailBackend for ImapType {
                         break;
                     }
                 }
-
-                /* [ref:FIXME]  Do not try to CREATE a sub-mailbox in a
-                 * mailbox that has the \Noinferiors flag
-                 * set. */
             }
 
             let mut response = Vec::with_capacity(8 * 1024);

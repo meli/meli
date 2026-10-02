@@ -336,7 +336,6 @@ pub fn fmt_mailbox(
     address_spec: &str,
     f: &mut std::fmt::Formatter,
 ) -> std::fmt::Result {
-    // [ref:FIXME]: do proper string escaping; we need a string escaping trait
     if let Some(display_name) = display_name {
         let display_name = display_name
             .strip_prefix('"')
