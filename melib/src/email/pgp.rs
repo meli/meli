@@ -21,10 +21,7 @@
 
 //! `OpenPGP` signatures and encryption.
 
-use std::{
-    borrow::Cow,
-    hash::{Hash, Hasher},
-};
+use std::hash::{Hash, Hasher};
 
 use futures::future::BoxFuture;
 use serde::{
@@ -161,31 +158,6 @@ impl std::fmt::Display for LocateKey {
     }
 }
 
-/// Convert raw attachment to the form needed for signature verification ([RFC3156](https://tools.ietf.org/html/rfc3156))
-///
-/// ## RFC3156
-///
-/// ```text
-/// Upon receipt of a signed message, an application MUST:
-///
-///   (1)   Convert line endings to the canonical <CR><LF> sequence before
-///         the signature can be verified.  This is necessary since the
-///         local MTA may have converted to a local end of line convention.
-///   (2)   Pass both the signed data and its associated content headers
-///         along with the OpenPGP signature to the signature verification
-///         service.
-/// ```
-pub fn convert_attachment_to_rfc_spec(input: &'_ [u8]) -> Cow<'_, [u8]> {
-    if input.is_empty() {
-        return Cow::Borrowed(input);
-    }
-    let re = regex::bytes::Regex::new(r"[^\r]\n").unwrap();
-    if re.find_iter(input).count() > 0 {
-        return Cow::Owned(input.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"));
-    }
-    Cow::Borrowed(input)
-}
-
 pub enum UnverifiedSignature<'a> {
     Detached {
         signed_part: Vec<u8>,
@@ -231,13 +203,20 @@ pub fn extract_unverified_signature(a: &'_ Attachment) -> Result<UnverifiedSigna
                 .set_kind(ErrorKind::ValueError));
             }
 
+            // RFC3156 says:
+            //
+            // Upon receipt of a signed message, an application MUST:
+            //
+            // Convert line endings to the canonical <CR><LF> sequence before the signature can be
+            // verified. This is necessary since the local MTA may have converted to a local end
+            // of line convention.
             let signed_part: Vec<u8> = if let Some(v) = parts
                 .iter()
                 .find(|p| {
                     p.content_type != ContentType::PGPSignature
                         && p.content_type != ContentType::CMSSignature
                 })
-                .map(|a| convert_attachment_to_rfc_spec(a.raw()))
+                .map(|a| crate::utils::canonicalize_crlf(a.raw()))
             {
                 v.into_owned()
             } else {

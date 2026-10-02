@@ -21,6 +21,10 @@
 
 //! Utility modules for general use.
 
+use std::borrow::Cow;
+
+use crate::parser::BytesExt;
+
 pub mod connections;
 pub mod datetime;
 pub mod fnmatch;
@@ -340,4 +344,16 @@ macro_rules! identify {
         let _: ::core::marker::PhantomData<Self> = __debugify();
         stringify!($f$($t)*)
     }};
+}
+
+/// Canonicalize line endings to `<CR><LF` (`\r\n`).
+pub fn canonicalize_crlf(input: &'_ [u8]) -> Cow<'_, [u8]> {
+    if input.is_empty() {
+        return Cow::Borrowed(input);
+    }
+    let re = regex::bytes::Regex::new(r"[^\r]\n").unwrap();
+    if re.find_iter(input).count() > 0 {
+        return Cow::Owned(input.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"));
+    }
+    Cow::Borrowed(input)
 }
