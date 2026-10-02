@@ -175,14 +175,11 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
                     None,
                 );
                 for (i, a) in self.draft.attachments().iter().enumerate() {
-                    let bg = if let EditAttachmentCursor::AttachmentNo(u) = self.inner.cursor {
-                        if u == i {
-                            crate::conf::value(context, "highlight").bg
-                        } else {
-                            theme_default.bg
-                        }
+                    let theme_attr = if matches!(self.inner.cursor, EditAttachmentCursor::AttachmentNo(u) if u == i)
+                    {
+                        crate::conf::value(context, "highlight")
                     } else {
-                        theme_default.bg
+                        theme_default
                     };
                     grid.write_string(
                         &if let Some(name) = a.content_type().name() {
@@ -201,9 +198,9 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
                                 melib::BytesDisplay(a.raw.len())
                             )
                         },
-                        theme_default.fg,
-                        bg,
-                        theme_default.attrs,
+                        theme_attr.fg,
+                        theme_attr.bg,
+                        theme_attr.attrs,
                         area.skip(2, 2 + i),
                         None,
                         None,
