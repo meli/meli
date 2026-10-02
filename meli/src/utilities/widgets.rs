@@ -727,15 +727,16 @@ where
             let mut len = 0;
             for (i, k) in self.layout.iter().enumerate() {
                 let cur_len = k.len();
+                let theme_attr = if i == self.cursor && self.focus {
+                    crate::conf::value(context, "highlight")
+                } else {
+                    theme_default
+                };
                 grid.write_string(
                     k.as_ref(),
-                    theme_default.fg,
-                    if i == self.cursor && self.focus {
-                        crate::conf::value(context, "highlight").bg
-                    } else {
-                        theme_default.bg
-                    },
-                    Attr::BOLD,
+                    theme_attr.fg,
+                    theme_attr.bg,
+                    theme_attr.attrs | Attr::BOLD,
                     area.skip_cols(len),
                     None,
                     None,
