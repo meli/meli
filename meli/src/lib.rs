@@ -73,7 +73,6 @@
  * annotation:
  *
  * - tags from melib/src/lib.rs.
- * - [tag:hardcoded_color_value] Replace hardcoded color values with user configurable ones.
  */
 
 //!
