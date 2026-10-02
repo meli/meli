@@ -158,6 +158,8 @@ pub enum ToolOpt {
     #[cfg(feature = "http")]
     /// Interact with a public-inbox server (e.g. lore.kernel.org)
     PublicInbox(PublicInboxOpt),
+    /// List, apply or revert migrations
+    Migration(MigrationOpt),
 }
 
 #[derive(Debug, StructOpt)]
@@ -178,6 +180,28 @@ pub enum PublicInboxOpt {
         output: Option<PathOrStdio>,
         #[structopt(value_name = "MESSAGE_ID")]
         message_id: String,
+    },
+}
+
+#[derive(Debug, StructOpt)]
+pub enum MigrationOpt {
+    /// List all available migrations
+    List,
+    /// Apply a specific migration
+    Apply {
+        #[structopt(short, long)]
+        dry_run: bool,
+        #[structopt(short, long)]
+        verbose: bool,
+        migration: String,
+    },
+    /// Revert a specific migration
+    Revert {
+        #[structopt(short, long)]
+        dry_run: bool,
+        #[structopt(short, long)]
+        verbose: bool,
+        migration: String,
     },
 }
 
