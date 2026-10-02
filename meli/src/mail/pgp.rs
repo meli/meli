@@ -219,7 +219,8 @@ pub fn sign_filter(
                 ));
             }
             let a: Attachment = a.into();
-            let signed_data = melib_pgp::convert_attachment_to_rfc_spec(a.into_raw().as_bytes());
+            let raw = a.into_raw();
+            let signed_data = melib_pgp::convert_attachment_to_rfc_spec(raw.as_bytes());
             let (sig_metadata, sig_bytes) = backend.sign(sign_keys, &signed_data, false)?.await?;
             let sig_attachment =
                 Attachment::new(ContentType::PGPSignature, Default::default(), sig_bytes);
@@ -311,7 +312,8 @@ pub fn encrypt_filter(
             }
             let a: Attachment = if let Some(sign_keys) = sign_keys {
                 let a: Attachment = a.into();
-                let data = melib_pgp::convert_attachment_to_rfc_spec(a.into_raw().as_bytes());
+                let raw = a.into_raw();
+                let data = melib_pgp::convert_attachment_to_rfc_spec(raw.as_bytes());
                 let (sig_metadata, sig_bytes) = backend.sign(sign_keys, &data, false)?.await?;
                 let sig_attachment =
                     Attachment::new(ContentType::PGPSignature, Default::default(), sig_bytes);
