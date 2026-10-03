@@ -453,7 +453,7 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync, F: FormWidgetL
                     v.draw_cursor(
                         grid,
                         area.nth_row(i).skip_cols(self.field_name_max_length + 2),
-                        area.nth_row(i + 1)
+                        area.skip_rows(i + 1)
                             .skip_cols(self.field_name_max_length + 2),
                         context,
                     );
