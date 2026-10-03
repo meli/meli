@@ -146,9 +146,6 @@ impl TextField {
             highlight_attr.fg,
             highlight_attr.bg,
         );
-        if self.inner.grapheme_len() <= 2 {
-            return;
-        }
         if let Some((autocomplete_fn, autocomplete)) = self.autocomplete.as_mut() {
             let entries = autocomplete_fn(context, self.inner.as_str());
             autocomplete.set_suggestions(entries);
