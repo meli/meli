@@ -2819,8 +2819,7 @@ impl Component for Listing {
                 return true;
             }
             UIEvent::Action(Action::Tab(ManageMailboxes)) => {
-                let account_pos = self.cursor_pos.account;
-                let mgr = MailboxManager::new(context, account_pos);
+                let mgr = MailboxManager::new(context);
                 context
                     .replies
                     .push_back(UIEvent::Action(Tab(New(Some(Box::new(mgr))))));

@@ -1,25 +1,33 @@
-/*
- * meli
- *
- * Copyright 2019 Manos Pitsidianakis
- *
- * This file is part of meli.
- *
- * meli is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * meli is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with meli. If not, see <http://www.gnu.org/licenses/>.
- */
+//
+// meli
+//
+// Copyright 2019, 2026  Manos Pitsidianakis
+//
+// This file is part of meli.
+//
+// meli is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// meli is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with meli. If not, see <http://www.gnu.org/licenses/>.
+//
+// SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
-use crate::components::prelude::*;
+use melib::error::Result;
+
+use crate::{
+    components::prelude::*,
+    utilities::listings::{AccountEntryTrait, List},
+};
+
+pub type MailboxManager = List<AccountMailboxManager>;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum MailboxAction {
@@ -47,7 +55,7 @@ enum Column {
 }
 
 const fn _assert_len() {
-    if MailboxManager::HEADERS.len() != Column::_3 as usize + 1 {
+    if AccountMailboxManager::HEADERS.len() != Column::_3 as usize + 1 {
         panic!("MailboxManager::HEADERS length changed, please update Column enum accordingly.");
     }
 }
@@ -55,7 +63,7 @@ const fn _assert_len() {
 const _: () = _assert_len();
 
 #[derive(Debug)]
-pub struct MailboxManager {
+pub struct AccountMailboxManager {
     cursor_pos: usize,
     new_cursor_pos: usize,
     account_pos: usize,
@@ -78,13 +86,59 @@ pub struct MailboxManager {
     id: ComponentId,
 }
 
-impl std::fmt::Display for MailboxManager {
+impl AccountEntryTrait for AccountMailboxManager {
+    const DESCRIPTION: &str = "mailboxes";
+    type Entry = MailboxEntry;
+
+    fn account_hash(&self) -> &AccountHash {
+        &self.account_hash
+    }
+
+    fn new(
+        _parent: ComponentId,
+        id: ComponentId,
+        account_hash: AccountHash,
+        context: &mut Context,
+    ) -> Result<Self> {
+        let account_pos = context.accounts.get_index_of(&account_hash).unwrap();
+        let theme_default = crate::conf::value(context, "theme_default");
+        let mut data_columns = DataColumns::new(theme_default);
+        data_columns.theme_config.set_single_theme(theme_default);
+        Ok(Self {
+            cursor_pos: 0,
+            new_cursor_pos: 0,
+            account_hash,
+            mode: ViewMode::default(),
+            entries: IndexMap::default(),
+            length: 0,
+            account_pos,
+            data_columns,
+            sort_col: Column::_1,
+            sort_order: SortOrder::Asc,
+            min_width: [0; 4],
+            theme_default,
+            highlight_theme: crate::conf::value(context, "highlight"),
+            initialized: false,
+            dirty: true,
+            movement: None,
+            id,
+        })
+    }
+
+    fn no_of_entries(&self) -> usize {
+        0
+    }
+
+    fn draw_menu_entry(&self, _: usize, _: bool, _: &mut CellBuffer, _: Area, _: &mut Context) {}
+}
+
+impl std::fmt::Display for AccountMailboxManager {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "mailboxes")
     }
 }
 
-impl MailboxManager {
+impl AccountMailboxManager {
     const HEADERS: [&'static str; 4] = ["name", "path", "size", "subscribed"];
 
     pub fn new(context: &Context, account_pos: usize) -> Self {
@@ -395,7 +449,7 @@ impl MailboxManager {
     }
 }
 
-impl Component for MailboxManager {
+impl Component for AccountMailboxManager {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if !self.is_dirty() {
             return;
