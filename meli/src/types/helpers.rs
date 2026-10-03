@@ -99,20 +99,39 @@ impl File {
         loop {
             let mut dir = std::env::temp_dir();
             let path = if let Some(ref mut p) = path {
-                if p.try_exists().unwrap_or_default() && p.is_dir() {
+                if p.is_dir() {
                     if let Some(filename) = filename {
                         p.push(filename);
+                        let parts = p
+                            .extension()
+                            .and_then(|ext| Some((p.file_stem()?, ext)))
+                            .map(|(stem, ext)| {
+                                (stem.to_string_lossy().into_owned(), ext.to_os_string())
+                            });
                         'exists: while p.try_exists().unwrap_or_default() {
                             for i in 0..u8::MAX {
                                 p.pop();
-                                p.push(format!("{filename}_{i}"));
-                                if p.try_exists().unwrap_or_default() {
+                                if let Some((ref stem, ref ext)) = parts {
+                                    p.push(format!("{stem}_{i}"));
+                                    p.set_extension(ext);
+                                } else {
+                                    p.push(format!("{filename}_{i}"));
+                                }
+                                if !p.try_exists().unwrap_or_default() {
                                     break 'exists;
                                 }
                             }
-                            while p.try_exists().unwrap_or_default() {
+                            loop {
                                 p.pop();
-                                p.push(format!("{filename}_{}", Uuid::new_v4().as_simple()));
+                                if let Some((ref stem, ref ext)) = parts {
+                                    p.push(format!("{stem}_{}", Uuid::new_v4().as_simple()));
+                                    p.set_extension(ext);
+                                } else {
+                                    p.push(format!("{filename}_{}", Uuid::new_v4().as_simple()));
+                                }
+                                if !p.try_exists().unwrap_or_default() {
+                                    break;
+                                }
                             }
                         }
                     } else {
@@ -126,17 +145,36 @@ impl File {
                 std::fs::DirBuilder::new().recursive(true).create(&dir)?;
                 if let Some(filename) = filename {
                     dir.push(filename);
+                    let parts = dir
+                        .extension()
+                        .and_then(|ext| Some((dir.file_stem()?, ext)))
+                        .map(|(stem, ext)| {
+                            (stem.to_string_lossy().into_owned(), ext.to_os_string())
+                        });
                     'exists: while dir.try_exists().unwrap_or_default() {
                         for i in 0..u8::MAX {
                             dir.pop();
-                            dir.push(format!("{filename}_{i}"));
-                            if dir.try_exists().unwrap_or_default() {
+                            if let Some((ref stem, ref ext)) = parts {
+                                dir.push(format!("{stem}_{i}"));
+                                dir.set_extension(ext);
+                            } else {
+                                dir.push(format!("{filename}_{i}"));
+                            }
+                            if !dir.try_exists().unwrap_or_default() {
                                 break 'exists;
                             }
                         }
-                        while dir.try_exists().unwrap_or_default() {
+                        loop {
                             dir.pop();
-                            dir.push(format!("{filename}_{}", Uuid::new_v4().as_simple()));
+                            if let Some((ref stem, ref ext)) = parts {
+                                dir.push(format!("{stem}_{}", Uuid::new_v4().as_simple()));
+                                dir.set_extension(ext);
+                            } else {
+                                dir.push(format!("{filename}_{}", Uuid::new_v4().as_simple()));
+                            }
+                            if !dir.try_exists().unwrap_or_default() {
+                                break;
+                            }
                         }
                     }
                 } else {
@@ -333,5 +371,52 @@ mod tests {
                     .to_string()
             )
         );
+    }
+
+    #[test]
+    fn test_file_alreadyexists() {
+        const S: &str = "hello world";
+        let tempdir = tempfile::tempdir().unwrap();
+
+        let initial = File::create_temp_file(
+            S.as_bytes(),
+            Some("hello.txt"),
+            Some(&mut tempdir.path().to_path_buf()),
+            None,
+            true,
+        )
+        .unwrap();
+        assert_eq!(&initial.read_to_string().unwrap(), S);
+        assert!(tempdir.path().try_exists().unwrap());
+        let mut new_path = tempdir.path().to_path_buf();
+        let new = File::create_temp_file(
+            S.as_bytes(),
+            Some("hello.txt"),
+            Some(&mut new_path),
+            None,
+            true,
+        )
+        .unwrap();
+        assert_eq!(&new.read_to_string().unwrap(), S);
+        assert_eq!(&new.path(), &new_path);
+        let ext = new_path.extension().unwrap().to_string_lossy().into_owned();
+        let stem = new_path.file_stem().unwrap().to_string_lossy().into_owned();
+        assert_eq!(stem, "hello_0");
+        assert_eq!(ext, "txt");
+        let mut new_path = tempdir.path().to_path_buf();
+        let _new_2 = File::create_temp_file(
+            S.as_bytes(),
+            Some("hello.txt"),
+            Some(&mut new_path),
+            None,
+            true,
+        )
+        .unwrap();
+        let ext = new_path.extension().unwrap().to_string_lossy().into_owned();
+        let stem = new_path.file_stem().unwrap().to_string_lossy().into_owned();
+        assert_eq!(stem, "hello_1");
+        assert_eq!(ext, "txt");
+
+        _ = tempdir.close();
     }
 }
