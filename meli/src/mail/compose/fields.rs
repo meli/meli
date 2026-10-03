@@ -22,11 +22,7 @@
 
 use std::sync::Arc;
 
-use melib::{
-    parser::BytesExt,
-    text::{TextProcessing, Truncate},
-    AccountHash, Contacts,
-};
+use melib::{parser::BytesExt, text::Truncate, AccountHash, Contacts};
 
 use crate::{account_settings, utilities::AutoCompleteFn, AutoCompleteEntry, ValidateFn};
 
@@ -99,18 +95,16 @@ pub(super) fn generic_address_complete_fn(account_hash: AccountHash) -> AutoComp
             rest = &input[1..];
         }
         let rest = String::from_utf8_lossy(rest.ltrim());
-        if rest.grapheme_len() <= 2 {
-            return vec![];
-        }
         let book: &Contacts = &c.accounts[&account_hash].contacts;
         let results = book.search(&rest);
         let stripped_term = term.strip_suffix(rest.as_ref()).unwrap();
+        let pad = if term.ends_with(",") { " " } else { "" };
         results
             .into_iter()
             .map(|card| card.as_address())
             .filter(|addr| !valid.contains(addr))
             .map(|addr| addr.to_string())
-            .map(|r| format!("{stripped_term}{r}"))
+            .map(|r| format!("{stripped_term}{pad}{r}"))
             .filter(|c| c != term)
             .map(AutoCompleteEntry::from)
             .collect::<Vec<AutoCompleteEntry>>()
@@ -202,10 +196,36 @@ mod tests {
                 description: "".into()
             }]
         );
-        // Ensure a full match and adding comma, whitespace are not completed
+        // Ensure a full match is not completed until you add a comma
         assert_eq!(complete_fn(&context, "foo@example.com"), vec![]);
-        assert_eq!(complete_fn(&context, "foo@example.com,"), vec![]);
-        assert_eq!(complete_fn(&context, "foo@example.com, "), vec![]);
+        assert_eq!(
+            complete_fn(&context, "foo@example.com,"),
+            vec![
+                AutoCompleteEntry {
+                    entry: "foo@example.com, Bar Jr <bar@example.com>".into(),
+                    description: "".into()
+                },
+                AutoCompleteEntry {
+                    entry: "foo@example.com, \"Nightmare D. Macdonald\" <nightd@example.com>"
+                        .into(),
+                    description: "".into()
+                }
+            ]
+        );
+        assert_eq!(
+            complete_fn(&context, "foo@example.com, "),
+            vec![
+                AutoCompleteEntry {
+                    entry: "foo@example.com, Bar Jr <bar@example.com>".into(),
+                    description: "".into()
+                },
+                AutoCompleteEntry {
+                    entry: "foo@example.com, \"Nightmare D. Macdonald\" <nightd@example.com>"
+                        .into(),
+                    description: "".into()
+                }
+            ]
+        );
 
         // Ensure followup completion is properly quoted if necessary
         assert_eq!(
