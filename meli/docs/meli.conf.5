@@ -309,7 +309,21 @@ They are parsed and imported read-only.
 .Pq Em optional
 Query passed to
 .Qq Li notmuch address
-to import contacts into meli. Contacts are parsed and imported read-only.
+to import contacts into meli.
+Contacts are parsed and imported read-only.
+This can be used with any backend, not just notmuch, since it only relies on the existance of the
+.Xr notmuch 1
+binary.
+.sp
+Example:
+.Bd -literal
+notmuch_address_book_query = "date:1Y.. AND from:you@example.com"
+.Ed
+This will run the command
+.Bd -literal
+notmuch address --format=json --output=recipients date:1Y.. AND from:you@example.com
+.Ed
+and parse its json output.
 .It Ic mailboxes Ar mailbox
 .Pq Em optional
 Configuration for each mailbox.

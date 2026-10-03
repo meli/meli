@@ -19,23 +19,27 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-pub mod jscontact;
-pub mod mutt;
-pub mod notmuchcontact;
-pub mod vcard;
-
-mod card;
 use std::{
     hash::{Hash, Hasher},
     ops::Deref,
     path::Path,
 };
 
-pub use card::*;
 use indexmap::IndexMap;
 use uuid::Uuid;
 
-use crate::utils::{parsec::Parser, shellexpand::ShellExpandTrait};
+use crate::{
+    text::Truncate,
+    utils::{parsec::Parser, shellexpand::ShellExpandTrait},
+};
+
+pub mod jscontact;
+pub mod mutt;
+pub mod notmuchcontact;
+pub mod vcard;
+
+mod card;
+pub use card::*;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(from = "String")]
@@ -150,11 +154,14 @@ impl Contacts {
         use std::process::Command;
         match s.notmuch_address_book_query() {
             Ok(None) => {}
-            Ok(Some(notmuch_addressbook_query)) => {
+            Ok(Some(notmuch_address_book_query)) => {
                 match Command::new("sh")
                     .args([
                         "-c",
-                        &format!("notmuch address --format=json {notmuch_addressbook_query}"),
+                        &format!(
+                            "notmuch address --format=json --output=recipients \
+                             {notmuch_address_book_query}",
+                        ),
                     ])
                     .stdin(std::process::Stdio::null())
                     .stdout(std::process::Stdio::piped())
@@ -176,18 +183,16 @@ impl Contacts {
                                         Err(err) => {
                                             log::warn!(
                                                 "Unable to parse notmuch contact result into \
-                                                 cards: {} {}",
-                                                notmuch_address_out,
-                                                err
+                                                 cards: {} {err}",
+                                                notmuch_address_out.trim_at_boundary(100),
                                             );
                                         }
                                     }
                                 }
                                 Err(err) => {
                                     log::warn!(
-                                        "Unable to read from notmuch address query: {} {}",
-                                        notmuch_addressbook_query,
-                                        err
+                                        "Unable to read from notmuch address query: \
+                                         {notmuch_address_book_query}: {err}",
                                     );
                                 }
                             }
@@ -200,7 +205,7 @@ impl Contacts {
                             );
                         }
                     }
-                    Err(e) => log::warn!("Unable to run notmuch address command: {}", e),
+                    Err(err) => log::warn!("Unable to run notmuch address command: {err}"),
                 }
             }
             Err(err) => {
