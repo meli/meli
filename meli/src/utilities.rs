@@ -48,6 +48,8 @@ pub use self::dialogs::*;
 mod tables;
 pub use self::tables::*;
 
+pub mod listings;
+
 #[cfg(test)]
 pub mod tests;
 
