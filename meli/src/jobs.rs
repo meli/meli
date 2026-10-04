@@ -51,6 +51,16 @@ pub enum IsAsync {
     Blocking,
 }
 
+impl From<bool> for IsAsync {
+    fn from(b: bool) -> Self {
+        if b {
+            Self::Async
+        } else {
+            Self::Blocking
+        }
+    }
+}
+
 type AsyncTask = async_task::Runnable;
 
 #[derive(Clone, Debug)]
