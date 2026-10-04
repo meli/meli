@@ -42,14 +42,14 @@ pub struct CardDeserializer;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct JSContact<T: JSContactVersion>(
     json_types::JsonCardValue,
-    std::marker::PhantomData<*const T>,
+    std::marker::PhantomData<fn() -> T>,
 );
 
 impl<V: JSContactVersion> JSContact<V> {
     pub fn new_v1() -> JSContact<impl JSContactVersion> {
         JSContact(
             json_types::JsonCardValue::default(),
-            std::marker::PhantomData::<*const JSContactVersion1>,
+            std::marker::PhantomData::<fn() -> JSContactVersion1>,
         )
     }
 }
@@ -84,7 +84,7 @@ impl<V: JSContactVersion> TryInto<Card> for JSContact<V> {
 
 impl From<json_types::JsonCardValue> for JSContact<JSContactVersion1> {
     fn from(val: json_types::JsonCardValue) -> Self {
-        Self(val, std::marker::PhantomData::<*const JSContactVersion1>)
+        Self(val, std::marker::PhantomData::<fn() -> JSContactVersion1>)
     }
 }
 
