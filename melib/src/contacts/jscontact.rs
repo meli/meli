@@ -88,6 +88,25 @@ impl From<json_types::JsonCardValue> for JSContact<JSContactVersion1> {
     }
 }
 
+impl serde::Serialize for JSContact<JSContactVersion1> {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for JSContact<JSContactVersion1> {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = <json_types::JsonCardValue>::deserialize(deserializer)?;
+        Ok(Self(s, std::marker::PhantomData))
+    }
+}
+
 pub mod json_types {
     use indexmap::IndexMap;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
