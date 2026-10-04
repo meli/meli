@@ -20,6 +20,7 @@
  */
 
 use std::{
+    borrow::Borrow,
     hash::{Hash, Hasher},
     ops::Deref,
     path::Path,
@@ -35,6 +36,7 @@ use crate::{
     utils::{parsec::Parser, shellexpand::ShellExpandTrait},
 };
 
+pub mod backend;
 mod card;
 pub mod jscontact;
 pub mod mutt;
@@ -83,7 +85,7 @@ impl From<String> for CardId {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-pub struct AddressBookName(Arc<str>);
+pub struct AddressBookName(pub Arc<str>);
 
 impl Deref for AddressBookName {
     type Target = str;
@@ -93,9 +95,27 @@ impl Deref for AddressBookName {
     }
 }
 
+impl From<&str> for AddressBookName {
+    fn from(s: &str) -> Self {
+        Self(s.to_string().into_boxed_str().into())
+    }
+}
+
+impl From<Arc<str>> for AddressBookName {
+    fn from(inner: Arc<str>) -> Self {
+        Self(inner)
+    }
+}
+
 impl std::fmt::Display for AddressBookName {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         self.0.fmt(fmt)
+    }
+}
+
+impl Borrow<str> for AddressBookName {
+    fn borrow(&self) -> &str {
+        &self.0
     }
 }
 
@@ -108,9 +128,9 @@ pub struct AddressBook {
 }
 
 impl AddressBook {
-    pub fn new(name: Arc<str>, format: Arc<str>, read_only: bool) -> Self {
+    pub fn new(name: AddressBookName, format: Arc<str>, read_only: bool) -> Self {
         Self {
-            name: AddressBookName(name),
+            name,
             format,
             read_only,
             cards: IndexMap::default(),
@@ -176,7 +196,7 @@ impl Contacts {
                     }) {
                     Ok(cards) => {
                         let mut book = AddressBook::new(
-                            mutt_alias_file.into(),
+                            mutt_alias_file.as_ref().into(),
                             "mutt_alias_file".into(),
                             true,
                         );
@@ -204,7 +224,8 @@ impl Contacts {
                 let expanded_path = Path::new(vcard_path.as_ref()).expand();
                 match vcard::load_cards(&expanded_path) {
                     Ok(cards) => {
-                        let mut book = AddressBook::new(vcard_path.into(), "vcard".into(), true);
+                        let mut book =
+                            AddressBook::new(vcard_path.as_ref().into(), "vcard".into(), true);
                         for c in cards {
                             book.add_card(c);
                         }
@@ -251,7 +272,7 @@ impl Contacts {
                                     ) {
                                         Ok(contacts) => {
                                             let mut book = AddressBook::new(
-                                                notmuch_address_book_query.into(),
+                                                notmuch_address_book_query.as_ref().into(),
                                                 "notmuch_address_book_query".into(),
                                                 true,
                                             );
