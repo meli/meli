@@ -93,6 +93,7 @@ use backend_mailbox::JmapMailbox;
 pub mod argument;
 pub mod capabilities;
 pub mod comparator;
+pub mod contacts;
 pub mod email;
 pub mod eventsource;
 pub mod filters;
@@ -103,7 +104,9 @@ pub mod thread;
 pub mod url_template;
 
 use argument::Argument;
-use capabilities::{JmapCoreCapability, JmapMailCapability, JmapSubmissionCapability};
+use capabilities::{
+    JmapContactsCapability, JmapCoreCapability, JmapMailCapability, JmapSubmissionCapability,
+};
 use filters::Filter;
 
 #[cfg(test)]
@@ -348,15 +351,18 @@ impl MailBackend for JmapType {
             ..crate::backends::EMPTY_MAIL_BACKEND_CAPABILITIES
         };
         let mut supports_submission = false;
+        let mut supports_contacts = false;
         let mut extensions = None;
         if let Ok(core_capabilities) = self.store.core_capabilities.lock() {
             let mut caps = vec![];
             supports_submission = core_capabilities.contains_key(JmapSubmissionCapability::uri());
+            supports_contacts = core_capabilities.contains_key(JmapContactsCapability::uri());
             for k in core_capabilities.keys() {
                 if [
                     JmapCoreCapability::uri(),
                     JmapMailCapability::uri(),
                     JmapSubmissionCapability::uri(),
+                    JmapContactsCapability::uri(),
                 ]
                 .contains(&k.as_str())
                 {
@@ -386,6 +392,7 @@ impl MailBackend for JmapType {
 
         MailBackendCapabilities {
             supports_submission,
+            supports_contacts,
             metadata,
             extensions,
             ..CAPABILITIES
@@ -1542,6 +1549,39 @@ impl MailBackend for JmapType {
                 };
             }
             Ok(())
+        }))
+    }
+
+    fn contact_backend(
+        &mut self,
+    ) -> ResultFuture<Box<dyn crate::contacts::backend::ContactBackend>> {
+        let server_conf = self.server_conf.clone();
+        let store = self.store.clone();
+        let connection = self.connection.clone();
+        Ok(Box::pin(async move {
+            {
+                let mut conn = timeout(server_conf.timeout, connection.lock()).await?;
+                let client = conn.client().await?;
+                client.connect().await?;
+            }
+            let caps = {
+                let core_capabilities = store.core_capabilities.lock().unwrap();
+                let Some(caps) = core_capabilities.get(JmapContactsCapability::uri()) else {
+                    return Err(Error::new(
+                        "Server does not support JSON Meta Application Protocol (JMAP) for \
+                         Contacts",
+                    )
+                    .set_kind(ErrorKind::NotSupported));
+                };
+                caps.clone()
+            };
+            Ok(Box::new(contacts::JmapContacts::new(
+                caps,
+                server_conf,
+                connection,
+                store,
+            ))
+                as Box<dyn crate::contacts::backend::ContactBackend>)
         }))
     }
 }

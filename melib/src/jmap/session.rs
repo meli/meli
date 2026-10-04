@@ -26,7 +26,7 @@ use serde_json::Value;
 use url::Url;
 
 use crate::jmap::{
-    capabilities::JmapMailCapability,
+    capabilities::{JmapContactsCapability, JmapMailCapability},
     identity::Identity,
     methods::u64_zero,
     objects::{Account, Id, Object, State},
@@ -65,6 +65,12 @@ impl Session {
     /// capability.
     pub fn mail_account_id(&self) -> Id<Account> {
         self.primary_accounts[JmapMailCapability::uri()].clone()
+    }
+
+    /// Return the account ID corresponding to the [`JmapContactsCapability`]
+    /// capability.
+    pub fn contacts_account_id(&self) -> Id<Account> {
+        self.primary_accounts[JmapContactsCapability::uri()].clone()
     }
 }
 

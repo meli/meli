@@ -55,11 +55,13 @@ pub trait Method<OBJ: Object>: Serialize + Send + Sync {
     const NAME: &'static str;
 }
 
-static USING: &[&str] = &[
+const USING: &[&str] = &[
     JmapCoreCapability::uri(),
     JmapMailCapability::uri(),
     JmapSubmissionCapability::uri(),
 ];
+
+pub const USING_CONTACTS: &[&str] = &[JmapCoreCapability::uri(), JmapContactsCapability::uri()];
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -86,6 +88,14 @@ impl Request {
     pub fn new(request_no: Arc<AtomicUsize>) -> Self {
         Self {
             using: USING,
+            method_calls: Vec::new(),
+            request_no,
+        }
+    }
+
+    pub fn new_with_using(request_no: Arc<AtomicUsize>, using: &'static [&'static str]) -> Self {
+        Self {
+            using,
             method_calls: Vec::new(),
             request_no,
         }
