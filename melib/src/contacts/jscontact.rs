@@ -67,14 +67,14 @@ impl<V: JSContactVersion> TryInto<Card> for JSContact<V> {
 
     fn try_into(self) -> Result<Card> {
         let json_types::JsonCardValue {
-            uid, name, email, ..
+            uid, name, emails, ..
         } = self.0;
         let mut card = Card::new();
         card.set_id(CardId::from(uid));
         if let Some(name) = name.full {
             card.set_name(name);
         }
-        if let Some(e) = email.get_index(0) {
+        if let Some(e) = emails.get_index(0) {
             card.set_email(e.1.address.to_string());
         }
 
@@ -236,7 +236,7 @@ pub mod json_types {
         pub kind: Option<JsonCardKind>,
         pub name: JsonCardName,
         #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
-        pub email: IndexMap<String, JsonCardEmailAddress>,
+        pub emails: IndexMap<String, JsonCardEmailAddress>,
     }
 
     #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -245,7 +245,7 @@ pub mod json_types {
         #[serde(rename = "@type", default, skip_serializing_if = "Option::is_none")]
         __type: Option<JsonNameType>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        pub components: Vec<()>,
+        pub components: Vec<serde_json::Value>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub is_ordered: Option<bool>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -289,7 +289,7 @@ pub mod json_types {
                     is_ordered: Some(true),
                     default_separator: None,
                 },
-                email: indexmap! {
+                emails: indexmap! {
                     "main".to_string() => JsonCardEmailAddress {
                         __type: None,
                         address: "user@example.com".to_string(),
@@ -305,7 +305,7 @@ pub mod json_types {
             "version": "1.0",
             "uid": "22B2C7DF-9120-4969-8460-05956FE6B065",
             "kind": "individual",
-            "email": {
+            "emails": {
                 "main": {
                     "address": "user@example.com"
                 }
@@ -330,7 +330,7 @@ pub mod json_types {
             "version": "1.0",
             "uid": "22B2C7DF-9120-4969-8460-05956FE6B065",
             "kind": "individual",
-            "email": {
+            "emails": {
                 "main": {
                     "address": "user@example.com"
                 }
