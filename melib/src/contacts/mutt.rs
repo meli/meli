@@ -21,10 +21,21 @@
 
 //! # Mutt contact formats
 
-use std::collections::VecDeque;
+use std::{
+    collections::VecDeque,
+    path::{Path, PathBuf},
+};
 
-use super::*;
-use crate::utils::parsec::{is_not, map_res, match_literal_anycase, prefix, Parser};
+use crate::{
+    backends::prelude::ResultFuture,
+    contacts::{
+        backend::{ContactBackend, ContactBackendCapabilities},
+        AddressBookName, Card,
+    },
+    error::{Error, ErrorKind},
+    utils::parsec::{is_not, map_res, match_literal_anycase, prefix, Parser},
+    ShellExpandTrait,
+};
 
 //alias <nickname> [ <long name> ] <address>
 // From mutt doc:
@@ -77,6 +88,57 @@ pub fn parse_mutt_contact<'a>() -> impl Parser<'a, Card> {
             },
         )
         .parse(input)
+    }
+}
+
+#[derive(Debug)]
+pub struct MuttContacts {
+    pub path: PathBuf,
+}
+
+impl ContactBackend for MuttContacts {
+    fn capabilities(&mut self) -> ContactBackendCapabilities {
+        ContactBackendCapabilities::default()
+    }
+
+    fn address_books(&mut self) -> ResultFuture<Vec<AddressBookName>> {
+        Ok(Box::pin(async {
+            Ok(vec![AddressBookName("mutt_alias_file".into())])
+        }))
+    }
+
+    fn fetch_book(&mut self, address_book: &AddressBookName) -> ResultFuture<Vec<Card>> {
+        if address_book.0.as_ref() != "mutt_alias_file" {
+            return Err(Error::new("").set_kind(ErrorKind::ValueError));
+        }
+        let mutt_alias_file = &self.path;
+        let cards = match std::fs::read_to_string(Path::new(mutt_alias_file).expand())
+            .map_err(|err| Error::from(err).set_related_path(Some(mutt_alias_file)))
+            .and_then(|contents| {
+                Ok(contents
+                    .lines()
+                    .map(|line| parse_mutt_contact().parse(line).map(|(_, c)| c))
+                    .collect::<std::result::Result<Vec<Card>, &str>>()
+                    .map_err(|err| format!("Could not parse file: {err}"))?)
+            }) {
+            Ok(cards) => cards,
+            Err(err) => {
+                return Err(Error::new(format!(
+                    "Could not load mutt alias file {mutt_alias_file:?}"
+                ))
+                .set_source(Some(crate::src_err_arc_wrap!(err))));
+            }
+        };
+
+        Ok(Box::pin(async { Ok(cards) }))
+    }
+
+    fn search(
+        &self,
+        _term: &str,
+        _address_book: Option<&AddressBookName>,
+    ) -> ResultFuture<Vec<Card>> {
+        Err(Error::new("").set_kind(ErrorKind::NotSupported))
     }
 }
 
