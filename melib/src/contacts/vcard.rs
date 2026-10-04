@@ -27,14 +27,21 @@
 //! - Version 4 [RFC 6350: vCard Format Specification](https://datatracker.ietf.org/doc/rfc6350/)
 //! - Parameter escaping [RFC 6868 Parameter Value Encoding in iCalendar and vCard](https://datatracker.ietf.org/doc/rfc6868/)
 
-use std::convert::TryInto;
+use std::{convert::TryInto, hash::Hasher, path::PathBuf};
 
 use indexmap::IndexMap;
 
-use super::*;
 use crate::{
-    error::{Error, ErrorKind, Result},
-    utils::parsec::{match_literal_anycase, one_or_more, peek, prefix, take_until, Parser},
+    backends::prelude::ResultFuture,
+    contacts::{
+        backend::{ContactBackend, ContactBackendCapabilities},
+        AddressBookName, Card, CardId,
+    },
+    error::{Error, ErrorKind, Result, ResultIntoError},
+    utils::{
+        parsec::{match_literal_anycase, one_or_more, peek, prefix, take_until, Parser},
+        shellexpand::ShellExpandTrait,
+    },
 };
 
 /* Supported vcard versions */
@@ -277,37 +284,38 @@ fn parse_card<'a>() -> impl Parser<'a, Vec<&'a str>> {
 }
 
 pub fn load_cards(p: &std::path::Path) -> Result<Vec<Card>> {
-    let vcf_dir = std::fs::read_dir(p);
+    let vcf_dir = std::fs::read_dir(p).chain_err_related_path(p)?;
     let mut ret: Vec<Result<_>> = Vec::new();
     let mut is_any_valid = false;
-    if vcf_dir.is_ok() {
-        let mut contents = String::with_capacity(256);
-        for f in vcf_dir? {
-            if f.is_err() {
-                continue;
-            }
-            let f = f?.path();
-            if f.is_file() {
-                use std::io::Read;
-                contents.clear();
-                std::fs::File::open(&f)?.read_to_string(&mut contents)?;
-                match parse_card().parse(contents.as_str()) {
-                    Ok((_, c)) => {
-                        for s in c {
-                            ret.push(
-                                CardDeserializer::try_from_str(s)
-                                    .and_then(TryInto::try_into)
-                                    .map(|mut card| {
-                                        Card::set_external_resource(&mut card, true);
-                                        is_any_valid = true;
-                                        card
-                                    }),
-                            );
-                        }
+    let mut contents = String::with_capacity(256);
+    for f in vcf_dir {
+        if f.is_err() {
+            continue;
+        }
+        let f = f.chain_err_related_path(p)?.path();
+        if f.is_file() {
+            use std::io::Read;
+            contents.clear();
+            std::fs::File::open(&f)?
+                .read_to_string(&mut contents)
+                .chain_err_related_path(&f)?;
+            match parse_card().parse(contents.as_str()) {
+                Ok((_, c)) => {
+                    for s in c {
+                        ret.push(
+                            CardDeserializer::try_from_str(s)
+                                .and_then(TryInto::try_into)
+                                .map(|mut card| {
+                                    Card::set_external_resource(&mut card, true);
+                                    is_any_valid = true;
+                                    card
+                                })
+                                .map_err(|err| err.set_related_path(Some(&f))),
+                        );
                     }
-                    Err(err) => {
-                        log::warn!("Could not parse vcard from {}: {}", f.display(), err);
-                    }
+                }
+                Err(err) => {
+                    log::warn!("Could not parse vcard from {}: {}", f.display(), err);
                 }
             }
         }
@@ -321,6 +329,52 @@ pub fn load_cards(p: &std::path::Path) -> Result<Vec<Card>> {
         ret.retain(Result::is_ok);
     }
     ret.into_iter().collect::<Result<Vec<Card>>>()
+}
+
+#[derive(Debug)]
+pub struct VCardContacts {
+    pub path: PathBuf,
+}
+
+impl ContactBackend for VCardContacts {
+    fn capabilities(&mut self) -> ContactBackendCapabilities {
+        ContactBackendCapabilities::default()
+    }
+
+    fn address_books(&mut self) -> ResultFuture<Vec<AddressBookName>> {
+        Ok(Box::pin(async {
+            Ok(vec![AddressBookName("vcard_folder".into())])
+        }))
+    }
+
+    fn fetch_book(&mut self, address_book: &AddressBookName) -> ResultFuture<Vec<Card>> {
+        if address_book.0.as_ref() != "vcard_folder" {
+            return Err(Error::new("").set_kind(ErrorKind::ValueError));
+        }
+        let vcard_path = &self.path;
+        let expanded_path = vcard_path.expand();
+        let cards = load_cards(&expanded_path).map_err(|err| {
+            let mut err = err.set_summary("Could not load vcards");
+            if expanded_path != *vcard_path {
+                err = err.set_details(format!(
+                    "Note: vcard_folder was expanded from {} to {}",
+                    vcard_path.display(),
+                    expanded_path.display()
+                ));
+            }
+            err
+        });
+
+        Ok(Box::pin(async { cards }))
+    }
+
+    fn search(
+        &self,
+        _term: &str,
+        _address_book: Option<&AddressBookName>,
+    ) -> ResultFuture<Vec<Card>> {
+        Err(Error::new("").set_kind(ErrorKind::NotSupported))
+    }
 }
 
 #[test]
