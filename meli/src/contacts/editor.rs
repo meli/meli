@@ -19,12 +19,12 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::Arc};
 
 use indexmap::IndexMap;
 use melib::{
     contacts::{AddressBook, AddressBookName, Card},
-    AccountHash,
+    AccountHash, ContactBackendID,
 };
 
 use crate::{
@@ -49,7 +49,7 @@ pub struct ContactManager {
     mode: ViewMode,
     form: FormWidget<FormButtonAction>,
     account_hash: AccountHash,
-    book: AddressBookName,
+    book_id: (Arc<ContactBackendID>, AddressBookName),
     content: Screen<Virtual>,
     theme_default: ThemeAttribute,
     dirty: bool,
@@ -64,14 +64,17 @@ impl std::fmt::Display for ContactManager {
 }
 
 impl ContactManager {
-    pub fn new(account_hash: AccountHash, book: AddressBookName, context: &Context) -> Self {
-        let book: &AddressBook = &context.accounts[&account_hash].contacts.books[&book];
+    pub fn new(
+        account_hash: AccountHash,
+        book_id: (Arc<ContactBackendID>, AddressBookName),
+        context: &Context,
+    ) -> Self {
+        let book: &AddressBook = &context.accounts[&account_hash].contacts.books[&book_id];
         let mode = if book.read_only {
             ViewMode::ReadOnly
         } else {
             ViewMode::Edit
         };
-        let book = book.name.clone();
         let theme_default: ThemeAttribute = crate::conf::value(context, "theme_default");
         Self {
             id: ComponentId::default(),
@@ -80,7 +83,7 @@ impl ContactManager {
             mode,
             form: FormWidget::default(),
             account_hash,
-            book,
+            book_id,
             content: Screen::<Virtual>::new(theme_default),
             theme_default,
             dirty: true,
@@ -252,7 +255,7 @@ impl Component for ContactManager {
                                 body: format!("{new_card} was saved.").into(),
                                 kind: Some(NotificationType::Info),
                             });
-                            context.accounts[&self.account_hash].contacts.books[&self.book]
+                            context.accounts[&self.account_hash].contacts.books[&self.book_id]
                                 .add_card(new_card);
                             self.unrealize(context);
                         }

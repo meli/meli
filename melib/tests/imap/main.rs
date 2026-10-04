@@ -1380,6 +1380,7 @@ mod tests {
             subscribed_mailboxes: vec![],
             mailboxes: indexmap::indexmap! {},
             manual_refresh: false,
+            contacts: indexmap::indexmap! {},
             extra: indexmap::indexmap! {
                 "server_hostname".to_string() => local_addr.ip().to_string().into(),
                 "server_username".to_string() => "user".to_string().into(),

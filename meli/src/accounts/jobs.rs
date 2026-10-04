@@ -154,6 +154,7 @@ pub enum JobRequest {
         )>,
     },
     Mailbox(MailboxJobRequest),
+    Contacts(crate::accounts::contacts::ContactJobRequest),
 }
 
 impl std::fmt::Debug for JobRequest {
@@ -161,6 +162,7 @@ impl std::fmt::Debug for JobRequest {
         match self {
             Self::Generic { name, .. } => write!(f, "JobRequest::Generic({name})"),
             Self::Mailbox(inner) => std::fmt::Debug::fmt(inner, f),
+            Self::Contacts(inner) => std::fmt::Debug::fmt(inner, f),
             Self::Fetch { mailbox_hash, .. } => {
                 write!(f, "JobRequest::Fetch({mailbox_hash})")
             }
@@ -193,6 +195,7 @@ impl std::fmt::Display for JobRequest {
         match self {
             Self::Generic { name, .. } => write!(f, "{name}"),
             Self::Mailbox(inner) => std::fmt::Display::fmt(inner, f),
+            Self::Contacts(inner) => std::fmt::Display::fmt(inner, f),
             Self::Fetch { .. } => write!(f, "Mailbox fetch"),
             Self::IsOnline { .. } => write!(f, "Online status check"),
             Self::Refresh { .. } => write!(f, "Refresh mailbox"),
@@ -235,6 +238,7 @@ impl JobRequest {
         match self {
             Self::Generic { handle, .. } => handle.cancel(),
             Self::Mailbox(inner) => inner.cancel(),
+            Self::Contacts(inner) => inner.cancel(),
             Self::Fetch { handle, .. } => handle.cancel(),
             Self::IsOnline { handle, .. } => handle.cancel(),
             Self::Refresh { handle, .. } => handle.cancel(),

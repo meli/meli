@@ -22,7 +22,7 @@
 //! Basic mail account configuration to use with
 //! [`backends`](./backends/index.html)
 
-use std::{borrow::Cow, path::Path};
+use std::borrow::Cow;
 
 use indexmap::IndexMap;
 
@@ -30,7 +30,6 @@ use crate::{
     backends::SpecialUsageMailbox,
     email::Address,
     error::{Error, ErrorKind, Result},
-    ShellExpandTrait,
 };
 
 mod field_types;
@@ -69,6 +68,14 @@ macro_rules! impl_extra_setting_from_str {
 
 impl_extra_setting_from_str! { bool, u16, u64 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "type", content = "value")]
+pub enum ContactBackendConf {
+    NotmuchAddress(String),
+    MuttAlias(String),
+    VCard(String),
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct AccountSettings {
     pub name: String,
@@ -91,6 +98,8 @@ pub struct AccountSettings {
     pub mailboxes: IndexMap<String, MailboxConf>,
     #[serde(default)]
     pub manual_refresh: bool,
+    #[serde(default)]
+    pub contacts: IndexMap<String, ContactBackendConf>,
     #[serde(flatten)]
     pub extra: IndexMap<String, serde_json::Value>,
 }
@@ -141,23 +150,6 @@ impl AccountSettings {
             .map(|v| Some(v))
     }
 
-    #[inline]
-    fn extra_field_as_str(&'_ self, extra_field: &str) -> Result<Option<Cow<'_, str>>> {
-        self.deserialize_extra_field::<Cow<'_, str>>(extra_field)
-    }
-
-    pub fn vcard_folder(&'_ self) -> Result<Option<Cow<'_, str>>> {
-        self.extra_field_as_str("vcard_folder")
-    }
-
-    pub fn notmuch_address_book_query(&self) -> Result<Option<Cow<'_, str>>> {
-        self.extra_field_as_str("notmuch_address_book_query")
-    }
-
-    pub fn mutt_alias_file(&self) -> Result<Option<Cow<'_, str>>> {
-        self.extra_field_as_str("mutt_alias_file")
-    }
-
     pub fn validator<'a, D: ExtraSetting>(
         &'a mut self,
         extra_field: &'static str,
@@ -170,59 +162,6 @@ impl AccountSettings {
             validation_fn: None,
             default_value: None,
         }
-    }
-
-    pub fn validate_config(&mut self) -> Result<()> {
-        {
-            if let Some(folder) = self.vcard_folder()? {
-                let path = Path::new(folder.as_ref()).expand();
-                _ = self.extra.swap_remove("vcard_folder");
-
-                if !matches!(path.try_exists(), Ok(true)) {
-                    return Err(Error::new(format!(
-                        "`vcard_folder` path {} does not exist",
-                        path.display()
-                    ))
-                    .set_details("`vcard_folder` must be a path of a folder containing .vcf files")
-                    .set_kind(ErrorKind::Configuration));
-                }
-                if !path.is_dir() {
-                    return Err(Error::new(format!(
-                        "`vcard_folder` path {} is not a directory",
-                        path.display()
-                    ))
-                    .set_details("`vcard_folder` must be a path of a folder containing .vcf files")
-                    .set_kind(ErrorKind::Configuration));
-                }
-            }
-            self.notmuch_address_book_query()?;
-            _ = self.extra.swap_remove("notmuch_address_book_query");
-        }
-        {
-            if let Some(mutt_alias_file) = self.mutt_alias_file()? {
-                let path = Path::new(mutt_alias_file.as_ref()).expand();
-                _ = self.extra.swap_remove("mutt_alias_file");
-
-                if !matches!(path.try_exists(), Ok(true)) {
-                    return Err(Error::new(format!(
-                        "`mutt_alias_file` path {} does not exist",
-                        path.display()
-                    ))
-                    .set_details("`mutt_alias_file` must be an existing path of a mutt alias file")
-                    .set_kind(ErrorKind::Configuration));
-                }
-                if !path.is_file() {
-                    return Err(Error::new(format!(
-                        "`mutt_alias_file` path {} is not a file",
-                        path.display()
-                    ))
-                    .set_details("`mutt_alias_file` must be a path of a mutt alias file")
-                    .set_kind(ErrorKind::Configuration));
-                }
-            }
-        }
-
-        Ok(())
     }
 }
 

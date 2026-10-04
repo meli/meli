@@ -209,6 +209,7 @@ other_email=test2@example.com;test3@example.com
             read_only: false,
             display_name: None,
             subscribed_mailboxes,
+            contacts: indexmap::indexmap! {},
             mailboxes,
             manual_refresh: true,
             extra,

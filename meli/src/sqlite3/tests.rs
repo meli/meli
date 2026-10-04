@@ -76,6 +76,7 @@ fn new_maildir_backend(
         read_only: true,
         display_name: None,
         subscribed_mailboxes: vec!["inbox".into()],
+        contacts: indexmap::indexmap! {},
         mailboxes: vec![(
             "inbox".into(),
             melib::conf::MailboxConf {

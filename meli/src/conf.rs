@@ -217,6 +217,8 @@ pub struct FileAccount {
     pub manual_refresh: bool,
     #[serde(default = "none", skip_serializing_if = "Option::is_none")]
     pub refresh_command: Option<String>,
+    #[serde(default)]
+    pub contacts: IndexMap<String, melib::conf::ContactBackendConf>,
     #[serde(flatten)]
     pub conf_override: MailUIConf,
     #[serde(flatten)]
@@ -322,6 +324,7 @@ impl TryFrom<FileAccount> for AccountConf {
             subscribed_mailboxes: x.subscribed_mailboxes.clone(),
             mailboxes,
             manual_refresh: x.manual_refresh,
+            contacts: x.contacts.clone(),
             extra: x
                 .extra
                 .clone()
@@ -488,6 +491,7 @@ impl FileSettings {
                 read_only,
                 display_name,
                 subscribed_mailboxes,
+                contacts,
                 mailboxes,
                 extra,
                 manual_refresh,
@@ -507,6 +511,7 @@ impl FileSettings {
                 read_only,
                 display_name,
                 subscribed_mailboxes,
+                contacts,
                 manual_refresh,
                 mailboxes: mailboxes
                     .into_iter()
@@ -517,7 +522,6 @@ impl FileSettings {
                     .map(|(k, v)| Ok((k, json_from_toml(v)?)))
                     .collect::<Result<IndexMap<_, _>>>()?,
             };
-            s.validate_config()?;
             backends.validate_config(&lowercase_format, &mut s)?;
             if !s.extra.is_empty() {
                 return Err(Error::new(format!(
@@ -596,6 +600,7 @@ impl FileSettings {
                 mailboxes,
                 extra,
                 manual_refresh,
+                contacts,
                 default_mailbox: _,
                 refresh_command: _,
                 search_backend: _,
@@ -612,6 +617,7 @@ impl FileSettings {
                 read_only,
                 display_name,
                 subscribed_mailboxes,
+                contacts,
                 manual_refresh,
                 mailboxes: mailboxes
                     .into_iter()
@@ -622,7 +628,6 @@ impl FileSettings {
                     .map(|(k, v)| Ok((k, json_from_toml(v)?)))
                     .collect::<Result<IndexMap<_, _>>>()?,
             };
-            s.validate_config()?;
             backends.validate_config(&lowercase_format, &mut s)?;
             if !s.extra.is_empty() {
                 return Err(Error::new(format!(

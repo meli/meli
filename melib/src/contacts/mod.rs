@@ -23,18 +23,11 @@ use std::{
     borrow::Borrow,
     hash::{Hash, Hasher},
     ops::Deref,
-    path::Path,
-    process::Command,
     sync::Arc,
 };
 
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use uuid::Uuid;
-
-use crate::{
-    text::Truncate,
-    utils::{parsec::Parser, shellexpand::ShellExpandTrait},
-};
 
 pub mod backend;
 mod card;
@@ -122,16 +115,14 @@ impl Borrow<str> for AddressBookName {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct AddressBook {
     pub name: AddressBookName,
-    pub format: Arc<str>,
     pub read_only: bool,
     pub cards: IndexMap<CardId, Card>,
 }
 
 impl AddressBook {
-    pub fn new(name: AddressBookName, format: Arc<str>, read_only: bool) -> Self {
+    pub fn new(name: AddressBookName, read_only: bool) -> Self {
         Self {
             name,
-            format,
             read_only,
             cards: IndexMap::default(),
         }
@@ -166,10 +157,17 @@ impl Deref for AddressBook {
     }
 }
 
+#[derive(Clone, Hash, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct ContactBackendID {
+    pub name: Box<str>,
+    pub format: Box<str>,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Contacts {
     name: String,
-    pub books: IndexMap<AddressBookName, AddressBook>,
+    pub books: IndexMap<(Arc<ContactBackendID>, AddressBookName), AddressBook>,
+    pub backends: IndexSet<Arc<ContactBackendID>>,
 }
 
 impl Contacts {
@@ -177,142 +175,44 @@ impl Contacts {
         Self {
             name,
             books: IndexMap::default(),
+            backends: IndexSet::default(),
         }
     }
 
-    pub fn with_account(s: &crate::conf::AccountSettings) -> Self {
-        let mut ret = Self::new(s.name.clone());
-        match s.mutt_alias_file() {
-            Ok(None) => {}
-            Ok(Some(mutt_alias_file)) => {
-                match std::fs::read_to_string(Path::new(mutt_alias_file.as_ref()).expand())
-                    .map_err(|err| err.to_string())
-                    .and_then(|contents| {
-                        contents
-                            .lines()
-                            .map(|line| mutt::parse_mutt_contact().parse(line).map(|(_, c)| c))
-                            .collect::<Result<Vec<Card>, &str>>()
-                            .map_err(|err| err.to_string())
-                    }) {
-                    Ok(cards) => {
-                        let mut book = AddressBook::new(
-                            mutt_alias_file.as_ref().into(),
-                            "mutt_alias_file".into(),
-                            true,
-                        );
-                        for c in cards {
-                            book.add_card(c);
-                        }
-                        ret.books.insert(book.name.clone(), book);
-                    }
-                    Err(err) => {
-                        log::warn!(
-                            "Could not load mutt alias file {:?}: {}",
-                            mutt_alias_file,
-                            err
-                        );
-                    }
-                }
+    pub fn add_book(&mut self, backend_name: &str, backend_format: &str, book: AddressBook) {
+        let id = if let Some(id) = self
+            .backends
+            .iter()
+            .find(|i| i.name.as_ref() == backend_name && i.format.as_ref() == backend_format)
+        {
+            Arc::clone(id)
+        } else {
+            let id = Arc::new(ContactBackendID {
+                name: backend_name.to_string().into_boxed_str(),
+                format: backend_format.to_string().into_boxed_str(),
+            });
+            self.backends.insert(Arc::clone(&id));
+            id
+        };
+        self.books.insert((id, book.name.clone()), book);
+    }
+
+    pub fn get_book(
+        &self,
+        backend_name: &str,
+        backend_format: &str,
+        name: &str,
+    ) -> Option<&AddressBook> {
+        let id = self
+            .backends
+            .iter()
+            .find(|i| i.name.as_ref() == backend_name && i.format.as_ref() == backend_format)?;
+        self.books.iter().find_map(|(k, v)| {
+            if k.0 == *id && (k.1).0.as_ref() == name {
+                Some(v)
+            } else {
+                None
             }
-            Err(err) => {
-                log::error!("Could not read mutt alias configuration value: {err}",);
-            }
-        }
-        match s.vcard_folder() {
-            Ok(None) => {}
-            Ok(Some(vcard_path)) => {
-                let expanded_path = Path::new(vcard_path.as_ref()).expand();
-                match vcard::load_cards(&expanded_path) {
-                    Ok(cards) => {
-                        let mut book =
-                            AddressBook::new(vcard_path.as_ref().into(), "vcard".into(), true);
-                        for c in cards {
-                            book.add_card(c);
-                        }
-                        ret.books.insert(book.name.clone(), book);
-                    }
-                    Err(err) => {
-                        log::warn!("Could not load vcards from {:?}: {}", vcard_path, err);
-                        if expanded_path.display().to_string() != vcard_path {
-                            log::warn!(
-                                "Note: vcard_folder was expanded from {} to {}",
-                                vcard_path,
-                                expanded_path.display()
-                            );
-                        }
-                    }
-                }
-            }
-            Err(err) => {
-                log::error!("Could not read vcard_folder value: {err}",);
-            }
-        }
-        match s.notmuch_address_book_query() {
-            Ok(None) => {}
-            Ok(Some(notmuch_address_book_query)) => {
-                match Command::new("sh")
-                    .args([
-                        "-c",
-                        &format!(
-                            "notmuch address --format=json --output=recipients \
-                             {notmuch_address_book_query}",
-                        ),
-                    ])
-                    .stdin(std::process::Stdio::null())
-                    .stdout(std::process::Stdio::piped())
-                    .stderr(std::process::Stdio::piped())
-                    .output()
-                {
-                    Ok(notmuch_addresses) => {
-                        if notmuch_addresses.status.success() {
-                            match std::str::from_utf8(&notmuch_addresses.stdout) {
-                                Ok(notmuch_address_out) => {
-                                    match notmuchcontact::parse_notmuch_contacts(
-                                        notmuch_address_out,
-                                    ) {
-                                        Ok(contacts) => {
-                                            let mut book = AddressBook::new(
-                                                notmuch_address_book_query.as_ref().into(),
-                                                "notmuch_address_book_query".into(),
-                                                true,
-                                            );
-                                            for c in contacts {
-                                                book.add_card(c);
-                                            }
-                                            ret.books.insert(book.name.clone(), book);
-                                        }
-                                        Err(err) => {
-                                            log::warn!(
-                                                "Unable to parse notmuch contact result into \
-                                                 cards: {} {err}",
-                                                notmuch_address_out.trim_at_boundary(100),
-                                            );
-                                        }
-                                    }
-                                }
-                                Err(err) => {
-                                    log::warn!(
-                                        "Unable to read from notmuch address query: \
-                                         {notmuch_address_book_query}: {err}",
-                                    );
-                                }
-                            }
-                        } else {
-                            log::warn!(
-                                "Error ({}) running notmuch address: {} {}",
-                                notmuch_addresses.status,
-                                String::from_utf8_lossy(&notmuch_addresses.stdout),
-                                String::from_utf8_lossy(&notmuch_addresses.stderr)
-                            );
-                        }
-                    }
-                    Err(err) => log::warn!("Unable to run notmuch address command: {err}"),
-                }
-            }
-            Err(err) => {
-                log::error!("Could not read notmuch_address_book_query configuration value: {err}",);
-            }
-        }
-        ret
+        })
     }
 }

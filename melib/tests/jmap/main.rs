@@ -1010,6 +1010,7 @@ mod tests {
             display_name: None,
             subscribed_mailboxes: vec![],
             mailboxes: indexmap::indexmap! {},
+            contacts: indexmap::indexmap! {},
             manual_refresh: false,
             extra: indexmap::indexmap! {
                 "server_url".to_string() => format!("http://{}:{}", local_addr.ip(), local_addr.port()).into(),
@@ -1232,6 +1233,7 @@ hello world.
             display_name: None,
             subscribed_mailboxes: vec![],
             mailboxes: indexmap::indexmap! {},
+            contacts: indexmap::indexmap! {},
             manual_refresh: false,
             extra: indexmap::indexmap! {
                 "server_url".to_string() => format!("http://{}:{}", local_addr.ip(), local_addr.port()).into(),

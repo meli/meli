@@ -293,37 +293,65 @@ and
 .Qq Li sqlite3 Ns
 \&.
 .Pq Qq sqlite3
-.It Ic vcard_folder Ar String
+.It Ic contacts Ar Map[String, ContactBackendConf]
 .Pq Em optional
-Folder that contains
-.Sy .vcf
-files.
-They are parsed and imported read-only.
-.It Ic mutt_alias_file Ar String
-.Pq Em optional
-Path of
-.Xr mutt 1
-compatible alias file in the option
-They are parsed and imported read-only.
-.It Ic notmuch_address_book_query Ar String
-.Pq Em optional
-Query passed to
+A map of named contact backends for this account.
+The key string value is an arbitrary name you set for your own reference.
+The value type of
+.Li ContactBackendConf
+is a map with two keys:
+.Bl -tag -width 36n
+.It Ic type Ar String
+.It Ic value Ar String
+.El
+Where
+.Li type
+is one of:
+.Bl -tag -width 36n
+.It Ic NotmuchAddress
+and
+.Li value
+is a string query passed to
 .Qq Li notmuch address
 to import contacts into meli.
 Contacts are parsed and imported read-only.
-This can be used with any backend, not just notmuch, since it only relies on the existance of the
+This can be used with any backend, not just notmuch, since it only relies on the existence of the
 .Xr notmuch 1
 binary.
 .sp
 Example:
 .Bd -literal
-notmuch_address_book_query = "date:1Y.. AND from:you@example.com"
+contacts = { "notmuch" = { type = "NotmuchAddress", value = "date:1Y.. AND from:you@example.com" } }
 .Ed
 This will run the command
 .Bd -literal
 notmuch address --format=json --output=recipients date:1Y.. AND from:you@example.com
 .Ed
 and parse its json output.
+.It Ic MuttAlias
+and
+.Li value
+is a string of a path of
+.Xr mutt 1
+compatible alias file in the option
+They are parsed and imported read-only.
+Example:
+.Bd -literal
+contacts = { "mutt" = { type = "MuttAlias", value = "~/.mutt/aliases" } }
+.Ed
+.It Ic VCard
+and
+.Li value
+is a string of a folder path that contains
+.Sy .vcf
+files.
+They are parsed and imported read-only.
+Example:
+.Bd -literal
+contacts = { "vcards" = { type = "VCard", value = "~/.contacts/" } }
+.Ed
+.El
+You can include as many contact backends as you wish.
 .It Ic mailboxes Ar mailbox
 .Pq Em optional
 Configuration for each mailbox.

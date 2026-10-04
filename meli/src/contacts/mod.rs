@@ -29,14 +29,9 @@ use crate::{
 pub mod editor;
 pub mod list;
 
-pub fn export_to_vcard(card: &Card, account_hash: AccountHash, context: &mut Context) {
-    let mut output_dir = context.accounts[&account_hash]
-        .settings
-        .account
-        .vcard_folder()
-        .ok()
-        .flatten()
-        .map(|s| std::path::Path::new(s.as_ref()).to_path_buf());
+pub fn export_to_vcard(card: &Card, _account_hash: AccountHash, context: &mut Context) {
+    // [ref:TODO]: configure output_dir
+    let mut output_dir = None;
     let filename = format!(
         "{prefix}{name}{suffix}{space}{additionalname}",
         prefix = card.name_prefix(),

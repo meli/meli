@@ -25,9 +25,7 @@ use std::{
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
     convert::TryFrom,
     future::Future,
-    io::Write,
     ops::{Index, IndexMut},
-    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     pin::Pin,
     sync::{Arc, Mutex},
@@ -38,8 +36,8 @@ use futures::{future::FutureExt, stream::StreamExt};
 use indexmap::IndexMap;
 use melib::{
     backends::{prelude::*, Backends},
-    contacts::{AddressBook, Card, CardId, Contacts},
-    error::{Error, ErrorKind, NetworkErrorKind, Result, ResultIntoError},
+    contacts::{backend::ContactBackend, Contacts},
+    error::{Error, ErrorKind, NetworkErrorKind, Result},
     log,
     thread::Threads,
     utils::{fnmatch::Fnmatch, futures::sleep, random, shellexpand::ShellExpandTrait},
@@ -56,6 +54,7 @@ use crate::{
 };
 
 mod backend_ops;
+mod contacts;
 mod jobs;
 mod mailbox;
 mod mailbox_ops;
@@ -129,6 +128,8 @@ pub struct Account {
     pub tree: Vec<MailboxNode>,
     pub collection: Collection,
     pub contacts: Contacts,
+    pub contact_backends:
+        IndexMap<melib::contacts::ContactBackendID, Arc<Mutex<Box<dyn ContactBackend>>>>,
     pub settings: AccountConf,
     pub backend: Arc<Mutex<Box<dyn MailBackend>>>,
 
@@ -174,47 +175,6 @@ impl Account {
                 .into(),
             event_consumer,
         )?;
-
-        let contacts = {
-            let data_dir = xdg::BaseDirectories::with_profile("meli", name.as_ref())?;
-            let mut contacts = Contacts::with_account(settings.account());
-            // Create a default local address book for the account.
-            let mut default_address_book = AddressBook::new("default".into(), "Card".into(), false);
-
-            if let Ok(data) = data_dir.place_data_file("contacts") {
-                if data.exists() {
-                    fn read_contacts(book: &mut AddressBook, file: &Path) -> Result<()> {
-                        let reader = std::io::BufReader::new(
-                            std::fs::File::open(file).chain_err_related_path(file)?,
-                        );
-                        let data: IndexMap<CardId, Card> =
-                            serde_json::from_reader(reader).chain_err_related_path(file)?;
-                        for (id, c) in data {
-                            if !book.card_exists(id) && !c.external_resource() {
-                                book.add_card(c);
-                            }
-                        }
-                        Ok(())
-                    }
-                    if let Err(err) = read_contacts(&mut default_address_book, &data) {
-                        main_loop_handler.send(ThreadEvent::UIEvent(UIEvent::Notification {
-                            title: Some(format!("{}: Could not load contacts", name).into()),
-                            body: err.to_string().into(),
-                            kind: Some(NotificationType::Error(err.kind)),
-                            source: Some(err),
-                        }));
-                    }
-                }
-            }
-            let was_empty = contacts.books.is_empty();
-            let name = default_address_book.name.clone();
-            let default_index = contacts.books.insert_full(name, default_address_book).0;
-            if !was_empty {
-                // Ensure default address book is first.
-                contacts.books.swap_indices(0, default_index);
-            }
-            contacts
-        };
 
         if settings.conf.search_backend == SearchBackend::Auto {
             if backend.capabilities().supports_search {
@@ -290,7 +250,7 @@ impl Account {
             }
         }
 
-        Ok(Self {
+        let mut ret = Self {
             hash,
             name,
             is_online: if !backend.capabilities().is_remote {
@@ -301,7 +261,8 @@ impl Account {
             mailbox_entries: Default::default(),
             mailboxes_order: Default::default(),
             tree: Default::default(),
-            contacts,
+            contacts: Contacts::new(settings.account().name.clone()),
+            contact_backends: IndexMap::default(),
             collection: backend.collection(),
             settings,
             main_loop_handler,
@@ -310,7 +271,9 @@ impl Account {
             event_queue: IndexMap::default(),
             backend_capabilities: backend.capabilities(),
             backend: Arc::new(Mutex::new(backend)),
-        })
+        };
+        ret.init_contacts();
+        Ok(ret)
     }
 
     fn init(&mut self, mut ref_mailboxes: HashMap<MailboxHash, Mailbox>) -> Result<()> {
@@ -1822,6 +1785,9 @@ impl Account {
                             )));
                     }
                 }
+                JobRequest::Contacts(job) => {
+                    return self.process_contact_event(job_id, job);
+                }
             }
             true
         } else {
@@ -1885,32 +1851,6 @@ impl Account {
                 })
             })
             .or_else(|| Some(Path::new("~/.signature").expand()).filter(|p| p.is_file()))
-    }
-
-    pub fn write_default_address_book_to_disk(&self) -> Result<()> {
-        if self.contacts.books.is_empty() {
-            return Ok(());
-        }
-        let data_dir = xdg::BaseDirectories::with_profile("meli", self.name.as_ref())?;
-        let (data, data_new) = (
-            data_dir.place_data_file("contacts")?,
-            data_dir.place_data_file("contacts_new")?,
-        );
-        let f = std::fs::File::create(&data_new).chain_err_related_path(&data_new)?;
-        if let Ok(metadata) = f.metadata() {
-            let mut permissions = metadata.permissions();
-
-            permissions.set_mode(0o600); // Read/write for owner only.
-            f.set_permissions(permissions)
-                .chain_err_related_path(&data_new)?;
-        }
-        let mut writer = std::io::BufWriter::new(f);
-        serde_json::to_writer(&mut writer, &self.contacts.books[0].cards)
-            .chain_err_related_path(&data_new)?;
-        writer.flush().chain_err_related_path(&data_new)?;
-        drop(writer);
-        std::fs::rename(&data_new, &data).chain_err_related_path(&data)?;
-        Ok(())
     }
 }
 

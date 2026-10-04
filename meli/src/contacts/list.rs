@@ -41,7 +41,7 @@ use melib::{
     email::compose::Draft,
     error::Result,
     text::TextProcessing,
-    AccountHash,
+    AccountHash, ContactBackendID,
 };
 
 use crate::{
@@ -55,8 +55,7 @@ use crate::{
 #[derive(Debug)]
 pub struct AddressBookList {
     account_hash: AccountHash,
-    name: AddressBookName,
-    format: Arc<str>,
+    backend_id: (Arc<ContactBackendID>, AddressBookName),
     read_only: bool,
     editor: Option<Box<ContactManager>>,
     cursor_pos: usize,
@@ -72,15 +71,19 @@ pub struct AddressBookList {
 }
 
 impl AddressBookList {
-    fn new(book: &AddressBook, account_hash: AccountHash, context: &Context) -> Self {
+    fn new(
+        backend_id: (Arc<ContactBackendID>, AddressBookName),
+        book: &AddressBook,
+        account_hash: AccountHash,
+        context: &Context,
+    ) -> Self {
         let theme_default = crate::conf::value(context, "theme_default");
         let highlight_theme = crate::conf::value(context, "highlight");
         let data_columns = DataColumns::new(theme_default);
 
         Self {
             account_hash,
-            name: book.name.clone(),
-            format: book.format.clone(),
+            backend_id,
             read_only: book.read_only,
             editor: None,
             cursor_pos: 0,
@@ -99,7 +102,7 @@ impl AddressBookList {
     fn initialize(&mut self, context: &Context) {
         self.data_columns.clear();
         let account = &context.accounts[&self.account_hash];
-        let contacts: &AddressBook = &account.contacts.books[&self.name];
+        let contacts: &AddressBook = &account.contacts.books[&self.backend_id];
         if contacts.cards.is_empty() {
             let message = "Address book is empty.".to_string();
             if self.data_columns.columns[0].resize_with_context(message.len(), 1, context) {
@@ -239,7 +242,12 @@ impl Component for AddressBookList {
         grid.clear_area(info_area, self.theme_default);
         grid.clear_area(header_area, self.theme_default);
         grid.write_string(
-            &format!("{} [{}]", self.name, self.format),
+            &format!(
+                "{name} [{backend} {format}]",
+                name = self.backend_id.1,
+                backend = self.backend_id.0.name,
+                format = self.backend_id.0.format
+            ),
             self.theme_default.fg,
             self.theme_default.bg,
             self.theme_default.attrs,
@@ -435,7 +443,7 @@ impl Component for AddressBookList {
                 }
                 let mut editor = Box::new(ContactManager::new(
                     self.account_hash,
-                    self.name.clone(),
+                    self.backend_id.clone(),
                     context,
                 ));
                 editor.set_parent_id(self.id);
@@ -457,10 +465,10 @@ impl Component for AddressBookList {
 
                 let mut editor = Box::new(ContactManager::new(
                     self.account_hash,
-                    self.name.clone(),
+                    self.backend_id.clone(),
                     context,
                 ));
-                let card = context.accounts[&self.account_hash].contacts.books[&self.name]
+                let card = context.accounts[&self.account_hash].contacts.books[&self.backend_id]
                     [&self.id_positions[self.cursor_pos]]
                     .clone();
                 editor.set_card(card);
@@ -480,7 +488,7 @@ impl Component for AddressBookList {
                 if self.id_positions.is_empty() {
                     return true;
                 }
-                let card = context.accounts[&self.account_hash].contacts.books[&self.name]
+                let card = context.accounts[&self.account_hash].contacts.books[&self.backend_id]
                     [&self.id_positions[self.cursor_pos]]
                     .clone();
                 super::export_to_vcard(&card, self.account_hash, context);
@@ -492,7 +500,7 @@ impl Component for AddressBookList {
                 if self.id_positions.is_empty() {
                     return true;
                 }
-                let card = &context.accounts[&self.account_hash].contacts.books[&self.name]
+                let card = &context.accounts[&self.account_hash].contacts.books[&self.backend_id]
                     [&self.id_positions[self.cursor_pos]];
                 let mut draft: Draft = Draft::default();
                 *draft.headers_mut().get_mut("To").unwrap() =
@@ -514,7 +522,7 @@ impl Component for AddressBookList {
                     return true;
                 }
                 // [ref:TODO]: add a confirmation dialog?
-                context.accounts[&self.account_hash].contacts.books[&self.name]
+                context.accounts[&self.account_hash].contacts.books[&self.backend_id]
                     .remove_card(self.id_positions[self.cursor_pos]);
                 self.initialized = false;
                 self.set_dirty(true);
@@ -661,7 +669,7 @@ impl Component for AddressBookList {
 pub struct AccountContacts {
     account_hash: AccountHash,
     book_pos: usize,
-    books: IndexMap<AddressBookName, Box<AddressBookList>>,
+    books: IndexMap<(Arc<ContactBackendID>, AddressBookName), Box<AddressBookList>>,
     dirty: bool,
     theme_default: ThemeAttribute,
     highlight_theme: ThemeAttribute,
@@ -694,10 +702,15 @@ impl AccountEntryTrait for AccountContacts {
                 .contacts
                 .books
                 .iter()
-                .map(|(name, book)| {
+                .map(|(book_id, book)| {
                     (
-                        name.clone(),
-                        Box::new(AddressBookList::new(book, account_hash, context)),
+                        book_id.clone(),
+                        Box::new(AddressBookList::new(
+                            book_id.clone(),
+                            book,
+                            account_hash,
+                            context,
+                        )),
                     )
                 })
                 .collect(),
@@ -725,7 +738,7 @@ impl AccountEntryTrait for AccountContacts {
         };
         grid.change_theme(area, book_attr);
         let (x, y) = grid.write_string(
-            &book.name,
+            &book.backend_id.1,
             book_attr.fg,
             book_attr.bg,
             book_attr.attrs,
@@ -783,6 +796,29 @@ impl Component for AccountContacts {
         }
         let shortcuts = self.shortcuts(context);
         match *event {
+            UIEvent::AccountStatusChange(ref account_hash, _)
+                if account_hash == self.account_hash() =>
+            {
+                if context.accounts[account_hash].is_online(false).is_ok() {
+                    self.books = context.accounts[account_hash]
+                        .contacts
+                        .books
+                        .iter()
+                        .map(|(book_id, book)| {
+                            (
+                                book_id.clone(),
+                                Box::new(AddressBookList::new(
+                                    book_id.clone(),
+                                    book,
+                                    self.account_hash,
+                                    context,
+                                )),
+                            )
+                        })
+                        .collect();
+                    self.set_dirty(true);
+                }
+            }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::LISTING]["next_mailbox"]) =>
             {

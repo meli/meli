@@ -50,6 +50,7 @@ impl Version for V0_9_0 {
         vec![
             Box::new(ServerPasswordCommand) as Box<dyn Migration + Send + Sync + 'static>,
             Box::new(AddressbookRefactor) as Box<dyn Migration + Send + Sync + 'static>,
+            Box::new(ContactBackendRefactor) as Box<dyn Migration + Send + Sync + 'static>,
         ]
     }
 }
@@ -377,6 +378,244 @@ impl Migration for AddressbookRefactor {
     }
 }
 
+/// Add contact backends configuration value
+///
+/// `notmuch_address_book_query`, `mutt_alias_file`, `vcard_folder` are moved into a single
+/// `contacts` configuration value.
+#[derive(Clone, Copy, Debug)]
+struct ContactBackendRefactor;
+
+impl ContactBackendRefactor {
+    fn transform(doc: &mut DocumentMut, verbose: bool) -> Result<()> {
+        use melib::conf::ContactBackendConf;
+
+        if let Some(accs) = doc.get_mut("accounts") {
+            let Some(accs) = accs.as_table_mut() else {
+                return Err(Error::new(format!("invalid accounts value, got: {accs:?}")));
+            };
+            for (acc_name, acc) in accs.iter_mut() {
+                let Some(acc) = acc.as_table_like_mut() else {
+                    return Err(Error::new(format!("invalid account value, got: {acc:?}")));
+                };
+                let mut contacts = toml_edit::InlineTable::new();
+                for (t, f) in [
+                    (
+                        ContactBackendConf::NotmuchAddress as fn(String) -> ContactBackendConf,
+                        "notmuch_address_book_query",
+                    ),
+                    (ContactBackendConf::MuttAlias, "mutt_alias_file"),
+                    (ContactBackendConf::VCard, "vcard_folder"),
+                ] {
+                    if let Some(val) = acc.get_mut(f) {
+                        let val = val.as_str().ok_or_else(|| {
+                            format!("Expected string value for {f} field, got: {val}")
+                        })?;
+                        let val = t(val.to_string());
+                        let val = serde::Serialize::serialize(
+                            &val,
+                            toml_edit::ser::ValueSerializer::new(),
+                        )
+                        .expect("serialize ContactBackendConf");
+                        contacts.insert(f, val);
+                        acc.remove(f);
+                    }
+                }
+                if !contacts.is_empty() {
+                    let new = toml_edit::Item::Value(toml_edit::Value::InlineTable(contacts));
+                    if verbose {
+                        log::info!("Account {acc_name}: adding contacts = {new}.");
+                    }
+                    acc.insert("contacts", new);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn revert_transform(doc: &mut DocumentMut, verbose: bool) -> Result<()> {
+        use melib::conf::ContactBackendConf;
+
+        use serde::de::IntoDeserializer;
+
+        if let Some(accs) = doc.get_mut("accounts") {
+            let Some(accs) = accs.as_table_mut() else {
+                return Err(Error::new(format!("invalid accounts value, got: {accs:?}")));
+            };
+            for (acc_name, acc) in accs.iter_mut() {
+                let Some(acc) = acc.as_table_like_mut() else {
+                    return Err(Error::new(format!("invalid accounts value, got: {acc:?}")));
+                };
+                if let Some(contacts) = acc.get_mut("contacts") {
+                    let Some(contacts) = contacts.as_table_like_mut() else {
+                        continue;
+                    };
+                    let mut notmuch_address_book_query: Option<String> = None;
+                    let mut mutt_alias_file = None;
+                    let mut vcard_folder = None;
+                    for (opt, variant, f) in [
+                        (
+                            &mut notmuch_address_book_query,
+                            ContactBackendConf::NotmuchAddress(String::new()),
+                            "notmuch_address_book_query",
+                        ),
+                        (
+                            &mut mutt_alias_file,
+                            ContactBackendConf::MuttAlias(String::new()),
+                            "mutt_alias_file",
+                        ),
+                        (
+                            &mut vcard_folder,
+                            ContactBackendConf::VCard(String::new()),
+                            "vcard_folder",
+                        ),
+                    ] {
+                        let Some(prev) = contacts.remove(f) else {
+                            continue;
+                        };
+                        let toml_edit::Item::Value(prev) = prev else {
+                            return Err(Error::new(format!(
+                                "{acc_name}: invalid {f} value, got: {prev:?}"
+                            )));
+                        };
+                        let prev = <ContactBackendConf as serde::Deserialize>::deserialize(
+                            prev.into_deserializer(),
+                        )
+                        .unwrap();
+
+                        let val = match (prev, variant) {
+                            (
+                                ContactBackendConf::MuttAlias(val),
+                                ContactBackendConf::MuttAlias(_),
+                            )
+                            | (ContactBackendConf::VCard(val), ContactBackendConf::VCard(_))
+                            | (
+                                ContactBackendConf::NotmuchAddress(val),
+                                ContactBackendConf::NotmuchAddress(_),
+                            ) => val,
+                            (prev, _) => {
+                                return Err(Error::new(format!(
+                                    "{acc_name}: invalid {f} value, got: {prev:?}"
+                                )));
+                            }
+                        };
+                        *opt = Some(val);
+                    }
+                    if !contacts.is_empty() {
+                        return Err(Error::new(format!(
+                                    "{acc_name}: could not revert migration because we would have to remove these unmigrateable items: {:?}", acc.get("contacts").unwrap().to_string()
+                        )));
+                    }
+                    acc.remove("contacts");
+                    if let Some(n) = notmuch_address_book_query {
+                        let new = toml_edit::Item::Value(toml_edit::Value::from(n));
+                        if verbose {
+                            log::info!(
+                                "Account {acc_name}: adding notmuch_address_book_query = {new}."
+                            );
+                        }
+                        acc.insert("notmuch_address_book_query", new);
+                    }
+                    if let Some(n) = mutt_alias_file {
+                        let new = toml_edit::Item::Value(toml_edit::Value::from(n));
+                        if verbose {
+                            log::info!("Account {acc_name}: adding mutt_alias_file = {new}.");
+                        }
+                        acc.insert("mutt_alias_file", new);
+                    }
+                    if let Some(n) = vcard_folder {
+                        let new = toml_edit::Item::Value(toml_edit::Value::from(n));
+                        if verbose {
+                            log::info!("Account {acc_name}: adding vcard_folder = {new}.");
+                        }
+                        acc.insert("vcard_folder", new);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Migration for ContactBackendRefactor {
+    fn id(&self) -> &'static str {
+        melib::identify! { ContactBackendRefactor }
+    }
+
+    fn version(&self) -> &VersionIdentifier {
+        &V0_9_0_ID
+    }
+
+    fn description(&self) -> &str {
+        "`notmuch_address_book_query`, `mutt_alias_file`, `vcard_folder` are moved into a single `contacts` configuration value"
+    }
+
+    fn question(&self) -> &str {
+        "Consolidate `notmuch_address_book_query`, `mutt_alias_file`, `vcard_folder` options into the new `contacts` field?"
+    }
+
+    fn is_applicable(&self, config: &Path) -> Option<bool> {
+        if !config.try_exists().unwrap_or(false) {
+            return Some(false);
+        }
+        for c in get_included_configs(config).ok()? {
+            let raw = std::fs::read_to_string(&c).ok()?;
+            if raw.contains("notmuch_address_book_query")
+                || raw.contains("mutt_alias_file")
+                || raw.contains("vcard_folder")
+            {
+                return Some(true);
+            }
+        }
+        Some(false)
+    }
+
+    fn perform(&self, config: &Path, dry_run: bool, verbose: bool) -> Result<()> {
+        for c in get_included_configs(config)? {
+            if !dry_run {
+                self.perform(config, true, false)
+                    .chain_err_summary(|| "No migration was performed.")?;
+            }
+            let raw = std::fs::read_to_string(&c).chain_err_related_path(&c)?;
+            let Ok(mut doc) = raw.parse::<DocumentMut>() else {
+                if verbose {
+                    log::warn!("Could not parse {} as valid TOML, skipping.", c.display());
+                }
+                continue;
+            };
+
+            Self::transform(&mut doc, verbose).chain_err_related_path(&c)?;
+
+            if !dry_run {
+                std::fs::write(&c, doc.to_string()).chain_err_related_path(&c)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn revert(&self, config: &Path, dry_run: bool, verbose: bool) -> Result<()> {
+        for c in get_included_configs(config)? {
+            if !dry_run {
+                self.perform(config, true, false)
+                    .chain_err_summary(|| "No migration revert was performed.")?;
+            }
+            let raw = std::fs::read_to_string(&c).chain_err_related_path(&c)?;
+            let Ok(mut doc) = raw.parse::<DocumentMut>() else {
+                if verbose {
+                    log::warn!("Could not parse {} as valid TOML, skipping.", c.display());
+                }
+                continue;
+            };
+
+            Self::revert_transform(&mut doc, verbose).chain_err_related_path(&c)?;
+
+            if !dry_run {
+                std::fs::write(&c, doc.to_string()).chain_err_related_path(&c)?;
+            }
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -393,6 +632,11 @@ mod tests {
             #[test]
             fn test_contacts_refactor() {
                 run_contacts_refactor()
+            }
+
+            #[test]
+            fn test_contact_backend_refactor() {
+                run_contact_backend_refactor()
             }
     }
 
@@ -483,5 +727,43 @@ server_password = "hunter2"
             bkp_filepath.file_name().unwrap().to_string_lossy().as_ref(),
             "contacts_new.bkp1"
         );
+    }
+
+    fn run_contact_backend_refactor() {
+        let _logger = Logger::new_with(LogLevel::TRACE, true);
+        let input = r#"
+[accounts.imap]
+root_mailbox = "INBOX"
+format = "imap"
+send_mail = 'false'
+identity="username@example.com"
+server_username = "null"
+server_hostname = "example.com"
+server_password = "false"
+notmuch_address_book_query = "notmuch"
+mutt_alias_file = "mutt_alias"
+vcard_folder = "vcard_folder"
+
+"#;
+        let mut doc = input.parse::<DocumentMut>().unwrap();
+
+        ContactBackendRefactor::transform(&mut doc, true).unwrap();
+        assert_eq!(
+            doc.to_string(),
+            r#"
+[accounts.imap]
+root_mailbox = "INBOX"
+format = "imap"
+send_mail = 'false'
+identity="username@example.com"
+server_username = "null"
+server_hostname = "example.com"
+server_password = "false"
+contacts = { notmuch_address_book_query = { type = "NotmuchAddress", value = "notmuch" }, mutt_alias_file = { type = "MuttAlias", value = "mutt_alias" }, vcard_folder = { type = "VCard", value = "vcard_folder" } }
+
+"#
+        );
+        ContactBackendRefactor::revert_transform(&mut doc, true).unwrap();
+        assert_eq!(doc.to_string(), input);
     }
 }

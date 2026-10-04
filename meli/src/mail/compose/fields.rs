@@ -111,7 +111,13 @@ pub(super) fn generic_address_complete_fn(account_hash: AccountHash) -> AutoComp
                     .filter(|c| c != term)
                     .map(|entry| AutoCompleteEntry {
                         entry,
-                        description: k.to_string().into(),
+                        description: format!(
+                            "{name} [{backend} {format}]",
+                            name = k.1,
+                            backend = (k.0).name,
+                            format = (k.0).format,
+                        )
+                        .into(),
                     })
             })
             .collect::<Vec<AutoCompleteEntry>>()
@@ -184,7 +190,7 @@ mod tests {
             complete_fn(&context, "foo"),
             vec![AutoCompleteEntry {
                 entry: "foo@example.com".into(),
-                description: "default".into()
+                description: "default [meli Card]".into()
             }]
         );
         // Ensure first completion is not quoted if not necessary
@@ -192,7 +198,7 @@ mod tests {
             complete_fn(&context, "bar"),
             vec![AutoCompleteEntry {
                 entry: "Bar Jr <bar@example.com>".into(),
-                description: "default".into()
+                description: "default [meli Card]".into()
             }]
         );
         // Ensure first completion is properly quoted if necessary
@@ -200,7 +206,7 @@ mod tests {
             complete_fn(&context, "Nightmare"),
             vec![AutoCompleteEntry {
                 entry: "\"Nightmare D. Macdonald\" <nightd@example.com>".into(),
-                description: "default".into()
+                description: "default [meli Card]".into()
             }]
         );
         // Ensure a full match is not completed until you add a comma
@@ -210,12 +216,12 @@ mod tests {
             vec![
                 AutoCompleteEntry {
                     entry: "foo@example.com, Bar Jr <bar@example.com>".into(),
-                    description: "default".into()
+                    description: "default [meli Card]".into()
                 },
                 AutoCompleteEntry {
                     entry: "foo@example.com, \"Nightmare D. Macdonald\" <nightd@example.com>"
                         .into(),
-                    description: "default".into()
+                    description: "default [meli Card]".into()
                 }
             ]
         );
@@ -224,12 +230,12 @@ mod tests {
             vec![
                 AutoCompleteEntry {
                     entry: "foo@example.com, Bar Jr <bar@example.com>".into(),
-                    description: "default".into()
+                    description: "default [meli Card]".into()
                 },
                 AutoCompleteEntry {
                     entry: "foo@example.com, \"Nightmare D. Macdonald\" <nightd@example.com>"
                         .into(),
-                    description: "default".into()
+                    description: "default [meli Card]".into()
                 }
             ]
         );
@@ -239,7 +245,7 @@ mod tests {
             complete_fn(&context, "foo@example.com, Nightm"),
             vec![AutoCompleteEntry {
                 entry: "foo@example.com, \"Nightmare D. Macdonald\" <nightd@example.com>".into(),
-                description: "default".into()
+                description: "default [meli Card]".into()
             }]
         );
         // Ensure values are not repeated

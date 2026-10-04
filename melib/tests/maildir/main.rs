@@ -110,6 +110,7 @@ fn new_maildir_backend(
         read_only: false,
         display_name: None,
         subscribed_mailboxes,
+        contacts: indexmap::indexmap! {},
         mailboxes,
         manual_refresh: true,
         extra,
