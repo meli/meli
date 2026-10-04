@@ -73,6 +73,30 @@ impl<V: JSContactVersion> TryInto<Card> for JSContact<V> {
         card.set_id(CardId::from(uid));
         if let Some(name) = name.full {
             card.set_name(name);
+        } else if name.is_ordered {
+            card.set_name(
+                name.components
+                    .iter()
+                    .map(|c| c.value.as_str())
+                    .collect::<Vec<_>>()
+                    .join(name.default_separator.as_deref().unwrap_or(" ")),
+            );
+        } else {
+            use json_types::JsonCardNameComponentKind::*;
+
+            let mut name_s = String::new();
+            let sep = name.default_separator.as_deref().unwrap_or(" ");
+            for kind in [
+                Title, Given, Given2, Surname, Surname2, Credential, Generation,
+            ] {
+                if let Some(c) = name.components.iter().find(|c| c.kind == kind) {
+                    if !name_s.is_empty() {
+                        name_s.push_str(sep);
+                    }
+                    name_s.push_str(&c.value)
+                }
+            }
+            card.set_name(name_s);
         }
         if let Some(e) = emails.get_index(0) {
             card.set_email(e.1.address.to_string());
@@ -147,6 +171,7 @@ pub mod json_types {
 
     impl_json_type_struct_serde! {JsonCardType, "Card"}
     impl_json_type_struct_serde! {JsonNameType, "Name"}
+    impl_json_type_struct_serde! {JsonNameComponentType, "NameComponent"}
     impl_json_type_struct_serde! {JsonEmailAddressType, "EmailAddress"}
 
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -258,15 +283,39 @@ pub mod json_types {
         pub emails: IndexMap<String, JsonCardEmailAddress>,
     }
 
+    #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+    #[serde(rename_all = "lowercase")]
+    pub enum JsonCardNameComponentKind {
+        Title,
+        Given,
+        Given2,
+        Surname,
+        Surname2,
+        Credential,
+        Generation,
+        Separator,
+    }
+
+    #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct JsonCardNameCmponent {
+        #[serde(rename = "@type", default, skip_serializing_if = "Option::is_none")]
+        __type: Option<JsonNameComponentType>,
+        pub value: String,
+        pub kind: JsonCardNameComponentKind,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        pub phonetic: String,
+    }
+
     #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
     #[serde(rename_all = "camelCase")]
     pub struct JsonCardName {
         #[serde(rename = "@type", default, skip_serializing_if = "Option::is_none")]
         __type: Option<JsonNameType>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        pub components: Vec<serde_json::Value>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub is_ordered: Option<bool>,
+        pub components: Vec<JsonCardNameCmponent>,
+        #[serde(default)]
+        pub is_ordered: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub default_separator: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -305,7 +354,7 @@ pub mod json_types {
                     __type: None,
                     components: vec![],
                     full: Some("full_name".to_string()),
-                    is_ordered: Some(true),
+                    is_ordered: false,
                     default_separator: None,
                 },
                 emails: indexmap! {
@@ -332,7 +381,7 @@ pub mod json_types {
             "name": {
                 "components": [],
                 "full": "full_name",
-                "isOrdered": true
+                "isOrdered": false
             }
         }"#
             )
@@ -357,7 +406,7 @@ pub mod json_types {
             "name": {
                 "components": [],
                 "full": "full_name",
-                "isOrdered": true
+                "isOrdered": false
             }
         }"#
                         )
