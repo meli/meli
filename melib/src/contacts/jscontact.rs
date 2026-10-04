@@ -33,7 +33,7 @@ pub struct JSContactVersionUnknown;
 impl JSContactVersion for JSContactVersionUnknown {}
 
 /// Version 1 <https://www.rfc-editor.org/rfc/rfc9553.html>
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct JSContactVersion1;
 impl JSContactVersion for JSContactVersion1 {}
 
