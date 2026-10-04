@@ -329,7 +329,7 @@ impl Component for ContactManager {
             return true;
         }
 
-        if matches!(self.mode, ViewMode::Discard(_)) {
+        if matches!(self.mode, ViewMode::Discard(_) | ViewMode::ReadOnly) {
             true
         } else {
             let Some(parent_id) = self.parent_id else {
