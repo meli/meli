@@ -47,9 +47,6 @@ use crate::{
 
 pub type UtcDate = String;
 
-crate::_impl_jmap_capability! { JmapMailCapability: "urn:ietf:params:jmap:mail", name: "Mail" }
-crate::_impl_jmap_capability! { JmapSubmissionCapability: "urn:ietf:params:jmap:submission", name: "Submission" }
-
 pub trait Response<OBJ: Object>: Send + Sync {
     const NAME: &'static str;
 }
