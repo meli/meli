@@ -410,14 +410,14 @@ impl std::fmt::Display for ErrorChainDisplay<'_> {
                 };
             } else {
                 write!(fmt, "{}", cur.current.summary)?;
-                if let Some(details) = cur.current.details.as_ref() {
-                    if !details.trim().is_empty() {
-                        write!(fmt, "\n{details}")?;
-                    }
+            }
+            if let Some(details) = cur.current.details.as_ref() {
+                if !details.trim().is_empty() {
+                    write!(fmt, "\n{details}")?;
                 }
-                if let Some(ref path) = cur.current.related_path {
-                    write!(fmt, "\nRelated path: {}", path.display())?;
-                }
+            }
+            if let Some(ref path) = cur.current.related_path {
+                write!(fmt, "\nRelated path: {}", path.display())?;
             }
             if let Some(ref source) = cur.current.source {
                 writeln!(fmt, "\nCaused by:")?;
