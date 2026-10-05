@@ -106,6 +106,12 @@ pub struct ContentLine {
 
 impl CardDeserializer {
     pub fn try_from_str(mut input: &str) -> Result<VCard<impl VCardVersion>> {
+        let (sep, fold) = if input.starts_with(HEADER_CRLF) {
+            ("\r\n", "\r\n ")
+        } else {
+            ("\n", "\n ")
+        };
+
         input = if (!input.starts_with(HEADER_CRLF)
             || (!input.ends_with(FOOTER_CRLF) && !input.ends_with(FOOTER)))
             && (!input.starts_with(HEADER_LF)
@@ -136,7 +142,27 @@ impl CardDeserializer {
         }
         let mut stage: Stage;
 
-        for l in input.lines() {
+        let mut cursor = 0;
+        while cursor < input.len() {
+            let mut line_end = 0;
+            while let Some(next_ln) = input[cursor..][line_end..].find(sep) {
+                if input[cursor..][line_end..][next_ln + sep.len()..].starts_with(' ') {
+                    line_end += next_ln + sep.len();
+                    if !input[cursor..][line_end..].contains(sep) {
+                        line_end = input[cursor..].len();
+                        break;
+                    }
+                    continue;
+                }
+                line_end += next_ln + sep.len();
+                break;
+            }
+            if line_end == 0 {
+                line_end = input[cursor..].len();
+            }
+            let l = input[cursor..][..line_end].trim();
+            cursor += line_end;
+
             let mut el = ContentLine::default();
             let mut value_start = 0;
             let mut has_colon = false;
@@ -192,7 +218,11 @@ impl CardDeserializer {
                 ))
                 .set_kind(ErrorKind::ValueError));
             }
-            el.value = l[value_start..].replace("\\:", ":");
+            let mut value = l[value_start..].replace("\\:", ":");
+            if value.contains(fold) {
+                value = value.replace(fold, "");
+            }
+            el.value = value;
             ret.insert(name, el);
         }
         Ok(VCard(ret, std::marker::PhantomData::<*const VCardVersion4>))
@@ -449,11 +479,17 @@ fn test_vcard_v4_parse() {
         },
     };
     assert_eq!(parsed.version(), VCardVersion4::NAME);
-    assert_eq!(parsed.0, contents,);
+    assert_eq!(parsed.0, contents);
 
     // Test with LF endings
     let j = "BEGIN:VCARD\nVERSION:4.0\nN:Gump;Forrest;;Mr.;\nFN:Forrest Gump\nORG:Bubba Gump Shrimp Co.\nTITLE:Shrimp Man\nPHOTO;MEDIATYPE=image/gif:http://www.example.com/dir_photos/my_photo.gif\nTEL;TYPE=work,voice;VALUE=uri:tel:+1-111-555-1212\nTEL;TYPE=home,voice;VALUE=uri:tel:+1-404-555-1212\nADR;TYPE=WORK;PREF=1;LABEL=\"100 Waters Edge\\nBaytown\\, LA 30314\\nUnited States of America\":;;100 Waters Edge;Baytown;LA;30314;United States of America\nADR;TYPE=HOME;LABEL=\"42 Plantation St.\\nBaytown\\, LA 30314\\nUnited States of America\":;;42 Plantation St.;Baytown;LA;30314;United States of America\nEMAIL:forrestgump@example.com\nREV:20080424T195243Z\nx-qq:21588891\nEND:VCARD\n";
     let parsed2 = CardDeserializer::try_from_str(j).unwrap();
     assert_eq!(parsed2.version(), VCardVersion4::NAME);
-    assert_eq!(parsed2.0, contents,);
+    assert_eq!(parsed2.0, contents);
+
+    // Test with value folding
+    let j = "BEGIN:VCARD\nVERSION:4.0\nN:Gump;Forrest;;Mr.;\nFN:Forrest \n Gump\nORG:Bubba Gump Shrimp Co.\nTITLE:Shrimp Man\nPHOTO;MEDIATYPE=image/gif:http://www.example.com/dir_photos/my_photo.gif\nTEL;TYPE=work,voice;VALUE=uri:tel:+1-111-555-1212\nTEL;TYPE=home,voice;VALUE=uri:tel:+1-404-555-1212\nADR;TYPE=WORK;PREF=1;LABEL=\"100 Waters Edge\\nBaytown\\, LA 30314\\nUnited States of America\":;;100 Waters Edge;Baytown;LA;30314;United States of America\nADR;TYPE=HOME;LABEL=\"42 Plantation St.\\nBaytown\\, LA 30314\\nUnited States of America\":;;42 Plantation St.;Baytown;LA;30314;United States of America\nEMAIL:forrestgump@example.com\nREV:20080424T195243Z\nx-qq:21588891\nEND:VCARD\n";
+    let parsed3 = CardDeserializer::try_from_str(j).unwrap();
+    assert_eq!(parsed3.version(), VCardVersion4::NAME);
+    assert_eq!(parsed3.0, contents);
 }
