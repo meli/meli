@@ -166,6 +166,24 @@ impl Account {
                         IsAsync::Async,
                     );
                 }
+                ContactBackendConf::CardDAV(server_conf) => {
+                    self.init_contact_backend(
+                        name,
+                        "carddav".to_string(),
+                        async move {
+                            use melib::{
+                                contacts::carddav::{CardDAVConnection, CardDAVContacts},
+                                utils::webdav::WebDAVConnection,
+                            };
+                            let mut connection = WebDAVConnection::new(&server_conf).await?;
+                            connection.connect().await?;
+                            let connection = CardDAVConnection::new(connection).await?.into();
+
+                            Ok(Box::new(CardDAVContacts { connection }) as Box<dyn ContactBackend>)
+                        },
+                        IsAsync::Async,
+                    );
+                }
             }
         }
     }

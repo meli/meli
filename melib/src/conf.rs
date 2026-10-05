@@ -74,6 +74,8 @@ pub enum ContactBackendConf {
     NotmuchAddress(String),
     MuttAlias(String),
     VCard(String),
+    #[cfg(feature = "webdav")]
+    CardDAV(crate::utils::webdav::WebDAVServerConf),
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]

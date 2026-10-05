@@ -350,6 +350,31 @@ Example:
 .Bd -literal
 contacts = { "vcards" = { type = "VCard", value = "~/.contacts/" } }
 .Ed
+.It Ic CardDAV
+and
+.Li value
+is a map including the CardDAV server configuration.
+.Bl -tag -width 36n
+.It Ic url Ar String
+Server url.
+.It Ic username Ar Secret
+Authentication username.
+.It Ic password Ar Secret
+Authentication password.
+.It Ic auth Ar \&"Basic\&" | \&"BearerToken\&" | \&"None\&"
+Type of HTTP authentication.
+.El
+Example (with line breaks for editorial clarity):
+.Bd -literal
+contacts = { "my_carddav" =
+  { type = "CardDAV", value = {
+    url = "https://carddav.example.com",
+    username = "user@example.com",
+    password = "hunter2",
+    auth = "Basic" }
+  }
+}
+.Ed
 .El
 You can include as many contact backends as you wish.
 .It Ic mailboxes Ar mailbox

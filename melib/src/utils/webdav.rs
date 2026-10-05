@@ -73,14 +73,14 @@ use crate::{
     error::{Error, ErrorKind, NetworkErrorKind, Result, ResultIntoError},
 };
 
-#[derive(Copy, Clone, Debug, Deserialize)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub enum WebDAVAuthentication {
     Basic,
     BearerToken,
     None,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct WebDAVServerConf {
     pub url: Url,
     pub username: Secret,
