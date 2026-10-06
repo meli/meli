@@ -41,6 +41,7 @@ use super::*;
 use crate::{
     accounts::{JobRequest, MailboxStatus},
     components::ExtendShortcutsMaps,
+    conf::themes::ThemeAttribute,
     jobs::IsAsync,
 };
 
@@ -313,89 +314,110 @@ pub struct ColorCache {
 impl ColorCache {
     pub fn new(context: &Context, style: IndexStyle) -> Self {
         let default = Self {
-            theme_default: crate::conf::value(context, "theme_default"),
-            tag_default: crate::conf::value(context, "mail.listing.tag_default"),
-            highlight_self: crate::conf::value(context, "mail.listing.highlight_self"),
+            theme_default: crate::conf::theme_value(context, "theme_default"),
+            tag_default: crate::conf::theme_value(context, "mail.listing.tag_default"),
+            highlight_self: crate::conf::theme_value(context, "mail.listing.highlight_self"),
             ..Self::default()
         };
         let mut ret = match style {
             IndexStyle::Plain => Self {
-                even: crate::conf::value(context, "mail.listing.plain.even"),
-                odd: crate::conf::value(context, "mail.listing.plain.odd"),
-                even_unseen: crate::conf::value(context, "mail.listing.plain.even_unseen"),
-                odd_unseen: crate::conf::value(context, "mail.listing.plain.odd_unseen"),
-                even_highlighted: crate::conf::value(
+                even: crate::conf::theme_value(context, "mail.listing.plain.even"),
+                odd: crate::conf::theme_value(context, "mail.listing.plain.odd"),
+                even_unseen: crate::conf::theme_value(context, "mail.listing.plain.even_unseen"),
+                odd_unseen: crate::conf::theme_value(context, "mail.listing.plain.odd_unseen"),
+                even_highlighted: crate::conf::theme_value(
                     context,
                     "mail.listing.plain.even_highlighted",
                 ),
-                odd_highlighted: crate::conf::value(context, "mail.listing.plain.odd_highlighted"),
-                odd_highlighted_selected: crate::conf::value(
+                odd_highlighted: crate::conf::theme_value(
+                    context,
+                    "mail.listing.plain.odd_highlighted",
+                ),
+                odd_highlighted_selected: crate::conf::theme_value(
                     context,
                     "mail.listing.plain.odd_highlighted_selected",
                 ),
-                even_selected: crate::conf::value(context, "mail.listing.plain.even_selected"),
-                even_highlighted_selected: crate::conf::value(
+                even_selected: crate::conf::theme_value(
+                    context,
+                    "mail.listing.plain.even_selected",
+                ),
+                even_highlighted_selected: crate::conf::theme_value(
                     context,
                     "mail.listing.plain.even_highlighted_selected",
                 ),
-                odd_selected: crate::conf::value(context, "mail.listing.plain.odd_selected"),
+                odd_selected: crate::conf::theme_value(context, "mail.listing.plain.odd_selected"),
                 ..default
             },
             IndexStyle::Threaded => Self {
-                even_unseen: crate::conf::value(context, "mail.listing.plain.even_unseen"),
-                even_selected: crate::conf::value(context, "mail.listing.plain.even_selected"),
-                even_highlighted: crate::conf::value(
+                even_unseen: crate::conf::theme_value(context, "mail.listing.plain.even_unseen"),
+                even_selected: crate::conf::theme_value(
+                    context,
+                    "mail.listing.plain.even_selected",
+                ),
+                even_highlighted: crate::conf::theme_value(
                     context,
                     "mail.listing.plain.even_highlighted",
                 ),
-                even_highlighted_selected: crate::conf::value(
+                even_highlighted_selected: crate::conf::theme_value(
                     context,
                     "mail.listing.plain.even_highlighted_selected",
                 ),
-                odd_unseen: crate::conf::value(context, "mail.listing.plain.odd_unseen"),
-                odd_selected: crate::conf::value(context, "mail.listing.plain.odd_selected"),
-                odd_highlighted: crate::conf::value(context, "mail.listing.plain.odd_highlighted"),
-                odd_highlighted_selected: crate::conf::value(
+                odd_unseen: crate::conf::theme_value(context, "mail.listing.plain.odd_unseen"),
+                odd_selected: crate::conf::theme_value(context, "mail.listing.plain.odd_selected"),
+                odd_highlighted: crate::conf::theme_value(
+                    context,
+                    "mail.listing.plain.odd_highlighted",
+                ),
+                odd_highlighted_selected: crate::conf::theme_value(
                     context,
                     "mail.listing.plain.odd_highlighted_selected",
                 ),
-                even: crate::conf::value(context, "mail.listing.plain.even"),
-                odd: crate::conf::value(context, "mail.listing.plain.odd"),
+                even: crate::conf::theme_value(context, "mail.listing.plain.even"),
+                odd: crate::conf::theme_value(context, "mail.listing.plain.odd"),
                 ..default
             },
             IndexStyle::Compact => Self {
-                even_unseen: crate::conf::value(context, "mail.listing.compact.even_unseen"),
-                even_selected: crate::conf::value(context, "mail.listing.compact.even_selected"),
-                even_highlighted: crate::conf::value(
+                even_unseen: crate::conf::theme_value(context, "mail.listing.compact.even_unseen"),
+                even_selected: crate::conf::theme_value(
+                    context,
+                    "mail.listing.compact.even_selected",
+                ),
+                even_highlighted: crate::conf::theme_value(
                     context,
                     "mail.listing.compact.even_highlighted",
                 ),
-                even_highlighted_selected: crate::conf::value(
+                even_highlighted_selected: crate::conf::theme_value(
                     context,
                     "mail.listing.compact.even_highlighted_selected",
                 ),
-                odd_unseen: crate::conf::value(context, "mail.listing.compact.odd_unseen"),
-                odd_selected: crate::conf::value(context, "mail.listing.compact.odd_selected"),
-                odd_highlighted: crate::conf::value(
+                odd_unseen: crate::conf::theme_value(context, "mail.listing.compact.odd_unseen"),
+                odd_selected: crate::conf::theme_value(
+                    context,
+                    "mail.listing.compact.odd_selected",
+                ),
+                odd_highlighted: crate::conf::theme_value(
                     context,
                     "mail.listing.compact.odd_highlighted",
                 ),
-                odd_highlighted_selected: crate::conf::value(
+                odd_highlighted_selected: crate::conf::theme_value(
                     context,
                     "mail.listing.compact.odd_highlighted_selected",
                 ),
-                even: crate::conf::value(context, "mail.listing.compact.even"),
-                odd: crate::conf::value(context, "mail.listing.compact.odd"),
+                even: crate::conf::theme_value(context, "mail.listing.compact.even"),
+                odd: crate::conf::theme_value(context, "mail.listing.compact.odd"),
                 ..default
             },
             IndexStyle::Conversations => Self {
-                subject: crate::conf::value(context, "mail.listing.conversations.subject"),
-                from: crate::conf::value(context, "mail.listing.conversations.from"),
-                date: crate::conf::value(context, "mail.listing.conversations.date"),
-                selected: crate::conf::value(context, "mail.listing.conversations.selected"),
-                unseen: crate::conf::value(context, "mail.listing.conversations.unseen"),
-                highlighted: crate::conf::value(context, "mail.listing.conversations.highlighted"),
-                highlighted_selected: crate::conf::value(
+                subject: crate::conf::theme_value(context, "mail.listing.conversations.subject"),
+                from: crate::conf::theme_value(context, "mail.listing.conversations.from"),
+                date: crate::conf::theme_value(context, "mail.listing.conversations.date"),
+                selected: crate::conf::theme_value(context, "mail.listing.conversations.selected"),
+                unseen: crate::conf::theme_value(context, "mail.listing.conversations.unseen"),
+                highlighted: crate::conf::theme_value(
+                    context,
+                    "mail.listing.conversations.highlighted",
+                ),
+                highlighted_selected: crate::conf::theme_value(
                     context,
                     "mail.listing.conversations.highlighted_selected",
                 ),
@@ -1488,14 +1510,16 @@ impl Component for Listing {
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         match event {
             UIEvent::ConfigReload { old_settings: _ } => {
-                self.theme_default = crate::conf::value(context, "theme_default");
+                self.theme_default = crate::conf::theme_value(context, "theme_default");
                 let account_hash = context.accounts[self.cursor_pos.account].hash();
                 self.sidebar_divider =
                     *account_settings!(context[&account_hash].listing.sidebar_divider);
-                self.sidebar_divider_theme = conf::value(context, "mail.sidebar_divider");
+                self.sidebar_divider_theme =
+                    crate::conf::theme_value(context, "mail.sidebar_divider");
                 self.mail_view_divider =
                     *account_settings!(context[&account_hash].listing.mail_view_divider);
-                self.mail_view_divider_theme = conf::value(context, "mail.view.divider");
+                self.mail_view_divider_theme =
+                    crate::conf::theme_value(context, "mail.view.divider");
                 self.menu.grid_mut().empty();
                 self.set_dirty(true);
             }
@@ -3090,7 +3114,7 @@ impl Listing {
                 account: 0,
                 menu: MenuEntryCursor::Mailbox(0),
             },
-            menu: Screen::<Virtual>::new(crate::conf::value(context, "mail.sidebar")),
+            menu: Screen::<Virtual>::new(crate::conf::theme_value(context, "mail.sidebar")),
             menu_scrollbar_show_timer: context.main_loop_handler.job_executor.clone().create_timer(
                 std::time::Duration::from_secs(0),
                 std::time::Duration::from_millis(1200),
@@ -3101,16 +3125,16 @@ impl Listing {
                 1000,
                 context.main_loop_handler.job_executor.clone(),
             ),
-            theme_default: conf::value(context, "theme_default"),
+            theme_default: crate::conf::theme_value(context, "theme_default"),
             id: ComponentId::default(),
             sidebar_divider: *account_settings!(
                 context[&first_account_hash].listing.sidebar_divider
             ),
-            sidebar_divider_theme: conf::value(context, "mail.sidebar_divider"),
+            sidebar_divider_theme: crate::conf::theme_value(context, "mail.sidebar_divider"),
             mail_view_divider: *account_settings!(
                 context[&first_account_hash].listing.mail_view_divider
             ),
-            mail_view_divider_theme: conf::value(context, "mail.view.divider"),
+            mail_view_divider_theme: crate::conf::theme_value(context, "mail.view.divider"),
             menu_visibility: !*account_settings!(
                 context[&first_account_hash].listing.hide_sidebar_on_launch
             ),
@@ -3259,25 +3283,25 @@ impl Listing {
 
         let mut lines: Vec<Line> = Vec::new();
         let mail_sidebar_highlighted_value =
-            crate::conf::value(context, "mail.sidebar_highlighted");
+            crate::conf::theme_value(context, "mail.sidebar_highlighted");
         let mail_sidebar_highlighted_account_name_value =
-            crate::conf::value(context, "mail.sidebar_highlighted_account_name");
+            crate::conf::theme_value(context, "mail.sidebar_highlighted_account_name");
         let mail_sidebar_account_name_value =
-            crate::conf::value(context, "mail.sidebar_account_name");
+            crate::conf::theme_value(context, "mail.sidebar_account_name");
         let mail_sidebar_highlighted_index_value =
-            crate::conf::value(context, "mail.sidebar_highlighted_index");
+            crate::conf::theme_value(context, "mail.sidebar_highlighted_index");
         let mail_sidebar_highlighted_unread_count_value =
-            crate::conf::value(context, "mail.sidebar_highlighted_unread_count");
+            crate::conf::theme_value(context, "mail.sidebar_highlighted_unread_count");
         let mail_sidebar_highlighted_account_value =
-            crate::conf::value(context, "mail.sidebar_highlighted_account");
+            crate::conf::theme_value(context, "mail.sidebar_highlighted_account");
         let mail_sidebar_highlighted_account_index_value =
-            crate::conf::value(context, "mail.sidebar_highlighted_account_index");
+            crate::conf::theme_value(context, "mail.sidebar_highlighted_account_index");
         let mail_sidebar_highlighted_account_unread_count_value =
-            crate::conf::value(context, "mail.sidebar_highlighted_account_unread_count");
-        let mail_sidebar_value = crate::conf::value(context, "mail.sidebar");
-        let mail_sidebar_index_value = crate::conf::value(context, "mail.sidebar_index");
+            crate::conf::theme_value(context, "mail.sidebar_highlighted_account_unread_count");
+        let mail_sidebar_value = crate::conf::theme_value(context, "mail.sidebar");
+        let mail_sidebar_index_value = crate::conf::theme_value(context, "mail.sidebar_index");
         let mail_sidebar_unread_count_value =
-            crate::conf::value(context, "mail.sidebar_unread_count");
+            crate::conf::theme_value(context, "mail.sidebar_unread_count");
         let has_sibling_str: &str = account_settings!(
             context[&self.accounts[aidx].hash]
                 .listing
@@ -3388,7 +3412,7 @@ impl Listing {
         if lines.is_empty() {
             self.menu.grid_mut().write_string(
                 "offline",
-                crate::conf::value(context, "error_message").fg,
+                crate::conf::theme_value(context, "error_message").fg,
                 account_attrs.bg,
                 account_attrs.attrs,
                 area.skip_rows(1),

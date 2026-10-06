@@ -1000,7 +1000,7 @@ impl State {
                         &self.context,
                         None,
                         None,
-                        crate::conf::value(&self.context, "theme_default"),
+                        crate::conf::theme_value(&self.context, "theme_default"),
                     ),
                 )))))),
                 Err(err) => self.context.replies.push_back(UIEvent::Notification {

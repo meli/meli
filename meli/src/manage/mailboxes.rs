@@ -101,7 +101,7 @@ impl AccountEntryTrait for AccountMailboxManager {
         context: &mut Context,
     ) -> Result<Self> {
         let account_pos = context.accounts.get_index_of(&account_hash).unwrap();
-        let theme_default = crate::conf::value(context, "theme_default");
+        let theme_default = crate::conf::theme_value(context, "theme_default");
         let mut data_columns = DataColumns::new(theme_default);
         data_columns.theme_config.set_single_theme(theme_default);
         Ok(Self {
@@ -117,7 +117,7 @@ impl AccountEntryTrait for AccountMailboxManager {
             sort_order: SortOrder::Asc,
             min_width: [0; 4],
             theme_default,
-            highlight_theme: crate::conf::value(context, "highlight"),
+            highlight_theme: crate::conf::theme_value(context, "highlight"),
             initialized: false,
             dirty: true,
             movement: None,
@@ -143,7 +143,7 @@ impl AccountMailboxManager {
 
     pub fn new(context: &Context, account_pos: usize) -> Self {
         let account_hash = context.accounts[account_pos].hash();
-        let theme_default = crate::conf::value(context, "theme_default");
+        let theme_default = crate::conf::theme_value(context, "theme_default");
         let mut data_columns = DataColumns::new(theme_default);
         data_columns.theme_config.set_single_theme(theme_default);
         Self {
@@ -159,7 +159,7 @@ impl AccountMailboxManager {
             sort_order: SortOrder::Asc,
             min_width: [0; 4],
             theme_default,
-            highlight_theme: crate::conf::value(context, "highlight"),
+            highlight_theme: crate::conf::theme_value(context, "highlight"),
             initialized: false,
             dirty: true,
             movement: None,
@@ -504,7 +504,7 @@ impl Component for AccountMailboxManager {
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if let UIEvent::ConfigReload { old_settings: _ } = event {
-            self.theme_default = crate::conf::value(context, "theme_default");
+            self.theme_default = crate::conf::theme_value(context, "theme_default");
             self.initialized = false;
             self.set_dirty(true);
         }

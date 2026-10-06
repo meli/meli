@@ -19,7 +19,11 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
+use crate::{
+    components::prelude::*,
+    terminal::{cells::create_box, Alignment, Screen, Virtual},
+    utilities::widgets::ScrollBar,
+};
 
 const OK: &str = "OK";
 const CANCEL: &str = "Cancel";
@@ -514,7 +518,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             identifiers[0].1 = true;
         }
 
-        let theme_default = crate::conf::value(context, "theme_default");
+        let theme_default = crate::conf::theme_value(context, "theme_default");
         let mut ret = Self {
             single_only,
             entries: identifiers,
@@ -538,7 +542,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
     }
 
     fn initialise(&mut self, context: &Context) {
-        self.theme_default = crate::conf::value(context, "theme_default");
+        self.theme_default = crate::conf::theme_value(context, "theme_default");
     }
 
     pub fn is_done(&self) -> bool {
@@ -554,7 +558,8 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
     }
 
     fn initialize(&mut self, context: &Context) {
-        let mut highlighted_attrs = crate::conf::value(context, "widgets.options.highlighted");
+        let mut highlighted_attrs =
+            crate::conf::theme_value(context, "widgets.options.highlighted");
         if !context.settings.terminal.use_color() {
             highlighted_attrs.attrs |= Attr::REVERSE;
         }
@@ -678,7 +683,8 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
     }
 
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        let mut highlighted_attrs = crate::conf::value(context, "widgets.options.highlighted");
+        let mut highlighted_attrs =
+            crate::conf::theme_value(context, "widgets.options.highlighted");
         if !context.settings.terminal.use_color() {
             highlighted_attrs.attrs |= Attr::REVERSE;
         }

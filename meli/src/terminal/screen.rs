@@ -26,6 +26,7 @@ use melib::{log, uuid};
 use termion::{clear, cursor, raw::IntoRawMode, screen::AlternateScreen};
 
 use crate::{
+    conf::themes::ThemeAttribute,
     terminal::{
         cells::CellBuffer, Alignment, BracketModeEnd, BracketModeStart, Cell, Color,
         DisableAlternateScrollMode, DisableMouse, DisableSGRMouse, DisableWraparoundMode,
@@ -33,7 +34,7 @@ use crate::{
         QueryForeground, QuerySynchronizedOutputSupport, RestoreWindowTitleIconFromStack,
         RestoreWraparoundMode, SaveWindowTitleIconToStack, SaveWraparoundMode,
     },
-    Attr, Context, ThemeAttribute,
+    Attr, Context,
 };
 
 pub type StateStdout = termion::screen::AlternateScreen<

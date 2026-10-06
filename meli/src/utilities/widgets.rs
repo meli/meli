@@ -22,7 +22,7 @@
 use std::{borrow::Cow, time::Duration};
 
 use super::*;
-use crate::melib::text::TextProcessing;
+use crate::{conf::themes::ThemeAttribute, melib::text::TextProcessing};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 enum FormFocus {
@@ -112,7 +112,7 @@ impl Field {
 
 impl Component for Field {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        let theme_attr = crate::conf::value(context, "widgets.form.field");
+        let theme_attr = crate::conf::theme_value(context, "widgets.form.field");
         let str = self.as_str();
         match self {
             Self::Text(ref mut text_field) => {
@@ -414,11 +414,11 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync, F: FormWidgetL
 {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.is_dirty() {
-            let theme_default = crate::conf::value(context, "theme_default");
+            let theme_default = crate::conf::theme_value(context, "theme_default");
 
             grid.clear_area(area, theme_default);
-            let label_attrs = crate::conf::value(context, "widgets.form.label");
-            let mut highlighted = crate::conf::value(context, "highlight");
+            let label_attrs = crate::conf::theme_value(context, "widgets.form.label");
+            let mut highlighted = crate::conf::theme_value(context, "highlight");
             if !context.settings.terminal.use_color() {
                 highlighted.attrs |= Attr::REVERSE;
             }
@@ -721,14 +721,14 @@ where
 {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.dirty {
-            let theme_default = crate::conf::value(context, "theme_default");
+            let theme_default = crate::conf::theme_value(context, "theme_default");
             grid.clear_area(area, theme_default);
 
             let mut len = 0;
             for (i, k) in self.layout.iter().enumerate() {
                 let cur_len = k.len();
                 let theme_attr = if i == self.cursor && self.focus {
-                    crate::conf::value(context, "highlight")
+                    crate::conf::theme_value(context, "highlight")
                 } else {
                     theme_default
                 };
@@ -893,8 +893,8 @@ impl Component for AutoComplete {
             .unwrap_or(0)
             + 1;
         let area = area.take_cols(width);
-        let theme_attr = crate::conf::value(context, "widgets.autocomplete");
-        grid.clear_area(area, crate::conf::value(context, "theme_default"));
+        let theme_attr = crate::conf::theme_value(context, "widgets.autocomplete");
+        grid.clear_area(area, crate::conf::theme_value(context, "theme_default"));
         grid.change_theme(area, theme_attr);
         let mut rev_iter = self
             .entries
@@ -909,7 +909,7 @@ impl Component for AutoComplete {
         } else {
             &mut normal_iter
         };
-        let highlight = crate::conf::value(context, "highlight");
+        let highlight = crate::conf::theme_value(context, "highlight");
         for (row, (i, e)) in iter.enumerate() {
             let theme_attr = if Some(i) == self.cursor {
                 grid.change_theme(area.nth_row(row), highlight);
@@ -1130,7 +1130,7 @@ impl ScrollBar {
         if height < 3 {
             return;
         }
-        let theme_default = crate::conf::value(context, "theme_default");
+        let theme_default = crate::conf::theme_value(context, "theme_default");
         grid.clear_area(area, theme_default);
 
         let visible_rows = std::cmp::min(visible_rows, length);
@@ -1143,7 +1143,7 @@ impl ScrollBar {
         if self.show_arrows {
             grid[area2.upper_left()]
                 .set_ch(if ascii_drawing { '^' } else { '▀' })
-                .set_fg(crate::conf::value(context, "widgets.options.highlighted").bg);
+                .set_fg(crate::conf::theme_value(context, "widgets.options.highlighted").bg);
             area2 = area2.skip_rows(1);
         }
 
@@ -1154,7 +1154,7 @@ impl ScrollBar {
             }
             grid[area2.upper_left()]
                 .set_ch(if ascii_drawing { '#' } else { '█' })
-                .set_fg(crate::conf::value(context, "widgets.options.highlighted").bg)
+                .set_fg(crate::conf::theme_value(context, "widgets.options.highlighted").bg)
                 .set_attrs(if !context.settings.terminal.use_color() {
                     theme_default.attrs | Attr::REVERSE
                 } else {
@@ -1165,8 +1165,8 @@ impl ScrollBar {
         if self.show_arrows {
             grid[area2.bottom_right()]
                 .set_ch(if ascii_drawing { 'v' } else { '▄' })
-                .set_fg(crate::conf::value(context, "widgets.options.highlighted").bg)
-                .set_bg(crate::conf::value(context, "theme_default").bg);
+                .set_fg(crate::conf::theme_value(context, "widgets.options.highlighted").bg)
+                .set_bg(crate::conf::theme_value(context, "theme_default").bg);
         }
     }
 
@@ -1187,7 +1187,7 @@ impl ScrollBar {
         if width < 3 {
             return;
         }
-        let theme_default = crate::conf::value(context, "theme_default");
+        let theme_default = crate::conf::theme_value(context, "theme_default");
         grid.clear_area(area, theme_default);
 
         let visible_cols = std::cmp::min(visible_cols, length);
@@ -1200,7 +1200,7 @@ impl ScrollBar {
         if self.show_arrows {
             grid[area2.upper_left()]
                 .set_ch(if ascii_drawing { '<' } else { '▐' })
-                .set_fg(crate::conf::value(context, "widgets.options.highlighted").bg);
+                .set_fg(crate::conf::theme_value(context, "widgets.options.highlighted").bg);
             area2 = area2.skip_cols(1);
         }
 
@@ -1211,7 +1211,7 @@ impl ScrollBar {
             }
             grid[area2.upper_left()]
                 .set_ch(if ascii_drawing { '#' } else { '█' })
-                .set_fg(crate::conf::value(context, "widgets.options.highlighted").bg)
+                .set_fg(crate::conf::theme_value(context, "widgets.options.highlighted").bg)
                 .set_attrs(if !context.settings.terminal.use_color() {
                     theme_default.attrs | Attr::REVERSE
                 } else {
@@ -1222,8 +1222,8 @@ impl ScrollBar {
         if self.show_arrows {
             grid[area2.bottom_right()]
                 .set_ch(if ascii_drawing { '>' } else { '▌' })
-                .set_fg(crate::conf::value(context, "widgets.options.highlighted").bg)
-                .set_bg(crate::conf::value(context, "theme_default").bg);
+                .set_fg(crate::conf::theme_value(context, "widgets.options.highlighted").bg)
+                .set_bg(crate::conf::theme_value(context, "theme_default").bg);
         }
     }
 }
@@ -1406,7 +1406,7 @@ impl ProgressSpinner {
             .job_executor
             .clone()
             .create_timer(interval, interval);
-        let mut theme_attr = crate::conf::value(context, "status.bar");
+        let mut theme_attr = crate::conf::theme_value(context, "status.bar");
         if !context.settings.terminal.use_color() {
             theme_attr.attrs |= Attr::REVERSE;
         }

@@ -712,8 +712,8 @@ To: {}
 
     fn draw_attachments(&self, grid: &mut CellBuffer, mut area: Area, context: &Context) {
         let attachments_no = self.draft.attachments().len();
-        let theme_default = crate::conf::value(context, "theme_default");
-        let highlight_attr = crate::conf::value(context, "highlight");
+        let theme_default = crate::conf::theme_value(context, "theme_default");
+        let highlight_attr = crate::conf::theme_value(context, "highlight");
         grid.clear_area(area, theme_default);
         let our_map: ShortcutMap =
             account_settings!(context[&self.account_hash].shortcuts.composing).key_values();
@@ -1070,8 +1070,8 @@ impl Component for Composer {
             self.initialized = true;
         }
 
-        let theme_default = crate::conf::value(context, "theme_default");
-        let highlight_attr = crate::conf::value(context, "highlight");
+        let theme_default = crate::conf::theme_value(context, "theme_default");
+        let highlight_attr = crate::conf::theme_value(context, "highlight");
         if self.dirty {
             grid.clear_area(area.skip_rows(1), theme_default);
             grid.clear_area(area.nth_row(0), highlight_attr);

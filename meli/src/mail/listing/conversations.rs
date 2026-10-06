@@ -25,7 +25,7 @@ use indexmap::IndexSet;
 use melib::{Address, SortField, SortOrder, TagHash, Threads};
 
 use super::*;
-use crate::{components::PageMovement, jobs::JoinHandle};
+use crate::{components::PageMovement, conf::themes::ThemeAttribute, jobs::JoinHandle};
 
 macro_rules! row_attr {
     ($field:ident, $color_cache:expr, unseen: $unseen:expr, highlighted: $highlighted:expr, selected: $selected:expr  $(,)*) => {{

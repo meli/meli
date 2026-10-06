@@ -34,7 +34,7 @@ use melib::{
 use smallvec::SmallVec;
 
 use super::*;
-use crate::{accounts::JobRequest, jobs::JobId};
+use crate::{accounts::JobRequest, conf::themes::ThemeAttribute, jobs::JobId};
 
 mod utils;
 pub use utils::*;
@@ -99,7 +99,7 @@ impl MailView {
             dirty: true,
             contact_selector: None,
             forward_dialog: None,
-            theme_default: crate::conf::value(context, "mail.view.body"),
+            theme_default: crate::conf::theme_value(context, "mail.view.body"),
             active_jobs: Default::default(),
             initialized: false,
             state: MailViewState::default(),
@@ -115,7 +115,7 @@ impl MailView {
 
     fn init_futures(&mut self, context: &mut Context) {
         log::trace!("MailView::init_futures");
-        self.theme_default = crate::conf::value(context, "mail.view.body");
+        self.theme_default = crate::conf::theme_value(context, "mail.view.body");
         let mut pending_action = None;
         let Some(coordinates) = self.coordinates else {
             return;
@@ -494,7 +494,7 @@ impl Component for MailView {
         let shortcuts = &self.shortcuts(context);
         match *event {
             UIEvent::ConfigReload { old_settings: _ } => {
-                self.theme_default = crate::conf::value(context, "theme_default");
+                self.theme_default = crate::conf::theme_value(context, "theme_default");
                 self.set_dirty(true);
             }
             UIEvent::Input(ref key)

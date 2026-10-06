@@ -72,9 +72,9 @@ impl JobManager {
     const HEADERS: [&'static str; 5] = ["id", "desc", "started", "finished", "succeeded"];
 
     pub fn new(context: &Context) -> Self {
-        let theme_default = crate::conf::value(context, "theme_default");
+        let theme_default = crate::conf::theme_value(context, "theme_default");
         let highlight_theme = if context.settings.terminal.use_color() {
-            crate::conf::value(context, "highlight")
+            crate::conf::theme_value(context, "highlight")
         } else {
             ThemeAttribute {
                 attrs: Attr::REVERSE,
@@ -472,7 +472,7 @@ impl Component for JobManager {
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if let UIEvent::ConfigReload { old_settings: _ } = event {
-            self.theme_default = crate::conf::value(context, "theme_default");
+            self.theme_default = crate::conf::theme_value(context, "theme_default");
             self.initialized = false;
             self.set_dirty(true);
         }

@@ -64,9 +64,10 @@ pub mod tags;
 pub mod shortcuts;
 mod listing;
 pub mod terminal;
-mod themes;
+pub mod themes;
 use default_values::*;
-pub use themes::*;
+pub use themes::value as theme_value;
+use themes::Themes;
 
 pub use self::{composing::*, pgp::*, shortcuts::*, tags::*};
 

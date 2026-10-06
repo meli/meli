@@ -24,7 +24,7 @@
 use std::sync::Arc;
 
 use super::*;
-use crate::melib::text::Truncate;
+use crate::{conf::themes::ThemeAttribute, melib::text::Truncate};
 
 pub type ValidateFn = Arc<dyn Fn(&str) -> bool + Send + Sync>;
 
@@ -137,7 +137,7 @@ impl TextField {
         };
 
         let highlight_attr = self.highlight.unwrap_or_else(|| {
-            let val = crate::conf::value(context, "highlight");
+            let val = crate::conf::theme_value(context, "highlight");
             self.highlight = Some(val);
             val
         });
@@ -163,7 +163,7 @@ impl TextField {
 impl Component for TextField {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let theme_attr = self.theme_attr.unwrap_or_else(|| {
-            let val = crate::conf::value(context, "widgets.form.field");
+            let val = crate::conf::theme_value(context, "widgets.form.field");
             self.theme_attr = Some(val);
             val
         });
@@ -171,7 +171,7 @@ impl Component for TextField {
         let theme_attr = if let Some(ref validate_fn) = self.validate_fn {
             if !validate_fn(self.as_str()) {
                 self.invalid_attr.unwrap_or_else(|| {
-                    let val = crate::conf::value(context, "text.error");
+                    let val = crate::conf::theme_value(context, "text.error");
                     self.invalid_attr = Some(val);
                     val
                 })

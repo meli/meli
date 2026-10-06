@@ -95,7 +95,7 @@ impl ThreadView {
         focus: Option<ThreadViewFocus>,
         context: &mut Context,
     ) -> Self {
-        let theme_default = crate::conf::value(context, "theme_default");
+        let theme_default = crate::conf::theme_value(context, "theme_default");
         let mut view = Self {
             reversed: false,
             coordinates,
@@ -107,12 +107,12 @@ impl ThreadView {
             dirty: true,
             id: ComponentId::default(),
             //indentation_colors: [
-            //    crate::conf::value(context, "mail.view.thread.indentation.a"),
-            //    crate::conf::value(context, "mail.view.thread.indentation.b"),
-            //    crate::conf::value(context, "mail.view.thread.indentation.c"),
-            //    crate::conf::value(context, "mail.view.thread.indentation.d"),
-            //    crate::conf::value(context, "mail.view.thread.indentation.e"),
-            //    crate::conf::value(context, "mail.view.thread.indentation.f"),
+            //    crate::conf::theme_value(context, "mail.view.thread.indentation.a"),
+            //    crate::conf::theme_value(context, "mail.view.thread.indentation.b"),
+            //    crate::conf::theme_value(context, "mail.view.thread.indentation.c"),
+            //    crate::conf::theme_value(context, "mail.view.thread.indentation.d"),
+            //    crate::conf::theme_value(context, "mail.view.thread.indentation.e"),
+            //    crate::conf::theme_value(context, "mail.view.thread.indentation.f"),
             //],
             use_color: context.settings.terminal.use_color(),
             last_width: 0,
@@ -367,8 +367,8 @@ impl ThreadView {
         if !self.content.resize_with_context(width, height, context) {
             return;
         }
-        let theme_default = crate::conf::value(context, "theme_default");
-        let highlight_theme = crate::conf::value(context, "theme_default");
+        let theme_default = crate::conf::theme_value(context, "theme_default");
+        let highlight_theme = crate::conf::theme_value(context, "theme_default");
         if self.reversed {
             for (y, e) in self.entries.iter().rev().enumerate() {
                 {
@@ -442,7 +442,7 @@ impl ThreadView {
             .nth(self.cursor_pos)
             == Some(&idx)
         {
-            let mut highlight = crate::conf::value(context, "highlight");
+            let mut highlight = crate::conf::theme_value(context, "highlight");
             if self.use_color {
                 highlight.attrs |= Attr::REVERSE;
             }
@@ -513,7 +513,7 @@ impl ThreadView {
         let get_entry_area = |idx: usize| self.content.area().skip_rows(idx).take_rows(1);
 
         if self.dirty || (page_no != prev_page_no) {
-            grid.clear_area(area, crate::conf::value(context, "theme_default"));
+            grid.clear_area(area, crate::conf::theme_value(context, "theme_default"));
             let visibles: Vec<&usize> =
                 self.visible_entries.iter().flat_map(|v| v.iter()).collect();
 
@@ -553,7 +553,7 @@ impl ThreadView {
             if top_idx + rows > visibles.len() {
                 grid.clear_area(
                     area.skip_rows(visibles.len() - top_idx),
-                    crate::conf::value(context, "theme_default"),
+                    crate::conf::theme_value(context, "theme_default"),
                 );
             }
         } else {
@@ -604,7 +604,7 @@ impl ThreadView {
             return self.draw_horz(grid, area, context);
         }
 
-        let theme_default = crate::conf::value(context, "theme_default");
+        let theme_default = crate::conf::theme_value(context, "theme_default");
         // First draw the thread subject on the first row
         if self.dirty {
             grid.clear_area(area, theme_default);
@@ -671,7 +671,7 @@ impl ThreadView {
 
         let mid = self.content.area().width().min(area.height() / 2);
 
-        let theme_default = crate::conf::value(context, "theme_default");
+        let theme_default = crate::conf::theme_value(context, "theme_default");
         // First draw the thread subject on the first row
         if self.dirty {
             grid.clear_area(area, theme_default);

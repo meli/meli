@@ -36,7 +36,7 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use smallvec::SmallVec;
 
 use super::{Area, Color, Pos, ScreenGeneration};
-use crate::{state::Context, ThemeAttribute};
+use crate::{conf::themes::ThemeAttribute, state::Context};
 
 /// In a scroll region up and down cursor movements shift the region vertically.
 /// The new lines are empty.
@@ -159,7 +159,7 @@ impl CellBuffer {
     pub fn new_with_context(default_cell: Option<Cell>, area: Area, context: &Context) -> Self {
         let default_cell = default_cell.unwrap_or_else(|| {
             let mut ret = Cell::default();
-            let theme_default = crate::conf::value(context, "theme_default");
+            let theme_default = crate::conf::theme_value(context, "theme_default");
             ret.set_fg(theme_default.fg)
                 .set_bg(theme_default.bg)
                 .set_attrs(theme_default.attrs);
@@ -210,7 +210,7 @@ impl CellBuffer {
     ) -> bool {
         self.default_cell = {
             let mut ret = Cell::default();
-            let theme_default = crate::conf::value(context, "theme_default");
+            let theme_default = crate::conf::theme_value(context, "theme_default");
             ret.set_fg(theme_default.fg)
                 .set_bg(theme_default.bg)
                 .set_attrs(theme_default.attrs);

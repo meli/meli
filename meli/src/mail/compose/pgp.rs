@@ -155,7 +155,7 @@ impl Component for KeySelection {
                 keys_accumulator: _,
             } => progress_spinner.draw(grid, area.center_inside((2, 2)), context),
             Self::Error { ref err, .. } => {
-                let theme_default = crate::conf::value(context, "theme_default");
+                let theme_default = crate::conf::theme_value(context, "theme_default");
                 grid.write_string(
                     &err.to_string(),
                     theme_default.fg,

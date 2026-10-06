@@ -112,8 +112,8 @@ impl MailViewState {
             None,
             None,
             Some(ViewSettings {
-                theme_default: crate::conf::value(context, "theme_default"),
-                body_theme: crate::conf::value(context, "mail.view.body"),
+                theme_default: crate::conf::theme_value(context, "theme_default"),
+                body_theme: crate::conf::theme_value(context, "mail.view.body"),
                 env_view_shortcuts: mailbox_settings!(
                     context[&coordinates.0][&coordinates.1]
                         .shortcuts

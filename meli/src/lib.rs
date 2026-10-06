@@ -152,7 +152,7 @@ pub use manage::*;
 pub mod conf;
 pub use crate::conf::{
     data_types::{IndexStyle, SearchBackend},
-    DotAddressable, Settings, Shortcuts, ThemeAttribute,
+    DotAddressable, Settings, Shortcuts,
 };
 
 #[cfg(feature = "sqlite3")]

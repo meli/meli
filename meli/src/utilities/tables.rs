@@ -24,6 +24,7 @@ use std::mem::MaybeUninit;
 
 use super::*;
 use crate::{
+    conf::themes::ThemeAttribute,
     segment_tree::SegmentTree,
     terminal::{Screen, Virtual},
 };

@@ -22,7 +22,7 @@
 
 use melib::error::{Error, Result};
 
-use crate::{account_settings, components::prelude::*};
+use crate::{account_settings, components::prelude::*, conf::themes::ThemeAttribute};
 
 pub trait AccountEntryTrait: Component + Sized {
     const DESCRIPTION: &str;
@@ -88,9 +88,9 @@ impl<E: AccountEntryTrait> Component for AccountEntry<E> {
                 ref messages,
                 ..
             } => {
-                let theme_default = crate::conf::value(context, "theme_default");
-                let text_unfocused = crate::conf::value(context, "text.unfocused");
-                let error_message = crate::conf::value(context, "error_message");
+                let theme_default = crate::conf::theme_value(context, "theme_default");
+                let text_unfocused = crate::conf::theme_value(context, "text.unfocused");
+                let error_message = crate::conf::theme_value(context, "error_message");
                 grid.clear_area(area, theme_default);
                 if context.is_online(*account_hash).is_err() {
                     let (x, _) = grid.write_string(
@@ -139,9 +139,9 @@ impl<E: AccountEntryTrait> Component for AccountEntry<E> {
                 } else {
                     grid.write_string(
                         "loading...",
-                        crate::conf::value(context, "highlight").fg,
-                        crate::conf::value(context, "highlight").bg,
-                        crate::conf::value(context, "highlight").attrs,
+                        crate::conf::theme_value(context, "highlight").fg,
+                        crate::conf::theme_value(context, "highlight").bg,
+                        crate::conf::theme_value(context, "highlight").attrs,
                         area,
                         None,
                         None,
@@ -322,7 +322,7 @@ impl<E: AccountEntryTrait> List<E> {
             accounts,
             account_pos: 0,
             menu_visibility: true,
-            theme_default: crate::conf::value(context, "theme_default"),
+            theme_default: crate::conf::theme_value(context, "theme_default"),
             dirty: true,
             id,
         }
@@ -330,9 +330,9 @@ impl<E: AccountEntryTrait> List<E> {
 
     pub fn draw_menu(&self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let mut y_offset = 0;
-        let account_name_attr = crate::conf::value(context, "mail.sidebar_account_name");
+        let account_name_attr = crate::conf::theme_value(context, "mail.sidebar_account_name");
         let highlight_attr = {
-            let mut v = crate::conf::value(context, "mail.sidebar_highlighted");
+            let mut v = crate::conf::theme_value(context, "mail.sidebar_highlighted");
             if !context.settings.terminal.use_color() {
                 v.attrs |= Attr::REVERSE;
             }
@@ -438,7 +438,7 @@ impl<E: AccountEntryTrait> Component for List<E> {
                 }
             }
             UIEvent::ConfigReload { old_settings: _ } => {
-                self.theme_default = crate::conf::value(context, "theme_default");
+                self.theme_default = crate::conf::theme_value(context, "theme_default");
             }
             UIEvent::ChangeMode(UIMode::Normal)
             | UIEvent::Resize

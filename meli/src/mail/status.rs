@@ -24,7 +24,7 @@ use std::borrow::Cow;
 use melib::{MailBackendExtensionStatus, SpecialUsageMailbox};
 
 use super::*;
-use crate::accounts::JobRequest;
+use crate::{accounts::JobRequest, conf::themes::ThemeAttribute};
 
 #[derive(Debug)]
 pub struct AccountStatus {
@@ -474,7 +474,7 @@ impl Component for AccountStatus {
         let shortcuts = self.shortcuts(context);
         match *event {
             UIEvent::ConfigReload { old_settings: _ } => {
-                self.theme_default = crate::conf::value(context, "theme_default");
+                self.theme_default = crate::conf::theme_value(context, "theme_default");
                 self.set_dirty(true);
             }
             UIEvent::Resize => {

@@ -24,7 +24,7 @@ use std::iter::FromIterator;
 use melib::{Address, SortField, SortOrder, ThreadNode};
 
 use super::{EntryStrings, *};
-use crate::{components::PageMovement, jobs::JoinHandle};
+use crate::{components::PageMovement, conf::themes::ThemeAttribute, jobs::JoinHandle};
 
 macro_rules! row_attr {
     ($color_cache:expr, even: $even:expr, unseen: $unseen:expr, highlighted: $highlighted:expr, selected: $selected:expr  $(,)*) => {{
@@ -992,7 +992,8 @@ impl PlainListing {
                     None,
                 );
                 {
-                    for text_formatter in crate::conf::text_format_regexps(context, "listing.from")
+                    for text_formatter in
+                        crate::conf::themes::text_format_regexps(context, "listing.from")
                     {
                         let t = columns[2].grid_mut().insert_tag(text_formatter.tag);
                         for (start, end) in text_formatter.regexp.find_iter(strings.from.as_str()) {
@@ -1065,7 +1066,7 @@ impl PlainListing {
                 ));
                 {
                     for text_formatter in
-                        crate::conf::text_format_regexps(context, "listing.subject")
+                        crate::conf::themes::text_format_regexps(context, "listing.subject")
                     {
                         let t = columns[4].grid_mut().insert_tag(text_formatter.tag);
                         for (start, end) in
@@ -1270,7 +1271,9 @@ impl PlainListing {
                 None,
             ));
             {
-                for text_formatter in crate::conf::text_format_regexps(context, "listing.subject") {
+                for text_formatter in
+                    crate::conf::themes::text_format_regexps(context, "listing.subject")
+                {
                     let t = columns[4].grid_mut().insert_tag(text_formatter.tag);
                     for (start, end) in text_formatter.regexp.find_iter(strings.subject.as_str()) {
                         columns[4].grid_mut().set_tag(t, (start, idx), (end, idx));

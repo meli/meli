@@ -333,9 +333,10 @@ pub mod prelude {
             Component, ComponentAttr, ComponentId, ComponentPath, ExtendShortcutsMaps,
             PageMovement, ScrollContext, ScrollUpdate, ShortcutMaps,
         },
+        conf::themes::ThemeAttribute,
         jobs::{JobId, JobMetadata},
         melib::{text::TextProcessing, utils::datetime, SortOrder},
         shortcut, AccountHash, Action, Area, Attr, CellBuffer, Context, DataColumns, EnvelopeHash,
-        Key, MailboxHash, Shortcuts, StatusEvent, ThemeAttribute, UIDialog, UIEvent, UIMode,
+        Key, MailboxHash, Shortcuts, StatusEvent, UIDialog, UIEvent, UIMode,
     };
 }

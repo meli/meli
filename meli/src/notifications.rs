@@ -467,7 +467,7 @@ impl Component for DisplayMessageBox {
             ..
         }) = self.messages.get(self.pos)
         {
-            let noto_colors = crate::conf::value(context, "status.notification");
+            let noto_colors = crate::conf::theme_value(context, "status.notification");
             use crate::melib::text::{Reflow, TextProcessing};
 
             let box_width = area.width() / 3;

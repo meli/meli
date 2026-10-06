@@ -31,7 +31,7 @@ use indexmap::IndexMap;
 use melib::text::Reflow;
 
 use super::*;
-use crate::{components::ExtendShortcutsMaps, jobs::JobId, melib::text::TextProcessing};
+use crate::{components::prelude::*, jobs::JobId, melib::text::TextProcessing};
 
 mod pager;
 pub use self::pager::*;
@@ -158,7 +158,7 @@ impl StatusBar {
     }
 
     fn draw_status_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        let mut attribute = crate::conf::value(context, "status.bar");
+        let mut attribute = crate::conf::theme_value(context, "status.bar");
         if !context.settings.terminal.use_color() {
             attribute.attrs |= Attr::REVERSE;
         }
@@ -257,8 +257,8 @@ impl StatusBar {
     }
 
     fn draw_command_bar(&self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        grid.clear_area(area, crate::conf::value(context, "theme_default"));
-        let command_bar = crate::conf::value(context, "status.command_bar");
+        grid.clear_area(area, crate::conf::theme_value(context, "theme_default"));
+        let command_bar = crate::conf::theme_value(context, "status.command_bar");
         let (_, y) = grid.write_string(
             self.ex_buffer.as_str(),
             command_bar.fg,
@@ -789,7 +789,7 @@ pub struct Tabbed {
 impl Tabbed {
     pub fn new(children: Vec<Box<dyn Component>>, context: &Context) -> Self {
         let pinned = children.len();
-        let theme_default = crate::conf::value(context, "theme_default");
+        let theme_default = crate::conf::theme_value(context, "theme_default");
         let mut ret = Self {
             help_view: HelpView {
                 content: Screen::<Virtual>::new(theme_default),
@@ -815,13 +815,13 @@ impl Tabbed {
     }
 
     fn draw_tabs(&self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        let tab_bar_attribute = crate::conf::value(context, "tab.bar");
+        let tab_bar_attribute = crate::conf::theme_value(context, "tab.bar");
         grid.clear_area(area, tab_bar_attribute);
         if self.children.is_empty() {
             return;
         }
-        let tab_unfocused_attribute = crate::conf::value(context, "tab.unfocused");
-        let mut tab_focused_attribute = crate::conf::value(context, "tab.focused");
+        let tab_unfocused_attribute = crate::conf::theme_value(context, "tab.unfocused");
+        let mut tab_focused_attribute = crate::conf::theme_value(context, "tab.focused");
         if !context.settings.terminal.use_color() {
             tab_focused_attribute.attrs |= Attr::REVERSE;
         }
@@ -874,7 +874,7 @@ impl Component for Tabbed {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.dirty {
             let first_row = area.nth_row(0);
-            grid.clear_area(first_row, crate::conf::value(context, "tab.bar"));
+            grid.clear_area(first_row, crate::conf::theme_value(context, "tab.bar"));
             context.dirty_areas.push_back(first_row);
         }
 
@@ -1138,9 +1138,9 @@ impl Component for Tabbed {
                     .into_iter()
                     .map(|offset| (offset / width, offset % width))
                     .collect::<Vec<(usize, usize)>>();
-                let results_attr = crate::conf::value(context, "pager.highlight_search");
+                let results_attr = crate::conf::theme_value(context, "pager.highlight_search");
                 let results_current_attr =
-                    crate::conf::value(context, "pager.highlight_search_current");
+                    crate::conf::theme_value(context, "pager.highlight_search_current");
                 search.cursor =
                     std::cmp::min(search.positions.len().saturating_sub(1), search.cursor);
                 for (i, (y, x)) in search.positions.iter().enumerate() {
@@ -1275,7 +1275,7 @@ impl Component for Tabbed {
         let shortcuts = &self.help_view.curr_views;
         match &mut event {
             UIEvent::ConfigReload { old_settings: _ } => {
-                self.theme_default = crate::conf::value(context, "theme_default");
+                self.theme_default = crate::conf::theme_value(context, "theme_default");
                 self.set_dirty(true);
             }
             UIEvent::Input(Key::Alt(no)) if *no >= '1' && *no <= '9' => {
@@ -1559,7 +1559,7 @@ impl Component for RawBuffer {
                 std::cmp::min(width.saturating_sub(cols), self.cursor.0),
                 std::cmp::min(height.saturating_sub(rows), self.cursor.1),
             );
-            grid.clear_area(area, crate::conf::value(context, "theme_default"));
+            grid.clear_area(area, crate::conf::theme_value(context, "theme_default"));
 
             grid.copy_area(
                 &self.buf,

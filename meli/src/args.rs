@@ -293,7 +293,7 @@ impl Opt {
                 Ok(())
             }
             SubCommand::PrintDefaultTheme => {
-                print!("{}", conf::Themes::default().key_to_string("dark", false));
+                print!("{}", crate::conf::themes::Themes::default().key_to_string("dark", false));
                 Ok(())
             }
             SubCommand::PrintAppDirectories => {

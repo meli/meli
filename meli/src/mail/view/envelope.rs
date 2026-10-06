@@ -605,11 +605,11 @@ impl EnvelopeView {
 
 impl Component for EnvelopeView {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        self.view_settings.theme_default = crate::conf::value(context, "theme_default");
+        self.view_settings.theme_default = crate::conf::theme_value(context, "theme_default");
 
-        let hdr_theme = crate::conf::value(context, "mail.view.headers");
-        let hdr_name_theme = crate::conf::value(context, "mail.view.headers_names");
-        let hdr_area_theme = crate::conf::value(context, "mail.view.headers_area");
+        let hdr_theme = crate::conf::theme_value(context, "mail.view.headers");
+        let hdr_name_theme = crate::conf::theme_value(context, "mail.view.headers_names");
+        let hdr_area_theme = crate::conf::theme_value(context, "mail.view.headers_area");
 
         if self.filters.is_empty() {
             let body = self.mail.body();
@@ -798,7 +798,7 @@ impl Component for EnvelopeView {
                 text.pop();
             }
             let cursor_pos = self.pager.cursor_pos();
-            self.view_settings.body_theme = crate::conf::value(context, "mail.view.body");
+            self.view_settings.body_theme = crate::conf::theme_value(context, "mail.view.body");
             self.pager = Pager::from_string(
                 text,
                 context,

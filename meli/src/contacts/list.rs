@@ -77,8 +77,8 @@ impl AddressBookList {
         account_hash: AccountHash,
         context: &Context,
     ) -> Self {
-        let theme_default = crate::conf::value(context, "theme_default");
-        let highlight_theme = crate::conf::value(context, "highlight");
+        let theme_default = crate::conf::theme_value(context, "theme_default");
+        let highlight_theme = crate::conf::theme_value(context, "highlight");
         let data_columns = DataColumns::new(theme_default);
 
         Self {
@@ -358,7 +358,7 @@ impl Component for AddressBookList {
         self.data_columns
             .draw(grid, top_idx, self.cursor_pos, grid.bounds_iter(area));
 
-        let header_attrs = crate::conf::value(context, "widgets.list.header");
+        let header_attrs = crate::conf::theme_value(context, "widgets.list.header");
         let mut x = 0;
         for i in 0..self.data_columns.columns.len() {
             if self.data_columns.widths[i] == 0 {
@@ -693,8 +693,8 @@ impl AccountEntryTrait for AccountContacts {
         account_hash: AccountHash,
         context: &mut Context,
     ) -> Result<Self> {
-        let theme_default = crate::conf::value(context, "theme_default");
-        let highlight_theme = crate::conf::value(context, "highlight");
+        let theme_default = crate::conf::theme_value(context, "theme_default");
+        let highlight_theme = crate::conf::theme_value(context, "highlight");
         Ok(Self {
             account_hash,
             book_pos: 0,
@@ -787,8 +787,8 @@ impl Component for AccountContacts {
         }
         match event {
             UIEvent::ConfigReload { old_settings: _ } => {
-                self.theme_default = crate::conf::value(context, "theme_default");
-                self.highlight_theme = crate::conf::value(context, "highlight");
+                self.theme_default = crate::conf::theme_value(context, "theme_default");
+                self.highlight_theme = crate::conf::theme_value(context, "highlight");
             }
             UIEvent::ChangeMode(UIMode::Normal)
             | UIEvent::Resize

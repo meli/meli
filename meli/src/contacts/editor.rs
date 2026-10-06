@@ -28,10 +28,11 @@ use melib::{
 };
 
 use crate::{
+    conf::themes::ThemeAttribute,
     terminal::*,
     types::NotificationType,
     utilities::{FormButtonAction, FormWidget},
-    CellBuffer, Component, ComponentId, Context, Field, Key, ThemeAttribute, UIDialog, UIEvent,
+    CellBuffer, Component, ComponentId, Context, Field, Key, UIDialog, UIEvent,
 };
 
 #[derive(Debug)]
@@ -75,7 +76,7 @@ impl ContactManager {
         } else {
             ViewMode::Edit
         };
-        let theme_default: ThemeAttribute = crate::conf::value(context, "theme_default");
+        let theme_default: ThemeAttribute = crate::conf::theme_value(context, "theme_default");
         Self {
             id: ComponentId::default(),
             parent_id: None,
@@ -205,7 +206,7 @@ impl Component for ContactManager {
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if let UIEvent::ConfigReload { old_settings: _ } = event {
-            self.theme_default = crate::conf::value(context, "theme_default");
+            self.theme_default = crate::conf::theme_value(context, "theme_default");
             self.content.grid_mut().empty();
             self.initialized = false;
             self.set_dirty(true);

@@ -153,7 +153,7 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
             inner.draw(grid, area, context);
         } else if self.is_dirty() {
             let attachments_no = self.draft.attachments().len();
-            let theme_default = crate::conf::value(context, "theme_default");
+            let theme_default = crate::conf::theme_value(context, "theme_default");
             grid.clear_area(area, theme_default);
             if attachments_no == 0 {
                 grid.write_string(
@@ -182,7 +182,7 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
                 for (i, a) in self.draft.attachments().iter().enumerate() {
                     let theme_attr = if matches!(self.inner.cursor, EditAttachmentCursor::AttachmentNo(u) if u == i)
                     {
-                        crate::conf::value(context, "highlight")
+                        crate::conf::theme_value(context, "highlight")
                     } else {
                         theme_default
                     };

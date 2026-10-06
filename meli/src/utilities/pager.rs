@@ -23,6 +23,7 @@ use melib::text::{Line, LineBreakText};
 
 use super::*;
 use crate::{
+    conf::themes::ThemeAttribute,
     jobs::{IsAsync, JoinHandle},
     terminal::embedded::EmbeddedGrid,
 };
@@ -101,7 +102,7 @@ impl Pager {
             minimum_width: context.settings.pager.minimum_width,
             ..Self::default()
         };
-        ret.set_colors(crate::conf::value(context, "theme_default"))
+        ret.set_colors(crate::conf::theme_value(context, "theme_default"))
             .set_reflow(if context.settings.pager.split_long_lines {
                 Reflow::All
             } else {
@@ -478,14 +479,14 @@ impl Pager {
                 );
                 if l.content.starts_with('⤷') {
                     grid[area2.upper_left()]
-                        .set_fg(crate::conf::value(context, "highlight").fg)
-                        .set_attrs(crate::conf::value(context, "highlight").attrs);
+                        .set_fg(crate::conf::theme_value(context, "highlight").fg)
+                        .set_attrs(crate::conf::theme_value(context, "highlight").attrs);
                 }
                 area2 = area2.skip_rows(1);
             }
 
             if area2.height() <= 1 {
-                grid.clear_area(area2, crate::conf::value(context, "theme_default"));
+                grid.clear_area(area2, crate::conf::theme_value(context, "theme_default"));
             }
         }
 
@@ -493,7 +494,7 @@ impl Pager {
             {
                 let area3 = area;
                 for text_formatter in
-                    crate::conf::text_format_regexps(context, "pager.envelope.body")
+                    crate::conf::themes::text_format_regexps(context, "pager.envelope.body")
                 {
                     let t = grid.insert_tag(text_formatter.tag);
                     for (i, l) in self
@@ -516,9 +517,9 @@ impl Pager {
                 // Last row will be reserved for the "Results for ..." line.
                 let area3 = area.skip_rows_from_end(1);
                 let cursor_line = self.cursor.1;
-                let results_attr = crate::conf::value(context, "pager.highlight_search");
+                let results_attr = crate::conf::theme_value(context, "pager.highlight_search");
                 let results_current_attr =
-                    crate::conf::value(context, "pager.highlight_search_current");
+                    crate::conf::theme_value(context, "pager.highlight_search_current");
                 search.cursor =
                     std::cmp::min(search.positions.len().saturating_sub(1), search.cursor);
                 for (i, (y, offset)) in search
@@ -565,7 +566,7 @@ impl Component for Pager {
         self.dirty = false;
 
         if self.height == 0 || self.width == 0 {
-            grid.clear_area(area, crate::conf::value(context, "theme_default"));
+            grid.clear_area(area, crate::conf::theme_value(context, "theme_default"));
             return;
         }
 
@@ -671,7 +672,7 @@ impl Component for Pager {
             }
         }
 
-        grid.clear_area(area, crate::conf::value(context, "theme_default"));
+        grid.clear_area(area, crate::conf::theme_value(context, "theme_default"));
 
         self.cols_lt_width = cols + self.cursor.0 < width;
         self.rows_lt_height = rows + self.cursor.1 < height;
@@ -741,7 +742,7 @@ impl Component for Pager {
                     total_results = search.positions.len(),
                     has_more_lines = if !has_more_lines { "" } else { "(+)" }
                 );
-                let mut attribute = crate::conf::value(context, "status.bar");
+                let mut attribute = crate::conf::theme_value(context, "status.bar");
                 if !context.settings.terminal.use_color() {
                     attribute.attrs |= Attr::REVERSE;
                 }
@@ -774,7 +775,7 @@ impl Component for Pager {
         let shortcuts = self.shortcuts(context);
         match event {
             UIEvent::ConfigReload { old_settings: _ } => {
-                self.set_colors(crate::conf::value(context, "theme_default"));
+                self.set_colors(crate::conf::theme_value(context, "theme_default"));
                 self.set_dirty(true);
             }
             UIEvent::Input(ref key)

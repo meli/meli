@@ -154,9 +154,9 @@ impl Component for OfflineListing {
             return;
         }
         self.dirty = false;
-        let theme_default = conf::value(context, "theme_default");
-        let text_unfocused = conf::value(context, "text.unfocused");
-        let error_message = conf::value(context, "error_message");
+        let theme_default = crate::conf::theme_value(context, "theme_default");
+        let text_unfocused = crate::conf::theme_value(context, "text.unfocused");
+        let error_message = crate::conf::theme_value(context, "error_message");
         grid.clear_area(area, theme_default);
         if let Err(err) = context.is_online(self.cursor_pos.0) {
             let (x, _) = grid.write_string(
@@ -203,11 +203,12 @@ impl Component for OfflineListing {
                 );
             }
         } else {
+            let highlight = crate::conf::theme_value(context, "highlight");
             grid.write_string(
                 "loading...",
-                conf::value(context, "highlight").fg,
-                conf::value(context, "highlight").bg,
-                conf::value(context, "highlight").attrs,
+                highlight.fg,
+                highlight.bg,
+                highlight.attrs,
                 area,
                 None,
                 None,

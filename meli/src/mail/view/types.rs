@@ -27,10 +27,10 @@ use melib::{
 };
 
 use crate::{
-    conf::{pgp::PGPBackendChoice, shortcuts::EnvelopeViewShortcuts},
+    conf::{pgp::PGPBackendChoice, shortcuts::EnvelopeViewShortcuts, themes::ThemeAttribute},
     jobs::{JobId, JoinHandle},
     types::{Link, LinkKind},
-    ShortcutMap, ThemeAttribute,
+    ShortcutMap,
 };
 
 #[derive(Clone, Debug)]

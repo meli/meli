@@ -116,7 +116,7 @@ impl std::fmt::Display for EmbeddedContainer {
 impl Component for EmbeddedContainer {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if let Some(ref mut embedded_pty_pty) = self.embedded_pty {
-            let theme_default = crate::conf::value(context, "theme_default");
+            let theme_default = crate::conf::theme_value(context, "theme_default");
             match embedded_pty_pty {
                 EmbeddedPty::Running(_) => {
                     let mut guard = embedded_pty_pty.lock().unwrap();
@@ -169,7 +169,7 @@ impl Component for EmbeddedContainer {
             }
             return;
         } else {
-            let theme_default = crate::conf::value(context, "theme_default");
+            let theme_default = crate::conf::theme_value(context, "theme_default");
             grid.clear_area(area, theme_default);
             match create_pty(area.width(), area.height(), &self.command) {
                 Ok(embedded_pty) => {
