@@ -10,7 +10,7 @@ categories = ["email", "parser-implementations"]
 license = "EUPL-1.2 OR GPL-3.0-or-later"
 edition = "2021"
 build = "build.rs"
-rust-version = "1.85.0"
+rust-version = "1.88.0"
 
 [lib]
 name = "melib"

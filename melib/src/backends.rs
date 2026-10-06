@@ -391,7 +391,6 @@ impl BackendEvent {
             b.push(ev);
         }
         debug_assert!(matches!(&val[first], Self::RefreshBatch(events) if !events.is_empty()));
-        // [ref:msrv]: use extract_if in 1.87.0.
         let mut i = first + 1;
 
         while i < val.len() {

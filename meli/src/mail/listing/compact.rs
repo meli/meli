@@ -439,7 +439,7 @@ impl MailListingTrait for CompactListing {
 
             let row_attr = row_attr!(
                 self.color_cache,
-                even: self.length % 2 == 0,
+                even: self.length.is_multiple_of(2),
                 unseen: threads.thread_ref(thread).unseen() > 0,
                 highlighted: false,
                 selected: false
@@ -632,7 +632,7 @@ impl ListingTrait for CompactListing {
 
         let row_attr = row_attr!(
             self.color_cache,
-            even: idx % 2 == 0,
+            even: idx.is_multiple_of(2),
             unseen: thread.unseen() > 0,
             highlighted: self.cursor_pos.2 == idx,
             selected: self.rows.is_thread_selected(thread_hash)
@@ -748,7 +748,7 @@ impl ListingTrait for CompactListing {
         /* highlight cursor */
         let row_attr = row_attr!(
             self.color_cache,
-            even: self.cursor_pos.2 % 2 == 0,
+            even: self.cursor_pos.2.is_multiple_of(2),
             unseen: false,
             highlighted: true,
             selected: false
@@ -1095,7 +1095,7 @@ impl CompactListing {
         let idx = self.rows.thread_order[&thread_hash];
         let row_attr = row_attr!(
             self.color_cache,
-            even: idx % 2 == 0,
+            even: idx.is_multiple_of(2),
             unseen: thread.unseen() > 0,
             highlighted: false,
             selected: self.rows.is_thread_selected(thread_hash)
@@ -1435,13 +1435,13 @@ impl CompactListing {
                 let thread = threads.thread_ref(thread_hash);
                 row_attr!(
                     self.color_cache,
-                    even: idx % 2 == 0,
+                    even: idx.is_multiple_of(2),
                     unseen: thread.unseen() > 0,
                     highlighted: self.new_cursor_pos.2 == idx,
                     selected: self.rows.is_thread_selected(thread_hash)
                 )
             } else {
-                row_attr!(self.color_cache, even: (top_idx + i) % 2 == 0, unseen: false, highlighted: true, selected: false)
+                row_attr!(self.color_cache, even: (top_idx + i).is_multiple_of(2), unseen: false, highlighted: true, selected: false)
             };
 
             grid.clear_area(area.nth_row(i), row_attr);

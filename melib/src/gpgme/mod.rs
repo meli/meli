@@ -58,8 +58,6 @@ macro_rules! call {
     non_camel_case_types,
     non_upper_case_globals,
     non_snake_case,
-    // [ref:msrv] unnecessary_transmutes is introduced in 1.88.0
-    unknown_lints,
     unnecessary_transmutes,
     unpredictable_function_pointer_comparisons,
     clippy::useless_transmute,

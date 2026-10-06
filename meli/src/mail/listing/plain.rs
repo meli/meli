@@ -387,7 +387,7 @@ impl ListingTrait for PlainListing {
 
         let row_attr = row_attr!(
             self.color_cache,
-            even: idx % 2 == 0,
+            even: idx.is_multiple_of(2),
             unseen: !envelope.is_seen(),
             highlighted: self.cursor_pos.2 == idx,
             selected: self.rows.selection.get(&i).copied().unwrap_or(false)
@@ -504,7 +504,7 @@ impl ListingTrait for PlainListing {
         /* highlight cursor */
         let row_attr = row_attr!(
             self.color_cache,
-            even: self.cursor_pos.2 % 2 == 0,
+            even: self.cursor_pos.2.is_multiple_of(2),
             unseen: false,
             highlighted: true,
             selected: false
@@ -827,7 +827,7 @@ impl PlainListing {
             }
             let row_attr = row_attr!(
                 self.color_cache,
-                even: self.length % 2 == 0,
+                even: self.length.is_multiple_of(2),
                 unseen: !envelope.is_seen(),
                 highlighted: false,
                 selected: false
@@ -1141,7 +1141,7 @@ impl PlainListing {
         let idx = self.rows.env_order[&env_hash];
         let row_attr = row_attr!(
             self.color_cache,
-            even: idx % 2 == 0,
+            even: idx.is_multiple_of(2),
             unseen: !envelope.is_seen(),
             highlighted: false,
             selected: self.rows.selection.get(&env_hash).copied().unwrap_or(false)
@@ -1330,13 +1330,13 @@ impl PlainListing {
                     .unwrap_or(false);
                 row_attr!(
                     self.color_cache,
-                    even: (top_idx + i) % 2 == 0,
+                    even: (top_idx + i).is_multiple_of(2),
                     unseen: unseen,
                     highlighted: self.cursor_pos.2 == (top_idx + i),
                     selected: self.rows.selection.get(&env_hash).copied().unwrap_or(false)
                 )
             } else {
-                row_attr!(self.color_cache, even: (top_idx + i) % 2 == 0, unseen: false, highlighted: true, selected: false)
+                row_attr!(self.color_cache, even: (top_idx + i).is_multiple_of(2), unseen: false, highlighted: true, selected: false)
             };
 
             grid.clear_area(area.nth_row(i), row_attr);
@@ -1628,7 +1628,7 @@ impl Component for PlainListing {
                     let row: usize = self.rows.env_order[&env_hash];
                     let row_attr = row_attr!(
                         self.color_cache,
-                        even: row % 2 == 0,
+                        even: row.is_multiple_of(2),
                         unseen: !envelope.is_seen(),
                         highlighted: false,
                         selected: self.rows.selection.get(&env_hash).copied().unwrap_or(false)

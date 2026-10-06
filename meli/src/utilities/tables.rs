@@ -312,7 +312,7 @@ impl<const N: usize> DataColumns<N> {
             let offset = cursor_pos - top_idx;
             let row_attr = match self.cursor_config.theme {
                 TableTheme::Single(attr) => attr,
-                TableTheme::EvenOdd { even, odd: _ } if cursor_pos % 2 == 0 => even,
+                TableTheme::EvenOdd { even, odd: _ } if cursor_pos.is_multiple_of(2) => even,
                 TableTheme::EvenOdd { even: _, odd } => odd,
             };
 

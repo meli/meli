@@ -1049,7 +1049,7 @@ impl AutoComplete {
         }
 
         fn mismatch_chunks<const N: usize>(xs: &[u8], ys: &[u8]) -> usize {
-            let off = std::iter::zip(xs.chunks_exact(N), ys.chunks_exact(N))
+            let off = std::iter::zip(xs.as_chunks::<N>().0, ys.as_chunks::<N>().0)
                 .take_while(|(x, y)| x == y)
                 .count()
                 * N;
