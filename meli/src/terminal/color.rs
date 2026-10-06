@@ -1024,7 +1024,6 @@ pub enum ColorContrast {
     #[default]
     Dark,
     Light,
-    Other,
 }
 
 impl Color {

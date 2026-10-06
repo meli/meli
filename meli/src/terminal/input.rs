@@ -22,7 +22,10 @@
 
 use std::os::fd::{AsFd, AsRawFd, OwnedFd};
 
-use crossbeam::{channel::Receiver, select};
+use crossbeam::{
+    channel::{Receiver, Sender},
+    select,
+};
 use melib::log;
 use nix::poll::{poll, PollFd, PollFlags, PollTimeout};
 use termion::{
@@ -33,10 +36,13 @@ use termion::{
     input::TermReadEventsAndRaw,
 };
 
-use crate::terminal::{
-    color::Color,
-    keys::{Key, MouseButton, MouseEvent},
-    EscapeSequenceQuery, QueryBackground, QueryForeground,
+use crate::{
+    terminal::{
+        color::Color,
+        keys::{Key, MouseButton, MouseEvent},
+        EscapeSequenceQuery, QueryBackground, QueryForeground,
+    },
+    types::{TerminalEvent, ThreadEvent},
 };
 
 /*
@@ -167,7 +173,7 @@ pub enum InputCommand {
 /// The main loop uses [`crate::state::State::try_wait_on_children`] to check if
 /// child has exited.
 pub fn get_events(
-    mut closure: impl FnMut((Key, Vec<u8>)),
+    state_tx: Sender<ThreadEvent>,
     rx: &Receiver<InputCommand>,
     new_command_fd: &OwnedFd,
     working: std::sync::Arc<()>,
@@ -216,6 +222,7 @@ pub fn get_events(
                                     log::trace!("compute_scheme_contrast(fg {fg:?}, bg {bg:?}) = {:?}", Color::compute_scheme_contrast(fg, bg));
                                     palette.0.take();
                                     palette.1.take();
+                                    state_tx.send(TerminalEvent::ColorScheme { fg, bg }.into()).unwrap();
                                 }
                                 continue 'stdin_while;
                             }
@@ -224,7 +231,7 @@ pub fn get_events(
                                 continue 'stdin_while;
                             }
                             (Ok((TermionEvent::Key(k), bytes)), InputMode::Normal) => {
-                                closure((Key::from(k), bytes));
+                                state_tx.send(ThreadEvent::Input((Key::from(k), bytes))).unwrap();
                                 continue 'poll_while;
                             }
                             (
@@ -246,11 +253,11 @@ pub fn get_events(
                                     input_mode = InputMode::Normal;
                                     let ret = Key::from(&paste_buf);
                                     paste_buf.clear();
-                                    closure((ret, buf));
+                                    state_tx.send(ThreadEvent::Input((ret, buf))).unwrap();
                                     continue 'poll_while;
                                 }
                             (Ok((TermionEvent::Mouse(mev), bytes)), InputMode::Normal) => {
-                                closure((Key::Mouse(mev.into()), bytes));
+                                state_tx.send(ThreadEvent::Input((Key::Mouse(mev.into()), bytes))).unwrap();
                                 continue 'poll_while;
                                 }
                             (Ok((TermionEvent::Unsupported(ref k,), _)), InputMode::Normal) if k.as_slice() == [27, 91, 63] => {

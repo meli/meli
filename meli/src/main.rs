@@ -208,6 +208,9 @@ fn run_app(mut opt: Opt) -> Result<()> {
                             state.rcv_event(e);
                             state.redraw();
                         },
+                        ThreadEvent::Terminal(e) => {
+                            state.rcv_terminal_event(e);
+                        },
                         ThreadEvent::Pulse => {
                             state.pulse();
                         },

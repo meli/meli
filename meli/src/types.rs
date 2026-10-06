@@ -82,6 +82,7 @@ pub enum ThreadEvent {
         events: Vec<RefreshEventKind>,
     },
     UIEvent(UIEvent),
+    Terminal(TerminalEvent),
     /// A thread has updated some of its information
     Pulse,
     JobFinished(JobId),
@@ -125,6 +126,17 @@ impl From<UIEvent> for ThreadEvent {
     fn from(event: UIEvent) -> Self {
         Self::UIEvent(event)
     }
+}
+
+impl From<TerminalEvent> for ThreadEvent {
+    fn from(event: TerminalEvent) -> Self {
+        Self::Terminal(event)
+    }
+}
+
+#[derive(Debug)]
+pub enum TerminalEvent {
+    ColorScheme { fg: Color, bg: Color },
 }
 
 #[derive(Debug)]

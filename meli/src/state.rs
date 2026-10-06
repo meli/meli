@@ -83,16 +83,7 @@ impl InputHandler {
         let tx = self.state_tx.clone();
         thread::Builder::new()
             .name("input-thread".to_string())
-            .spawn(move || {
-                get_events(
-                    |i| {
-                        tx.send(ThreadEvent::Input(i)).unwrap();
-                    },
-                    &rx,
-                    &pipe,
-                    working,
-                )
-            })
+            .spawn(move || get_events(tx, &rx, &pipe, working))
             .unwrap();
         self.control = control;
     }
@@ -1344,6 +1335,32 @@ impl State {
                 self.context.replies.drain(0..).collect();
             // Pass replies to self and call count on the map iterator to force evaluation
             replies.into_iter().map(|r| self.rcv_event(r)).count();
+        }
+    }
+
+    pub fn rcv_terminal_event(&mut self, event: TerminalEvent) {
+        match event {
+            TerminalEvent::ColorScheme { fg, bg } => {
+                if self.context.settings.terminal.theme.as_str() == crate::conf::themes::AUTO {
+                    let old_settings = self.context.settings.clone();
+                    match Color::compute_scheme_contrast(fg, bg) {
+                        ColorContrast::Dark => {
+                            log::debug!("changing default theme to dark");
+                            self.context.settings.terminal.theme =
+                                crate::conf::themes::DARK.to_string();
+                        }
+                        ColorContrast::Light => {
+                            log::debug!("changing default theme to light");
+                            self.context.settings.terminal.theme =
+                                crate::conf::themes::LIGHT.to_string();
+                        }
+                    }
+                    self.context
+                        .replies
+                        .push_back(UIEvent::ConfigReload { old_settings });
+                    self.context.replies.push_back(UIEvent::Resize);
+                }
+            }
         }
     }
 

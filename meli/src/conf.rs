@@ -473,7 +473,7 @@ impl FileSettings {
             }
         }
         match s.terminal.theme.as_str() {
-            themes::DARK | themes::LIGHT => {}
+            themes::AUTO | themes::DARK | themes::LIGHT => {}
             t if s.terminal.themes.other_themes.contains_key(t) => {}
             t => {
                 return Err(Error::new(format!("Theme `{t}` was not found."))
@@ -579,7 +579,7 @@ impl FileSettings {
             }
         }
         match s.terminal.theme.as_str() {
-            themes::DARK | themes::LIGHT => {}
+            themes::AUTO | themes::DARK | themes::LIGHT => {}
             t if s.terminal.themes.other_themes.contains_key(t) => {}
             t => {
                 return Err(Error::new(format!("Theme `{t}` was not found."))

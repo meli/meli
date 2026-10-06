@@ -50,10 +50,12 @@ use crate::{
 
 pub const LIGHT: &str = "light";
 pub const DARK: &str = "dark";
+pub const AUTO: &str = "auto";
 
 #[inline(always)]
 pub fn value(context: &Context, key: &'static str) -> ThemeAttribute {
     let theme = match context.settings.terminal.theme.as_str() {
+        self::AUTO => &context.settings.terminal.themes.dark,
         self::LIGHT => &context.settings.terminal.themes.light,
         self::DARK => &context.settings.terminal.themes.dark,
         t => context
@@ -70,6 +72,7 @@ pub fn value(context: &Context, key: &'static str) -> ThemeAttribute {
 #[inline(always)]
 pub fn fg_color(context: &Context, key: &'static str) -> Color {
     let theme = match context.settings.terminal.theme.as_str() {
+        self::AUTO => &context.settings.terminal.themes.dark,
         self::LIGHT => &context.settings.terminal.themes.light,
         self::DARK => &context.settings.terminal.themes.dark,
         t => context
@@ -86,6 +89,7 @@ pub fn fg_color(context: &Context, key: &'static str) -> Color {
 #[inline(always)]
 pub fn bg_color(context: &Context, key: &'static str) -> Color {
     let theme = match context.settings.terminal.theme.as_str() {
+        self::AUTO => &context.settings.terminal.themes.dark,
         self::LIGHT => &context.settings.terminal.themes.light,
         self::DARK => &context.settings.terminal.themes.dark,
         t => context
@@ -102,6 +106,7 @@ pub fn bg_color(context: &Context, key: &'static str) -> Color {
 #[inline(always)]
 pub fn attrs(context: &Context, key: &'static str) -> Attr {
     let theme = match context.settings.terminal.theme.as_str() {
+        self::AUTO => &context.settings.terminal.themes.dark,
         self::LIGHT => &context.settings.terminal.themes.light,
         self::DARK => &context.settings.terminal.themes.dark,
         t => context
@@ -582,6 +587,7 @@ mod regexp {
         key: &'static str,
     ) -> SmallVec<[TextFormatter<'ctx>; 64]> {
         let theme = match context.settings.terminal.theme.as_str() {
+            self::AUTO => &context.settings.terminal.themes.dark,
             self::LIGHT => &context.settings.terminal.themes.light,
             self::DARK => &context.settings.terminal.themes.dark,
             t => context

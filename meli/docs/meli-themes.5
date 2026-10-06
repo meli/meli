@@ -30,8 +30,12 @@ terminal e-mail client
 .Nm meli
 comes with two themes,
 .Ic dark
-(default) and
+and
 .Ic light .
+The default setting is \&"auto\&" which is an alias for \&"dark\&".
+If your terminal supports foreground/background color queries (OSC 10 and OSC 11),
+.Nm meli
+will try to compute whether the colors' contrast scheme is dark or light and set the default theme to \&"dark\&" or \&"light\&" based on that result.
 .Pp
 Custom themes are defined as lists of key-values in the configuration files:
 .Bl -item -compact -offset 2

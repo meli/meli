@@ -29,7 +29,7 @@ use super::{deserializers::non_empty_opt_string, DotAddressable, Themes};
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct TerminalSettings {
-    /// light, dark
+    /// light, dark, auto or a named theme
     pub theme: String,
     pub themes: Themes,
     #[serde(default = "tab_width")]
@@ -71,7 +71,7 @@ const fn tab_width() -> u8 {
 impl Default for TerminalSettings {
     fn default() -> Self {
         Self {
-            theme: "dark".to_string(),
+            theme: crate::conf::themes::AUTO.to_string(),
             themes: Themes::default(),
             tab_width: tab_width(),
             ascii_drawing: false,
