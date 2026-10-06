@@ -112,7 +112,7 @@ use smallvec::SmallVec;
 
 use crate::{
     error::{Error, Result},
-    parser::BytesExt,
+    parser::BytesExt as _,
     TagHash, UnixTimestamp,
 };
 

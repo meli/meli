@@ -40,7 +40,6 @@ use melib::{
     contacts::{AddressBook, AddressBookName, Card, CardId},
     email::compose::Draft,
     error::Result,
-    text::TextProcessing,
     AccountHash, ContactBackendID,
 };
 

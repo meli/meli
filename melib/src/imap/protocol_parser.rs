@@ -21,7 +21,7 @@
 
 #![allow(clippy::type_complexity)]
 
-use std::{convert::TryFrom, str::FromStr};
+use std::{convert::TryFrom, str::FromStr as _};
 
 pub mod id_ext;
 #[cfg(test)]
@@ -43,11 +43,10 @@ use crate::{
         address::Address,
         parser::{
             generic::{byte_in_range, byte_in_slice},
-            BytesExt, IResult,
+            BytesExt as _, IResult,
         },
     },
-    error::ResultIntoError,
-    text::Truncate,
+    text::Truncate as _,
     utils::parsec::CRLF,
 };
 

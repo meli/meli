@@ -24,7 +24,7 @@ use super::{
     parser::*, ActionCommand::*, AddressOperator::*, CharacterOperator::*, ConditionRule::*,
     ControlCommand::*, IntegerOperator::*, MatchOperator::*, Rule::*, RuleBlock,
 };
-use crate::utils::parsec::Parser;
+use crate::utils::parsec::Parser as _;
 
 #[test]
 fn test_sieve_parse_strings() {

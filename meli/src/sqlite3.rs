@@ -35,10 +35,10 @@ use melib::{
     },
     smol,
     utils::sqlite3::{
-        rusqlite::{params, OptionalExtension},
+        rusqlite::{params, OptionalExtension as _},
         DatabaseDescription,
     },
-    Error, Result, ResultIntoError, SortField, SortOrder,
+    Error, Result, ResultIntoError as _, SortField, SortOrder,
 };
 
 #[cfg(test)]

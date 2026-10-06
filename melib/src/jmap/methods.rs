@@ -24,7 +24,7 @@ use std::marker::PhantomData;
 use indexmap::IndexMap;
 use serde::{
     de::DeserializeOwned,
-    ser::{Serialize, SerializeStruct, Serializer},
+    ser::{Serialize, SerializeStruct as _, Serializer},
 };
 use serde_json::{value::RawValue, Value};
 

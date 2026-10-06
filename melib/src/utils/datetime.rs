@@ -39,12 +39,12 @@
 //! ```
 use std::{
     borrow::Cow,
-    convert::TryInto,
+    convert::TryInto as _,
     ffi::{CStr, CString},
     os::raw::c_int,
 };
 
-use crate::error::{ErrorKind, Result, ResultIntoError};
+use crate::error::{ErrorKind, Result, ResultIntoError as _};
 
 pub type UnixTimestamp = u64;
 
@@ -256,7 +256,7 @@ fn timestamp_to_string_inner(
 
         unsafe {
             strftime(
-                vec.as_mut_ptr() as *mut _,
+                vec.as_mut_ptr().cast::<std::os::raw::c_char>(),
                 256,
                 format.as_ptr(),
                 std::ptr::addr_of!(new_tm),
@@ -353,7 +353,7 @@ fn year_to_secs(year: i64, is_leap: &mut bool) -> std::result::Result<i64, ()> {
         }
     }
 
-    leaps += 97 * cycles + 24 * centuries - if *is_leap { 1 } else { 0 };
+    leaps += 97 * cycles + 24 * centuries - i64::from(*is_leap);
 
     match (year - 100).overflowing_mul(31536000) {
         (_, true) => Err(()),
@@ -757,7 +757,7 @@ const TIMEZONE_ABBR: &[(&[u8], (i8, i8))] = &[
 ];
 
 pub mod lib {
-    use std::convert::TryFrom;
+    use std::convert::TryFrom as _;
 
     use libc::tm;
 

@@ -21,6 +21,7 @@
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
 #![cfg(feature = "jmap")]
+#![allow(clippy::print_stderr)]
 
 use rusty_fork::rusty_fork_test;
 
@@ -45,8 +46,8 @@ pub mod server {
     use futures::{
         channel::mpsc::UnboundedReceiver,
         future::{self, Either},
-        io::AsyncWriteExt,
-        AsyncBufReadExt, StreamExt,
+        io::AsyncWriteExt as _,
+        AsyncBufReadExt as _, StreamExt as _,
     };
     use melib::{
         backends::prelude::*,
@@ -54,7 +55,7 @@ pub mod server {
         smol::Async,
         Mail,
     };
-    use serde::Serialize;
+    use serde::Serialize as _;
     use serde_json::Value;
 
     #[derive(Debug, serde_derive::Deserialize)]
@@ -476,7 +477,7 @@ pub mod server {
                             let mut update_state = false;
                             if let Some(ref if_in_state) = if_in_state {
                                 if *if_in_state != self.identity_state {
-                                    unimplemented!();
+                                    panic!();
                                 }
                             }
                             for (id, mut obj) in create.unwrap_or_default() {
@@ -491,10 +492,10 @@ pub mod server {
                             assert_eq!(update.unwrap_or_default().len(), 0);
                             assert_eq!(destroy.unwrap_or_default().len(), 0);
                             // for _ in update.unwrap_or_default() {
-                            //     unimplemented!();
+                            //     panic!();
                             // }
                             // for _ in destroy.unwrap_or_default() {
-                            //     unimplemented!();
+                            //     panic!();
                             // }
                             let old_state = if update_state {
                                 Some(std::mem::replace(
@@ -549,7 +550,7 @@ pub mod server {
                             let mut update_state = false;
                             if let Some(ref if_in_state) = if_in_state {
                                 if *if_in_state != self.mailbox_state {
-                                    unimplemented!();
+                                    panic!();
                                 }
                             }
                             for (id, mut obj) in create.unwrap_or_default() {
@@ -564,10 +565,10 @@ pub mod server {
                             assert_eq!(update.unwrap_or_default().len(), 0);
                             assert_eq!(destroy.unwrap_or_default().len(), 0);
                             // for _ in update.unwrap_or_default() {
-                            //     unimplemented!();
+                            //     panic!();
                             // }
                             // for _ in destroy.unwrap_or_default() {
-                            //     unimplemented!();
+                            //     panic!();
                             // }
                             let old_state = if update_state {
                                 Some(std::mem::replace(
@@ -608,7 +609,7 @@ pub mod server {
                         }
                         other => panic!("other type name {other}"),
                     },
-                    MethodCallType::Copy => unimplemented!(),
+                    MethodCallType::Copy => panic!(),
                     MethodCallType::Query => match object_type_name.as_str() {
                         "Email" => {
                             let query: email::EmailQuery =
@@ -635,7 +636,7 @@ pub mod server {
                         }
                         other => panic!("other type name {other}"),
                     },
-                    MethodCallType::QueryChanges => unimplemented!(),
+                    MethodCallType::QueryChanges => panic!(),
                 }
             }
             eprintln!("Sending API call responses: {responses:?}");
@@ -685,7 +686,7 @@ pub mod server {
                     FlagOp::UnSet(f) => {
                         entry.envelope.set_flag(f, false);
                     }
-                    _ => unimplemented!(),
+                    _ => panic!(),
                 });
             let old_state = std::mem::replace(&mut self.email_state, State::new_random());
             let _none = self
@@ -795,12 +796,10 @@ pub mod server {
                             eprintln!("saving event stream");
 
                             tcp_stream
-                                .write_all("Content-Type: text/event-stream\r\n\r\n".as_bytes())
+                                .write_all(b"Content-Type: text/event-stream\r\n\r\n")
                                 .await?;
                             let state = state.lock().unwrap().email_state.clone();
-                            tcp_stream
-                                .write_all("event: state\r\ndata: ".as_bytes())
-                                .await?;
+                            tcp_stream.write_all(b"event: state\r\ndata: ").await?;
                             tcp_stream
                                 .write_all(
                                     serde_json::json! {
@@ -818,12 +817,12 @@ pub mod server {
                                     .as_bytes(),
                                 )
                                 .await?;
-                            tcp_stream.write_all("\r\n\r\n".as_bytes()).await?;
+                            tcp_stream.write_all(b"\r\n\r\n").await?;
                             tcp_stream.flush().await?;
                             event_streams.push(tcp_stream);
                             continue;
                         } else {
-                            unimplemented!()
+                            panic!()
                         };
                         tcp_stream
                             .write_all(
@@ -848,9 +847,7 @@ pub mod server {
                                     state.insert_email(mail)
                                 };
                                 for event_stream in &mut event_streams {
-                                    event_stream
-                                        .write_all("event: state\r\ndata: ".as_bytes())
-                                        .await?;
+                                    event_stream.write_all(b"event: state\r\ndata: ").await?;
                                     event_stream
                                         .write_all(
                                             serde_json::json! {
@@ -868,7 +865,7 @@ pub mod server {
                                             .as_bytes(),
                                         )
                                         .await?;
-                                    event_stream.write_all("\r\n\r\n".as_bytes()).await?;
+                                    event_stream.write_all(b"\r\n\r\n").await?;
                                     event_stream.flush().await?;
                                 }
                             }
@@ -878,9 +875,7 @@ pub mod server {
                                     state.set_flags(msgid, flag_op)
                                 };
                                 for event_stream in &mut event_streams {
-                                    event_stream
-                                        .write_all("event: state\r\ndata: ".as_bytes())
-                                        .await?;
+                                    event_stream.write_all(b"event: state\r\ndata: ").await?;
                                     event_stream
                                         .write_all(
                                             serde_json::json! {
@@ -898,7 +893,7 @@ pub mod server {
                                             .as_bytes(),
                                         )
                                         .await?;
-                                    event_stream.write_all("\r\n\r\n".as_bytes()).await?;
+                                    event_stream.write_all(b"\r\n\r\n").await?;
                                     event_stream.flush().await?;
                                 }
                             }
@@ -908,9 +903,7 @@ pub mod server {
                                     state.destroy_email(mail_id)
                                 };
                                 for event_stream in &mut event_streams {
-                                    event_stream
-                                        .write_all("event: state\r\n".as_bytes())
-                                        .await?;
+                                    event_stream.write_all(b"event: state\r\n").await?;
                                     event_stream
                                         .write_all(
                                             serde_json::json! {
@@ -928,7 +921,7 @@ pub mod server {
                                             .as_bytes(),
                                         )
                                         .await?;
-                                    event_stream.write_all("\r\n\r\n".as_bytes()).await?;
+                                    event_stream.write_all(b"\r\n\r\n").await?;
                                     event_stream.flush().await?;
                                 }
                             }
@@ -940,13 +933,13 @@ pub mod server {
     }
 }
 
-mod tests {
+pub mod tests {
     use std::{
         net::TcpListener,
         sync::{Arc, Mutex},
     };
 
-    use futures::{channel::mpsc::unbounded, executor::block_on, StreamExt};
+    use futures::{channel::mpsc::unbounded, executor::block_on, StreamExt as _};
     use melib::{
         backends::prelude::*,
         jmap::*,
@@ -959,7 +952,7 @@ mod tests {
 
     /// Test that `JmapType::refresh` returns the expected `Refresh` events when
     /// altering the mail store in the jmap server.
-    pub(crate) fn run_jmap_refresh() {
+    pub fn run_jmap_refresh() {
         let mut _logger = Logger::new_with(LogLevel::TRACE, true);
         let temp_dir = TempDir::new().unwrap();
         let backend_event_queue =
@@ -1182,7 +1175,7 @@ hello world.
     /// Test that `JmapType::watch` `Stream` returns the expected `Refresh`
     /// events when altering the mail store in the JMAP server, using eventSourceUrl-type instead
     /// of polling.
-    pub(crate) fn run_jmap_watch() {
+    pub fn run_jmap_watch() {
         let mut _logger = Logger::new_with(LogLevel::TRACE, true);
         let temp_dir = TempDir::new().unwrap();
         let backend_event_queue =

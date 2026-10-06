@@ -27,12 +27,12 @@ use std::{
     ffi::{CStr, CString},
     future::Future,
     hash::{Hash, Hasher},
-    io::Seek,
+    io::Seek as _,
     ptr::NonNull,
     sync::Arc,
 };
 
-use futures::FutureExt;
+use futures::FutureExt as _;
 use smol::{
     channel::{Receiver, Sender},
     Async,
@@ -40,7 +40,7 @@ use smol::{
 
 use crate::{
     email::pgp::{Key, LocateKey, NewSignature, SignaturesMetadata},
-    error::{Error, ErrorKind, Result, ResultIntoError},
+    error::{Error, ErrorKind, Result, ResultIntoError as _},
 };
 
 macro_rules! call {
@@ -197,17 +197,14 @@ impl Context {
                 unsafe {
                     call!(&self.inner.lib, gpgme_set_offline)(
                         self.inner.ptr.as_ptr(),
-                        if value { 1 } else { 0 },
+                        value.into(),
                     );
                 };
                 return Ok(self);
             }
             GpgmeFlag::AsciiArmor => {
                 unsafe {
-                    call!(&self.inner.lib, gpgme_set_armor)(
-                        self.inner.ptr.as_ptr(),
-                        if value { 1 } else { 0 },
-                    );
+                    call!(&self.inner.lib, gpgme_set_armor)(self.inner.ptr.as_ptr(), value.into());
                 };
                 return Ok(self);
             }

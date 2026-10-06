@@ -23,7 +23,7 @@
 use std::{convert::TryInto, sync::Arc};
 
 use http::{header, status::StatusCode, Request};
-use isahc::AsyncReadResponseExt;
+use isahc::AsyncReadResponseExt as _;
 
 use crate::{
     backends::prelude::ResultFuture,
@@ -31,7 +31,7 @@ use crate::{
         backend::{ContactBackend, ContactBackendCapabilities},
         vcard, AddressBookName, Card,
     },
-    error::{Error, ErrorKind, Result, ResultIntoError},
+    error::{Error, ErrorKind, Result, ResultIntoError as _},
     utils::webdav::*,
 };
 

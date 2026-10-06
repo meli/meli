@@ -22,7 +22,7 @@
 
 use std::{
     collections::HashMap,
-    io::Read,
+    io::Read as _,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
@@ -30,7 +30,7 @@ use std::{
 use crate::{
     backends::prelude::*,
     maildir::{
-        utilities::{MaildirFilePathExt, MaildirMailboxPathExt},
+        utilities::{MaildirFilePathExt as _, MaildirMailboxPathExt as _},
         Configuration, MaildirMailbox,
     },
 };

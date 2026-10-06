@@ -28,8 +28,8 @@
 
 use std::{
     collections::{hash_map::DefaultHasher, BTreeSet, HashMap, HashSet},
-    hash::Hasher,
-    str::FromStr,
+    hash::Hasher as _,
+    str::FromStr as _,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -49,7 +49,7 @@ pub use connection::*;
 use crate::{
     backends::prelude::*,
     email::{address::MessageID, Mail},
-    parser::BytesExt,
+    parser::BytesExt as _,
 };
 pub type UID = usize;
 

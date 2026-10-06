@@ -22,20 +22,19 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     ffi::{CStr, CString, OsStr},
-    io::Read,
-    os::unix::ffi::OsStrExt,
+    os::unix::ffi::OsStrExt as _,
     path::{Path, PathBuf},
     ptr::NonNull,
     sync::{Arc, Mutex, RwLock},
 };
 
-use futures::{channel::mpsc, SinkExt, StreamExt};
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use futures::{channel::mpsc, SinkExt as _, StreamExt as _};
+use notify::{RecommendedWatcher, RecursiveMode, Watcher as _};
 
 use crate::{
     backends::prelude::*,
-    error::{Error, ErrorKind, IntoError, Result},
-    utils::shellexpand::ShellExpandTrait,
+    error::{Error, ErrorKind, Result},
+    utils::shellexpand::ShellExpandTrait as _,
 };
 
 macro_rules! try_call {
@@ -55,7 +54,7 @@ macro_rules! try_call {
 }
 
 pub mod query;
-use query::{MelibQueryToNotmuchQuery, Query};
+use query::{MelibQueryToNotmuchQuery as _, Query};
 pub mod mailbox;
 use mailbox::NotmuchMailbox;
 pub mod api;
@@ -1133,9 +1132,8 @@ impl NotmuchOp {
             let snapshot = _self.snapshot.write().unwrap();
             let message =
                 Message::find_message(&_self.database, &snapshot.message_id_index[&_self.hash])?;
-            let mut f = std::fs::File::open(message.get_filename())?;
-            let mut response = Vec::new();
-            f.read_to_end(&mut response)?;
+            let filename = Path::new(message.get_filename());
+            let response = std::fs::read(filename).chain_err_related_path(filename)?;
             Ok(response)
         })
         .await

@@ -37,7 +37,7 @@ use melib::{
         Attachment, AttachmentBuilder,
     },
     error::*,
-    parser::BytesExt,
+    parser::BytesExt as _,
 };
 
 use super::AttachmentBoxFuture;
@@ -681,7 +681,7 @@ impl<'a> PGPBackend for PGPBackendInstance<'a> {
                         if let Ok(err) = serde_json::from_slice::<String>(&output.stdout) {
                             return Err(err.into());
                         }
-                        use serde::de::Deserialize;
+                        use serde::de::Deserialize as _;
                         Ok(
                             serde_json::from_slice::<[serde_json::Value; 2]>(&output.stdout)
                                 .and_then(|[n, b]| {
@@ -1329,6 +1329,7 @@ iy22S9oOhvpIcPXS/GjgUQMrImZNsmCwx4kiQ9Dex7Xs+hKkp1+siM9P2XS5iiDm
         _ = tempdir.close();
     }
 
+    #[cfg(test)]
     fn run_gpg_cli() {
         let Some(GpgTest {
             _logger,
@@ -1401,7 +1402,7 @@ iy22S9oOhvpIcPXS/GjgUQMrImZNsmCwx4kiQ9Dex7Xs+hKkp1+siM9P2XS5iiDm
             ),
         ] {
             std::fs::write(path, source).unwrap();
-            use std::os::unix::fs::PermissionsExt;
+            use std::os::unix::fs::PermissionsExt as _;
             let mut perms = std::fs::metadata(path).unwrap().permissions();
             perms.set_mode(perms.mode() | 0o700);
             std::fs::set_permissions(path, perms).unwrap();

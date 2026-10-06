@@ -133,21 +133,21 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    io::{BufReader, Read},
-    os::unix::ffi::OsStrExt,
+    io::{BufReader, Read as _},
+    os::unix::ffi::OsStrExt as _,
     path::{Path, PathBuf},
-    str::FromStr,
+    str::FromStr as _,
     sync::{Arc, Mutex, RwLock},
 };
 
 #[cfg(feature = "mbox-notify")]
-use notify::{event::EventKind as NotifyEvent, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{event::EventKind as NotifyEvent, RecommendedWatcher, RecursiveMode, Watcher as _};
 
 use crate::{
     backends::prelude::*,
-    email::{parser::BytesExt, *},
-    text::Truncate,
-    utils::{lock::*, shellexpand::ShellExpandTrait},
+    email::{parser::BytesExt as _, *},
+    text::Truncate as _,
+    utils::{lock::*, shellexpand::ShellExpandTrait as _},
 };
 pub mod write;
 
@@ -269,7 +269,7 @@ impl MboxOp {
     }
 
     pub async fn as_bytes(&self) -> Result<Vec<u8>> {
-        use std::io::Seek;
+        use std::io::Seek as _;
         let _self = self.clone();
 
         smol::unblock(move || {
@@ -991,7 +991,7 @@ impl MailBackend for MboxType {
     fn watch(&mut self) -> ResultStream<BackendEvent> {
         use std::sync::mpsc::channel;
 
-        use crate::error::IntoError;
+        use crate::error::IntoError as _;
 
         let (tx, rx) = channel();
         let watcher = RecommendedWatcher::new(

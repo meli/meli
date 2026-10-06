@@ -21,6 +21,7 @@
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
 #![cfg(feature = "imap")]
+#![allow(clippy::print_stderr)]
 
 use rusty_fork::rusty_fork_test;
 
@@ -39,7 +40,7 @@ rusty_fork_test! {
 pub mod server {
     use std::{
         collections::{HashSet, VecDeque},
-        convert::TryInto,
+        convert::TryInto as _,
         net::{TcpListener, TcpStream},
         num::NonZeroU32,
         sync::{Arc, Mutex},
@@ -49,13 +50,13 @@ pub mod server {
         channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender},
         executor::block_on,
         future::{self, Either},
-        io::{AsyncReadExt, AsyncWriteExt},
-        stream::{FuturesUnordered, StreamExt},
-        FutureExt,
+        io::{AsyncReadExt as _, AsyncWriteExt as _},
+        stream::{FuturesUnordered, StreamExt as _},
+        FutureExt as _,
     };
     use imap_codec::{
-        decode::Decoder,
-        encode::{Encoder, Fragment},
+        decode::Decoder as _,
+        encode::{Encoder as _, Fragment},
         imap_types, CommandCodec, ResponseCodec,
     };
     use imap_types::{
@@ -64,7 +65,7 @@ pub mod server {
         fetch::MessageDataItem,
         response::{Capability, Code, CommandContinuationRequest, Data, Response, Status},
     };
-    use melib::{backends::prelude::*, imap::*, parser::BytesExt, smol::Async, Mail};
+    use melib::{backends::prelude::*, imap::*, parser::BytesExt as _, smol::Async, Mail};
 
     #[derive(Debug)]
     pub enum SessionState {
@@ -718,7 +719,7 @@ pub mod server {
                                 assert_eq!(password.as_ref(), b"\0user\0password");
                                 *session_state = SessionState::Authenticated;
                             } else {
-                                unimplemented!();
+                                panic!();
                             }
                             responses.push(Response::Status(
                                 Status::ok(Some(id), None, "Welcome").unwrap(),
@@ -1165,11 +1166,11 @@ pub mod server {
                                                                 .set_flag(Flag::TRASHED, true);
                                                         }
                                                     }
-                                                    other => unimplemented!("{other:?}"),
+                                                    other => panic!("{other:?}"),
                                                 }
                                             }
                                         }
-                                        other => unimplemented!("{other:?}"),
+                                        other => panic!("{other:?}"),
                                     }
                                 }
                             }
@@ -1189,7 +1190,7 @@ pub mod server {
                                 Fragment::Literal { data, mode } => match mode {
                                     LiteralMode::Sync => {
                                         // Wait for a continuation request.
-                                        todo!()
+                                        panic!()
                                     }
                                     LiteralMode::NonSync => {
                                         // We don't need to wait for a continuation request
@@ -1242,15 +1243,14 @@ pub mod server {
                                 .write_all(b" OK IDLE terminated\r\n")
                                 .await
                                 .unwrap();
-                            tcp_stream.flush().await.unwrap();
                         } else {
                             eprintln!("main loop_handler received ServerEvent::Quit");
                             tcp_stream
                                 .write_all(b"* BYE cruel world\r\n")
                                 .await
                                 .unwrap();
-                            tcp_stream.flush().await.unwrap();
                         }
+                        tcp_stream.flush().await.unwrap();
                         return Some(true);
                     }
                     StreamEvent::Untagged(UntaggedEvent::New(uid)) => {
@@ -1287,7 +1287,7 @@ pub mod server {
     }
 }
 
-mod tests {
+pub mod tests {
     use std::{
         collections::VecDeque,
         net::TcpListener,
@@ -1297,7 +1297,7 @@ mod tests {
     use futures::{
         channel::mpsc::{unbounded, UnboundedSender},
         executor::block_on,
-        StreamExt,
+        StreamExt as _,
     };
     use melib::{
         backends::prelude::*,
@@ -1406,7 +1406,7 @@ mod tests {
 
     /// Test that `ImapType::watch` `Stream` returns the expected `Refresh`
     /// events when altering the mail store in the IMAP server.
-    pub(crate) fn run_imap_watch() {
+    pub fn run_imap_watch() {
         let ImapTest {
             _logger,
             _temp_dir,
@@ -1701,7 +1701,7 @@ hello world 3.
     }
 
     /// Test that initial fetch state as well as cache resync works.
-    pub(crate) fn run_imap_fetch() {
+    pub fn run_imap_fetch() {
         // $ date -R -u -r 0
         let new_mail = Mail::new(
             br#"From: "some name" <some@example.com>

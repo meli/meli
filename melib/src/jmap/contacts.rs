@@ -20,10 +20,10 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
-use std::{convert::TryFrom, sync::Arc};
+use std::sync::Arc;
 
 use futures::lock::Mutex as FutureMutex;
-use isahc::AsyncReadResponseExt;
+use isahc::AsyncReadResponseExt as _;
 
 use crate::{
     backends::prelude::*,

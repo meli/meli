@@ -25,9 +25,7 @@
 #[cfg(test)]
 pub mod tests;
 
-#[cfg(any(test, doc))]
-use std::backtrace::Backtrace;
-use std::{borrow::Cow, convert::TryFrom, fmt::Write};
+use std::{borrow::Cow, convert::TryFrom as _, fmt::Write as _};
 
 use nom::{
     branch::alt,
@@ -47,7 +45,7 @@ use crate::{
         headers::{HeaderMap, HeaderName},
         mailto::Mailto,
     },
-    error::{Error, Result, ResultIntoError},
+    error::{Error, Result, ResultIntoError as _},
     utils::{html_escape::HtmlEntity, percent_encoding::percent_decode},
 };
 
@@ -59,8 +57,6 @@ macro_rules! to_str {
 pub struct ParsingError<I> {
     pub input: I,
     pub error: Cow<'static, str>,
-    #[cfg(any(test, doc))]
-    pub backtrace: Backtrace,
 }
 
 impl<I: PartialEq> PartialEq for ParsingError<I> {
@@ -71,41 +67,19 @@ impl<I: PartialEq> PartialEq for ParsingError<I> {
 
 impl std::fmt::Debug for ParsingError<&'_ [u8]> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        #[cfg(any(test, doc))]
-        {
-            fmt.debug_struct(stringify!(ParsingError))
-                .field("input", &to_str!(self.input))
-                .field("error", &self.error)
-                .field("backtrace", &self.backtrace)
-                .finish()
-        }
-        #[cfg(not(any(test, doc)))]
-        {
-            fmt.debug_struct(stringify!(ParsingError))
-                .field("input", &to_str!(self.input))
-                .field("error", &self.error)
-                .finish()
-        }
+        fmt.debug_struct(stringify!(ParsingError))
+            .field("input", &to_str!(self.input))
+            .field("error", &self.error)
+            .finish()
     }
 }
 
 impl std::fmt::Debug for ParsingError<&'_ str> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        #[cfg(any(test, doc))]
-        {
-            fmt.debug_struct(stringify!(ParsingError))
-                .field("input", &self.input)
-                .field("error", &self.error)
-                .field("backtrace", &self.backtrace)
-                .finish()
-        }
-        #[cfg(not(any(test, doc)))]
-        {
-            fmt.debug_struct(stringify!(ParsingError))
-                .field("input", &self.input)
-                .field("error", &self.error)
-                .finish()
-        }
+        fmt.debug_struct(stringify!(ParsingError))
+            .field("input", &self.input)
+            .field("error", &self.error)
+            .finish()
     }
 }
 
@@ -129,29 +103,17 @@ impl<'i> ParsingError<&'i str> {
         ParsingError {
             input: self.input.as_bytes(),
             error: self.error,
-            #[cfg(any(test, doc))]
-            backtrace: self.backtrace,
         }
     }
 
     pub fn new(input: &'i str, error: Cow<'static, str>) -> Self {
-        ParsingError {
-            input,
-            error,
-            #[cfg(any(test, doc))]
-            backtrace: Backtrace::capture(),
-        }
+        ParsingError { input, error }
     }
 }
 
 impl<'i> ParsingError<&'i [u8]> {
     pub fn new(input: &'i [u8], error: Cow<'static, str>) -> Self {
-        ParsingError {
-            input,
-            error,
-            #[cfg(any(test, doc))]
-            backtrace: Backtrace::capture(),
-        }
+        ParsingError { input, error }
     }
 }
 
@@ -160,8 +122,6 @@ impl<I> From<(I, &'static str)> for ParsingError<I> {
         Self {
             input,
             error: error.into(),
-            #[cfg(any(test, doc))]
-            backtrace: Backtrace::capture(),
         }
     }
 }
@@ -171,8 +131,6 @@ impl<I> From<(I, String)> for ParsingError<I> {
         Self {
             input,
             error: error.into(),
-            #[cfg(any(test, doc))]
-            backtrace: Backtrace::capture(),
         }
     }
 }
@@ -182,8 +140,6 @@ impl<I> nom::error::ParseError<I> for ParsingError<I> {
         Self {
             input,
             error: kind.description().to_string().into(),
-            #[cfg(any(test, doc))]
-            backtrace: Backtrace::capture(),
         }
     }
 
@@ -191,8 +147,6 @@ impl<I> nom::error::ParseError<I> for ParsingError<I> {
         Self {
             input,
             error: format!("{}, {}", kind.description(), other.error).into(),
-            #[cfg(any(test, doc))]
-            backtrace: Backtrace::capture(),
         }
     }
 }
@@ -202,8 +156,6 @@ impl<I, E> nom::error::FromExternalError<I, E> for ParsingError<I> {
         Self {
             input,
             error: kind.description().to_string().into(),
-            #[cfg(any(test, doc))]
-            backtrace: Backtrace::capture(),
         }
     }
 }
@@ -212,15 +164,6 @@ impl<I> nom::error::ContextError<I> for ParsingError<I> {}
 
 impl<'i> From<ParsingError<&'i [u8]>> for Error {
     fn from(val: ParsingError<&'i [u8]>) -> Self {
-        #[cfg(any(test, doc))]
-        {
-            eprintln!(
-                "Parsing error for input:\n{}\nError:\n{}\nBacktrace:\n{}",
-                String::from_utf8_lossy(val.input),
-                val.error,
-                val.backtrace
-            );
-        }
         Self::new(format!(
             "Error when parsing: \"{}\"",
             String::from_utf8_lossy(val.input)
@@ -231,13 +174,6 @@ impl<'i> From<ParsingError<&'i [u8]>> for Error {
 
 impl<'i> From<ParsingError<&'i str>> for Error {
     fn from(val: ParsingError<&'i str>) -> Self {
-        #[cfg(any(test, doc))]
-        {
-            eprintln!(
-                "Parsing error for input:\n{}\nError:\n{}\nBacktrace:\n{}",
-                val.input, val.error, val.backtrace
-            );
-        }
         Self::new(format!("Error when parsing: \"{}\"", val.input)).set_details(val.error)
     }
 }

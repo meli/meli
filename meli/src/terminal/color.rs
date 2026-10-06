@@ -99,7 +99,7 @@ impl Color {
     }
 
     pub fn write_fg(self, stdout: &mut crate::StateStdout) -> std::io::Result<()> {
-        use std::io::Write;
+        use std::io::Write as _;
         match self {
             Self::Default => write!(stdout, "{}", termion::color::Fg(termion::color::Reset)),
             Self::Rgb(r, g, b) => write!(stdout, "{}", termion::color::Fg(TermionRgb(r, g, b))),
@@ -108,7 +108,7 @@ impl Color {
     }
 
     pub fn write_bg(self, stdout: &mut crate::StateStdout) -> std::io::Result<()> {
-        use std::io::Write;
+        use std::io::Write as _;
         match self {
             Self::Default => write!(stdout, "{}", termion::color::Bg(termion::color::Reset)),
             Self::Rgb(r, g, b) => write!(stdout, "{}", termion::color::Bg(TermionRgb(r, g, b))),
@@ -1058,12 +1058,1039 @@ impl Color {
             Self::Black => (0, 0, 0),
             Self::Red => (255, 0, 0),
             Self::Green => (0, 255, 0),
-            Self::Yellow => todo!(),
+            Self::Yellow => (255, 255, 0),
             Self::Blue => (0, 0, 255),
-            Self::Magenta => todo!(),
-            Self::Cyan => todo!(),
+            Self::Magenta => (255, 0, 255),
+            Self::Cyan => (0, 255, 255),
             Self::White => (255, 255, 255),
-            Self::Byte(_b) => todo!(),
+            Self::Byte(b) => {
+                match b {
+                    0 => {
+                        // Black (SYSTEM)	#000000
+                        (0, 0, 0)
+                    }
+                    1 => {
+                        // Maroon (SYSTEM)	#800000
+                        (128, 0, 0)
+                    }
+                    2 => {
+                        // Green (SYSTEM)	#008000
+                        (0, 128, 0)
+                    }
+                    3 => {
+                        // Olive (SYSTEM)	#808000
+                        (128, 128, 0)
+                    }
+                    4 => {
+                        // Navy (SYSTEM)	#000080
+                        (0, 0, 128)
+                    }
+                    5 => {
+                        // Purple (SYSTEM)	#800080
+                        (128, 0, 128)
+                    }
+                    6 => {
+                        // Teal (SYSTEM)	#008080
+                        (0, 128, 128)
+                    }
+                    7 => {
+                        // Silver (SYSTEM)	#c0c0c0
+                        (192, 192, 192)
+                    }
+                    8 => {
+                        // Grey (SYSTEM)	#808080
+                        (128, 128, 128)
+                    }
+                    9 => {
+                        // Red (SYSTEM)	#ff0000
+                        (255, 0, 0)
+                    }
+                    10 => {
+                        // Lime (SYSTEM)	#00ff00
+                        (0, 255, 0)
+                    }
+                    11 => {
+                        // Yellow (SYSTEM)	#ffff00
+                        (255, 255, 0)
+                    }
+                    12 => {
+                        // Blue (SYSTEM)	#0000ff
+                        (0, 0, 255)
+                    }
+                    13 => {
+                        // Fuchsia (SYSTEM)	#ff00ff
+                        (255, 0, 255)
+                    }
+                    14 => {
+                        // Aqua (SYSTEM)	#00ffff
+                        (0, 255, 255)
+                    }
+                    15 => {
+                        // White (SYSTEM)	#ffffff
+                        (255, 255, 255)
+                    }
+                    16 => {
+                        // Grey0	#000000
+                        (0, 0, 0)
+                    }
+                    17 => {
+                        // NavyBlue	#00005f
+                        (0, 0, 95)
+                    }
+                    18 => {
+                        // DarkBlue	#000087
+                        (0, 0, 135)
+                    }
+                    19 => {
+                        // Blue3	#0000af
+                        (0, 0, 175)
+                    }
+                    20 => {
+                        // Blue3	#0000d7
+                        (0, 0, 215)
+                    }
+                    21 => {
+                        // Blue1	#0000ff
+                        (0, 0, 255)
+                    }
+                    22 => {
+                        // DarkGreen	#005f00
+                        (0, 95, 0)
+                    }
+                    23 => {
+                        // DeepSkyBlue4	#005f5f
+                        (0, 95, 95)
+                    }
+                    24 => {
+                        // DeepSkyBlue4	#005f87
+                        (0, 95, 135)
+                    }
+                    25 => {
+                        // DeepSkyBlue4	#005faf
+                        (0, 95, 175)
+                    }
+                    26 => {
+                        // DodgerBlue3	#005fd7
+                        (0, 95, 215)
+                    }
+                    27 => {
+                        // DodgerBlue2	#005fff
+                        (0, 95, 255)
+                    }
+                    28 => {
+                        // Green4	#008700
+                        (0, 135, 0)
+                    }
+                    29 => {
+                        // SpringGreen4	#00875f
+                        (0, 135, 95)
+                    }
+                    30 => {
+                        // Turquoise4	#008787
+                        (0, 135, 135)
+                    }
+                    31 => {
+                        // DeepSkyBlue3	#0087af
+                        (0, 135, 175)
+                    }
+                    32 => {
+                        // DeepSkyBlue3	#0087d7
+                        (0, 135, 215)
+                    }
+                    33 => {
+                        // DodgerBlue1	#0087ff
+                        (0, 135, 255)
+                    }
+                    34 => {
+                        // Green3	#00af00
+                        (0, 175, 0)
+                    }
+                    35 => {
+                        // SpringGreen3	#00af5f
+                        (0, 175, 95)
+                    }
+                    36 => {
+                        // DarkCyan	#00af87
+                        (0, 175, 135)
+                    }
+                    37 => {
+                        // LightSeaGreen	#00afaf
+                        (0, 175, 175)
+                    }
+                    38 => {
+                        // DeepSkyBlue2	#00afd7
+                        (0, 175, 215)
+                    }
+                    39 => {
+                        // DeepSkyBlue1	#00afff
+                        (0, 175, 255)
+                    }
+                    40 => {
+                        // Green3	#00d700
+                        (0, 215, 0)
+                    }
+                    41 => {
+                        // SpringGreen3	#00d75f
+                        (0, 215, 95)
+                    }
+                    42 => {
+                        // SpringGreen2	#00d787
+                        (0, 215, 135)
+                    }
+                    43 => {
+                        // Cyan3	#00d7af
+                        (0, 215, 175)
+                    }
+                    44 => {
+                        // DarkTurquoise	#00d7d7
+                        (0, 215, 215)
+                    }
+                    45 => {
+                        // Turquoise2	#00d7ff
+                        (0, 215, 255)
+                    }
+                    46 => {
+                        // Green1	#00ff00
+                        (0, 255, 0)
+                    }
+                    47 => {
+                        // SpringGreen2	#00ff5f
+                        (0, 255, 95)
+                    }
+                    48 => {
+                        // SpringGreen1	#00ff87
+                        (0, 255, 135)
+                    }
+                    49 => {
+                        // MediumSpringGreen	#00ffaf
+                        (0, 255, 175)
+                    }
+                    50 => {
+                        // Cyan2	#00ffd7
+                        (0, 255, 215)
+                    }
+                    51 => {
+                        // Cyan1	#00ffff
+                        (0, 255, 255)
+                    }
+                    52 => {
+                        // DarkRed	#5f0000
+                        (95, 0, 0)
+                    }
+                    53 => {
+                        // DeepPink4	#5f005f
+                        (95, 0, 95)
+                    }
+                    54 => {
+                        // Purple4	#5f0087
+                        (95, 0, 135)
+                    }
+                    55 => {
+                        // Purple4	#5f00af
+                        (95, 0, 175)
+                    }
+                    56 => {
+                        // Purple3	#5f00d7
+                        (95, 0, 215)
+                    }
+                    57 => {
+                        // BlueViolet	#5f00ff
+                        (95, 0, 255)
+                    }
+                    58 => {
+                        // Orange4	#5f5f00
+                        (95, 95, 0)
+                    }
+                    59 => {
+                        // Grey37	#5f5f5f
+                        (95, 95, 95)
+                    }
+                    60 => {
+                        // MediumPurple4	#5f5f87
+                        (95, 95, 135)
+                    }
+                    61 => {
+                        // SlateBlue3	#5f5faf
+                        (95, 95, 175)
+                    }
+                    62 => {
+                        // SlateBlue3	#5f5fd7
+                        (95, 95, 215)
+                    }
+                    63 => {
+                        // RoyalBlue1	#5f5fff
+                        (95, 95, 255)
+                    }
+                    64 => {
+                        // Chartreuse4	#5f8700
+                        (95, 135, 0)
+                    }
+                    65 => {
+                        // DarkSeaGreen4	#5f875f
+                        (95, 135, 95)
+                    }
+                    66 => {
+                        // PaleTurquoise4	#5f8787
+                        (95, 135, 135)
+                    }
+                    67 => {
+                        // SteelBlue	#5f87af
+                        (95, 135, 175)
+                    }
+                    68 => {
+                        // SteelBlue3	#5f87d7
+                        (95, 135, 215)
+                    }
+                    69 => {
+                        // CornflowerBlue	#5f87ff
+                        (95, 135, 255)
+                    }
+                    70 => {
+                        // Chartreuse3	#5faf00
+                        (95, 175, 0)
+                    }
+                    71 => {
+                        // DarkSeaGreen4	#5faf5f
+                        (95, 175, 95)
+                    }
+                    72 => {
+                        // CadetBlue	#5faf87
+                        (95, 175, 135)
+                    }
+                    73 => {
+                        // CadetBlue	#5fafaf
+                        (95, 175, 175)
+                    }
+                    74 => {
+                        // SkyBlue3	#5fafd7
+                        (95, 175, 215)
+                    }
+                    75 => {
+                        // SteelBlue1	#5fafff
+                        (95, 175, 255)
+                    }
+                    76 => {
+                        // Chartreuse3	#5fd700
+                        (95, 215, 0)
+                    }
+                    77 => {
+                        // PaleGreen3	#5fd75f
+                        (95, 215, 95)
+                    }
+                    78 => {
+                        // SeaGreen3	#5fd787
+                        (95, 215, 135)
+                    }
+                    79 => {
+                        // Aquamarine3	#5fd7af
+                        (95, 215, 175)
+                    }
+                    80 => {
+                        // MediumTurquoise	#5fd7d7
+                        (95, 215, 215)
+                    }
+                    81 => {
+                        // SteelBlue1	#5fd7ff
+                        (95, 215, 255)
+                    }
+                    82 => {
+                        // Chartreuse2	#5fff00
+                        (95, 255, 0)
+                    }
+                    83 => {
+                        // SeaGreen2	#5fff5f
+                        (95, 255, 95)
+                    }
+                    84 => {
+                        // SeaGreen1	#5fff87
+                        (95, 255, 135)
+                    }
+                    85 => {
+                        // SeaGreen1	#5fffaf
+                        (95, 255, 175)
+                    }
+                    86 => {
+                        // Aquamarine1	#5fffd7
+                        (95, 255, 215)
+                    }
+                    87 => {
+                        // DarkSlateGray2	#5fffff
+                        (95, 255, 255)
+                    }
+                    88 => {
+                        // DarkRed	#870000
+                        (135, 0, 0)
+                    }
+                    89 => {
+                        // DeepPink4	#87005f
+                        (135, 0, 95)
+                    }
+                    90 => {
+                        // DarkMagenta	#870087
+                        (135, 0, 135)
+                    }
+                    91 => {
+                        // DarkMagenta	#8700af
+                        (135, 0, 175)
+                    }
+                    92 => {
+                        // DarkViolet	#8700d7
+                        (135, 0, 215)
+                    }
+                    93 => {
+                        // Purple	#8700ff
+                        (135, 0, 255)
+                    }
+                    94 => {
+                        // Orange4	#875f00
+                        (135, 95, 0)
+                    }
+                    95 => {
+                        // LightPink4	#875f5f
+                        (135, 95, 95)
+                    }
+                    96 => {
+                        // Plum4	#875f87
+                        (135, 95, 135)
+                    }
+                    97 => {
+                        // MediumPurple3	#875faf
+                        (135, 95, 175)
+                    }
+                    98 => {
+                        // MediumPurple3	#875fd7
+                        (135, 95, 215)
+                    }
+                    99 => {
+                        // SlateBlue1	#875fff
+                        (135, 95, 255)
+                    }
+                    100 => {
+                        // Yellow4	#878700
+                        (135, 135, 0)
+                    }
+                    101 => {
+                        // Wheat4	#87875f
+                        (135, 135, 95)
+                    }
+                    102 => {
+                        // Grey53	#878787
+                        (135, 135, 135)
+                    }
+                    103 => {
+                        // LightSlateGrey	#8787af
+                        (135, 135, 175)
+                    }
+                    104 => {
+                        // MediumPurple	#8787d7
+                        (135, 135, 215)
+                    }
+                    105 => {
+                        // LightSlateBlue	#8787ff
+                        (135, 135, 255)
+                    }
+                    106 => {
+                        // Yellow4	#87af00
+                        (135, 175, 0)
+                    }
+                    107 => {
+                        // DarkOliveGreen3	#87af5f
+                        (135, 175, 95)
+                    }
+                    108 => {
+                        // DarkSeaGreen	#87af87
+                        (135, 175, 135)
+                    }
+                    109 => {
+                        // LightSkyBlue3	#87afaf
+                        (135, 175, 175)
+                    }
+                    110 => {
+                        // LightSkyBlue3	#87afd7
+                        (135, 175, 215)
+                    }
+                    111 => {
+                        // SkyBlue2	#87afff
+                        (135, 175, 255)
+                    }
+                    112 => {
+                        // Chartreuse2	#87d700
+                        (135, 215, 0)
+                    }
+                    113 => {
+                        // DarkOliveGreen3	#87d75f
+                        (135, 215, 95)
+                    }
+                    114 => {
+                        // PaleGreen3	#87d787
+                        (135, 215, 135)
+                    }
+                    115 => {
+                        // DarkSeaGreen3	#87d7af
+                        (135, 215, 175)
+                    }
+                    116 => {
+                        // DarkSlateGray3	#87d7d7
+                        (135, 215, 215)
+                    }
+                    117 => {
+                        // SkyBlue1	#87d7ff
+                        (135, 215, 255)
+                    }
+                    118 => {
+                        // Chartreuse1	#87ff00
+                        (135, 255, 0)
+                    }
+                    119 => {
+                        // LightGreen	#87ff5f
+                        (135, 255, 95)
+                    }
+                    120 => {
+                        // LightGreen	#87ff87
+                        (135, 255, 135)
+                    }
+                    121 => {
+                        // PaleGreen1	#87ffaf
+                        (135, 255, 175)
+                    }
+                    122 => {
+                        // Aquamarine1	#87ffd7
+                        (135, 255, 215)
+                    }
+                    123 => {
+                        // DarkSlateGray1	#87ffff
+                        (135, 255, 255)
+                    }
+                    124 => {
+                        // Red3	#af0000
+                        (175, 0, 0)
+                    }
+                    125 => {
+                        // DeepPink4	#af005f
+                        (175, 0, 95)
+                    }
+                    126 => {
+                        // MediumVioletRed	#af0087
+                        (175, 0, 135)
+                    }
+                    127 => {
+                        // Magenta3	#af00af
+                        (175, 0, 175)
+                    }
+                    128 => {
+                        // DarkViolet	#af00d7
+                        (175, 0, 215)
+                    }
+                    129 => {
+                        // Purple	#af00ff
+                        (175, 0, 255)
+                    }
+                    130 => {
+                        // DarkOrange3	#af5f00
+                        (175, 95, 0)
+                    }
+                    131 => {
+                        // IndianRed	#af5f5f
+                        (175, 95, 95)
+                    }
+                    132 => {
+                        // HotPink3	#af5f87
+                        (175, 95, 135)
+                    }
+                    133 => {
+                        // MediumOrchid3	#af5faf
+                        (175, 95, 175)
+                    }
+                    134 => {
+                        // MediumOrchid	#af5fd7
+                        (175, 95, 215)
+                    }
+                    135 => {
+                        // MediumPurple2	#af5fff
+                        (175, 95, 255)
+                    }
+                    136 => {
+                        // DarkGoldenrod	#af8700
+                        (175, 135, 0)
+                    }
+                    137 => {
+                        // LightSalmon3	#af875f
+                        (175, 135, 95)
+                    }
+                    138 => {
+                        // RosyBrown	#af8787
+                        (175, 135, 135)
+                    }
+                    139 => {
+                        // Grey63	#af87af
+                        (175, 135, 175)
+                    }
+                    140 => {
+                        // MediumPurple2	#af87d7
+                        (175, 135, 215)
+                    }
+                    141 => {
+                        // MediumPurple1	#af87ff
+                        (175, 135, 255)
+                    }
+                    142 => {
+                        // Gold3	#afaf00
+                        (175, 175, 0)
+                    }
+                    143 => {
+                        // DarkKhaki	#afaf5f
+                        (175, 175, 95)
+                    }
+                    144 => {
+                        // NavajoWhite3	#afaf87
+                        (175, 175, 135)
+                    }
+                    145 => {
+                        // Grey69	#afafaf
+                        (175, 175, 175)
+                    }
+                    146 => {
+                        // LightSteelBlue3	#afafd7
+                        (175, 175, 215)
+                    }
+                    147 => {
+                        // LightSteelBlue	#afafff
+                        (175, 175, 255)
+                    }
+                    148 => {
+                        // Yellow3	#afd700
+                        (175, 215, 0)
+                    }
+                    149 => {
+                        // DarkOliveGreen3	#afd75f
+                        (175, 215, 95)
+                    }
+                    150 => {
+                        // DarkSeaGreen3	#afd787
+                        (175, 215, 135)
+                    }
+                    151 => {
+                        // DarkSeaGreen2	#afd7af
+                        (175, 215, 175)
+                    }
+                    152 => {
+                        // LightCyan3	#afd7d7
+                        (175, 215, 215)
+                    }
+                    153 => {
+                        // LightSkyBlue1	#afd7ff
+                        (175, 215, 255)
+                    }
+                    154 => {
+                        // GreenYellow	#afff00
+                        (175, 255, 0)
+                    }
+                    155 => {
+                        // DarkOliveGreen2	#afff5f
+                        (175, 255, 95)
+                    }
+                    156 => {
+                        // PaleGreen1	#afff87
+                        (175, 255, 135)
+                    }
+                    157 => {
+                        // DarkSeaGreen2	#afffaf
+                        (175, 255, 175)
+                    }
+                    158 => {
+                        // DarkSeaGreen1	#afffd7
+                        (175, 255, 215)
+                    }
+                    159 => {
+                        // PaleTurquoise1	#afffff
+                        (175, 255, 255)
+                    }
+                    160 => {
+                        // Red3	#d70000
+                        (215, 0, 0)
+                    }
+                    161 => {
+                        // DeepPink3	#d7005f
+                        (215, 0, 95)
+                    }
+                    162 => {
+                        // DeepPink3	#d70087
+                        (215, 0, 135)
+                    }
+                    163 => {
+                        // Magenta3	#d700af
+                        (215, 0, 175)
+                    }
+                    164 => {
+                        // Magenta3	#d700d7
+                        (215, 0, 215)
+                    }
+                    165 => {
+                        // Magenta2	#d700ff
+                        (215, 0, 255)
+                    }
+                    166 => {
+                        // DarkOrange3	#d75f00
+                        (215, 95, 0)
+                    }
+                    167 => {
+                        // IndianRed	#d75f5f
+                        (215, 95, 95)
+                    }
+                    168 => {
+                        // HotPink3	#d75f87
+                        (215, 95, 135)
+                    }
+                    169 => {
+                        // HotPink2	#d75faf
+                        (215, 95, 175)
+                    }
+                    170 => {
+                        // Orchid	#d75fd7
+                        (215, 95, 215)
+                    }
+                    171 => {
+                        // MediumOrchid1	#d75fff
+                        (215, 95, 255)
+                    }
+                    172 => {
+                        // Orange3	#d78700
+                        (215, 135, 0)
+                    }
+                    173 => {
+                        // LightSalmon3	#d7875f
+                        (215, 135, 95)
+                    }
+                    174 => {
+                        // LightPink3	#d78787
+                        (215, 135, 135)
+                    }
+                    175 => {
+                        // Pink3	#d787af
+                        (215, 135, 175)
+                    }
+                    176 => {
+                        // Plum3	#d787d7
+                        (215, 135, 215)
+                    }
+                    177 => {
+                        // Violet	#d787ff
+                        (215, 135, 255)
+                    }
+                    178 => {
+                        // Gold3	#d7af00
+                        (215, 175, 0)
+                    }
+                    179 => {
+                        // LightGoldenrod3	#d7af5f
+                        (215, 175, 95)
+                    }
+                    180 => {
+                        // Tan	#d7af87
+                        (215, 175, 135)
+                    }
+                    181 => {
+                        // MistyRose3	#d7afaf
+                        (215, 175, 175)
+                    }
+                    182 => {
+                        // Thistle3	#d7afd7
+                        (215, 175, 215)
+                    }
+                    183 => {
+                        // Plum2	#d7afff
+                        (215, 175, 255)
+                    }
+                    184 => {
+                        // Yellow3	#d7d700
+                        (215, 215, 0)
+                    }
+                    185 => {
+                        // Khaki3	#d7d75f
+                        (215, 215, 95)
+                    }
+                    186 => {
+                        // LightGoldenrod2	#d7d787
+                        (215, 215, 135)
+                    }
+                    187 => {
+                        // LightYellow3	#d7d7af
+                        (215, 215, 175)
+                    }
+                    188 => {
+                        // Grey84	#d7d7d7
+                        (215, 215, 215)
+                    }
+                    189 => {
+                        // LightSteelBlue1	#d7d7ff
+                        (215, 215, 255)
+                    }
+                    190 => {
+                        // Yellow2	#d7ff00
+                        (215, 255, 0)
+                    }
+                    191 => {
+                        // DarkOliveGreen1	#d7ff5f
+                        (215, 255, 95)
+                    }
+                    192 => {
+                        // DarkOliveGreen1	#d7ff87
+                        (215, 255, 135)
+                    }
+                    193 => {
+                        // DarkSeaGreen1	#d7ffaf
+                        (215, 255, 175)
+                    }
+                    194 => {
+                        // Honeydew2	#d7ffd7
+                        (215, 255, 215)
+                    }
+                    195 => {
+                        // LightCyan1	#d7ffff
+                        (215, 255, 255)
+                    }
+                    196 => {
+                        // Red1	#ff0000
+                        (255, 0, 0)
+                    }
+                    197 => {
+                        // DeepPink2	#ff005f
+                        (255, 0, 95)
+                    }
+                    198 => {
+                        // DeepPink1	#ff0087
+                        (255, 0, 135)
+                    }
+                    199 => {
+                        // DeepPink1	#ff00af
+                        (255, 0, 175)
+                    }
+                    200 => {
+                        // Magenta2	#ff00d7
+                        (255, 0, 215)
+                    }
+                    201 => {
+                        // Magenta1	#ff00ff
+                        (255, 0, 255)
+                    }
+                    202 => {
+                        // OrangeRed1	#ff5f00
+                        (255, 95, 0)
+                    }
+                    203 => {
+                        // IndianRed1	#ff5f5f
+                        (255, 95, 95)
+                    }
+                    204 => {
+                        // IndianRed1	#ff5f87
+                        (255, 95, 135)
+                    }
+                    205 => {
+                        // HotPink	#ff5faf
+                        (255, 95, 175)
+                    }
+                    206 => {
+                        // HotPink	#ff5fd7
+                        (255, 95, 215)
+                    }
+                    207 => {
+                        // MediumOrchid1	#ff5fff
+                        (255, 95, 255)
+                    }
+                    208 => {
+                        // DarkOrange	#ff8700
+                        (255, 135, 0)
+                    }
+                    209 => {
+                        // Salmon1	#ff875f
+                        (255, 135, 95)
+                    }
+                    210 => {
+                        // LightCoral	#ff8787
+                        (255, 135, 135)
+                    }
+                    211 => {
+                        // PaleVioletRed1	#ff87af
+                        (255, 135, 175)
+                    }
+                    212 => {
+                        // Orchid2	#ff87d7
+                        (255, 135, 215)
+                    }
+                    213 => {
+                        // Orchid1	#ff87ff
+                        (255, 135, 255)
+                    }
+                    214 => {
+                        // Orange1	#ffaf00
+                        (255, 175, 0)
+                    }
+                    215 => {
+                        // SandyBrown	#ffaf5f
+                        (255, 175, 95)
+                    }
+                    216 => {
+                        // LightSalmon1	#ffaf87
+                        (255, 175, 135)
+                    }
+                    217 => {
+                        // LightPink1	#ffafaf
+                        (255, 175, 175)
+                    }
+                    218 => {
+                        // Pink1	#ffafd7
+                        (255, 175, 215)
+                    }
+                    219 => {
+                        // Plum1	#ffafff
+                        (255, 175, 255)
+                    }
+                    220 => {
+                        // Gold1	#ffd700
+                        (255, 215, 0)
+                    }
+                    221 => {
+                        // LightGoldenrod2	#ffd75f
+                        (255, 215, 95)
+                    }
+                    222 => {
+                        // LightGoldenrod2	#ffd787
+                        (255, 215, 135)
+                    }
+                    223 => {
+                        // NavajoWhite1	#ffd7af
+                        (255, 215, 175)
+                    }
+                    224 => {
+                        // MistyRose1	#ffd7d7
+                        (255, 215, 215)
+                    }
+                    225 => {
+                        // Thistle1	#ffd7ff
+                        (255, 215, 255)
+                    }
+                    226 => {
+                        // Yellow1	#ffff00
+                        (255, 255, 0)
+                    }
+                    227 => {
+                        // LightGoldenrod1	#ffff5f
+                        (255, 255, 95)
+                    }
+                    228 => {
+                        // Khaki1	#ffff87
+                        (255, 255, 135)
+                    }
+                    229 => {
+                        // Wheat1	#ffffaf
+                        (255, 255, 175)
+                    }
+                    230 => {
+                        // Cornsilk1	#ffffd7
+                        (255, 255, 215)
+                    }
+                    231 => {
+                        // Grey100	#ffffff
+                        (255, 255, 255)
+                    }
+                    232 => {
+                        // Grey3	#080808
+                        (8, 8, 8)
+                    }
+                    233 => {
+                        // Grey7	#121212
+                        (18, 18, 18)
+                    }
+                    234 => {
+                        // Grey11	#1c1c1c
+                        (28, 28, 28)
+                    }
+                    235 => {
+                        // Grey15	#262626
+                        (38, 38, 38)
+                    }
+                    236 => {
+                        // Grey19	#303030
+                        (48, 48, 48)
+                    }
+                    237 => {
+                        // Grey23	#3a3a3a
+                        (58, 58, 58)
+                    }
+                    238 => {
+                        // Grey27	#444444
+                        (68, 68, 68)
+                    }
+                    239 => {
+                        // Grey30	#4e4e4e
+                        (78, 78, 78)
+                    }
+                    240 => {
+                        // Grey35	#585858
+                        (88, 88, 88)
+                    }
+                    241 => {
+                        // Grey39	#626262
+                        (98, 98, 98)
+                    }
+                    242 => {
+                        // Grey42	#6c6c6c
+                        (108, 108, 108)
+                    }
+                    243 => {
+                        // Grey46	#767676
+                        (118, 118, 118)
+                    }
+                    244 => {
+                        // Grey50	#808080
+                        (128, 128, 128)
+                    }
+                    245 => {
+                        // Grey54	#8a8a8a
+                        (138, 138, 138)
+                    }
+                    246 => {
+                        // Grey58	#949494
+                        (148, 148, 148)
+                    }
+                    247 => {
+                        // Grey62	#9e9e9e
+                        (158, 158, 158)
+                    }
+                    248 => {
+                        // Grey66	#a8a8a8
+                        (168, 168, 168)
+                    }
+                    249 => {
+                        // Grey70	#b2b2b2
+                        (178, 178, 178)
+                    }
+                    250 => {
+                        // Grey74	#bcbcbc
+                        (188, 188, 188)
+                    }
+                    251 => {
+                        // Grey78	#c6c6c6
+                        (198, 198, 198)
+                    }
+                    252 => {
+                        // Grey82	#d0d0d0
+                        (208, 208, 208)
+                    }
+                    253 => {
+                        // Grey85	#dadada
+                        (218, 218, 218)
+                    }
+                    254 => {
+                        // Grey89	#e4e4e4
+                        (228, 228, 228)
+                    }
+                    255 => {
+                        // Grey93	#eeeeee
+                        (238, 238, 238)
+                    }
+                }
+            }
             Self::Rgb(r, g, b) => (*r, *g, *b),
             Self::Default => (0, 0, 0),
         }

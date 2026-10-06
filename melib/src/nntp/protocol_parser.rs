@@ -19,8 +19,6 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::str::FromStr;
-
 use nom::{
     bytes::complete::{is_not, tag},
     combinator::opt,

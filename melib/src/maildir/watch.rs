@@ -22,7 +22,7 @@
 
 use std::sync::Arc;
 
-use futures::{channel::mpsc, StreamExt};
+use futures::{channel::mpsc, StreamExt as _};
 use notify::{self, event::EventKind as NotifyEvent};
 
 use crate::{
@@ -30,7 +30,7 @@ use crate::{
     error::Result,
     maildir::{
         cache::Cache,
-        utilities::{move_to_cur, MaildirFilePathExt},
+        utilities::{move_to_cur, MaildirFilePathExt as _},
         Configuration, MaildirType,
     },
 };

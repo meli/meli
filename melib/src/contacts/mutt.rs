@@ -34,7 +34,7 @@ use crate::{
     },
     error::{Error, ErrorKind},
     utils::parsec::{is_not, map_res, match_literal_anycase, prefix, Parser},
-    ShellExpandTrait,
+    ShellExpandTrait as _,
 };
 
 //alias <nickname> [ <long name> ] <address>

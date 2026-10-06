@@ -22,7 +22,7 @@
 
 use serde::{
     de::{Deserialize, Deserializer},
-    ser::{Serialize, SerializeMap, Serializer},
+    ser::{Serialize, SerializeMap as _, Serializer},
 };
 
 use crate::error::{Error, ErrorKind};

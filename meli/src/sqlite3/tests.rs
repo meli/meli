@@ -22,7 +22,7 @@
 
 use std::{
     collections::{HashSet, VecDeque},
-    io::Read,
+    io::Read as _,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -36,7 +36,7 @@ use crate::utilities::tests::{eprint_step_fn, eprintln_ok_fn};
 
 #[test]
 fn test_sqlite3_query_to_sql() {
-    use melib::{search::query, utils::parsec::Parser};
+    use melib::{search::query, utils::parsec::Parser as _};
     assert_eq!(
         "(subject LIKE \"%test%\" ) AND (body_text LIKE \"%i%\" ) ",
         &query_to_sql(&query().parse_complete("subject:test and i").unwrap().1)
@@ -100,7 +100,7 @@ fn new_maildir_backend(
 rusty_fork_test! {
 #[test]
 fn test_sqlite3_reindex() {
-    use futures::stream::TryStreamExt;
+    use futures::stream::TryStreamExt as _;
 
     /// Account name to use throughout the test.
     const ACCOUNT_NAME: &str = "test";

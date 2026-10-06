@@ -41,7 +41,7 @@ mod tests;
 
 use std::{
     cmp::{Eq, PartialEq},
-    convert::{TryFrom, TryInto},
+    convert::{TryFrom as _, TryInto},
     ops::{Deref, DerefMut},
 };
 

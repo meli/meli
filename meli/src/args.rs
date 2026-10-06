@@ -21,7 +21,7 @@
 
 //! Command line arguments.
 
-use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _};
 
 use super::*;
 #[cfg(feature = "cli-docs")]
@@ -205,6 +205,7 @@ pub enum MigrationOpt {
     },
 }
 
+#[expect(clippy::print_stdout)]
 fn print_path(path: &std::path::Path) {
     if let Some(hostname) = nix::unistd::gethostname()
         .ok()
@@ -222,6 +223,7 @@ fn print_path(path: &std::path::Path) {
     }
 }
 
+#[expect(clippy::print_stdout)]
 impl Opt {
     /// Execute `self.subcommand` if any, and return its result. Otherwise
     /// return `None`.
@@ -263,7 +265,7 @@ impl Opt {
                 no_raw,
                 gzipped: true,
             }) => {
-                use std::io::Write;
+                use std::io::Write as _;
 
                 ret_err!(std::io::stdout().write_all(if no_raw {
                     page.text_gz()

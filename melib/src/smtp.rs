@@ -78,7 +78,7 @@
 
 use std::{borrow::Cow, convert::TryFrom};
 
-use futures::io::{AsyncReadExt, AsyncWriteExt};
+use futures::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use native_tls::TlsConnector;
 use smallvec::SmallVec;
 use smol::{unblock, Async as AsyncWrapper};
@@ -86,7 +86,7 @@ use smol::{unblock, Async as AsyncWrapper};
 use crate::{
     conf::Secret,
     email::{Address, Envelope},
-    error::{Error, ErrorKind, Result, ResultIntoError},
+    error::{Error, ErrorKind, Result, ResultIntoError as _},
     utils::connections::{std_net::connect as tcp_stream_connect, Connection},
 };
 

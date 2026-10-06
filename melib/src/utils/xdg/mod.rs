@@ -50,8 +50,7 @@
 use std::{
     collections::HashMap,
     env, fs,
-    fs::File,
-    io::{Error, ErrorKind, Read, Result},
+    io::{Error, ErrorKind, Result},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     str,
@@ -70,17 +69,6 @@ macro_rules! split_and_chain {
 struct Ini(String);
 
 impl Ini {
-    fn from_filename(filename: &Path) -> Result<Self> {
-        let mut file: File = File::open(filename)?;
-
-        let mut contents: Vec<u8> = vec![];
-        file.read_to_end(&mut contents)?;
-
-        let contents_str =
-            String::from_utf8(contents).map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
-        Ok(Self(contents_str))
-    }
-
     fn iter_section(&self, section: &str) -> impl Iterator<Item = (&str, &str)> {
         let section = format!("[{section}]");
         let mut lines = self.0.lines();
@@ -230,7 +218,7 @@ fn check_mimeapps_list<T: AsRef<str>>(
     xdg_vars: &HashMap<String, String>,
     query: T,
 ) -> Result<Option<String>> {
-    let ini = Ini::from_filename(filename)?;
+    let ini = Ini(std::fs::read_to_string(filename)?);
     for (key, value) in ini
         .iter_section("Added Associations")
         .chain(ini.iter_section("Default Applications"))
@@ -292,7 +280,7 @@ pub fn desktop_file_to_command(
             }
         }
         if let Some(file_path) = file_path {
-            let ini = Ini::from_filename(&file_path)?;
+            let ini = Ini(std::fs::read_to_string(&file_path)?);
             for (key, value) in ini.iter_section("Desktop Entry") {
                 if key != "Exec" {
                     continue;

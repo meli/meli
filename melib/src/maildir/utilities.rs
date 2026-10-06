@@ -21,14 +21,14 @@
 
 use std::{
     collections::hash_map::DefaultHasher,
-    hash::{Hash, Hasher},
-    io::{BufReader, Read},
+    hash::{Hash as _, Hasher as _},
+    io::{BufReader, Read as _},
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
 };
 
 use super::{Configuration, HashIndex};
-use crate::{backends::prelude::*, utils::shellexpand::ShellExpandTrait};
+use crate::{backends::prelude::*, utils::shellexpand::ShellExpandTrait as _};
 
 type HashIndexes = Arc<Mutex<HashMap<MailboxHash, HashIndex>>>;
 
@@ -558,8 +558,7 @@ pub fn move_to_cur(config: &Configuration, p: &Path) -> Result<PathBuf> {
         cur
     };
     let dest_path = p.place_in_dir(&cur, config)?;
+    std::fs::rename(p, &dest_path).chain_err_related_path(p)?;
     log::trace!("moved to cur: {}", dest_path.display());
-    #[cfg(not(test))]
-    std::fs::rename(p, &dest_path)?;
     Ok(dest_path)
 }

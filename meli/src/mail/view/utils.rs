@@ -19,9 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{fs::File, io::Write, os::unix::fs::PermissionsExt, path::Path};
+use std::{fs::File, io::Write as _, os::unix::fs::PermissionsExt as _, path::Path};
 
-use melib::{Result, ShellExpandTrait};
+use melib::{Result, ShellExpandTrait as _};
 
 pub fn save_attachment(path: &Path, bytes: &[u8]) -> Result<()> {
     let mut f = File::options()

@@ -23,16 +23,16 @@
 //! Preprocess configuration files by unfolding `include` macros.
 
 use std::{
-    io::{self, BufRead, Read, Write},
+    io::{self, BufRead as _, Write as _},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::Arc,
 };
 
 use melib::{
-    error::{Error, ErrorKind, Result, ResultIntoError, WrapResultIntoError},
+    error::{Error, ErrorKind, Result, ResultIntoError as _, WrapResultIntoError as _},
     utils::parsec::*,
-    ShellExpandTrait,
+    ShellExpandTrait as _,
 };
 
 /// Try to parse line into a path to be included.
@@ -102,9 +102,7 @@ fn pp_helper(path: &Path, level: u8) -> Result<String> {
         ))
         .set_kind(ErrorKind::ValueError));
     }
-    let mut contents = String::new();
-    let mut file = std::fs::File::open(path)?;
-    file.read_to_string(&mut contents)?;
+    let contents = std::fs::read_to_string(path).chain_err_related_path(path)?;
     let mut ret = String::with_capacity(contents.len());
 
     for (i, l) in contents.lines().enumerate() {
@@ -177,10 +175,7 @@ pub fn expand_config(conf_path: &Path) -> Result<String> {
         const M4_PREAMBLE: &str = r#"define(`builtin_include', defn(`include'))dnl
 define(`include', `builtin_include(substr($1,1,decr(decr(len($1)))))dnl')dnl
 "#;
-        let mut contents = String::new();
-        contents.clear();
-        let mut file = std::fs::File::open(conf_path)?;
-        file.read_to_string(&mut contents)?;
+        let contents = std::fs::read_to_string(conf_path).chain_err_related_path(conf_path)?;
 
         let mut handle = Command::new("m4")
             .current_dir(conf_path.parent().unwrap_or_else(|| Path::new("/")))
@@ -209,7 +204,6 @@ changequote(`"', `"')dnl
     let mut ret = vec![];
     let prefix = conf_path.parent().unwrap().to_path_buf();
     let mut stack = vec![(None::<PathBuf>, conf_path.to_path_buf())];
-    let mut contents = String::new();
     while let Some((parent, p)) = stack.pop() {
         if !p.exists() || p.is_dir() {
             return Err(Error::new(format!(
@@ -233,10 +227,7 @@ changequote(`"', `"')dnl
             ))
             .set_kind(ErrorKind::ValueError));
         }
-        contents.clear();
-        let mut file = std::fs::File::open(&p).chain_err_related_path(&p)?;
-        file.read_to_string(&mut contents)
-            .chain_err_related_path(&p)?;
+        let contents = std::fs::read_to_string(&p).chain_err_related_path(&p)?;
 
         let mut handle = match Command::new("m4")
             .stdin(Stdio::piped())

@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::{borrow::ToOwned, sync::mpsc::channel, time::Duration};
+use std::{borrow::ToOwned as _, sync::mpsc::channel, time::Duration};
 
 use chrono::{NaiveDate, NaiveDateTime};
 

@@ -32,7 +32,7 @@
 //! user having mutable ownership.
 
 use crate::{
-    email::{parser::BytesExt, *},
+    email::{parser::BytesExt as _, *},
     SortField, SortOrder, UnixTimestamp,
 };
 
@@ -40,9 +40,9 @@ mod iterators;
 use std::{
     cmp::Ordering,
     collections::{HashMap, HashSet, VecDeque},
-    iter::FromIterator,
+    iter::FromIterator as _,
     ops::Index,
-    string::ToString,
+    string::ToString as _,
     sync::{Arc, RwLock},
 };
 
@@ -966,32 +966,16 @@ impl Threads {
                 root: new_id,
                 date: envelopes_lck[&env_hash].date(),
                 len: 1,
-                unseen: if !envelopes_lck[&env_hash].is_seen() {
-                    1
-                } else {
-                    0
-                },
-                attachments: if envelopes_lck[&env_hash].has_attachments() {
-                    1
-                } else {
-                    0
-                },
+                unseen: usize::from(!envelopes_lck[&env_hash].is_seen()),
+                attachments: usize::from(envelopes_lck[&env_hash].has_attachments()),
                 snoozed: false,
             }));
         } else {
             let parent_group = self.thread_ref_mut(thread_hash);
             parent_group.date = std::cmp::max(parent_group.date, envelopes_lck[&env_hash].date());
             parent_group.len += 1;
-            parent_group.unseen += if !envelopes_lck[&env_hash].is_seen() {
-                1
-            } else {
-                0
-            };
-            parent_group.attachments += if envelopes_lck[&env_hash].has_attachments() {
-                1
-            } else {
-                0
-            };
+            parent_group.unseen += usize::from(!envelopes_lck[&env_hash].is_seen());
+            parent_group.attachments += usize::from(envelopes_lck[&env_hash].has_attachments());
         }
 
         self.message_ids.insert(message_id.clone(), new_id);

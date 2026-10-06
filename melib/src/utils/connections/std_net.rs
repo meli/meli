@@ -219,7 +219,7 @@ enum AddOutcome {
 #[cfg(test)]
 mod tests {
     use std::{
-        io::{ErrorKind, Read, Write},
+        io::{ErrorKind, Read as _, Write as _},
         net::{IpAddr, Ipv4Addr, Ipv6Addr, TcpListener},
         thread::JoinHandle,
     };

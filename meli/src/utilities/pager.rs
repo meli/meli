@@ -202,7 +202,7 @@ impl Pager {
     pub fn filter(&mut self, cmd: &str, context: &Context) {
         async fn filter_fut(bin: String, text: String, tab_width: u8) -> Result<EmbeddedGrid> {
             use std::{
-                io::Write,
+                io::Write as _,
                 process::{Command, Stdio},
             };
             let mut filter_child = Command::new("sh")
@@ -274,7 +274,7 @@ impl Pager {
             self.height = self.text_lines.len();
             self.width = width;
             if let Some(ref mut search) = self.search {
-                use melib::text::search::KMP;
+                use melib::text::search::KMP as _;
                 search.positions.clear();
                 for (y, l) in self.text_lines.iter().enumerate() {
                     search.positions.extend(
@@ -325,7 +325,7 @@ impl Pager {
         };
         let new_lines_no = self.text_lines.len() - old_lines_no;
         if let Some(ref mut search) = self.search {
-            use melib::text::search::KMP;
+            use melib::text::search::KMP as _;
             for (y, l) in self.text_lines.iter().enumerate().skip(old_lines_no) {
                 search.positions.extend(
                     l.content
@@ -841,7 +841,7 @@ impl Component for Pager {
             }
             UIEvent::Action(View(Pipe(ref bin, ref args))) => {
                 use std::{
-                    io::Write,
+                    io::Write as _,
                     process::{Command, Stdio},
                 };
                 let mut command_obj = match Command::new(bin)

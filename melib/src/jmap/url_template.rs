@@ -27,7 +27,7 @@ use serde::ser::{Serialize, Serializer};
 use url::Url;
 
 use crate::{
-    email::parser::BytesExt,
+    email::parser::BytesExt as _,
     error::{Error, ErrorKind, Result},
     jmap::objects::{Account, BlobObject, Id},
 };

@@ -24,7 +24,7 @@ use std::hash::{Hash, Hasher};
 
 use futures::future::BoxFuture;
 use openpgp::{
-    parse::{PacketParser, PacketParserResult, Parse},
+    parse::{PacketParser, PacketParserResult, Parse as _},
     policy::StandardPolicy,
     types::KeyFlags,
     Cert, Fingerprint, KeyHandle, Packet,

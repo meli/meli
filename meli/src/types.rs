@@ -38,7 +38,7 @@ use std::{borrow::Cow, sync::Arc};
 use indexmap::IndexMap;
 use melib::{
     backends::{AccountHash, BackendEvent, MailboxHash},
-    error::{Error, Result, ResultIntoError},
+    error::{Error, Result, ResultIntoError as _},
     log, EnvelopeHash, RefreshEvent, RefreshEventKind, ThreadHash,
 };
 use nix::{errno::Errno, unistd::Pid};
@@ -453,7 +453,7 @@ pub mod segment_tree {
     //! useful if given an array of numbers you want to get the maximum
     //! value inside an interval quickly.
 
-    use std::{convert::TryFrom, iter::FromIterator};
+    use std::{convert::TryFrom as _, iter::FromIterator as _};
 
     use smallvec::SmallVec;
 

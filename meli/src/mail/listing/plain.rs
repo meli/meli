@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::iter::FromIterator;
+use std::iter::FromIterator as _;
 
 use melib::{Address, SortField, SortOrder, ThreadNode};
 
@@ -813,7 +813,7 @@ impl PlainListing {
             ) else {
                 continue;
             };
-            use melib::search::QueryTrait;
+            use melib::search::QueryTrait as _;
             if let Some(filter_query) = mailbox_settings!(
                 context[&self.cursor_pos.0][&self.cursor_pos.1]
                     .listing
@@ -1311,7 +1311,7 @@ impl PlainListing {
                     .set_attrs(row_attr.attrs);
             }
         }
-        *self.rows.entries.get_mut(idx).unwrap() = ((thread_hash, env_hash), strings);
+        self.rows.entries[idx] = ((thread_hash, env_hash), strings);
     }
 
     fn draw_relative_numbers(&self, grid: &mut CellBuffer, area: Area, top_idx: usize) {

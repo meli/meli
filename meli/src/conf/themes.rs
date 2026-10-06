@@ -33,7 +33,7 @@
 use std::{
     borrow::Cow,
     collections::HashSet,
-    fmt::Write,
+    fmt::Write as _,
     ops::{Deref, DerefMut},
 };
 

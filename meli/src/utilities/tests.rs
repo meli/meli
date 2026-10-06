@@ -23,7 +23,7 @@
 #[test]
 fn test_utilities_text_input_field() {
     use super::TextField;
-    use crate::{melib::text::TextProcessing, Component, Key, UIEvent};
+    use crate::{melib::text::TextProcessing as _, Component as _, Key, UIEvent};
 
     const PANGRAM: &str = "Blocky dwarf zings the jump.";
     const PANGRAM_END: usize = PANGRAM.len();

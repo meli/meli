@@ -23,7 +23,7 @@
 use std::io::{BufWriter, Write};
 
 use melib::{log, uuid};
-use termion::{clear, cursor, raw::IntoRawMode, screen::AlternateScreen};
+use termion::{clear, cursor, raw::IntoRawMode as _, screen::AlternateScreen};
 
 use crate::{
     conf::themes::ThemeAttribute,

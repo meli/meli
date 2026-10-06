@@ -21,6 +21,7 @@
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
 #![cfg(feature = "notmuch")]
+#![allow(clippy::print_stderr)]
 
 use rusty_fork::rusty_fork_test;
 
@@ -38,14 +39,14 @@ rusty_fork_test! {
     }
 }
 
-mod tests {
+pub mod tests {
     use std::{
         collections::VecDeque,
         path::PathBuf,
         sync::{Arc, Mutex},
     };
 
-    use futures::{executor::block_on, StreamExt};
+    use futures::{executor::block_on, StreamExt as _};
     use melib::{
         backends::prelude::*,
         maildir::MaildirType,
@@ -221,7 +222,7 @@ other_email=test2@example.com;test3@example.com
 
     /// Test that `NotmuchDb::watch` `Stream` returns the expected `Refresh`
     /// events when altering the mail store in the filesystem.
-    pub(crate) fn run_notmuch_watch() {
+    pub fn run_notmuch_watch() {
         let mut _logger = Logger::new_with(LogLevel::TRACE, true);
         let library_file_path = skip_test_if_notmuch_not_installed!();
         let temp_dir = TempDir::new().unwrap();
@@ -268,7 +269,7 @@ other_email=test2@example.com;test3@example.com
             &temp_dir,
             library_file_path,
             "notmuch",
-            backend_event_consumer.clone(),
+            backend_event_consumer,
             true,
         )
         .unwrap();
@@ -301,8 +302,7 @@ hello world.
             None,
         )
         .unwrap();
-        let mail_path =
-            MaildirType::save_to_mailbox(root_mailbox.clone(), new_mail.bytes, None).unwrap();
+        let mail_path = MaildirType::save_to_mailbox(root_mailbox, new_mail.bytes, None).unwrap();
         notmuch_new(false);
         let (value1, _watch_fut) = block_on(watch_fut);
         backend_events.push(value1.unwrap().unwrap());
@@ -369,7 +369,7 @@ hello world.
 
     /// Test that `NotmuchDb::refresh` returns the expected `Refresh` events
     /// when altering the mail store in the filesystem.
-    pub(crate) fn run_notmuch_refresh() {
+    pub fn run_notmuch_refresh() {
         let mut _logger = Logger::new_with(LogLevel::TRACE, true);
         let library_file_path = skip_test_if_notmuch_not_installed!();
         let temp_dir = TempDir::new().unwrap();
@@ -416,7 +416,7 @@ hello world.
             &temp_dir,
             library_file_path,
             "notmuch",
-            backend_event_consumer.clone(),
+            backend_event_consumer,
             true,
         )
         .unwrap();
@@ -445,8 +445,7 @@ hello world.
             None,
         )
         .unwrap();
-        let mail_path =
-            MaildirType::save_to_mailbox(root_mailbox.clone(), new_mail.bytes, None).unwrap();
+        let mail_path = MaildirType::save_to_mailbox(root_mailbox, new_mail.bytes, None).unwrap();
         notmuch_new(true);
         block_on(notmuch.refresh(inbox_hash).unwrap()).unwrap();
         backend_events.push(backend_event_queue.lock().unwrap().pop_back().unwrap().1);

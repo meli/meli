@@ -171,12 +171,12 @@ mod nttp {
 
 #[cfg(feature = "http")]
 mod http {
-    use std::{io::Read, time::Duration};
+    use std::{io::Read as _, time::Duration};
 
     use flate2::bufread::GzDecoder;
     use isahc::{
-        config::{Configurable, DnsCache, RedirectPolicy},
-        http, AsyncReadResponseExt, HttpClient,
+        config::{Configurable as _, DnsCache, RedirectPolicy},
+        http, AsyncReadResponseExt as _, HttpClient,
     };
     use url::Url;
 

@@ -23,7 +23,7 @@
 
 use std::borrow::Cow;
 
-use crate::parser::BytesExt;
+use crate::parser::BytesExt as _;
 
 pub mod connections;
 pub mod datetime;
@@ -264,8 +264,6 @@ impl std::ops::Not for SortOrder {
 
 pub mod hostname {
     //! Get local hostname.
-    use std::io::Read;
-
     use crate::{
         error::{Error, ErrorKind, Result},
         src_err_arc_wrap,
@@ -279,14 +277,10 @@ pub mod hostname {
                 .set_kind(ErrorKind::Platform)
         });
         if retval.is_err() {
-            let mut hostn_buf = String::with_capacity(256);
-            if matches!(
-                std::fs::File::open("/etc/hostname")
-                    .ok()
-                    .and_then(|mut f| f.read_to_string(&mut hostn_buf).ok()),
-                Some(n) if n > 0
-            ) {
-                return Ok(hostn_buf.into());
+            if let Ok(hostn_buf) = std::fs::read_to_string("/etc/hostname") {
+                if !hostn_buf.is_empty() {
+                    return Ok(hostn_buf.into());
+                }
             }
         }
         retval

@@ -26,7 +26,7 @@ use std::{
 };
 
 use async_fn_stream::try_fn_stream;
-use futures::{io::AsyncReadExt, stream::Stream};
+use futures::{io::AsyncReadExt as _, stream::Stream};
 use isahc::{config::RedirectPolicy, http, http::request::Request, prelude::*, HttpClient};
 use regex::Regex;
 use url::Url;

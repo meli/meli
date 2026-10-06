@@ -22,7 +22,7 @@ use std::str;
 
 use crate::email::{
     attachments::{Attachment, AttachmentBuilder},
-    parser::BytesExt,
+    parser::BytesExt as _,
 };
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]

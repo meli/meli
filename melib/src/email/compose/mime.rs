@@ -20,7 +20,7 @@
  */
 
 use super::*;
-use crate::text::grapheme_clusters::TextProcessing;
+use crate::text::grapheme_clusters::TextProcessing as _;
 
 pub fn encode_header(value: &str) -> String {
     let mut ret = String::with_capacity(value.len());

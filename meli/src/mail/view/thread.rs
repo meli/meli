@@ -19,17 +19,13 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{
-    cmp,
-    fs::File,
-    io::{BufWriter, Write},
-};
+use std::{cmp, fs::File, io::BufWriter};
 
 use futures::future::try_join_all;
 use melib::{
     utils::{
         datetime::{timestamp_to_string, UnixTimestamp},
-        shellexpand::ShellExpandTrait,
+        shellexpand::ShellExpandTrait as _,
     },
     Address,
 };

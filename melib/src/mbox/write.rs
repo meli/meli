@@ -165,7 +165,7 @@ impl MboxFormat {
                         .windows(b"\nFrom ".len())
                         .filter(|w| w == b"\nFrom ")
                         .count()
-                    + if body.starts_with(b"From ") { 1 } else { 0 })
+                    + usize::from(body.starts_with(b"From ")))
                 .to_string();
                 for (h, v) in headers
                     .into_iter()

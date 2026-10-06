@@ -26,6 +26,7 @@
 // [ref:TODO]: add tests for STARTTLS/TLS
 
 #![cfg(feature = "smtp")]
+#![allow(clippy::print_stderr)]
 
 use rusty_fork::rusty_fork_test;
 
@@ -45,8 +46,8 @@ pub mod server {
     use futures::{
         channel::mpsc::UnboundedReceiver,
         future::{self, Either},
-        io::{AsyncReadExt, AsyncWriteExt},
-        StreamExt,
+        io::{AsyncReadExt as _, AsyncWriteExt as _},
+        StreamExt as _,
     };
     use melib::{backends::prelude::*, smol::Async, smtp::*};
 

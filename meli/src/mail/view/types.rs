@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{borrow::Cow, fmt::Write as IoWrite};
+use std::{borrow::Cow, fmt::Write as _};
 
 use melib::{
     attachment_types::Charset, conf::ActionFlag, email::headers::HeaderName, error::*,

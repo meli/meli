@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{convert::TryInto, iter::FromIterator};
+use std::{convert::TryInto as _, iter::FromIterator as _};
 
 use melib::{Address, SortField, SortOrder, ThreadNode, Threads};
 
@@ -338,7 +338,7 @@ impl MailListingTrait for ThreadListing {
                 let Some(envelope) = account.collection.get_env(env_hash) else {
                     continue;
                 };
-                use melib::search::QueryTrait;
+                use melib::search::QueryTrait as _;
                 if let Some(filter_query) = mailbox_settings!(
                     context[&self.new_cursor_pos.0][&self.new_cursor_pos.1]
                         .listing
@@ -1269,12 +1269,12 @@ impl ThreadListing {
         // ));
         drop(envelope);
         std::mem::swap(
-            &mut self.rows.entries.get_mut(idx).unwrap().1.subject,
+            &mut self.rows.entries[idx].1.subject,
             &mut entry_strings.subject,
         );
         // Set row as undrawn so that it gets updated when we call `self.draw_rows`
         self.rows_drawn.update(idx, 1);
-        *self.rows.entries.get_mut(idx).unwrap() = ((thread_hash, env_hash), entry_strings);
+        self.rows.entries[idx] = ((thread_hash, env_hash), entry_strings);
         self.draw_rows(context, idx, idx);
     }
 

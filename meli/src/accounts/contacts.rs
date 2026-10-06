@@ -22,8 +22,8 @@
 
 use std::{
     future::Future,
-    io::Write,
-    os::unix::fs::PermissionsExt,
+    io::Write as _,
+    os::unix::fs::PermissionsExt as _,
     path::Path,
     sync::{Arc, Mutex},
 };
@@ -34,7 +34,7 @@ use melib::{
         backend::ContactBackend, mutt, notmuchcontact, vcard, AddressBook, AddressBookName, Card,
         CardId, ContactBackendID,
     },
-    error::{Result, ResultIntoError},
+    error::{Result, ResultIntoError as _},
     ErrorKind,
 };
 

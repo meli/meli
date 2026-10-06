@@ -21,11 +21,11 @@
 
 use std::{
     collections::HashMap,
-    convert::TryFrom,
+    convert::TryFrom as _,
     sync::{Arc, Mutex},
 };
 
-use isahc::AsyncReadResponseExt;
+use isahc::AsyncReadResponseExt as _;
 use serde_json::value::RawValue;
 use smallvec::SmallVec;
 

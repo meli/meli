@@ -21,7 +21,7 @@
 
 use std::{
     fs::OpenOptions,
-    io::{Read, Write},
+    io::{Read as _, Write as _},
     sync::{Arc, Mutex},
 };
 

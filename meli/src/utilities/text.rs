@@ -24,7 +24,7 @@
 use std::sync::Arc;
 
 use super::*;
-use crate::{conf::themes::ThemeAttribute, melib::text::Truncate};
+use crate::{conf::themes::ThemeAttribute, melib::text::Truncate as _};
 
 pub type ValidateFn = Arc<dyn Fn(&str) -> bool + Send + Sync>;
 

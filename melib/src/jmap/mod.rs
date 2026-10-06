@@ -24,8 +24,7 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    convert::TryFrom,
-    str::FromStr,
+    str::FromStr as _,
     sync::{Arc, Mutex, RwLock},
     time::{Duration, Instant},
 };
@@ -35,10 +34,10 @@ use futures::{
         MappedMutexGuard as FutureMappedMutexGuard, Mutex as FutureMutex,
         MutexGuard as FutureMutexGuard,
     },
-    stream::StreamExt,
+    stream::StreamExt as _,
 };
 use indexmap::{IndexMap, IndexSet};
-use isahc::AsyncReadResponseExt;
+use isahc::AsyncReadResponseExt as _;
 use serde_json::{json, Value};
 use url::Url;
 

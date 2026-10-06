@@ -26,7 +26,7 @@
 
 use std::{
     borrow::Cow,
-    io::{Read, Write},
+    io::Write as _,
     path::PathBuf,
     process::{Command, Stdio},
     sync::Arc,
@@ -35,7 +35,7 @@ use std::{
 use melib::{
     email::{attachment_types::ContentType, Attachment},
     log,
-    utils::fnmatch::Fnmatch,
+    utils::fnmatch::Fnmatch as _,
     uuid::Uuid,
     Error, ErrorKind, Result,
 };
@@ -281,14 +281,14 @@ impl MailcapEntry<'static> {
         let content_type = a.content_type().to_string();
 
         let mut candidates = vec![];
-        let mut content = String::new();
         'mailcap_candidates: for mailcap_path in file_candidates {
-            if let Err(err) = std::fs::File::open(mailcap_path.as_path())
-                .and_then(|mut fs| fs.read_to_string(&mut content))
-            {
-                log::warn!("Could not read {}: {err}", mailcap_path.display());
-                continue;
-            }
+            let content = match std::fs::read_to_string(mailcap_path.as_path()) {
+                Ok(v) => v,
+                Err(err) => {
+                    log::warn!("Could not read {}: {err}", mailcap_path.display());
+                    continue;
+                }
+            };
             for entry in MailcapEntry::parser(&content) {
                 let entry = match entry {
                     Ok(entry) => entry,

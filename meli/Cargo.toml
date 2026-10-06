@@ -101,3 +101,6 @@ regex = { workspace = true }
 rusty-fork = { workspace = true }
 serde_test2 = { workspace = true }
 tempfile = { workspace = true }
+
+[lints]
+workspace = true

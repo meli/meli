@@ -20,8 +20,6 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
-use std::str::FromStr;
-
 use super::*;
 
 const GREEK_FOOBAR: &str = "αδφαφσαφασ";
@@ -249,7 +247,7 @@ else:
             .take()
             .expect("Failed to open python3 process stdin");
         std::thread::spawn(move || {
-            use std::io::Write;
+            use std::io::Write as _;
 
             stdin
                 .write_all(bytes.as_bytes())

@@ -22,25 +22,25 @@
 use std::{
     borrow::Cow,
     collections::HashMap,
-    convert::TryFrom,
-    fmt::Write,
+    convert::TryFrom as _,
+    fmt::Write as _,
     future::Future,
     pin::Pin,
-    str::FromStr,
+    str::FromStr as _,
     sync::Arc,
     time::{Duration, Instant, SystemTime},
 };
 
-use base64::{engine::general_purpose::STANDARD as base64, Engine};
+use base64::{engine::general_purpose::STANDARD as base64, Engine as _};
 use futures::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncReadExt as _, AsyncWriteExt as _},
     lock::{
         MappedMutexGuard as FutureMappedMutexGuard, Mutex as FutureMutex,
         MutexGuard as FutureMutexGuard,
     },
 };
 use imap_codec::{
-    encode::{Encoder, Fragment},
+    encode::{Encoder as _, Fragment},
     imap_types::{
         auth::AuthMechanism,
         command::{Command, CommandBody},
@@ -61,19 +61,19 @@ pub use smol::Async as AsyncWrapper;
 use crate::{
     backends::{
         prelude::{EnvelopeHash, Flag, Query},
-        BackendEvent, BackendMailbox, MailboxHash, RefreshEvent,
+        BackendEvent, BackendMailbox as _, MailboxHash, RefreshEvent,
     },
-    email::parser::BytesExt,
+    email::parser::BytesExt as _,
     error::*,
     imap::{
         protocol_parser::{
-            self, id_ext::id_ext_response, ImapLineSplit, ImapResponse, RequiredResponses,
+            self, id_ext::id_ext_response, ImapLineSplit as _, ImapResponse, RequiredResponses,
             SelectResponse,
         },
-        search::ToImapSearch,
+        search::ToImapSearch as _,
         Capabilities, ImapServerConf, UIDStore, UID,
     },
-    text::Truncate,
+    text::Truncate as _,
     utils::{
         connections::{std_net::connect as tcp_stream_connect, Connection},
         futures::timeout,

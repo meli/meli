@@ -22,7 +22,7 @@
 
 use std::sync::Arc;
 
-use melib::{parser::BytesExt, text::Truncate, AccountHash, Contacts};
+use melib::{parser::BytesExt as _, text::Truncate as _, AccountHash, Contacts};
 
 use crate::{account_settings, utilities::AutoCompleteFn, AutoCompleteEntry, ValidateFn};
 

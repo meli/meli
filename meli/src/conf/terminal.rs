@@ -215,14 +215,14 @@ impl Serialize for ProgressSpinnerSequence {
                 interval_ms,
             } => {
                 if *interval_ms == interval_ms_val() {
-                    use serde::ser::SerializeSeq;
+                    use serde::ser::SerializeSeq as _;
                     let mut seq = serializer.serialize_seq(Some(frames.len()))?;
                     for element in frames {
                         seq.serialize_element(element)?;
                     }
                     seq.end()
                 } else {
-                    use serde::ser::SerializeMap;
+                    use serde::ser::SerializeMap as _;
 
                     let mut map = serializer.serialize_map(Some(2))?;
                     map.serialize_entry("frames", frames)?;

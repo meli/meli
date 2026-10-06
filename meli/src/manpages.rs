@@ -22,13 +22,13 @@
 
 use std::{
     env, fs,
-    io::Read,
+    io::Read as _,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
 use flate2::bufread::GzDecoder;
-use melib::{log, ShellExpandTrait};
+use melib::{log, ShellExpandTrait as _};
 
 use crate::{Error, Result};
 
@@ -195,7 +195,7 @@ impl ManPages {
     /// Helper function to remove backspace markup from mandoc output.
     pub fn remove_markup(input: &str) -> Result<String> {
         use std::{
-            io::Write,
+            io::Write as _,
             process::{Command, Stdio},
         };
         let mut child = Command::new("col")

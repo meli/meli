@@ -20,7 +20,7 @@
  */
 
 use indexmap::IndexSet;
-use melib::email::pgp::{Key, LocateKey, PGPBackend};
+use melib::email::pgp::{Key, LocateKey, PGPBackend as _};
 
 use super::*;
 use crate::conf::PGPBackendChoice;
@@ -470,6 +470,7 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
     fn run_compose_gpg_key_selection() {
         let tempdir = tempfile::tempdir().unwrap();
         {

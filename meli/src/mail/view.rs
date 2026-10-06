@@ -21,15 +21,15 @@
 
 use std::{
     collections::HashSet,
-    convert::TryFrom,
-    io::Write,
+    convert::TryFrom as _,
+    io::Write as _,
     process::{Command, Stdio},
 };
 
 use indexmap::IndexSet;
 use melib::{
-    email::attachment_types::ContentType, list_management, mailto::Mailto, parser::BytesExt, Card,
-    Draft, FlagOp, HeaderName, SpecialUsageMailbox,
+    email::attachment_types::ContentType, list_management, mailto::Mailto, parser::BytesExt as _,
+    Card, Draft, FlagOp, HeaderName, SpecialUsageMailbox,
 };
 use smallvec::SmallVec;
 

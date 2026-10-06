@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{collections::BTreeMap, convert::TryInto, iter::FromIterator};
+use std::{collections::BTreeMap, convert::TryInto as _, iter::FromIterator as _};
 
 use indexmap::IndexSet;
 use melib::{Address, SortField, SortOrder, TagHash, Threads};
@@ -383,7 +383,7 @@ impl MailListingTrait for CompactListing {
             else {
                 continue;
             };
-            use melib::search::QueryTrait;
+            use melib::search::QueryTrait as _;
             if let Some(filter_query) = mailbox_settings!(
                 context[&self.cursor_pos.0][&self.cursor_pos.1]
                     .listing
@@ -1179,7 +1179,7 @@ impl CompactListing {
         }
         self.rows_drawn.update(idx, 1);
 
-        *self.rows.entries.get_mut(idx).unwrap() = ((thread_hash, env_hash), entry_strings);
+        self.rows.entries[idx] = ((thread_hash, env_hash), entry_strings);
     }
 
     fn draw_rows(&mut self, context: &Context, start: usize, end: usize) {

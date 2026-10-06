@@ -20,7 +20,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
-use melib::error::{Result, WrapResultIntoError};
+use melib::error::{Result, WrapResultIntoError as _};
 use serde::{Deserialize, Deserializer};
 
 const fn lf_val() -> u8 {

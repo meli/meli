@@ -233,6 +233,7 @@ impl Backends {
 
     pub fn get(&self, key: &str) -> BackendCreator {
         if !self.map.contains_key(key) {
+            #[expect(clippy::print_stderr)]
             if key == "notmuch" {
                 eprint!("{NOTMUCH_ERROR_MSG}");
                 #[cfg(feature = "notmuch")]

@@ -21,7 +21,7 @@
 
 use smallvec::SmallVec;
 
-use super::TextProcessing;
+use super::TextProcessing as _;
 
 pub trait KMP {
     fn kmp_search(&self, pattern: &str) -> SmallVec<[usize; 256]>;
@@ -85,7 +85,7 @@ impl KMP for str {
 
 #[cfg(test)]
 mod tests {
-    use crate::text::search::KMP;
+    use crate::text::search::KMP as _;
 
     #[test]
     fn test_kmp_search() {

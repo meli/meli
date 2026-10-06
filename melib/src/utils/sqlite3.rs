@@ -21,7 +21,7 @@
 
 use std::{
     borrow::Cow,
-    os::unix::fs::PermissionsExt,
+    os::unix::fs::PermissionsExt as _,
     path::{Path, PathBuf},
     sync::Arc,
 };

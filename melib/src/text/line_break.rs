@@ -19,13 +19,13 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{cmp::Ordering, collections::VecDeque, iter::Peekable, str::FromStr};
+use std::{cmp::Ordering, collections::VecDeque, iter::Peekable, str::FromStr as _};
 
 use unicode_segmentation::UnicodeSegmentation;
 use LineBreakClass::*;
 
 use super::{
-    grapheme_clusters::TextProcessing,
+    grapheme_clusters::TextProcessing as _,
     tables::LINE_BREAK_RULES,
     types::{LineBreakClass, Reflow},
 };
@@ -838,7 +838,7 @@ fn search_table(c: u32, t: &'static [(u32, u32, LineBreakClass)]) -> LineBreakCl
 }
 
 mod alg {
-    use crate::text::{grapheme_clusters::TextProcessing, *};
+    use crate::text::{grapheme_clusters::TextProcessing as _, *};
 
     fn cost(i: usize, j: usize, width: usize, minima: &[usize], offsets: &[usize]) -> usize {
         let w = offsets[j] + j - offsets[i] - i - 1;
@@ -1307,7 +1307,7 @@ mod segment_tree {
     //! Simple segment tree implementation for maximum in range queries. This
     //! is useful if given an  array of numbers you want to get the
     //! maximum value inside an interval quickly.
-    use std::{convert::TryFrom, iter::FromIterator};
+    use std::{convert::TryFrom as _, iter::FromIterator as _};
 
     use smallvec::SmallVec;
 

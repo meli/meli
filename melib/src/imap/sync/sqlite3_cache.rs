@@ -29,7 +29,7 @@ use std::{
 use crate::{
     backends::{EnvelopeHashBatch, FlagOp, MailboxHash, RefreshEvent, RefreshEventKind, TagHash},
     email::{Envelope, EnvelopeHash},
-    error::{Error, ErrorKind, Result, ResultIntoError},
+    error::{Error, ErrorKind, Result, ResultIntoError as _},
     imap::{
         sync::cache::{CachedEnvelope, CachedState, ImapCache, ImapCacheReset},
         FetchResponse, ModSequence, SelectResponse, UIDStore, UID, UIDVALIDITY,

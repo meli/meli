@@ -21,6 +21,7 @@
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
 #![cfg(feature = "maildir")]
+#![allow(clippy::print_stderr)]
 
 use rusty_fork::rusty_fork_test;
 
@@ -47,11 +48,11 @@ use std::{
 use futures::{
     executor::block_on,
     future::{self, Either},
-    StreamExt,
+    StreamExt as _,
 };
 use melib::{
     backends::prelude::*,
-    maildir::{utilities::MaildirFilePathExt, *},
+    maildir::{utilities::MaildirFilePathExt as _, *},
     utils::logging::{LogLevel, Logger},
     Mail,
 };
@@ -162,7 +163,7 @@ fn run_maildir_watch() {
     };
 
     let (root_mailbox, _settings, mut maildir) =
-        new_maildir_backend(&temp_dir, "maildir", backend_event_consumer.clone(), true).unwrap();
+        new_maildir_backend(&temp_dir, "maildir", backend_event_consumer, true).unwrap();
 
     let is_online_fut = maildir.is_online().unwrap();
     block_on(is_online_fut).unwrap();
@@ -192,7 +193,7 @@ hello world.
         None,
     )
     .unwrap();
-    MaildirType::save_to_mailbox(root_mailbox.clone(), new_mail.bytes, None).unwrap();
+    MaildirType::save_to_mailbox(root_mailbox, new_mail.bytes, None).unwrap();
     let (value1, _watch_fut) = block_on(watch_fut);
     let inbox_env: Envelope = {
         let backend_event = value1.unwrap().unwrap();
@@ -317,7 +318,7 @@ fn run_maildir_refresh() {
     };
 
     let (root_mailbox, _settings, mut maildir) =
-        new_maildir_backend(&temp_dir, "maildir", backend_event_consumer.clone(), true).unwrap();
+        new_maildir_backend(&temp_dir, "maildir", backend_event_consumer, true).unwrap();
 
     let is_online_fut = maildir.is_online().unwrap();
     block_on(is_online_fut).unwrap();
@@ -343,7 +344,7 @@ hello world.
         None,
     )
     .unwrap();
-    MaildirType::save_to_mailbox(root_mailbox.clone(), new_mail.bytes, None).unwrap();
+    MaildirType::save_to_mailbox(root_mailbox, new_mail.bytes, None).unwrap();
     block_on(maildir.refresh(inbox_hash).unwrap()).unwrap();
     let inbox_env: Envelope = {
         let backend_event = backend_event_queue.lock().unwrap().pop_back().unwrap().1;

@@ -24,7 +24,7 @@ use std::marker::PhantomData;
 use indexmap::IndexMap;
 use serde::{
     de::{Deserialize, Deserializer},
-    ser::{Serialize, Serializer},
+    ser::{Serialize as _, Serializer},
 };
 use serde_json::{value::RawValue, Value};
 use smallvec::SmallVec;

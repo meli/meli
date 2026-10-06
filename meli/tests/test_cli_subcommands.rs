@@ -22,11 +22,11 @@
 
 use std::{
     collections::BTreeMap,
-    io::Write,
+    io::Write as _,
     path::{Path, PathBuf},
 };
 
-use assert_cmd::{assert::OutputAssertExt, Command};
+use assert_cmd::{assert::OutputAssertExt as _, Command};
 use predicates::prelude::*;
 use rusty_fork::rusty_fork_test;
 use tempfile::TempDir;
@@ -246,7 +246,7 @@ fn test_subcommand_man(env: &Env) {
                     .unwrap()
                     .assert();
                 output.code(0).stdout(predicate::function(|x: &[u8]| {
-                    use std::io::Read;
+                    use std::io::Read as _;
 
                     use flate2::bufread::GzDecoder;
 
@@ -375,7 +375,7 @@ server_password = { command = "false" }
             )
             .unwrap();
     }
-    common_env.insert("MELI_CONFIG", conf_path.to_path_buf());
+    common_env.insert("MELI_CONFIG", conf_path);
 
     test_subcommand_succeeds_empty(&common_env, "test-config");
 

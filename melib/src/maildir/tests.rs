@@ -33,7 +33,7 @@ use crate::{
     email::Flag,
     error::Result,
     maildir::{
-        utilities::{move_to_cur, MaildirFilePathExt, MaildirMailbox},
+        utilities::{move_to_cur, MaildirFilePathExt as _, MaildirMailbox},
         Configuration, MaildirType,
     },
 };
@@ -51,63 +51,60 @@ fn set_flags(config: &Configuration, path: &Path, flag_ops: &[FlagOp]) -> Result
 
 #[test]
 fn test_maildir_move_to_cur_rename() {
+    let temp_dir = TempDir::new().unwrap();
     let config = Configuration::default();
-    assert_eq!(
-        move_to_cur(&config, Path::new("/path/to/new/1423819205.29514_1:2,FRS")).unwrap(),
-        Path::new("/path/to/cur/1423819205.29514_1:2,FRS")
-    );
-    assert_eq!(
-        move_to_cur(&config, Path::new("/path/to/new/1423819205.29514_1:2,")).unwrap(),
-        Path::new("/path/to/cur/1423819205.29514_1:2,")
-    );
-    assert_eq!(
-        move_to_cur(&config, Path::new("/path/to/new/1423819205.29514_1:1,")).unwrap(),
-        Path::new("/path/to/cur/1423819205.29514_1:1,:2,")
-    );
-    assert_eq!(
-        move_to_cur(&config, Path::new("/path/to/new/1423819205.29514_1")).unwrap(),
-        Path::new("/path/to/cur/1423819205.29514_1:2,")
-    );
+    std::fs::create_dir(temp_dir.path().join("new")).unwrap();
+    std::fs::create_dir(temp_dir.path().join("cur")).unwrap();
+    // Check that moving to cur does not affect the name if we do not set `rename_regex`.
+    for (name, expected) in [
+        ("1423819205.29514_1:2,FRS", "1423819205.29514_1:2,FRS"),
+        ("1423819205.29514_1:2,", "1423819205.29514_1:2,"),
+        ("1423819205.29514_1:1,", "1423819205.29514_1:1,:2,"),
+        ("1423819205.29514_1", "1423819205.29514_1:2,"),
+    ] {
+        let p = temp_dir.path().join("new").join(name);
+        let expected = temp_dir.path().join("cur").join(expected);
+        std::fs::write(&p, "").unwrap();
+        assert_eq!(&move_to_cur(&config, &p).unwrap(), &expected);
+        std::fs::remove_file(&p).unwrap_err();
+        std::fs::remove_file(&expected).unwrap();
+    }
+    _ = temp_dir.close();
 }
 
 #[test]
 fn test_maildir_move_to_cur_rename_regexp() {
+    let temp_dir = TempDir::new().unwrap();
     let config = Configuration {
         rename_regex: Some(Regex::new(r",U=\d\d*").unwrap()),
         ..Configuration::default()
     };
-    assert_eq!(
-        move_to_cur(
-            &config,
-            Path::new("/path/to/new/1423819205.29514_1.foo,U=123:2,S")
-        )
-        .unwrap(),
-        Path::new("/path/to/cur/1423819205.29514_1.foo:2,S")
-    );
-    assert_eq!(
-        move_to_cur(
-            &config,
-            Path::new("/path/to/new/1423819205.29514_1.foo,U=1:2,S")
-        )
-        .unwrap(),
-        Path::new("/path/to/cur/1423819205.29514_1.foo:2,S")
-    );
-    assert_eq!(
-        move_to_cur(
-            &config,
-            Path::new("/path/to/new/1423819205.29514_1.foo,U=:2,S")
-        )
-        .unwrap(),
-        Path::new("/path/to/cur/1423819205.29514_1.foo,U=:2,S")
-    );
-    assert_eq!(
-        move_to_cur(
-            &config,
-            Path::new("/path/to/new/1423819205.29514_1.foo:2,S")
-        )
-        .unwrap(),
-        Path::new("/path/to/cur/1423819205.29514_1.foo:2,S")
-    );
+    std::fs::create_dir(temp_dir.path().join("new")).unwrap();
+    std::fs::create_dir(temp_dir.path().join("cur")).unwrap();
+    // Check that moving to cur changes the name if we set `rename_regex`.
+    for (name, expected) in [
+        (
+            "1423819205.29514_1.foo,U=123:2,S",
+            "1423819205.29514_1.foo:2,S",
+        ),
+        (
+            "1423819205.29514_1.foo,U=1:2,S",
+            "1423819205.29514_1.foo:2,S",
+        ),
+        (
+            "1423819205.29514_1.foo,U=:2,S",
+            "1423819205.29514_1.foo,U=:2,S",
+        ),
+        ("1423819205.29514_1.foo:2,S", "1423819205.29514_1.foo:2,S"),
+    ] {
+        let p = temp_dir.path().join("new").join(name);
+        let expected = temp_dir.path().join("cur").join(expected);
+        std::fs::write(&p, "").unwrap();
+        assert_eq!(&move_to_cur(&config, &p).unwrap(), &expected);
+        std::fs::remove_file(&p).unwrap_err();
+        std::fs::remove_file(&expected).unwrap();
+    }
+    _ = temp_dir.close();
 }
 
 #[test]
@@ -547,4 +544,5 @@ fn test_maildir_mailbox_paths() {
             )
         );
     }
+    _ = temp_dir.close();
 }

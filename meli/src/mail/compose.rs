@@ -23,7 +23,7 @@ use std::{
     borrow::Cow,
     fmt::Write as _,
     future::Future,
-    io::Write,
+    io::Write as _,
     pin::Pin,
     process::{Command, Stdio},
     sync::{Arc, Mutex},
@@ -33,9 +33,9 @@ use indexmap::IndexSet;
 use melib::{
     email::attachment_types::{ContentType, MultipartType},
     list_management,
-    parser::BytesExt,
+    parser::BytesExt as _,
     pgp::Key as PGPKey,
-    Address, Draft, HeaderName, SpecialUsageMailbox, SubjectPrefix, UnixTimestamp,
+    Address, Draft, HeaderName, SpecialUsageMailbox, SubjectPrefix as _, UnixTimestamp,
 };
 use nix::sys::wait::WaitStatus;
 

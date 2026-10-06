@@ -22,8 +22,8 @@
 
 use std::{
     fs::{File, OpenOptions},
-    io::Write,
-    os::unix::fs::PermissionsExt,
+    io::Write as _,
+    os::unix::fs::PermissionsExt as _,
     path::Path,
 };
 
@@ -282,7 +282,7 @@ fn test_fd_locks() {
     };
 
     fn create_file_util(path: &Path) -> File {
-        use super::shellexpand::ShellExpandTrait;
+        use super::shellexpand::ShellExpandTrait as _;
 
         let path = Path::new(path).expand();
         let mut f = File::create(&path).unwrap();

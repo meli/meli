@@ -26,15 +26,15 @@
 
 use std::{
     collections::{HashMap, HashSet, VecDeque},
-    io::{self, Write},
-    os::unix::fs::PermissionsExt,
+    io::{self, Write as _},
+    os::unix::fs::PermissionsExt as _,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::Duration,
 };
 
-use futures::{channel::mpsc, SinkExt};
-use notify::Watcher;
+use futures::{channel::mpsc, SinkExt as _};
+use notify::Watcher as _;
 use regex::Regex;
 
 pub mod cache;
@@ -45,11 +45,11 @@ pub mod watch;
 mod tests;
 
 use cache::{Cache, HashIndex};
-use utilities::{MaildirFilePathExt, MaildirMailbox, MaildirMailboxPathExt, MaildirOp};
+use utilities::{MaildirFilePathExt as _, MaildirMailbox, MaildirMailboxPathExt as _, MaildirOp};
 
 use crate::{
     backends::{prelude::*, RefreshEventKind::*},
-    utils::shellexpand::ShellExpandTrait,
+    utils::shellexpand::ShellExpandTrait as _,
 };
 
 #[derive(Debug, Default)]

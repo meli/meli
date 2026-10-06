@@ -21,7 +21,7 @@
 
 use std::{
     borrow::Cow,
-    io::Write,
+    io::Write as _,
     process::{Command, Stdio},
     sync::Arc,
 };
@@ -33,8 +33,8 @@ use melib::{
     email::headers::HeaderName,
     error::*,
     log,
-    parser::BytesExt,
-    text::Truncate,
+    parser::BytesExt as _,
+    text::Truncate as _,
     utils::xdg::query_default_app,
     Attachment, AttachmentBuilder, Result,
 };

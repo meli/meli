@@ -30,7 +30,7 @@ use std::{
 
 use melib::{
     log,
-    text::{search::KMP, wcwidth, TextPresentation},
+    text::{search::KMP, wcwidth, TextPresentation as _},
 };
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use smallvec::SmallVec;
@@ -509,7 +509,7 @@ impl CellBuffer {
     pub fn insert_tag(&mut self, tag: FormatTag) -> u64 {
         use std::{
             collections::hash_map::DefaultHasher,
-            hash::{Hash, Hasher},
+            hash::{Hash as _, Hasher as _},
         };
 
         let mut hasher = DefaultHasher::new();
@@ -534,7 +534,7 @@ impl CellBuffer {
     pub fn insert_uri(&mut self, uri: &str) -> u64 {
         use std::{
             collections::hash_map::DefaultHasher,
-            hash::{Hash, Hasher},
+            hash::{Hash as _, Hasher as _},
         };
 
         let mut hasher = DefaultHasher::new();
@@ -1410,7 +1410,7 @@ impl Attr {
     }
 
     pub fn write(self, prev: Self, stdout: &mut crate::StateStdout) -> std::io::Result<()> {
-        use std::io::Write;
+        use std::io::Write as _;
         match (self.intersects(Self::BOLD), prev.intersects(Self::BOLD)) {
             (true, true) | (false, false) => Ok(()),
             (false, true) => write!(stdout, "\x1B[22m"),
@@ -2008,9 +2008,9 @@ pub enum WidgetWidth {
 
 #[cfg(test)]
 mod tests {
-    use melib::text::{Reflow, TextProcessing};
+    use melib::text::{Reflow, TextProcessing as _};
 
-    use super::KMP;
+    use super::KMP as _;
     use crate::terminal::{Screen, Virtual};
 
     const _ALICE_CHAPTER_1: &str = "CHAPTER I. Down the Rabbit-Hole

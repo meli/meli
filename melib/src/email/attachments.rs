@@ -29,7 +29,7 @@ use smallvec::SmallVec;
 use crate::{
     email::{
         attachment_types::*,
-        parser::{self, BytesExt},
+        parser::{self, BytesExt as _},
         HeaderName, Mail,
     },
     BytesDisplay,

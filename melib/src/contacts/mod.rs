@@ -21,7 +21,7 @@
 
 use std::{
     borrow::Borrow,
-    hash::{Hash, Hasher},
+    hash::{Hash, Hasher as _},
     ops::Deref,
     sync::Arc,
 };
@@ -65,7 +65,7 @@ impl From<CardId> for String {
 
 impl From<String> for CardId {
     fn from(s: String) -> Self {
-        use std::{collections::hash_map::DefaultHasher, str::FromStr};
+        use std::{collections::hash_map::DefaultHasher, str::FromStr as _};
 
         if let Ok(u) = Uuid::try_parse(s.as_str()) {
             Self::Uuid(u)

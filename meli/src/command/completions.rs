@@ -48,7 +48,7 @@ use crate::{
         parser::{LexToken, LexTokenError, Lexer},
         Token, TokenStream, COMMAND_COMPLETION,
     },
-    melib::ShellExpandTrait,
+    melib::ShellExpandTrait as _,
     utilities::AutoCompleteEntry,
 };
 

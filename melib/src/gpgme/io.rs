@@ -26,7 +26,7 @@ use std::{
     io::{self, Read, Seek, Write},
     mem::ManuallyDrop,
     os::{
-        fd::{AsFd, BorrowedFd, FromRawFd, OwnedFd},
+        fd::{AsFd, BorrowedFd, FromRawFd as _, OwnedFd},
         unix::io::{AsRawFd, RawFd},
     },
     ptr::NonNull,
@@ -35,7 +35,7 @@ use std::{
 
 use futures::{
     future::Either,
-    stream::{FuturesUnordered, StreamExt},
+    stream::{FuturesUnordered, StreamExt as _},
 };
 
 use super::{bindings::gpgme_io_event_done_data, *};
@@ -223,7 +223,7 @@ impl Drop for IoState {
             unsafe { Arc::decrement_strong_count(Arc::as_ptr(&inner)) };
         }
         if strong_count != 3 && cfg!(debug_assertions) {
-            eprintln!(
+            log::error!(
                 "BUG: On Drop, IoState expects three references to Arc<Mutex<IoStateInner>> but \
                  got {strong_count}. This suggests a memory leak."
             );
@@ -358,7 +358,7 @@ impl Read for Data {
     #[inline]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let result = unsafe {
-            let (buf, len) = (buf.as_mut_ptr() as *mut _, buf.len());
+            let (buf, len) = (buf.as_mut_ptr().cast::<c_void>(), buf.len());
             call!(self.lib, gpgme_data_read)(
                 self.inner.as_ptr(),
                 buf,
@@ -378,7 +378,7 @@ impl Write for Data {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let result = unsafe {
-            let (buf, len) = (buf.as_ptr() as *const _, buf.len());
+            let (buf, len) = (buf.as_ptr().cast::<c_void>(), buf.len());
             call!(self.lib, gpgme_data_write)(
                 self.inner.as_ptr(),
                 buf,
@@ -455,7 +455,7 @@ impl Data {
                 &lib,
                 call!(&lib, gpgme_data_new_from_mem)(
                     &raw mut ptr,
-                    bytes.as_ptr() as *const ::std::os::raw::c_char,
+                    bytes.as_ptr().cast::<::std::os::raw::c_char>(),
                     bytes
                         .len()
                         .try_into()
@@ -474,7 +474,7 @@ impl Data {
     }
 
     pub fn into_bytes(mut self) -> Result<Vec<u8>> {
-        use std::io::Read;
+        use std::io::Read as _;
         let mut buf = vec![];
         self.read_to_end(&mut buf)?;
         Ok(buf)

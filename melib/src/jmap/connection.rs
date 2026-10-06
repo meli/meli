@@ -20,21 +20,21 @@
  */
 
 use std::{
-    convert::TryFrom,
+    convert::TryFrom as _,
     sync::{atomic::AtomicUsize, Arc},
     time::{Duration, Instant},
 };
 
 use futures::lock::MappedMutexGuard as FutureMappedMutexGuard;
 use isahc::{
-    config::{Configurable, DnsCache, RedirectPolicy, SslOption},
-    http, AsyncReadResponseExt, HttpClient,
+    config::{Configurable as _, DnsCache, RedirectPolicy, SslOption},
+    http, AsyncReadResponseExt as _, HttpClient,
 };
 use url::Url;
 
 use crate::{
-    email::parser::BytesExt,
-    error::{Error, ErrorKind, NetworkErrorKind, Result, ResultIntoError},
+    email::parser::BytesExt as _,
+    error::{Error, ErrorKind, NetworkErrorKind, Result, ResultIntoError as _},
     jmap::{
         argument::Argument,
         capabilities::*,

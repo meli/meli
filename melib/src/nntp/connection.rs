@@ -20,8 +20,8 @@
  */
 
 use crate::{
-    backends::{BackendMailbox, MailboxHash},
-    email::parser::BytesExt,
+    backends::{BackendMailbox as _, MailboxHash},
+    email::parser::BytesExt as _,
     error::*,
     log,
     utils::connections::{std_net::connect as tcp_stream_connect, Connection},
@@ -35,7 +35,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use futures::io::{AsyncReadExt, AsyncWriteExt};
+use futures::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use native_tls::TlsConnector;
 pub use smol::Async as AsyncWrapper;
 

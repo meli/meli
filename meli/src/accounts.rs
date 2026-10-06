@@ -23,7 +23,7 @@
 
 use std::{
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
-    convert::TryFrom,
+    convert::TryFrom as _,
     future::Future,
     ops::{Index, IndexMut},
     path::{Path, PathBuf},
@@ -32,7 +32,7 @@ use std::{
     time::Duration,
 };
 
-use futures::{future::FutureExt, stream::StreamExt};
+use futures::{future::FutureExt as _, stream::StreamExt as _};
 use indexmap::IndexMap;
 use melib::{
     backends::{prelude::*, Backends},
@@ -40,7 +40,7 @@ use melib::{
     error::{Error, ErrorKind, NetworkErrorKind, Result},
     log,
     thread::Threads,
-    utils::{fnmatch::Fnmatch, futures::sleep, random, shellexpand::ShellExpandTrait},
+    utils::{fnmatch::Fnmatch as _, futures::sleep, random, shellexpand::ShellExpandTrait as _},
     SortField, SortOrder,
 };
 
@@ -142,6 +142,7 @@ pub struct Account {
 
 impl Drop for Account {
     fn drop(&mut self) {
+        #[expect(clippy::print_stderr)]
         if let Err(err) = self.write_default_address_book_to_disk() {
             eprintln!("Could not flush contacts to disk: {err}");
         }
@@ -973,7 +974,7 @@ impl Account {
         #[allow(unused_variables)] complete_in_background: bool,
     ) -> Result<Option<JoinHandle<Result<()>>>> {
         use std::{
-            io::Write,
+            io::Write as _,
             process::{Command, Stdio},
         };
 
@@ -1066,7 +1067,7 @@ impl Account {
         move |message: Arc<String>| -> Pin<Box<dyn Future<Output = Result<()>> + Send>> {
             Box::pin(async move {
                 use std::{
-                    io::Write,
+                    io::Write as _,
                     process::{Command, Stdio},
                 };
 
@@ -1237,7 +1238,7 @@ impl Account {
                         Some(mailbox_hash),
                     )
                 } else {
-                    use melib::search::QueryTrait;
+                    use melib::search::QueryTrait as _;
                     let query = melib::search::Query::try_from(search_term)?;
                     let mut ret = Vec::with_capacity(512);
                     let envelopes = self.collection.envelopes.read().unwrap();

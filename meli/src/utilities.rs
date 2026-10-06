@@ -31,7 +31,7 @@ use indexmap::IndexMap;
 use melib::text::Reflow;
 
 use super::*;
-use crate::{components::prelude::*, jobs::JobId, melib::text::TextProcessing};
+use crate::{components::prelude::*, jobs::JobId};
 
 mod pager;
 pub use self::pager::*;
@@ -1129,7 +1129,7 @@ impl Component for Tabbed {
             let (width, height) = self.help_view.content.area().size();
             let (cols, rows) = inner_area.size();
             if let Some(ref mut search) = self.help_view.search {
-                use crate::melib::text::search::KMP;
+                use crate::melib::text::search::KMP as _;
                 search.positions = self
                     .help_view
                     .content

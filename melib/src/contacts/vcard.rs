@@ -27,7 +27,7 @@
 //! - Version 4 [RFC 6350: vCard Format Specification](https://datatracker.ietf.org/doc/rfc6350/)
 //! - Parameter escaping [RFC 6868 Parameter Value Encoding in iCalendar and vCard](https://datatracker.ietf.org/doc/rfc6868/)
 
-use std::{convert::TryInto, hash::Hasher, path::PathBuf};
+use std::{convert::TryInto, hash::Hasher as _, path::PathBuf};
 
 use indexmap::IndexMap;
 
@@ -37,10 +37,10 @@ use crate::{
         backend::{ContactBackend, ContactBackendCapabilities},
         AddressBookName, Card, CardId,
     },
-    error::{Error, ErrorKind, Result, ResultIntoError},
+    error::{Error, ErrorKind, Result, ResultIntoError as _},
     utils::{
         parsec::{match_literal_anycase, one_or_more, peek, prefix, take_until, Parser},
-        shellexpand::ShellExpandTrait,
+        shellexpand::ShellExpandTrait as _,
     },
 };
 
@@ -324,7 +324,7 @@ pub fn load_cards(p: &std::path::Path) -> Result<Vec<Card>> {
         }
         let f = f.chain_err_related_path(p)?.path();
         if f.is_file() {
-            use std::io::Read;
+            use std::io::Read as _;
             contents.clear();
             std::fs::File::open(&f)?
                 .read_to_string(&mut contents)

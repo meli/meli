@@ -21,7 +21,7 @@
 
 use std::{
     collections::BTreeSet,
-    convert::TryFrom,
+    convert::TryFrom as _,
     sync::{atomic::AtomicUsize, Arc},
 };
 

@@ -27,7 +27,7 @@ use indexmap::IndexMap;
 use melib::{
     backends::{AccountHash, Mailbox, MailboxHash},
     email::{attachment_types::*, attachments::*},
-    text::{TextProcessing, Truncate},
+    text::{TextProcessing as _, Truncate as _},
     thread::ThreadNodeHash,
 };
 use uuid::Uuid;

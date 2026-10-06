@@ -612,7 +612,7 @@ pub fn date<'a, T: Into<Cow<'static, str>>>(fmt: T) -> impl Parser<'a, UnixTimes
 }
 
 pub fn integer<'a>() -> impl Parser<'a, usize> {
-    use std::str::FromStr;
+    use std::str::FromStr as _;
     map_res(is_a(b"0123456789"), usize::from_str)
 }
 

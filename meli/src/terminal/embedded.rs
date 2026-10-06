@@ -25,8 +25,8 @@ use std::{
     ffi::{CStr, CString, OsStr},
     mem::ManuallyDrop,
     os::unix::{
-        ffi::OsStrExt,
-        io::{AsRawFd, FromRawFd, IntoRawFd},
+        ffi::OsStrExt as _,
+        io::{AsRawFd as _, FromRawFd as _, IntoRawFd as _},
     },
 };
 
@@ -46,8 +46,8 @@ pub mod terminal;
 #[cfg(not(target_os = "macos"))]
 use std::path::Path;
 use std::{
-    convert::TryFrom,
-    io::{Read, Write},
+    convert::TryFrom as _,
+    io::{Read as _, Write as _},
     sync::{Arc, Mutex},
 };
 

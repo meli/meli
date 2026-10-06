@@ -75,11 +75,8 @@ use crate::conf::{*, data_types::*};
 
     'file_loop: for (filename, ident) in filenames {
         println!("cargo:rerun-if-changed={filename}");
-        let mut file = File::open(filename)
-            .unwrap_or_else(|err| panic!("Unable to open file `{filename}` {err}"));
-
-        let mut src = String::new();
-        file.read_to_string(&mut src).expect("Unable to read file");
+        let src = std::fs::read_to_string(filename)
+            .unwrap_or_else(|err| panic!("Unable to read file `{filename}` {err}"));
 
         let syntax = syn::parse_file(&src).expect("Unable to parse file");
         if syntax.items.iter().any(|item| {

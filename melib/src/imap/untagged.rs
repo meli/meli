@@ -19,20 +19,20 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::convert::{TryFrom, TryInto};
+use std::convert::{TryFrom as _, TryInto as _};
 
 use imap_codec::imap_types::{command::CommandBody, search::SearchKey, sequence::SequenceSet};
 
 use crate::{
-    backends::{BackendEvent, BackendMailbox, RefreshEvent, RefreshEventKind::*, TagHash},
+    backends::{BackendEvent, BackendMailbox as _, RefreshEvent, RefreshEventKind::*, TagHash},
     error::*,
     imap::{
         email::common_attributes,
         protocol_parser::{
-            generate_envelope_hash, FetchResponse, ImapLineSplit, RequiredResponses,
+            generate_envelope_hash, FetchResponse, ImapLineSplit as _, RequiredResponses,
             UntaggedResponse,
         },
-        sync::cache::ImapCache,
+        sync::cache::ImapCache as _,
         ImapConnection, MailboxSelection, UID,
     },
 };

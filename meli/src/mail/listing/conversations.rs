@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{collections::BTreeMap, iter::FromIterator};
+use std::{collections::BTreeMap, iter::FromIterator as _};
 
 use indexmap::IndexSet;
 use melib::{Address, SortField, SortOrder, TagHash, Threads};
@@ -306,7 +306,7 @@ impl MailListingTrait for ConversationsListing {
             else {
                 continue 'items_for_loop;
             };
-            use melib::search::QueryTrait;
+            use melib::search::QueryTrait as _;
             if let Some(filter_query) = mailbox_settings!(
                 context[&self.cursor_pos.0][&self.cursor_pos.1]
                     .listing

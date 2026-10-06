@@ -355,7 +355,7 @@ impl Account {
                 mailbox_hash,
                 ref mut new_path,
             } => {
-                use indexmap::map::MutableKeys;
+                use indexmap::map::MutableKeys as _;
                 try_handle! { handle, mailbox => {
                     let new_hash = mailbox.hash();
                     if let Some((_, key, entry)) = self.mailbox_entries.get_full_mut2(&mailbox_hash) {

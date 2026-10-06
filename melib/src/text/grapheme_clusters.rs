@@ -95,7 +95,7 @@ impl TextProcessing for str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::text::TextPresentation;
+    use crate::text::TextPresentation as _;
 
     #[test]
     fn test_grapheme_width() {

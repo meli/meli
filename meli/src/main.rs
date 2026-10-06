@@ -32,6 +32,7 @@
 use args::*;
 use meli::*;
 
+#[expect(clippy::print_stderr)]
 fn main() {
     let opt = Opt::from_args();
     ::std::process::exit(match run_app(opt) {

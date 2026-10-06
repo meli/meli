@@ -150,7 +150,7 @@ impl Truncate for String {
 }
 
 pub mod hex {
-    use std::fmt::Write;
+    use std::fmt::Write as _;
 
     use crate::error::Result;
 
@@ -191,7 +191,7 @@ pub trait TextPresentation {
 
 impl TextPresentation for str {
     fn text_pr(&self) -> std::borrow::Cow<'_, str> {
-        use std::{borrow::Cow, str::FromStr};
+        use std::{borrow::Cow, str::FromStr as _};
 
         // [ref:FIXME]: add all relevant Unicode range/blocks to TextPresentation::text_pr()
 

@@ -20,7 +20,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
-use std::os::fd::{AsFd, AsRawFd, OwnedFd};
+use std::os::fd::{AsFd as _, AsRawFd as _, OwnedFd};
 
 use crossbeam::{
     channel::{Receiver, Sender},
@@ -33,14 +33,14 @@ use termion::{
         Event as TermionEvent, Key as TermionKey, MouseButton as TermionMouseButton,
         MouseEvent as TermionMouseEvent,
     },
-    input::TermReadEventsAndRaw,
+    input::TermReadEventsAndRaw as _,
 };
 
 use crate::{
     terminal::{
         color::Color,
         keys::{Key, MouseButton, MouseEvent},
-        EscapeSequenceQuery, QueryBackground, QueryForeground,
+        EscapeSequenceQuery as _, QueryBackground, QueryForeground,
     },
     types::{TerminalEvent, ThreadEvent},
 };
@@ -342,7 +342,7 @@ pub fn get_events(
                 }
             },
             recv(rx) -> cmd => {
-                use nix::sys::time::TimeValLike;
+                use nix::sys::time::TimeValLike as _;
                 let mut buf = [0;2];
                 let mut read_fd_set = nix::sys::select::FdSet::new();
                 read_fd_set.insert(new_command_fd.as_fd());

@@ -28,8 +28,8 @@ extern crate xdg;
 use std::{
     env,
     fs::OpenOptions,
-    io::Write,
-    os::unix::fs::PermissionsExt,
+    io::Write as _,
+    os::unix::fs::PermissionsExt as _,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -40,7 +40,7 @@ use melib::{
     conf::{ActionFlag, MailboxConf, Secret, ToggleFlag},
     error::*,
     search::Query,
-    Logger, ShellExpandTrait, SortField, SortOrder,
+    Logger, ShellExpandTrait as _, SortField, SortOrder,
 };
 
 use crate::{conf::deserializers::non_empty_opt_string, terminal::Color};
@@ -392,6 +392,7 @@ pub fn get_config_file() -> Result<PathBuf> {
 impl FileSettings {
     pub const EXAMPLE_CONFIG: &'static str = include_str!("../docs/samples/sample-config.toml");
 
+    #[allow(clippy::cfg_not_test)]
     pub fn new() -> Result<Self> {
         let config_path = get_config_file()?;
         if !config_path.exists() {
@@ -729,7 +730,7 @@ impl Settings {
 }
 
 mod deserializers {
-    use serde::{de, Deserialize, Deserializer};
+    use serde::{de, Deserialize as _, Deserializer};
 
     pub(in crate::conf) fn non_empty_opt_string<'de, D, T: std::convert::From<Option<String>>>(
         deserializer: D,
@@ -760,6 +761,7 @@ mod deserializers {
     }
 }
 
+#[expect(clippy::print_stdout)]
 pub fn create_config_file(p: &Path) -> Result<()> {
     let mut file = OpenOptions::new()
         .write(true)

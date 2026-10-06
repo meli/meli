@@ -31,7 +31,7 @@ use melib::{
         bytes::complete::{is_a, tag, take_until, take_while},
         character::complete::{digit1, not_line_ending},
         combinator::{map, map_res},
-        error::{Error as NomError, FromExternalError},
+        error::{Error as NomError, FromExternalError as _},
         multi::separated_list1,
         sequence::{pair, preceded, separated_pair},
         IResult,

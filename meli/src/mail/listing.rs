@@ -22,10 +22,10 @@
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
-    convert::TryFrom,
+    convert::TryFrom as _,
     fs::File,
     future::Future,
-    io::{BufWriter, Write},
+    io::{BufWriter, Write as _},
     ops::{Deref, DerefMut},
     pin::Pin,
 };
@@ -33,14 +33,13 @@ use std::{
 use futures::future::try_join_all;
 use melib::{
     backends::EnvelopeHashBatch, mbox::MboxMetadata, utils::datetime, Flag, FlagOp,
-    ShellExpandTrait, UnixTimestamp,
+    ShellExpandTrait as _, UnixTimestamp,
 };
 use smallvec::SmallVec;
 
 use super::*;
 use crate::{
     accounts::{JobRequest, MailboxStatus},
-    components::ExtendShortcutsMaps,
     conf::themes::ThemeAttribute,
     jobs::IsAsync,
 };
@@ -2072,7 +2071,7 @@ impl Component for Listing {
                                 let message_id = message_id.clone();
                                 async move {
                                     use melib::utils::patch_retrieve::{
-                                        PatchSource, PublicInboxHTTP,
+                                        PatchSource as _, PublicInboxHTTP,
                                     };
                                     let lore = PublicInboxHTTP::new("https://lore.kernel.org")?;
                                     if thread {

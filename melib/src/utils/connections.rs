@@ -24,7 +24,7 @@ use std::{
     borrow::Cow,
     os::{
         fd::{AsFd, BorrowedFd, OwnedFd},
-        unix::io::AsRawFd,
+        unix::io::AsRawFd as _,
     },
     time::Duration,
 };
@@ -481,7 +481,7 @@ impl Connection {
             self.as_raw_fd(),
             opt,
             val,
-            std::ptr::addr_of_mut!(slot) as *mut _,
+            (&raw mut slot).cast::<libc::c_void>(),
             &raw mut len,
         ))?;
         assert_eq!(len as usize, std::mem::size_of::<T>());
@@ -514,7 +514,7 @@ impl std::io::Read for Connection {
             #[cfg(feature = "tls")]
             Tls { ref mut inner, .. } => inner.read(buf),
             Fd { ref inner, .. } => {
-                use std::os::unix::io::{FromRawFd, IntoRawFd};
+                use std::os::unix::io::{FromRawFd as _, IntoRawFd as _};
                 let mut f = unsafe { std::fs::File::from_raw_fd(inner.as_raw_fd()) };
                 let ret = f.read(buf);
                 let _ = f.into_raw_fd();
@@ -579,7 +579,7 @@ impl std::io::Write for Connection {
             #[cfg(feature = "tls")]
             Tls { ref mut inner, .. } => inner.write(buf),
             Fd { ref inner, .. } => {
-                use std::os::unix::io::{FromRawFd, IntoRawFd};
+                use std::os::unix::io::{FromRawFd as _, IntoRawFd as _};
                 let mut f = unsafe { std::fs::File::from_raw_fd(inner.as_raw_fd()) };
                 let ret = f.write(buf);
                 let _ = f.into_raw_fd();
@@ -595,7 +595,7 @@ impl std::io::Write for Connection {
             #[cfg(feature = "tls")]
             Tls { ref mut inner, .. } => inner.flush(),
             Fd { ref inner, .. } => {
-                use std::os::unix::io::{FromRawFd, IntoRawFd};
+                use std::os::unix::io::{FromRawFd as _, IntoRawFd as _};
                 let mut f = unsafe { std::fs::File::from_raw_fd(inner.as_raw_fd()) };
                 let ret = f.flush();
                 let _ = f.into_raw_fd();
@@ -635,7 +635,7 @@ unsafe impl async_io::IoSafe for Connection {}
 #[deprecated = "While it supports IPv6, it does not implement the happy eyeballs algorithm. Use \
                 {std_net,smol}::tcp_stream_connect instead."]
 pub fn lookup_ip(host: &str, port: u16) -> crate::Result<std::net::SocketAddr> {
-    use std::net::ToSocketAddrs;
+    use std::net::ToSocketAddrs as _;
 
     use crate::error::{Error, ErrorKind, NetworkErrorKind};
 

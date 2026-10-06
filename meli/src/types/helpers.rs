@@ -21,18 +21,17 @@
 
 use std::{
     borrow::Cow,
-    fs,
     fs::OpenOptions,
-    io::{Read, Write},
-    os::{fd::OwnedFd, unix::fs::PermissionsExt},
+    io::Write as _,
+    os::{fd::OwnedFd, unix::fs::PermissionsExt as _},
     path::{Path, PathBuf},
 };
 
 use melib::{
     error::*,
-    text::{TextProcessing, Truncate},
+    text::{TextProcessing as _, Truncate as _},
     uuid::Uuid,
-    ShellExpandTrait,
+    ShellExpandTrait as _,
 };
 
 /// Temporary file that can optionally cleaned up when it is dropped.
@@ -71,13 +70,7 @@ impl File {
 
     /// Convenience method to read `File` to `String`.
     pub fn read_to_string(&self) -> Result<String> {
-        fn inner(path: &Path) -> Result<String> {
-            let mut buf = Vec::new();
-            let mut f = fs::File::open(path)?;
-            f.read_to_end(&mut buf)?;
-            Ok(String::from_utf8(buf)?)
-        }
-        inner(&self.path).chain_err_summary(|| format!("Can't read {}", self.path.display()))
+        std::fs::read_to_string(&self.path).chain_err_related_path(&self.path)
     }
 
     /// Returned `File` will be deleted when dropped if `delete_on_drop` is set,

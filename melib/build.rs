@@ -75,8 +75,9 @@ impl Ucd {
     }
 }
 
+#[expect(clippy::print_stderr)]
 fn main() -> Result<(), std::io::Error> {
-    let version: String = std::env::var("UNICODE_VERSION").unwrap_or("16.0.0".into());
+    let version: String = std::env::var("UNICODE_VERSION").unwrap_or_else(|_| "16.0.0".into());
     println!("cargo:rerun-if-env-changed=UNICODE_REGENERATE_TABLES");
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed={MOD_PATH}");
@@ -149,7 +150,7 @@ fn main() -> Result<(), std::io::Error> {
     let mut codepoints: Vec<Codepoint> = Vec::with_capacity(MAX_CODEPOINT + 1);
     for i in 0..=MAX_CODEPOINT {
         codepoints.push(Codepoint {
-            raw: i as u32,
+            raw: u32::try_from(i).unwrap(),
             width: None,
             category: CAT_UNASSIGNED,
         });
@@ -259,7 +260,7 @@ fn main() -> Result<(), std::io::Error> {
                 continue;
             }
 
-            use std::str::FromStr;
+            use std::str::FromStr as _;
             let mut v = comment.split_whitespace().next().unwrap();
             if v.starts_with('E') {
                 v = &v[1..];

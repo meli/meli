@@ -45,10 +45,9 @@ pub mod sync;
 pub mod untagged;
 use std::{
     collections::{hash_map::DefaultHasher, BTreeMap, BTreeSet, HashMap, HashSet},
-    convert::TryFrom,
-    hash::Hasher,
+    hash::Hasher as _,
     num::NonZeroU32,
-    str::FromStr,
+    str::FromStr as _,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
@@ -72,10 +71,10 @@ use crate::{
     backends::{prelude::*, RefreshEventKind::*},
     collection::Collection,
     conf::AccountSettings,
-    email::{parser::BytesExt, *},
-    error::{ignore_not_found, Error, ErrorKind, Result, ResultIntoError},
+    email::{parser::BytesExt as _, *},
+    error::{ignore_not_found, Error, ErrorKind, Result},
     imap::{protocol_parser::id_ext::IDResponse, sync::cache::ImapCache},
-    text::Truncate,
+    text::Truncate as _,
     utils::futures::timeout,
 };
 
@@ -596,7 +595,7 @@ impl MailBackend for ImapType {
         let main_conn = self.connection.clone();
         let uid_store = self.uid_store.clone();
         Ok(Box::pin(try_fn_stream(|emitter| async move {
-            use futures::stream::StreamExt;
+            use futures::stream::StreamExt as _;
 
             let has_idle: bool = match server_conf.protocol {
                 ImapProtocol::IMAP {
@@ -1544,6 +1543,7 @@ impl ImapType {
         }))
     }
 
+    #[expect(clippy::print_stdout)]
     pub fn shell(&self) {
         let mut conn = ImapConnection::new_connection(
             &self.server_conf,

@@ -183,7 +183,7 @@ mod system {
                         || (0x7f..=0x84).contains(&i)
                         || (0x86..=0x9f).contains(&i)
                     {
-                        use std::fmt::Write;
+                        use std::fmt::Write as _;
                         let _ = write!(ret, "&#{i:x}%{i:x};");
                     } else {
                         ret.push(c);
@@ -468,7 +468,7 @@ impl Component for DisplayMessageBox {
         }) = self.messages.get(self.pos)
         {
             let noto_colors = crate::conf::theme_value(context, "status.notification");
-            use crate::melib::text::{Reflow, TextProcessing};
+            use crate::melib::text::{Reflow, TextProcessing as _};
 
             let box_width = area.width() / 3;
             if box_width < 10 {

@@ -26,3 +26,61 @@ codegen-units = 1
 opt-level = "s"
 debug = false
 strip = true
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.rustdoc]
+redundant_explicit_links = "deny"
+broken_intra_doc_links = "deny"
+
+[workspace.lints.clippy]
+correctness = { level = "deny", priority = -1 }
+suspicious = { level = "deny", priority = -1 }
+complexity = { level = "deny", priority = -1 }
+perf = { level = "deny", priority = -1 }
+cargo = { level = "deny", priority = -1 }
+nursery = { level = "deny", priority = -1 }
+style = { level = "deny", priority = -1 }
+large_include_file = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+rc_buffer = "deny"
+as_underscore = "deny"
+assertions_on_result_states = "deny"
+doc_markdown = "deny"
+expect_fun_call = "deny"
+or_fun_call = "deny"
+bool_to_int_with_if = "deny"
+borrow_as_ptr = "deny"
+cast_ptr_alignment = "deny"
+large_futures = "deny"
+waker_clone_wake = "deny"
+unused_enumerate_index = "deny"
+unnecessary_fallible_conversions = "deny"
+struct_field_names = "deny"
+manual_hash_one = "deny"
+into_iter_without_iter = "deny"
+# allow_attributes = "deny"
+# allow_attributes_without_reason = "deny"
+# arithmetic_side_effects = "deny"
+# as_conversions = "deny"
+as_pointer_underscore = "deny"
+cfg_not_test = "deny"
+fn_to_numeric_cast_any = "deny"
+get_unwrap = "deny"
+unused_trait_names = "deny"
+verbose_file_reads = "deny"
+
+option_if_let_else = "allow"
+missing_const_for_fn = "allow"
+significant_drop_tightening = "allow"
+multiple_crate_versions = "allow"
+significant_drop_in_scrutinee = "allow"
+cognitive_complexity = "allow"
+manual_clamp = "allow"
+coerce_container_to_any = "allow"
+collapsible_match = "allow"

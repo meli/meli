@@ -117,7 +117,7 @@ server_password = { command = "false" }
         assert_eq!(updated_version.trim(), LATEST.as_str());
     }
     {
-        use std::io::BufRead;
+        use std::io::BufRead as _;
 
         let mut stdout = vec![];
         let mut stdin = &b"N\n"[..];

@@ -188,7 +188,7 @@ impl<'de> Deserialize<'de> for Key {
                     "Esc" | "esc" => Ok(Key::Esc),
                     s if s.len() == 1 => Ok(Key::Char(s.chars().next().unwrap())),
                     s if s.starts_with('F') && (s.len() == 2 || s.len() == 3) => {
-                        use std::str::FromStr;
+                        use std::str::FromStr as _;
 
                         if let Ok(n) = u8::from_str(&s[1..]) {
                             if (1..=12).contains(&n) {

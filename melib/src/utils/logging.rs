@@ -22,7 +22,7 @@
 use std::{
     fs::{File, OpenOptions},
     io::{BufWriter, Write},
-    ops::DerefMut,
+    ops::DerefMut as _,
     path::PathBuf,
     sync::{
         atomic::{AtomicU8, Ordering},
@@ -263,7 +263,7 @@ impl Logger {
     }
 
     pub fn change_log_dest(&self, path: PathBuf) {
-        use crate::utils::shellexpand::ShellExpandTrait;
+        use crate::utils::shellexpand::ShellExpandTrait as _;
 
         let path = path.expand(); // expand shell stuff
         let mut dest = self.dest.lock().unwrap();

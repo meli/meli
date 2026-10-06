@@ -22,7 +22,7 @@
 //! A string buffer that supports input operations, meant to be used in text
 //! input widgets.
 
-use melib::text::TextProcessing;
+use melib::text::TextProcessing as _;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct UText {

@@ -22,7 +22,7 @@
 
 //! Signal handler setup.
 
-use std::os::{fd::AsFd, raw::c_int};
+use std::os::{fd::AsFd as _, raw::c_int};
 
 use crate::*;
 

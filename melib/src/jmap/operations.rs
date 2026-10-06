@@ -22,7 +22,7 @@
 use std::sync::Arc;
 
 use futures::lock::Mutex as FutureMutex;
-use isahc::AsyncReadResponseExt;
+use isahc::AsyncReadResponseExt as _;
 
 use crate::{
     error::Result,

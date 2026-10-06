@@ -21,9 +21,8 @@
 
 //! Compose a [`Draft`], with `MIME` and attachment support.
 use std::{
-    convert::TryFrom,
+    convert::TryFrom as _,
     ffi::OsStr,
-    io::Read,
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -36,8 +35,8 @@ use crate::{
         attachment_types::{ContentTransferEncoding, ContentType, MultipartType, Text},
         attachments::AttachmentBuilder,
     },
-    error::{ErrorKind, ResultIntoError},
-    utils::{datetime, shellexpand::ShellExpandTrait, xdg::query_mime_info},
+    error::{ErrorKind, ResultIntoError as _},
+    utils::{datetime, shellexpand::ShellExpandTrait as _, xdg::query_mime_info},
 };
 
 pub mod mime;
@@ -410,13 +409,11 @@ where
     I: AsRef<OsStr>,
 {
     let path: PathBuf = Path::new(path).expand();
-    if !path.is_file() {
+    if path.is_dir() {
         return Err(Error::new(format!("{} is not a file", path.display())));
     }
 
-    let mut file = std::fs::File::open(&path)?;
-    let mut contents = Vec::new();
-    file.read_to_end(&mut contents)?;
+    let contents = std::fs::read(&path).chain_err_related_path(&path)?;
     let mut attachment = AttachmentBuilder::default();
 
     attachment

@@ -24,7 +24,7 @@
 use std::{
     borrow::Cow,
     ffi::OsStr,
-    os::unix::ffi::OsStrExt,
+    os::unix::ffi::OsStrExt as _,
     path::{Path, PathBuf},
 };
 
@@ -229,7 +229,7 @@ pub mod impls {
     /// [`getdents64`](::libc::SYS_getdents64) to get results faster, since we
     /// only care for raw name byte matching.
     pub fn inner_complete_linux(_self: &Path, force: bool, treat_as_dir: bool) -> Completions {
-        use std::os::unix::io::AsRawFd;
+        use std::os::unix::io::AsRawFd as _;
 
         use nix::fcntl::OFlag;
 

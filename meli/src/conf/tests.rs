@@ -22,9 +22,9 @@
 
 use std::{
     borrow::Cow,
-    fmt::Write as FmtWrite,
+    fmt::Write as _,
     fs::{self, OpenOptions},
-    io::Write,
+    io::Write as _,
     path::PathBuf,
 };
 
@@ -285,12 +285,14 @@ color_aliases= { "Jebediah" = "$JebediahJr", "JebediahJr" = "mail.listing.tag_de
 
 #[test]
 fn test_conf_theme_key_values() {
-    use std::{collections::VecDeque, fs::File, io::Read, path::PathBuf};
+    use std::{collections::VecDeque, path::PathBuf};
+
+    use melib::ResultIntoError as _;
+
     let mut queue: VecDeque<PathBuf> = VecDeque::new();
     queue.push_back("src/".into());
     let re_conf = regex::Regex::new(r#"value\((?:\s|\n)*[&]?context,[^"]*"([^"]*)""#).unwrap();
 
-    let mut content = String::new();
     while let Some(dir) = queue.pop_front() {
         for entry in std::fs::read_dir(&dir).unwrap() {
             let entry = entry.unwrap();
@@ -298,9 +300,9 @@ fn test_conf_theme_key_values() {
             if path.is_dir() {
                 queue.push_back(path);
             } else if path.extension().map(|os_s| os_s == "rs").unwrap_or(false) {
-                let mut file = File::open(&path).unwrap();
-                content.clear();
-                file.read_to_string(&mut content).unwrap();
+                let content = std::fs::read_to_string(&path)
+                    .chain_err_related_path(&path)
+                    .unwrap();
                 for mat in re_conf.captures_iter(&content) {
                     let theme_key = &mat[1];
                     if !DEFAULT_KEYS.contains(&theme_key) {

@@ -24,7 +24,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use melib::utils::{shellexpand::ShellExpandTrait, xdg::query_default_app};
+use melib::utils::{shellexpand::ShellExpandTrait as _, xdg::query_default_app};
 
 use super::*;
 use crate::{command::actions::FileAction, jobs::IsAsync, ThreadEvent};

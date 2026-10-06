@@ -435,7 +435,7 @@ impl ContactBackendRefactor {
     fn revert_transform(doc: &mut DocumentMut, verbose: bool) -> Result<()> {
         use melib::conf::ContactBackendConf;
 
-        use serde::de::IntoDeserializer;
+        use serde::de::IntoDeserializer as _;
 
         if let Some(accs) = doc.get_mut("accounts") {
             let Some(accs) = accs.as_table_mut() else {

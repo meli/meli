@@ -26,7 +26,7 @@ use std::{
 };
 
 use crossbeam::channel::{Receiver, Sender};
-use melib::{utils::futures::timeout, Result, ShellExpandTrait};
+use melib::{utils::futures::timeout, Result, ShellExpandTrait as _};
 
 use crate::{
     args::{MigrationOpt, PathOrStdio, ToolOpt},
@@ -82,6 +82,7 @@ pub fn man(page: manpages::ManPages, source: bool) -> Result<String> {
 }
 
 #[cfg(feature = "cli-docs")]
+#[expect(clippy::print_stdout)]
 pub fn pager(v: String, no_raw: bool) -> Result<()> {
     if no_raw || !terminal::is_tty() {
         println!("{v}");
@@ -106,6 +107,7 @@ pub fn man(_: args::ManOpt) -> Result<()> {
     Err(Error::new("error: this version of meli was not build with embedded documentation (cargo feature `cli-docs`). You might have it installed as manpages (eg `man meli`), otherwise check https://meli-email.org"))
 }
 
+#[expect(clippy::print_stdout)]
 pub fn compiled_with() -> Result<()> {
     #[cfg(feature = "notmuch")]
     println!("notmuch");
@@ -212,6 +214,7 @@ pub fn view(
     Ok(state)
 }
 
+#[expect(clippy::print_stdout, clippy::print_stderr)]
 pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
     fn get_account(
         path: Option<PathBuf>,
@@ -372,7 +375,7 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
             use std::fs::OpenOptions;
 
             use melib::{
-                utils::patch_retrieve::{PatchSource, PublicInboxHTTP},
+                utils::patch_retrieve::{PatchSource as _, PublicInboxHTTP},
                 MessageID,
             };
 

@@ -27,7 +27,7 @@ use crate::{
         AddressBookName, Card,
     },
     error::{Error, ErrorKind, Result},
-    text::Truncate,
+    text::Truncate as _,
 };
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

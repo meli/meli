@@ -21,7 +21,7 @@
 
 use std::{
     collections::HashMap,
-    io::Read,
+    io::Read as _,
     sync::{Arc, Mutex},
 };
 

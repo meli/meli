@@ -26,14 +26,14 @@ use std::hash::{Hash, Hasher};
 use futures::future::BoxFuture;
 use serde::{
     de::{self, Deserialize, Deserializer, SeqAccess},
-    ser::{Serialize, SerializeMap, Serializer},
+    ser::{Serialize, SerializeMap as _, Serializer},
 };
 
 use crate::{
     email::{
         attachment_types::{ContentType, MultipartType, Text},
         attachments::Attachment,
-        parser::BytesExt,
+        parser::BytesExt as _,
     },
     error::{Error, ErrorKind, Result},
 };

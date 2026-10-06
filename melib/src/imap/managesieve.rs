@@ -31,7 +31,7 @@ use crate::{
     error::{Error, Result},
     get_conf_val,
     imap::RequiredResponses,
-    text::Truncate,
+    text::Truncate as _,
 };
 
 pub struct ManageSieveConnection {

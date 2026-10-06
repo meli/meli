@@ -43,7 +43,7 @@ fn test_mailbox_utf7() {
 
     impl melib::BackendMailbox for TestMailbox {
         fn hash(&self) -> MailboxHash {
-            unimplemented!()
+            panic!()
         }
 
         fn name(&self) -> &str {
@@ -55,39 +55,39 @@ fn test_mailbox_utf7() {
         }
 
         fn children(&self) -> &[MailboxHash] {
-            unimplemented!()
+            panic!()
         }
 
         fn clone(&self) -> Mailbox {
-            unimplemented!()
+            panic!()
         }
 
         fn special_usage(&self) -> SpecialUsageMailbox {
-            unimplemented!()
+            panic!()
         }
 
         fn parent(&self) -> Option<MailboxHash> {
-            unimplemented!()
+            panic!()
         }
 
         fn permissions(&self) -> MailboxPermissions {
-            unimplemented!()
+            panic!()
         }
 
         fn is_subscribed(&self) -> bool {
-            unimplemented!()
+            panic!()
         }
 
         fn set_is_subscribed(&mut self, _: bool) -> Result<()> {
-            unimplemented!()
+            panic!()
         }
 
         fn set_special_usage(&mut self, _: SpecialUsageMailbox) -> Result<()> {
-            unimplemented!()
+            panic!()
         }
 
         fn count(&self) -> Result<(usize, usize)> {
-            unimplemented!()
+            panic!()
         }
 
         fn as_any(&self) -> &dyn std::any::Any {

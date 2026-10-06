@@ -61,16 +61,16 @@ use futures::lock::{
 use http::{status::StatusCode, Request};
 use indexmap::IndexSet;
 use isahc::{
-    config::{Configurable, DnsCache, RedirectPolicy, SslOption},
-    http, AsyncBody, AsyncReadResponseExt, HttpClient,
+    config::{Configurable as _, DnsCache, RedirectPolicy, SslOption},
+    http, AsyncBody, AsyncReadResponseExt as _, HttpClient,
 };
 use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::{
     conf::Secret,
-    email::parser::BytesExt,
-    error::{Error, ErrorKind, NetworkErrorKind, Result, ResultIntoError},
+    email::parser::BytesExt as _,
+    error::{Error, ErrorKind, NetworkErrorKind, Result, ResultIntoError as _},
 };
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]

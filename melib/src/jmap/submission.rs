@@ -20,7 +20,7 @@
  */
 
 use indexmap::IndexMap;
-use serde::ser::{Serialize, SerializeStruct, Serializer};
+use serde::ser::{Serialize, SerializeStruct as _, Serializer};
 use serde_json::Value;
 
 use crate::jmap::{
