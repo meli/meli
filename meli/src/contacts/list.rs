@@ -426,6 +426,9 @@ impl Component for AddressBookList {
             }
             _ => {}
         }
+        if self.editor.is_some() {
+            return false;
+        }
         let shortcuts = self.shortcuts(context);
         match *event {
             UIEvent::Input(ref key)
