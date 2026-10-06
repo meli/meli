@@ -451,7 +451,10 @@ impl MailBackend for JmapType {
     fn watch(&mut self) -> ResultStream<BackendEvent> {
         let connection = self.connection.clone();
         let store = self.store.clone();
-        let server_conf = self.server_conf.clone();
+        let server_conf = JmapServerConf {
+            timeout: None,
+            ..self.server_conf.clone()
+        };
         Ok(Box::pin(try_fn_stream(|emitter| async move {
             let mut event_source = {
                 connection.lock().await.client().await?.connect().await?;

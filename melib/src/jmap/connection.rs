@@ -93,6 +93,7 @@ impl JmapClient {
     pub async fn new(server_conf: &JmapServerConf, store: &Arc<Store>) -> Result<Self> {
         let http_client = HttpClient::builder()
             .dns_cache(DnsCache::Forever)
+            .connect_timeout(Duration::from_secs(60))
             .connection_cache_size(8)
             .connection_cache_ttl(Duration::from_secs(30 * 60))
             .default_header(http::header::CONTENT_TYPE, "application/json")
@@ -108,9 +109,7 @@ impl JmapClient {
             .redirect_policy(RedirectPolicy::Limit(10));
         let http_client =
             if let Some(dur) = server_conf.timeout.filter(|dur| *dur != Duration::ZERO) {
-                http_client
-                    .timeout(dur)
-                    .connect_timeout(dur + Duration::from_secs(300))
+                http_client.timeout(dur)
             } else {
                 http_client
             };
