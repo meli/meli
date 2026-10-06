@@ -48,7 +48,7 @@ jobs:
         name: install OS dependencies
         run: |
           apt-get update
-          apt-get install -y libdbus-1-dev pkg-config mandoc libssl-dev make libnotmuch5 notmuch clang nettle-dev capnproto libsqlite3-dev
+          apt-get install -y libdbus-1-dev pkg-config mandoc libssl-dev make libnotmuch5 notmuch clang nettle-dev capnproto libsqlite3-dev libgpgme11t64
       - name: Cache rustup
         id: cache-rustup
         uses: actions/cache@v4
