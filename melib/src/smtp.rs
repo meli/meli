@@ -855,7 +855,7 @@ pub enum ReplyCode {
     _554,
     /// MAIL FROM/RCPT TO parameters not recognized or not implemented
     _555,
-    /// Must issue a STARTTLS command first
+    /// Authentication required or Must issue a STARTTLS command first
     _530,
 }
 
@@ -898,7 +898,7 @@ impl ReplyCode {
             }
             _554 => "Transaction failed",
             _555 => "MAIL FROM/RCPT TO parameters not recognized or not implemented",
-            _530 => "Must issue a STARTTLS command first",
+            _530 => "Authentication required, or Must issue a STARTTLS command first",
         }
     }
 
@@ -994,6 +994,7 @@ impl TryFrom<&'_ str> for ReplyCode {
             "502" => Ok(_502),
             "503" => Ok(_503),
             "504" => Ok(_504),
+            "530" => Ok(_530),
             "535" => Ok(_535),
             "550" => Ok(_550),
             "551" => Ok(_551),
