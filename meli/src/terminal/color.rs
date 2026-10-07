@@ -67,6 +67,15 @@ pub enum Color {
 }
 
 impl Color {
+    pub const BRIGHT_BLACK: Self = Self::Byte(8);
+    pub const BRIGHT_RED: Self = Self::Byte(9);
+    pub const BRIGHT_GREEN: Self = Self::Byte(10);
+    pub const BRIGHT_YELLOW: Self = Self::Byte(11);
+    pub const BRIGHT_BLUE: Self = Self::Byte(12);
+    pub const BRIGHT_MAGENTA: Self = Self::Byte(13);
+    pub const BRIGHT_CYAN: Self = Self::Byte(14);
+    pub const BRIGHT_WHITE: Self = Self::Byte(15);
+
     /// Returns the `u8` representation of the `Color`.
     pub fn as_byte(self) -> Option<u8> {
         Some(match self {

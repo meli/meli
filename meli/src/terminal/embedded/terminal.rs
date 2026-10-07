@@ -44,7 +44,7 @@ use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
 use super::*;
 use crate::terminal::{
     cells::*,
-    embedded::escape_codes::{EscCode, State},
+    embedded::escape_codes::{Blink, EscCode, Intensity, Sgr, SgrIter, State, Underline},
     Area, Color, Screen, Virtual,
 };
 
@@ -164,7 +164,7 @@ impl Terminal {
         let mut bytes_iter = std::io::BufReader::new(pty_fd).bytes();
         //log::trace!("waiting for bytes");
         while let Some(Ok(byte)) = bytes_iter.next() {
-            //log::trace!("got a byte? {:?}", byte as char);
+            // log::trace!("got a byte? {byte} = {:?}", byte as char);
             /* Drink deep, and descend. */
             pty.lock().unwrap().process_byte(byte);
         }
@@ -427,124 +427,112 @@ impl EmbeddedGrid {
         }
 
         macro_rules! sgr {
-            ($slice:expr) => {{
-                let slice: &[u8] = $slice;
+            ($sgr:expr) => {{
+                let sgr: Sgr = $sgr;
                 let mut change = true;
-                match slice {
-                    b"0" => {
+                match sgr {
+                    Sgr::Reset => {
                         *attrs = Attr::DEFAULT;
                     }
-                    b"1" => {
+                    Sgr::Intensity(Intensity::Bold) => {
                         /* bold */
                         *attrs |= Attr::BOLD;
                     }
-                    b"2" => {
+                    Sgr::Intensity(Intensity::Dim) => {
                         /* faint, dim */
                         *attrs |= Attr::DIM;
                     }
-                    b"3" => {
-                        /* italicized */
-                        *attrs |= Attr::ITALICS;
-                    }
-                    b"4" => {
-                        /* underlined */
-                        *attrs |= Attr::UNDERLINE;
-                    }
-                    b"5" => {
-                        /* blink */
-                        *attrs |= Attr::BLINK;
-                    }
-                    b"7" => {
-                        /* Inverse */
-                        *attrs |= Attr::REVERSE;
-                    }
-                    b"8" => {
-                        /* invisible */
-                        *attrs |= Attr::HIDDEN;
-                    }
-                    b"9" => {
-                        /* crossed out */
-                        change = false;
-                    }
-                    b"21" => {
-                        /* Doubly-underlined */
-                        change = false;
-                    }
-                    b"22" => {
+                    Sgr::Intensity(Intensity::Normal) => {
                         /* Normal (neither bold nor faint), ECMA-48 3rd. */
                         *attrs &= !(Attr::BOLD | Attr::DIM);
                     }
-                    b"23" => {
-                        /* Not italicized, ECMA-48 3rd */
-                        *attrs &= !Attr::ITALICS;
+                    Sgr::Underline(Underline::Single) => {
+                        /* underlined */
+                        *attrs |= Attr::UNDERLINE;
                     }
-                    b"24" => {
+                    Sgr::Underline(Underline::Dashed)
+                    | Sgr::Underline(Underline::Curly)
+                    | Sgr::Underline(Underline::Dotted) => {
+                        *attrs |= Attr::UNDERLINE;
+                        *attrs |= Attr::UNDERCURL;
+                    }
+                    Sgr::Underline(Underline::Double) => {
+                        /* Doubly-underlined */
+                        // [ref:TODO]
+                        change = false;
+                    }
+                    Sgr::Underline(Underline::None) => {
                         /* Not underlined, ECMA-48 3rd. */
                         *attrs &= !Attr::UNDERLINE;
                         *attrs &= !Attr::UNDERCURL;
                     }
-                    b"25" => {
+                    Sgr::Blink(Blink::Slow | Blink::Rapid) => {
+                        /* blink */
+                        *attrs |= Attr::BLINK;
+                    }
+                    Sgr::Blink(Blink::None) => {
                         /* Steady (not blinking), ECMA-48 3rd. */
                         *attrs &= !Attr::BLINK;
                     }
-                    b"27" => {
+                    Sgr::Italic(true) => {
+                        /* italicized */
+                        *attrs |= Attr::ITALICS;
+                    }
+                    Sgr::Italic(false) => {
+                        /* Not italicized, ECMA-48 3rd */
+                        *attrs &= !Attr::ITALICS;
+                    }
+                    Sgr::Reverse(true) => {
+                        /* Inverse */
+                        *attrs |= Attr::REVERSE;
+                    }
+                    Sgr::Reverse(false) => {
                         /* Positive (not inverse), ECMA-48 3rd. */
                         *attrs &= !Attr::REVERSE;
                     }
-                    b"28" => {
+                    Sgr::Invisible(true) => {
+                        /* invisible */
+                        *attrs |= Attr::HIDDEN;
+                    }
+                    Sgr::Invisible(false) => {
                         /* Visible, i.e., not hidden, ECMA-48 3rd, VT300. */
                         *attrs &= !Attr::HIDDEN;
                     }
-                    b"29" => {
+                    Sgr::StrikeThrough(true) => {
+                        /* crossed out */
+                        // [ref:TODO]
+                        change = false;
+                    }
+                    Sgr::StrikeThrough(false) => {
                         /* Not crossed-out, ECMA-48 3rd. */
                         change = false;
                     }
-                    b"30" => *fg_color = Color::Black,
-                    b"31" => *fg_color = Color::Red,
-                    b"32" => *fg_color = Color::Green,
-                    b"33" => *fg_color = Color::Yellow,
-                    b"34" => *fg_color = Color::Blue,
-                    b"35" => *fg_color = Color::Magenta,
-                    b"36" => *fg_color = Color::Cyan,
-                    b"37" => *fg_color = Color::White,
-                    b"39" => *fg_color = Color::Default,
-
-                    b"40" => *bg_color = Color::Black,
-                    b"41" => *bg_color = Color::Red,
-                    b"42" => *bg_color = Color::Green,
-                    b"43" => *bg_color = Color::Yellow,
-                    b"44" => *bg_color = Color::Blue,
-                    b"45" => *bg_color = Color::Magenta,
-                    b"46" => *bg_color = Color::Cyan,
-                    b"47" => *bg_color = Color::White,
-                    b"49" => *bg_color = Color::Default,
-                    b"59" => {
-                        /* reset the underline color */
-
+                    Sgr::Overline(true) => {
+                        /* overline */
+                        // [ref:TODO]
                         change = false;
                     }
-                    b"90" => *fg_color = Color::Black,
-                    b"91" => *fg_color = Color::Red,
-                    b"92" => *fg_color = Color::Green,
-                    b"93" => *fg_color = Color::Yellow,
-                    b"94" => *fg_color = Color::Blue,
-                    b"95" => *fg_color = Color::Magenta,
-                    b"96" => *fg_color = Color::Cyan,
-                    b"97" => *fg_color = Color::White,
+                    Sgr::Overline(false) => {
+                        /* No overline, ECMA-48 3rd. */
+                        // [ref:TODO]
+                        change = false;
+                    }
+                    Sgr::Font(_) => {
+                        // font, ignore
+                        // [ref:TODO]
+                        change = false;
+                    }
+                    Sgr::VerticalAlign(_) => {
+                        // vertical align, ignore
+                        // [ref:TODO]
+                        change = false;
+                    }
+                    Sgr::Foreground(color) => *fg_color = color,
+                    Sgr::Background(color) => *bg_color = color,
+                    Sgr::UnderlineColor(_) => {
+                        /* reset the underline color */
+                        // [ref:TODO]
 
-                    b"100" => *bg_color = Color::Black,
-                    b"101" => *bg_color = Color::Red,
-                    b"102" => *bg_color = Color::Green,
-                    b"103" => *bg_color = Color::Yellow,
-                    b"104" => *bg_color = Color::Blue,
-                    b"105" => *bg_color = Color::Magenta,
-                    b"106" => *bg_color = Color::Cyan,
-                    b"107" => *bg_color = Color::White,
-                    other => {
-                        log::trace!(
-                            "unknown SGR attribute {:?} m",
-                            String::from_utf8_lossy(other)
-                        );
                         change = false;
                     }
                 }
@@ -565,7 +553,7 @@ impl EmbeddedGrid {
             }
             (b']', State::ExpectingControlChar) => {
                 let buf1 = SmallVec::new();
-                *state = State::Osc1(buf1);
+                *state = State::Osc1([buf1]);
             }
             (b'[', State::ExpectingControlChar) => {
                 *state = State::Csi;
@@ -620,15 +608,15 @@ impl EmbeddedGrid {
                 *state = State::CsiQ(buf1);
             }
             /* OSC stuff */
-            (c, State::Osc1(ref mut buf)) if c.is_ascii_digit() || c == b'?' => {
+            (c, State::Osc1([ref mut buf])) if c.is_ascii_digit() || c == b'?' => {
                 buf.push(c);
             }
-            (b';', State::Osc1(ref mut buf1_p)) => {
+            (b';', State::Osc1([ref mut buf1_p])) => {
                 let buf1 = std::mem::take(buf1_p);
                 let buf2 = SmallVec::new();
-                *state = State::Osc2(buf1, buf2);
+                *state = State::Osc2([buf1, buf2]);
             }
-            (c, State::Osc2(_, ref mut buf)) if c.is_ascii_digit() || c == b'?' => {
+            (c, State::Osc2([_, ref mut buf])) if c.is_ascii_digit() || c == b'?' => {
                 buf.push(c);
             }
             /* Normal */
@@ -889,7 +877,7 @@ impl EmbeddedGrid {
             (c, State::Csi) if c.is_ascii_digit() => {
                 let mut buf1 = SmallVec::new();
                 buf1.push(c);
-                *state = State::Csi1(buf1);
+                *state = State::Csi1([buf1]);
             }
             (b'J', State::Csi) => {
                 /* Erase in Display (ED), VT100. */
@@ -919,7 +907,7 @@ impl EmbeddedGrid {
             }
             (b'L', State::Csi) | (b'L', State::Csi1(_)) => {
                 /* Insert n blank lines (default 1) */
-                let n = if let State::Csi1(ref buf1) = state {
+                let n = if let State::Csi1([ref buf1]) = state {
                     unsafe { std::str::from_utf8_unchecked(buf1) }
                         .parse::<usize>()
                         .unwrap()
@@ -935,7 +923,7 @@ impl EmbeddedGrid {
             }
             (b'M', State::Csi) | (b'M', State::Csi1(_)) => {
                 /* Delete n lines (default 1) */
-                let n = if let State::Csi1(ref buf1) = state {
+                let n = if let State::Csi1([ref buf1]) = state {
                     unsafe { std::str::from_utf8_unchecked(buf1) }
                         .parse::<usize>()
                         .unwrap()
@@ -961,7 +949,7 @@ impl EmbeddedGrid {
                 //log::trace!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
-            (b'K', State::Csi1(buf)) if buf.as_ref() == b"0" => {
+            (b'K', State::Csi1([buf])) if buf.as_ref() == b"0" => {
                 /* Erase in Line (ED), VT100. */
                 /* Erase to right (Default) */
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
@@ -971,7 +959,7 @@ impl EmbeddedGrid {
                 *dirty = true;
                 *state = State::Normal;
             }
-            (b'K', State::Csi1(buf)) if buf.as_ref() == b"1" => {
+            (b'K', State::Csi1([buf])) if buf.as_ref() == b"1" => {
                 /* Erase in Line (ED), VT100. */
                 /* Erase to left (Default) */
                 for x in 0..=cursor.0 {
@@ -981,7 +969,7 @@ impl EmbeddedGrid {
                 *dirty = true;
                 *state = State::Normal;
             }
-            (b'K', State::Csi1(buf)) if buf.as_ref() == b"2" => {
+            (b'K', State::Csi1([buf])) if buf.as_ref() == b"2" => {
                 /* Erase in Line (ED), VT100. */
                 /* Erase all */
                 for y in 0..terminal_size.1 {
@@ -999,7 +987,7 @@ impl EmbeddedGrid {
                 *dirty = true;
                 *state = State::Normal;
             }
-            (b'J', State::Csi1(ref buf)) if buf.as_ref() == b"0" => {
+            (b'J', State::Csi1([ref buf])) if buf.as_ref() == b"0" => {
                 /* Erase in Display (ED), VT100. */
                 /* Erase Below (default). */
 
@@ -1015,7 +1003,7 @@ impl EmbeddedGrid {
                 *dirty = true;
                 *state = State::Normal;
             }
-            (b'J', State::Csi1(ref buf)) if buf.as_ref() == b"1" => {
+            (b'J', State::Csi1([ref buf])) if buf.as_ref() == b"1" => {
                 /* Erase in Display (ED), VT100. */
                 /* Erase Above */
 
@@ -1028,7 +1016,7 @@ impl EmbeddedGrid {
                 *dirty = true;
                 *state = State::Normal;
             }
-            (b'J', State::Csi1(ref buf)) if buf.as_ref() == b"2" => {
+            (b'J', State::Csi1([ref buf])) if buf.as_ref() == b"2" => {
                 /* Erase in Display (ED), VT100. */
                 /* Erase All */
 
@@ -1038,7 +1026,7 @@ impl EmbeddedGrid {
                 *dirty = true;
                 *state = State::Normal;
             }
-            (b'X', State::Csi1(ref buf)) => {
+            (b'X', State::Csi1([ref buf])) => {
                 /* Erase Ps Character(s) (default = 1) (ECH).. */
                 let ps = unsafe { std::str::from_utf8_unchecked(buf) }
                     .parse::<usize>()
@@ -1062,7 +1050,7 @@ impl EmbeddedGrid {
                 *dirty = true;
                 *state = State::Normal;
             }
-            (b't', State::Csi1(buf)) => {
+            (b't', State::Csi1([buf])) => {
                 /* Window manipulation */
                 if buf.as_ref() == b"18" || buf.as_ref() == b"19" {
                     // Ps = 18 → Report the size of the text area in characters as CSI 8 ; height ;
@@ -1101,7 +1089,7 @@ impl EmbeddedGrid {
                 stdin.flush().unwrap();
                 *state = State::Normal;
             }
-            (b'A', State::Csi1(buf)) => {
+            (b'A', State::Csi1([buf])) => {
                 // Move cursor up n lines
                 let offset = unsafe { std::str::from_utf8_unchecked(buf) }
                     .parse::<usize>()
@@ -1115,7 +1103,7 @@ impl EmbeddedGrid {
                 //log::trace!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
-            (b'B', State::Csi1(buf)) => {
+            (b'B', State::Csi1([buf])) => {
                 // ESC[{buf}B   CSI Cursor Down {buf} Times
                 let offset = unsafe { std::str::from_utf8_unchecked(buf) }
                     .parse::<usize>()
@@ -1141,7 +1129,7 @@ impl EmbeddedGrid {
                 //log::trace!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
-            (b'D', State::Csi1(buf)) => {
+            (b'D', State::Csi1([buf])) => {
                 // ESC[{buf}D   CSI Cursor Backward {buf} Times
                 let offset = unsafe { std::str::from_utf8_unchecked(buf) }
                     .parse::<usize>()
@@ -1155,7 +1143,7 @@ impl EmbeddedGrid {
                 // );
                 *state = State::Normal;
             }
-            (b'E', State::Csi1(buf)) => {
+            (b'E', State::Csi1([buf])) => {
                 // ESC[{buf}E   CSI Cursor Next Line {buf} Times
                 let offset = unsafe { std::str::from_utf8_unchecked(buf) }
                     .parse::<usize>()
@@ -1175,7 +1163,7 @@ impl EmbeddedGrid {
                 //log::trace!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
-            (b'F', State::Csi1(buf)) => {
+            (b'F', State::Csi1([buf])) => {
                 // ESC[{buf}F   CSI Cursor Previous Line {buf} Times
                 let offset = unsafe { std::str::from_utf8_unchecked(buf) }
                     .parse::<usize>()
@@ -1192,7 +1180,7 @@ impl EmbeddedGrid {
             }
             (b'G', State::Csi1(_)) | (b'G', State::Csi) => {
                 // ESC[{buf}G   Cursor Character Absolute  [column={buf}] (default = [row,1])
-                let new_col = if let State::Csi1(buf) = state {
+                let new_col = if let State::Csi1([buf]) = state {
                     unsafe { std::str::from_utf8_unchecked(buf) }
                         .parse::<usize>()
                         .unwrap()
@@ -1213,7 +1201,7 @@ impl EmbeddedGrid {
                 //log::trace!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
-            (b'C', State::Csi1(buf)) => {
+            (b'C', State::Csi1([buf])) => {
                 // ESC[{buf}C   CSI Cursor Forward {buf} Times
                 let offset = unsafe { std::str::from_utf8_unchecked(buf) }
                     .parse::<usize>()
@@ -1227,7 +1215,7 @@ impl EmbeddedGrid {
             }
             (b'P', State::Csi1(_)) | (b'P', State::Csi) => {
                 // ESC[{buf}P   CSI Delete {buf} characters, default = 1
-                let offset = if let State::Csi1(buf) = state {
+                let offset = if let State::Csi1([buf]) = state {
                     unsafe { std::str::from_utf8_unchecked(buf) }
                         .parse::<usize>()
                         .unwrap()
@@ -1251,7 +1239,7 @@ impl EmbeddedGrid {
             }
             (b'd', State::Csi1(_)) | (b'd', State::Csi) => {
                 /* CSI Pm d Line Position Absolute [row] (default = [1,column]) (VPA). */
-                let row = if let State::Csi1(buf) = state {
+                let row = if let State::Csi1([buf]) = state {
                     unsafe { std::str::from_utf8_unchecked(buf) }
                         .parse::<usize>()
                         .unwrap()
@@ -1270,28 +1258,30 @@ impl EmbeddedGrid {
                 //log::trace!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
-            (b';', State::Csi1(ref mut buf1_p)) => {
+            (b';', State::Csi1([ref mut buf1_p])) => {
                 if buf1_p.is_empty() {
                     buf1_p.push(b'0');
                 }
                 let buf1 = std::mem::take(buf1_p);
                 let buf2 = SmallVec::new();
-                *state = State::Csi2(buf1, buf2);
+                *state = State::Csi2([buf1, buf2]);
             }
-            (b':', State::Csi1(ref buf1_p)) if buf1_p.as_slice() == b"58".as_slice() => {
+            (b':', State::Csi1([ref buf1_p])) if buf1_p.as_slice() == b"58".as_slice() => {
                 *state = State::Csi58;
             }
-            (b':', State::Csi1(ref mut buf1_p)) if buf1_p.as_slice() == b"4".as_slice() => {
+            (b':', State::Csi1([ref mut buf1_p])) if buf1_p.as_slice() == b"4".as_slice() => {
                 let buf1 = std::mem::take(buf1_p);
                 let buf2 = SmallVec::new();
-                *state = State::Csi2(buf1, buf2);
+                *state = State::Csi2([buf1, buf2]);
             }
             (b'm', State::Csi1(ref buf1)) => {
                 // Character Attributes.
-                sgr!(buf1.as_slice());
+                if let Some(sgr) = SgrIter::new(buf1).next() {
+                    sgr!(sgr);
+                }
                 *state = State::Normal;
             }
-            (b'm', State::Csi2(ref buf1, ref buf2))
+            (b'm', State::Csi2([ref buf1, ref buf2]))
                 if buf1.as_slice() == b"4".as_slice() && buf2.as_slice() == b"0".as_slice() =>
             {
                 *attrs &= !Attr::UNDERCURL;
@@ -1299,7 +1289,7 @@ impl EmbeddedGrid {
                 *dirty = true;
                 *state = State::Normal;
             }
-            (b'm', State::Csi2(ref buf1, ref buf2))
+            (b'm', State::Csi2([ref buf1, ref buf2]))
                 if buf1.as_slice() == b"4".as_slice()
                     && ([&b"1"[..], &b"2"[..], &b"3"[..], &b"4"[..], &b"5"[..]]
                         .contains(&buf2.as_slice())) =>
@@ -1317,32 +1307,33 @@ impl EmbeddedGrid {
                 *dirty = true;
                 *state = State::Normal;
             }
-            (b'm', State::Csi2(ref buf1, ref buf2)) => {
-                for b in &[buf1, buf2] {
-                    sgr!(b.as_slice());
+            (b'm', State::Csi2(ref buf)) => {
+                let sgrs = SgrIter::new(buf);
+                for sgr in sgrs {
+                    sgr!(sgr);
                 }
                 *state = State::Normal;
             }
-            (c, State::Csi1(ref mut buf)) if c.is_ascii_digit() || c == b' ' => {
+            (c, State::Csi1([ref mut buf])) if c.is_ascii_digit() || c == b' ' => {
                 buf.push(c);
             }
-            (b';', State::Csi2(ref mut buf1_p, ref mut buf2_p)) => {
+            (b';', State::Csi2([ref mut buf1_p, ref mut buf2_p])) => {
                 let buf1 = std::mem::take(buf1_p);
                 if buf2_p.is_empty() {
                     buf2_p.push(b'0');
                 }
                 let buf2 = std::mem::take(buf2_p);
                 let buf3 = SmallVec::new();
-                *state = State::Csi3(buf1, buf2, buf3);
+                *state = State::Csi3([buf1, buf2, buf3]);
             }
-            (b't', State::Csi2(_, _)) => {
+            (b't', State::Csi2(_)) => {
                 //log::trace!("ignoring {}", EscCode::from((&(*state), byte)));
                 // Window manipulation, skip it
                 *state = State::Normal;
             }
-            (b'H', State::Csi2(_, _)) | (b'H', State::Csi) => {
+            (b'H', State::Csi2(_)) | (b'H', State::Csi) => {
                 //Cursor Position [row;column] (default = [1,1]) (CUP).
-                let (orig_x, mut orig_y) = if let State::Csi2(ref y, ref x) = state {
+                let (orig_x, mut orig_y) = if let State::Csi2([ref y, ref x]) = state {
                     (
                         unsafe { std::str::from_utf8_unchecked(x) }
                             .parse::<usize>()
@@ -1376,13 +1367,13 @@ impl EmbeddedGrid {
                 //log::trace!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
-            (c, State::Csi2(_, ref mut buf)) if c.is_ascii_digit() => {
+            (c, State::Csi2([_, ref mut buf])) if c.is_ascii_digit() => {
                 buf.push(c);
             }
-            (b'r', State::Csi2(_, _)) | (b'r', State::Csi) => {
+            (b'r', State::Csi2(_)) | (b'r', State::Csi) => {
                 /* CSI Ps ; Ps r Set Scrolling Region [top;bottom] (default = full size of
                  * window) (DECSTBM). */
-                let (top, bottom) = if let State::Csi2(ref top, ref bottom) = state {
+                let (top, bottom) = if let State::Csi2([ref top, ref bottom]) = state {
                     (
                         unsafe { std::str::from_utf8_unchecked(top) }
                             .parse::<usize>()
@@ -1404,16 +1395,16 @@ impl EmbeddedGrid {
                 //log::trace!("set scrolling region to {:?}", scroll_region);
                 *state = State::Normal;
             }
-            (b't', State::Csi3(_, _, _)) => {
+            (b't', State::Csi3(_)) => {
                 //log::trace!("ignoring {}", EscCode::from((&(*state), byte)));
                 // Window manipulation, skip it
                 *state = State::Normal;
             }
 
-            (c, State::Csi3(_, _, ref mut buf)) if c.is_ascii_digit() => {
+            (c, State::Csi3([_, _, ref mut buf])) if c.is_ascii_digit() => {
                 buf.push(c);
             }
-            (b'm', State::Csi3(ref buf1, ref buf2, ref buf3))
+            (b'm', State::Csi3([ref buf1, ref buf2, ref buf3]))
                 if buf1.as_ref() == b"38" && buf2.as_ref() == b"5" =>
             {
                 /* Set character attributes | foreground color */
@@ -1429,7 +1420,7 @@ impl EmbeddedGrid {
                 *dirty = true;
                 *state = State::Normal;
             }
-            (b'm', State::Csi3(ref buf1, ref buf2, ref buf3))
+            (b'm', State::Csi3([ref buf1, ref buf2, ref buf3]))
                 if buf1.as_ref() == b"48" && buf2.as_ref() == b"5" =>
             {
                 /* Set character attributes | background color */
@@ -1445,7 +1436,7 @@ impl EmbeddedGrid {
                 *dirty = true;
                 *state = State::Normal;
             }
-            (b'm', State::Csi3(ref buf1, ref buf2, ref _buf3))
+            (b'm', State::Csi3([ref buf1, ref buf2, ref _buf3]))
                 if buf1.as_ref() == b"58" && buf2.as_ref() == b"5" =>
             {
                 /* Set underline color */
@@ -1461,10 +1452,10 @@ impl EmbeddedGrid {
                 //*dirty = true;
                 *state = State::Normal;
             }
-            (c, State::Csi3(_, _, ref mut buf)) if c.is_ascii_digit() => {
+            (c, State::Csi3([_, _, ref mut buf])) if c.is_ascii_digit() => {
                 buf.push(c);
             }
-            (b';', State::Csi3(ref mut buf1_p, ref mut buf2_p, ref mut buf3_p)) => {
+            (b';', State::Csi3([ref mut buf1_p, ref mut buf2_p, ref mut buf3_p])) => {
                 let buf1 = std::mem::take(buf1_p);
                 let buf2 = std::mem::take(buf2_p);
                 if buf3_p.is_empty() {
@@ -1472,12 +1463,15 @@ impl EmbeddedGrid {
                 }
                 let buf3 = std::mem::take(buf3_p);
                 let buf4 = SmallVec::new();
-                *state = State::Csi4(buf1, buf2, buf3, buf4);
+                *state = State::Csi4([buf1, buf2, buf3, buf4]);
             }
-            (c, State::Csi4(_, _, _, ref mut buf)) if c.is_ascii_digit() => {
+            (c, State::Csi4([_, _, _, ref mut buf])) if c.is_ascii_digit() => {
                 buf.push(c);
             }
-            (b';', State::Csi4(ref mut buf1_p, ref mut buf2_p, ref mut buf3_p, ref mut buf4_p)) => {
+            (
+                b';',
+                State::Csi4([ref mut buf1_p, ref mut buf2_p, ref mut buf3_p, ref mut buf4_p]),
+            ) => {
                 let buf1 = std::mem::take(buf1_p);
                 let buf2 = std::mem::take(buf2_p);
                 let buf3 = std::mem::take(buf3_p);
@@ -1486,19 +1480,15 @@ impl EmbeddedGrid {
                 }
                 let buf4 = std::mem::take(buf4_p);
                 let buf5 = SmallVec::new();
-                *state = State::Csi5(buf1, buf2, buf3, buf4, buf5);
+                *state = State::Csi5([buf1, buf2, buf3, buf4, buf5]);
             }
-            (c, State::Csi5(_, _, _, _, ref mut buf)) if c.is_ascii_digit() => {
+            (c, State::Csi5([_, _, _, _, ref mut buf])) if c.is_ascii_digit() => {
                 buf.push(c);
             }
             (
                 b';',
                 State::Csi5(
-                    ref mut buf1_p,
-                    ref mut buf2_p,
-                    ref mut buf3_p,
-                    ref mut buf4_p,
-                    ref mut buf5_p,
+                    [ref mut buf1_p, ref mut buf2_p, ref mut buf3_p, ref mut buf4_p, ref mut buf5_p],
                 ),
             ) => {
                 let buf1 = std::mem::take(buf1_p);
@@ -1510,20 +1500,15 @@ impl EmbeddedGrid {
                 }
                 let buf5 = std::mem::take(buf5_p);
                 let buf6 = SmallVec::new();
-                *state = State::Csi6(buf1, buf2, buf3, buf4, buf5, buf6);
+                *state = State::Csi6([buf1, buf2, buf3, buf4, buf5, buf6]);
             }
-            (c, State::Csi6(_, _, _, _, _, ref mut buf)) if c.is_ascii_digit() => {
+            (c, State::Csi6([_, _, _, _, _, ref mut buf])) if c.is_ascii_digit() => {
                 buf.push(c);
             }
             (
                 b'm',
                 State::Csi6(
-                    ref mut buf1,
-                    ref mut buf2,
-                    ref mut _color_space_buf,
-                    ref mut r_buf,
-                    ref mut g_buf,
-                    ref mut b_buf,
+                    [ref mut buf1, ref mut buf2, ref mut _color_space_buf, ref mut r_buf, ref mut g_buf, ref mut b_buf],
                 ),
             ) if buf1.as_ref() == b"38" && buf2.as_ref() == b"2" => {
                 /* Set true foreground color */
@@ -1542,12 +1527,7 @@ impl EmbeddedGrid {
             (
                 b'm',
                 State::Csi6(
-                    ref mut buf1,
-                    ref mut buf2,
-                    ref mut _color_space_buf,
-                    ref mut r_buf,
-                    ref mut g_buf,
-                    ref mut b_buf,
+                    [ref mut buf1, ref mut buf2, ref mut _color_space_buf, ref mut r_buf, ref mut g_buf, ref mut b_buf],
                 ),
             ) if buf1.as_ref() == b"48" && buf2.as_ref() == b"2" => {
                 /* Set true background color */
@@ -1566,12 +1546,7 @@ impl EmbeddedGrid {
             (
                 b'm',
                 State::Csi6(
-                    ref mut buf1,
-                    ref mut buf2,
-                    ref mut _color_space_buf,
-                    ref mut _r_buf,
-                    ref mut _g_buf,
-                    ref mut _b_buf,
+                    [ref mut buf1, ref mut buf2, ref mut _color_space_buf, ref mut _r_buf, ref mut _g_buf, ref mut _b_buf],
                 ),
             ) if buf1.as_ref() == b"58" && buf2.as_ref() == b"2" => {
                 /* Set underline color */
@@ -1590,11 +1565,7 @@ impl EmbeddedGrid {
             (
                 b'm',
                 State::Csi5(
-                    ref mut buf1,
-                    ref mut buf2,
-                    ref mut r_buf,
-                    ref mut g_buf,
-                    ref mut b_buf,
+                    [ref mut buf1, ref mut buf2, ref mut r_buf, ref mut g_buf, ref mut b_buf],
                 ),
             ) if buf1.as_ref() == b"38" && buf2.as_ref() == b"2" => {
                 /* Set true foreground color */
@@ -1613,11 +1584,7 @@ impl EmbeddedGrid {
             (
                 b'm',
                 State::Csi5(
-                    ref mut buf1,
-                    ref mut buf2,
-                    ref mut r_buf,
-                    ref mut g_buf,
-                    ref mut b_buf,
+                    [ref mut buf1, ref mut buf2, ref mut r_buf, ref mut g_buf, ref mut b_buf],
                 ),
             ) if buf1.as_ref() == b"48" && buf2.as_ref() == b"2" => {
                 /* Set true background color */
@@ -1636,11 +1603,7 @@ impl EmbeddedGrid {
             (
                 b'm',
                 State::Csi5(
-                    ref mut buf1,
-                    ref mut buf2,
-                    ref mut _r_buf,
-                    ref mut _g_buf,
-                    ref mut _b_buf,
+                    [ref mut buf1, ref mut buf2, ref mut _r_buf, ref mut _g_buf, ref mut _b_buf],
                 ),
             ) if buf1.as_ref() == b"58" && buf2.as_ref() == b"2" => {
                 /* Set underline color */
@@ -1648,7 +1611,7 @@ impl EmbeddedGrid {
                 // *dirty = true;
                 *state = State::Normal;
             }
-            (b'q', State::Csi1(buf))
+            (b'q', State::Csi1([buf]))
                 if buf.len() == 2 && buf[1] == b' ' && (b'0'..=b'6').contains(&buf[0]) =>
             {
                 /*
@@ -1748,37 +1711,38 @@ impl EmbeddedGrid {
             ) => {
                 *state = State::Normal;
             }
-            (b'm', State::Csi6(a, b, c, d, e, f)) => {
+            (b'm', State::Csi6(ref bufs)) => {
                 // https://vt100.net/docs/vt510-rm/SGR.html
                 // SGR—Select Graphic Rendition
                 //
                 // This control function selects one or more character attributes at the same
                 // time.
-                sgr!(a.as_slice());
-                sgr!(b.as_slice());
-                sgr!(c.as_slice());
-                sgr!(d.as_slice());
-                sgr!(e.as_slice());
-                sgr!(f.as_slice());
+                let sgrs = SgrIter::new(bufs);
+                for sgr in sgrs {
+                    sgr!(sgr);
+                }
                 *state = State::Normal;
             }
-            (b';', State::Csi6(a, b, c, d, e, f)) => {
-                let a = a.to_vec();
-                let b = b.to_vec();
-                let c = c.to_vec();
-                let d = d.to_vec();
-                let e = e.to_vec();
-                let f = f.to_vec();
-                *state = State::CsiLarge(vec![a, b, c, d, e, f]);
+            (
+                b';',
+                State::Csi6([ref mut a, ref mut b, ref mut c, ref mut d, ref mut e, ref mut f]),
+            ) => {
+                let a = std::mem::take(a);
+                let b = std::mem::take(b);
+                let c = std::mem::take(c);
+                let d = std::mem::take(d);
+                let e = std::mem::take(e);
+                let f = std::mem::take(f);
+                *state = State::CsiLarge(vec![a, b, c, d, e, f, SmallVec::new()]);
             }
             (b';', State::CsiLarge(ref mut bufs)) => {
-                bufs.push(vec![]);
+                bufs.push(SmallVec::new());
             }
-            (b'm', State::CsiLarge(_)) => {
-                log::trace!(
-                    "state: {state:?} {} ignoring grouped SGR update",
-                    EscCode::from((&(*state), byte))
-                );
+            (b'm', State::CsiLarge(bufs)) => {
+                let sgrs = SgrIter::new(bufs);
+                for sgr in sgrs {
+                    sgr!(sgr);
+                }
                 *state = State::Normal;
             }
             (other, State::CsiLarge(ref mut bufs)) => {
@@ -1788,13 +1752,13 @@ impl EmbeddedGrid {
                 _,
                 State::Csi
                 | State::Csi1(_)
-                | State::Csi2(_, _)
-                | State::Csi3(_, _, _)
-                | State::Csi4(_, _, _, _)
-                | State::Csi5(_, _, _, _, _)
-                | State::Csi6(_, _, _, _, _, _)
+                | State::Csi2(_)
+                | State::Csi3(_)
+                | State::Csi4(_)
+                | State::Csi5(_)
+                | State::Csi6(_)
                 | State::Osc1(_)
-                | State::Osc2(_, _)
+                | State::Osc2(_)
                 | State::CsiQ(_)
                 | State::Csi58
                 | State::Csi58_2
