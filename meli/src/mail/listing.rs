@@ -2055,7 +2055,8 @@ impl Component for Listing {
                                     return true;
                                 }
                             };
-                            let (sender, mut receiver) = crate::jobs::oneshot::channel();
+                            let (sender, mut receiver) =
+                                crate::jobs::oneshot::channel::<Vec<Mail>>();
                             #[cfg(not(feature = "http"))]
                             let fut = async move {
                                 _ = sender;
