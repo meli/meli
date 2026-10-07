@@ -1457,29 +1457,30 @@ impl MboxType {
         );
         /* Look for other mailboxes */
         for (k, f) in s.mailboxes.iter() {
-            let Some(path_str) = f.extra.get("path") else {
+            let Some(path_str) = f.deserialize_extra_field::<Cow<'_, str>>("path")? else {
                 return Err(Error::new(format!(
                     "mbox mailbox configuration entry \"{k}\" should have a \"path\" value set \
                      pointing to an mbox file."
                 )));
             };
-            let format = if let Some(format_str) = f.extra.get("format") {
-                if format_str.as_str() == "auto" {
-                    MboxFormat::default()
+            let format =
+                if let Some(format_str) = f.deserialize_extra_field::<Cow<'_, str>>("format")? {
+                    if format_str.as_ref() == "auto" {
+                        MboxFormat::default()
+                    } else {
+                        MboxFormat::from_str(format_str.as_ref()).wrap_err(|| {
+                            format!(
+                                "{}, mailbox {k}: invalid `format` value: `{format_str}`",
+                                s.name
+                            )
+                        })?
+                    }
                 } else {
-                    MboxFormat::from_str(format_str).wrap_err(|| {
-                        format!(
-                            "{}, mailbox {k}: invalid `format` value: `{format_str}`",
-                            s.name
-                        )
-                    })?
-                }
-            } else {
-                ret.prefer_mbox_type
-            };
+                    ret.prefer_mbox_type
+                };
 
             let hash = MailboxHash::from_bytes(path_str.as_bytes());
-            let pathbuf: PathBuf = Path::new(path_str).expand();
+            let pathbuf: PathBuf = Path::new(path_str.as_ref()).expand();
             if !pathbuf.try_exists().unwrap_or(false) || pathbuf.is_dir() {
                 return Err(Error::new(format!(
                     "mbox mailbox configuration entry \"{k}\" path value {path_str} is not a file."
@@ -1545,6 +1546,20 @@ impl MboxType {
                 )
             })?;
         }
+        let mailboxes = s.mailboxes.keys().cloned().collect::<Vec<_>>();
+        for k in mailboxes {
+            s.mailbox_conf_validator::<Cow<'_, str>>(&k, "path", "path pointing to an mbox file")
+                .expect("mailbox to exist")
+                .validate()?;
+            s.mailbox_conf_validator::<Cow<'_, str>>(&k, "format", "mbox format")
+                .expect("mailbox to exist")
+                .validation_fn(|format| {
+                    _ = MboxFormat::from_str(format.as_ref())?;
+                    Ok(())
+                })
+                .ignore_missing()?;
+        }
+
         Ok(())
     }
 }

@@ -440,11 +440,11 @@ impl NotmuchDb {
             .set_kind(ErrorKind::Configuration));
         }
         let mut mailboxes = IndexMap::with_capacity(s.mailboxes.len());
-        let mut parents: Vec<(MailboxHash, &str)> = Vec::with_capacity(s.mailboxes.len());
+        let mut parents: Vec<(MailboxHash, String)> = Vec::with_capacity(s.mailboxes.len());
         for (k, f) in s.mailboxes.iter() {
-            if let Some(query_str) = f.extra.get("query") {
+            if let Some(query_str) = f.deserialize_extra_field::<String>("query")? {
                 let hash = MailboxHash::from_bytes(k.as_bytes());
-                if let Some(parent) = f.extra.get("parent") {
+                if let Some(parent) = f.deserialize_extra_field::<String>("parent")? {
                     parents.push((hash, parent));
                 }
                 mailboxes.insert(
@@ -575,27 +575,32 @@ impl NotmuchDb {
             .set_kind(ErrorKind::Configuration));
         }
         let mut parents: Vec<(String, String)> = Vec::with_capacity(s.mailboxes.len());
-        for (k, f) in s.mailboxes.iter_mut() {
-            if f.extra.swap_remove("query").is_none() {
-                return Err(Error::new(format!(
-                    "notmuch mailbox configuration entry `{k}` for account {account_name} should \
-                     have a `query` value set."
-                ))
-                .set_kind(ErrorKind::Configuration));
-            }
-            if let Some(parent) = f.extra.swap_remove("parent") {
-                parents.push((k.clone(), parent));
+        let mailbox_names = s.mailboxes.keys().cloned().collect::<Vec<_>>();
+        for n in &mailbox_names {
+            s.mailbox_conf_validator::<Cow<'_, str>>(n, "query", "string")
+                .expect("mailbox to exist")
+                .validate()?;
+            let parent = s
+                .mailbox_conf_validator::<Cow<'_, str>>(n, "parent", "string")
+                .expect("mailbox to exist")
+                .validation_fn(|parent| {
+                    if !mailbox_names.iter().any(|m| m == parent) {
+                        return Err(Error::new(format!(
+                            "{account_name}: notmuch mailbox configuration for `{n}` defines its \
+                             parent mailbox as `{parent}` but no mailbox exists with this exact \
+                             name."
+                        ))
+                        .set_kind(ErrorKind::Configuration));
+                    }
+                    Ok(())
+                })
+                .ignore_missing()?;
+            if let Some(parent) = parent {
+                parents.push((n.clone(), parent.into_owned()));
             }
         }
         let mut path = Vec::with_capacity(8);
         for (mbox, parent) in parents.iter() {
-            if !s.mailboxes.contains_key(parent) {
-                return Err(Error::new(format!(
-                    "Mailbox configuration for `{mbox}` defines its parent mailbox as `{parent}` \
-                     but no mailbox exists with this exact name."
-                ))
-                .set_kind(ErrorKind::Configuration));
-            }
             path.clear();
             path.push(mbox.as_str());
             let mut iter = parent.as_str();

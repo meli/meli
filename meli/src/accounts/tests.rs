@@ -145,7 +145,7 @@ fn new_maildir_backend(
             "inbox".into(),
             melib::conf::MailboxConf {
                 extra: indexmap::indexmap! {
-                    "path".into() => root_mailbox.display().to_string(),
+                    "path".into() => root_mailbox.display().to_string().into(),
                 },
                 ..Default::default()
             },

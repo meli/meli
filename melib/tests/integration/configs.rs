@@ -200,9 +200,11 @@ mailboxes = {{ "INBOX" = {{}}, "Drafts" = {{ query="tag:draft" }}}}
     assert_eq!(
         NotmuchDb::validate_config(&mut s).unwrap_err(),
         Error::new(format!(
-            "notmuch mailbox configuration entry `INBOX` for account {account_name} should have a \
-             `query` value set."
+            "{account_name} INBOX: notmuch backend requires mailbox field `query` set",
         ))
+        .set_source(Some(Box::new(
+            Error::new("missing field `query`").set_kind(ErrorKind::NotFound)
+        )))
         .set_kind(ErrorKind::Configuration)
     );
 
@@ -221,10 +223,11 @@ mailboxes = {{ "INBOX" = {{ query="tag:inbox", parent = "doesnotexist" }}, "Draf
 
     assert_eq!(
         NotmuchDb::validate_config(&mut s).unwrap_err(),
-        Error::new(
-            "Mailbox configuration for `INBOX` defines its parent mailbox as `doesnotexist` but \
-             no mailbox exists with this exact name."
-        )
+        Error::new(format!(
+            "{account_name}: notmuch mailbox configuration for `INBOX` defines its parent mailbox \
+             as `doesnotexist` but no mailbox exists with this exact name. {account_name} INBOX: \
+             notmuch backend mailbox field `parent` is invalid"
+        ))
         .set_kind(ErrorKind::Configuration)
     );
 

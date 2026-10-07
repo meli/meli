@@ -176,7 +176,7 @@ other_email=test2@example.com;test3@example.com
                 "INBOX".into(),
                 melib::conf::MailboxConf {
                     extra: indexmap::indexmap! {
-                        "query".into() => "".to_string(),
+                        "query".into() => "".to_string().into(),
                     },
                     ..Default::default()
                 },

@@ -38,6 +38,7 @@ mod tests;
 
 pub use field_types::*;
 
+/// Trait to deserialize a type with [`serde_json`].
 pub trait ExtraSetting: serde::de::DeserializeOwned {
     fn deserialize_extra(value: &serde_json::Value) -> Result<Self> {
         Ok(serde::de::Deserialize::deserialize(value.clone())?)
@@ -66,7 +67,7 @@ macro_rules! impl_extra_setting_from_str {
     };
 }
 
-impl_extra_setting_from_str! { bool, u16, u64 }
+impl_extra_setting_from_str! { bool, u16, u64, i64 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", content = "value")]
@@ -152,18 +153,55 @@ impl AccountSettings {
             .map(|v| Some(v))
     }
 
+    /// Validate an extra field with [`FieldValidator`].
+    ///
+    /// This removes the value from [`Self::extra`].
+    #[allow(clippy::type_complexity, reason = "whadd'ya gonna do?")]
     pub fn validator<'a, D: ExtraSetting>(
         &'a mut self,
         extra_field: &'static str,
         expected_type: &'static str,
-    ) -> FieldValidatorBuilder<'a, D, fn(&D) -> Result<()>> {
-        FieldValidatorBuilder {
+    ) -> FieldValidator<'a, &'a mut Self, D, fn(&D) -> Result<()>> {
+        FieldValidator {
             inner: self,
             extra_field,
             expected_type,
             validation_fn: None,
             default_value: None,
+            _phantom: std::marker::PhantomData,
         }
+    }
+
+    /// Validate an extra field of a mailbox with [`FieldValidator`].
+    ///
+    /// This removes the value from [`MailboxConf::extra`].
+    #[allow(clippy::type_complexity, reason = "whadd'ya gonna do?")]
+    pub fn mailbox_conf_validator<'a, D: ExtraSetting>(
+        &'a mut self,
+        mailbox_name: &str,
+        extra_field: &'static str,
+        expected_type: &'static str,
+    ) -> Option<FieldValidator<'a, MailboxConfValidationRef<'a>, D, fn(&D) -> Result<()>>> {
+        let Self {
+            ref mut mailboxes,
+            name: ref account_name,
+            ref format,
+            ..
+        } = self;
+        let (mailbox_name, inner) = mailboxes.get_key_value_mut(mailbox_name)?;
+        Some(FieldValidator {
+            inner: MailboxConfValidationRef {
+                mailbox_name,
+                account_name,
+                format,
+                inner,
+            },
+            extra_field,
+            expected_type,
+            validation_fn: None,
+            default_value: None,
+            _phantom: std::marker::PhantomData,
+        })
     }
 }
 
@@ -185,7 +223,7 @@ pub struct MailboxConf {
     #[serde(default = "none")]
     pub encoding: Option<String>,
     #[serde(flatten)]
-    pub extra: IndexMap<String, String>,
+    pub extra: IndexMap<String, serde_json::Value>,
 }
 
 impl Default for MailboxConf {
@@ -207,6 +245,34 @@ impl MailboxConf {
     pub fn alias(&self) -> Option<&str> {
         self.alias.as_deref()
     }
+
+    /// Deserialize [`Self::extra`] fields as [`[ExtraSetting`] types.
+    pub fn deserialize_extra_field<'de, 'a: 'de, D: ExtraSetting>(
+        &'a self,
+        extra_field: &str,
+    ) -> Result<Option<D>> {
+        let Some(v) = self.extra.get(extra_field) else {
+            return Ok(None);
+        };
+        <D>::deserialize_extra(v)
+            .map_err(|err| {
+                Error::new(format!(
+                    "Could not deserialize {extra_field} as {type_name}",
+                    type_name = std::any::type_name::<D>()
+                ))
+                .set_source(Some(Box::new(err)))
+                .set_kind(ErrorKind::Configuration)
+            })
+            .map(|v| Some(v))
+    }
+}
+
+/// Helper struct to validate [`MailboxConf`].
+pub struct MailboxConfValidationRef<'a> {
+    inner: &'a mut MailboxConf,
+    account_name: &'a str,
+    mailbox_name: &'a str,
+    format: &'a str,
 }
 
 pub const fn true_val() -> bool {
@@ -221,40 +287,224 @@ pub const fn none<T>() -> Option<T> {
     None
 }
 
-#[must_use]
-pub struct FieldValidatorBuilder<'a, D: ExtraSetting, ValidationFn: FnOnce(&D) -> Result<()>> {
-    inner: &'a mut AccountSettings,
-    extra_field: &'static str,
-    expected_type: &'static str,
-    validation_fn: Option<ValidationFn>,
-    default_value: Option<D>,
+/// Trait for configuration structs that have "extra" deserializable fields like [`AccountSettings`] and [`MailboxConf`].
+///
+/// ```no_run
+/// use indexmap::IndexMap;
+/// use melib::{
+///     conf::{ExtraSetting, FieldValidationTrait, FieldValidator},
+///     error::Result,
+/// };
+/// use serde::Deserialize;
+///
+/// #[derive(Default, Deserialize)]
+/// #[serde(default)]
+/// struct Settings {
+///     pub name: String,
+///     #[serde(flatten)]
+///     pub extra: IndexMap<String, serde_json::Value>,
+/// }
+///
+/// impl Settings {
+///     fn validator<'a, D: ExtraSetting>(
+///         &'a mut self,
+///         extra_field: &'static str,
+///         expected_type: &'static str,
+///     ) -> FieldValidator<'a, &'a mut Self, D, fn(&D) -> Result<()>> {
+///         FieldValidator {
+///             inner: self,
+///             extra_field,
+///             expected_type,
+///             validation_fn: None,
+///             default_value: None,
+///             _phantom: std::marker::PhantomData,
+///         }
+///     }
+/// }
+///
+/// impl FieldValidationTrait for &mut Settings {
+///     fn extra_mut(&mut self) -> &mut IndexMap<String, serde_json::Value> {
+///         &mut self.extra
+///     }
+///
+///     fn requires_field_err(&self, extra_field: &'static str) -> String {
+///         format!(
+///             "{name} requires field `{extra_field}` set",
+///             name = self.name,
+///         )
+///     }
+///
+///     fn expects_type_err(
+///         &self,
+///         extra_field: &'static str,
+///         expected_type: &'static str,
+///     ) -> String {
+///         format!(
+///             "{name} field `{extra_field}` expects value of type {expected_type}",
+///             name = self.name,
+///         )
+///     }
+///
+///     fn validation_fn_err(&self, extra_field: &'static str) -> String {
+///         format!(
+///             "{name} backend field `{extra_field}` is invalid",
+///             name = self.name,
+///         )
+///     }
+/// }
+///
+/// let mut settings = Settings {
+///     name: "my_settings".to_string(),
+///     extra: indexmap::indexmap! {
+///     "one".to_string() => serde_json::json! { 1_i64 },
+///     "two".to_string() => serde_json::json! { "2" },
+///     },
+/// };
+///
+/// assert_eq!(
+///     settings
+///         .validator::<i64>("one", "integer")
+///         .validate()
+///         .unwrap(),
+///     1
+/// );
+/// assert_eq!(
+///     settings
+///         .validator::<String>("two", "integer")
+///         .ignore_missing()
+///         .unwrap(),
+///     Some("2".to_string())
+/// );
+/// settings
+///     .extra
+///     .insert("one".to_string(), "one".to_string().into());
+///
+/// settings
+///     .validator::<i64>("one", "integer")
+///     .validate()
+///     .unwrap_err();
+/// ```
+pub trait FieldValidationTrait {
+    fn extra_mut(&mut self) -> &mut IndexMap<String, serde_json::Value>;
+    /// Create error string for when a missing field is required.
+    fn requires_field_err(&self, extra_field: &'static str) -> String;
+    /// Create error string for when a field value is of wrong type.
+    fn expects_type_err(&self, extra_field: &'static str, expected_type: &'static str) -> String;
+    /// Create error string for when a validation function fails.
+    fn validation_fn_err(&self, extra_field: &'static str) -> String;
 }
 
-impl<'a, D: ExtraSetting> FieldValidatorBuilder<'a, D, fn(&D) -> Result<()>> {
+impl FieldValidationTrait for &mut AccountSettings {
+    fn extra_mut(&mut self) -> &mut IndexMap<String, serde_json::Value> {
+        &mut self.extra
+    }
+
+    fn requires_field_err(&self, extra_field: &'static str) -> String {
+        format!(
+            "{name}: {format} backend requires field `{extra_field}` set",
+            name = self.name,
+            format = self.format
+        )
+    }
+
+    fn expects_type_err(&self, extra_field: &'static str, expected_type: &'static str) -> String {
+        format!(
+            "{name}: {format} backend field `{extra_field}` expects value of type {expected_type}",
+            name = self.name,
+            format = self.format,
+        )
+    }
+
+    fn validation_fn_err(&self, extra_field: &'static str) -> String {
+        format!(
+            "{name}: {format} backend field `{extra_field}` is invalid",
+            name = self.name,
+            format = self.format
+        )
+    }
+}
+
+impl<'a> FieldValidationTrait for MailboxConfValidationRef<'a> {
+    fn extra_mut(&mut self) -> &mut IndexMap<String, serde_json::Value> {
+        &mut self.inner.extra
+    }
+
+    fn requires_field_err(&self, extra_field: &'static str) -> String {
+        format!(
+            "{account_name} {mailbox_name}: {format} backend requires mailbox field \
+             `{extra_field}` set",
+            account_name = self.account_name,
+            mailbox_name = self.mailbox_name,
+            format = self.format
+        )
+    }
+
+    fn expects_type_err(&self, extra_field: &'static str, expected_type: &'static str) -> String {
+        format!(
+            "{account_name} {mailbox_name}: {format} backend mailbox field `{extra_field}` \
+             expects value of type {expected_type}",
+            account_name = self.account_name,
+            mailbox_name = self.mailbox_name,
+            format = self.format,
+        )
+    }
+
+    fn validation_fn_err(&self, extra_field: &'static str) -> String {
+        format!(
+            "{account_name} {mailbox_name}: {format} backend mailbox field `{extra_field}` is \
+             invalid",
+            account_name = self.account_name,
+            mailbox_name = self.mailbox_name,
+            format = self.format
+        )
+    }
+}
+
+/// Validate a field.
+///
+/// See documentation of [`FieldValidationTrait`].
+#[must_use]
+pub struct FieldValidator<
+    'a,
+    T: FieldValidationTrait + 'a,
+    D: ExtraSetting,
+    ValidationFn: FnOnce(&D) -> Result<()>,
+> {
+    pub inner: T,
+    pub extra_field: &'static str,
+    pub expected_type: &'static str,
+    pub validation_fn: Option<ValidationFn>,
+    pub default_value: Option<D>,
+    pub _phantom: std::marker::PhantomData<&'a T>,
+}
+
+impl<'a, T: FieldValidationTrait, D: ExtraSetting> FieldValidator<'a, T, D, fn(&D) -> Result<()>> {
     #[inline]
     pub fn validation_fn<F: FnOnce(&D) -> Result<()>>(
         self,
         validation_fn: F,
-    ) -> FieldValidatorBuilder<'a, D, F> {
+    ) -> FieldValidator<'a, T, D, F> {
         let Self {
             inner,
             extra_field,
             expected_type,
             validation_fn: _,
+            _phantom,
             default_value,
         } = self;
-        FieldValidatorBuilder::<'a, D, F> {
+        FieldValidator::<'a, T, D, F> {
             inner,
             extra_field,
             expected_type,
             validation_fn: Some(validation_fn),
             default_value,
+            _phantom,
         }
     }
 }
 
-impl<'a, D: ExtraSetting, ValidationFn: FnOnce(&D) -> Result<()>>
-    FieldValidatorBuilder<'a, D, ValidationFn>
+impl<'a, T: FieldValidationTrait, D: ExtraSetting, ValidationFn: FnOnce(&D) -> Result<()>>
+    FieldValidator<'a, T, D, ValidationFn>
 {
     #[inline]
     pub fn default_value(self, default_value: D) -> Self {
@@ -279,39 +529,36 @@ impl<'a, D: ExtraSetting, ValidationFn: FnOnce(&D) -> Result<()>>
     #[must_use = "A validation result must be inspected"]
     pub fn validate(self) -> Result<D> {
         let Self {
-            inner,
+            mut inner,
             extra_field,
             expected_type,
             validation_fn,
             default_value,
+            _phantom,
         } = self;
-        let Some(raw_value) = inner.extra.swap_remove(extra_field) else {
+        let Some(raw_value) = inner.extra_mut().swap_remove(extra_field) else {
             if let Some(default_value) = default_value {
                 return Ok(default_value);
             }
             let source =
                 Error::new(format!("missing field `{extra_field}`")).set_kind(ErrorKind::NotFound);
-            return Err(Error::new(format!(
-                "{name}: {format} backend requires field `{extra_field}` set",
-                name = inner.name,
-                format = inner.format
-            ))
-            .set_source(Some(Box::new(source)))
-            .set_kind(ErrorKind::Configuration));
+            return Err(Error::new(inner.requires_field_err(extra_field))
+                .set_source(Some(Box::new(source)))
+                .set_kind(ErrorKind::Configuration));
         };
         match <D>::deserialize_extra(&raw_value) {
             Ok(v) => {
                 if let Some(validation_fn) = validation_fn {
-                    validation_fn(&v).map_err(|err| err.set_summary(inner.name.to_string()))?;
+                    validation_fn(&v)
+                        .map_err(|err| err.set_summary(inner.validation_fn_err(extra_field)))?;
                 }
                 Ok(v)
             }
-            Err(err) => Err(Error::new(format!(
-                "{name}: field `{extra_field}` expects value of type {expected_type}",
-                name = inner.name,
-            ))
-            .set_source(Some(Box::new(err)))
-            .set_kind(ErrorKind::Configuration)),
+            Err(err) => Err(
+                Error::new(inner.expects_type_err(extra_field, expected_type))
+                    .set_source(Some(Box::new(err)))
+                    .set_kind(ErrorKind::Configuration),
+            ),
         }
     }
 }

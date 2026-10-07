@@ -68,7 +68,13 @@ impl MailboxEntry {
             ref_mailbox,
             conf,
         };
-        match ret.conf.mailbox_conf.extra.get("encoding") {
+        match ret
+            .conf
+            .mailbox_conf
+            .deserialize_extra_field::<std::borrow::Cow<'_, str>>("encoding")
+            .ok()
+            .flatten()
+        {
             None => {}
             Some(v) if ["utf-8", "utf8"].iter().any(|e| v.eq_ignore_ascii_case(e)) => {}
             Some(v) if ["utf-7", "utf7"].iter().any(|e| v.eq_ignore_ascii_case(e)) => {
