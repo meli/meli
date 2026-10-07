@@ -30,9 +30,7 @@ rusty_fork_test! {
     fn test_notmuch_watch() {
         tests::run_notmuch_watch();
     }
-}
 
-rusty_fork_test! {
     #[test]
     fn test_notmuch_refresh() {
         tests::run_notmuch_refresh();
@@ -137,16 +135,14 @@ pub mod tests {
         library_file_path: Option<PathBuf>,
         acc_name: &str,
         event_consumer: BackendEventConsumer,
-        with_root_mailbox: bool,
     ) -> Result<(PathBuf, AccountSettings, Box<NotmuchDb>)> {
         let root_mailbox = temp_dir.path().join("INBOX");
-        {
-            std::fs::create_dir(&root_mailbox).expect("Could not create root mailbox directory.");
-            if with_root_mailbox {
-                for d in &["cur", "new", "tmp"] {
-                    std::fs::create_dir(root_mailbox.join(d))
-                        .expect("Could not create root mailbox directory contents.");
-                }
+        let sent_mailbox = temp_dir.path().join("INBOX").join("Sent");
+        for mbox in [&root_mailbox, &sent_mailbox] {
+            std::fs::create_dir(mbox).expect("Could not create mailbox directory.");
+            for d in &["cur", "new", "tmp"] {
+                std::fs::create_dir(mbox.join(d))
+                    .expect("Could not create mailbox directory contents.");
             }
         }
         std::env::set_var("NOTMUCH_CONFIG", temp_dir.path().join("notmuch-config"));
@@ -166,34 +162,25 @@ other_email=test2@example.com;test3@example.com
         )
         .unwrap();
         notmuch_new(true);
-        let subscribed_mailboxes = if with_root_mailbox {
-            vec!["INBOX".into()]
-        } else {
-            vec![]
-        };
-        let mailboxes = if with_root_mailbox {
-            vec![(
-                "INBOX".into(),
-                melib::conf::MailboxConf {
-                    extra: indexmap::indexmap! {
-                        "query".into() => "".to_string().into(),
-                    },
-                    ..Default::default()
+        let subscribed_mailboxes = vec!["INBOX".into(), "Sent".into()];
+        let mailboxes = indexmap::indexmap! {
+            "INBOX".into() => melib::conf::MailboxConf {
+                extra: indexmap::indexmap! {
+                    "query".into() => "not tag:sent".to_string().into(),
                 },
-            )]
-            .into_iter()
-            .collect()
-        } else {
-            indexmap::indexmap! {}
+                ..Default::default()
+            },
+            "Sent".into() => melib::conf::MailboxConf {
+                extra: indexmap::indexmap! {
+                    "query".into() => "tag:sent".to_string().into(),
+                    "parent".into() => "INBOX".to_string().into(),
+                    "save_to".into() => serde_json::json! {{ "path":  &sent_mailbox, "add_tags": ["sent"] }},
+                },
+                ..Default::default()
+            },
         };
         let mut extra = indexmap::indexmap! {};
 
-        if with_root_mailbox {
-            extra.insert(
-                "root_mailbox".into(),
-                root_mailbox.display().to_string().into(),
-            );
-        }
         if let Some(library_file_path) = library_file_path {
             extra.insert(
                 "library_file_path".into(),
@@ -235,7 +222,7 @@ other_email=test2@example.com;test3@example.com
             let backend_event_queue = Arc::clone(&backend_event_queue);
 
             BackendEventConsumer::new(Arc::new(move |ah, be| {
-                eprintln!("BackendEventConsumer: ah {ah:?} be {be:?}");
+                log::debug!("BackendEventConsumer: ah {ah:?} be {be:?}");
                 backend_event_queue.lock().unwrap().push_back((ah, be));
             }))
         };
@@ -270,7 +257,6 @@ other_email=test2@example.com;test3@example.com
             library_file_path,
             "notmuch",
             backend_event_consumer,
-            true,
         )
         .unwrap();
 
@@ -278,13 +264,21 @@ other_email=test2@example.com;test3@example.com
         block_on(is_online_fut).unwrap();
         let mut mailboxes_fut = notmuch.mailboxes().unwrap();
         let mailboxes = block_on(mailboxes_fut.as_mut()).unwrap();
-        let inbox_hash: MailboxHash = *mailboxes.keys().next().unwrap();
+        log::debug!("mailboxes are: {mailboxes:?}");
+        let inbox_hash: MailboxHash = mailboxes
+            .iter()
+            .find_map(|(h, m)| (m.name() == "INBOX").then_some(*h))
+            .unwrap();
+        let _sent_hash: MailboxHash = mailboxes
+            .iter()
+            .find_map(|(h, m)| (m.name() == "Sent").then_some(*h))
+            .unwrap();
 
         let watch_fut = {
             let fut = notmuch.watch().unwrap().into_future();
             smol::unblock(move || futures::executor::block_on(fut))
         };
-        eprintln!(
+        log::info!(
             "Create a new email using MaildirType::save_to_mailbox() and assert that the watch \
              stream yields a RefreshEventKind::Create for this envelope."
         );
@@ -306,7 +300,7 @@ hello world.
         notmuch_new(false);
         let (value1, _watch_fut) = block_on(watch_fut);
         backend_events.push(value1.unwrap().unwrap());
-        eprintln!("Delete envelope from Inbox folder and assert we receive a Remove event");
+        log::info!("Delete envelope from Inbox folder and assert we receive a Remove event");
         std::fs::remove_file(&mail_path).unwrap();
         notmuch_new(false);
         let (value1, _watch_fut) = block_on(_watch_fut.into_future());
@@ -382,7 +376,7 @@ hello world.
             let backend_event_queue = Arc::clone(&backend_event_queue);
 
             BackendEventConsumer::new(Arc::new(move |ah, be| {
-                eprintln!("BackendEventConsumer: ah {ah:?} be {be:?}");
+                log::debug!("BackendEventConsumer: ah {ah:?} be {be:?}");
                 backend_event_queue.lock().unwrap().push_back((ah, be));
             }))
         };
@@ -417,7 +411,6 @@ hello world.
             library_file_path,
             "notmuch",
             backend_event_consumer,
-            true,
         )
         .unwrap();
 
@@ -425,9 +418,17 @@ hello world.
         block_on(is_online_fut).unwrap();
         let mut mailboxes_fut = notmuch.mailboxes().unwrap();
         let mailboxes = block_on(mailboxes_fut.as_mut()).unwrap();
-        let inbox_hash = *mailboxes.keys().next().unwrap();
+        log::debug!("mailboxes are: {mailboxes:?}");
+        let inbox_hash: MailboxHash = mailboxes
+            .iter()
+            .find_map(|(h, m)| (m.name() == "INBOX").then_some(*h))
+            .unwrap();
+        let sent_hash: MailboxHash = mailboxes
+            .iter()
+            .find_map(|(h, m)| (m.name() == "Sent").then_some(*h))
+            .unwrap();
 
-        eprintln!(
+        log::info!(
             "Create a new email using MaildirType::save_to_mailbox() and assert that the watch \
              stream yields a RefreshEventKind::Create for this envelope."
         );
@@ -445,11 +446,12 @@ hello world.
             None,
         )
         .unwrap();
-        let mail_path = MaildirType::save_to_mailbox(root_mailbox, new_mail.bytes, None).unwrap();
+        let mail_path =
+            MaildirType::save_to_mailbox(root_mailbox, new_mail.bytes.clone(), None).unwrap();
         notmuch_new(true);
         block_on(notmuch.refresh(inbox_hash).unwrap()).unwrap();
         backend_events.push(backend_event_queue.lock().unwrap().pop_back().unwrap().1);
-        eprintln!("Delete envelope from Inbox folder and assert we receive a Remove event");
+        log::info!("Delete envelope from Inbox folder and assert we receive a Remove event");
         std::fs::remove_file(&mail_path).unwrap();
         notmuch_new(true);
         block_on(notmuch.refresh(inbox_hash).unwrap()).unwrap();
@@ -496,6 +498,34 @@ hello world.
                 "Expected Remove event in Inbox folder, got: {refresh_event:#?}"
             );
             assert_eq!(old_hash, env.hash());
+        }
+        backend_events.clear();
+        block_on(
+            notmuch
+                .save(
+                    new_mail.bytes,
+                    sent_hash,
+                    Some((Flag::SEEN, vec!["sent".to_string()])),
+                )
+                .unwrap(),
+        )
+        .unwrap();
+        notmuch_new(true);
+        block_on(notmuch.refresh(sent_hash).unwrap()).unwrap();
+        backend_events.push(backend_event_queue.lock().unwrap().pop_back().unwrap().1);
+        {
+            let BackendEvent::Refresh(refresh_event) = &backend_events[0] else {
+                panic!("Expected Refresh event, got: {:#?}", backend_events[0]);
+            };
+            assert_eq!(
+                refresh_event.mailbox_hash, sent_hash,
+                "expected Create event in Sent mailbox, found: {refresh_event:?}"
+            );
+            let RefreshEventKind::Create(ref env) = refresh_event.kind else {
+                panic!("Expected Create event, got: {refresh_event:#?}");
+            };
+            assert_eq!(env.subject(), "RE: your e-mail");
+            assert_eq!(env.message_id(), "h2g7f.z0gy2pgaen5m@example.com");
         }
     }
 }

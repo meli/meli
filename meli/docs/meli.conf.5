@@ -448,6 +448,28 @@ for
 If you wish to build a mailbox hierarchy, define the name of a parent mailbox
 you have used in your configuration.
 .Pq Em optional
+.It Ic save_to Ar SaveTo
+If you wish to be able to save e-mails to your filesystem by copying to a mailbox or when sending a copy of sent e-mails to your Sent folder, you can specify a path that will be used to store a Maildir file copy and optionally tags to add.
+The path must point to a valid Maildir directory, and not to one of its
+.Li cur Ns
+,
+.Li new Ns
+,
+.Li tmp
+subdirectories.
+The
+.Ic SaveTo
+type is a map with the following keys:
+.Bl -dash -compact
+.It
+.Ic path Ar Path
+Directory path.
+The path must point to a valid Maildir directory.
+.It
+.Ic add_tags Ar [String]
+An optional array of tag strings to add after saving, can be omitted.
+.El
+.Pq Em optional
 .El
 .sp
 Example:
@@ -461,9 +483,9 @@ format = "notmuch"
 #library_file_path = "/opt/homebrew/lib/libnotmuch.5.dylib"
 \&...
   [accounts.notmuch.mailboxes]
-  "INBOX" = {  query="tag:inbox", subscribe = true }
-  "Drafts" = {  query="tag:draft", subscribe = true }
-  "Sent" = {  query="from:username@example.com from:username2@example.com", subscribe = true }
+  "INBOX" = {  query="tag:inbox", subscribe = true, usage = "Inbox", save_to = { path = "/path/to/INBOX", add_tags = ["inbox"] } }
+  "Drafts" = {  query="tag:draft", usage = "Drafts", save_to = { path = "/path/to/Drafts", add_tags = ["draft"] }, subscribe = true }
+  "Sent" = {  query="from:username@example.com from:username2@example.com", usage = "Sent", save_to = { path = "/path/to/Sent", add_tags = ["sent"] }, subscribe = true }
   "Archives" = {  query="tag:archived", subscribe = true }
   "Archives/2019" = {  query="tag:archived date:01-2019..12-2019", parent="Archives", subscribe = true }
 .Ed

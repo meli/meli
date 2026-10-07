@@ -37,6 +37,7 @@ pub struct NotmuchMailbox {
     pub name: String,
     pub path: String,
     pub query_str: String,
+    pub save_to: Option<crate::notmuch::SaveToConf>,
     pub usage: Arc<RwLock<SpecialUsageMailbox>>,
     pub counters: Arc<Mutex<MailboxCounters>>,
 }
