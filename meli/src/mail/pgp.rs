@@ -1316,7 +1316,7 @@ iy22S9oOhvpIcPXS/GjgUQMrImZNsmCwx4kiQ9Dex7Xs+hKkp1+siM9P2XS5iiDm
         let mail = melib::Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
 
         let signatures = smol::block_on(verify(
-            PGPBackendChoice::default().instantiate().unwrap(),
+            PGPBackendChoice::GpgME.instantiate().unwrap(),
             mail.body(),
         ))
         .unwrap();
@@ -1618,7 +1618,7 @@ iy22S9oOhvpIcPXS/GjgUQMrImZNsmCwx4kiQ9Dex7Xs+hKkp1+siM9P2XS5iiDm
             .unwrap();
             assert_eq!(
                 &signatures_into_error(signatures).unwrap().unwrap(),
-                "good signature by AEDC11FBCE2D746BF8BF7166CC2E963C99975163:VALID[u]"
+                "good signature by AEDC11FBCE2D746BF8BF7166CC2E963C99975163:VALID[f]"
             );
         }
 
@@ -1666,7 +1666,7 @@ iy22S9oOhvpIcPXS/GjgUQMrImZNsmCwx4kiQ9Dex7Xs+hKkp1+siM9P2XS5iiDm
             );
             assert_eq!(
                 &signatures_into_error(signatures).unwrap().unwrap(),
-                "good signature by AEDC11FBCE2D746BF8BF7166CC2E963C99975163:VALID[u]"
+                "good signature by AEDC11FBCE2D746BF8BF7166CC2E963C99975163:VALID[f]"
             );
         }
         // Sign, then encrypt and decrypt
@@ -1723,7 +1723,7 @@ iy22S9oOhvpIcPXS/GjgUQMrImZNsmCwx4kiQ9Dex7Xs+hKkp1+siM9P2XS5iiDm
                             keyid: "AEDC11FBCE2D746BF8BF7166CC2E963C99975163".into(),
                             status: Ok(())
                         },
-                        validity: Validity::Ultimate,
+                        validity: Validity::Full,
                         validity_reason: None,
                         cleartext: false
                     }]
@@ -1737,7 +1737,7 @@ iy22S9oOhvpIcPXS/GjgUQMrImZNsmCwx4kiQ9Dex7Xs+hKkp1+siM9P2XS5iiDm
             .unwrap();
             assert_eq!(
                 &signatures_into_error(signatures).unwrap().unwrap(),
-                "good signature by AEDC11FBCE2D746BF8BF7166CC2E963C99975163:VALID[u]"
+                "good signature by AEDC11FBCE2D746BF8BF7166CC2E963C99975163:VALID[f]"
             );
         }
         _ = tempdir.close();
