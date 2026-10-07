@@ -112,15 +112,26 @@ impl Drop for ContextInner {
 
 impl Context {
     pub fn new() -> Result<Self> {
+        let names = [
+            libloading::library_filename("gpgme"),
+            "libgpgme.so.11".into(),
+        ];
         let lib = Arc::new(
-            match unsafe { libloading::Library::new(libloading::library_filename("gpgme")) } {
+            // SAFETY: it's safe to load libgpgme.
+            match unsafe { libloading::Library::new(names[0].clone()) } {
                 Ok(v) => v,
                 Err(err) => {
-                    let source = Error::from(err).set_kind(ErrorKind::LinkedLibrary("gpgme"));
-                    let mut err =
-                        Error::new("Could not use libgpgme").set_kind(ErrorKind::NotFound);
-                    err.source = Some(Box::new(source));
-                    return Err(err);
+                    // SAFETY: it's safe to load libgpgme.
+                    if let Ok(v) = unsafe { libloading::Library::new(names[1].clone()) } {
+                        v
+                    } else {
+                        let source = Error::from(err).set_kind(ErrorKind::LinkedLibrary("gpgme"));
+                        let mut err = Error::new("Could not use libgpgme")
+                            .set_details(format!("Tried these names: {names:?}"))
+                            .set_kind(ErrorKind::NotFound);
+                        err.source = Some(Box::new(source));
+                        return Err(err);
+                    }
                 }
             },
         );
