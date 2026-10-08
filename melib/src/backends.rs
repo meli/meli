@@ -664,23 +664,18 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
             .set_kind(ErrorKind::NotSupported))
     }
 
-    fn submit(
-        &mut self,
-        _bytes: Vec<u8>,
-        _mailbox_hash: Option<MailboxHash>,
-        _flags: Option<Flag>,
-    ) -> ResultFuture<()> {
+    fn submit(&mut self, _bytes: Vec<u8>, _mailbox_hash: Option<MailboxHash>) -> ResultFuture<()> {
         Err(Error::new("Submission not supported in this backend.")
             .set_kind(ErrorKind::NotSupported))
     }
 
     fn submit_batch(
         &mut self,
-        batch: Vec<(Vec<u8>, Option<MailboxHash>, Option<Flag>)>,
+        batch: Vec<(Vec<u8>, Option<MailboxHash>)>,
     ) -> ResultStream<Result<()>> {
         let mut futures = batch
             .into_iter()
-            .map(|(bytes, mailbox_hash, flags)| self.submit(bytes, mailbox_hash, flags))
+            .map(|(bytes, mailbox_hash)| self.submit(bytes, mailbox_hash))
             .collect::<Result<Vec<Pin<Box<_>>>>>()?;
         Ok(Box::pin(try_fn_stream(|emitter| async move {
             while !futures.is_empty() {

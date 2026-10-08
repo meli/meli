@@ -1038,11 +1038,11 @@ impl Account {
             }
             SendMail::ServerSubmission => {
                 if self.backend_capabilities.supports_submission {
-                    let job =
-                        self.backend
-                            .lock()
-                            .unwrap()
-                            .submit(message.into_bytes(), None, None)?;
+                    let job = self
+                        .backend
+                        .lock()
+                        .unwrap()
+                        .submit(message.into_bytes(), None)?;
 
                     let handle = self.main_loop_handler.job_executor.spawn(
                         "server-submission".into(),
@@ -1121,11 +1121,10 @@ impl Account {
                     }
                     SendMail::ServerSubmission => {
                         if capabilities.supports_submission {
-                            let fut = backend.lock().unwrap().submit(
-                                message.as_bytes().to_vec(),
-                                None,
-                                None,
-                            )?;
+                            let fut = backend
+                                .lock()
+                                .unwrap()
+                                .submit(message.as_bytes().to_vec(), None)?;
                             fut.await?;
                             return Ok(());
                         }

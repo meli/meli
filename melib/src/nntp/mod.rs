@@ -589,12 +589,7 @@ impl MailBackend for NntpType {
             .set_kind(ErrorKind::NotSupported))
     }
 
-    fn submit(
-        &mut self,
-        bytes: Vec<u8>,
-        mailbox_hash: Option<MailboxHash>,
-        _flags: Option<Flag>,
-    ) -> ResultFuture<()> {
+    fn submit(&mut self, bytes: Vec<u8>, mailbox_hash: Option<MailboxHash>) -> ResultFuture<()> {
         let mut bytes = crate::utils::canonicalize_crlf(&bytes).into_owned();
         let is_online_fut = self.is_online()?;
         let connection = self.connection.clone();

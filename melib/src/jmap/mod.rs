@@ -1381,12 +1381,7 @@ impl MailBackend for JmapType {
     }
 
     // [ref:TODO] add support for BLOB extension
-    fn submit(
-        &mut self,
-        bytes: Vec<u8>,
-        mailbox_hash: Option<MailboxHash>,
-        _flags: Option<Flag>,
-    ) -> ResultFuture<()> {
+    fn submit(&mut self, bytes: Vec<u8>, mailbox_hash: Option<MailboxHash>) -> ResultFuture<()> {
         let store = self.store.clone();
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
