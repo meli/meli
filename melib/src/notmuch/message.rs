@@ -35,6 +35,17 @@ pub struct Message<'m> {
     pub _ph: PhantomData<&'m ffi::notmuch_message_t>,
 }
 
+impl<'m> std::fmt::Debug for Message<'m> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fmt.debug_struct("Message")
+            .field("freezes", &self.freezes)
+            .field("env_hash", &self.env_hash())
+            .field("msg_id", &self.msg_id_str())
+            .field("tags", &self.tags().collect_flags_and_tags())
+            .finish_non_exhaustive()
+    }
+}
+
 impl<'m> Message<'m> {
     pub fn find_message(db: &'m DbConnection, msg_id: &CStr) -> Result<Self> {
         let mut message: *mut ffi::notmuch_message_t = std::ptr::null_mut();
