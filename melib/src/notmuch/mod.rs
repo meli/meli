@@ -20,7 +20,7 @@
  */
 
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet},
     ffi::{CStr, CString, OsStr},
     os::unix::ffi::OsStrExt as _,
     path::{Path, PathBuf},
@@ -166,18 +166,20 @@ impl DbConnection {
 
     fn refresh(
         &self,
-        mailboxes: Arc<RwLock<HashMap<MailboxHash, NotmuchMailbox>>>,
+        mailboxes: Arc<RwLock<IndexMap<MailboxHash, NotmuchMailbox>>>,
+        mailbox_hash: Option<MailboxHash>,
         snapshot: &mut Snapshot,
         account_hash: AccountHash,
     ) -> Result<Option<BackendEvent>> {
         let mailboxes_lck = mailboxes.read().unwrap();
         let mailbox_queries = mailboxes_lck
             .iter()
+            .filter(|(k, _)| mailbox_hash.as_ref().is_none() || mailbox_hash.as_ref() == Some(k))
             .map(|(k, v)| {
                 let total = v.counters.lock().unwrap().total.set.clone();
                 (*k, (total, v.query_str.to_string()))
             })
-            .collect::<HashMap<MailboxHash, (BTreeSet<EnvelopeHash>, String)>>();
+            .collect::<IndexMap<MailboxHash, (BTreeSet<EnvelopeHash>, String)>>();
         let mut events = IndexMap::new();
         for (mailbox_hash, (mut current, query_str)) in mailbox_queries {
             let mut counters = mailboxes_lck[&mailbox_hash].counters.lock().unwrap();
@@ -334,7 +336,7 @@ impl From<NotmuchError> for Error {
 pub struct NotmuchDb {
     #[allow(dead_code)]
     lib: Arc<NotmuchLibrary>,
-    mailboxes: Arc<RwLock<HashMap<MailboxHash, NotmuchMailbox>>>,
+    mailboxes: Arc<RwLock<IndexMap<MailboxHash, NotmuchMailbox>>>,
     snapshot: Arc<RwLock<Snapshot>>,
     collection: Collection,
     path: PathBuf,
@@ -437,7 +439,7 @@ impl NotmuchDb {
             ))
             .set_kind(ErrorKind::Configuration));
         }
-        let mut mailboxes = HashMap::with_capacity(s.mailboxes.len());
+        let mut mailboxes = IndexMap::with_capacity(s.mailboxes.len());
         let mut parents: Vec<(MailboxHash, &str)> = Vec::with_capacity(s.mailboxes.len());
         for (k, f) in s.mailboxes.iter() {
             if let Some(query_str) = f.extra.get("query") {
@@ -634,7 +636,7 @@ impl MailBackend for NotmuchDb {
             mailbox_hash: MailboxHash,
             database: Arc<DbConnection>,
             snapshot: Arc<RwLock<Snapshot>>,
-            mailboxes: Arc<RwLock<HashMap<MailboxHash, NotmuchMailbox>>>,
+            mailboxes: Arc<RwLock<IndexMap<MailboxHash, NotmuchMailbox>>>,
             iter: std::vec::IntoIter<CString>,
         }
         impl FetchState {
@@ -726,7 +728,7 @@ impl MailBackend for NotmuchDb {
         })))
     }
 
-    fn refresh(&mut self, _mailbox_hash: MailboxHash) -> ResultFuture<()> {
+    fn refresh(&mut self, mailbox_hash: MailboxHash) -> ResultFuture<()> {
         let account_hash = self.account_hash;
         let new_connection = DbConnection::new(self.path.as_path(), self.lib.clone(), false)?;
         let snapshot = self.snapshot.clone();
@@ -735,8 +737,12 @@ impl MailBackend for NotmuchDb {
         Ok(Box::pin(async move {
             let events = {
                 let mut snapshot_lck = snapshot.write().unwrap();
-                let events =
-                    new_connection.refresh(mailboxes.clone(), &mut snapshot_lck, account_hash)?;
+                let events = new_connection.refresh(
+                    mailboxes.clone(),
+                    Some(mailbox_hash),
+                    &mut snapshot_lck,
+                    account_hash,
+                )?;
                 if events.is_some() {
                     snapshot_lck.connection = new_connection;
                 }
@@ -809,6 +815,7 @@ impl MailBackend for NotmuchDb {
                     let mut snapshot_lck = snapshot.write().unwrap();
                     let events = new_connection.refresh(
                         mailboxes.clone(),
+                        None,
                         &mut snapshot_lck,
                         account_hash,
                     )?;
