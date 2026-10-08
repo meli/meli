@@ -309,6 +309,19 @@ impl DbConnection {
             inner,
         }))
     }
+
+    /// Return revision and UUID of database.
+    pub fn get_revision(&self) -> (::std::os::raw::c_ulong, CString) {
+        let mut uuid = std::ptr::null();
+        let revision = unsafe {
+            (self.lib.database_get_revision())(self.inner.lock().unwrap().as_mut(), &raw mut uuid)
+        };
+        assert!(!uuid.is_null());
+        // SAFETY: libnotmuch guarantees this is a NUL-terminated opaque string.
+        let uuid = unsafe { std::ffi::CStr::from_ptr(uuid).into() };
+
+        (revision, uuid)
+    }
 }
 
 #[derive(Debug)]
@@ -493,6 +506,7 @@ impl NotmuchDb {
 
         let account_hash = AccountHash::from_bytes(s.name.as_bytes());
         let connection = DbConnection::new(path.as_path(), lib.clone(), false)?;
+        let (revision, uuid) = connection.get_revision();
         let collection = Collection::default();
         Ok(Box::new(Self {
             lib,
@@ -503,6 +517,8 @@ impl NotmuchDb {
                 env_to_mailbox_index: Default::default(),
                 tag_index: collection.tag_index.clone(),
                 account_hash,
+                revision,
+                uuid,
             })),
             collection,
             mailboxes: Arc::new(RwLock::new(mailboxes)),
@@ -741,16 +757,20 @@ impl MailBackend for NotmuchDb {
         let event_consumer = self.event_consumer.clone();
         Ok(Box::pin(async move {
             let events = {
-                let mut snapshot_lck = snapshot.write().unwrap();
+                let mut snapshot = snapshot.write().unwrap();
+                let (revision, uuid) = new_connection.get_revision();
+                if (revision, &uuid) == (snapshot.revision, &snapshot.uuid) {
+                    return Ok(());
+                }
                 let events = new_connection.refresh(
                     mailboxes.clone(),
                     Some(mailbox_hash),
-                    &mut snapshot_lck,
+                    &mut snapshot,
                     account_hash,
                 )?;
-                if events.is_some() {
-                    snapshot_lck.connection = new_connection;
-                }
+                snapshot.connection = new_connection;
+                snapshot.revision = revision;
+                snapshot.uuid = uuid;
                 events
             };
             if let Some(evn) = events {
@@ -817,16 +837,20 @@ impl MailBackend for NotmuchDb {
 
                 let events = {
                     let new_connection = DbConnection::new(path.as_path(), lib.clone(), false)?;
-                    let mut snapshot_lck = snapshot.write().unwrap();
+                    let mut snapshot = snapshot.write().unwrap();
+                    let (revision, uuid) = new_connection.get_revision();
+                    if (revision, &uuid) == (snapshot.revision, &snapshot.uuid) {
+                        continue;
+                    }
                     let events = new_connection.refresh(
                         mailboxes.clone(),
                         None,
-                        &mut snapshot_lck,
+                        &mut snapshot,
                         account_hash,
                     )?;
-                    if events.is_some() {
-                        snapshot_lck.connection = new_connection;
-                    }
+                    snapshot.connection = new_connection;
+                    snapshot.revision = revision;
+                    snapshot.uuid = uuid;
                     events
                 };
                 if let Some(evn) = events {
@@ -853,7 +877,7 @@ impl MailBackend for NotmuchDb {
             database: Arc::new(DbConnection::new(
                 self.path.as_path(),
                 self.lib.clone(),
-                true,
+                false,
             )?),
             lib: self.lib.clone(),
             hash,
