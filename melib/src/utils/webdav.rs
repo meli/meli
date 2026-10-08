@@ -277,7 +277,7 @@ impl WebDAVConnection {
                      server: {}",
                     self.server_conf.url, err
                 ))
-                .set_source(Some(Arc::new(err)));
+                .set_source(Some(Box::new(err)));
                 _ = self.online_status.set(None, Err(err.clone())).await;
                 return Err(err);
             }
@@ -428,7 +428,7 @@ impl WebDAVConnection {
                     "Could not connect to WebDAV server endpoint for {}\nReply from server: {}",
                     self.server_conf.url, err
                 ))
-                .set_source(Some(Arc::new(err)));
+                .set_source(Some(Box::new(err)));
                 _ = self
                     .online_status
                     .set(Some(req_instant), Err(err.clone()))

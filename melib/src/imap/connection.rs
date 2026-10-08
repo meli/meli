@@ -581,7 +581,7 @@ impl ImapStream {
                         hostname,
                         String::from_utf8_lossy(bytes).as_ref().trim_at_boundary(40)
                     ))
-                    .set_source(Some(Arc::new(Error::from(err))))
+                    .set_source(Some(Box::new(Error::from(err))))
                     .set_kind(ErrorKind::ProtocolError)
                 })
         }

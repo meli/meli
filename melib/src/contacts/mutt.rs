@@ -126,7 +126,7 @@ impl ContactBackend for MuttContacts {
                 return Err(Error::new(format!(
                     "Could not load mutt alias file {mutt_alias_file:?}"
                 ))
-                .set_source(Some(crate::src_err_arc_wrap!(err))));
+                .set_source(Some(Box::new(err))));
             }
         };
 

@@ -31,7 +31,6 @@ use std::{
     io::Write as _,
     os::unix::fs::PermissionsExt as _,
     path::{Path, PathBuf},
-    sync::Arc,
 };
 
 use indexmap::IndexMap;
@@ -440,14 +439,14 @@ impl FileSettings {
         )
         .map_err(|err| {
             Error::new("Config file is invalid TOML")
-                .set_source(Some(Arc::new(err)))
+                .set_source(Some(Box::new(err)))
                 .set_kind(ErrorKind::ValueError)
         })?;
 
         let mut s: Self = melib::serde_path_to_error::deserialize(toml::Deserializer::new(&s))
             .map_err(|err| {
                 Error::new("Input contains errors")
-                    .set_source(Some(Arc::new(err)))
+                    .set_source(Some(Box::new(err)))
                     .set_kind(ErrorKind::Configuration)
             })?;
         let backends = melib::backends::Backends::new();
@@ -553,7 +552,7 @@ impl FileSettings {
 
         let mut s: Self = toml::from_str(&s).map_err(|err| {
             Error::new(format!("{}: Config file contains errors", path.display()))
-                .set_source(Some(Arc::new(err)))
+                .set_source(Some(Box::new(err)))
                 .set_kind(ErrorKind::Configuration)
         })?;
         let backends = melib::backends::Backends::new();

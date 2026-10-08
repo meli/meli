@@ -120,7 +120,7 @@ pub fn deserialize_from_str<'de, T: serde::de::Deserialize<'de>>(s: &'de str) ->
              {err} at {path}. Reply from server: {s}",
             path = err.path(),
         ))
-        .set_source(Some(Arc::new(err)))
+        .set_source(Some(Box::new(err)))
         .set_kind(ErrorKind::Bug)),
     }
 }

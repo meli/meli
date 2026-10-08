@@ -525,7 +525,7 @@ impl MaildirMailboxPathExt for Path {
             Err(err) => {
                 return Err(Error::new("Invalid maildir mailbox")
                     .set_details("Could not access filesystem.")
-                    .set_source(Some(std::sync::Arc::new(Box::new(err))))
+                    .set_source(Some(Box::new(err)))
                     .set_related_path(Some(path)));
             }
             Ok(false) => {

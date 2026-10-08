@@ -70,12 +70,12 @@ impl Configuration {
         let rename_regex = if let Some(v) = settings
             .deserialize_extra_field::<Cow<'_, str>>(RENAME_REGEX_FIELDNAME)?
             .map(|v| {
-                Regex::new(v.as_ref()).map_err(|e| {
+                Regex::new(v.as_ref()).map_err(|err| {
                     Error::new(format!(
                         "{}: Invalid value for field `{RENAME_REGEX_FIELDNAME}`: {v}",
                         settings.name.as_str(),
                     ))
-                    .set_source(Some(crate::src_err_arc_wrap!(e)))
+                    .set_source(Some(Box::new(err)))
                     .set_kind(ErrorKind::Configuration)
                 })
             }) {

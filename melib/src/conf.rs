@@ -146,7 +146,7 @@ impl AccountSettings {
                     "Could not deserialize {extra_field} as {type_name}",
                     type_name = std::any::type_name::<D>()
                 ))
-                .set_source(Some(crate::src_err_arc_wrap! { err }))
+                .set_source(Some(Box::new(err)))
                 .set_kind(ErrorKind::Configuration)
             })
             .map(|v| Some(v))
@@ -268,7 +268,7 @@ impl<'a, D: ExtraSetting, ValidationFn: FnOnce(&D) -> Result<()>>
     #[must_use = "A validation result must be inspected"]
     pub fn ignore_missing(self) -> Result<Option<D>> {
         self.validate().map(|v| Some(v)).or_else(|err| {
-            if matches!(err.kind, ErrorKind::NotFound) {
+            if matches!(&err.source, Some(err) if err.kind == ErrorKind::NotFound) {
                 return Ok(None);
             }
             Err(err)
@@ -289,12 +289,15 @@ impl<'a, D: ExtraSetting, ValidationFn: FnOnce(&D) -> Result<()>>
             if let Some(default_value) = default_value {
                 return Ok(default_value);
             }
+            let source =
+                Error::new(format!("missing field `{extra_field}`")).set_kind(ErrorKind::NotFound);
             return Err(Error::new(format!(
                 "{name}: {format} backend requires field `{extra_field}` set",
                 name = inner.name,
                 format = inner.format
             ))
-            .set_kind(ErrorKind::NotFound));
+            .set_source(Some(Box::new(source)))
+            .set_kind(ErrorKind::Configuration));
         };
         match <D>::deserialize_extra(&raw_value) {
             Ok(v) => {
@@ -307,7 +310,7 @@ impl<'a, D: ExtraSetting, ValidationFn: FnOnce(&D) -> Result<()>>
                 "{name}: field `{extra_field}` expects value of type {expected_type}",
                 name = inner.name,
             ))
-            .set_source(Some(crate::src_err_arc_wrap! { err }))
+            .set_source(Some(Box::new(err)))
             .set_kind(ErrorKind::Configuration)),
         }
     }

@@ -197,7 +197,7 @@ impl JmapClient {
                      discovery via /.well-known/jmap is supported. DNS SRV records are not \
                      supported)\n\nError connecting to server: {err}",
                 ))
-                .set_source(Some(Arc::new(err)));
+                .set_source(Some(Box::new(err)));
                 _ = self.store.online_status.set(None, Err(err.clone())).await;
                 return Err(err);
             }
@@ -290,7 +290,7 @@ impl JmapClient {
                      discovery via /.well-known/jmap is supported. DNS SRV records are not \
                      supported)\n\nReply from server: {err}",
                 ))
-                .set_source(Some(Arc::new(err)));
+                .set_source(Some(Box::new(err)));
                 _ = self
                     .store
                     .online_status
@@ -309,7 +309,7 @@ impl JmapClient {
                      discovery via /.well-known/jmap is supported. DNS SRV records are not \
                      supported)\n\nReply from server: {res_text}",
                 ))
-                .set_source(Some(Arc::new(err)));
+                .set_source(Some(Box::new(err)));
                 _ = self
                     .store
                     .online_status

@@ -22,7 +22,7 @@
 //! Pre-submission hooks for draft validation and/or transformations.
 pub use std::borrow::Cow;
 
-use melib::{email::headers::HeaderName, src_err_arc_wrap};
+use melib::email::headers::HeaderName;
 
 use super::*;
 
@@ -106,7 +106,7 @@ impl Hook {
                             "could not execute `{command}`. Check if its binary is in PATH or if \
                              the command is valid."
                         ))
-                        .set_source(Some(src_err_arc_wrap! {err}))
+                        .set_source(Some(Box::new(err)))
                     })?;
                 let mut stdin = child
                     .stdin
@@ -122,7 +122,7 @@ impl Hook {
                 });
                 let output = child.wait_with_output().map_err(|err| -> Error {
                     Error::new(format!("failed to wait on hook child {name_}"))
-                        .set_source(Some(src_err_arc_wrap! {err}))
+                        .set_source(Some(Box::new(err)))
                 })?;
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 let stderr = String::from_utf8_lossy(&output.stderr);
@@ -190,7 +190,7 @@ fn important_header_warn(_ctx: &Context, draft: &Draft) -> Result<()> {
             Some(Ok(_)) => {}
             Some(Err(err)) => {
                 return Err(Error::new(format!("{hdr} header value is invalid"))
-                    .set_source(Some(src_err_arc_wrap! {err})))
+                    .set_source(Some(Box::new(err))))
             }
             None => return Err(format!("{hdr} header is missing and should be present.").into()),
         }
@@ -203,8 +203,9 @@ fn important_header_warn(_ctx: &Context, draft: &Draft) -> Result<()> {
             .map(melib::utils::datetime::rfc822_to_timestamp)
         {
             Some(Err(err)) => {
-                return Err(Error::new("Date header value is invalid.")
-                    .set_source(Some(src_err_arc_wrap! {err})))
+                return Err(
+                    Error::new("Date header value is invalid.").set_source(Some(Box::new(err)))
+                )
             }
             Some(Ok(0)) => return Err(Error::new("Date header value is invalid.")),
             _ => {}
@@ -219,7 +220,7 @@ fn important_header_warn(_ctx: &Context, draft: &Draft) -> Result<()> {
             .map(melib::Address::list_try_from)
         {
             return Err(Error::new(format!("{hdr} header value is invalid"))
-                .set_source(Some(src_err_arc_wrap! {err})));
+                .set_source(Some(Box::new(err))));
         }
     }
     Ok(())

@@ -219,7 +219,7 @@ impl Secret {
                 .map_err(|err| {
                     Error::new(format!("Could not execute command `{command}`"))
                         .set_details(err.to_string())
-                        .set_source(Some(crate::src_err_arc_wrap! { err }))
+                        .set_source(Some(Box::new(err)))
                         .set_kind(ErrorKind::External)
                 })
                 .and_then(|output| {
@@ -233,7 +233,7 @@ impl Secret {
                                 "stdout was: {stdout:?}",
                                 stdout = String::from_utf8_lossy(&output.stdout)
                             ))
-                            .set_source(Some(crate::src_err_arc_wrap! { err }))
+                            .set_source(Some(Box::new(err)))
                             .set_kind(ErrorKind::External)),
                         }
                     } else {

@@ -23,7 +23,6 @@ use std::{
     borrow::Cow,
     io::Write as _,
     process::{Command, Stdio},
-    sync::Arc,
 };
 
 type ProcessEventFn = fn(&mut ViewFilter, &mut UIEvent, &mut Context) -> bool;
@@ -323,7 +322,7 @@ impl ViewFilter {
                     Error::new(format!(
                         "Failed to start html filter process `{filter_invocation}`",
                     ))
-                    .set_source(Some(Arc::new(err)))
+                    .set_source(Some(Box::new(err)))
                     .set_kind(ErrorKind::External),
                     bytes,
                 )),
@@ -957,7 +956,7 @@ impl ViewFilter {
                 self.event_handler = None;
                 /* Job was cancelled */
                 self.body_text = ViewFilterContent::Error {
-                    inner: Error::new("Job was cancelled.").set_source(Some(Arc::new(err))),
+                    inner: Error::new("Job was cancelled.").set_source(Some(Box::new(err))),
                 };
                 self.notice = Some(format!("{} cancelled", self.filter_invocation).into());
             }

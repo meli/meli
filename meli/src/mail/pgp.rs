@@ -168,7 +168,7 @@ pub fn signatures_into_error(metadata: SignaturesMetadata) -> Result<Option<Stri
         } = sig;
         if let Err(err) = status {
             return Err(Error::new(format!("BAD signature from {fingerprint}"))
-                .set_source(Some(melib::src_err_arc_wrap! { err }))
+                .set_source(Some(Box::new(err)))
                 .set_kind(ErrorKind::ValueError));
         }
         if cleartext {

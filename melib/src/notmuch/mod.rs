@@ -388,11 +388,11 @@ impl NotmuchDb {
                                 s.name
                             ))
                             .set_kind(ErrorKind::Configuration)
-                            .set_source(Some(Arc::new(err))));
+                            .set_source(Some(Box::new(err))));
                         } else {
                             return Err(Error::new("Could not load libnotmuch!")
                                 .set_details(super::NOTMUCH_ERROR_DETAILS)
-                                .set_source(Some(Arc::new(err))));
+                                .set_source(Some(Box::new(err))));
                         }
                     }
                 }

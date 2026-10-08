@@ -21,8 +21,6 @@
 
 //! URI Template (level 1) format `RFC6570` values
 
-use std::sync::Arc;
-
 use serde::ser::{Serialize, Serializer};
 use url::Url;
 
@@ -171,7 +169,7 @@ pub fn download_request_format(
                 download_url.text, account_id, blob_id,
             ))
             .set_kind(ErrorKind::ProtocolError)
-            .set_source(Some(Arc::new(err)))
+            .set_source(Some(Box::new(err)))
     })
 }
 
@@ -207,7 +205,7 @@ pub fn upload_request_format(
                 upload_url.text, account_id
             ))
             .set_kind(ErrorKind::ProtocolError)
-            .set_source(Some(Arc::new(err)))
+            .set_source(Some(Box::new(err)))
     })
 }
 
@@ -246,7 +244,7 @@ pub fn event_source_request_format(
                  inform the server administrator for this protocol violation.",
             ))
             .set_kind(ErrorKind::ProtocolError)
-            .set_source(Some(Arc::new(err)))
+            .set_source(Some(Box::new(err)))
     })
 }
 
