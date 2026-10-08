@@ -267,7 +267,9 @@ fn test_sqlite3_reindex() {
             )
         };
     }
-    let mail_batch: Vec<(Vec<u8>, MailboxHash, Option<Flag>)> = vec![
+
+    #[allow(clippy::type_complexity)]
+    let mail_batch: Vec<(Vec<u8>, MailboxHash, Option<(Flag, Vec<String>)>)> = vec![
         batch_entry!("../../../melib/tests/data/PATCH-Put-sha1dc-on-a-diet_op.mbox.gz"),
         batch_entry!("../../../melib/tests/data/PATCH-Put-sha1dc-on-a-diet.mbox.gz"),
         batch_entry!("../../../melib/tests/data/git-am-breakage-with-MIME-decoding_op.mbox.gz"),

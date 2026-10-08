@@ -728,23 +728,51 @@ impl Component for MailView {
                                              * on its own */
                                             drop(detect);
                                             drop(envelope);
-                                            if let Err(err) = super::compose::send_draft(
-                                                ToggleFlag::False,
+                                            match super::compose::send_draft_async(
+                                                Default::default(),
                                                 context,
                                                 coordinates.0,
                                                 draft,
                                                 SpecialUsageMailbox::Sent,
                                                 Flag::SEEN,
-                                                true,
                                             ) {
-                                                context.replies.push_back(UIEvent::Notification {
-                                                    title: Some(
-                                                        "Couldn't send unsubscribe e-mail".into(),
-                                                    ),
-                                                    source: None,
-                                                    body: err.to_string().into(),
-                                                    kind: Some(NotificationType::Error(err.kind)),
-                                                });
+                                                Err(err) => {
+                                                    context.replies.push_back(
+                                                        UIEvent::Notification {
+                                                            title: Some(
+                                                                "Couldn't send unsubscribe e-mail"
+                                                                    .into(),
+                                                            ),
+                                                            source: None,
+                                                            body: err.to_string().into(),
+                                                            kind: Some(NotificationType::Error(
+                                                                err.kind,
+                                                            )),
+                                                        },
+                                                    );
+                                                }
+                                                Ok(fut) => {
+                                                    let account =
+                                                        &mut context.accounts[&coordinates.0];
+                                                    let handle = account
+                                                        .main_loop_handler
+                                                        .job_executor
+                                                        .spawn(
+                                                            "list-unsubscribe".into(),
+                                                            fut,
+                                                            account.is_async(),
+                                                        );
+                                                    let job_id = handle.job_id;
+                                                    context.accounts[&coordinates.0].insert_job(
+                                                        job_id,
+                                                        JobRequest::Generic {
+                                                            name: "list-unsubscribe".into(),
+                                                            handle,
+                                                            on_finish: None,
+                                                            log_level: LogLevel::INFO,
+                                                        },
+                                                    );
+                                                }
                                             }
                                             return true;
                                         }

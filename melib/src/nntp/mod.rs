@@ -435,7 +435,7 @@ impl MailBackend for NntpType {
         &mut self,
         _bytes: Vec<u8>,
         _mailbox_hash: MailboxHash,
-        _flags: Option<Flag>,
+        _flags: Option<(Flag, Vec<String>)>,
     ) -> ResultFuture<()> {
         Err(Error::new("NNTP doesn't support saving.").set_kind(ErrorKind::NotSupported))
     }

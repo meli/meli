@@ -575,12 +575,13 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         &mut self,
         bytes: Vec<u8>,
         mailbox_hash: MailboxHash,
-        flags: Option<Flag>,
+        flags: Option<(Flag, Vec<String>)>,
     ) -> ResultFuture<()>;
 
+    #[allow(clippy::type_complexity)]
     fn save_batch(
         &mut self,
-        batch: Vec<(Vec<u8>, MailboxHash, Option<Flag>)>,
+        batch: Vec<(Vec<u8>, MailboxHash, Option<(Flag, Vec<String>)>)>,
     ) -> ResultStream<Result<()>> {
         let mut futures = batch
             .into_iter()

@@ -900,7 +900,7 @@ impl Account {
         &mut self,
         bytes: &[u8],
         mailbox_type: SpecialUsageMailbox,
-        flags: Flag,
+        flags: (Flag, Vec<String>),
     ) -> Result<MailboxHash> {
         let mut saved_at: Option<MailboxHash> = None;
         for mailbox in &[
@@ -909,7 +909,7 @@ impl Account {
             self.special_use_mailbox(SpecialUsageMailbox::Normal),
         ] {
             if let Some(mailbox_hash) = mailbox {
-                if let Err(err) = self.save(bytes, *mailbox_hash, Some(flags)) {
+                if let Err(err) = self.save(bytes, *mailbox_hash, Some(flags.clone())) {
                     log::error!("Could not save in '{}' mailbox: {}.", *mailbox_hash, err);
                 } else {
                     saved_at = Some(*mailbox_hash);
@@ -941,7 +941,7 @@ impl Account {
         &mut self,
         bytes: &[u8],
         mailbox_hash: MailboxHash,
-        flags: Option<Flag>,
+        flags: Option<(Flag, Vec<String>)>,
     ) -> Result<()> {
         if self.settings.account.read_only {
             return Err(Error::new(format!("Account {} is read-only.", self.name)));

@@ -867,7 +867,7 @@ impl MailBackend for NotmuchDb {
         &mut self,
         bytes: Vec<u8>,
         _mailbox_hash: MailboxHash,
-        flags: Option<Flag>,
+        flags: Option<(Flag, Vec<String>)>,
     ) -> ResultFuture<()> {
         // [ref:FIXME]: call notmuch_database_index_file ?
         let path = self
@@ -875,7 +875,7 @@ impl MailBackend for NotmuchDb {
             .as_ref()
             .unwrap_or(&self.path)
             .to_path_buf();
-        crate::maildir::MaildirType::save_to_mailbox(path, bytes, flags)?;
+        crate::maildir::MaildirType::save_to_mailbox(path, bytes, flags.map(|(f, _)| f))?;
         Ok(Box::pin(async { Ok(()) }))
     }
 

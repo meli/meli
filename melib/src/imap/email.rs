@@ -71,7 +71,7 @@ pub fn common_attributes() -> (RequiredResponses, MacroOrMessageDataItemNames<'s
 ///   [`imap_codec::imap_types::flag::Flag::Draft`].
 /// - [`Flag::FLAGGED`](crate::email::Flag::FLAGGED) to
 ///   [`imap_codec::imap_types::flag::Flag::Flagged`].
-impl From<crate::email::Flag> for Vec<Flag<'static>> {
+impl<'a> From<crate::email::Flag> for Vec<Flag<'a>> {
     fn from(val: crate::email::Flag) -> Self {
         let mut flags = vec![];
 

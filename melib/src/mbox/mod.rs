@@ -1261,7 +1261,7 @@ impl MailBackend for MboxType {
         &mut self,
         _bytes: Vec<u8>,
         _mailbox_hash: MailboxHash,
-        _flags: Option<Flag>,
+        _flags: Option<(Flag, Vec<String>)>,
     ) -> ResultFuture<()> {
         Err(
             Error::new("Saving messages is currently unimplemented for mbox backend")

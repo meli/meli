@@ -35,6 +35,11 @@ rusty_fork_test! {
     fn test_jmap_watch() {
         tests::run_jmap_watch();
     }
+
+    #[test]
+    fn test_jmap_operations() {
+        tests::run_jmap_operations();
+    }
 }
 
 pub mod server {
@@ -1687,6 +1692,194 @@ hello world.
                     panic!("Expected Remove event, got: {refresh_event:?}");
                 };
                 assert_eq!(env_hash, env_1.hash());
+            }
+            server_event_sender
+                .unbounded_send(ServerEvent::Quit)
+                .unwrap();
+        };
+        std::thread::spawn(move || {
+            block_on(fut);
+        })
+        .join()
+        .unwrap();
+    }
+
+    /// Test various data operations
+    pub fn run_jmap_operations() {
+        let mut _logger = Logger::new_with(LogLevel::TRACE, true);
+        let temp_dir = TempDir::new().unwrap();
+        let backend_event_queue =
+            Arc::new(Mutex::new(std::collections::VecDeque::with_capacity(16)));
+
+        let backend_event_consumer = {
+            let backend_event_queue = Arc::clone(&backend_event_queue);
+
+            BackendEventConsumer::new(Arc::new(move |ah, be| {
+                eprintln!("BackendEventConsumer: ah {ah:?} be {be:?}");
+                backend_event_queue.lock().unwrap().push_back((ah, be));
+            }))
+        };
+
+        for var in [
+            "HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_CONFIG_DIRS",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_DIRS",
+            "XDG_DATA_HOME",
+        ] {
+            std::env::remove_var(var);
+        }
+        for (var, dir) in [
+            ("HOME", temp_dir.path().to_path_buf()),
+            ("XDG_CACHE_HOME", temp_dir.path().join(".cache")),
+            ("XDG_STATE_HOME", temp_dir.path().join(".local/state")),
+            ("XDG_CONFIG_HOME", temp_dir.path().join(".config")),
+            ("XDG_DATA_HOME", temp_dir.path().join(".local/share")),
+        ] {
+            std::fs::create_dir_all(&dir).unwrap_or_else(|err| {
+                panic!("Could not create {} path, {}: {}", var, dir.display(), err);
+            });
+            std::env::set_var(var, &dir);
+        }
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let local_addr = listener.local_addr().unwrap();
+        let account_conf = AccountSettings {
+            name: "test".to_string(),
+            root_mailbox: "INBOX".to_string(),
+            format: "jmap".to_string(),
+            identity: "user@example.com".to_string(),
+            extra_identities: vec![],
+            read_only: false,
+            display_name: None,
+            subscribed_mailboxes: vec![],
+            mailboxes: indexmap::indexmap! {},
+            contacts: indexmap::indexmap! {},
+            manual_refresh: false,
+            extra: indexmap::indexmap! {
+                "server_url".to_string() => format!("http://{}:{}", local_addr.ip(), local_addr.port()).into(),
+                "server_username".to_string() => "user".to_string().into(),
+                "server_password".to_string() => "password".to_string().into(),
+                "use_token".to_string() => "true".to_string().into(),
+            },
+        };
+
+        let mut jmap =
+            JmapType::new(&account_conf, Default::default(), backend_event_consumer).unwrap();
+        let (server_event_sender, server_event_receiver) = unbounded();
+        let server = JmapServerStream::new(
+            smol::Async::new(listener).unwrap(),
+            server_event_receiver,
+            local_addr,
+        );
+        std::thread::spawn(move || {
+            block_on(server.loop_handler()).unwrap();
+        });
+        let fut = async move {
+            eprintln!(
+                "Assert that account is not online because we have not performed any operations \
+                 yet."
+            );
+            assert_eq!(
+                &jmap.is_online().unwrap().await.unwrap_err().to_string(),
+                "Account is uninitialised."
+            );
+            let mailboxes = jmap.mailboxes().unwrap().await.unwrap();
+            assert_eq!(
+                mailboxes.len(),
+                1,
+                "Expected one mailbox, Inbox. Got: {mailboxes:?}"
+            );
+            let inbox_hash = *mailboxes.keys().next().unwrap();
+            eprintln!("Inbox hash: {inbox_hash:?}");
+            {
+                let events = backend_event_queue
+                    .lock()
+                    .unwrap()
+                    .drain(..)
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    events.len(),
+                    0,
+                    "Unexpected events without having performed any changes: {events:?}"
+                );
+            }
+            eprintln!("Refresh account and assert that no events arrive.");
+            jmap.refresh(inbox_hash).unwrap().await.unwrap();
+            {
+                let events = backend_event_queue
+                    .lock()
+                    .unwrap()
+                    .drain(..)
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    events.len(),
+                    0,
+                    "Unexpected events after refreshing without having performed any changes: \
+                     {events:?}"
+                );
+            }
+
+            eprintln!(
+                "Add new e-mail on server store and assert that a refresh results in a Refresh \
+                 Create event."
+            );
+            let new_mail = Box::new(
+                Mail::new(
+                    br#"From: "some name" <some@example.com>
+To: "me" <myself@example.com>
+Cc:
+Subject: RE: your e-mail
+Message-ID: <h2g7f.z0gy2pgaen5m@example.com>
+Content-Type: text/plain
+
+hello world.
+"#
+                    .to_vec(),
+                    None,
+                )
+                .unwrap(),
+            );
+            let fetch_result: Vec<_> = jmap.fetch(inbox_hash).unwrap().collect::<Vec<_>>().await;
+            for res in fetch_result {
+                let res = res.unwrap();
+                assert_eq!(res, vec![]);
+            }
+            jmap.save(
+                new_mail.bytes.clone(),
+                inbox_hash,
+                Some((Flag::DRAFT, vec!["sent".to_string()])),
+            )
+            .unwrap()
+            .await
+            .unwrap();
+            jmap.refresh(inbox_hash).unwrap().await.unwrap();
+            {
+                let events = backend_event_queue
+                    .lock()
+                    .unwrap()
+                    .drain(..)
+                    .collect::<Vec<_>>();
+                log::debug!("got events: {events:?}");
+            };
+            let fetch_result: Vec<_> = jmap.fetch(inbox_hash).unwrap().collect::<Vec<_>>().await;
+            let collection = jmap.collection();
+            assert_eq!(fetch_result.len(), 1);
+            for res in fetch_result {
+                let tag_index = collection.tag_index.read().unwrap();
+                let res = res.unwrap();
+                assert_eq!(res.len(), 1);
+                assert_eq!(res[0].flags(), Flag::DRAFT);
+                assert_eq!(
+                    res[0]
+                        .tags()
+                        .into_iter()
+                        .map(|t| &tag_index[t])
+                        .collect::<Vec<_>>(),
+                    vec!["sent"]
+                );
             }
             server_event_sender
                 .unbounded_send(ServerEvent::Quit)
