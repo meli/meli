@@ -307,7 +307,8 @@ impl Error {
         M: Into<Cow<'static, str>>,
     {
         if let Some(old_details) = self.details.as_ref() {
-            self.details = Some(format!("{}. {}", old_details, details.into()).into());
+            self.details =
+                Some(format!("{}. {}", old_details.trim_end_matches('.'), details.into()).into());
         } else {
             self.details = Some(details.into());
         }
@@ -321,7 +322,8 @@ impl Error {
         if self.summary.is_empty() {
             self.summary = summary.into();
         } else {
-            self.summary = format!("{}. {}", self.summary, summary.into()).into();
+            self.summary =
+                format!("{}. {}", self.summary.trim_end_matches('.'), summary.into()).into();
         }
         self
     }
