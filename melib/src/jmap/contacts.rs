@@ -179,9 +179,10 @@ impl ContactBackend for JmapContacts {
             };
             let GetResponse { list, .. } =
                 GetResponse::<ContactCardObject>::try_from(v.method_responses.remove(0))?;
-            list.into_iter()
-                .map(|obj| obj.jscontact.try_into())
-                .collect::<Result<Vec<_>>>()
+            Ok(list
+                .into_iter()
+                .map(|obj| obj.jscontact.into())
+                .collect::<Vec<_>>())
         }))
     }
 
