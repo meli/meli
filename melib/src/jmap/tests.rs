@@ -625,7 +625,6 @@ fn test_jmap_session_serde() {
                 "A13824",
             ),
         },
-        identities: indexmap::indexmap! {},
         username: "john@example.com".to_string(),
         api_url: serde_json::from_value(json!("https://jmap.example.com/api/")).unwrap(),
         download_url: serde_json::from_value(json!(

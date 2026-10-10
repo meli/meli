@@ -464,7 +464,7 @@ impl JmapClient {
                 GetResponse::<Identity>::try_from(v.method_responses.remove(0))?;
             id_list = list;
         }
-        self.session_guard().await?.identities =
+        *self.store.identities.lock().await =
             id_list.into_iter().map(|id| (id.id.clone(), id)).collect();
 
         Ok(())
