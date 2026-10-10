@@ -522,8 +522,8 @@ pub mod server {
                                         panic!("unimplemented");
                                     };
                                     obj.id = id.clone();
-                                    self.identities.insert(id.clone(), obj.clone());
-                                    created.insert(id, obj);
+                                    self.identities.insert(id.clone(), obj);
+                                    created.insert(id.clone(), serde_json::json! {{"id": id }});
                                     new_state = std::mem::replace(
                                         &mut self.identity_state,
                                         State::new_random(),
@@ -595,8 +595,8 @@ pub mod server {
                                         unreachable!();
                                     };
                                     obj.id = id.clone();
-                                    self.mailboxes.insert(id.clone(), obj.clone());
-                                    created.insert(id, obj);
+                                    self.mailboxes.insert(id.clone(), obj);
+                                    created.insert(id.clone(), serde_json::json! {{"id": id }});
                                 }
                                 assert_eq!(update.unwrap_or_default().len(), 0);
                                 assert_eq!(destroy.unwrap_or_default().len(), 0);

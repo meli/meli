@@ -683,7 +683,7 @@ pub struct SetResponse<OBJ: Object> {
     ///
     /// This argument is null if no `Foo` objects were successfully created.
     #[serde(default = "default_none", skip_serializing_if = "Option::is_none")]
-    pub created: Option<IndexMap<Id<OBJ>, OBJ>>,
+    pub created: Option<IndexMap<Id<OBJ>, Value>>,
     /// `updated`: `Id[Foo|null]|null` The keys in this map are the ids of all
     /// `Foo`s that were successfully updated.
     ///
@@ -694,7 +694,7 @@ pub struct SetResponse<OBJ: Object> {
     ///
     /// This argument is null if no `Foo` objects were successfully updated.
     #[serde(default = "default_none", skip_serializing_if = "Option::is_none")]
-    pub updated: Option<IndexMap<Id<OBJ>, Option<OBJ>>>,
+    pub updated: Option<IndexMap<Id<OBJ>, Option<Value>>>,
     /// `destroyed`: `Id[]|null` A list of `Foo` ids for records that were
     /// successfully destroyed, or `null` if none.
     #[serde(default = "default_none", skip_serializing_if = "Option::is_none")]
