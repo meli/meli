@@ -21,7 +21,7 @@
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
 use crate::{
-    contacts::{AddressBookName, Card},
+    contacts::{AddressBook, AddressBookName, Card},
     prelude::*,
 };
 
@@ -33,7 +33,7 @@ pub struct ContactBackendCapabilities {
     pub supports_search: bool,
     pub metadata: Option<serde_json::Value>,
     pub can_create_address_book: bool,
-    pub max_address_books_per_card: Option<u32>,
+    pub max_address_books_per_card: Option<u64>,
 }
 
 /// A default for [`ContactBackendCapabilities`] for use in const contexts.
@@ -60,7 +60,7 @@ pub trait ContactBackend: ::std::fmt::Debug + Send + Sync {
         Ok(Box::pin(async { Ok(()) }))
     }
     fn address_books(&mut self) -> ResultFuture<Vec<AddressBookName>>;
-    fn fetch_book(&mut self, address_book: &AddressBookName) -> ResultFuture<Vec<Card>>;
+    fn fetch_book(&mut self, address_book: &AddressBookName) -> ResultFuture<AddressBook>;
     fn search(&self, term: &str, address_book: Option<&AddressBookName>)
         -> ResultFuture<Vec<Card>>;
 }

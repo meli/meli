@@ -24,7 +24,7 @@ use crate::{
     backends::prelude::ResultFuture,
     contacts::{
         backend::{ContactBackend, ContactBackendCapabilities},
-        AddressBookName, Card,
+        AddressBook, AddressBookName, Card,
     },
     error::{Error, ErrorKind, Result},
     text::Truncate as _,
@@ -71,61 +71,70 @@ impl ContactBackend for NotmuchContacts {
         Ok(Box::pin(async { Ok(vec![AddressBookName(name.into())]) }))
     }
 
-    fn fetch_book(&mut self, address_book: &AddressBookName) -> ResultFuture<Vec<Card>> {
+    fn fetch_book(&mut self, address_book: &AddressBookName) -> ResultFuture<AddressBook> {
         if address_book.0.as_ref() != self.query {
             return Err(Error::new("").set_kind(ErrorKind::ValueError));
         }
-        let query = &self.query;
-        let cards = match std::process::Command::new("sh")
-            .args([
-                "-c",
-                &format!("notmuch address --format=json --output=recipients {query}",),
-            ])
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .output()
-        {
-            Ok(notmuch_addresses) => {
-                if notmuch_addresses.status.success() {
-                    match std::str::from_utf8(&notmuch_addresses.stdout) {
-                        Ok(notmuch_address_out) => {
-                            match parse_notmuch_contacts(notmuch_address_out) {
-                                Ok(contacts) => contacts,
-                                Err(err) => {
-                                    return Err(Error::new(format!(
-                                        "Unable to parse notmuch contact result into cards: {}",
-                                        notmuch_address_out.trim_at_boundary(100),
-                                    ))
-                                    .set_source(Some(Box::new(err))));
+        let query = self.query.clone();
+        let name = address_book.clone();
+
+        Ok(Box::pin(async move {
+            let cards = match std::process::Command::new("sh")
+                .args([
+                    "-c",
+                    &format!("notmuch address --format=json --output=recipients {query}",),
+                ])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .output()
+            {
+                Ok(notmuch_addresses) => {
+                    if notmuch_addresses.status.success() {
+                        match std::str::from_utf8(&notmuch_addresses.stdout) {
+                            Ok(notmuch_address_out) => {
+                                match parse_notmuch_contacts(notmuch_address_out) {
+                                    Ok(contacts) => contacts,
+                                    Err(err) => {
+                                        return Err(Error::new(format!(
+                                            "Unable to parse notmuch contact result into cards: {}",
+                                            notmuch_address_out.trim_at_boundary(100),
+                                        ))
+                                        .set_source(Some(Box::new(err))));
+                                    }
                                 }
                             }
+                            Err(err) => {
+                                return Err(Error::new(format!(
+                                    "Unable to read from notmuch address query: {query}",
+                                ))
+                                .set_source(Some(Box::new(err))));
+                            }
                         }
-                        Err(err) => {
-                            return Err(Error::new(format!(
-                                "Unable to read from notmuch address query: {query}",
-                            ))
-                            .set_source(Some(Box::new(err))));
-                        }
+                    } else {
+                        return Err(Error::new(format!(
+                            "Error running notmuch address: {} stdout: {} stderr: {}",
+                            notmuch_addresses.status,
+                            String::from_utf8_lossy(&notmuch_addresses.stdout),
+                            String::from_utf8_lossy(&notmuch_addresses.stderr)
+                        ))
+                        .set_kind(ErrorKind::External));
                     }
-                } else {
-                    return Err(Error::new(format!(
-                        "Error running notmuch address: {} stdout: {} stderr: {}",
-                        notmuch_addresses.status,
-                        String::from_utf8_lossy(&notmuch_addresses.stdout),
-                        String::from_utf8_lossy(&notmuch_addresses.stderr)
-                    ))
-                    .set_kind(ErrorKind::External));
                 }
-            }
-            Err(err) => {
-                return Err(Error::new("Unable to run notmuch address command")
-                    .set_kind(ErrorKind::External)
-                    .set_source(Some(Box::new(err))));
-            }
-        };
+                Err(err) => {
+                    return Err(Error::new("Unable to run notmuch address command")
+                        .set_kind(ErrorKind::External)
+                        .set_source(Some(Box::new(err))));
+                }
+            };
+            let cards = cards.into_iter().map(|c| (c.id, c)).collect();
 
-        Ok(Box::pin(async { Ok(cards) }))
+            Ok(AddressBook {
+                name,
+                cards,
+                read_only: true,
+            })
+        }))
     }
 
     fn search(

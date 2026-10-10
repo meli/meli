@@ -1650,23 +1650,61 @@ impl MailBackend for JmapType {
                 let client = conn.client().await?;
                 client.connect().await?;
             }
-            let caps = {
+            let (account_id, capabilities) = {
+                let mut conn = connection.lock().await;
+                let client = conn.client().await?;
+                let session_guard = client.session_guard().await?;
                 let core_capabilities = store.core_capabilities.lock().unwrap();
-                let Some(caps) = core_capabilities.get(JmapContactsCapability::uri()) else {
+                if !core_capabilities.contains_key(JmapContactsCapability::uri()) {
                     return Err(Error::new(
                         "Server does not support JSON Meta Application Protocol (JMAP) for \
                          Contacts",
                     )
                     .set_kind(ErrorKind::NotSupported));
+                }
+                let Some(account_id) = session_guard.contacts_account_id() else {
+                    return Err(Error::new(
+                        "JMAP Server session does not have any contact accounts configured.",
+                    )
+                    .set_kind(ErrorKind::NotFound));
                 };
-                caps.clone()
+                let account = session_guard.accounts.get(&account_id).ok_or_else(|| {
+                    Error::new(format!(
+                        "JMAP Server session does not have primary contact account {account_id} \
+                         in `accounts` field. It has: {:?}",
+                        session_guard.accounts
+                    ))
+                    .set_kind(ErrorKind::Bug)
+                })?;
+                let account_caps = account
+                    .account_capabilities
+                    .get(JmapContactsCapability::uri())
+                    .ok_or_else(|| {
+                        Error::new(format!(
+                            "JMAP Server session does not have primary contact account \
+                             {account_id} capabilities for {} in `accounts` field. It has: {:?}",
+                            JmapContactsCapability::uri(),
+                            account.account_capabilities
+                        ))
+                        .set_kind(ErrorKind::Bug)
+                    })?;
+                let account_caps = serde_json::from_value(account_caps.clone()).map_err(|err| {
+                    Error::new(format!(
+                        "Could not deserialize contacts Capabilities object from Session object: \
+                         {account_caps:?}"
+                    ))
+                    .set_kind(ErrorKind::Bug)
+                    .set_source(Some(Box::new(err)))
+                })?;
+                (account_id, account_caps)
             };
-            Ok(Box::new(contacts::JmapContacts::new(
-                caps,
+            Ok(Box::new(contacts::JmapContacts {
+                account_id,
+                capabilities,
                 server_conf,
                 connection,
                 store,
-            ))
+            })
                 as Box<dyn crate::contacts::backend::ContactBackend>)
         }))
     }

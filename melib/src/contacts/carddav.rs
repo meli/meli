@@ -29,7 +29,7 @@ use crate::{
     backends::prelude::ResultFuture,
     contacts::{
         backend::{ContactBackend, ContactBackendCapabilities},
-        vcard, AddressBookName, Card,
+        vcard, AddressBook, AddressBookName, Card,
     },
     error::{Error, ErrorKind, Result, ResultIntoError as _},
     utils::webdav::*,
@@ -300,10 +300,22 @@ impl ContactBackend for CardDAVContacts {
         Ok(Box::pin(async { Ok(names) }))
     }
 
-    fn fetch_book(&mut self, address_book: &AddressBookName) -> ResultFuture<Vec<Card>> {
+    fn fetch_book(&mut self, address_book: &AddressBookName) -> ResultFuture<AddressBook> {
         let conn = self.connection.clone();
-        let address_book = address_book.clone();
-        Ok(Box::pin(async move { conn.all(address_book.0).await }))
+        let name = address_book.clone();
+        Ok(Box::pin(async move {
+            let cards = conn
+                .all(Arc::clone(&name.0))
+                .await?
+                .into_iter()
+                .map(|c| (c.id, c))
+                .collect();
+            Ok(AddressBook {
+                name,
+                cards,
+                read_only: true,
+            })
+        }))
     }
 
     fn search(

@@ -30,7 +30,7 @@ use crate::{
     backends::prelude::ResultFuture,
     contacts::{
         backend::{ContactBackend, ContactBackendCapabilities},
-        AddressBookName, Card,
+        AddressBook, AddressBookName, Card,
     },
     error::{Error, ErrorKind},
     utils::parsec::{is_not, map_res, match_literal_anycase, prefix, Parser},
@@ -107,30 +107,39 @@ impl ContactBackend for MuttContacts {
         }))
     }
 
-    fn fetch_book(&mut self, address_book: &AddressBookName) -> ResultFuture<Vec<Card>> {
+    fn fetch_book(&mut self, address_book: &AddressBookName) -> ResultFuture<AddressBook> {
         if address_book.0.as_ref() != "mutt_alias_file" {
             return Err(Error::new("").set_kind(ErrorKind::ValueError));
         }
-        let mutt_alias_file = &self.path;
-        let cards = match std::fs::read_to_string(Path::new(mutt_alias_file).expand())
-            .map_err(|err| Error::from(err).set_related_path(Some(mutt_alias_file)))
-            .and_then(|contents| {
-                Ok(contents
-                    .lines()
-                    .map(|line| parse_mutt_contact().parse(line).map(|(_, c)| c))
-                    .collect::<std::result::Result<Vec<Card>, &str>>()
-                    .map_err(|err| format!("Could not parse file: {err}"))?)
-            }) {
-            Ok(cards) => cards,
-            Err(err) => {
-                return Err(Error::new(format!(
-                    "Could not load mutt alias file {mutt_alias_file:?}"
-                ))
-                .set_source(Some(Box::new(err))));
-            }
-        };
+        let mutt_alias_file = self.path.clone();
+        let name = address_book.clone();
 
-        Ok(Box::pin(async { Ok(cards) }))
+        Ok(Box::pin(async move {
+            let cards = match std::fs::read_to_string(Path::new(&mutt_alias_file).expand())
+                .map_err(|err| Error::from(err).set_related_path(Some(&mutt_alias_file)))
+                .and_then(|contents| {
+                    Ok(contents
+                        .lines()
+                        .map(|line| parse_mutt_contact().parse(line).map(|(_, c)| c))
+                        .collect::<std::result::Result<Vec<Card>, &str>>()
+                        .map_err(|err| format!("Could not parse file: {err}"))?)
+                }) {
+                Ok(cards) => cards,
+                Err(err) => {
+                    return Err(Error::new(format!(
+                        "Could not load mutt alias file {mutt_alias_file:?}"
+                    ))
+                    .set_source(Some(Box::new(err))));
+                }
+            };
+
+            let cards = cards.into_iter().map(|c| (c.id, c)).collect();
+            Ok(AddressBook {
+                name,
+                cards,
+                read_only: true,
+            })
+        }))
     }
 
     fn search(

@@ -30,40 +30,41 @@ use crate::{
     contacts::{
         backend::{ContactBackend, ContactBackendCapabilities},
         jscontact::{JSContact, JSContactVersion1},
-        AddressBookName,
+        AddressBook, AddressBookName, Card,
     },
     jmap::{
         deserialize_from_str,
         filters::FilterTrait,
         methods::{Get, GetResponse, MethodResponse},
-        objects::{Id, Object},
+        objects::{Account, Id, Object},
         protocol::{Method, Request, UtcDate, USING_CONTACTS as USING},
-        CapabilitiesObject, JmapConnection, JmapServerConf, Store,
+        JmapConnection, JmapServerConf, Store,
     },
     utils::futures::timeout,
 };
 
 #[derive(Debug)]
 pub struct JmapContacts {
-    capabilities: CapabilitiesObject,
-    server_conf: JmapServerConf,
-    connection: Arc<FutureMutex<JmapConnection>>,
-    store: Arc<Store>,
+    pub capabilities: ContactsCapabilitiesObject,
+    pub account_id: Id<Account>,
+    pub server_conf: JmapServerConf,
+    pub connection: Arc<FutureMutex<JmapConnection>>,
+    pub store: Arc<Store>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContactsCapabilitiesObject {
+    #[serde(default)]
+    pub may_create_address_book: bool,
+    #[serde(default)]
+    pub max_address_books_per_card: Option<u64>,
 }
 
 impl ContactBackend for JmapContacts {
     fn capabilities(&mut self) -> ContactBackendCapabilities {
-        let can_create_address_book = self
-            .capabilities
-            .extra_properties
-            .get("mayCreateAddressBook")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-        let max_address_books_per_card = self
-            .capabilities
-            .extra_properties
-            .get("maxAddressBooksPerCard")
-            .and_then(|v| v.as_number()?.as_u64()?.try_into().ok());
+        let can_create_address_book = self.capabilities.may_create_address_book;
+        let max_address_books_per_card = self.capabilities.max_address_books_per_card;
         ContactBackendCapabilities {
             is_async: true,
             is_remote: true,
@@ -87,11 +88,11 @@ impl ContactBackend for JmapContacts {
 
     fn address_books(&mut self) -> crate::prelude::ResultFuture<Vec<AddressBookName>> {
         let store = self.store.clone();
+        let account_id = self.account_id.clone();
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
             let mut conn = connection.lock().await;
             let client = conn.client().await?;
-            let account_id = client.session_guard().await?.contacts_account_id();
             let mut req = Request::new_with_using(client.request_no.clone(), USING);
             let get_call = AddressBookGet::new(Get::new().account_id(account_id));
 
@@ -123,14 +124,14 @@ impl ContactBackend for JmapContacts {
     fn fetch_book(
         &mut self,
         address_book: &AddressBookName,
-    ) -> crate::prelude::ResultFuture<Vec<crate::Card>> {
+    ) -> crate::prelude::ResultFuture<AddressBook> {
         let store = self.store.clone();
         let connection = self.connection.clone();
-        let address_book: AddressBookName = address_book.clone();
+        let account_id = self.account_id.clone();
+        let address_book = address_book.clone();
         Ok(Box::pin(async move {
             let mut conn = connection.lock().await;
             let client = conn.client().await?;
-            let account_id = client.session_guard().await?.contacts_account_id();
             let mut req = Request::new_with_using(client.request_no.clone(), USING);
             let get_call = AddressBookGet::new(Get::new().account_id(account_id.clone()));
 
@@ -153,7 +154,7 @@ impl ContactBackend for JmapContacts {
             let GetResponse { list, .. } =
                 GetResponse::<AddressBookObject>::try_from(v.method_responses.remove(0))?;
             store.online_status.update_timestamp(None).await;
-            let Some(_book) = list.iter().find(|b| b.name == address_book.deref()) else {
+            let Some(book) = list.iter().find(|b| b.name == address_book.deref()) else {
                 return Err(Error::new(format!(
                     "Address book {} not found. Available address books: {:?}",
                     address_book.deref(),
@@ -179,10 +180,18 @@ impl ContactBackend for JmapContacts {
             };
             let GetResponse { list, .. } =
                 GetResponse::<ContactCardObject>::try_from(v.method_responses.remove(0))?;
-            Ok(list
+            let cards = list
                 .into_iter()
-                .map(|obj| obj.jscontact.into())
-                .collect::<Vec<_>>())
+                .map(|obj| {
+                    let card: Card = obj.jscontact.into();
+                    (card.id, card)
+                })
+                .collect::<IndexMap<_, _>>();
+            Ok(AddressBook {
+                name: address_book,
+                read_only: !book.my_rights.may_write,
+                cards,
+            })
         }))
     }
 
@@ -190,24 +199,8 @@ impl ContactBackend for JmapContacts {
         &self,
         _term: &str,
         _address_book: Option<&AddressBookName>,
-    ) -> crate::prelude::ResultFuture<Vec<crate::Card>> {
+    ) -> crate::prelude::ResultFuture<Vec<Card>> {
         Err(Error::new("").set_kind(ErrorKind::NotImplemented))
-    }
-}
-
-impl JmapContacts {
-    pub fn new(
-        capabilities: CapabilitiesObject,
-        server_conf: JmapServerConf,
-        connection: Arc<FutureMutex<JmapConnection>>,
-        store: Arc<Store>,
-    ) -> Self {
-        Self {
-            capabilities,
-            server_conf,
-            connection,
-            store,
-        }
     }
 }
 
@@ -242,8 +235,7 @@ pub struct AddressBookObject {
     pub is_subscribed: bool,
     #[serde(skip)]
     pub share_with: (),
-    #[serde(skip)]
-    pub my_rights: (),
+    pub my_rights: AddressBookRights,
 }
 
 impl Object for AddressBookObject {
@@ -367,3 +359,12 @@ impl ContactCardFilterCondition {
 }
 
 impl FilterTrait<ContactCardObject> for ContactCardFilterCondition {}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddressBookRights {
+    pub may_read: bool,
+    pub may_write: bool,
+    pub may_share: bool,
+    pub may_delete: bool,
+}

@@ -35,7 +35,7 @@ use crate::{
     backends::prelude::ResultFuture,
     contacts::{
         backend::{ContactBackend, ContactBackendCapabilities},
-        AddressBookName, Card, CardId,
+        AddressBook, AddressBookName, Card, CardId,
     },
     error::{Error, ErrorKind, Result, ResultIntoError as _},
     utils::{
@@ -377,25 +377,36 @@ impl ContactBackend for VCardContacts {
         }))
     }
 
-    fn fetch_book(&mut self, address_book: &AddressBookName) -> ResultFuture<Vec<Card>> {
+    fn fetch_book(&mut self, address_book: &AddressBookName) -> ResultFuture<AddressBook> {
         if address_book.0.as_ref() != "vcard_folder" {
             return Err(Error::new("").set_kind(ErrorKind::ValueError));
         }
-        let vcard_path = &self.path;
-        let expanded_path = vcard_path.expand();
-        let cards = load_cards(&expanded_path).map_err(|err| {
-            let mut err = err.set_summary("Could not load vcards");
-            if expanded_path != *vcard_path {
-                err = err.set_details(format!(
-                    "Note: vcard_folder was expanded from {} to {}",
-                    vcard_path.display(),
-                    expanded_path.display()
-                ));
-            }
-            err
-        });
+        let name = address_book.clone();
+        let vcard_path = self.path.clone();
+        Ok(Box::pin(async move {
+            let expanded_path = vcard_path.expand();
+            let cards = load_cards(&expanded_path)
+                .map_err(|err| {
+                    let mut err = err.set_summary("Could not load vcards");
+                    if expanded_path != *vcard_path {
+                        err = err.set_details(format!(
+                            "Note: vcard_folder was expanded from {} to {}",
+                            vcard_path.display(),
+                            expanded_path.display()
+                        ));
+                    }
+                    err
+                })?
+                .into_iter()
+                .map(|c| (c.id, c))
+                .collect();
 
-        Ok(Box::pin(async { cards }))
+            Ok(AddressBook {
+                name,
+                cards,
+                read_only: true,
+            })
+        }))
     }
 
     fn search(

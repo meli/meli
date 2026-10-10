@@ -453,11 +453,7 @@ impl Account {
                                 kind: Some(NotificationType::Error(err.kind)),
                             }));
                     }
-                    Ok(Some(Ok(cards))) => {
-                        let mut b = AddressBook::new(book, true);
-                        for c in cards {
-                            b.add_card(c);
-                        }
+                    Ok(Some(Ok(b))) => {
                         self.contacts.add_book(&name, &format, b);
                         self.main_loop_handler.send(ThreadEvent::UIEvent(
                             UIEvent::AccountStatusChange(self.hash, None),
@@ -485,7 +481,7 @@ pub enum ContactJobRequest {
         name: String,
         format: String,
         book: AddressBookName,
-        handle: JoinHandle<Result<Vec<Card>>>,
+        handle: JoinHandle<Result<AddressBook>>,
     },
 }
 

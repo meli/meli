@@ -61,8 +61,10 @@ impl Session {
 
     /// Return the account ID corresponding to the [`JmapContactsCapability`]
     /// capability.
-    pub fn contacts_account_id(&self) -> Id<Account> {
-        self.primary_accounts[JmapContactsCapability::uri()].clone()
+    pub fn contacts_account_id(&self) -> Option<Id<Account>> {
+        self.primary_accounts
+            .get(JmapContactsCapability::uri())
+            .cloned()
     }
 }
 
