@@ -137,6 +137,7 @@ pub struct Account {
     pub active_job_instants: BTreeMap<std::time::Instant, JobId>,
     pub event_queue: IndexMap<MailboxHash, VecDeque<RefreshEventKind>>,
     pub backend_capabilities: MailBackendCapabilities,
+    pub component_states: IndexMap<String, serde_json::Value>,
 }
 
 impl Drop for Account {
@@ -250,6 +251,15 @@ impl Account {
             }
         }
 
+        let component_states = xdg::BaseDirectories::with_profile("meli", name.as_ref())
+            .ok()
+            .and_then(|d| d.place_state_file("component_states.json").ok())
+            .and_then(|path| {
+                let file = std::fs::File::open(path).ok()?;
+                let reader = std::io::BufReader::new(file);
+                serde_json::from_reader::<_, IndexMap<String, serde_json::Value>>(reader).ok()
+            })
+            .unwrap_or_default();
         let mut ret = Self {
             hash,
             name,
@@ -271,6 +281,7 @@ impl Account {
             event_queue: IndexMap::default(),
             backend_capabilities: backend.capabilities(),
             backend: Arc::new(Mutex::new(backend)),
+            component_states,
         };
         ret.init_contacts();
         Ok(ret)

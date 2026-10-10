@@ -69,6 +69,9 @@ pub struct TerminalSettings {
     /// Whether the `shortcuts.general.quit` shortcut needs a confirmation to quit.
     #[serde(default = "ToggleFlag::internal_true")]
     pub quit_confirmation: ToggleFlag,
+    /// Store some TUI state such as current tab in `XDG_STATE_HOME`
+    #[serde(default = "ToggleFlag::internal_true")]
+    pub store_component_states: ToggleFlag,
 }
 
 const fn tab_width() -> u8 {
@@ -91,6 +94,7 @@ impl Default for TerminalSettings {
             file_picker_command: None,
             progress_spinner_sequence: None,
             quit_confirmation: ToggleFlag::InternalVal(true),
+            store_component_states: ToggleFlag::InternalVal(true),
         }
     }
 }
@@ -119,6 +123,11 @@ impl TerminalSettings {
     pub fn quit_confirmation(&self) -> bool {
         self.quit_confirmation.is_true()
     }
+
+    #[inline]
+    pub fn store_component_states(&self) -> bool {
+        self.store_component_states.is_true()
+    }
 }
 
 impl DotAddressable for TerminalSettings {
@@ -142,6 +151,7 @@ impl DotAddressable for TerminalSettings {
                         self.progress_spinner_sequence.lookup(field, tail)
                     }
                     "quit_confirmation" => self.quit_confirmation.lookup(field, tail),
+                    "store_component_states" => self.store_component_states.lookup(field, tail),
                     other => Err(Error::new(format!(
                         "{parent_field} has no field named {other}"
                     ))),

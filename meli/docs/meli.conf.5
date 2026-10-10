@@ -2396,6 +2396,14 @@ Whether the
 .Ic shortcuts.general.quit
 shortcut needs a confirmation to quit.
 .Pq Em true \" default value
+.It Ic store_component_states Ar boolean
+Store some TUI state such as current tab in
+.Pa $XDG_STATE_HOME/meli/ \" default value
+.Po which is usually
+.Pa $HOME/.local/state/meli/ \" default value
+.Pc
+directories.
+.Pq Em true \" default value
 .El
 .\"
 .\"

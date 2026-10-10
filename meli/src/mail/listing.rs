@@ -604,6 +604,7 @@ struct AccountMenuEntry {
     hash: AccountHash,
     index: usize,
     entries: SmallVec<[MailboxMenuEntry; 16]>,
+    collapsed: BTreeSet<MailboxHash>,
 }
 
 impl AccountMenuEntry {
@@ -1554,18 +1555,8 @@ impl Component for Listing {
                 if self.cursor_pos.account == account_index {
                     self.change_account(context);
                 } else {
-                    let previous_collapsed_mailboxes: BTreeSet<MailboxHash> = self.accounts
-                        [account_index]
-                        .entries
-                        .iter()
-                        .filter_map(|e| {
-                            if e.collapsed {
-                                Some(e.mailbox_hash)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect::<_>();
+                    let previous_collapsed_mailboxes: BTreeSet<MailboxHash> =
+                        self.accounts[account_index].collapsed.clone();
                     let previous_index_styles: BTreeMap<MailboxHash, IndexStyle> = self.accounts
                         [account_index]
                         .entries
@@ -1610,18 +1601,8 @@ impl Component for Listing {
                     .get_index_of(account_hash)
                     .expect("Invalid account_hash in UIEventMailbox{Delete,Create}");
                 self.menu.grid_mut().empty();
-                let previous_collapsed_mailboxes: BTreeSet<MailboxHash> = self.accounts
-                    [account_index]
-                    .entries
-                    .iter()
-                    .filter_map(|e| {
-                        if e.collapsed {
-                            Some(e.mailbox_hash)
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<_>();
+                let previous_collapsed_mailboxes: BTreeSet<MailboxHash> =
+                    self.accounts[account_index].collapsed.clone();
                 let previous_index_styles: BTreeMap<MailboxHash, IndexStyle> = self.accounts
                     [account_index]
                     .entries
@@ -2475,11 +2456,26 @@ impl Component for Listing {
                         } else {
                             return false;
                         };
-                    if let Some(target) = self.accounts[self.menu_cursor_pos.account]
-                        .entries
-                        .get_mut(target_mailbox_idx)
-                    {
+                    let AccountMenuEntry {
+                        ref mut entries,
+                        ref mut collapsed,
+                        hash: ref account_hash,
+                        ..
+                    } = &mut self.accounts[self.menu_cursor_pos.account];
+                    if let Some(target) = entries.get_mut(target_mailbox_idx) {
                         target.collapsed = !(target.collapsed);
+                        if target.collapsed {
+                            collapsed.insert(target.mailbox_hash);
+                        } else {
+                            collapsed.remove(&target.mailbox_hash);
+                        }
+                        *context.accounts[account_hash]
+                            .component_states
+                            .entry("listing".into())
+                            .or_default() = serde_json::to_value(ListingComponentState {
+                            collapsed: collapsed.clone(),
+                        })
+                        .expect("serializable component state");
                         self.dirty = true;
                         self.menu.grid_mut().empty();
                         context
@@ -3068,6 +3064,11 @@ impl Component for Listing {
     }
 }
 
+#[derive(Default, serde::Deserialize, serde::Serialize)]
+struct ListingComponentState {
+    collapsed: BTreeSet<MailboxHash>,
+}
+
 impl Listing {
     pub fn new(context: &mut Context) -> Self {
         let account_entries: Vec<AccountMenuEntry> = context
@@ -3075,18 +3076,29 @@ impl Listing {
             .iter()
             .enumerate()
             .map(|(i, (h, a))| {
+                let mut collapsed: BTreeSet<MailboxHash> = a
+                    .component_states
+                    .get("listing")
+                    .and_then(|c| serde_json::from_value::<ListingComponentState>(c.clone()).ok())
+                    .unwrap_or_default()
+                    .collapsed;
                 let entries: SmallVec<[MailboxMenuEntry; 16]> = a
                     .list_mailboxes()
                     .into_iter()
                     .filter(|mailbox_node| a[&mailbox_node.hash].ref_mailbox.is_subscribed())
-                    .map(|f| MailboxMenuEntry {
-                        depth: f.depth,
-                        indentation: f.indentation,
-                        has_sibling: f.has_sibling,
-                        mailbox_hash: f.hash,
-                        visible: true,
-                        collapsed: a[&f.hash].conf.collapsed,
-                        index_style: a[&f.hash].conf.conf_override().listing.index_style,
+                    .map(|f| {
+                        if a[&f.hash].conf.collapsed {
+                            collapsed.insert(f.hash);
+                        }
+                        MailboxMenuEntry {
+                            depth: f.depth,
+                            indentation: f.indentation,
+                            has_sibling: f.has_sibling,
+                            mailbox_hash: f.hash,
+                            visible: true,
+                            collapsed: collapsed.contains(&f.hash),
+                            index_style: a[&f.hash].conf.conf_override().listing.index_style,
+                        }
                     })
                     .collect::<_>();
 
@@ -3095,6 +3107,7 @@ impl Listing {
                     hash: *h,
                     index: i,
                     entries,
+                    collapsed,
                 }
             })
             .collect();
@@ -3634,18 +3647,8 @@ impl Listing {
 
     fn change_account(&mut self, context: &mut Context) {
         let account_hash = context.accounts[self.cursor_pos.account].hash();
-        let previous_collapsed_mailboxes: BTreeSet<MailboxHash> = self.accounts
-            [self.cursor_pos.account]
-            .entries
-            .iter()
-            .filter_map(|e| {
-                if e.collapsed {
-                    Some(e.mailbox_hash)
-                } else {
-                    None
-                }
-            })
-            .collect::<_>();
+        let previous_collapsed_mailboxes: BTreeSet<MailboxHash> =
+            self.accounts[self.cursor_pos.account].collapsed.clone();
         let previous_index_styles: BTreeMap<MailboxHash, IndexStyle> = self.accounts
             [self.cursor_pos.account]
             .entries
