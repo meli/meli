@@ -310,13 +310,13 @@ impl Account {
                     let handle = self.main_loop_handler.job_executor.spawn(
                         format!("fetch {name} {format} address book").into(),
                         v,
-                        self.is_async(),
+                        backend.capabilities().is_async.into(),
                     );
                     let job_id = handle.job_id;
                     self.active_jobs.insert(
                         job_id,
                         JobRequest::Contacts(ContactJobRequest::Cards {
-                            name: format.clone(),
+                            name: name.clone(),
                             format: format.clone(),
                             book,
                             handle,
@@ -443,7 +443,7 @@ impl Account {
                             .send(ThreadEvent::UIEvent(UIEvent::Notification {
                                 title: Some(
                                     format!(
-                                        "{}: {name} {format} contact initialization failed",
+                                        "{}: {name} {format} address book {book} fetch failed",
                                         self.name
                                     )
                                     .into(),
