@@ -764,6 +764,12 @@ impl Tabbed {
     pub fn new(children: Vec<Box<dyn Component>>, context: &Context) -> Self {
         let pinned = children.len();
         let theme_default = crate::conf::theme_value(context, "theme_default");
+        let cursor_pos: usize = context
+            .component_states
+            .get("tabbed")
+            .and_then(|l| l.get("cursor_pos"))
+            .and_then(|c| serde_json::from_value(c.clone()).ok())
+            .unwrap_or_default();
         let mut ret = Self {
             help_view: HelpView {
                 content: Screen::<Virtual>::new(theme_default),
@@ -776,8 +782,12 @@ impl Tabbed {
             },
             theme_default,
             pinned,
+            cursor_pos: if cursor_pos >= children.len() {
+                0
+            } else {
+                cursor_pos
+            },
             children,
-            cursor_pos: 0,
             show_shortcuts: false,
             dirty: true,
             id: ComponentId::default(),
@@ -1245,6 +1255,14 @@ impl Component for Tabbed {
                     self.children[self.cursor_pos]
                         .process_event(&mut UIEvent::VisibilityChange(false), context);
                     self.cursor_pos = no % self.children.len();
+                    {
+                        let tabbed = context.component_states.entry("tabbed".into()).or_default();
+                        if tabbed.as_object_mut().is_none() {
+                            *tabbed = serde_json::json! { {} };
+                        }
+                        let map = tabbed.as_object_mut().unwrap();
+                        map.insert("cursor_pos".into(), serde_json::json! {self.cursor_pos});
+                    }
                     self.update_help_curr_views(context);
                     context
                         .replies
@@ -1262,6 +1280,14 @@ impl Component for Tabbed {
                     .process_event(&mut UIEvent::VisibilityChange(false), context);
                 self.cursor_pos = (self.cursor_pos + 1) % self.children.len();
                 self.update_help_curr_views(context);
+                {
+                    let tabbed = context.component_states.entry("tabbed".into()).or_default();
+                    if tabbed.as_object_mut().is_none() {
+                        *tabbed = serde_json::json! { {} };
+                    }
+                    let map = tabbed.as_object_mut().unwrap();
+                    map.insert("cursor_pos".into(), serde_json::json! {self.cursor_pos});
+                }
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
@@ -1294,6 +1320,14 @@ impl Component for Tabbed {
                 self.cursor_pos = self.children.len() - 1;
                 self.children[self.cursor_pos].set_dirty(true);
                 self.update_help_curr_views(context);
+                {
+                    let tabbed = context.component_states.entry("tabbed".into()).or_default();
+                    if tabbed.as_object_mut().is_none() {
+                        *tabbed = serde_json::json! { {} };
+                    }
+                    let map = tabbed.as_object_mut().unwrap();
+                    map.insert("cursor_pos".into(), serde_json::json! {self.cursor_pos});
+                }
                 return true;
             }
             UIEvent::Action(Tab(Close)) => {
@@ -1303,6 +1337,14 @@ impl Component for Tabbed {
                 let id = self.children[self.cursor_pos].id();
                 self.children[self.cursor_pos].kill(id, context);
                 self.update_help_curr_views(context);
+                {
+                    let tabbed = context.component_states.entry("tabbed".into()).or_default();
+                    if tabbed.as_object_mut().is_none() {
+                        *tabbed = serde_json::json! { {} };
+                    }
+                    let map = tabbed.as_object_mut().unwrap();
+                    map.insert("cursor_pos".into(), serde_json::json! {self.cursor_pos});
+                }
                 self.set_dirty(true);
                 return true;
             }
@@ -1318,6 +1360,14 @@ impl Component for Tabbed {
                     self.cursor_pos = 0;
                     self.set_dirty(true);
                     self.update_help_curr_views(context);
+                    {
+                        let tabbed = context.component_states.entry("tabbed".into()).or_default();
+                        if tabbed.as_object_mut().is_none() {
+                            *tabbed = serde_json::json! { {} };
+                        }
+                        let map = tabbed.as_object_mut().unwrap();
+                        map.insert("cursor_pos".into(), serde_json::json! {self.cursor_pos});
+                    }
                     return true;
                 } else {
                     log::debug!(

@@ -238,6 +238,7 @@ fn test_accounts_mailbox_by_path_error_msg() {
             event_queue: IndexMap::default(),
             backend_capabilities: backend.capabilities(),
             backend: Arc::new(std::sync::Mutex::new(backend)),
+            component_states: IndexMap::default(),
         };
         account.init(ref_mailboxes).unwrap();
         while let Ok(thread_event) = ctx.receiver.try_recv() {
@@ -448,6 +449,7 @@ fn test_accounts_mailbox_by_path_error_msg() {
             event_queue: IndexMap::default(),
             backend_capabilities: backend.capabilities(),
             backend: Arc::new(std::sync::Mutex::new(backend)),
+            component_states: IndexMap::default(),
         };
         account.init(ref_mailboxes).unwrap();
         while let Ok(thread_event) = ctx.receiver.try_recv() {

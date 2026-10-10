@@ -137,6 +137,7 @@ pub struct Account {
     pub active_job_instants: BTreeMap<std::time::Instant, JobId>,
     pub event_queue: IndexMap<MailboxHash, VecDeque<RefreshEventKind>>,
     pub backend_capabilities: MailBackendCapabilities,
+    pub component_states: IndexMap<String, serde_json::Value>,
 }
 
 impl Drop for Account {
@@ -145,6 +146,16 @@ impl Drop for Account {
         if let Err(err) = self.write_default_address_book_to_disk() {
             eprintln!("Could not flush contacts to disk: {err}");
         }
+        _ = xdg::BaseDirectories::with_profile("meli", self.name.as_ref())
+            .ok()
+            .and_then(|d| d.place_state_file("component_states").ok())
+            .and_then(|path| {
+                serde_json::to_writer::<_, IndexMap<String, serde_json::Value>>(
+                    std::fs::File::create(path).ok()?,
+                    &self.component_states,
+                )
+                .ok()
+            });
     }
 }
 
@@ -250,6 +261,15 @@ impl Account {
             }
         }
 
+        let component_states = xdg::BaseDirectories::with_profile("meli", name.as_ref())
+            .ok()
+            .and_then(|d| d.place_state_file("component_states").ok())
+            .and_then(|path| {
+                let file = std::fs::File::open(path).ok()?;
+                let reader = std::io::BufReader::new(file);
+                serde_json::from_reader::<_, IndexMap<String, serde_json::Value>>(reader).ok()
+            })
+            .unwrap_or_default();
         let mut ret = Self {
             hash,
             name,
@@ -271,6 +291,7 @@ impl Account {
             event_queue: IndexMap::default(),
             backend_capabilities: backend.capabilities(),
             backend: Arc::new(Mutex::new(backend)),
+            component_states,
         };
         ret.init_contacts();
         Ok(ret)

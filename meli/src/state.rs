@@ -149,6 +149,7 @@ pub struct Context {
     /// Children processes
     pub children: IndexMap<Cow<'static, str>, Vec<ForkedProcess>>,
     pub temp_files: Vec<File>,
+    pub component_states: IndexMap<String, serde_json::Value>,
 }
 
 impl Context {
@@ -296,6 +297,7 @@ impl Context {
                 sender,
             },
             receiver,
+            component_states: IndexMap::default(),
         }
     }
 
@@ -420,6 +422,16 @@ impl Drop for State {
                 err
             );
         }
+        _ = xdg::BaseDirectories::with_prefix("meli")
+            .ok()
+            .and_then(|d| d.place_state_file("component_states").ok())
+            .and_then(|path| {
+                serde_json::to_writer::<_, IndexMap<String, serde_json::Value>>(
+                    std::fs::File::create(path).ok()?,
+                    &self.context.component_states,
+                )
+                .ok()
+            });
         // When done, restore the defaults to avoid messing with the terminal.
         self.screen.switch_to_main_screen();
     }
@@ -509,6 +521,15 @@ impl State {
                 Screen::draw_horizontal_segment_no_color
             });
         let message_box = DisplayMessageBox::new(&screen);
+        let component_states = xdg::BaseDirectories::with_prefix("meli")
+            .ok()
+            .and_then(|d| d.place_state_file("component_states").ok())
+            .and_then(|path| {
+                let file = std::fs::File::open(path).ok()?;
+                let reader = std::io::BufReader::new(file);
+                serde_json::from_reader::<_, IndexMap<String, serde_json::Value>>(reader).ok()
+            })
+            .unwrap_or_default();
         let mut s = Self {
             screen,
             child: None,
@@ -527,6 +548,7 @@ impl State {
                 realized: IndexMap::default(),
                 unrealized: IndexSet::default(),
                 temp_files: Vec::new(),
+                component_states,
                 current_dir: std::env::current_dir()?,
                 children: IndexMap::default(),
                 cmd_buf: None,
