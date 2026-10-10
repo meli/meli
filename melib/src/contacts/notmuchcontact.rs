@@ -144,6 +144,18 @@ impl ContactBackend for NotmuchContacts {
     ) -> ResultFuture<Vec<Card>> {
         Err(Error::new("").set_kind(ErrorKind::NotSupported))
     }
+
+    fn add(&mut self, _: &AddressBookName, _: Card) -> ResultFuture<Card> {
+        Err(Error::new("").set_kind(ErrorKind::NotSupported))
+    }
+
+    fn edit(&mut self, _: &AddressBookName, _: Card) -> ResultFuture<Card> {
+        Err(Error::new("").set_kind(ErrorKind::NotSupported))
+    }
+
+    fn delete(&mut self, _: &AddressBookName, _: Card) -> ResultFuture<()> {
+        Err(Error::new("").set_kind(ErrorKind::NotSupported))
+    }
 }
 
 #[test]

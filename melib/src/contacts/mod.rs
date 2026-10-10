@@ -48,6 +48,15 @@ pub enum CardId {
     Hash(u64),
 }
 
+impl CardId {
+    pub const fn as_uuid(&self) -> Option<Uuid> {
+        let Self::Uuid(uuid) = self else {
+            return None;
+        };
+        Some(*uuid)
+    }
+}
+
 impl std::fmt::Display for CardId {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
@@ -181,34 +190,25 @@ impl Contacts {
         }
     }
 
-    pub fn add_book(&mut self, backend_name: &str, backend_format: &str, book: AddressBook) {
-        let id = if let Some(id) = self
-            .backends
-            .iter()
-            .find(|i| i.name.as_ref() == backend_name && i.format.as_ref() == backend_format)
-        {
+    pub fn add_book(&mut self, backend_id: Arc<ContactBackendID>, book: AddressBook) {
+        let id = if let Some(id) = self.backends.iter().find(|i| {
+            i.name.as_ref() == backend_id.name.as_ref()
+                && i.format.as_ref() == backend_id.format.as_ref()
+        }) {
             Arc::clone(id)
         } else {
-            let id = Arc::new(ContactBackendID {
-                name: backend_name.to_string().into_boxed_str(),
-                format: backend_format.to_string().into_boxed_str(),
-            });
+            let id = backend_id;
             self.backends.insert(Arc::clone(&id));
             id
         };
         self.books.insert((id, book.name.clone()), book);
     }
 
-    pub fn get_book(
-        &self,
-        backend_name: &str,
-        backend_format: &str,
-        name: &str,
-    ) -> Option<&AddressBook> {
-        let id = self
-            .backends
-            .iter()
-            .find(|i| i.name.as_ref() == backend_name && i.format.as_ref() == backend_format)?;
+    pub fn get_book(&self, backend_id: &ContactBackendID, name: &str) -> Option<&AddressBook> {
+        let id = self.backends.iter().find(|i| {
+            i.name.as_ref() == backend_id.name.as_ref()
+                && i.format.as_ref() == backend_id.format.as_ref()
+        })?;
         self.books.iter().find_map(|(k, v)| {
             if k.0 == *id && (k.1).0.as_ref() == name {
                 Some(v)

@@ -21,31 +21,44 @@
 
 use std::{borrow::Cow, sync::Arc};
 
+use futures::channel::oneshot;
 use indexmap::IndexMap;
 use melib::{
     contacts::{AddressBook, AddressBookName, Card},
-    AccountHash, ContactBackendID,
+    error::Result,
+    AccountHash, ContactBackendID, Error,
 };
 
 use crate::{
     conf::themes::ThemeAttribute,
+    jobs::JobId,
     terminal::*,
     types::NotificationType,
     utilities::{FormButtonAction, FormWidget},
-    CellBuffer, Component, ComponentId, Context, Field, Key, UIDialog, UIEvent,
+    CellBuffer, Component, ComponentId, Context, Field, Key, StatusEvent, UIDialog, UIEvent,
 };
 
 #[derive(Debug)]
 enum ViewMode {
     ReadOnly,
-    Discard(Box<UIDialog<char>>),
-    Edit,
+    Discard {
+        dialog: Box<UIDialog<char>>,
+        create: bool,
+    },
+    WaitingForSaveResult {
+        dialog: Box<UIDialog<char>>,
+        receiver: oneshot::Receiver<Result<()>>,
+        job_id: JobId,
+        create: bool,
+    },
+    Edit {
+        create: bool,
+    },
 }
 
 #[derive(Debug)]
-pub struct ContactManager {
+pub struct ContactEditor {
     id: ComponentId,
-    parent_id: Option<ComponentId>,
     card: Card,
     mode: ViewMode,
     form: FormWidget<FormButtonAction>,
@@ -58,14 +71,14 @@ pub struct ContactManager {
     initialized: bool,
 }
 
-impl std::fmt::Display for ContactManager {
+impl std::fmt::Display for ContactEditor {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", self.card)
     }
 }
 
-impl ContactManager {
-    pub fn new(
+impl ContactEditor {
+    pub fn create_card(
         account_hash: AccountHash,
         book_id: (Arc<ContactBackendID>, AddressBookName),
         context: &Context,
@@ -74,13 +87,40 @@ impl ContactManager {
         let mode = if book.read_only {
             ViewMode::ReadOnly
         } else {
-            ViewMode::Edit
+            ViewMode::Edit { create: true }
         };
         let theme_default: ThemeAttribute = crate::conf::theme_value(context, "theme_default");
         Self {
             id: ComponentId::default(),
-            parent_id: None,
             card: Card::new(),
+            mode,
+            form: FormWidget::default(),
+            account_hash,
+            book_id,
+            content: Screen::<Virtual>::new(theme_default),
+            theme_default,
+            dirty: true,
+            has_changes: false,
+            initialized: false,
+        }
+    }
+
+    pub fn edit_card(
+        account_hash: AccountHash,
+        book_id: (Arc<ContactBackendID>, AddressBookName),
+        context: &Context,
+        card: Card,
+    ) -> Self {
+        let book: &AddressBook = &context.accounts[&account_hash].contacts.books[&book_id];
+        let mode = if book.read_only {
+            ViewMode::ReadOnly
+        } else {
+            ViewMode::Edit { create: false }
+        };
+        let theme_default: ThemeAttribute = crate::conf::theme_value(context, "theme_default");
+        Self {
+            id: ComponentId::default(),
+            card,
             mode,
             form: FormWidget::default(),
             account_hash,
@@ -99,9 +139,25 @@ impl ContactManager {
         }
         let area = self.content.area();
 
+        let is_create = matches!(
+            self.mode,
+            ViewMode::Discard { create: true, .. }
+                | ViewMode::WaitingForSaveResult { create: true, .. }
+                | ViewMode::Edit { create: true }
+        );
         if matches!(self.mode, ViewMode::ReadOnly) {
             self.content.grid_mut().write_string(
-                "This contact's origin is external and cannot be edited within meli.",
+                "This contact is in a read-only address book.",
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs,
+                area,
+                None,
+                None,
+            );
+        } else if is_create {
+            self.content.grid_mut().write_string(
+                "New contact",
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
@@ -134,7 +190,14 @@ impl ContactManager {
             if self.card.external_resource() {
                 ("Cancel(Esc)".into(), FormButtonAction::Cancel)
             } else {
-                ("Save".into(), FormButtonAction::Accept)
+                (
+                    if is_create {
+                        "Create".into()
+                    } else {
+                        "Save".into()
+                    },
+                    FormButtonAction::Accept,
+                )
             },
             // cursor_up_shortcut
             context.settings.shortcuts.general.scroll_up.clone(),
@@ -146,8 +209,10 @@ impl ContactManager {
             context.settings.shortcuts.general.scroll_left.clone(),
         );
         if !self.card.external_resource() {
-            self.form
-                .add_button(("Export".into(), FormButtonAction::Other("Export")));
+            if !is_create {
+                self.form
+                    .add_button(("Export".into(), FormButtonAction::Other("Export")));
+            }
             self.form
                 .add_button(("Cancel(Esc)".into(), FormButtonAction::Cancel));
         }
@@ -169,19 +234,9 @@ impl ContactManager {
             self.form.push((k.to_string().into(), v.to_string()));
         }
     }
-
-    pub fn set_parent_id(&mut self, new_val: ComponentId) {
-        self.parent_id = Some(new_val);
-    }
-
-    pub fn set_card(&mut self, new_val: Card) {
-        self.card = new_val;
-        self.initialized = false;
-        self.set_dirty(true);
-    }
 }
 
-impl Component for ContactManager {
+impl Component for ContactEditor {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if !self.initialized {
             self.initialize(context);
@@ -196,9 +251,9 @@ impl Component for ContactManager {
 
         self.form
             .draw(grid, area.skip_rows(self.content.area().height()), context);
-        if let ViewMode::Discard(ref mut selector) = self.mode {
-            /* Let user choose whether to quit with/without saving or cancel */
-            selector.draw(grid, area, context);
+        if let ViewMode::Discard { ref mut dialog, .. } = self.mode {
+            // Let user choose whether to quit with/without saving or cancel
+            dialog.draw(grid, area, context);
         }
 
         context.dirty_areas.push_back(area);
@@ -212,19 +267,23 @@ impl Component for ContactManager {
             self.set_dirty(true);
         }
         match self.mode {
-            ViewMode::Discard(ref mut selector) => {
-                if matches!(event, UIEvent::ComponentUnrealize(ref id) if *id == selector.id()) {
-                    selector.unrealize(context);
-                    self.mode = ViewMode::Edit;
+            ViewMode::Discard {
+                ref mut dialog,
+                ref create,
+            } => {
+                if matches!(event, UIEvent::ComponentUnrealize(ref id) if *id == dialog.id()) {
+                    let create = *create;
+                    dialog.unrealize(context);
+                    self.mode = ViewMode::Edit { create };
                     self.set_dirty(true);
                     return true;
                 }
-                if selector.process_event(event, context) {
+                if dialog.process_event(event, context) {
                     self.set_dirty(true);
                     return true;
                 }
             }
-            ViewMode::Edit => {
+            ViewMode::Edit { create } => {
                 if matches!(event, UIEvent::Input(Key::Esc)) {
                     if self.can_quit_cleanly(context) {
                         self.unrealize(context);
@@ -235,8 +294,10 @@ impl Component for ContactManager {
                     match self.form.buttons_result() {
                         None => {}
                         Some(FormButtonAction::Accept) => {
-                            let fields = std::mem::take(&mut self.form).collect();
-                            let fields: IndexMap<String, String> = fields
+                            let fields: IndexMap<String, String> = self
+                                .form
+                                .values()
+                                .clone()
                                 .into_iter()
                                 .map(|(s, v)| {
                                     (
@@ -248,17 +309,45 @@ impl Component for ContactManager {
                                     )
                                 })
                                 .collect();
-                            let mut new_card = Card::from(fields);
-                            new_card.set_id(*self.card.id());
-                            context.replies.push_back(UIEvent::Notification {
-                                title: Some("Contact saved.".into()),
-                                source: None,
-                                body: format!("{new_card} was saved.").into(),
-                                kind: Some(NotificationType::Info),
-                            });
-                            context.accounts[&self.account_hash].contacts.books[&self.book_id]
-                                .add_card(new_card);
-                            self.unrealize(context);
+                            let mut card = Card::from(fields);
+                            card.set_id(*self.card.id());
+                            let (job_id, receiver) = if create {
+                                context.accounts[&self.account_hash]
+                                    .add_card(self.book_id.clone(), card)
+                                    .expect("TODO")
+                            } else {
+                                context.accounts[&self.account_hash]
+                                    .edit_card(self.book_id.clone(), card)
+                                    .expect("TODO")
+                            };
+                            self.mode = ViewMode::WaitingForSaveResult {
+                                dialog: Box::new(UIDialog::new(
+                                    "Waiting for confirmation. The tab will close automatically \
+                                     on successful creation.",
+                                    vec![
+                                        ('c', "force close tab".to_string()),
+                                        (
+                                            'n',
+                                            "close this message and return to edit mode"
+                                                .to_string(),
+                                        ),
+                                    ],
+                                    true,
+                                    Some(Box::new(
+                                        move |id: ComponentId, results: &[char], context| {
+                                            context.replies.push_back(UIEvent::FinishedUIDialog(
+                                                id,
+                                                Box::new(results.first().cloned().unwrap_or('c')),
+                                            ));
+                                        },
+                                    )),
+                                    context,
+                                )),
+                                job_id,
+                                receiver,
+                                create,
+                            };
+                            self.set_dirty(true);
                         }
                         Some(FormButtonAction::Cancel) => {
                             self.unrealize(context);
@@ -306,6 +395,68 @@ impl Component for ContactManager {
                     return true;
                 }
             }
+            ViewMode::WaitingForSaveResult {
+                ref mut dialog,
+                ref mut receiver,
+                job_id,
+                create,
+            } => {
+                match event {
+                    UIEvent::FinishedUIDialog(id, result) if *id == dialog.id() => {
+                        if let Some(key) = result.downcast_mut::<char>() {
+                            match key {
+                                'c' => {
+                                    self.unrealize(context);
+                                    return true;
+                                }
+                                'n' => {
+                                    self.set_dirty(true);
+                                    self.mode = ViewMode::Edit { create };
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    UIEvent::StatusEvent(StatusEvent::JobFinished(ref other_job_id))
+                        if *other_job_id == job_id =>
+                    {
+                        match receiver.try_recv().map_err(
+                            |_: futures::channel::oneshot::Canceled| Error::new("Job was canceled"),
+                        ) {
+                            Err(err) | Ok(Some(Err(err))) => {
+                                self.mode = ViewMode::Edit { create };
+                                context.replies.push_back(UIEvent::Notification {
+                                    title: None,
+                                    source: None,
+                                    body: err.to_string().into(),
+                                    kind: Some(NotificationType::Error(err.kind)),
+                                });
+                                self.set_dirty(true);
+                            }
+                            Ok(None) | Ok(Some(Ok(()))) => {
+                                self.mode = ViewMode::Edit { create };
+                                context.replies.push_back(UIEvent::Notification {
+                                    title: Some("Contact saved.".into()),
+                                    source: None,
+                                    body: format!(
+                                        "Card was {}.",
+                                        if create { "created" } else { "saved" }
+                                    )
+                                    .into(),
+                                    kind: Some(NotificationType::Info),
+                                });
+                                self.unrealize(context);
+                            }
+                        }
+                    }
+                    _ => {
+                        if dialog.process_event(event, context) {
+                            self.set_dirty(true);
+                            return true;
+                        }
+                    }
+                }
+            }
         }
         false
     }
@@ -313,14 +464,14 @@ impl Component for ContactManager {
     fn is_dirty(&self) -> bool {
         self.dirty
             || self.form.is_dirty()
-            || matches!(self.mode,  ViewMode::Discard(ref selector) if selector.is_dirty())
+            || matches!(self.mode,  ViewMode::Discard {ref dialog, ..} if dialog.is_dirty())
     }
 
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
         self.form.set_dirty(value);
-        if let ViewMode::Discard(ref mut selector) = self.mode {
-            selector.set_dirty(value);
+        if let ViewMode::Discard { ref mut dialog, .. } = self.mode {
+            dialog.set_dirty(value);
         }
     }
 
@@ -333,33 +484,36 @@ impl Component for ContactManager {
             return true;
         }
 
-        if matches!(self.mode, ViewMode::Discard(_) | ViewMode::ReadOnly) {
-            true
-        } else {
-            let Some(parent_id) = self.parent_id else {
-                return true;
-            };
-            /* Play it safe and ask user for confirmation */
-            self.mode = ViewMode::Discard(Box::new(UIDialog::new(
-                "this contact has unsaved changes",
-                vec![
-                    ('y', "quit without saving".to_string()),
-                    ('n', "cancel".to_string()),
-                ],
-                true,
-                Some(Box::new(move |id, results: &[char], context| {
-                    context
-                        .replies
-                        .push_back(if matches!(results.first(), Some(&'y')) {
-                            UIEvent::ComponentUnrealize(parent_id)
-                        } else {
-                            UIEvent::ComponentUnrealize(id)
-                        });
-                })),
-                context,
-            )));
-            self.set_dirty(true);
-            false
+        match self.mode {
+            ViewMode::Discard { .. } | ViewMode::ReadOnly => true,
+            ViewMode::WaitingForSaveResult { .. } => false,
+            ViewMode::Edit { create } => {
+                let parent_id = self.id;
+                // Ask user for confirmation
+                self.mode = ViewMode::Discard {
+                    dialog: Box::new(UIDialog::new(
+                        "this contact has unsaved changes",
+                        vec![
+                            ('y', "quit without saving".to_string()),
+                            ('n', "cancel".to_string()),
+                        ],
+                        true,
+                        Some(Box::new(move |id, results: &[char], context| {
+                            context
+                                .replies
+                                .push_back(if matches!(results.first(), Some(&'y')) {
+                                    UIEvent::ComponentUnrealize(parent_id)
+                                } else {
+                                    UIEvent::ComponentUnrealize(id)
+                                });
+                        })),
+                        context,
+                    )),
+                    create,
+                };
+                self.set_dirty(true);
+                false
+            }
         }
     }
 }

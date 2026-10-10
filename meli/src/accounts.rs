@@ -129,7 +129,7 @@ pub struct Account {
     pub collection: Collection,
     pub contacts: Contacts,
     pub contact_backends:
-        IndexMap<melib::contacts::ContactBackendID, Arc<Mutex<Box<dyn ContactBackend>>>>,
+        IndexMap<Arc<melib::contacts::ContactBackendID>, Arc<Mutex<Box<dyn ContactBackend>>>>,
     pub settings: AccountConf,
     pub backend: Arc<Mutex<Box<dyn MailBackend>>>,
 

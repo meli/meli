@@ -39,16 +39,17 @@ use indexmap::IndexMap;
 use melib::{
     contacts::{AddressBook, AddressBookName, Card, CardId},
     email::compose::Draft,
-    error::Result,
+    error::{ErrorKind, Result},
     AccountHash, ContactBackendID,
 };
 
 use crate::{
     account_settings,
     components::prelude::*,
-    contacts::editor::ContactManager,
+    contacts::editor::ContactEditor,
     mail::compose::Composer,
     utilities::listings::{AccountEntryTrait, List},
+    NotificationType, UIConfirmationDialog,
 };
 
 #[derive(Debug)]
@@ -56,7 +57,7 @@ pub struct AddressBookList {
     account_hash: AccountHash,
     backend_id: (Arc<ContactBackendID>, AddressBookName),
     read_only: bool,
-    editor: Option<Box<ContactManager>>,
+    editor: Option<Box<ContactEditor>>,
     cursor_pos: usize,
     new_cursor_pos: usize,
     id_positions: Vec<CardId>,
@@ -435,22 +436,29 @@ impl Component for AddressBookList {
             {
                 self.initialized = false;
                 self.set_dirty(true);
+                context.accounts[&self.account_hash].fetch_contact_backend_address_book(
+                    self.backend_id.0.clone(),
+                    self.backend_id.1.clone(),
+                );
                 return true;
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["create_contact"]) =>
             {
                 if self.read_only {
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::UpdateSubStatus(
+                            "Address book is read-only".into(),
+                        )));
                     return true;
                 }
-                let mut editor = Box::new(ContactManager::new(
+                self.editor = Some(Box::new(ContactEditor::create_card(
                     self.account_hash,
                     self.backend_id.clone(),
                     context,
-                ));
-                editor.set_parent_id(self.id);
+                )));
 
-                self.editor = Some(editor);
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
@@ -465,18 +473,16 @@ impl Component for AddressBookList {
                     return true;
                 }
 
-                let mut editor = Box::new(ContactManager::new(
-                    self.account_hash,
-                    self.backend_id.clone(),
-                    context,
-                ));
                 let card = context.accounts[&self.account_hash].contacts.books[&self.backend_id]
                     [&self.id_positions[self.cursor_pos]]
                     .clone();
-                editor.set_card(card);
-                editor.set_parent_id(self.id);
+                self.editor = Some(Box::new(ContactEditor::edit_card(
+                    self.account_hash,
+                    self.backend_id.clone(),
+                    context,
+                    card,
+                )));
 
-                self.editor = Some(editor);
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
@@ -523,9 +529,40 @@ impl Component for AddressBookList {
                 if self.id_positions.is_empty() {
                     return true;
                 }
-                // [ref:TODO]: add a confirmation dialog?
-                context.accounts[&self.account_hash].contacts.books[&self.backend_id]
-                    .remove_card(self.id_positions[self.cursor_pos]);
+                let card = context.accounts[&self.account_hash].contacts.books[&self.backend_id]
+                    [&self.id_positions[self.cursor_pos]]
+                    .clone();
+                let question = format!("Delete this contact? {card}");
+                let on_confirm_cb = Box::new({
+                    let account_hash = self.account_hash;
+                    let backend_id = self.backend_id.clone();
+                    move |_: ComponentId, result: bool, context: &mut Context| {
+                        if !result {
+                            return;
+                        }
+                        let Some(account) = context.accounts.get_mut(&account_hash) else {
+                            return;
+                        };
+                        if let Err(err) = account.delete_card(backend_id, card) {
+                            context.replies.push_back(UIEvent::Notification {
+                                title: None,
+                                source: Some(err),
+                                body: "Could not request contact deletion".into(),
+                                kind: Some(NotificationType::Error(ErrorKind::None)),
+                            });
+                        }
+                    }
+                });
+                context.replies.push_back(UIEvent::GlobalUIDialog {
+                    value: Box::new(UIConfirmationDialog::new(
+                        question,
+                        vec![(true, "yes".to_string()), (false, "no".to_string())],
+                        true,
+                        Some(on_confirm_cb),
+                        context,
+                    )),
+                    parent: Some(self.id),
+                });
                 self.initialized = false;
                 self.set_dirty(true);
                 context

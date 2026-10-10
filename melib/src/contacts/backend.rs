@@ -61,6 +61,9 @@ pub trait ContactBackend: ::std::fmt::Debug + Send + Sync {
     }
     fn address_books(&mut self) -> ResultFuture<Vec<AddressBookName>>;
     fn fetch_book(&mut self, address_book: &AddressBookName) -> ResultFuture<AddressBook>;
+    fn add(&mut self, address_book: &AddressBookName, new_card: Card) -> ResultFuture<Card>;
+    fn edit(&mut self, address_book: &AddressBookName, card: Card) -> ResultFuture<Card>;
+    fn delete(&mut self, address_book: &AddressBookName, card: Card) -> ResultFuture<()>;
     fn search(&self, term: &str, address_book: Option<&AddressBookName>)
         -> ResultFuture<Vec<Card>>;
 }

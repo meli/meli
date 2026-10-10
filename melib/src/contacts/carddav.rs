@@ -337,4 +337,16 @@ impl ContactBackend for CardDAVContacts {
             Ok(ret)
         }))
     }
+
+    fn add(&mut self, _address_book: &AddressBookName, _new_card: Card) -> ResultFuture<Card> {
+        Err(Error::new("").set_kind(ErrorKind::NotImplemented))
+    }
+
+    fn edit(&mut self, _address_book: &AddressBookName, _card: Card) -> ResultFuture<Card> {
+        Err(Error::new("").set_kind(ErrorKind::NotImplemented))
+    }
+
+    fn delete(&mut self, _address_book: &AddressBookName, _card: Card) -> ResultFuture<()> {
+        Err(Error::new("").set_kind(ErrorKind::NotImplemented))
+    }
 }
