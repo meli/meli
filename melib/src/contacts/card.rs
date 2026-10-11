@@ -56,12 +56,10 @@ pub struct Card {
 
 impl std::fmt::Display for Card {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if !self.name.is_empty() {
-            self.name.fmt(fmt)
-        } else if !self.email.is_empty() {
-            self.email.fmt(fmt)
+        if self.name.is_empty() && self.email.is_empty() {
+            write!(fmt, "empty contact")
         } else {
-            "empty contact".fmt(fmt)
+            write!(fmt, "{}", self.as_address())
         }
     }
 }
