@@ -279,6 +279,8 @@ impl Component for TextField {
                     self.inner = UText::new(suggestion);
                     let len = self.inner.as_str().len();
                     self.inner.set_cursor(len);
+                } else {
+                    return false;
                 }
             }
             UIEvent::InsertInput(Key::Up) => {

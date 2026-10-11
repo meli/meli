@@ -541,6 +541,10 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync, F: FormWidgetL
                 return true;
             }
             UIEvent::InsertInput(Key::Char('\n')) if self.focus == FormFocus::TextInput => {
+                let field = self.fields.get_mut(&self.layout[self.cursor]).unwrap();
+                if field.process_event(event, context) {
+                    return true;
+                }
                 self.focus = FormFocus::Fields;
                 context
                     .replies
