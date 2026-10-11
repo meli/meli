@@ -311,42 +311,61 @@ impl Component for ContactEditor {
                                 .collect();
                             let mut card = Card::from(fields);
                             card.set_id(*self.card.id());
-                            let (job_id, receiver) = if create {
+                            let res = if create {
                                 context.accounts[&self.account_hash]
                                     .add_card(self.book_id.clone(), card)
-                                    .expect("TODO")
                             } else {
                                 context.accounts[&self.account_hash]
                                     .edit_card(self.book_id.clone(), card)
-                                    .expect("TODO")
                             };
-                            self.mode = ViewMode::WaitingForSaveResult {
-                                dialog: Box::new(UIDialog::new(
-                                    "Waiting for confirmation. The tab will close automatically \
-                                     on successful creation.",
-                                    vec![
-                                        ('c', "force close tab".to_string()),
-                                        (
-                                            'n',
-                                            "close this message and return to edit mode"
-                                                .to_string(),
-                                        ),
-                                    ],
-                                    true,
-                                    Some(Box::new(
-                                        move |id: ComponentId, results: &[char], context| {
-                                            context.replies.push_back(UIEvent::FinishedUIDialog(
-                                                id,
-                                                Box::new(results.first().cloned().unwrap_or('c')),
-                                            ));
-                                        },
-                                    )),
-                                    context,
-                                )),
-                                job_id,
-                                receiver,
-                                create,
-                            };
+                            match res {
+                                Ok((job_id, receiver)) => {
+                                    let dialog = UIDialog::new(
+                                        "Waiting for confirmation. The tab will close \
+                                         automatically on successful creation.",
+                                        vec![
+                                            ('c', "force close tab".to_string()),
+                                            (
+                                                'n',
+                                                "close this message and return to edit mode"
+                                                    .to_string(),
+                                            ),
+                                        ],
+                                        true,
+                                        Some(Box::new(
+                                            move |id: ComponentId, results: &[char], context| {
+                                                context.replies.push_back(
+                                                    UIEvent::FinishedUIDialog(
+                                                        id,
+                                                        Box::new(
+                                                            results.first().cloned().unwrap_or('c'),
+                                                        ),
+                                                    ),
+                                                );
+                                            },
+                                        )),
+                                        context,
+                                    )
+                                    .into();
+                                    self.mode = ViewMode::WaitingForSaveResult {
+                                        dialog,
+                                        job_id,
+                                        receiver,
+                                        create,
+                                    };
+                                }
+                                Err(err) => {
+                                    self.mode = ViewMode::Edit { create };
+                                    context.replies.push_back(UIEvent::Notification {
+                                        title: None,
+                                        source: None,
+                                        body: err.to_string().into(),
+                                        kind: Some(NotificationType::Error(err.kind)),
+                                    });
+                                    self.initialized = false;
+                                    self.set_dirty(true);
+                                }
+                            }
                             self.set_dirty(true);
                         }
                         Some(FormButtonAction::Cancel) => {
