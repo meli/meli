@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{borrow::Cow, sync::Arc};
+use std::sync::Arc;
 
 use futures::channel::oneshot;
 use indexmap::IndexMap;
@@ -31,6 +31,7 @@ use melib::{
 
 use crate::{
     conf::themes::ThemeAttribute,
+    contacts::export::ContactExportDialog,
     jobs::JobId,
     terminal::*,
     types::NotificationType,
@@ -390,11 +391,14 @@ impl Component for ContactEditor {
                                     .collect();
                                 let mut card = Card::from(fields);
                                 card.set_id(*self.card.id());
-                                Cow::Owned(card)
+                                card
                             } else {
-                                Cow::Borrowed(&self.card)
+                                self.card.clone()
                             };
-                            super::export_to_vcard(&card, self.account_hash, context);
+                            context.replies.push_back(UIEvent::GlobalUIDialog {
+                                value: Box::new(ContactExportDialog::new(card, context)),
+                                parent: Some(self.id),
+                            });
                             return true;
                         }
                         Some(FormButtonAction::Reset | FormButtonAction::Other(_)) => {}

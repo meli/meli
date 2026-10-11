@@ -1354,6 +1354,11 @@ impl<'a> LexTokenError<'a> {
             _ => None,
         }
     }
+
+    /// if `self` is [`Self::QuoteStart`] variant.
+    pub const fn is_quoted(&self) -> bool {
+        matches!(self, Self::QuoteStart { .. })
+    }
 }
 
 impl<'a> LexToken<'a> {

@@ -46,7 +46,7 @@ use melib::{
 use crate::{
     account_settings,
     components::prelude::*,
-    contacts::editor::ContactEditor,
+    contacts::{editor::ContactEditor, export::ContactExportDialog},
     mail::compose::Composer,
     utilities::listings::{AccountEntryTrait, List},
     NotificationType, UIConfirmationDialog,
@@ -499,7 +499,10 @@ impl Component for AddressBookList {
                 let card = context.accounts[&self.account_hash].contacts.books[&self.backend_id]
                     [&self.id_positions[self.cursor_pos]]
                     .clone();
-                super::export_to_vcard(&card, self.account_hash, context);
+                context.replies.push_back(UIEvent::GlobalUIDialog {
+                    value: Box::new(ContactExportDialog::new(card, context)),
+                    parent: Some(self.id),
+                });
                 return true;
             }
             UIEvent::Input(ref key)

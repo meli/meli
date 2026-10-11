@@ -19,54 +19,6 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use melib::{AccountHash, Card};
-
-use crate::{
-    types::{File, NotificationType, UIEvent},
-    Context,
-};
-
 pub mod editor;
+pub mod export;
 pub mod list;
-
-pub fn export_to_vcard(card: &Card, _account_hash: AccountHash, context: &mut Context) {
-    // [ref:TODO]: configure output_dir
-    let mut output_dir = None;
-    let filename = format!(
-        "{prefix}{name}{suffix}{space}{additionalname}",
-        prefix = card.name_prefix(),
-        name = card.name(),
-        suffix = card.name_suffix(),
-        space = if card.additionalname().trim().is_empty() {
-            ""
-        } else {
-            " "
-        },
-        additionalname = card.additionalname()
-    );
-    let res = File::create_temp_file(
-        card.to_vcard_string().as_bytes(),
-        Some(&filename),
-        output_dir.as_mut(),
-        Some("vcf"),
-        false,
-    );
-    match res {
-        Ok(f) => {
-            context.replies.push_back(UIEvent::Notification {
-                title: Some("Exported .vcf".into()),
-                body: format!("Exported contact to vcard file to\n{}", f.path().display()).into(),
-                kind: Some(NotificationType::Info),
-                source: None,
-            });
-        }
-        Err(err) => {
-            context.replies.push_back(UIEvent::Notification {
-                title: Some("Could not export contact.".into()),
-                body: err.to_string().into(),
-                kind: Some(NotificationType::Error(err.kind)),
-                source: Some(err),
-            });
-        }
-    }
-}

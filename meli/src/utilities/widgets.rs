@@ -243,10 +243,10 @@ where
     focus: FormFocus,
     hide_buttons: bool,
     dirty: bool,
-    cursor_up_shortcut: Key,
-    cursor_down_shortcut: Key,
-    cursor_right_shortcut: Key,
-    cursor_left_shortcut: Key,
+    pub cursor_up_shortcut: Key,
+    pub cursor_down_shortcut: Key,
+    pub cursor_right_shortcut: Key,
+    pub cursor_left_shortcut: Key,
     id: ComponentId,
 }
 
