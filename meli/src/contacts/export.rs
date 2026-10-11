@@ -250,6 +250,11 @@ impl Component for ContactExportDialog {
             self.set_dirty(true);
             return true;
         }
+        if matches!(event, UIEvent::Input(Key::Esc)) {
+            self.set_dirty(true);
+            self.unrealize(context);
+            return true;
+        }
         false
     }
 
