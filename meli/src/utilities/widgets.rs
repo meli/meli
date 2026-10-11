@@ -540,6 +540,14 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync, F: FormWidgetL
                 self.set_dirty(true);
                 return true;
             }
+            UIEvent::InsertInput(Key::Char('\n')) if self.focus == FormFocus::TextInput => {
+                self.focus = FormFocus::Fields;
+                context
+                    .replies
+                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
+                self.set_dirty(true);
+                return true;
+            }
             UIEvent::InsertInput(Key::Right) if self.focus == FormFocus::TextInput => {
                 let field = self.fields.get_mut(&self.layout[self.cursor]).unwrap();
                 field.process_event(event, context);
