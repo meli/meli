@@ -120,7 +120,6 @@ pub fn attrs(context: &Context, key: &'static str) -> Attr {
     unlink_attrs(theme, &Cow::from(key))
 }
 
-#[inline(always)]
 pub fn unlink<'k, 't: 'k>(theme: &'t Theme, key: &'k str) -> ThemeAttribute {
     ThemeAttribute {
         fg: unlink_fg(theme, &ColorField::Fg, key),
@@ -129,7 +128,6 @@ pub fn unlink<'k, 't: 'k>(theme: &'t Theme, key: &'k str) -> ThemeAttribute {
     }
 }
 
-#[inline(always)]
 pub fn unlink_fg<'k, 't: 'k>(
     theme: &'t Theme,
     mut field: &'k ColorField,
@@ -184,7 +182,6 @@ pub fn unlink_fg<'k, 't: 'k>(
     }
 }
 
-#[inline(always)]
 pub fn unlink_bg<'k, 't: 'k>(
     theme: &'t Theme,
     mut field: &'k ColorField,
