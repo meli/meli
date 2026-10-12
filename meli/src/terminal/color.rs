@@ -20,7 +20,6 @@
  */
 
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-use termion::color::{AnsiValue, Rgb as TermionRgb};
 
 /// The color of a `Cell`.
 ///
@@ -110,34 +109,34 @@ impl Color {
     pub fn write_fg(self, stdout: &mut crate::StateStdout) -> std::io::Result<()> {
         use std::io::Write as _;
         match self {
-            Self::Default => write!(stdout, "{}", termion::color::Fg(termion::color::Reset)),
-            Self::Rgb(r, g, b) => write!(stdout, "{}", termion::color::Fg(TermionRgb(r, g, b))),
-            _ => write!(stdout, "{}", termion::color::Fg(self.as_termion())),
+            Self::Default => write!(stdout, "\x1B[39m"),
+            Self::Rgb(r, g, b) => write!(stdout, "\x1B[38;2;{r};{g};{b}m"),
+            Self::Black => write!(stdout, "\x1B[38;5;0m"),
+            Self::Red => write!(stdout, "\x1B[38;5;1m"),
+            Self::Green => write!(stdout, "\x1B[38;5;2m"),
+            Self::Yellow => write!(stdout, "\x1B[38;5;3m"),
+            Self::Blue => write!(stdout, "\x1B[38;5;4m"),
+            Self::Magenta => write!(stdout, "\x1B[38;5;5m"),
+            Self::Cyan => write!(stdout, "\x1B[38;5;6m"),
+            Self::White => write!(stdout, "\x1B[38;5;7m"),
+            Self::Byte(b) => write!(stdout, "\x1B[38;5;{b}m"),
         }
     }
 
     pub fn write_bg(self, stdout: &mut crate::StateStdout) -> std::io::Result<()> {
         use std::io::Write as _;
         match self {
-            Self::Default => write!(stdout, "{}", termion::color::Bg(termion::color::Reset)),
-            Self::Rgb(r, g, b) => write!(stdout, "{}", termion::color::Bg(TermionRgb(r, g, b))),
-            _ => write!(stdout, "{}", termion::color::Bg(self.as_termion())),
-        }
-    }
-
-    pub fn as_termion(self) -> AnsiValue {
-        match self {
-            b @ Self::Black
-            | b @ Self::Red
-            | b @ Self::Green
-            | b @ Self::Yellow
-            | b @ Self::Blue
-            | b @ Self::Magenta
-            | b @ Self::Cyan
-            | b @ Self::White
-            | b @ Self::Default => AnsiValue(b.as_byte().unwrap_or_default()),
-            Self::Byte(b) => AnsiValue(b),
-            Self::Rgb(_, _, _) => AnsiValue(0),
+            Self::Default => write!(stdout, "\x1B[49m"),
+            Self::Rgb(r, g, b) => write!(stdout, "\x1B[48;2;{r};{g};{b}m"),
+            Self::Black => write!(stdout, "\x1B[48;5;0m"),
+            Self::Red => write!(stdout, "\x1B[48;5;1m"),
+            Self::Green => write!(stdout, "\x1B[48;5;2m"),
+            Self::Yellow => write!(stdout, "\x1B[48;5;3m"),
+            Self::Blue => write!(stdout, "\x1B[48;5;4m"),
+            Self::Magenta => write!(stdout, "\x1B[48;5;5m"),
+            Self::Cyan => write!(stdout, "\x1B[48;5;6m"),
+            Self::White => write!(stdout, "\x1B[48;5;7m"),
+            Self::Byte(b) => write!(stdout, "\x1B[48;5;{b}m"),
         }
     }
 
