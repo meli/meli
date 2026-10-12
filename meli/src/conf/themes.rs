@@ -1309,7 +1309,7 @@ impl Default for Themes {
         /* text palettes */
         add!("text.normal", "theme_default");
         add!("text.unfocused", dark = { fg: Color::GREY, bg: "theme_default", attrs: Attr::DIM }, light = { fg: Color::GREY, bg: "theme_default", attrs: Attr::DIM });
-        add!("text.error", "error_message");
+        add!("text.error", dark = { fg: "error_message", bg: "error_message", underline: Color::Red, attrs: Attr::UNDERCURL }, light = { fg: "error_message", bg: "error_message", underline: Color::Red, attrs: Attr::UNDERCURL });
         add!("text.highlight", dark = { fg: Color::Blue, bg: "theme_default", attrs: Attr::REVERSE }, light = { fg: Color::Blue, bg: "theme_default", attrs: Attr::REVERSE });
 
         /* rest */
