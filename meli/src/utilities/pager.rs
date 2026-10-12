@@ -470,9 +470,10 @@ impl Pager {
                 }
                 grid.write_string(
                     &l.content,
-                    self.colors.fg,
-                    self.colors.bg,
-                    Attr::DEFAULT,
+                    &ThemeAttribute {
+                        attrs: Attr::DEFAULT,
+                        ..self.colors
+                    },
                     area2,
                     None,
                     None,
@@ -748,9 +749,7 @@ impl Component for Pager {
                 }
                 grid.write_string(
                     &status_message,
-                    attribute.fg,
-                    attribute.bg,
-                    attribute.attrs,
+                    &attribute,
                     area.nth_row(area.height().saturating_sub(1)),
                     None,
                     None,

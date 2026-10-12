@@ -91,23 +91,14 @@ impl<E: AccountEntryTrait> Component for AccountEntry<E> {
                 let theme_default = crate::conf::theme_value(context, "theme_default");
                 let text_unfocused = crate::conf::theme_value(context, "text.unfocused");
                 let error_message = crate::conf::theme_value(context, "error_message");
+                let highlight = crate::conf::theme_value(context, "highlight");
                 grid.clear_area(area, theme_default);
                 if context.is_online(*account_hash).is_err() {
-                    let (x, _) = grid.write_string(
-                        "offline: ",
-                        error_message.fg,
-                        error_message.bg,
-                        error_message.attrs,
-                        area,
-                        None,
-                        None,
-                    );
+                    let (x, _) = grid.write_string("offline: ", &error_message, area, None, None);
 
                     let (_, mut y_offset) = grid.write_string(
                         &err.to_string(),
-                        error_message.fg,
-                        error_message.bg,
-                        error_message.attrs,
+                        &error_message,
                         area,
                         Some(x + 1),
                         Some(0),
@@ -116,9 +107,7 @@ impl<E: AccountEntryTrait> Component for AccountEntry<E> {
                     if let Some(msg) = messages.last() {
                         grid.write_string(
                             msg,
-                            text_unfocused.fg,
-                            text_unfocused.bg,
-                            Attr::BOLD,
+                            &(text_unfocused | Attr::BOLD),
                             area.skip_rows(y_offset),
                             None,
                             None,
@@ -128,33 +117,21 @@ impl<E: AccountEntryTrait> Component for AccountEntry<E> {
                     for (i, msg) in messages.iter().rev().skip(1).enumerate() {
                         grid.write_string(
                             msg,
-                            text_unfocused.fg,
-                            text_unfocused.bg,
-                            text_unfocused.attrs,
+                            &text_unfocused,
                             area.skip_rows(y_offset + i),
                             None,
                             None,
                         );
                     }
                 } else {
-                    grid.write_string(
-                        "loading...",
-                        crate::conf::theme_value(context, "highlight").fg,
-                        crate::conf::theme_value(context, "highlight").bg,
-                        crate::conf::theme_value(context, "highlight").attrs,
-                        area,
-                        None,
-                        None,
-                    );
+                    grid.write_string("loading...", &highlight, area, None, None);
                     let mut jobs: Vec<_> =
                         context.accounts[account_hash].active_jobs.iter().collect();
                     jobs.sort_by_key(|(j, _)| *j);
                     for (i, (job_id, j)) in jobs.into_iter().enumerate() {
                         grid.write_string(
                             &format!("{}: {:?}", job_id, j),
-                            text_unfocused.fg,
-                            text_unfocused.bg,
-                            text_unfocused.attrs,
+                            &text_unfocused,
                             area.skip_rows(i + 1),
                             None,
                             None,
@@ -355,9 +332,7 @@ impl<E: AccountEntryTrait> List<E> {
             grid.change_theme(area, account_attr);
             let (x, y) = grid.write_string(
                 &context.accounts[a.account_hash()].name,
-                account_attr.fg,
-                account_attr.bg,
-                account_attr.attrs,
+                &account_attr,
                 area,
                 None,
                 None,
@@ -368,9 +343,7 @@ impl<E: AccountEntryTrait> List<E> {
                 if no_of_entries > 0 {
                     grid.write_string(
                         &format!(" [{}]", no_of_entries),
-                        account_attr.fg,
-                        account_attr.bg,
-                        account_attr.attrs,
+                        &account_attr,
                         area.skip(x, y),
                         None,
                         None,
@@ -389,9 +362,7 @@ impl<E: AccountEntryTrait> List<E> {
             } else {
                 grid.write_string(
                     " offline",
-                    account_attr.fg,
-                    account_attr.bg,
-                    account_attr.attrs | Attr::ITALICS,
+                    &(account_attr | Attr::ITALICS),
                     area.skip(x, y),
                     None,
                     None,

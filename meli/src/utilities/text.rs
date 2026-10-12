@@ -246,9 +246,7 @@ impl Component for TextField {
             } else {
                 str
             },
-            theme_attr.fg,
-            theme_attr.bg,
-            theme_attr.attrs,
+            &theme_attr,
             area,
             None,
             None,

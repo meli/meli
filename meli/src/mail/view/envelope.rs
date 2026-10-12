@@ -846,9 +846,7 @@ impl Component for EnvelopeView {
                                     let (_x, _y) =
                                         grid.write_string(
                                             &format!("{}:", $header),
-                                            hdr_name_theme.fg,
-                                            hdr_name_theme.bg,
-                                            hdr_name_theme.attrs,
+                                            &hdr_name_theme,
                                             area.skip_rows(y),
                                             None,
                                             Some(0)
@@ -856,9 +854,7 @@ impl Component for EnvelopeView {
                                     let (__x, mut __y) =
                                         grid.write_string(
                                             &$string,
-                                            hdr_theme.fg,
-                                            hdr_theme.bg,
-                                            hdr_theme.attrs,
+                                            &hdr_theme,
                                             area.skip_rows(y + _y),
                                             Some(_x + 1),
                                             Some(2)
@@ -938,9 +934,7 @@ impl Component for EnvelopeView {
                             grid.clear_area(area.nth_row(y), hdr_area_theme);
                             let (_x, _y) = grid.write_string(
                                 "List-ID: ",
-                                hdr_name_theme.fg,
-                                hdr_name_theme.bg,
-                                hdr_name_theme.attrs,
+                                &hdr_name_theme,
                                 area.nth_row(y),
                                 None,
                                 Some(0),
@@ -953,9 +947,7 @@ impl Component for EnvelopeView {
                             y += _y;
                             let (_x, _y) = grid.write_string(
                                 id,
-                                hdr_theme.fg,
-                                hdr_theme.bg,
-                                hdr_theme.attrs,
+                                &hdr_theme,
                                 area.nth_row(y),
                                 Some(x),
                                 Some(0),
@@ -973,9 +965,7 @@ impl Component for EnvelopeView {
                         if archive.is_some() || post.is_some() || unsubscribe.is_some() {
                             let (_x, _y) = grid.write_string(
                                 " Available actions: [ ",
-                                hdr_name_theme.fg,
-                                hdr_name_theme.bg,
-                                hdr_name_theme.attrs,
+                                &hdr_name_theme,
                                 area.skip(0, y),
                                 Some(x),
                                 Some(0),
@@ -990,9 +980,7 @@ impl Component for EnvelopeView {
                         if archive.is_some() {
                             let (_x, _y) = grid.write_string(
                                 "list-archive, ",
-                                hdr_theme.fg,
-                                hdr_theme.bg,
-                                hdr_theme.attrs,
+                                &hdr_theme,
                                 area.skip(0, y),
                                 Some(x),
                                 Some(0),
@@ -1007,9 +995,7 @@ impl Component for EnvelopeView {
                         if post.is_some() {
                             let (_x, _y) = grid.write_string(
                                 "list-post, ",
-                                hdr_theme.fg,
-                                hdr_theme.bg,
-                                hdr_theme.attrs,
+                                &hdr_theme,
                                 area.skip(0, y),
                                 Some(x),
                                 Some(0),
@@ -1024,9 +1010,7 @@ impl Component for EnvelopeView {
                         if unsubscribe.is_some() {
                             let (_x, _y) = grid.write_string(
                                 "list-unsubscribe, ",
-                                hdr_theme.fg,
-                                hdr_theme.bg,
-                                hdr_theme.attrs,
+                                &hdr_theme,
                                 area.skip(0, y),
                                 Some(x),
                                 Some(0),
@@ -1099,9 +1083,7 @@ impl Component for EnvelopeView {
             let s = cmd_buf.to_string();
             grid.write_string(
                 &s,
-                self.view_settings.theme_default.fg,
-                self.view_settings.theme_default.bg,
-                self.view_settings.theme_default.attrs,
+                &self.view_settings.theme_default,
                 l.skip_cols_from_end(8),
                 None,
                 None,

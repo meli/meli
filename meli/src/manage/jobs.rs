@@ -185,9 +185,7 @@ impl JobManager {
                 let area = self.data_columns.columns[0].area().nth_row(idx);
                 self.data_columns.columns[0].grid_mut().write_string(
                     &e.id().to_string(),
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
+                    &self.theme_default,
                     area,
                     None,
                     None,
@@ -198,9 +196,7 @@ impl JobManager {
                 let area = self.data_columns.columns[1].area().nth_row(idx);
                 self.data_columns.columns[1].grid_mut().write_string(
                     e.description(),
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
+                    &self.theme_default,
                     area,
                     None,
                     None,
@@ -215,9 +211,7 @@ impl JobManager {
                         Some(RFC3339_DATETIME_AND_SPACE),
                         true,
                     ),
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
+                    &self.theme_default,
                     area,
                     None,
                     None,
@@ -236,9 +230,7 @@ impl JobManager {
                     } else {
                         Cow::Borrowed("null")
                     },
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
+                    &self.theme_default,
                     area,
                     None,
                     None,
@@ -253,9 +245,7 @@ impl JobManager {
                     } else {
                         Cow::Borrowed("-")
                     },
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
+                    &self.theme_default,
                     area,
                     None,
                     None,
@@ -270,9 +260,7 @@ impl JobManager {
                 let area = self.data_columns.columns[0].area();
                 self.data_columns.columns[0].grid_mut().write_string(
                     &message,
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
+                    &self.theme_default,
                     area,
                     None,
                     None,
@@ -436,9 +424,7 @@ impl Component for JobManager {
             for (i, (h, w)) in Self::HEADERS.iter().zip(self.min_width).enumerate() {
                 grid.write_string(
                     h,
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs | Attr::BOLD,
+                    &(self.theme_default | Attr::BOLD),
                     area.skip_cols(x_offset),
                     None,
                     None,
@@ -453,9 +439,7 @@ impl Component for JobManager {
                     };
                     grid.write_string(
                         arrow,
-                        self.theme_default.fg,
-                        self.theme_default.bg,
-                        self.theme_default.attrs,
+                        &self.theme_default,
                         area.skip_cols(x_offset + h.len()),
                         None,
                         None,

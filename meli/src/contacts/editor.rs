@@ -149,9 +149,7 @@ impl ContactEditor {
         if matches!(self.mode, ViewMode::ReadOnly) {
             self.content.grid_mut().write_string(
                 "This contact is in a read-only address book.",
-                self.theme_default.fg,
-                self.theme_default.bg,
-                self.theme_default.attrs,
+                &self.theme_default,
                 area,
                 None,
                 None,
@@ -159,9 +157,7 @@ impl ContactEditor {
         } else if is_create {
             self.content.grid_mut().write_string(
                 "New contact",
-                self.theme_default.fg,
-                self.theme_default.bg,
-                self.theme_default.attrs,
+                &self.theme_default,
                 area,
                 None,
                 None,
@@ -169,18 +165,14 @@ impl ContactEditor {
         } else {
             let (x, _) = self.content.grid_mut().write_string(
                 "Last edited: ",
-                self.theme_default.fg,
-                self.theme_default.bg,
-                self.theme_default.attrs,
+                &self.theme_default,
                 area,
                 None,
                 None,
             );
             self.content.grid_mut().write_string(
                 &self.card.last_edited(),
-                self.theme_default.fg,
-                self.theme_default.bg,
-                self.theme_default.attrs,
+                &self.theme_default,
                 area.skip_cols(x),
                 None,
                 None,

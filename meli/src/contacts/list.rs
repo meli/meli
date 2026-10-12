@@ -109,9 +109,7 @@ impl AddressBookList {
                 let area = self.data_columns.columns[0].area();
                 self.data_columns.columns[0].grid_mut().write_string(
                     &message,
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
+                    &self.theme_default,
                     area,
                     None,
                     None,
@@ -161,9 +159,7 @@ impl AddressBookList {
                 let area = self.data_columns.columns[0].area().nth_row(idx);
                 self.data_columns.columns[0].grid_mut().write_string(
                     c.name(),
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
+                    &self.theme_default,
                     area,
                     None,
                     None,
@@ -174,9 +170,7 @@ impl AddressBookList {
                 let area = self.data_columns.columns[1].area().nth_row(idx);
                 self.data_columns.columns[1].grid_mut().write_string(
                     c.email(),
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
+                    &self.theme_default,
                     area,
                     None,
                     None,
@@ -187,9 +181,7 @@ impl AddressBookList {
                 let area = self.data_columns.columns[2].area().nth_row(idx);
                 self.data_columns.columns[2].grid_mut().write_string(
                     c.url(),
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
+                    &self.theme_default,
                     area,
                     None,
                     None,
@@ -248,9 +240,7 @@ impl Component for AddressBookList {
                 backend = self.backend_id.0.name,
                 format = self.backend_id.0.format
             ),
-            self.theme_default.fg,
-            self.theme_default.bg,
-            self.theme_default.attrs,
+            &self.theme_default,
             info_area,
             None,
             None,
@@ -371,9 +361,7 @@ impl Component for AddressBookList {
                     2 => "URL",
                     _ => "",
                 },
-                header_attrs.fg,
-                header_attrs.bg,
-                header_attrs.attrs,
+                &header_attrs,
                 header_area
                     .skip_cols(x)
                     .take_cols(x + (self.data_columns.widths[i])),
@@ -779,20 +767,10 @@ impl AccountEntryTrait for AccountContacts {
             self.theme_default
         };
         grid.change_theme(area, book_attr);
-        let (x, y) = grid.write_string(
-            &book.backend_id.1,
-            book_attr.fg,
-            book_attr.bg,
-            book_attr.attrs,
-            area,
-            None,
-            None,
-        );
+        let (x, y) = grid.write_string(&book.backend_id.1, &book_attr, area, None, None);
         grid.write_string(
             &format!(" [{}]", book.id_positions.len()),
-            book_attr.fg,
-            book_attr.bg,
-            book_attr.attrs,
+            &book_attr,
             area.skip(x, y),
             None,
             None,

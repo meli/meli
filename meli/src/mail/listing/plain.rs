@@ -24,7 +24,7 @@ use std::iter::FromIterator as _;
 use melib::{Address, SortField, SortOrder, ThreadNode};
 
 use super::{EntryStrings, *};
-use crate::{components::PageMovement, conf::themes::ThemeAttribute, jobs::JoinHandle};
+use crate::{components::PageMovement, jobs::JoinHandle};
 
 macro_rules! row_attr {
     ($color_cache:expr, even: $even:expr, unseen: $unseen:expr, highlighted: $highlighted:expr, selected: $selected:expr  $(,)*) => {{
@@ -33,94 +33,34 @@ macro_rules! row_attr {
         let unseen = $unseen;
         let highlighted = $highlighted;
         let selected = $selected;
-        ThemeAttribute {
-            fg: if highlighted && selected {
-                if even {
-                    color_cache.even_highlighted_selected.fg
-                } else {
-                    color_cache.odd_highlighted_selected.fg
-                }
-            } else if highlighted {
-                if even {
-                    color_cache.even_highlighted.fg
-                } else {
-                    color_cache.odd_highlighted.fg
-                }
-            } else if selected {
-                if even {
-                    color_cache.even_selected.fg
-                } else {
-                    color_cache.odd_selected.fg
-                }
-            } else if unseen {
-                if even {
-                    color_cache.even_unseen.fg
-                } else {
-                    color_cache.odd_unseen.fg
-                }
-            } else if even {
-                color_cache.even.fg
+        if highlighted && selected {
+            if even {
+                color_cache.even_highlighted_selected
             } else {
-                color_cache.odd.fg
-            },
-            bg: if highlighted && selected {
-                if even {
-                    color_cache.even_highlighted_selected.bg
-                } else {
-                    color_cache.odd_highlighted_selected.bg
-                }
-            } else if highlighted {
-                if even {
-                    color_cache.even_highlighted.bg
-                } else {
-                    color_cache.odd_highlighted.bg
-                }
-            } else if selected {
-                if even {
-                    color_cache.even_selected.bg
-                } else {
-                    color_cache.odd_selected.bg
-                }
-            } else if unseen {
-                if even {
-                    color_cache.even_unseen.bg
-                } else {
-                    color_cache.odd_unseen.bg
-                }
-            } else if even {
-                color_cache.even.bg
+                color_cache.odd_highlighted_selected
+            }
+        } else if highlighted {
+            if even {
+                color_cache.even_highlighted
             } else {
-                color_cache.odd.bg
-            },
-            attrs: if highlighted && selected {
-                if even {
-                    color_cache.even_highlighted_selected.attrs
-                } else {
-                    color_cache.odd_highlighted_selected.attrs
-                }
-            } else if highlighted {
-                if even {
-                    color_cache.even_highlighted.attrs
-                } else {
-                    color_cache.odd_highlighted.attrs
-                }
-            } else if selected {
-                if even {
-                    color_cache.even_selected.attrs
-                } else {
-                    color_cache.odd_selected.attrs
-                }
-            } else if unseen {
-                if even {
-                    color_cache.even_unseen.attrs
-                } else {
-                    color_cache.odd_unseen.attrs
-                }
-            } else if even {
-                color_cache.even.attrs
+                color_cache.odd_highlighted
+            }
+        } else if selected {
+            if even {
+                color_cache.even_selected
             } else {
-                color_cache.odd.attrs
-            },
+                color_cache.odd_selected
+            }
+        } else if unseen {
+            if even {
+                color_cache.even_unseen
+            } else {
+                color_cache.odd_unseen
+            }
+        } else if even {
+            color_cache.even
+        } else {
+            color_cache.odd
         }
     }};
 }
@@ -225,9 +165,7 @@ impl MailListingTrait for PlainListing {
                     let area = self.data_columns.columns[0].area();
                     self.data_columns.columns[0].grid_mut().write_string(
                         message.as_str(),
-                        self.color_cache.theme_default.fg,
-                        self.color_cache.theme_default.bg,
-                        self.color_cache.theme_default.attrs,
+                        &self.color_cache.theme_default,
                         area,
                         None,
                         None,
@@ -302,9 +240,7 @@ impl MailListingTrait for PlainListing {
             let area = self.data_columns.columns[0].area();
             self.data_columns.columns[0].grid_mut().write_string(
                 message.as_str(),
-                self.color_cache.theme_default.fg,
-                self.color_cache.theme_default.bg,
-                self.color_cache.theme_default.attrs,
+                &self.color_cache.theme_default,
                 area,
                 None,
                 None,
@@ -949,9 +885,7 @@ impl PlainListing {
                 if !*account_settings!(context[&self.cursor_pos.0].listing.relative_list_indices) {
                     area_col_0 = area_col_0.skip_cols(columns[0].grid_mut().write_string(
                         itoa_buffer.format(idx),
-                        row_attr.fg,
-                        row_attr.bg,
-                        row_attr.attrs,
+                        &row_attr,
                         area_col_0,
                         None,
                         None,
@@ -967,9 +901,7 @@ impl PlainListing {
                 let mut area_col_1 = columns[1].area().nth_row(idx);
                 area_col_1 = area_col_1.skip_cols(columns[1].grid_mut().write_string(
                     &strings.date,
-                    row_attr.fg,
-                    row_attr.bg,
-                    row_attr.attrs,
+                    &row_attr,
                     area_col_1,
                     None,
                     None,
@@ -984,9 +916,7 @@ impl PlainListing {
                 let area_col_2 = columns[2].area().nth_row(idx);
                 let (skip_cols, _) = columns[2].grid_mut().write_string(
                     &strings.from,
-                    row_attr.fg,
-                    row_attr.bg,
-                    row_attr.attrs,
+                    &row_attr,
                     area_col_2,
                     None,
                     None,
@@ -1018,9 +948,7 @@ impl PlainListing {
                 let mut area_col_3 = columns[3].area().nth_row(idx);
                 area_col_3 = area_col_3.skip_cols(columns[3].grid_mut().write_string(
                     &strings.flag,
-                    row_attr.fg,
-                    row_attr.bg,
-                    row_attr.attrs,
+                    &row_attr,
                     area_col_3,
                     None,
                     None,
@@ -1035,9 +963,11 @@ impl PlainListing {
                         .as_ref()
                         .map(|s| s.as_str())
                         .unwrap_or(super::DEFAULT_HIGHLIGHT_SELF_FLAG),
-                        self.color_cache.highlight_self.fg,
-                        row_attr.bg,
-                        row_attr.attrs | Attr::FORCE_TEXT,
+                        &ThemeAttribute {
+                            fg: self.color_cache.highlight_self.fg,
+                            bg: row_attr.bg,
+                            attrs: row_attr.attrs | Attr::FORCE_TEXT,
+                        },
                         area_col_3,
                         None,
                         None,
@@ -1057,9 +987,7 @@ impl PlainListing {
                 let mut area_col_4 = columns[4].area().nth_row(idx);
                 area_col_4 = area_col_4.skip_cols(columns[4].grid_mut().write_string(
                     &strings.subject,
-                    row_attr.fg,
-                    row_attr.bg,
-                    row_attr.attrs,
+                    &row_attr,
                     area_col_4,
                     None,
                     None,
@@ -1081,9 +1009,10 @@ impl PlainListing {
                     let color = color.unwrap_or(self.color_cache.tag_default.bg);
                     let (x, _) = columns[4].grid_mut().write_string(
                         t,
-                        self.color_cache.tag_default.fg,
-                        color,
-                        self.color_cache.tag_default.attrs,
+                        &ThemeAttribute {
+                            bg: color,
+                            ..self.color_cache.tag_default
+                        },
                         area_col_4.skip_cols(1),
                         None,
                         None,
@@ -1111,9 +1040,7 @@ impl PlainListing {
                 let area = self.data_columns.columns[0].area();
                 self.data_columns.columns[0].grid_mut().write_string(
                     message.as_str(),
-                    self.color_cache.theme_default.fg,
-                    self.color_cache.theme_default.bg,
-                    self.color_cache.theme_default.attrs,
+                    &self.color_cache.theme_default,
                     area,
                     None,
                     None,
@@ -1159,15 +1086,9 @@ impl PlainListing {
         let mut itoa_buffer = itoa::Buffer::new();
         let (x, _) = {
             let area = columns[0].area().nth_row(idx);
-            columns[0].grid_mut().write_string(
-                itoa_buffer.format(idx),
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                area,
-                None,
-                None,
-            )
+            columns[0]
+                .grid_mut()
+                .write_string(itoa_buffer.format(idx), &row_attr, area, None, None)
         };
         for c in {
             let area = columns[0].area().nth_row(idx);
@@ -1179,15 +1100,9 @@ impl PlainListing {
         }
         let (x, _) = {
             let area = columns[1].area().nth_row(idx);
-            columns[1].grid_mut().write_string(
-                &strings.date,
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                area,
-                None,
-                None,
-            )
+            columns[1]
+                .grid_mut()
+                .write_string(&strings.date, &row_attr, area, None, None)
         };
         for c in {
             let area = columns[1].area().nth_row(idx);
@@ -1199,15 +1114,9 @@ impl PlainListing {
         }
         let (x, _) = {
             let area = columns[2].area().nth_row(idx);
-            columns[2].grid_mut().write_string(
-                &strings.from,
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                area,
-                None,
-                None,
-            )
+            columns[2]
+                .grid_mut()
+                .write_string(&strings.from, &row_attr, area, None, None)
         };
         for c in {
             let area = columns[2].area().nth_row(idx);
@@ -1221,9 +1130,7 @@ impl PlainListing {
             let mut area_col_3 = columns[3].area().nth_row(idx);
             area_col_3 = area_col_3.skip_cols(columns[3].grid_mut().write_string(
                 &strings.flag,
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
+                &row_attr,
                 area_col_3,
                 None,
                 None,
@@ -1238,9 +1145,11 @@ impl PlainListing {
                     .as_ref()
                     .map(|s| s.as_str())
                     .unwrap_or(super::DEFAULT_HIGHLIGHT_SELF_FLAG),
-                    self.color_cache.highlight_self.fg,
-                    row_attr.bg,
-                    row_attr.attrs | Attr::FORCE_TEXT,
+                    &ThemeAttribute {
+                        fg: self.color_cache.highlight_self.fg,
+                        attrs: row_attr.attrs | Attr::FORCE_TEXT,
+                        ..row_attr
+                    },
                     area_col_3,
                     None,
                     None,
@@ -1263,9 +1172,7 @@ impl PlainListing {
             let mut area_col_4 = columns[4].area().nth_row(idx);
             area_col_4 = area_col_4.skip_cols(columns[4].grid_mut().write_string(
                 &strings.subject,
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
+                &row_attr,
                 area_col_4,
                 None,
                 None,
@@ -1285,9 +1192,10 @@ impl PlainListing {
                 let color = color.unwrap_or(self.color_cache.tag_default.bg);
                 let (x, _) = columns[4].grid_mut().write_string(
                     t,
-                    self.color_cache.tag_default.fg,
-                    color,
-                    self.color_cache.tag_default.attrs,
+                    &ThemeAttribute {
+                        bg: color,
+                        ..self.color_cache.tag_default
+                    },
                     area_col_4.skip_cols(1),
                     None,
                     None,
@@ -1348,9 +1256,7 @@ impl PlainListing {
                         .abs()
                         .to_string()
                 },
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
+                &row_attr,
                 area.nth_row(i),
                 None,
                 None,
@@ -1429,9 +1335,7 @@ impl Component for PlainListing {
                         self.filtered_selection.len(),
                         self.filter_term
                     ),
-                    self.color_cache.theme_default.fg,
-                    self.color_cache.theme_default.bg,
-                    self.color_cache.theme_default.attrs,
+                    &self.color_cache.theme_default,
                     area,
                     None,
                     Some(0),

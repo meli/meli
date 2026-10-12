@@ -235,9 +235,7 @@ impl AccountMailboxManager {
                 let area = self.data_columns.columns[0].area().nth_row(idx);
                 self.data_columns.columns[0].grid_mut().write_string(
                     e.name(),
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
+                    &self.theme_default,
                     area,
                     None,
                     None,
@@ -248,9 +246,7 @@ impl AccountMailboxManager {
                 let area = self.data_columns.columns[1].area().nth_row(idx);
                 self.data_columns.columns[1].grid_mut().write_string(
                     e.ref_mailbox.path(),
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
+                    &self.theme_default,
                     area,
                     None,
                     None,
@@ -262,9 +258,7 @@ impl AccountMailboxManager {
                 let (_unseen, total) = e.ref_mailbox.count().ok().unwrap_or((0, 0));
                 self.data_columns.columns[2].grid_mut().write_string(
                     &total.to_string(),
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
+                    &self.theme_default,
                     area,
                     None,
                     None,
@@ -279,9 +273,7 @@ impl AccountMailboxManager {
                     } else {
                         "no"
                     },
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
+                    &self.theme_default,
                     area,
                     None,
                     None,
@@ -296,9 +288,7 @@ impl AccountMailboxManager {
                 let area = self.data_columns.columns[0].area();
                 self.data_columns.columns[0].grid_mut().write_string(
                     &message,
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
+                    &self.theme_default,
                     area,
                     None,
                     None,
@@ -465,9 +455,7 @@ impl Component for AccountMailboxManager {
             for (i, (h, w)) in Self::HEADERS.iter().zip(self.min_width).enumerate() {
                 grid.write_string(
                     h,
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs | Attr::BOLD,
+                    &(self.theme_default | Attr::BOLD),
                     area.skip_cols(x_offset),
                     None,
                     None,
@@ -482,9 +470,7 @@ impl Component for AccountMailboxManager {
                     };
                     grid.write_string(
                         arrow,
-                        self.theme_default.fg,
-                        self.theme_default.bg,
-                        self.theme_default.attrs,
+                        &self.theme_default,
                         area.skip_cols(x_offset + h.len()),
                         None,
                         None,

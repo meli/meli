@@ -158,9 +158,7 @@ impl Component for KeySelection {
                 let theme_default = crate::conf::theme_value(context, "theme_default");
                 grid.write_string(
                     &err.to_string(),
-                    theme_default.fg,
-                    theme_default.bg,
-                    theme_default.attrs,
+                    &theme_default,
                     area.center_inside((15, 2)),
                     None,
                     Some(0),

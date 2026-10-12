@@ -588,9 +588,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
         let inner_area = self.content.area();
         let (_, y) = self.content.grid_mut().write_string(
             &self.title,
-            self.theme_default.fg,
-            self.theme_default.bg,
-            self.theme_default.attrs | Attr::BOLD,
+            &(self.theme_default | Attr::BOLD),
             inner_area.skip_cols(2),
             None,
             None,
@@ -601,9 +599,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             .grid_mut()
             .write_string(
                 &navigate_help_string,
-                self.theme_default.fg,
-                self.theme_default.bg,
-                self.theme_default.attrs | Attr::ITALICS,
+                &(self.theme_default | Attr::ITALICS),
                 inner_area.skip_cols(2).skip_rows(y + 2),
                 None,
                 None,
@@ -622,15 +618,9 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
                 } else {
                     self.theme_default
                 };
-                self.content.grid_mut().write_string(
-                    e,
-                    attr.fg,
-                    attr.bg,
-                    attr.attrs,
-                    inner_area.nth_row(i),
-                    None,
-                    None,
-                );
+                self.content
+                    .grid_mut()
+                    .write_string(e, &attr, inner_area.nth_row(i), None, None);
             }
         } else {
             for (i, e) in self.entry_titles.iter().enumerate() {
@@ -641,9 +631,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
                 };
                 self.content.grid_mut().write_string(
                     &format!("[{}] {}", if self.entries[i].1 { "x" } else { " " }, e),
-                    attr.fg,
-                    attr.bg,
-                    attr.attrs,
+                    &attr,
                     inner_area.nth_row(i),
                     None,
                     None,
@@ -657,9 +645,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             };
             let (x, y) = self.content.grid_mut().write_string(
                 OK,
-                attr.fg,
-                attr.bg,
-                attr.attrs | Attr::BOLD,
+                &(attr | Attr::BOLD),
                 inner_area,
                 None,
                 None,
@@ -671,9 +657,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             };
             self.content.grid_mut().write_string(
                 CANCEL,
-                attr.fg,
-                attr.bg,
-                attr.attrs,
+                &attr,
                 inner_area.skip(CANCEL_OFFSET + x, y),
                 None,
                 None,

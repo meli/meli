@@ -163,15 +163,7 @@ impl StatusBar {
             attribute.attrs |= Attr::REVERSE;
         }
         grid.clear_area(area, attribute);
-        let (x, _) = grid.write_string(
-            &self.status,
-            attribute.fg,
-            attribute.bg,
-            attribute.attrs,
-            area,
-            None,
-            None,
-        );
+        let (x, _) = grid.write_string(&self.status, &attribute, area, None, None);
         let offset = self.status.find('|').unwrap_or(self.status.len());
         for c in grid.row_iter(area, offset..(area.width()), 0) {
             grid[c].set_attrs(attribute.attrs | Attr::BOLD);
@@ -193,15 +185,7 @@ impl StatusBar {
                 total_lines = *total_lines,
                 has_more_lines = if *has_more_lines { "(+)" } else { "" }
             );
-            grid.write_string(
-                &s,
-                attribute.fg,
-                attribute.bg,
-                attribute.attrs,
-                area.skip_cols(x + 1),
-                None,
-                None,
-            );
+            grid.write_string(&s, &attribute, area.skip_cols(x + 1), None, None);
         }
 
         if self.progress_spinner.is_dirty() {
@@ -216,9 +200,7 @@ impl StatusBar {
             .saturating_sub(self.progress_spinner.width + self.display_buffer.len() + 1);
         grid.write_string(
             &self.display_buffer,
-            attribute.fg,
-            attribute.bg,
-            attribute.attrs,
+            &attribute,
             area.skip_cols(skip),
             None,
             None,
@@ -259,15 +241,7 @@ impl StatusBar {
     fn draw_command_bar(&self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         grid.clear_area(area, crate::conf::theme_value(context, "theme_default"));
         let command_bar = crate::conf::theme_value(context, "status.command_bar");
-        let (_, y) = grid.write_string(
-            self.ex_buffer.as_str(),
-            command_bar.fg,
-            command_bar.bg,
-            command_bar.attrs,
-            area,
-            None,
-            None,
-        );
+        let (_, y) = grid.write_string(self.ex_buffer.as_str(), &command_bar, area, None, None);
         grid.change_theme(area, command_bar);
         if let Some(c) = grid
             .row_iter(area, self.ex_buffer.cursor()..area.width(), y)
@@ -828,13 +802,18 @@ impl Tabbed {
 
         let mut x = 0;
         for (idx, c) in self.children.iter().enumerate() {
-            let ThemeAttribute { fg, bg, attrs } = if idx == self.cursor_pos {
-                tab_focused_attribute
-            } else {
-                tab_unfocused_attribute
-            };
             let name = format!(" {c} ");
-            grid.write_string(&name, fg, bg, attrs, area.skip_cols(x), None, None);
+            grid.write_string(
+                &name,
+                if idx == self.cursor_pos {
+                    &tab_focused_attribute
+                } else {
+                    &tab_unfocused_attribute
+                },
+                area.skip_cols(x),
+                None,
+                None,
+            );
             x += name.len() + 1;
             if idx == self.pinned.saturating_sub(1) {
                 x += 2;
@@ -922,9 +901,7 @@ impl Component for Tabbed {
                 let inner_area = create_box(grid, dialog_area);
                 let (x, y) = grid.write_string(
                     "shortcuts",
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs | Attr::BOLD,
+                    &(self.theme_default | Attr::BOLD),
                     inner_area.skip_cols(2),
                     None,
                     None,
@@ -934,9 +911,7 @@ impl Component for Tabbed {
                         "Press {} to close",
                         children_maps[Shortcuts::GENERAL]["toggle_help"]
                     ),
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs | Attr::ITALICS,
+                    &(self.theme_default | Attr::ITALICS),
                     inner_area.skip(4 + x, y),
                     None,
                     None,
@@ -1040,9 +1015,7 @@ impl Component for Tabbed {
             let help_area = self.help_view.content.area();
             self.help_view.content.grid_mut().write_string(
                 "use COMMAND \"search\" to find shortcuts",
-                self.theme_default.fg,
-                self.theme_default.bg,
-                self.theme_default.attrs,
+                &self.theme_default,
                 help_area.skip(2, 1),
                 None,
                 None,
@@ -1052,9 +1025,7 @@ impl Component for Tabbed {
                 let help_area = self.help_view.content.area();
                 self.help_view.content.grid_mut().write_string(
                     desc,
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
+                    &self.theme_default,
                     help_area.skip(2, 2 + idx),
                     None,
                     None,
@@ -1068,9 +1039,7 @@ impl Component for Tabbed {
                             format!("{}", v),
                             width = max_first_column_width
                         ),
-                        self.theme_default.fg,
-                        self.theme_default.bg,
-                        self.theme_default.attrs | Attr::BOLD,
+                        &(self.theme_default | Attr::BOLD),
                         help_area.skip(2, 2 + idx),
                         None,
                         None,
@@ -1078,9 +1047,7 @@ impl Component for Tabbed {
                     let help_area = self.help_view.content.area();
                     self.help_view.content.grid_mut().write_string(
                         k,
-                        self.theme_default.fg,
-                        self.theme_default.bg,
-                        self.theme_default.attrs,
+                        &self.theme_default,
                         help_area.skip(x + 4, 2 + idx),
                         None,
                         None,
@@ -1106,9 +1073,7 @@ impl Component for Tabbed {
             let inner_area = create_box(grid, dialog_area);
             let (x, y) = grid.write_string(
                 "shortcuts",
-                self.theme_default.fg,
-                self.theme_default.bg,
-                self.theme_default.attrs | Attr::BOLD,
+                &(self.theme_default | Attr::BOLD),
                 inner_area.skip_cols(2),
                 None,
                 None,
@@ -1118,9 +1083,7 @@ impl Component for Tabbed {
                     "Press {} to close",
                     self.help_view.curr_views[Shortcuts::GENERAL]["toggle_help"]
                 ),
-                self.theme_default.fg,
-                self.theme_default.bg,
-                self.theme_default.attrs | Attr::ITALICS,
+                &(self.theme_default | Attr::ITALICS),
                 inner_area.skip(4 + x, y),
                 None,
                 None,
@@ -1212,9 +1175,7 @@ impl Component for Tabbed {
                         right = self.help_view.curr_views[Shortcuts::GENERAL]["scroll_right"],
                         left = self.help_view.curr_views[Shortcuts::GENERAL]["scroll_left"],
                     ),
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs | Attr::ITALICS,
+                    &(self.theme_default | Attr::ITALICS),
                     help_area.skip(2, 2),
                     None,
                     None,

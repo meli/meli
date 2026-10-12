@@ -154,9 +154,7 @@ impl Component for ContactExportDialog {
                 Key::Char('\n'),
                 Key::Esc
             ),
-            self.theme_default.fg,
-            self.theme_default.bg,
-            self.theme_default.attrs,
+            &self.theme_default,
             form_area,
             Some(2),
             Some(0),

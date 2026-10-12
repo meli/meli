@@ -376,16 +376,10 @@ impl ThreadView {
                     self.content.grid_mut().write_string(
                         &e.heading,
                         if e.seen {
-                            theme_default.fg
+                            &theme_default
                         } else {
-                            highlight_theme.fg
+                            &highlight_theme
                         },
-                        if e.seen {
-                            theme_default.bg
-                        } else {
-                            highlight_theme.bg
-                        },
-                        theme_default.attrs,
                         area,
                         None,
                         None,
@@ -403,16 +397,10 @@ impl ThreadView {
                     self.content.grid_mut().write_string(
                         &e.heading,
                         if e.seen {
-                            theme_default.fg
+                            &theme_default
                         } else {
-                            highlight_theme.fg
+                            &highlight_theme
                         },
-                        if e.seen {
-                            theme_default.bg
-                        } else {
-                            highlight_theme.bg
-                        },
-                        theme_default.attrs,
                         area,
                         None,
                         None,
@@ -618,15 +606,8 @@ impl ThreadView {
                 threads.thread_nodes()[&iter_ptr].message().unwrap()
             });
             if let Some(env_ref) = account.collection.get_env(i) {
-                let (_, y) = grid.write_string(
-                    &env_ref.subject(),
-                    theme_default.fg,
-                    theme_default.bg,
-                    theme_default.attrs,
-                    area,
-                    None,
-                    Some(0),
-                );
+                let (_, y) =
+                    grid.write_string(&env_ref.subject(), &theme_default, area, None, Some(0));
                 context.dirty_areas.push_back(area);
                 grid.clear_area(area.nth_col(mid), theme_default);
                 grid.clear_area(area.skip(mid, y + 1), theme_default);
@@ -685,15 +666,7 @@ impl ThreadView {
                 threads.thread_nodes()[&iter_ptr].message().unwrap()
             });
             if let Some(env_ref) = account.collection.get_env(i) {
-                grid.write_string(
-                    &env_ref.subject(),
-                    theme_default.fg,
-                    theme_default.bg,
-                    theme_default.attrs,
-                    area,
-                    None,
-                    Some(0),
-                );
+                grid.write_string(&env_ref.subject(), &theme_default, area, None, Some(0));
                 context.dirty_areas.push_back(area);
             }
         };

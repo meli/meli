@@ -3400,9 +3400,7 @@ impl Listing {
         // Print account name first
         self.menu.grid_mut().write_string(
             &self.accounts[aidx].name,
-            account_attrs.fg,
-            account_attrs.bg,
-            account_attrs.attrs,
+            &account_attrs,
             area,
             None,
             None,
@@ -3412,9 +3410,7 @@ impl Listing {
         if lines.is_empty() {
             self.menu.grid_mut().write_string(
                 "offline",
-                crate::conf::theme_value(context, "error_message").fg,
-                account_attrs.bg,
-                account_attrs.attrs,
+                &crate::conf::theme_value(context, "error_message"),
                 area.skip_rows(1),
                 None,
                 None,
@@ -3524,9 +3520,7 @@ impl Listing {
                 } else {
                     format!("{:>width$}", l.inc, width = total_mailbox_no_digits)
                 },
-                index_att.fg,
-                index_att.bg,
-                index_att.attrs,
+                &index_att,
                 area.nth_row(y + 1),
                 None,
                 None,
@@ -3558,9 +3552,7 @@ impl Listing {
                 .grid_mut()
                 .write_string(
                     &branches,
-                    att.fg,
-                    att.bg,
-                    att.attrs,
+                    &att,
                     area.nth_row(y + 1).skip_cols(x),
                     None,
                     None,
@@ -3574,9 +3566,7 @@ impl Listing {
                 .write_string(
                     context.accounts[self.accounts[aidx].index].mailbox_entries[&l.mailbox_idx]
                         .name(),
-                    att.fg,
-                    att.bg,
-                    att.attrs,
+                    &att,
                     area.nth_row(y + 1).skip_cols(x),
                     None,
                     None,
@@ -3610,14 +3600,12 @@ impl Listing {
             };
             let (x, _) = self.menu.grid_mut().write_string(
                 count_string.as_ref(),
-                unread_count_att.fg,
-                unread_count_att.bg,
-                unread_count_att.attrs
+                &(unread_count_att
                     | if l.count.unwrap_or(0) > 0 {
                         Attr::BOLD
                     } else {
                         Attr::DEFAULT
-                    },
+                    }),
                 area.nth_row(y + 1).skip_cols(skip_cols),
                 None,
                 None,

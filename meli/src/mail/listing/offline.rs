@@ -159,32 +159,15 @@ impl Component for OfflineListing {
         let error_message = crate::conf::theme_value(context, "error_message");
         grid.clear_area(area, theme_default);
         if let Err(err) = context.is_online(self.cursor_pos.0) {
-            let (x, _) = grid.write_string(
-                "offline: ",
-                error_message.fg,
-                error_message.bg,
-                error_message.attrs,
-                area,
-                None,
-                None,
-            );
+            let (x, _) = grid.write_string("offline: ", &error_message, area, None, None);
 
-            let (_, mut y_offset) = grid.write_string(
-                &err.to_string(),
-                error_message.fg,
-                error_message.bg,
-                error_message.attrs,
-                area,
-                Some(x + 1),
-                Some(0),
-            );
+            let (_, mut y_offset) =
+                grid.write_string(&err.to_string(), &error_message, area, Some(x + 1), Some(0));
             y_offset += 1;
             if let Some(msg) = self.messages.last() {
                 grid.write_string(
                     msg,
-                    text_unfocused.fg,
-                    text_unfocused.bg,
-                    Attr::BOLD,
+                    &(text_unfocused | Attr::BOLD),
                     area.skip_rows(y_offset),
                     None,
                     None,
@@ -194,9 +177,7 @@ impl Component for OfflineListing {
             for (i, msg) in self.messages.iter().rev().skip(1).enumerate() {
                 grid.write_string(
                     msg,
-                    text_unfocused.fg,
-                    text_unfocused.bg,
-                    text_unfocused.attrs,
+                    &text_unfocused,
                     area.skip_rows(y_offset + i),
                     None,
                     None,
@@ -204,15 +185,7 @@ impl Component for OfflineListing {
             }
         } else {
             let highlight = crate::conf::theme_value(context, "highlight");
-            grid.write_string(
-                "loading...",
-                highlight.fg,
-                highlight.bg,
-                highlight.attrs,
-                area,
-                None,
-                None,
-            );
+            grid.write_string("loading...", &highlight, area, None, None);
             let mut jobs: SmallVec<[_; 64]> = context.accounts[&self.cursor_pos.0]
                 .active_jobs
                 .iter()
@@ -221,9 +194,7 @@ impl Component for OfflineListing {
             for (i, (job_id, j)) in jobs.into_iter().enumerate() {
                 grid.write_string(
                     &format!("{job_id}: {j:?}"),
-                    text_unfocused.fg,
-                    text_unfocused.bg,
-                    text_unfocused.attrs,
+                    &text_unfocused,
                     area.skip_rows(i + 1),
                     None,
                     None,

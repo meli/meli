@@ -512,9 +512,7 @@ impl Component for DisplayMessageBox {
             {
                 let (_, y) = grid.write_string(
                     &line,
-                    noto_colors.fg,
-                    noto_colors.bg,
-                    noto_colors.attrs,
+                    &noto_colors,
                     box_displ_area.skip_rows(idx),
                     None,
                     Some(0),
@@ -541,9 +539,7 @@ impl Component for DisplayMessageBox {
                             context.settings.shortcuts.general.info_message_next
                         )
                     },
-                    noto_colors.fg,
-                    noto_colors.bg,
-                    noto_colors.attrs,
+                    &noto_colors,
                     box_displ_area.skip_rows(lines_no),
                     None,
                     Some(0),

@@ -25,7 +25,7 @@ use indexmap::IndexSet;
 use melib::{Address, SortField, SortOrder, TagHash, Threads};
 
 use super::*;
-use crate::{components::PageMovement, conf::themes::ThemeAttribute, jobs::JoinHandle};
+use crate::{components::PageMovement, jobs::JoinHandle};
 
 macro_rules! row_attr {
     ($field:ident, $color_cache:expr, unseen: $unseen:expr, highlighted: $highlighted:expr, selected: $selected:expr  $(,)*) => {{
@@ -33,36 +33,14 @@ macro_rules! row_attr {
         let unseen = $unseen;
         let highlighted = $highlighted;
         let selected = $selected;
-        ThemeAttribute {
-            fg: if highlighted {
-                color_cache.highlighted.fg
-            } else if selected {
-                color_cache.selected.fg
-            } else if unseen {
-                color_cache.unseen.fg
-            } else {
-                color_cache.$field.fg
-            },
-            bg: if highlighted {
-                color_cache.highlighted.bg
-            } else if selected {
-                color_cache.selected.bg
-            } else if unseen {
-                color_cache.unseen.bg
-            } else {
-                color_cache.$field.bg
-            },
-            attrs: if highlighted && selected {
-                color_cache.highlighted_selected.attrs
-            } else if highlighted {
-                color_cache.highlighted.attrs
-            } else if selected {
-                color_cache.selected.attrs
-            } else if unseen {
-                color_cache.unseen.attrs
-            } else {
-                color_cache.$field.attrs
-            },
+        if highlighted {
+            color_cache.highlighted
+        } else if selected {
+            color_cache.selected
+        } else if unseen {
+            color_cache.unseen
+        } else {
+            color_cache.$field
         }
     }};
     ($color_cache:expr, unseen: $unseen:expr, highlighted: $highlighted:expr, selected: $selected:expr  $(,)*) => {{
@@ -70,36 +48,14 @@ macro_rules! row_attr {
         let unseen = $unseen;
         let highlighted = $highlighted;
         let selected = $selected;
-        ThemeAttribute {
-            fg: if highlighted {
-                color_cache.highlighted.fg
-            } else if selected {
-                color_cache.selected.fg
-            } else if unseen {
-                color_cache.unseen.fg
-            } else {
-                color_cache.theme_default.fg
-            },
-            bg: if highlighted {
-                color_cache.highlighted.bg
-            } else if selected {
-                color_cache.selected.bg
-            } else if unseen {
-                color_cache.unseen.bg
-            } else {
-                color_cache.theme_default.bg
-            },
-            attrs: if highlighted && selected {
-                color_cache.highlighted_selected.attrs
-            } else if highlighted {
-                color_cache.highlighted.attrs
-            } else if selected {
-                color_cache.selected.attrs
-            } else if unseen {
-                color_cache.unseen.attrs
-            } else {
-                color_cache.theme_default.attrs
-            },
+        if highlighted {
+            color_cache.highlighted
+        } else if selected {
+            color_cache.selected
+        } else if unseen {
+            color_cache.unseen
+        } else {
+            color_cache.theme_default
         }
     }};
 }
@@ -462,15 +418,7 @@ impl ListingTrait for ConversationsListing {
         }
         if let Err(message) = self.error.as_ref() {
             grid.clear_area(area, self.color_cache.theme_default);
-            grid.write_string(
-                message,
-                self.color_cache.theme_default.fg,
-                self.color_cache.theme_default.bg,
-                self.color_cache.theme_default.attrs,
-                area,
-                None,
-                None,
-            );
+            grid.write_string(message, &self.color_cache.theme_default, area, None, None);
             context.dirty_areas.push_back(area);
             return;
         }
@@ -923,15 +871,7 @@ impl ConversationsListing {
                 selected: self.rows.is_thread_selected(*thread_hash)
             );
             // draw flags
-            let (mut x, _) = grid.write_string(
-                &strings.flag,
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                area,
-                None,
-                None,
-            );
+            let (mut x, _) = grid.write_string(&strings.flag, &row_attr, area, None, None);
             if !strings.flag.is_empty() {
                 for c in grid.row_iter(area, x..(x + 1), 0) {
                     grid[c].set_bg(row_attr.bg);
@@ -948,9 +888,7 @@ impl ConversationsListing {
             // draw subject
             let (x_, subject_overflowed) = grid.write_string(
                 &strings.subject,
-                subject_attr.fg,
-                subject_attr.bg,
-                subject_attr.attrs,
+                &subject_attr,
                 area.skip_cols(x),
                 None,
                 None,
@@ -965,9 +903,10 @@ impl ConversationsListing {
                 let color = color.unwrap_or(self.color_cache.tag_default.bg);
                 let (_x, _y) = grid.write_string(
                     t,
-                    self.color_cache.tag_default.fg,
-                    color,
-                    self.color_cache.tag_default.attrs,
+                    &ThemeAttribute {
+                        bg: color,
+                        ..self.color_cache.tag_default
+                    },
                     area.skip_cols(1),
                     None,
                     None,
@@ -1000,15 +939,7 @@ impl ConversationsListing {
             );
             x = 0;
             x += grid
-                .write_string(
-                    &strings.date,
-                    date_attr.fg,
-                    date_attr.bg,
-                    date_attr.attrs,
-                    area.skip(x, 1),
-                    None,
-                    None,
-                )
+                .write_string(&strings.date, &date_attr, area.skip(x, 1), None, None)
                 .0;
             for c in grid.row_iter(area, x..(x + 4), 1) {
                 grid[c].set_ch('▁').set_fg(row_attr.fg).set_bg(row_attr.bg);
@@ -1023,15 +954,7 @@ impl ConversationsListing {
             );
             // draw from
             x += grid
-                .write_string(
-                    &strings.from,
-                    from_attr.fg,
-                    from_attr.bg,
-                    from_attr.attrs,
-                    area.skip(x, 1),
-                    None,
-                    None,
-                )
+                .write_string(&strings.from, &from_attr, area.skip(x, 1), None, None)
                 .0;
 
             for c in grid.row_iter(area, x..area.width(), 1) {
@@ -1099,9 +1022,7 @@ impl Component for ConversationsListing {
                         self.filtered_selection.len(),
                         self.filter_term
                     ),
-                    self.color_cache.theme_default.fg,
-                    self.color_cache.theme_default.bg,
-                    self.color_cache.theme_default.attrs,
+                    &self.color_cache.theme_default,
                     area,
                     None,
                     Some(0),

@@ -103,9 +103,7 @@ impl AccountStatus {
         let area = self.content.area().skip_cols(1);
         let (_x, _y) = self.content.grid_mut().write_string(
             "Account ",
-            self.theme_default.fg,
-            self.theme_default.bg,
-            self.theme_default.attrs | Attr::UNDERLINE,
+            &(self.theme_default | Attr::UNDERLINE),
             area,
             None,
             None,
@@ -113,9 +111,10 @@ impl AccountStatus {
         let area = self.content.area().skip(_x + 1, _y);
         let (_x, _y) = self.content.grid_mut().write_string(
             a.name(),
-            self.theme_default.fg,
-            self.theme_default.bg,
-            Attr::BOLD | Attr::UNDERLINE,
+            &ThemeAttribute {
+                attrs: Attr::BOLD | Attr::UNDERLINE,
+                ..self.theme_default
+            },
             area,
             None,
             None,
@@ -125,9 +124,10 @@ impl AccountStatus {
         let area = self.content.area().skip(1, line);
         self.content.grid_mut().write_string(
             "In-progress jobs:",
-            self.theme_default.fg,
-            self.theme_default.bg,
-            Attr::BOLD,
+            &ThemeAttribute {
+                attrs: Attr::BOLD,
+                ..self.theme_default
+            },
             area,
             None,
             None,
@@ -144,9 +144,7 @@ impl AccountStatus {
             let area = self.content.area().skip(1, line);
             self.content.grid_mut().write_string(
                 &format!("{req} {job_id}"),
-                self.theme_default.fg,
-                self.theme_default.bg,
-                self.theme_default.attrs,
+                &self.theme_default,
                 area,
                 None,
                 None,
@@ -164,9 +162,7 @@ impl AccountStatus {
                 } else {
                     Cow::Owned(format!("and other {total} tasks"))
                 },
-                self.theme_default.fg,
-                self.theme_default.bg,
-                self.theme_default.attrs,
+                &self.theme_default,
                 area,
                 None,
                 None,
@@ -177,9 +173,7 @@ impl AccountStatus {
         let area = self.content.area().skip(1, line);
         let (_x, _y) = self.content.grid_mut().write_string(
             "Tag support: ",
-            self.theme_default.fg,
-            self.theme_default.bg,
-            self.theme_default.attrs | Attr::BOLD,
+            &(self.theme_default | Attr::BOLD),
             area,
             None,
             None,
@@ -191,9 +185,7 @@ impl AccountStatus {
             } else {
                 "no"
             },
-            self.theme_default.fg,
-            self.theme_default.bg,
-            self.theme_default.attrs,
+            &self.theme_default,
             area,
             None,
             None,
@@ -208,9 +200,7 @@ impl AccountStatus {
         if let Some(metadata) = metadata {
             self.content.grid_mut().write_string(
                 "Metadata:",
-                self.theme_default.fg,
-                self.theme_default.bg,
-                self.theme_default.attrs | Attr::BOLD,
+                &(self.theme_default | Attr::BOLD),
                 area,
                 None,
                 None,
@@ -219,9 +209,7 @@ impl AccountStatus {
             let area = self.content.area().skip_rows(line);
             let (_, _y) = self.content.grid_mut().write_string(
                 &metadata,
-                self.theme_default.fg,
-                self.theme_default.bg,
-                self.theme_default.attrs,
+                &self.theme_default,
                 area,
                 None,
                 Some(0),
@@ -231,9 +219,7 @@ impl AccountStatus {
         let area = self.content.area().skip(1, line);
         let (_x, _y) = self.content.grid_mut().write_string(
             "Search backend: ",
-            self.theme_default.fg,
-            self.theme_default.bg,
-            Attr::BOLD,
+            &(self.theme_default | Attr::BOLD),
             area,
             None,
             None,
@@ -265,9 +251,7 @@ impl AccountStatus {
                     }
                 }
             },
-            self.theme_default.fg,
-            self.theme_default.bg,
-            self.theme_default.attrs,
+            &self.theme_default,
             area,
             None,
             None,
@@ -277,9 +261,7 @@ impl AccountStatus {
         let area = self.content.area().skip(1, line);
         self.content.grid_mut().write_string(
             "Special Mailboxes:",
-            self.theme_default.fg,
-            self.theme_default.bg,
-            Attr::BOLD,
+            &(self.theme_default | Attr::BOLD),
             area,
             None,
             None,
@@ -294,9 +276,7 @@ impl AccountStatus {
             let area = self.content.area().skip(1, line);
             self.content.grid_mut().write_string(
                 &format!("{}: {}", f.path(), f.special_usage()),
-                self.theme_default.fg,
-                self.theme_default.bg,
-                self.theme_default.attrs,
+                &self.theme_default,
                 area,
                 None,
                 None,
@@ -307,9 +287,7 @@ impl AccountStatus {
             let area = self.content.area().skip(1, line);
             self.content.grid_mut().write_string(
                 "Server Extensions:",
-                self.theme_default.fg,
-                self.theme_default.bg,
-                Attr::BOLD,
+                &(self.theme_default | Attr::BOLD),
                 area,
                 None,
                 None,
@@ -325,9 +303,7 @@ impl AccountStatus {
             let area = self.content.area().skip(max_name_width + 6, line);
             self.content.grid_mut().write_string(
                 "meli support:",
-                self.theme_default.fg,
-                self.theme_default.bg,
-                self.theme_default.attrs,
+                &self.theme_default,
                 area,
                 None,
                 None,
@@ -339,9 +315,7 @@ impl AccountStatus {
                 let area = self.content.area().skip(1, line);
                 self.content.grid_mut().write_string(
                     name.trim_at_boundary(30),
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
+                    &self.theme_default,
                     area,
                     None,
                     None,
@@ -356,9 +330,10 @@ impl AccountStatus {
                     let area = self.content.area().skip(max_name_width + 6, line);
                     self.content.grid_mut().write_string(
                         status,
-                        color,
-                        self.theme_default.bg,
-                        self.theme_default.attrs,
+                        &ThemeAttribute {
+                            fg: color,
+                            ..self.theme_default
+                        },
                         area,
                         None,
                         None,
@@ -376,9 +351,7 @@ impl AccountStatus {
                         .skip(x, y);
                     let (_x, _y) = self.content.grid_mut().write_string(
                         " (",
-                        self.theme_default.fg,
-                        self.theme_default.bg,
-                        self.theme_default.attrs,
+                        &self.theme_default,
                         area,
                         None,
                         None,
@@ -391,9 +364,7 @@ impl AccountStatus {
                         .skip(_x, _y);
                     let (__x, __y) = self.content.grid_mut().write_string(
                         s,
-                        self.theme_default.fg,
-                        self.theme_default.bg,
-                        self.theme_default.attrs,
+                        &self.theme_default,
                         area,
                         None,
                         None,
@@ -405,9 +376,7 @@ impl AccountStatus {
                         .skip(x + _x + __x, y + _y + __y);
                     self.content.grid_mut().write_string(
                         ")",
-                        self.theme_default.fg,
-                        self.theme_default.bg,
-                        self.theme_default.attrs,
+                        &self.theme_default,
                         area,
                         None,
                         None,

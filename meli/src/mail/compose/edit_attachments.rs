@@ -156,15 +156,7 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
             let theme_default = crate::conf::theme_value(context, "theme_default");
             grid.clear_area(area, theme_default);
             if attachments_no == 0 {
-                grid.write_string(
-                    "No attachments",
-                    theme_default.fg,
-                    theme_default.bg,
-                    theme_default.attrs,
-                    area,
-                    None,
-                    None,
-                );
+                grid.write_string("No attachments", &theme_default, area, None, None);
             } else {
                 grid.write_string(
                     &format!(
@@ -172,9 +164,7 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
                         attachments_no,
                         if attachments_no == 1 { "" } else { "s" }
                     ),
-                    theme_default.fg,
-                    theme_default.bg,
-                    theme_default.attrs,
+                    &theme_default,
                     area,
                     None,
                     None,
@@ -203,9 +193,7 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
                                 melib::BytesDisplay(a.raw.len())
                             )
                         },
-                        theme_attr.fg,
-                        theme_attr.bg,
-                        theme_attr.attrs,
+                        &theme_attr,
                         area.skip(2, 2 + i),
                         None,
                         None,

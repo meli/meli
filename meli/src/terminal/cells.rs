@@ -675,7 +675,7 @@ impl CellBuffer {
                         self[(x, y)].set_bg(bg).set_keep_bg(true);
                     }
                     if let Some(attrs) = t.attrs {
-                        self[(x, y)].attrs |= attrs;
+                        self[(x, y)].theme_attr.attrs |= attrs;
                         self[(x, y)].set_keep_attrs(true);
                     }
                 }
@@ -705,9 +705,7 @@ impl CellBuffer {
     pub fn write_string(
         &mut self,
         s: &str,
-        fg_color: Color,
-        bg_color: Color,
-        attrs: Attr,
+        theme_attr: &ThemeAttribute,
         og_area: Area,
         skip_cols: Option<usize>,
         // The left-most x coordinate.
@@ -888,9 +886,9 @@ impl CellBuffer {
                     cell_mut!(x, y).set_ch(c);
                 }
                 cell_mut!(x, y)
-                    .set_fg(fg_color)
-                    .set_bg(bg_color)
-                    .set_attrs(attrs);
+                    .set_fg(theme_attr.fg)
+                    .set_bg(theme_attr.bg)
+                    .set_attrs(theme_attr.attrs);
 
                 match wcwidth(c) {
                     Some(0) | None => {
@@ -903,9 +901,9 @@ impl CellBuffer {
                         if let Some(c) = self.get_mut(x + 1, y) {
                             x += 1;
                             *c = Cell::default();
-                            c.set_fg(fg_color)
-                                .set_bg(bg_color)
-                                .set_attrs(attrs)
+                            c.set_fg(theme_attr.fg)
+                                .set_bg(theme_attr.bg)
+                                .set_attrs(theme_attr.attrs)
                                 .set_empty(true);
                         }
                     }
@@ -983,9 +981,7 @@ pub struct Cell {
     /// Set a `Cell` as empty when a previous cell spans multiple columns and it
     /// would "overflow" to this cell.
     empty: bool,
-    fg: Color,
-    bg: Color,
-    attrs: Attr,
+    theme_attr: ThemeAttribute,
     keep_fg: bool,
     keep_bg: bool,
     keep_attrs: bool,
@@ -997,20 +993,24 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
-    /// use meli::{Attr, Cell, Color};
+    /// use meli::{conf::themes::ThemeAttribute, Attr, Cell, Color};
     ///
-    /// let cell = Cell::new('x', Color::Default, Color::Green, Attr::DEFAULT);
+    /// let cell = Cell::new(
+    ///     'x',
+    ///     ThemeAttribute {
+    ///         bg: Color::Green,
+    ///         ..ThemeAttribute::default()
+    ///     },
+    /// );
     /// assert_eq!(cell.ch(), 'x');
     /// assert_eq!(cell.fg(), Color::Default);
     /// assert_eq!(cell.bg(), Color::Green);
     /// assert_eq!(cell.attrs(), Attr::DEFAULT);
     /// ```
-    pub const fn new(ch: char, fg: Color, bg: Color, attrs: Attr) -> Self {
+    pub const fn new(ch: char, theme_attr: ThemeAttribute) -> Self {
         Self {
             ch,
-            fg,
-            bg,
-            attrs,
+            theme_attr,
             empty: false,
             keep_fg: false,
             keep_bg: false,
@@ -1019,7 +1019,18 @@ impl Cell {
     }
 
     pub const fn new_default() -> Self {
-        Self::new(' ', Color::Default, Color::Default, Attr::DEFAULT)
+        Self {
+            ch: ' ',
+            theme_attr: ThemeAttribute {
+                fg: Color::Default,
+                bg: Color::Default,
+                attrs: Attr::DEFAULT,
+            },
+            empty: false,
+            keep_fg: false,
+            keep_bg: false,
+            keep_attrs: false,
+        }
     }
 
     /// Creates a new `Cell` with the given `char` and default style.
@@ -1035,8 +1046,11 @@ impl Cell {
     /// assert_eq!(cell.bg(), Color::Default);
     /// assert_eq!(cell.attrs(), Attr::DEFAULT);
     /// ```
-    pub fn with_char(ch: char) -> Self {
-        Self::new(ch, Color::Default, Color::Default, Attr::DEFAULT)
+    pub const fn with_char(ch: char) -> Self {
+        Self {
+            ch,
+            ..Self::new_default()
+        }
     }
 
     /// Creates a new `Cell` with the given style and a blank `char`.
@@ -1044,16 +1058,24 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
-    /// use meli::{Attr, Cell, Color};
+    /// use meli::{conf::themes::ThemeAttribute, Attr, Cell, Color};
     ///
-    /// let mut cell = Cell::with_style(Color::Default, Color::Red, Attr::BOLD);
+    /// let mut cell = Cell::with_style(ThemeAttribute {
+    ///     bg: Color::Red,
+    ///     attrs: Attr::BOLD,
+    ///     ..ThemeAttribute::default()
+    /// });
     /// assert_eq!(cell.fg(), Color::Default);
     /// assert_eq!(cell.bg(), Color::Red);
     /// assert_eq!(cell.attrs(), Attr::BOLD);
     /// assert_eq!(cell.ch(), ' ');
     /// ```
-    pub fn with_style(fg: Color, bg: Color, attr: Attr) -> Self {
-        Self::new(' ', fg, bg, attr)
+    pub const fn with_style(theme_attr: ThemeAttribute) -> Self {
+        Self {
+            ch: ' ',
+            theme_attr,
+            ..Self::new_default()
+        }
     }
 
     /// Returns the `Cell`'s character.
@@ -1096,13 +1118,16 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
-    /// use meli::{Attr, Cell, Color};
+    /// use meli::{conf::themes::ThemeAttribute, Attr, Cell, Color};
     ///
-    /// let mut cell = Cell::with_style(Color::Blue, Color::Default, Attr::DEFAULT);
+    /// let mut cell = Cell::with_style(ThemeAttribute {
+    ///     fg: Color::Blue,
+    ///     ..ThemeAttribute::default()
+    /// });
     /// assert_eq!(cell.fg(), Color::Blue);
     /// ```
-    pub fn fg(&self) -> Color {
-        self.fg
+    pub const fn fg(&self) -> Color {
+        self.theme_attr.fg
     }
 
     /// Sets the `Cell`'s foreground `Color` to the given `Color`.
@@ -1118,9 +1143,9 @@ impl Cell {
     /// cell.set_fg(Color::White);
     /// assert_eq!(cell.fg(), Color::White);
     /// ```
-    pub fn set_fg(&mut self, newfg: Color) -> &mut Self {
+    pub const fn set_fg(&mut self, newfg: Color) -> &mut Self {
         if !self.keep_fg {
-            self.fg = newfg;
+            self.theme_attr.fg = newfg;
         }
         self
     }
@@ -1130,13 +1155,16 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
-    /// use meli::{Attr, Cell, Color};
+    /// use meli::{conf::themes::ThemeAttribute, Attr, Cell, Color};
     ///
-    /// let mut cell = Cell::with_style(Color::Default, Color::Green, Attr::DEFAULT);
+    /// let mut cell = Cell::with_style(ThemeAttribute {
+    ///     bg: Color::Green,
+    ///     ..ThemeAttribute::default()
+    /// });
     /// assert_eq!(cell.bg(), Color::Green);
     /// ```
-    pub fn bg(&self) -> Color {
-        self.bg
+    pub const fn bg(&self) -> Color {
+        self.theme_attr.bg
     }
 
     /// Sets the `Cell`'s background `Color` to the given `Color`.
@@ -1152,23 +1180,23 @@ impl Cell {
     /// cell.set_bg(Color::Black);
     /// assert_eq!(cell.bg(), Color::Black);
     /// ```
-    pub fn set_bg(&mut self, newbg: Color) -> &mut Self {
+    pub const fn set_bg(&mut self, newbg: Color) -> &mut Self {
         if !self.keep_bg {
-            self.bg = newbg;
+            self.theme_attr.bg = newbg;
         }
         self
     }
 
-    pub fn attrs(&self) -> Attr {
-        self.attrs
+    pub const fn attrs(&self) -> Attr {
+        self.theme_attr.attrs
     }
 
     pub fn set_attrs(&mut self, mut newattrs: Attr) -> &mut Self {
-        if self.attrs.intersects(Attr::FORCE_TEXT) {
+        if self.theme_attr.attrs.intersects(Attr::FORCE_TEXT) {
             newattrs |= Attr::FORCE_TEXT;
         }
         if !self.keep_attrs {
-            self.attrs = newattrs;
+            self.theme_attr.attrs = newattrs;
         }
         self
     }
@@ -1221,17 +1249,15 @@ impl Default for Cell {
     /// assert_eq!(cell.bg(), Color::Default);
     /// ```
     fn default() -> Self {
-        Self::new(' ', Color::Default, Color::Default, Attr::DEFAULT)
+        Self::new_default()
     }
 }
 
 impl From<ThemeAttribute> for Cell {
-    fn from(ThemeAttribute { fg, bg, attrs, .. }: ThemeAttribute) -> Self {
+    fn from(theme_attr: ThemeAttribute) -> Self {
         Self {
-            fg,
-            bg,
-            attrs,
-            ..Self::default()
+            theme_attr,
+            ..Self::new_default()
         }
     }
 }
@@ -2066,7 +2092,6 @@ of the house!’ (Which was very likely true.)";
 
     #[test]
     fn test_cellbuffer_search() {
-        use crate::{Attr, Color};
         let lines: Vec<String> = _ALICE_CHAPTER_1.split_lines_reflow(Reflow::All, Some(78));
         let width = lines.iter().map(String::len).max().unwrap();
         let height = lines.len();
@@ -2074,15 +2099,9 @@ of the house!’ (Which was very likely true.)";
         assert!(screen.resize(width, height));
         let area = screen.grid().area();
         for (i, l) in lines.iter().enumerate() {
-            screen.grid_mut().write_string(
-                l,
-                Color::Default,
-                Color::Default,
-                Attr::DEFAULT,
-                area.nth_row(i),
-                None,
-                None,
-            );
+            screen
+                .grid_mut()
+                .write_string(l, &Default::default(), area.nth_row(i), None, None);
         }
         //eprintln!("{}", screen.grid().to_string());
         let positions = screen

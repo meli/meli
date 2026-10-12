@@ -729,9 +729,7 @@ To: {}
             if attachments_no == 0 {
                 grid.write_string(
                     &format!("No attachments [edit: {edit_shortcut}]"),
-                    theme_attr.fg,
-                    theme_attr.bg,
-                    theme_attr.attrs,
+                    &theme_attr,
                     area,
                     None,
                     None,
@@ -745,9 +743,7 @@ To: {}
                         if attachments_no != 1 { "s" } else { "" },
                         edit_shortcut
                     ),
-                    theme_attr.fg,
-                    theme_attr.bg,
-                    theme_attr.attrs,
+                    &theme_attr,
                     area,
                     None,
                     None,
@@ -771,9 +767,7 @@ To: {}
                                 melib::BytesDisplay(a.raw.len())
                             )
                         },
-                        theme_default.fg,
-                        theme_default.bg,
-                        theme_default.attrs,
+                        &theme_default,
                         area,
                         None,
                         None,
@@ -824,15 +818,7 @@ To: {}
                      {edit_shortcut}]",
                 )
             };
-            grid.write_string(
-                &sign,
-                theme_attr.fg,
-                theme_attr.bg,
-                theme_attr.attrs,
-                area,
-                None,
-                None,
-            );
+            grid.write_string(&sign, &theme_attr, area, None, None);
             area = area.skip_rows(1);
 
             let theme_attr = if self.focus == Focus::Encrypt {
@@ -888,15 +874,7 @@ To: {}
                      {edit_shortcut}]",
                 )
             };
-            grid.write_string(
-                &encrypt,
-                theme_attr.fg,
-                theme_attr.bg,
-                theme_attr.attrs,
-                area,
-                None,
-                None,
-            );
+            grid.write_string(&encrypt, &theme_attr, area, None, None);
         }
     }
 
@@ -1096,9 +1074,7 @@ impl Component for Composer {
                     field_shortcut,
                     edit_shortcut
                 ),
-                highlight_attr.fg,
-                highlight_attr.bg,
-                highlight_attr.attrs,
+                &highlight_attr,
                 area.nth_row(0),
                 None,
                 None,
@@ -1153,15 +1129,7 @@ impl Component for Composer {
                     .iter()
                     .enumerate()
                     {
-                        grid.write_string(
-                            l,
-                            theme_default.fg,
-                            theme_default.bg,
-                            theme_default.attrs,
-                            inner_area.skip_rows(i),
-                            None,
-                            None,
-                        );
+                        grid.write_string(l, &theme_default, inner_area.skip_rows(i), None, None);
                     }
                     context.dirty_areas.push_back(area);
                     guard.grid.set_dirty(false);

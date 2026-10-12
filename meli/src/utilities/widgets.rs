@@ -119,15 +119,7 @@ impl Component for Field {
                 text_field.draw(grid, area, context);
             }
             Self::Choice(_, _, _) => {
-                grid.write_string(
-                    str,
-                    theme_attr.fg,
-                    theme_attr.bg,
-                    theme_attr.attrs,
-                    area,
-                    None,
-                    None,
-                );
+                grid.write_string(str, &theme_attr, area, None, None);
             }
         }
     }
@@ -432,15 +424,7 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync, F: FormWidgetL
                 };
                 let v = self.fields.get_mut(k).unwrap();
                 /* Write field label */
-                grid.write_string(
-                    &k.display(),
-                    theme_attr.fg,
-                    theme_attr.bg,
-                    theme_attr.attrs,
-                    area.nth_row(i),
-                    None,
-                    None,
-                );
+                grid.write_string(&k.display(), &theme_attr, area.nth_row(i), None, None);
                 /* draw field */
                 v.draw(
                     grid,
@@ -746,9 +730,7 @@ where
                 };
                 grid.write_string(
                     k.as_ref(),
-                    theme_attr.fg,
-                    theme_attr.bg,
-                    theme_attr.attrs | Attr::BOLD,
+                    &(theme_attr | Attr::BOLD),
                     area.skip_cols(len),
                     None,
                     None,
@@ -929,20 +911,10 @@ impl Component for AutoComplete {
             } else {
                 theme_attr
             };
-            let (x, _) = grid.write_string(
-                &e.entry,
-                theme_attr.fg,
-                theme_attr.bg,
-                theme_attr.attrs,
-                area.nth_row(row),
-                None,
-                None,
-            );
+            let (x, _) = grid.write_string(&e.entry, &theme_attr, area.nth_row(row), None, None);
             grid.write_string(
                 e.description.as_ref(),
-                theme_attr.fg,
-                theme_attr.bg,
-                theme_attr.attrs | Attr::ITALICS,
+                &(theme_attr | Attr::ITALICS),
                 area.nth_row(row).skip_cols(x + 2),
                 None,
                 None,
@@ -1498,9 +1470,7 @@ impl Component for ProgressSpinner {
                         Ok(kind) => (Self::KINDS[*kind].1)[self.stage],
                         Err(custom) => custom[self.stage].as_ref(),
                     },
-                    self.theme_attr.fg,
-                    self.theme_attr.bg,
-                    self.theme_attr.attrs,
+                    &self.theme_attr,
                     area,
                     None,
                     None,
