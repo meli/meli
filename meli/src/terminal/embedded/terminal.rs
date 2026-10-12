@@ -190,11 +190,13 @@ pub struct EmbeddedGrid {
     initialized: bool,
     fg_color: Color,
     bg_color: Color,
+    underline_color: Color,
     attrs: Attr,
     /// Store the fg/bg color when highlighting the cell where the cursor is so
     /// that it can be restored afterwards
     prev_fg_color: Option<Color>,
     prev_bg_color: Option<Color>,
+    prev_underline_color: Option<Color>,
     prev_attrs: Option<Attr>,
 
     cursor_key_mode: bool, // (DECCKM)
@@ -236,9 +238,11 @@ impl EmbeddedGrid {
             state: State::Normal,
             fg_color: Color::Default,
             bg_color: Color::Default,
+            underline_color: Color::Default,
             attrs: Attr::DEFAULT,
             prev_fg_color: None,
             prev_bg_color: None,
+            prev_underline_color: None,
             prev_attrs: None,
             show_cursor: true,
             auto_wrap_mode: true,
@@ -337,9 +341,11 @@ impl EmbeddedGrid {
             state: _,
             ref mut fg_color,
             ref mut bg_color,
+            ref mut underline_color,
             ref mut attrs,
             ref mut prev_fg_color,
             ref mut prev_bg_color,
+            ref mut prev_underline_color,
             ref mut prev_attrs,
             ref mut codepoints,
             ref mut show_cursor,
@@ -529,17 +535,17 @@ impl EmbeddedGrid {
                     }
                     Sgr::Foreground(color) => *fg_color = color,
                     Sgr::Background(color) => *bg_color = color,
-                    Sgr::UnderlineColor(_) => {
-                        /* reset the underline color */
-                        // [ref:TODO]
-
-                        change = false;
-                    }
+                    Sgr::UnderlineColor(color) => *underline_color = color,
                 }
                 if change {
+                    *prev_fg_color = Some(screen.grid_mut()[cursor_val!()].fg());
+                    *prev_bg_color = Some(screen.grid_mut()[cursor_val!()].bg());
+                    *prev_underline_color = Some(screen.grid_mut()[cursor_val!()].underline());
+                    *prev_attrs = Some(screen.grid_mut()[cursor_val!()].attrs());
                     screen.grid_mut()[cursor_val!()]
                         .set_fg(*fg_color)
                         .set_bg(*bg_color)
+                        .set_underline(*underline_color)
                         .set_attrs(*attrs);
                     *dirty = true;
                 }
@@ -742,6 +748,7 @@ impl EmbeddedGrid {
                         .set_ch(c)
                         .set_fg(*fg_color)
                         .set_bg(*bg_color)
+                        .set_underline(*underline_color)
                         .set_attrs(*attrs);
                     match wcwidth(c) {
                         Some(0) | None => {
@@ -758,6 +765,7 @@ impl EmbeddedGrid {
                                     .set_empty(true)
                                     .set_fg(*fg_color)
                                     .set_bg(*bg_color)
+                                    .set_underline(*underline_color)
                                     .set_attrs(*attrs);
                             }
                         }
@@ -777,6 +785,7 @@ impl EmbeddedGrid {
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
                 *fg_color = Color::Default;
                 *bg_color = Color::Default;
+                *underline_color = Color::Default;
                 *attrs = Attr::DEFAULT;
                 screen.grid_mut()[cursor_val!()]
                     .set_fg(Color::Default)
@@ -812,10 +821,12 @@ impl EmbeddedGrid {
                         *show_cursor = true;
                         *prev_fg_color = Some(screen.grid_mut()[cursor_val!()].fg());
                         *prev_bg_color = Some(screen.grid_mut()[cursor_val!()].bg());
+                        *prev_underline_color = Some(screen.grid_mut()[cursor_val!()].underline());
                         *prev_attrs = Some(screen.grid_mut()[cursor_val!()].attrs());
                         screen.grid_mut()[cursor_val!()]
                             .set_fg(Color::Black)
                             .set_bg(Color::White)
+                            .set_underline(Color::Default)
                             .set_attrs(Attr::DEFAULT);
                         *dirty = true;
                     }
@@ -852,6 +863,11 @@ impl EmbeddedGrid {
                             screen.grid_mut()[cursor_val!()].set_bg(bg_color);
                         } else {
                             screen.grid_mut()[cursor_val!()].set_bg(*bg_color);
+                        }
+                        if let Some(underline_color) = prev_underline_color.take() {
+                            screen.grid_mut()[cursor_val!()].set_underline(underline_color);
+                        } else {
+                            screen.grid_mut()[cursor_val!()].set_underline(*underline_color);
                         }
                         if let Some(attrs) = prev_attrs.take() {
                             screen.grid_mut()[cursor_val!()].set_attrs(attrs);
@@ -1546,20 +1562,21 @@ impl EmbeddedGrid {
             (
                 b'm',
                 State::Csi6(
-                    [ref mut buf1, ref mut buf2, ref mut _color_space_buf, ref mut _r_buf, ref mut _g_buf, ref mut _b_buf],
+                    [ref mut buf1, ref mut buf2, ref mut _color_space_buf, ref mut r_buf, ref mut g_buf, ref mut b_buf],
                 ),
             ) if buf1.as_ref() == b"58" && buf2.as_ref() == b"2" => {
                 /* Set underline color */
-                // *bg_color = match (
-                //     unsafe { std::str::from_utf8_unchecked(r_buf) }.parse::<u8>(),
-                //     unsafe { std::str::from_utf8_unchecked(g_buf) }.parse::<u8>(),
-                //     unsafe { std::str::from_utf8_unchecked(b_buf) }.parse::<u8>(),
-                // ) {
-                //     (Ok(r), Ok(g), Ok(b)) => Color::Rgb(r, g, b),
-                //     _ => Color::Default,
-                // };
-                // screen.grid_mut()[cursor_val!()].set_bg(*bg_color);
-                // *dirty = true;
+                *prev_underline_color = Some(screen.grid_mut()[cursor_val!()].underline());
+                *underline_color = match (
+                    unsafe { std::str::from_utf8_unchecked(r_buf) }.parse::<u8>(),
+                    unsafe { std::str::from_utf8_unchecked(g_buf) }.parse::<u8>(),
+                    unsafe { std::str::from_utf8_unchecked(b_buf) }.parse::<u8>(),
+                ) {
+                    (Ok(r), Ok(g), Ok(b)) => Color::Rgb(r, g, b),
+                    _ => Color::Default,
+                };
+                screen.grid_mut()[cursor_val!()].set_underline(*underline_color);
+                *dirty = true;
                 *state = State::Normal;
             }
             (
@@ -1603,12 +1620,21 @@ impl EmbeddedGrid {
             (
                 b'm',
                 State::Csi5(
-                    [ref mut buf1, ref mut buf2, ref mut _r_buf, ref mut _g_buf, ref mut _b_buf],
+                    [ref mut buf1, ref mut buf2, ref mut r_buf, ref mut g_buf, ref mut b_buf],
                 ),
             ) if buf1.as_ref() == b"58" && buf2.as_ref() == b"2" => {
                 /* Set underline color */
-                // screen.grid_mut()[cursor_val!()].set_fg(*fg_color);
-                // *dirty = true;
+                *prev_underline_color = Some(screen.grid_mut()[cursor_val!()].underline());
+                *underline_color = match (
+                    unsafe { std::str::from_utf8_unchecked(r_buf) }.parse::<u8>(),
+                    unsafe { std::str::from_utf8_unchecked(g_buf) }.parse::<u8>(),
+                    unsafe { std::str::from_utf8_unchecked(b_buf) }.parse::<u8>(),
+                ) {
+                    (Ok(r), Ok(g), Ok(b)) => Color::Rgb(r, g, b),
+                    _ => Color::Default,
+                };
+                screen.grid_mut()[cursor_val!()].set_underline(*underline_color);
+                *dirty = true;
                 *state = State::Normal;
             }
             (b'q', State::Csi1([buf]))

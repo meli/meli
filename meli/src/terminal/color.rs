@@ -140,6 +140,23 @@ impl Color {
         }
     }
 
+    pub fn write_underline(self, stdout: &mut crate::StateStdout) -> std::io::Result<()> {
+        use std::io::Write as _;
+        match self {
+            Self::Default => write!(stdout, "\x1B[59m"),
+            Self::Rgb(r, g, b) => write!(stdout, "\x1B[58;2;{r};{g};{b}m"),
+            Self::Black => write!(stdout, "\x1B[58;5;0m"),
+            Self::Red => write!(stdout, "\x1B[58;5;1m"),
+            Self::Green => write!(stdout, "\x1B[58;5;2m"),
+            Self::Yellow => write!(stdout, "\x1B[58;5;3m"),
+            Self::Blue => write!(stdout, "\x1B[58;5;4m"),
+            Self::Magenta => write!(stdout, "\x1B[58;5;5m"),
+            Self::Cyan => write!(stdout, "\x1B[58;5;6m"),
+            Self::White => write!(stdout, "\x1B[58;5;7m"),
+            Self::Byte(b) => write!(stdout, "\x1B[58;5;{b}m"),
+        }
+    }
+
     pub fn from_string_de<'de, D>(s: String) -> std::result::Result<Self, D::Error>
     where
         D: Deserializer<'de>,

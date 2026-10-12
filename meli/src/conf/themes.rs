@@ -124,6 +124,7 @@ pub fn unlink<'k, 't: 'k>(theme: &'t Theme, key: &'k str) -> ThemeAttribute {
     ThemeAttribute {
         fg: unlink_fg(theme, &ColorField::Fg, key),
         bg: unlink_bg(theme, &ColorField::Bg, key),
+        underline: unlink_underline(theme, &ColorField::Underline, key),
         attrs: unlink_attrs(theme, key),
     }
 }
@@ -178,6 +179,27 @@ pub fn unlink_fg<'k, 't: 'k>(
                 }
                 ThemeValue::Value(val) => return *val,
             },
+            ColorField::Underline => match &theme[key].underline {
+                ThemeValue::Link(ref new_key, ref new_field) => {
+                    key = new_key;
+                    field = new_field
+                }
+                ThemeValue::Alias(ref alias_ident) => {
+                    let mut alias_ident = alias_ident;
+                    'other_alias_loop: loop {
+                        match &theme.color_aliases[alias_ident.as_ref()] {
+                            ThemeValue::Link(ref new_key, ref new_field) => {
+                                key = new_key;
+                                field = new_field;
+                                break 'other_alias_loop;
+                            }
+                            ThemeValue::Alias(ref new_alias_ident) => alias_ident = new_alias_ident,
+                            ThemeValue::Value(val) => return *val,
+                        }
+                    }
+                }
+                ThemeValue::Value(val) => return *val,
+            },
         }
     }
 }
@@ -211,6 +233,101 @@ pub fn unlink_bg<'k, 't: 'k>(
                 ThemeValue::Value(val) => return *val,
             },
             ColorField::Fg => match &theme[key].fg {
+                ThemeValue::Link(ref new_key, ref new_field) => {
+                    key = new_key;
+                    field = new_field
+                }
+                ThemeValue::Alias(ref alias_ident) => {
+                    let mut alias_ident = alias_ident;
+                    'other_alias_loop: loop {
+                        match &theme.color_aliases[alias_ident.as_ref()] {
+                            ThemeValue::Link(ref new_key, ref new_field) => {
+                                key = new_key;
+                                field = new_field;
+                                break 'other_alias_loop;
+                            }
+                            ThemeValue::Alias(ref new_alias_ident) => alias_ident = new_alias_ident,
+                            ThemeValue::Value(val) => return *val,
+                        }
+                    }
+                }
+                ThemeValue::Value(val) => return *val,
+            },
+            ColorField::Underline => match &theme[key].underline {
+                ThemeValue::Link(ref new_key, ref new_field) => {
+                    key = new_key;
+                    field = new_field
+                }
+                ThemeValue::Alias(ref alias_ident) => {
+                    let mut alias_ident = alias_ident;
+                    'other_alias_loop: loop {
+                        match &theme.color_aliases[alias_ident.as_ref()] {
+                            ThemeValue::Link(ref new_key, ref new_field) => {
+                                key = new_key;
+                                field = new_field;
+                                break 'other_alias_loop;
+                            }
+                            ThemeValue::Alias(ref new_alias_ident) => alias_ident = new_alias_ident,
+                            ThemeValue::Value(val) => return *val,
+                        }
+                    }
+                }
+                ThemeValue::Value(val) => return *val,
+            },
+        }
+    }
+}
+
+pub fn unlink_underline<'k, 't: 'k>(
+    theme: &'t Theme,
+    mut field: &'k ColorField,
+    mut key: &'k str,
+) -> Color {
+    loop {
+        match field {
+            ColorField::LikeSelf | ColorField::Underline => match &theme[key].underline {
+                ThemeValue::Link(ref new_key, ref new_field) => {
+                    key = new_key;
+                    field = new_field
+                }
+                ThemeValue::Alias(ref alias_ident) => {
+                    let mut alias_ident = alias_ident;
+                    'self_alias_loop: loop {
+                        match &theme.color_aliases[alias_ident.as_ref()] {
+                            ThemeValue::Link(ref new_key, ref new_field) => {
+                                key = new_key;
+                                field = new_field;
+                                break 'self_alias_loop;
+                            }
+                            ThemeValue::Alias(ref new_alias_ident) => alias_ident = new_alias_ident,
+                            ThemeValue::Value(val) => return *val,
+                        }
+                    }
+                }
+                ThemeValue::Value(val) => return *val,
+            },
+            ColorField::Fg => match &theme[key].fg {
+                ThemeValue::Link(ref new_key, ref new_field) => {
+                    key = new_key;
+                    field = new_field
+                }
+                ThemeValue::Alias(ref alias_ident) => {
+                    let mut alias_ident = alias_ident;
+                    'other_alias_loop: loop {
+                        match &theme.color_aliases[alias_ident.as_ref()] {
+                            ThemeValue::Link(ref new_key, ref new_field) => {
+                                key = new_key;
+                                field = new_field;
+                                break 'other_alias_loop;
+                            }
+                            ThemeValue::Alias(ref new_alias_ident) => alias_ident = new_alias_ident,
+                            ThemeValue::Value(val) => return *val,
+                        }
+                    }
+                }
+                ThemeValue::Value(val) => return *val,
+            },
+            ColorField::Bg => match &theme[key].bg {
                 ThemeValue::Link(ref new_key, ref new_field) => {
                     key = new_key;
                     field = new_field
@@ -345,6 +462,7 @@ pub const DEFAULT_KEYS: &[&str] = &[
 pub struct ThemeAttribute {
     pub fg: Color,
     pub bg: Color,
+    pub underline: Color,
     pub attrs: Attr,
 }
 
@@ -369,6 +487,8 @@ pub struct ThemeAttributeInner {
     #[serde(default)]
     bg: ThemeValue<Color>,
     #[serde(default)]
+    underline: ThemeValue<Color>,
+    #[serde(default)]
     attrs: ThemeValue<Attr>,
 }
 
@@ -383,6 +503,7 @@ impl ThemeAttributeInner {
         Self {
             fg: key.into(),
             bg: key.into(),
+            underline: key.into(),
             attrs: key.into(),
         }
     }
@@ -394,6 +515,7 @@ pub enum ColorField {
     LikeSelf,
     Fg,
     Bg,
+    Underline,
 }
 
 /// The field a `ThemeValue::Link` refers to.
@@ -426,6 +548,8 @@ impl From<&'static str> for ThemeValue<Color> {
             Self::Link(Cow::Borrowed(stripped), ColorField::Fg)
         } else if let Some(stripped) = s.strip_suffix(".bg") {
             Self::Link(Cow::Borrowed(stripped), ColorField::Bg)
+        } else if let Some(stripped) = s.strip_suffix(".underline") {
+            Self::Link(Cow::Borrowed(stripped), ColorField::Underline)
         } else {
             Self::Link(s.into(), ColorField::LikeSelf)
         }
@@ -505,6 +629,9 @@ impl Serialize for ThemeValue<Color> {
             Self::Link(s, ColorField::LikeSelf) => serializer.serialize_str(s.as_ref()),
             Self::Link(s, ColorField::Fg) => serializer.serialize_str(format!("{s}.fg").as_ref()),
             Self::Link(s, ColorField::Bg) => serializer.serialize_str(format!("{s}.bg").as_ref()),
+            Self::Link(s, ColorField::Underline) => {
+                serializer.serialize_str(format!("{s}.underline").as_ref())
+            }
         }
     }
 }
@@ -523,6 +650,8 @@ impl<'de> Deserialize<'de> for ThemeValue<Color> {
                 Ok(Self::Link(s.to_string().into(), ColorField::Fg))
             } else if let Some(s) = s.strip_suffix(".bg") {
                 Ok(Self::Link(s.to_string().into(), ColorField::Bg))
+            } else if let Some(s) = s.strip_suffix(".underline") {
+                Ok(Self::Link(s.to_string().into(), ColorField::Underline))
             } else {
                 Ok(Self::Link(s.into(), ColorField::LikeSelf))
             }
@@ -562,6 +691,7 @@ mod regexp {
         pub(super) regexp: RegexValue,
         pub(super) fg: Option<ThemeValue<Color>>,
         pub(super) bg: Option<ThemeValue<Color>>,
+        pub(super) underline: Option<ThemeValue<Color>>,
         pub(super) attrs: Option<ThemeValue<Attr>>,
         pub(super) priority: u8,
     }
@@ -637,6 +767,31 @@ mod regexp {
                                     ThemeValue::Value(val) => {
                                         ret = *val;
                                         break 'bg_alias_loop;
+                                    }
+                                }
+                            }
+                            ret
+                        }
+                        ThemeValue::Value(val) => *val,
+                    }),
+                    underline: v.underline.as_ref().map(|v| match v {
+                        ThemeValue::Link(ref key, ref field) => unlink_underline(theme, field, key),
+                        ThemeValue::Alias(ref alias_ident) => {
+                            let mut alias_ident = alias_ident;
+                            let ret;
+                            'underline_alias_loop: loop {
+                                match &theme.color_aliases[alias_ident.as_ref()] {
+                                    ThemeValue::Link(ref new_key, ref new_field) => {
+                                        ret = unlink_underline(theme, new_field, new_key);
+                                        break 'underline_alias_loop;
+                                    }
+
+                                    ThemeValue::Alias(ref new_alias_ident) => {
+                                        alias_ident = new_alias_ident
+                                    }
+                                    ThemeValue::Value(val) => {
+                                        ret = *val;
+                                        break 'underline_alias_loop;
                                     }
                                 }
                             }
@@ -733,6 +888,8 @@ impl<'de> Deserialize<'de> for Themes {
             #[serde(default)]
             bg: Option<ThemeValue<Color>>,
             #[serde(default)]
+            underline: Option<ThemeValue<Color>>,
+            #[serde(default)]
             attrs: Option<ThemeValue<Attr>>,
         }
 
@@ -756,6 +913,7 @@ impl<'de> Deserialize<'de> for Themes {
                     from,
                     fg,
                     bg,
+                    underline,
                     attrs,
                 }) = s.keys.shift_remove(k)
                 {
@@ -768,6 +926,11 @@ impl<'de> Deserialize<'de> for Themes {
                         v.bg = att;
                     } else if let Some(ref parent) = from {
                         v.bg = ThemeValue::Link(parent.clone(), ColorField::LikeSelf);
+                    }
+                    if let Some(att) = underline {
+                        v.underline = att;
+                    } else if let Some(ref parent) = from {
+                        v.underline = ThemeValue::Link(parent.clone(), ColorField::LikeSelf);
                     }
                     if let Some(att) = attrs {
                         v.attrs = att;
@@ -798,6 +961,7 @@ impl<'de> Deserialize<'de> for Themes {
                                 regexp,
                                 fg: v.rest.fg,
                                 bg: v.rest.bg,
+                                underline: v.rest.underline,
                                 attrs: v.rest.attrs,
                                 priority: v.priority,
                             });
@@ -844,6 +1008,7 @@ impl Themes {
                                 ColorField::LikeSelf => "Color alias link",
                                 ColorField::Fg => "Color alias fg link",
                                 ColorField::Bg => "Color alias bg link",
+                                ColorField::Underline => "Color alias underline link",
                             },
                             "invalid key",
                             r.as_ref(),
@@ -1064,11 +1229,13 @@ impl Themes {
             for k in theme.keys() {
                 let _ = writeln!(
                     ret,
-                    "\"{}\" = {{ fg = {}, bg = {}, attrs = {} }}",
+                    "\"{}\" = {{ fg = {}, bg = {}, underline = {}, attrs = {} }}",
                     k,
                     toml::Value::try_from(unlink_fg(theme, &ColorField::Fg, k))
                         .expect("Could not serialize Color"),
                     toml::Value::try_from(unlink_bg(theme, &ColorField::Bg, k))
+                        .expect("Could not serialize Color"),
+                    toml::Value::try_from(unlink_underline(theme, &ColorField::Underline, k))
                         .expect("Could not serialize Color"),
                     toml::Value::try_from(unlink_attrs(theme, k))
                         .expect("Could not serialize Attribute"),
@@ -1078,10 +1245,11 @@ impl Themes {
             for k in theme.keys() {
                 let _ = writeln!(
                     ret,
-                    "\"{}\" = {{ fg = {}, bg = {}, attrs = {} }}",
+                    "\"{}\" = {{ fg = {}, bg = {}, underline = {}, attrs = {} }}",
                     k,
                     toml::Value::try_from(&theme[k].fg).expect("Could not serialize Color"),
                     toml::Value::try_from(&theme[k].bg).expect("Could not serialize Color"),
+                    toml::Value::try_from(&theme[k].underline).expect("Could not serialize Color"),
                     toml::Value::try_from(&theme[k].attrs).expect("Could not serialize Attribute")
                 );
             }
@@ -1134,7 +1302,7 @@ impl Default for Themes {
                 dark.insert($key.into(), dark[$copy_from].clone());
             };
         }
-        add!("theme_default", dark = { fg: Color::Default, bg: Color::Default, attrs: Attr::DEFAULT }, light = { fg: Color::Default, bg: Color::Default, attrs: Attr::DEFAULT });
+        add!("theme_default", dark = { fg: Color::Default, bg: Color::Default, underline: Color::Default, attrs: Attr::DEFAULT }, light = { fg: Color::Default, bg: Color::Default, underline: Color::Default, attrs: Attr::DEFAULT });
 
         add!("error_message", dark = { fg: Color::Red, bg: "theme_default", attrs: "theme_default" }, light = { fg: Color::Red, bg: "theme_default", attrs: "theme_default" });
 
@@ -1609,6 +1777,7 @@ impl Serialize for Themes {
                 ThemeAttribute {
                     fg: unlink_fg(&self.dark, &ColorField::Fg, k),
                     bg: unlink_bg(&self.dark, &ColorField::Bg, k),
+                    underline: unlink_bg(&self.dark, &ColorField::Underline, k),
                     attrs: unlink_attrs(&self.dark, k),
                 },
             );
@@ -1620,6 +1789,7 @@ impl Serialize for Themes {
                 ThemeAttribute {
                     fg: unlink_fg(&self.light, &ColorField::Fg, k),
                     bg: unlink_bg(&self.light, &ColorField::Bg, k),
+                    underline: unlink_underline(&self.light, &ColorField::Underline, k),
                     attrs: unlink_attrs(&self.light, k),
                 },
             );
@@ -1634,6 +1804,7 @@ impl Serialize for Themes {
                     ThemeAttribute {
                         fg: unlink_fg(t, &ColorField::Fg, k),
                         bg: unlink_bg(t, &ColorField::Bg, k),
+                        underline: unlink_underline(t, &ColorField::Underline, k),
                         attrs: unlink_attrs(t, k),
                     },
                 );
@@ -1653,9 +1824,11 @@ pub fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
     enum Course {
         Fg,
         Bg,
+        Underline,
         Attrs,
         ColorAliasFg,
         ColorAliasBg,
+        ColorAliasUnderline,
         AttrAlias,
     }
     fn is_cyclic_util<'a>(
@@ -1759,6 +1932,61 @@ pub fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                     }
                     _ => {}
                 },
+                Course::Underline => match theme[k].underline {
+                    ThemeValue::Link(ref l, ColorField::LikeSelf)
+                    | ThemeValue::Link(ref l, ColorField::Underline) => {
+                        let l = l.as_ref();
+                        path.push((l, Course::Underline));
+                        if (!visited[&(l, Course::Underline)]
+                            && is_cyclic_util(course, l, visited, stack, path, theme))
+                            || stack[&(l, Course::Underline)]
+                        {
+                            return true;
+                        }
+                        path.pop();
+                    }
+                    ThemeValue::Link(ref l, ColorField::Fg) => {
+                        let l = l.as_ref();
+                        path.push((l, Course::Fg));
+                        if (!visited[&(l, Course::Fg)]
+                            && is_cyclic_util(Course::Fg, l, visited, stack, path, theme))
+                            || stack[&(l, Course::Fg)]
+                        {
+                            return true;
+                        }
+                        path.pop();
+                    }
+                    ThemeValue::Link(ref l, ColorField::Bg) => {
+                        let l = l.as_ref();
+                        path.push((l, Course::Bg));
+                        if (!visited[&(l, Course::Bg)]
+                            && is_cyclic_util(Course::Bg, l, visited, stack, path, theme))
+                            || stack[&(l, Course::Bg)]
+                        {
+                            return true;
+                        }
+                        path.pop();
+                    }
+                    ThemeValue::Alias(ref ident) => {
+                        let ident = ident.as_ref();
+                        path.push((ident, Course::ColorAliasUnderline));
+                        if (!visited[&(ident, Course::ColorAliasUnderline)]
+                            && is_cyclic_util(
+                                Course::ColorAliasUnderline,
+                                ident,
+                                visited,
+                                stack,
+                                path,
+                                theme,
+                            ))
+                            || stack[&(ident, Course::ColorAliasUnderline)]
+                        {
+                            return true;
+                        }
+                        path.pop();
+                    }
+                    _ => {}
+                },
                 Course::Attrs => match theme[k].attrs {
                     ThemeValue::Link(ref l, _) => {
                         let l = l.as_ref();
@@ -1791,40 +2019,46 @@ pub fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                     }
                     _ => {}
                 },
-                Course::ColorAliasFg | Course::ColorAliasBg => match &theme.color_aliases[k] {
-                    ThemeValue::Link(ref l, ref field) => {
-                        let l = l.as_ref();
-                        let course = match (course, field) {
-                            (Course::ColorAliasFg, ColorField::LikeSelf) => Course::Fg,
-                            (Course::ColorAliasBg, ColorField::LikeSelf) => Course::Bg,
-                            (_, ColorField::LikeSelf) => unsafe {
-                                std::hint::unreachable_unchecked()
-                            },
-                            (_, ColorField::Fg) => Course::Fg,
-                            (_, ColorField::Bg) => Course::Bg,
-                        };
-                        path.push((l, course));
-                        if (!visited[&(l, course)]
-                            && is_cyclic_util(course, l, visited, stack, path, theme))
-                            || stack[&(l, course)]
-                        {
-                            return true;
+                Course::ColorAliasFg | Course::ColorAliasBg | Course::ColorAliasUnderline => {
+                    match &theme.color_aliases[k] {
+                        ThemeValue::Link(ref l, ref field) => {
+                            let l = l.as_ref();
+                            let course = match (course, field) {
+                                (Course::ColorAliasFg, ColorField::LikeSelf) => Course::Fg,
+                                (Course::ColorAliasBg, ColorField::LikeSelf) => Course::Bg,
+                                (Course::ColorAliasUnderline, ColorField::LikeSelf) => {
+                                    Course::Underline
+                                }
+                                (_, ColorField::LikeSelf) => unsafe {
+                                    std::hint::unreachable_unchecked()
+                                },
+                                (_, ColorField::Fg) => Course::Fg,
+                                (_, ColorField::Bg) => Course::Bg,
+                                (_, ColorField::Underline) => Course::Underline,
+                            };
+                            path.push((l, course));
+                            if (!visited[&(l, course)]
+                                && is_cyclic_util(course, l, visited, stack, path, theme))
+                                || stack[&(l, course)]
+                            {
+                                return true;
+                            }
+                            path.pop();
                         }
-                        path.pop();
-                    }
-                    ThemeValue::Alias(ref ident) => {
-                        let ident = ident.as_ref();
-                        path.push((ident, course));
-                        if (!visited[&(ident, course)]
-                            && is_cyclic_util(course, ident, visited, stack, path, theme))
-                            || stack[&(ident, course)]
-                        {
-                            return true;
+                        ThemeValue::Alias(ref ident) => {
+                            let ident = ident.as_ref();
+                            path.push((ident, course));
+                            if (!visited[&(ident, course)]
+                                && is_cyclic_util(course, ident, visited, stack, path, theme))
+                                || stack[&(ident, course)]
+                            {
+                                return true;
+                            }
+                            path.pop();
                         }
-                        path.pop();
+                        _ => {}
                     }
-                    _ => {}
-                },
+                }
                 Course::AttrAlias => match &theme.attr_aliases[k] {
                     ThemeValue::Link(ref l, ()) => {
                         let l = l.as_ref();
@@ -1862,11 +2096,16 @@ pub fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
         .flat_map(|k| {
             std::iter::once(((k.as_ref(), Course::Fg), false))
                 .chain(std::iter::once(((k.as_ref(), Course::Bg), false)))
+                .chain(std::iter::once(((k.as_ref(), Course::Underline), false)))
                 .chain(std::iter::once(((k.as_ref(), Course::Attrs), false)))
         })
         .chain(theme.color_aliases.keys().flat_map(|k| {
             std::iter::once(((k.as_ref(), Course::ColorAliasFg), false))
                 .chain(std::iter::once(((k.as_ref(), Course::ColorAliasBg), false)))
+                .chain(std::iter::once((
+                    (k.as_ref(), Course::ColorAliasUnderline),
+                    false,
+                )))
         }))
         .chain(
             theme
@@ -1878,17 +2117,19 @@ pub fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
 
     let mut stack = visited.clone();
     for k in theme.keys() {
-        for &course in [Course::Fg, Course::Bg, Course::Attrs].iter() {
+        for &course in [Course::Fg, Course::Bg, Course::Underline, Course::Attrs].iter() {
             path.push((k.as_ref(), course));
             if is_cyclic_util(course, k, &mut visited, &mut stack, &mut path, theme) {
                 let path = path
                     .into_iter()
                     .map(|(k, c)| match c {
-                        Course::Fg => format!("{k}.fg",),
-                        Course::Bg => format!("{k}.fg",),
-                        Course::Attrs => format!("{k}.attrs",),
+                        Course::Fg => format!("{k}.fg"),
+                        Course::Bg => format!("{k}.fg"),
+                        Course::Underline => format!("{k}.underline"),
+                        Course::Attrs => format!("{k}.attrs"),
                         Course::ColorAliasFg => format!("(Color fg) ${k}"),
                         Course::ColorAliasBg => format!("(Color bg) ${k}"),
+                        Course::ColorAliasUnderline => format!("(Color underline) ${k}"),
                         Course::AttrAlias => format!("(Attr) ${k}"),
                     })
                     .collect::<Vec<String>>();
@@ -1897,9 +2138,11 @@ pub fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                     match course {
                         Course::Fg => "fg: ",
                         Course::Bg => "bg: ",
+                        Course::Underline => "underline: ",
                         Course::Attrs => "attrs: ",
                         Course::ColorAliasFg => "color alias fg: ",
                         Course::ColorAliasBg => "color alias bg: ",
+                        Course::ColorAliasUnderline => "color alias underline: ",
                         Course::AttrAlias => "attribute alias: ",
                     },
                     path.join(" -> ")

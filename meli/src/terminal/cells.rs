@@ -1024,6 +1024,7 @@ impl Cell {
             theme_attr: ThemeAttribute {
                 fg: Color::Default,
                 bg: Color::Default,
+                underline: Color::Default,
                 attrs: Attr::DEFAULT,
             },
             empty: false,
@@ -1183,6 +1184,19 @@ impl Cell {
     pub const fn set_bg(&mut self, newbg: Color) -> &mut Self {
         if !self.keep_bg {
             self.theme_attr.bg = newbg;
+        }
+        self
+    }
+
+    /// Returns the `Cell`'s underline `Color`.
+    pub const fn underline(&self) -> Color {
+        self.theme_attr.underline
+    }
+
+    /// Sets the `Cell`'s underline `Color` to the given `Color`.
+    pub const fn set_underline(&mut self, new: Color) -> &mut Self {
+        if !self.keep_fg {
+            self.theme_attr.underline = new;
         }
         self
     }
@@ -1989,6 +2003,7 @@ impl KMP for CellBuffer {
 pub struct FormatTag {
     pub fg: Option<Color>,
     pub bg: Option<Color>,
+    pub underline: Option<Color>,
     pub attrs: Option<Attr>,
     pub priority: u8,
 }
@@ -2007,10 +2022,17 @@ impl std::cmp::PartialOrd for FormatTag {
 
 impl From<ThemeAttribute> for FormatTag {
     fn from(val: ThemeAttribute) -> Self {
-        let ThemeAttribute { fg, bg, attrs, .. } = val;
+        let ThemeAttribute {
+            fg,
+            bg,
+            underline,
+            attrs,
+            ..
+        } = val;
         Self {
             fg: Some(fg),
             bg: Some(bg),
+            underline: Some(underline),
             attrs: Some(attrs),
             priority: 0,
         }

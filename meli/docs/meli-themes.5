@@ -60,9 +60,9 @@ For example,
 keys are settings for the
 .Ic compact
 mail listing style.
-A setting contains three fields: fg for foreground color, bg for background color, and attrs for text attribute.
+A setting contains four fields: fg for foreground color, bg for background color, underline for underline color and attrs for text attribute.
 .Pp
-.Dl \&"widget.key.label\&" = { fg = \&"Default\&", bg = \&"Default\&", attrs = \&"Default\&" }
+.Dl \&"widget.key.label\&" = { fg = \&"Default\&", bg = \&"Default\&", underline = \&"Default\&", attrs = \&"Default\&" }
 .Pp
 Each field contains a value, which may be either a color/attribute, a link (key name) or a valid alias.
 An alias is a string starting with the \&"\&$\&" character and must be declared in advance in the

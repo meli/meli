@@ -967,6 +967,7 @@ impl PlainListing {
                             fg: self.color_cache.highlight_self.fg,
                             bg: row_attr.bg,
                             attrs: row_attr.attrs | Attr::FORCE_TEXT,
+                            ..row_attr
                         },
                         area_col_3,
                         None,

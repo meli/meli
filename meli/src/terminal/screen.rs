@@ -441,6 +441,7 @@ impl Screen<Tty> {
         .unwrap();
         let mut current_fg = Color::Default;
         let mut current_bg = Color::Default;
+        let mut current_underline = Color::Default;
         let mut current_attrs = Attr::DEFAULT;
         let mut current_uri = None;
         let draw_hyperlinks = grid.draw_hyperlinks;
@@ -472,6 +473,10 @@ impl Screen<Tty> {
             if c.fg() != current_fg {
                 c.fg().write_fg(stdout).unwrap();
                 current_fg = c.fg();
+            }
+            if c.underline() != current_underline {
+                c.underline().write_underline(stdout).unwrap();
+                current_underline = c.underline();
             }
             if !c.empty() {
                 write!(stdout, "{}", c.ch()).unwrap();
