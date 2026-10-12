@@ -519,16 +519,10 @@ impl<'de> Deserialize<'de> for ThemeValue<Color> {
                 Ok(Self::Alias(stripped.to_string().into()))
             } else if let Ok(c) = Color::from_string_de::<'de, D>(s.clone()) {
                 Ok(Self::Value(c))
-            } else if s.ends_with(".fg") {
-                Ok(Self::Link(
-                    s[..s.len() - 3].to_string().into(),
-                    ColorField::Fg,
-                ))
-            } else if s.ends_with(".bg") {
-                Ok(Self::Link(
-                    s[..s.len() - 3].to_string().into(),
-                    ColorField::Bg,
-                ))
+            } else if let Some(s) = s.strip_suffix(".fg") {
+                Ok(Self::Link(s.to_string().into(), ColorField::Fg))
+            } else if let Some(s) = s.strip_suffix(".bg") {
+                Ok(Self::Link(s.to_string().into(), ColorField::Bg))
             } else {
                 Ok(Self::Link(s.into(), ColorField::LikeSelf))
             }
