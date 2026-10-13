@@ -27,7 +27,7 @@ use crate::terminal::Key;
 
 #[macro_export]
 macro_rules! shortcut {
-    ($key:ident == $shortcuts:ident[$section:expr][$val:literal]) => {
+    ($key:ident == $shortcuts:ident[$section:expr][$val:expr]) => {
         $shortcuts
             .get($section)
             .and_then(|s| s.get($val).map(|v| v == $key))

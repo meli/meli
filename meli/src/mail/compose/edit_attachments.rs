@@ -20,6 +20,10 @@
  */
 
 use super::*;
+use crate::utilities::form::{ButtonWidget, FormButtonAction, TextField};
+
+type FormWidget =
+    crate::utilities::form::FormWidget<FormButtonAction, Cow<'static, str>, TextField>;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum EditAttachmentCursor {
@@ -31,10 +35,7 @@ pub enum EditAttachmentCursor {
 #[derive(Debug)]
 pub enum EditAttachmentMode {
     Overview,
-    Edit {
-        inner: Box<FormWidget<FormButtonAction>>,
-        no: usize,
-    },
+    Edit { inner: Box<FormWidget>, no: usize },
 }
 
 #[derive(Debug)]
@@ -83,11 +84,7 @@ impl EditAttachments {
 }
 
 impl EditAttachmentsRefMut<'_, '_> {
-    fn new_edit_widget(
-        &self,
-        no: usize,
-        context: &Context,
-    ) -> Option<Box<FormWidget<FormButtonAction>>> {
+    fn new_edit_widget(&self, no: usize, context: &Context) -> Option<Box<FormWidget>> {
         if no >= self.draft.attachments().len() {
             return None;
         }

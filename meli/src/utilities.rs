@@ -36,8 +36,8 @@ use crate::{components::prelude::*, jobs::JobId};
 mod pager;
 pub use self::pager::*;
 
-mod text;
-pub use self::text::*;
+pub mod form;
+use form::TextField;
 
 mod widgets;
 pub use self::widgets::*;

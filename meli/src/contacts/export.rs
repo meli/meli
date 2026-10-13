@@ -23,18 +23,21 @@
 use melib::{contacts::Card, utils::shellexpand::ShellExpandTrait as _};
 
 use crate::{
-    conf::themes::ThemeAttribute,
+    components::prelude::*,
     terminal::*,
     types::NotificationType,
-    utilities::{FormButtonAction, FormWidget},
-    AutoCompleteEntry, CellBuffer, Component, ComponentId, Context, Field, File, Key, UIEvent,
+    utilities::form::{FormButtonAction, TextField},
+    AutoCompleteEntry, CellBuffer, Component, ComponentId, Context, File, Key, UIEvent,
 };
+
+type FormWidget =
+    crate::utilities::form::FormWidget<FormButtonAction, Cow<'static, str>, TextField>;
 
 #[derive(Debug)]
 pub struct ContactExportDialog {
     id: ComponentId,
     card: Card,
-    form: FormWidget<FormButtonAction>,
+    form: FormWidget,
     theme_default: ThemeAttribute,
     dirty: bool,
 }
@@ -178,10 +181,7 @@ impl Component for ContactExportDialog {
                         .form
                         .values()
                         .first()
-                        .map(|(_, v)| match v {
-                            Field::Text(v) => v.as_str().to_string(),
-                            Field::Choice(v, c, _) => v.clone().remove(*c).to_string(),
-                        })
+                        .map(|(_, v)| v.as_str().to_string())
                         .expect("path field in form");
                     let card = &self.card;
                     let output_dir = std::path::Path::new(&output_dir).expand();

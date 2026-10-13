@@ -24,7 +24,10 @@ use std::sync::Arc;
 
 use melib::{parser::BytesExt as _, text::Truncate as _, AccountHash, Contacts};
 
-use crate::{account_settings, utilities::AutoCompleteFn, AutoCompleteEntry, ValidateFn};
+use crate::{
+    account_settings,
+    utilities::{form::ValidateFn, AutoCompleteEntry, AutoCompleteFn},
+};
 
 #[inline]
 pub(super) fn newsgroups_complete_fn(account_hash: AccountHash) -> AutoCompleteFn {

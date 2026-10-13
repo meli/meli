@@ -46,6 +46,7 @@ use crate::{
     jobs::{IsAsync, JoinHandle},
     terminal::embedded::Terminal,
     types::File,
+    utilities::form::{FormButtonAction, FormWidget, TextField},
 };
 
 pub mod pgp;
@@ -125,7 +126,7 @@ pub struct Composer {
 
     pager: Pager,
     draft: Draft,
-    form: FormWidget<bool, HeaderName>,
+    form: FormWidget<bool, HeaderName, TextField>,
 
     mode: ViewMode,
 
@@ -300,8 +301,7 @@ impl Composer {
                         Some(melib::utils::datetime::formats::RFC822_DATE),
                         true,
                     );
-                    if let Some(Field::Text(ref mut text_field)) =
-                        composer.form.values_mut().get_mut(&HeaderName::DATE)
+                    if let Some(text_field) = composer.form.values_mut().get_mut(&HeaderName::DATE)
                     {
                         text_field.set_content(now);
                     }
@@ -657,6 +657,29 @@ To: {}
         self.form.set_cursor(old_cursor);
         let headers = self.draft.headers();
         let account_hash = self.account_hash;
+        self.form
+            .push((HeaderName::DATE, headers[HeaderName::DATE].to_string()))
+            .set_validate_fn(fields::date_validate_fn());
+        self.form
+            .push_cl((
+                HeaderName::FROM,
+                headers[HeaderName::FROM].to_string(),
+                fields::from_complete_fn(account_hash),
+            ))
+            .set_validate_fn(fields::generic_address_validate_fn());
+        for k in &[HeaderName::TO, HeaderName::CC, HeaderName::BCC] {
+            self.form
+                .push_cl((
+                    k.clone(),
+                    headers[k].to_string(),
+                    fields::generic_address_complete_fn(account_hash),
+                ))
+                .set_validate_fn(fields::generic_address_validate_fn());
+        }
+        self.form.push((
+            HeaderName::SUBJECT,
+            headers[HeaderName::SUBJECT].to_string(),
+        ));
         for k in context.accounts[&account_hash]
             .backend_capabilities
             .extra_submission_headers
@@ -669,43 +692,6 @@ To: {}
                 ));
             } else {
                 self.form.push((k.clone(), headers[k].to_string()));
-            }
-        }
-        for k in &[
-            HeaderName::DATE,
-            HeaderName::FROM,
-            HeaderName::TO,
-            HeaderName::CC,
-            HeaderName::BCC,
-            HeaderName::SUBJECT,
-        ] {
-            if matches!(*k, HeaderName::TO | HeaderName::CC | HeaderName::BCC) {
-                self.form.push_cl((
-                    k.clone(),
-                    headers[k].to_string(),
-                    fields::generic_address_complete_fn(account_hash),
-                ));
-            } else if k == HeaderName::FROM {
-                self.form.push_cl((
-                    k.clone(),
-                    headers[k].to_string(),
-                    fields::from_complete_fn(account_hash),
-                ));
-            } else {
-                self.form.push((k.clone(), headers[k].to_string()));
-            }
-        }
-        if let Field::Text(ref mut field) = self.form.values_mut()[&HeaderName::DATE] {
-            field.set_validate_fn(fields::date_validate_fn());
-        }
-        for k in [
-            HeaderName::FROM,
-            HeaderName::TO,
-            HeaderName::CC,
-            HeaderName::BCC,
-        ] {
-            if let Field::Text(ref mut field) = self.form.values_mut()[&k] {
-                field.set_validate_fn(fields::generic_address_validate_fn());
             }
         }
     }
@@ -1961,7 +1947,7 @@ impl Component for Composer {
                             Some(melib::utils::datetime::formats::RFC822_DATE),
                             true,
                         );
-                        if let Some(Field::Text(ref mut text_field)) =
+                        if let Some(text_field) =
                             composer.form.values_mut().get_mut(&HeaderName::DATE)
                         {
                             text_field.set_content(now);

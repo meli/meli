@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::sync::Arc;
+use std::{borrow::Cow, sync::Arc};
 
 use futures::channel::oneshot;
 use indexmap::IndexMap;
@@ -35,9 +35,12 @@ use crate::{
     jobs::JobId,
     terminal::*,
     types::NotificationType,
-    utilities::{FormButtonAction, FormWidget},
-    CellBuffer, Component, ComponentId, Context, Field, Key, StatusEvent, UIDialog, UIEvent,
+    utilities::form::{FormButtonAction, TextField},
+    CellBuffer, Component, ComponentId, Context, Key, StatusEvent, UIDialog, UIEvent,
 };
+
+type FormWidget =
+    crate::utilities::form::FormWidget<FormButtonAction, Cow<'static, str>, TextField>;
 
 #[derive(Debug)]
 enum ViewMode {
@@ -62,7 +65,7 @@ pub struct ContactEditor {
     id: ComponentId,
     card: Card,
     mode: ViewMode,
-    form: FormWidget<FormButtonAction>,
+    form: FormWidget,
     account_hash: AccountHash,
     book_id: (Arc<ContactBackendID>, AddressBookName),
     content: Screen<Virtual>,
@@ -292,15 +295,7 @@ impl Component for ContactEditor {
                                 .values()
                                 .clone()
                                 .into_iter()
-                                .map(|(s, v)| {
-                                    (
-                                        s.to_string(),
-                                        match v {
-                                            Field::Text(v) => v.as_str().to_string(),
-                                            Field::Choice(mut v, c, _) => v.remove(c).to_string(),
-                                        },
-                                    )
-                                })
+                                .map(|(s, v)| (s.to_string(), v.as_str().to_owned()))
                                 .collect();
                             let mut card = Card::from(fields);
                             card.set_id(*self.card.id());
@@ -369,17 +364,7 @@ impl Component for ContactEditor {
                                 let fields = self.form.clone().collect();
                                 let fields: IndexMap<String, String> = fields
                                     .into_iter()
-                                    .map(|(s, v)| {
-                                        (
-                                            s.to_string(),
-                                            match v {
-                                                Field::Text(v) => v.as_str().to_string(),
-                                                Field::Choice(mut v, c, _) => {
-                                                    v.remove(c).to_string()
-                                                }
-                                            },
-                                        )
-                                    })
+                                    .map(|(s, v)| (s.to_string(), v.as_str().to_owned()))
                                     .collect();
                                 let mut card = Card::from(fields);
                                 card.set_id(*self.card.id());

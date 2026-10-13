@@ -331,7 +331,7 @@ pub mod prelude {
         command::*,
         components::{
             Component, ComponentAttr, ComponentId, ComponentPath, ExtendShortcutsMaps,
-            PageMovement, ScrollContext, ScrollUpdate, ShortcutMaps,
+            PageMovement, ScrollContext, ScrollUpdate, ShortcutMap, ShortcutMaps,
         },
         conf::themes::ThemeAttribute,
         jobs::{JobId, JobMetadata},
