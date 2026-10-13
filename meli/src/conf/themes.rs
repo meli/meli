@@ -394,6 +394,7 @@ pub const DEFAULT_KEYS: &[&str] = &[
     "widgets.list.header",
     "widgets.form.label",
     "widgets.form.field",
+    "widgets.form.read_only",
     "widgets.form.highlighted",
     "widgets.options.highlighted",
     "widgets.autocomplete",
@@ -1335,7 +1336,8 @@ impl Default for Themes {
             light = { attrs: Attr::BOLD }
         );
         add!("widgets.form.field");
-        add!("widgets.form.highlighted", light = { bg: Color::Byte(246) }, dark = { bg: Color::Byte(246) });
+        add!("widgets.form.highlighted", light = { bg: Color::GREY58 }, dark = { bg: Color::Byte(246) });
+        add!("widgets.form.read_only", dark = { fg: Color::GREY46, bg: "widgets.form.field.bg" }, light = {fg: Color::GREY3, bg: "widgets.form.field.bg" });
         add!("widgets.options.highlighted", light = { bg: Color::Byte(8) }, dark = { bg: Color::Byte(8) });
         add!("widgets.autocomplete", light = { fg: Color::Byte(23), bg: Color::Byte(7), attrs: Attr::DEFAULT }, dark = { fg: Color::Byte(23), bg: Color::Byte(7), attrs: Attr::DEFAULT });
 
