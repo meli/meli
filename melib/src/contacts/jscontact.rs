@@ -43,14 +43,14 @@ pub struct CardDeserializer;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct JSContact<T: JSContactVersion>(
-    pub json_types::JsonCardValue,
+    pub json_types::Card,
     pub std::marker::PhantomData<fn() -> T>,
 );
 
 impl<V: JSContactVersion> JSContact<V> {
     pub fn new_v1() -> JSContact<impl JSContactVersion> {
         JSContact(
-            json_types::JsonCardValue::default(),
+            json_types::Card::default(),
             std::marker::PhantomData::<fn() -> JSContactVersion1>,
         )
     }
@@ -58,7 +58,7 @@ impl<V: JSContactVersion> JSContact<V> {
 
 impl CardDeserializer {
     pub fn try_from_str(input: &str) -> Result<JSContact<JSContactVersion1>> {
-        let inner: json_types::JsonCardValue = serde_json::from_str(input)?;
+        let inner: json_types::Card = serde_json::from_str(input)?;
 
         Ok(JSContact(inner, std::marker::PhantomData))
     }
@@ -66,7 +66,7 @@ impl CardDeserializer {
 
 impl<V: JSContactVersion> From<JSContact<V>> for Card {
     fn from(val: JSContact<V>) -> Self {
-        let json_types::JsonCardValue {
+        let json_types::Card {
             uid, name, emails, ..
         } = val.0;
         let mut card = Self::new();
@@ -82,7 +82,7 @@ impl<V: JSContactVersion> From<JSContact<V>> for Card {
                     .join(name.default_separator.as_deref().unwrap_or(" ")),
             );
         } else {
-            use json_types::JsonCardNameComponentKind::*;
+            use json_types::NameComponentKind::*;
 
             let mut name_s = String::new();
             let sep = name.default_separator.as_deref().unwrap_or(" ");
@@ -109,7 +109,7 @@ impl<V: JSContactVersion> From<JSContact<V>> for Card {
 impl From<Card> for JSContact<JSContactVersion1> {
     fn from(card: Card) -> Self {
         let mut ret = Self(
-            json_types::JsonCardValue::default(),
+            json_types::Card::default(),
             std::marker::PhantomData::<fn() -> JSContactVersion1>,
         );
         if let CardId::Uuid(uid) = card.id {
@@ -118,7 +118,7 @@ impl From<Card> for JSContact<JSContactVersion1> {
         ret.0.name.full = Some(card.name);
         ret.0.emails.insert(
             "main".into(),
-            json_types::JsonCardEmailAddress {
+            json_types::EmailAddress {
                 __type: None,
                 address: card.email,
                 contexts: IndexMap::new(),
@@ -131,8 +131,8 @@ impl From<Card> for JSContact<JSContactVersion1> {
     }
 }
 
-impl From<json_types::JsonCardValue> for JSContact<JSContactVersion1> {
-    fn from(val: json_types::JsonCardValue) -> Self {
+impl From<json_types::Card> for JSContact<JSContactVersion1> {
+    fn from(val: json_types::Card) -> Self {
         Self(val, std::marker::PhantomData::<fn() -> JSContactVersion1>)
     }
 }
@@ -151,12 +151,14 @@ impl<'de> serde::Deserialize<'de> for JSContact<JSContactVersion1> {
     where
         D: serde::Deserializer<'de>,
     {
-        let s = <json_types::JsonCardValue>::deserialize(deserializer)?;
+        let s = <json_types::Card>::deserialize(deserializer)?;
         Ok(Self(s, std::marker::PhantomData))
     }
 }
 
 pub mod json_types {
+    use std::str::FromStr;
+
     use indexmap::IndexMap;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -194,19 +196,29 @@ pub mod json_types {
         };
     }
 
-    impl_json_type_struct_serde! {JsonCardType, "Card"}
-    impl_json_type_struct_serde! {JsonNameType, "Name"}
-    impl_json_type_struct_serde! {JsonNameComponentType, "NameComponent"}
-    impl_json_type_struct_serde! {JsonEmailAddressType, "EmailAddress"}
+    impl_json_type_struct_serde! {CardType, "Card"}
+    impl_json_type_struct_serde! {NameType, "Name"}
+    impl_json_type_struct_serde! {NameComponentType, "NameComponent"}
+    impl_json_type_struct_serde! {EmailAddressType, "EmailAddress"}
+    impl_json_type_struct_serde! {OnlineServiceType, "OnlineService"}
+    impl_json_type_struct_serde! {CryptoKeyType, "CryptoKey"}
+    impl_json_type_struct_serde! {AnniversaryType, "Anniversary"}
+    impl_json_type_struct_serde! {PartialDateType, "PartialDate"}
+    impl_json_type_struct_serde! {TimestampType, "Timestamp"}
+    impl_json_type_struct_serde! {PersonalInfoType, "PersonalInfo"}
+    impl_json_type_struct_serde! {AddressType, "Address"}
+    impl_json_type_struct_serde! {SpeakToAsType, "SpeakToAs"}
+    impl_json_type_struct_serde! {PronounsType, "Pronouns"}
+    impl_json_type_struct_serde! {TitleType, "Title"}
 
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     #[non_exhaustive]
-    pub enum JsonCardVersion {
+    pub enum CardVersion {
         #[default]
         _1_0,
     }
 
-    impl Serialize for JsonCardVersion {
+    impl Serialize for CardVersion {
         fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
         where
             S: Serializer,
@@ -215,7 +227,7 @@ pub mod json_types {
         }
     }
 
-    impl<'de> Deserialize<'de> for JsonCardVersion {
+    impl<'de> Deserialize<'de> for CardVersion {
         fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
         where
             D: Deserializer<'de>,
@@ -232,6 +244,20 @@ pub mod json_types {
 
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     pub struct UTCDateTime(pub UnixTimestamp);
+
+    impl UTCDateTime {
+        const fn is_none(&self) -> bool {
+            matches!(self, Self(0))
+        }
+    }
+
+    impl std::fmt::Display for UTCDateTime {
+        fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+            use crate::utils::datetime::{formats::RFC3339_DATETIME_Z, timestamp_to_string_utc};
+
+            timestamp_to_string_utc(self.0, Some(RFC3339_DATETIME_Z), true).fmt(fmt)
+        }
+    }
 
     impl Serialize for UTCDateTime {
         fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
@@ -269,7 +295,7 @@ pub mod json_types {
 
     #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
     #[serde(rename_all = "lowercase")]
-    pub enum JsonCardKind {
+    pub enum CardKind {
         #[default]
         /// A single person
         Individual,
@@ -285,32 +311,102 @@ pub mod json_types {
         Application,
     }
 
+    impl CardKind {
+        const fn is_individual(&self) -> bool {
+            matches!(self, Self::Individual)
+        }
+
+        pub const fn as_str(&self) -> &'static str {
+            match self {
+                Self::Individual => "individual",
+                Self::Group => "group",
+                Self::Org => "org",
+                Self::Location => "location",
+                Self::Device => "device",
+                Self::Application => "application",
+            }
+        }
+    }
+
+    impl FromStr for CardKind {
+        type Err = serde_json::Error;
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            serde_json::from_str(s)
+        }
+    }
+
     #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
     #[serde(rename_all = "camelCase")]
-    pub struct JsonCardValue {
+    pub struct Card {
         #[serde(rename = "@type")]
-        pub __type: JsonCardType,
-        pub version: JsonCardVersion,
+        pub __type: CardType,
+        pub version: CardVersion,
         pub uid: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub created: Option<UTCDateTime>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub updated: Option<UTCDateTime>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[serde(default, skip_serializing_if = "UTCDateTime::is_none")]
+        pub created: UTCDateTime,
+        #[serde(default, skip_serializing_if = "UTCDateTime::is_none")]
+        pub updated: UTCDateTime,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
         /// The language tag, as defined in `RFC5646`, that best describes the
         /// language used for text in the card, optionally including
         /// additional information such as the script.
-        pub language: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub kind: Option<JsonCardKind>,
-        pub name: JsonCardName,
+        pub language: String,
+        #[serde(default, skip_serializing_if = "CardKind::is_individual")]
+        pub kind: CardKind,
+        #[serde(default, skip_serializing_if = "Name::is_empty")]
+        pub name: Name,
         #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
-        pub emails: IndexMap<String, JsonCardEmailAddress>,
+        pub nicknames: IndexMap<String, serde_json::Value>,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        pub organizations: IndexMap<String, serde_json::Value>,
+        #[serde(default, skip_serializing_if = "SpeakToAs::is_empty")]
+        pub speak_to_as: SpeakToAs,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        pub members: IndexMap<String, bool>,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        pub prod_id: String,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        pub related_to: IndexMap<String, serde_json::Value>,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        pub emails: IndexMap<String, EmailAddress>,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        pub addresses: IndexMap<String, serde_json::Value>,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        pub online_services: IndexMap<String, OnlineService>,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        pub phones: IndexMap<String, serde_json::Value>,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        pub preferred_languages: IndexMap<String, serde_json::Value>,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        pub calendars: IndexMap<String, serde_json::Value>,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        pub scheduling_addresses: IndexMap<String, serde_json::Value>,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        pub crypto_keys: IndexMap<String, CryptoKey>,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        pub directories: IndexMap<String, serde_json::Value>,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        pub links: IndexMap<String, serde_json::Value>,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        pub media: IndexMap<String, serde_json::Value>,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        pub localizations: IndexMap<String, serde_json::Value>,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        pub anniversaries: IndexMap<String, Anniversary>,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        pub keywords: IndexMap<String, bool>,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        pub notes: IndexMap<String, serde_json::Value>,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        pub personal_info: IndexMap<String, PersonalInfo>,
+        #[serde(default, flatten, skip_serializing_if = "IndexMap::is_empty")]
+        pub extra: IndexMap<String, serde_json::Value>,
     }
 
     #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
     #[serde(rename_all = "lowercase")]
-    pub enum JsonCardNameComponentKind {
+    pub enum NameComponentKind {
         Title,
         Given,
         Given2,
@@ -323,22 +419,22 @@ pub mod json_types {
 
     #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
     #[serde(rename_all = "camelCase")]
-    pub struct JsonCardNameCmponent {
+    pub struct NameComponent {
         #[serde(rename = "@type", default, skip_serializing_if = "Option::is_none")]
-        pub __type: Option<JsonNameComponentType>,
+        pub __type: Option<NameComponentType>,
         pub value: String,
-        pub kind: JsonCardNameComponentKind,
+        pub kind: NameComponentKind,
         #[serde(default, skip_serializing_if = "String::is_empty")]
         pub phonetic: String,
     }
 
     #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
     #[serde(rename_all = "camelCase")]
-    pub struct JsonCardName {
+    pub struct Name {
         #[serde(rename = "@type", default, skip_serializing_if = "Option::is_none")]
-        pub __type: Option<JsonNameType>,
+        pub __type: Option<NameType>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        pub components: Vec<JsonCardNameCmponent>,
+        pub components: Vec<NameComponent>,
         #[serde(default)]
         pub is_ordered: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -347,7 +443,13 @@ pub mod json_types {
         pub full: Option<String>,
     }
 
-    impl serde::Serialize for JsonCardName {
+    impl Name {
+        const fn is_empty(&self) -> bool {
+            self.components.is_empty() && self.full.is_none()
+        }
+    }
+
+    impl serde::Serialize for Name {
         fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
         where
             S: serde::Serializer,
@@ -378,9 +480,9 @@ pub mod json_types {
 
     #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
     #[serde(rename_all = "camelCase")]
-    pub struct JsonCardEmailAddress {
+    pub struct EmailAddress {
         #[serde(rename = "@type", default, skip_serializing_if = "Option::is_none")]
-        pub __type: Option<JsonEmailAddressType>,
+        pub __type: Option<EmailAddressType>,
         pub address: String,
         #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
         pub contexts: IndexMap<String, bool>,
@@ -390,21 +492,199 @@ pub mod json_types {
         pub label: Option<String>,
     }
 
+    #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+    #[serde(rename_all = "lowercase")]
+    pub enum GrammaticalGender {
+        #[default]
+        None,
+        Animate,
+        Common,
+        Feminine,
+        Inanimate,
+        Masculine,
+        Neuter,
+    }
+
+    impl GrammaticalGender {
+        const fn is_none(&self) -> bool {
+            matches!(self, Self::None)
+        }
+    }
+
+    #[derive(Clone, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
+    #[serde(rename_all = "camelCase")]
+    pub struct SpeakToAs {
+        #[serde(rename = "@type", default, skip_serializing_if = "Option::is_none")]
+        pub __type: Option<SpeakToAsType>,
+        #[serde(default, skip_serializing_if = "GrammaticalGender::is_none")]
+        pub grammatical_gender: GrammaticalGender,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        pub pronouns: IndexMap<String, Pronouns>,
+    }
+
+    impl SpeakToAs {
+        fn is_empty(&self) -> bool {
+            self.grammatical_gender.is_none() && self.pronouns.is_empty()
+        }
+    }
+
+    #[derive(Clone, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
+    #[serde(rename_all = "camelCase")]
+    pub struct Pronouns {
+        #[serde(rename = "@type", default, skip_serializing_if = "Option::is_none")]
+        pub __type: Option<PronounsType>,
+        pub pronouns: String,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        pub contexts: IndexMap<String, bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub pref: Option<u64>,
+    }
+
+    #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct OnlineService {
+        #[serde(rename = "@type", default, skip_serializing_if = "Option::is_none")]
+        pub __type: Option<OnlineServiceType>,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        pub service: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        pub uri: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        pub user: String,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        pub contexts: IndexMap<String, bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub pref: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub label: Option<String>,
+    }
+
+    /// Abstract type for resource properties
+    #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct Resource {
+        pub uri: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        pub media_type: String,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        pub contexts: IndexMap<String, bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub pref: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub label: Option<String>,
+    }
+
+    #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct CryptoKey {
+        #[serde(rename = "@type", default, skip_serializing_if = "Option::is_none")]
+        pub __type: Option<CryptoKeyType>,
+        #[serde(flatten)]
+        pub resource: Resource,
+    }
+
+    const fn is_zero(n: &u32) -> bool {
+        *n == 0
+    }
+
+    #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct PartialDate {
+        #[serde(rename = "@type", default, skip_serializing_if = "Option::is_none")]
+        pub __type: Option<PartialDateType>,
+        #[serde(default, skip_serializing_if = "is_zero")]
+        pub year: u32,
+        #[serde(default, skip_serializing_if = "is_zero")]
+        pub month: u32,
+        #[serde(default, skip_serializing_if = "is_zero")]
+        pub day: u32,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        pub calendar_scale: String,
+    }
+
+    #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct Timestamp {
+        #[serde(rename = "@type", default, skip_serializing_if = "Option::is_none")]
+        pub __type: Option<TimestampType>,
+        pub utc: UTCDateTime,
+    }
+
+    #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+    #[serde(untagged)]
+    pub enum AnniversaryDate {
+        Partial(PartialDate),
+        Timestamp(Timestamp),
+    }
+
+    #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+    #[serde(rename_all = "lowercase")]
+    pub enum AnniversaryKind {
+        Birth,
+        Death,
+        Wedding,
+    }
+
+    #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct Anniversary {
+        #[serde(rename = "@type", default, skip_serializing_if = "Option::is_none")]
+        pub __type: Option<AnniversaryType>,
+        pub kind: AnniversaryKind,
+        pub date: AnniversaryDate,
+        #[serde(default, skip_serializing_if = "serde_json::Value::is_null")]
+        pub place: serde_json::Value,
+    }
+
+    #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+    #[serde(rename_all = "lowercase")]
+    pub enum PersonalInfoKind {
+        Expertise,
+        Hobby,
+        Interest,
+    }
+
+    #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+    #[serde(rename_all = "lowercase")]
+    pub enum PersonalInfoLevel {
+        #[default]
+        None,
+        High,
+        Medium,
+        Low,
+    }
+
+    impl PersonalInfoLevel {
+        const fn is_none(&self) -> bool {
+            matches!(self, Self::None)
+        }
+    }
+
+    #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct PersonalInfo {
+        #[serde(rename = "@type", default, skip_serializing_if = "Option::is_none")]
+        pub __type: Option<PersonalInfoType>,
+        pub kind: PersonalInfoKind,
+        pub value: String,
+        #[serde(default, skip_serializing_if = "PersonalInfoLevel::is_none")]
+        pub level: PersonalInfoLevel,
+        #[serde(default, skip_serializing_if = "is_zero")]
+        pub list_as: u32,
+    }
+
     #[test]
     fn test_addressbook_jscontact() {
         use super::JSContactVersion1;
-        use crate::contacts::{jscontact::JSContact, Card, CardId};
+        use crate::contacts::{jscontact::JSContact, Card as MeliCard, CardId};
 
         assert_eq!(
-            JsonCardValue {
-                __type: JsonCardType,
-                version: JsonCardVersion::_1_0,
+            Card {
+                __type: CardType,
+                version: CardVersion::_1_0,
                 uid: "22B2C7DF-9120-4969-8460-05956FE6B065".to_string(),
-                created: None,
-                updated: None,
-                language: None,
-                kind: Some(JsonCardKind::Individual),
-                name: JsonCardName {
+                kind: CardKind::Individual,
+                name: Name {
                     __type: None,
                     components: vec![],
                     full: Some("full_name".to_string()),
@@ -412,14 +692,15 @@ pub mod json_types {
                     default_separator: None,
                 },
                 emails: indexmap! {
-                    "main".to_string() => JsonCardEmailAddress {
+                    "main".to_string() => EmailAddress {
                         __type: None,
                         address: "user@example.com".to_string(),
                         contexts: IndexMap::new(),
                         pref:None,
                         label: None,
                     }
-                }
+                },
+                ..Card::default()
             },
             serde_json::from_str(
                 r#"{
@@ -442,10 +723,10 @@ pub mod json_types {
             .unwrap(),
         );
         assert_eq!(
-            Card {
+            MeliCard {
                 last_edited: 1727155810,
                 ..JSContact::<JSContactVersion1>::from(
-                    serde_json::from_str::<JsonCardValue>(
+                    serde_json::from_str::<Card>(
                         r#"{
             "@type": "Card",
             "version": "1.0",
@@ -467,7 +748,7 @@ pub mod json_types {
                 )
                 .into()
             },
-            Card {
+            MeliCard {
                 id: CardId::Uuid(
                     uuid::Uuid::try_parse("22B2C7DF-9120-4969-8460-05956FE6B065").unwrap()
                 ),
