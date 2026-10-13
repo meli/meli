@@ -371,7 +371,6 @@ pub enum UIEvent {
     EnvelopeUpdate(EnvelopeHash),
     EnvelopeRename(EnvelopeHash, EnvelopeHash), // old_hash, new_hash
     EnvelopeRemove(EnvelopeHash, ThreadHash),
-    Contacts(ContactEvent),
     Compose(ComposeEvent),
     FinishedUIDialog(ComponentId, UIMessage),
     IntraComm {
@@ -611,11 +610,6 @@ impl RateLimit {
     pub fn id(&self) -> TimerId {
         self.timer.id()
     }
-}
-
-#[derive(Debug)]
-pub enum ContactEvent {
-    CreateContacts(Vec<melib::Card>),
 }
 
 #[derive(Debug)]

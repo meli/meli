@@ -186,8 +186,8 @@ impl ContactBackend for JmapContacts {
             let cards = list
                 .into_iter()
                 .map(|obj| {
-                    let card: Card = obj.jscontact.into();
-                    (card.id, card)
+                    let card: Card = obj.jscontact;
+                    (card.id(), card)
                 })
                 .collect::<IndexMap<_, _>>();
             Ok(AddressBook {
@@ -202,7 +202,7 @@ impl ContactBackend for JmapContacts {
         &self,
         _term: &str,
         _address_book: Option<&AddressBookName>,
-    ) -> crate::prelude::ResultFuture<Vec<Card>> {
+    ) -> ResultFuture<Vec<Card>> {
         Err(Error::new("").set_kind(ErrorKind::NotImplemented))
     }
 
@@ -291,7 +291,7 @@ impl ContactBackend for JmapContacts {
             if let Some(created) = created_card.get("created").cloned() {
                 new_obj.jscontact.0.created = serde_json::from_value(created).unwrap();
             }
-            let card: Card = new_obj.jscontact.into();
+            let card: Card = new_obj.jscontact;
             Ok(card)
         }))
     }
@@ -333,11 +333,7 @@ impl ContactBackend for JmapContacts {
                 ))
                 .set_kind(ErrorKind::ValueError));
             };
-            let Some(uid) = card.id.as_uuid() else {
-                return Err(Error::new("Contact card is not a JMAP card")
-                    .set_details("Contact card does not have a UUID uid")
-                    .set_kind(ErrorKind::ValueError));
-            };
+            let uid = card.0.uid;
             let mut obj: ContactCardObject = card.into();
             obj.address_book_ids.insert(book.id.clone(), true);
             let mut req = Request::new_with_using(client.request_no.clone(), USING);
@@ -433,7 +429,7 @@ impl ContactBackend for JmapContacts {
                     obj.jscontact.0.updated = serde_json::from_value(updated).unwrap();
                 }
             }
-            let card: Card = obj.jscontact.into();
+            let card = obj.jscontact;
             Ok(card)
         }))
     }
@@ -475,11 +471,7 @@ impl ContactBackend for JmapContacts {
                 ))
                 .set_kind(ErrorKind::ValueError));
             };
-            let Some(uid) = card.id.as_uuid() else {
-                return Err(Error::new("Contact card is not a JMAP card")
-                    .set_details("Contact card does not have a UUID uid")
-                    .set_kind(ErrorKind::ValueError));
-            };
+            let uid = card.0.uid;
             let mut req = Request::new_with_using(client.request_no.clone(), USING);
 
             let query_call = req.add_call(&ContactCardQuery::new(
@@ -652,8 +644,7 @@ impl Object for ContactCardObject {
 }
 
 impl From<Card> for ContactCardObject {
-    fn from(c: Card) -> Self {
-        let jscontact = c.into();
+    fn from(jscontact: Card) -> Self {
         Self {
             id: Id::new_random(),
             address_book_ids: IndexMap::default(),

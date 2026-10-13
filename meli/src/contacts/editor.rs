@@ -1,46 +1,260 @@
-/*
- * meli - contacts module
- *
- * Copyright 2019 Manos Pitsidianakis
- *
- * This file is part of meli.
- *
- * meli is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * meli is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with meli. If not, see <http://www.gnu.org/licenses/>.
- */
+//
+// meli
+//
+// Copyright 2019, 2026 Manos Pitsidianakis <manos@pitsidianak.is>
+//
+// This file is part of meli.
+//
+// meli is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// meli is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with meli. If not, see <http://www.gnu.org/licenses/>.
+//
+// SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
 use std::{borrow::Cow, sync::Arc};
 
 use futures::channel::oneshot;
-use indexmap::IndexMap;
 use melib::{
-    contacts::{AddressBook, AddressBookName, Card},
+    contacts::{jscontact::json_types::UTCDateTime, AddressBook, AddressBookName, Card},
     error::Result,
     AccountHash, ContactBackendID, Error,
 };
 
 use crate::{
-    conf::themes::ThemeAttribute,
+    account_settings,
+    components::prelude::*,
     contacts::export::ContactExportDialog,
     jobs::JobId,
-    terminal::*,
+    terminal::{text_editing::UText, Screen, Virtual},
     types::NotificationType,
-    utilities::form::{FormButtonAction, TextField},
+    utilities::form::{Field, FormButtonAction, TextField},
     CellBuffer, Component, ComponentId, Context, Key, StatusEvent, UIDialog, UIEvent,
 };
 
-type FormWidget =
-    crate::utilities::form::FormWidget<FormButtonAction, Cow<'static, str>, TextField>;
+#[derive(Debug, Clone, Ord, Hash, Eq, PartialEq, PartialOrd)]
+pub enum ContactFieldLabel {
+    Created,
+    CryptoKey,
+    Emails,
+    Keywords,
+    Kind,
+    Name,
+    Nickname,
+    Note,
+    GrammaticalGender,
+    Pronouns,
+    Extra,
+    ProdId,
+    Uid,
+    Updated,
+    Url,
+    Other(String),
+}
+
+impl AsRef<str> for ContactFieldLabel {
+    fn as_ref(&self) -> &str {
+        match self {
+            Self::Created => "Created",
+            Self::CryptoKey => "Cryptographic key",
+            Self::Emails => "E-mail",
+            Self::Keywords => "Keywords",
+            Self::Kind => "Kind",
+            Self::Name => "Name",
+            Self::Extra => "Extra",
+            Self::Nickname => "Nickname/Aliases",
+            Self::Note => "Note",
+            Self::GrammaticalGender => "Grammatical gender",
+            Self::Pronouns => "Pronouns",
+            Self::ProdId => "Product ID",
+            Self::Uid => "Uid",
+            Self::Updated => "Updated",
+            Self::Url => "URL",
+            Self::Other(other) => other.as_str(),
+        }
+    }
+}
+
+impl crate::form::FormWidgetLabel for ContactFieldLabel {
+    fn display(&'_ self) -> Cow<'_, str> {
+        Cow::Borrowed(self.as_ref())
+    }
+}
+
+impl std::fmt::Display for ContactFieldLabel {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        std::fmt::Display::fmt(self.as_ref(), fmt)
+    }
+}
+
+impl ContactFieldLabel {
+    fn field_as_value(&self, v: Field) -> serde_json::Value {
+        match self {
+            Self::CryptoKey => {
+                let dict_field = v.as_dict_field().expect("dict key field");
+                let values = dict_field
+                    .values
+                    .values()
+                    .iter()
+                    .map(|(key, f)| {
+                        (
+                            key.as_ref().to_owned(),
+                            serde_json::json! {{ "uri":
+                                f.as_text_field().expect("str key field").as_str()
+                            }},
+                        )
+                    })
+                    .collect::<serde_json::Map<String, serde_json::Value>>();
+                serde_json::Value::Object(values)
+            }
+            Self::Name => {
+                serde_json::json! {{
+                    "full" : v.as_text_field().expect("str name field").as_str()
+                }}
+            }
+            Self::Nickname => {
+                let dict_field = v.as_dict_field().expect("dict nickname field");
+                let values = dict_field
+                    .values
+                    .values()
+                    .iter()
+                    .map(|(key, f)| {
+                        (
+                            key.as_ref().to_owned(),
+                            serde_json::json! {{ "name":
+                                f.as_text_field().expect("str name field").as_str()
+                            }},
+                        )
+                    })
+                    .collect::<serde_json::Map<String, serde_json::Value>>();
+                serde_json::Value::Object(values)
+            }
+            Self::Note => {
+                let dict_field = v.as_dict_field().expect("dict note field");
+                let values = dict_field
+                    .values
+                    .values()
+                    .iter()
+                    .map(|(key, f)| {
+                        (
+                            key.as_ref().to_owned(),
+                            serde_json::json! {{ "note":
+                                f.as_text_field().expect("str note field").as_str()
+                            }},
+                        )
+                    })
+                    .collect::<serde_json::Map<String, serde_json::Value>>();
+                serde_json::Value::Object(values)
+            }
+            Self::Emails => {
+                let dict_field = v.as_dict_field().expect("dict email field");
+                let values = dict_field
+                    .values
+                    .values()
+                    .iter()
+                    .map(|(key, f)| {
+                        (
+                            key.as_ref().to_owned(),
+                            serde_json::json! {{ "address":
+                                f.as_text_field().expect("str address field").as_str()
+                            }},
+                        )
+                    })
+                    .collect::<serde_json::Map<String, serde_json::Value>>();
+                serde_json::Value::Object(values)
+            }
+            Self::Keywords => {
+                let dict_field = v.as_dict_field().expect("dict keywords field");
+                let values = dict_field
+                    .values
+                    .values()
+                    .iter()
+                    .map(|(_, f)| {
+                        (
+                            f.as_text_field()
+                                .expect("str keyword field")
+                                .as_str()
+                                .to_owned(),
+                            serde_json::Value::Bool(true),
+                        )
+                    })
+                    .collect::<serde_json::Map<String, serde_json::Value>>();
+                serde_json::Value::Object(values)
+            }
+            Self::Url => {
+                let dict_field = v.as_dict_field().expect("dict url field");
+                let values = dict_field
+                    .values
+                    .values()
+                    .iter()
+                    .map(|(key, f)| {
+                        (
+                            key.as_ref().to_owned(),
+                            serde_json::json! {{ "uri":
+                                f.as_text_field().expect("str url field").as_str()
+                            }},
+                        )
+                    })
+                    .collect::<serde_json::Map<String, serde_json::Value>>();
+                serde_json::Value::Object(values)
+            }
+            Self::Pronouns => {
+                let dict_field = v.as_dict_field().expect("dict pronouns field");
+                let values = dict_field
+                    .values
+                    .values()
+                    .iter()
+                    .map(|(key, f)| {
+                        (
+                            key.as_ref().to_owned(),
+                            serde_json::json! {{ "pronouns":
+                                f.as_text_field().expect("str pronouns field").as_str()
+                            }},
+                        )
+                    })
+                    .collect::<serde_json::Map<String, serde_json::Value>>();
+                serde_json::Value::Object(values)
+            }
+            Self::Created
+            | Self::Updated
+            | Self::Uid
+            | Self::ProdId
+            | Self::Kind
+            | Self::GrammaticalGender => v.as_json_value(),
+            Self::Extra => {
+                let dict_field = v.as_dict_field().expect("dict extra field");
+                let values = dict_field
+                    .values
+                    .values()
+                    .iter()
+                    .map(|(key, f)| {
+                        (
+                            key.as_ref().to_owned(),
+                            serde_json::from_str(
+                                f.as_text_field().expect("str extra field").as_str(),
+                            )
+                            .unwrap_or_default(),
+                        )
+                    })
+                    .collect::<serde_json::Map<String, serde_json::Value>>();
+                serde_json::Value::Object(values)
+            }
+            Self::Other(_) => {
+                serde_json::from_str(v.as_str().unwrap_or_default()).expect("deserialize")
+            }
+        }
+    }
+}
+
+type FormWidget = crate::utilities::form::FormWidget<FormButtonAction, ContactFieldLabel, Field>;
 
 #[derive(Debug)]
 enum ViewMode {
@@ -94,9 +308,16 @@ impl ContactEditor {
             ViewMode::Edit { create: true }
         };
         let theme_default: ThemeAttribute = crate::conf::theme_value(context, "theme_default");
+        let mut card = Card::default();
+        card.uid = uuid::Uuid::new_v4();
+        card.created = UTCDateTime::now();
+        card.updated = card.created;
+        if *account_settings!(context[&account_hash].composing.insert_user_agent) {
+            card.prod_id = format!("meli/{}", crate::version_migrations::LATEST.as_str());
+        }
         Self {
             id: ComponentId::default(),
-            card: Card::new(),
+            card,
             mode,
             form: FormWidget::default(),
             account_hash,
@@ -174,7 +395,7 @@ impl ContactEditor {
                 None,
             );
             self.content.grid_mut().write_string(
-                &self.card.last_edited(),
+                &self.card.updated.to_string(),
                 &self.theme_default,
                 area.skip_cols(x),
                 None,
@@ -183,7 +404,7 @@ impl ContactEditor {
         }
 
         self.form = FormWidget::new(
-            if self.card.external_resource() {
+            if matches!(self.mode, ViewMode::ReadOnly) {
                 ("Cancel(Esc)".into(), FormButtonAction::Cancel)
             } else {
                 (
@@ -204,7 +425,7 @@ impl ContactEditor {
             // cursor_left_shortcut
             context.settings.shortcuts.general.scroll_left.clone(),
         );
-        if !self.card.external_resource() {
+        if !matches!(self.mode, ViewMode::ReadOnly) {
             if !is_create {
                 self.form
                     .add_button(("Export".into(), FormButtonAction::Other("Export")));
@@ -212,23 +433,308 @@ impl ContactEditor {
             self.form
                 .add_button(("Cancel(Esc)".into(), FormButtonAction::Cancel));
         }
-        self.form
-            .push(("NAME".into(), self.card.name().to_string()));
+        let others = serde_json::json!(self.card)
+            .as_object_mut()
+            .expect("object")
+            .iter_mut()
+            .filter_map(|(s, v)| match s.as_str() {
+                "@type" | "version" | "uid" | "created" | "updated" | "kind" | "name"
+                | "nicknames" | "speakToAs" | "prodId" | "emails" | "onlineServices"
+                | "cryptoKeys" | "keywords" | "notes" => None,
+                other => Some((
+                    ContactFieldLabel::Other(other.to_owned()),
+                    std::mem::take(v),
+                )),
+            })
+            .collect::<IndexMap<ContactFieldLabel, serde_json::Value>>();
         self.form.push((
-            "ADDITIONAL NAME".into(),
-            self.card.additionalname().to_string(),
+            ContactFieldLabel::Name,
+            self.card.name().unwrap_or_default().to_string(),
         ));
+        self.form.push_dict(
+            (
+                ContactFieldLabel::Nickname,
+                self.card
+                    .nicknames
+                    .iter()
+                    .map(|(k, v)| {
+                        (
+                            k.to_owned(),
+                            Field::Text(TextField::new(UText::new(v.name.clone()), None)),
+                        )
+                    })
+                    .collect(),
+            ),
+            (Box::new(|| Field::Text(TextField::new(UText::new(String::new()), None)))
+                as Box<dyn Fn() -> Field + Send + Sync>)
+                .into(),
+        );
         self.form
-            .push(("NAME PREFIX".into(), self.card.name_prefix().to_string()));
+            .push((ContactFieldLabel::Uid, self.card.uid.to_string()))
+            .set_read_only(true);
         self.form
-            .push(("NAME SUFFIX".into(), self.card.name_suffix().to_string()));
+            .push((ContactFieldLabel::Created, self.card.created.to_string()))
+            .set_read_only(true);
         self.form
-            .push(("E-MAIL".into(), self.card.email().to_string()));
-        self.form.push(("URL".into(), self.card.url().to_string()));
-        self.form.push(("KEY".into(), self.card.key().to_string()));
-        for (k, v) in self.card.extra_properties() {
-            self.form.push((k.to_string().into(), v.to_string()));
+            .push((ContactFieldLabel::Updated, self.card.updated.to_string()))
+            .set_read_only(true);
+        self.form
+            .push((ContactFieldLabel::ProdId, self.card.prod_id.to_string()))
+            .set_read_only(true);
+        let kind = self.form.push_choices((
+            ContactFieldLabel::Kind,
+            vec![
+                "individual".into(),
+                "group".into(),
+                "org".into(),
+                "location".into(),
+                "device".into(),
+                "application".into(),
+            ],
+        ));
+        kind.cursor = kind
+            .values
+            .iter()
+            .position(|i| i == self.card.kind.as_str())
+            .unwrap_or_default();
+        let grammatical_gender = self.form.push_choices((
+            ContactFieldLabel::GrammaticalGender,
+            vec![
+                "none".into(),
+                "animate".into(),
+                "common".into(),
+                "feminine".into(),
+                "inanimate".into(),
+                "masculine".into(),
+                "neuter".into(),
+            ],
+        ));
+        grammatical_gender.cursor = grammatical_gender
+            .values
+            .iter()
+            .position(|i| i == self.card.speak_to_as.grammatical_gender.as_str())
+            .unwrap_or_default();
+        self.form.push_dict(
+            (
+                ContactFieldLabel::Pronouns,
+                self.card
+                    .speak_to_as
+                    .pronouns
+                    .iter()
+                    .map(|(k, v)| {
+                        (
+                            k.to_owned(),
+                            Field::Text(TextField::new(UText::new(v.pronouns.clone()), None)),
+                        )
+                    })
+                    .collect(),
+            ),
+            (Box::new(|| Field::Text(TextField::new(UText::new(String::new()), None)))
+                as Box<dyn Fn() -> Field + Send + Sync>)
+                .into(),
+        );
+        self.form.push_dict(
+            (
+                ContactFieldLabel::Url,
+                self.card
+                    .online_services
+                    .iter()
+                    .map(|(k, v)| {
+                        (
+                            k.to_owned(),
+                            Field::Text(TextField::new(UText::new(v.uri.clone()), None)),
+                        )
+                    })
+                    .collect(),
+            ),
+            (Box::new(|| Field::Text(TextField::new(UText::new(String::new()), None)))
+                as Box<dyn Fn() -> Field + Send + Sync>)
+                .into(),
+        );
+        self.form.push_dict(
+            (
+                ContactFieldLabel::Emails,
+                self.card
+                    .emails
+                    .iter()
+                    .map(|(k, v)| {
+                        (
+                            k.to_owned(),
+                            Field::Text(TextField::new(UText::new(v.address.clone()), None)),
+                        )
+                    })
+                    .collect(),
+            ),
+            (Box::new(|| Field::Text(TextField::new(UText::new(String::new()), None)))
+                as Box<dyn Fn() -> Field + Send + Sync>)
+                .into(),
+        );
+        self.form.push_dict(
+            (
+                ContactFieldLabel::Keywords,
+                self.card
+                    .keywords
+                    .iter()
+                    .map(|(k, _)| {
+                        (
+                            k.to_owned(),
+                            Field::Text(TextField::new(UText::new(k.to_owned()), None)),
+                        )
+                    })
+                    .collect(),
+            ),
+            (Box::new(|| Field::Text(TextField::new(UText::new(String::new()), None)))
+                as Box<dyn Fn() -> Field + Send + Sync>)
+                .into(),
+        );
+        self.form.push_dict(
+            (
+                ContactFieldLabel::CryptoKey,
+                self.card
+                    .crypto_keys
+                    .iter()
+                    .map(|(k, v)| {
+                        (
+                            k.to_owned(),
+                            Field::Text(TextField::new(UText::new(v.resource.uri.clone()), None)),
+                        )
+                    })
+                    .collect(),
+            ),
+            (Box::new(|| Field::Text(TextField::new(UText::new(String::new()), None)))
+                as Box<dyn Fn() -> Field + Send + Sync>)
+                .into(),
+        );
+        self.form.push_dict(
+            (
+                ContactFieldLabel::Note,
+                self.card
+                    .notes
+                    .iter()
+                    .map(|(k, v)| {
+                        (
+                            k.to_owned(),
+                            Field::Text(TextField::new(UText::new(v.note.clone()), None)),
+                        )
+                    })
+                    .collect(),
+            ),
+            (Box::new(|| Field::Text(TextField::new(UText::new(String::new()), None)))
+                as Box<dyn Fn() -> Field + Send + Sync>)
+                .into(),
+        );
+        if !self.card.extra.is_empty() {
+            self.form.push_dict(
+                (
+                    ContactFieldLabel::Extra,
+                    self.card
+                        .extra
+                        .iter()
+                        .map(|(k, v)| {
+                            (
+                                k.to_owned(),
+                                Field::Text(
+                                    TextField::new(UText::new(v.to_string()), None)
+                                        .with_read_only(true),
+                                ),
+                            )
+                        })
+                        .collect(),
+                ),
+                (Box::new(|| {
+                    Field::Text(
+                        TextField::new(UText::new(String::new()), None).with_read_only(true),
+                    )
+                }) as Box<dyn Fn() -> Field + Send + Sync>)
+                    .into(),
+            );
         }
+        for (label, val) in others {
+            self.form.push((label, val.to_string())).set_read_only(true);
+        }
+    }
+
+    fn as_json(&self) -> serde_json::Value {
+        let fields: IndexMap<ContactFieldLabel, serde_json::Value> = self
+            .form
+            .values()
+            .clone()
+            .into_iter()
+            .map(|(label, v)| {
+                let value = label.field_as_value(v);
+                (label, value)
+            })
+            .collect();
+        let mut retval: serde_json::Map<String, serde_json::Value> = std::iter::once((
+            "@type".to_owned(),
+            serde_json::Value::String("Card".to_owned()),
+        ))
+        .chain(std::iter::once((
+            "version".to_owned(),
+            serde_json::Value::String("1.0".to_owned()),
+        )))
+        .collect();
+        for (label, value) in fields {
+            match label {
+                ContactFieldLabel::CryptoKey => {
+                    retval.insert("cryptoKeys".to_string(), value);
+                }
+                ContactFieldLabel::Name => {
+                    retval.insert("name".to_string(), value);
+                }
+                ContactFieldLabel::Nickname => {
+                    retval.insert("nicknames".to_string(), value);
+                }
+                ContactFieldLabel::Note => {
+                    retval.insert("notes".to_string(), value);
+                }
+                ContactFieldLabel::Emails => {
+                    retval.insert("emails".to_string(), value);
+                }
+                ContactFieldLabel::Keywords => {
+                    retval.insert("keywords".to_string(), value);
+                }
+                ContactFieldLabel::Created => {
+                    retval.insert("created".to_string(), value);
+                }
+                ContactFieldLabel::Updated => {
+                    retval.insert("updated".to_string(), value);
+                }
+                ContactFieldLabel::Uid => {
+                    retval.insert("uid".to_string(), value);
+                }
+                ContactFieldLabel::ProdId => {
+                    retval.insert("prodId".to_string(), value);
+                }
+                ContactFieldLabel::Kind => {
+                    retval.insert("kind".to_string(), value);
+                }
+                ContactFieldLabel::Url => {
+                    retval.insert("onlineServices".to_string(), value);
+                }
+                ContactFieldLabel::Other(other) => {
+                    retval.insert(other, value);
+                }
+                ContactFieldLabel::GrammaticalGender => {
+                    retval.entry("speakToAs").or_insert_with(|| {
+                        serde_json::json!(melib::jscontact::json_types::SpeakToAs::default())
+                    })["grammaticalGender"] = value;
+                }
+                ContactFieldLabel::Pronouns => {
+                    retval.entry("speakToAs").or_insert_with(|| {
+                        serde_json::json!(melib::jscontact::json_types::SpeakToAs::default())
+                    })["pronouns"] = value;
+                }
+                ContactFieldLabel::Extra => {
+                    let serde_json::Value::Object(values) = value else {
+                        unreachable!();
+                    };
+                    retval.extend(values);
+                }
+            };
+        }
+
+        serde_json::Value::Object(retval)
     }
 }
 
@@ -290,15 +796,9 @@ impl Component for ContactEditor {
                     match self.form.buttons_result() {
                         None => {}
                         Some(FormButtonAction::Accept) => {
-                            let fields: IndexMap<String, String> = self
-                                .form
-                                .values()
-                                .clone()
-                                .into_iter()
-                                .map(|(s, v)| (s.to_string(), v.as_str().to_owned()))
-                                .collect();
-                            let mut card = Card::from(fields);
-                            card.set_id(*self.card.id());
+                            let json = self.as_json();
+                            let mut card: Card = serde_json::from_value(json).expect("deserialize");
+                            card.uid = self.card.uid;
                             let res = if create {
                                 context.accounts[&self.account_hash]
                                     .add_card(self.book_id.clone(), card)
@@ -361,13 +861,10 @@ impl Component for ContactEditor {
                         }
                         Some(FormButtonAction::Other("Export")) => {
                             let card = if self.has_changes {
-                                let fields = self.form.clone().collect();
-                                let fields: IndexMap<String, String> = fields
-                                    .into_iter()
-                                    .map(|(s, v)| (s.to_string(), v.as_str().to_owned()))
-                                    .collect();
-                                let mut card = Card::from(fields);
-                                card.set_id(*self.card.id());
+                                let json = self.as_json();
+                                let mut card: Card =
+                                    serde_json::from_value(json).expect("deserialize");
+                                card.uid = self.card.uid;
                                 card
                             } else {
                                 self.card.clone()
@@ -472,6 +969,15 @@ impl Component for ContactEditor {
         self.form.set_dirty(value);
         if let ViewMode::Discard { ref mut dialog, .. } = self.mode {
             dialog.set_dirty(value);
+        }
+    }
+
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
+        match self.mode {
+            ViewMode::Discard { .. }
+            | ViewMode::ReadOnly
+            | ViewMode::WaitingForSaveResult { .. } => ShortcutMaps::default(),
+            ViewMode::Edit { create: _ } => self.form.shortcuts(context),
         }
     }
 

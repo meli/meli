@@ -622,7 +622,7 @@ impl Account {
         let (sender, receiver) = oneshot::channel();
         let backend = self.contact_backends[&*backend_id].as_ref();
         let mut backend = backend.lock().unwrap();
-        let card_id = card.id;
+        let card_id = card.id();
         let fut = backend.add(&book, card)?;
         let handle = self.main_loop_handler.job_executor.spawn(
             "create contact".into(),
@@ -668,7 +668,7 @@ impl Account {
         let (sender, receiver) = oneshot::channel();
         let backend = self.contact_backends[&*backend_id].as_ref();
         let mut backend = backend.lock().unwrap();
-        let card_id = card.id;
+        let card_id = card.id();
         let fut = backend.edit(&book, card)?;
         let handle = self.main_loop_handler.job_executor.spawn(
             "edit contact".into(),
@@ -714,7 +714,7 @@ impl Account {
         let (sender, receiver) = oneshot::channel();
         let backend = self.contact_backends[&*backend_id].as_ref();
         let mut backend = backend.lock().unwrap();
-        let card_id = card.id;
+        let card_id = card.id();
         let fut = backend.delete(&book, card)?;
         let handle = self.main_loop_handler.job_executor.spawn(
             "delete contact".into(),
@@ -866,7 +866,7 @@ struct DefaultContacts {
 impl DefaultContacts {
     const DEFAULT_ADDRESS_BOOK: &str = "default";
     const NAME: &str = "meli";
-    const FORMAT: &str = "Card";
+    const FORMAT: &str = "JSContactV1";
 
     fn address_books(&self) -> Vec<AddressBookName> {
         vec![AddressBookName(
@@ -918,7 +918,7 @@ impl ContactBackend for DefaultContacts {
         if address_book.0.as_ref() != Self::DEFAULT_ADDRESS_BOOK {
             return Err(Error::new("").set_kind(ErrorKind::ValueError));
         }
-        self.cards.insert(new_card.id, new_card.clone());
+        self.cards.insert(new_card.id(), new_card.clone());
         Ok(Box::pin(async move { Ok(new_card) }))
     }
 
@@ -930,7 +930,7 @@ impl ContactBackend for DefaultContacts {
         if address_book.0.as_ref() != Self::DEFAULT_ADDRESS_BOOK {
             return Err(Error::new("").set_kind(ErrorKind::ValueError));
         }
-        let ret = if self.cards.shift_remove(&card.id).is_some() {
+        let ret = if self.cards.shift_remove(&(CardId::from(card.uid))).is_some() {
             Ok(())
         } else {
             Err(Error::new("").set_kind(ErrorKind::NotSupported))

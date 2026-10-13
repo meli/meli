@@ -308,7 +308,7 @@ impl ContactBackend for CardDAVContacts {
                 .all(Arc::clone(&name.0))
                 .await?
                 .into_iter()
-                .map(|c| (c.id, c))
+                .map(|c| (c.id(), c))
                 .collect();
             Ok(AddressBook {
                 name,

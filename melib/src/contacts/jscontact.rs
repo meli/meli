@@ -20,22 +20,21 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
-use indexmap::IndexMap;
+use std::borrow::Cow;
 
-use crate::{
-    contacts::{Card, CardId},
-    error::Result,
-};
+use crate::{email::Address, error::Result};
+
+pub type JSContactV1 = JSContact<JSContactVersion1>;
 
 /// Supported `JSContact` versions
-pub trait JSContactVersion: std::fmt::Debug {}
+pub trait JSContactVersion: std::fmt::Debug + Clone + Eq + PartialEq {}
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct JSContactVersionUnknown;
 impl JSContactVersion for JSContactVersionUnknown {}
 
 /// Version 1 <https://www.rfc-editor.org/rfc/rfc9553.html>
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct JSContactVersion1;
 impl JSContactVersion for JSContactVersion1 {}
 
@@ -47,12 +46,142 @@ pub struct JSContact<T: JSContactVersion>(
     pub std::marker::PhantomData<fn() -> T>,
 );
 
-impl<V: JSContactVersion> JSContact<V> {
-    pub fn new_v1() -> JSContact<impl JSContactVersion> {
-        JSContact(
-            json_types::Card::default(),
+impl<V: JSContactVersion> std::ops::DerefMut for JSContact<V> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<V: JSContactVersion> std::ops::Deref for JSContact<V> {
+    type Target = json_types::Card;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<V: JSContactVersion> std::fmt::Display for JSContact<V> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if self.name.is_empty() && self.emails.is_empty() {
+            write!(fmt, "empty contact")
+        } else {
+            write!(fmt, "{}", self.as_address())
+        }
+    }
+}
+
+impl JSContact<JSContactVersion1> {
+    pub fn new() -> Self {
+        Self(
+            json_types::Card {
+                uid: uuid::Uuid::new_v4(),
+                ..json_types::Card::default()
+            },
             std::marker::PhantomData::<fn() -> JSContactVersion1>,
         )
+    }
+
+    #[inline(always)]
+    pub fn id(&self) -> crate::contacts::CardId {
+        self.0.uid.into()
+    }
+}
+
+impl Default for JSContact<JSContactVersion1> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<V: JSContactVersion> JSContact<V> {
+    pub fn new_v1() -> JSContact<impl JSContactVersion> {
+        JSContactV1::new()
+    }
+
+    /// Return an [`Address`] for this contact.
+    pub fn as_address(&self) -> Address {
+        Address::new(
+            self.name().map(|n| n.into_owned()),
+            self.email().unwrap_or_default().to_owned(),
+        )
+    }
+
+    pub fn name(&'_ self) -> Option<Cow<'_, str>> {
+        if self.name.is_empty() {
+            None
+        } else if let Some(name) = self.name.full.as_deref() {
+            Some(Cow::Borrowed(name))
+        } else if self.name.is_ordered {
+            Some(Cow::Owned(
+                self.name
+                    .components
+                    .iter()
+                    .map(|c| c.value.as_str())
+                    .collect::<Vec<_>>()
+                    .join(self.name.default_separator.as_deref().unwrap_or(" ")),
+            ))
+        } else {
+            use json_types::NameComponentKind::*;
+
+            let mut name_s = String::new();
+            let sep = self.name.default_separator.as_deref().unwrap_or(" ");
+            for kind in [
+                Title, Given, Given2, Surname, Surname2, Credential, Generation,
+            ] {
+                if let Some(c) = self.name.components.iter().find(|c| c.kind == kind) {
+                    if !name_s.is_empty() {
+                        name_s.push_str(sep);
+                    }
+                    name_s.push_str(&c.value)
+                }
+            }
+            Some(Cow::Owned(name_s))
+        }
+    }
+
+    pub fn email(&'_ self) -> Option<&str> {
+        let (_, email) = self.emails.first()?;
+        Some(&email.address)
+    }
+
+    pub fn url(&'_ self) -> Option<&str> {
+        let (_, service) = self.online_services.first()?;
+        Some(&service.uri)
+    }
+
+    pub fn birthday(&self) -> Option<crate::UnixTimestamp> {
+        use json_types::{AnniversaryDate, AnniversaryKind};
+        self.anniversaries.values().find_map(|a| {
+            if a.kind == AnniversaryKind::Birth {
+                if let AnniversaryDate::Timestamp(ts) = &a.date {
+                    Some(ts.utc.0)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn to_vcard_string(&self) -> String {
+        use crate::utils::vobject::{vcard::VcardBuilder, write_component};
+
+        let mut builder = VcardBuilder::new().with_uid(self.uid.as_urn().to_string());
+        if let Some(email) = self.email() {
+            builder = builder.with_email(email.to_owned());
+        }
+        if let Some(name) = self.name() {
+            builder = builder.with_fullname(name.into_owned());
+        }
+        if let Some(url) = self.url() {
+            builder = builder.with_url(url.to_owned());
+        }
+        if let Some((_, nick)) = self.nicknames.first() {
+            builder = builder.with_nickname(Default::default(), nick.name.clone());
+        }
+
+        write_component(&builder.build().unwrap())
     }
 }
 
@@ -64,260 +193,19 @@ impl CardDeserializer {
     }
 }
 
-impl<V: JSContactVersion> From<JSContact<V>> for Card {
-    fn from(val: JSContact<V>) -> Self {
-        let json_types::Card {
-            uid, name, emails, ..
-        } = val.0;
-        let mut card = Self::new();
-        card.set_id(CardId::from(uid));
-        if let Some(name) = name.full {
-            card.set_name(name);
-        } else if name.is_ordered {
-            card.set_name(
-                name.components
-                    .iter()
-                    .map(|c| c.value.as_str())
-                    .collect::<Vec<_>>()
-                    .join(name.default_separator.as_deref().unwrap_or(" ")),
-            );
-        } else {
-            use json_types::NameComponentKind::*;
-
-            let mut name_s = String::new();
-            let sep = name.default_separator.as_deref().unwrap_or(" ");
-            for kind in [
-                Title, Given, Given2, Surname, Surname2, Credential, Generation,
-            ] {
-                if let Some(c) = name.components.iter().find(|c| c.kind == kind) {
-                    if !name_s.is_empty() {
-                        name_s.push_str(sep);
-                    }
-                    name_s.push_str(&c.value)
-                }
-            }
-            card.set_name(name_s);
-        }
-        if let Some(e) = emails.get_index(0) {
-            card.set_email(e.1.address.to_string());
-        }
-
-        card
-    }
-}
-
-impl From<Card> for JSContact<JSContactVersion1> {
-    fn from(card: Card) -> Self {
-        use json_types::UTCDateTime;
-
-        let Card {
-            id,
-            title,
-            name,
-            additionalname,
-            name_prefix,
-            name_suffix,
-            birthday,
-            email,
-            url,
-            key,
-            last_edited,
-            extra_properties,
-            external_resource: _,
-            color: _,
-        } = card;
-
+impl From<&Address> for JSContact<JSContactVersion1> {
+    fn from(addr: &Address) -> Self {
         let mut ret = Self(
             json_types::Card::default(),
             std::marker::PhantomData::<fn() -> JSContactVersion1>,
         );
-        ret.0.updated = UTCDateTime(last_edited);
-        if let CardId::Uuid(uid) = id {
-            ret.0.uid = uid.to_string();
+
+        if let Some(display_name) = addr.get_display_name() {
+            ret.name = display_name.to_string().into();
         }
-        let need_fullname = title.is_empty()
-            && additionalname.is_empty()
-            && name_prefix.is_empty()
-            && name_suffix.is_empty();
-        if need_fullname {
-            if !name.is_empty() {
-                ret.0.name.full = Some(name);
-            }
-        } else {
-            use std::collections::VecDeque;
-
-            use json_types::{NameComponent, NameComponentKind::*};
-
-            let given;
-            let mut given2 = None;
-            let mut surname = None;
-            let mut surname2 = None;
-            let mut rest = None;
-
-            let words_no = name.chars().filter(|c| c.is_whitespace()).count() + 1;
-
-            if words_no == 1 {
-                given = Some(NameComponent {
-                    __type: None,
-                    value: name,
-                    kind: Given,
-                    phonetic: String::new(),
-                });
-            } else {
-                let mut words = name
-                    .split_whitespace()
-                    .map(|s| s.to_owned())
-                    .collect::<VecDeque<_>>();
-                given = words.pop_front().map(|value| NameComponent {
-                    __type: None,
-                    value,
-                    kind: Given,
-                    phonetic: String::new(),
-                });
-                if words.len() > 1 {
-                    given2 = words.pop_front().map(|value| NameComponent {
-                        __type: None,
-                        value,
-                        kind: Given2,
-                        phonetic: String::new(),
-                    });
-                }
-                if words.len() > 1 {
-                    surname = words.pop_front().map(|value| NameComponent {
-                        __type: None,
-                        value,
-                        kind: Surname,
-                        phonetic: String::new(),
-                    });
-                }
-                surname2 = words.pop_front().map(|value| NameComponent {
-                    __type: None,
-                    value,
-                    kind: Surname2,
-                    phonetic: String::new(),
-                });
-                if !words.is_empty() {
-                    rest = Some(
-                        words
-                            .into_iter()
-                            .map(|value| NameComponent {
-                                __type: None,
-                                value,
-                                kind: Surname2,
-                                phonetic: String::new(),
-                            })
-                            .collect::<Vec<_>>(),
-                    );
-                }
-            }
-            if !title.is_empty() {
-                ret.0.name.components.push(NameComponent {
-                    __type: None,
-                    value: title,
-                    kind: Title,
-                    phonetic: String::new(),
-                });
-            }
-            if !name_prefix.is_empty() {
-                ret.0.name.components.push(NameComponent {
-                    __type: None,
-                    value: name_prefix,
-                    kind: Title,
-                    phonetic: String::new(),
-                });
-            }
-            if let Some(given) = given {
-                ret.0.name.components.push(given);
-            }
-            if !additionalname.is_empty() {
-                ret.0.name.components.push(NameComponent {
-                    __type: None,
-                    value: additionalname,
-                    kind: Given2,
-                    phonetic: String::new(),
-                });
-            }
-            if let Some(given2) = given2 {
-                ret.0.name.components.push(given2);
-            }
-            if let Some(surname) = surname {
-                ret.0.name.components.push(surname);
-            }
-            if let Some(surname2) = surname2 {
-                ret.0.name.components.push(surname2);
-            }
-            if let Some(rest) = rest {
-                ret.0.name.components.extend(rest);
-            }
-            if !name_suffix.is_empty() {
-                // Could also be `Generation` but the best we could do to detect that is heuristics
-                ret.0.name.components.push(NameComponent {
-                    __type: None,
-                    value: name_suffix,
-                    kind: Credential,
-                    phonetic: String::new(),
-                });
-            }
-        }
-        if let Some(birthday) = birthday {
-            use json_types::{Anniversary, AnniversaryDate, AnniversaryKind, Timestamp};
-
-            ret.0.anniversaries.insert(
-                "k0".into(),
-                Anniversary {
-                    __type: None,
-                    kind: AnniversaryKind::Birth,
-                    date: AnniversaryDate::Timestamp(Timestamp {
-                        __type: None,
-                        utc: UTCDateTime(birthday),
-                    }),
-                    place: serde_json::Value::default(),
-                },
-            );
-        }
-        if !url.is_empty() {
-            use json_types::OnlineService;
-
-            ret.0.online_services.insert(
-                "k0".into(),
-                OnlineService {
-                    uri: url,
-                    ..OnlineService::default()
-                },
-            );
-        }
-        if !key.is_empty() {
-            use json_types::{CryptoKey, Resource};
-
-            ret.0.crypto_keys.insert(
-                "k0".into(),
-                CryptoKey {
-                    __type: None,
-                    resource: Resource {
-                        uri: key,
-                        ..Resource::default()
-                    },
-                },
-            );
-        }
-        if !extra_properties.is_empty() {
-            ret.0.extra.extend(
-                extra_properties
-                    .into_iter()
-                    .map(|(s, v)| (s, serde_json::Value::String(v))),
-            );
-        }
-        ret.0.emails.insert(
-            "main".into(),
-            json_types::EmailAddress {
-                __type: None,
-                address: email,
-                contexts: IndexMap::new(),
-                pref: None,
-                label: None,
-            },
-        );
-
+        ret.0
+            .emails
+            .insert("main".into(), addr.get_email().to_string().into());
         ret
     }
 }
@@ -401,6 +289,10 @@ pub mod json_types {
     impl_json_type_struct_serde! {SpeakToAsType, "SpeakToAs"}
     impl_json_type_struct_serde! {PronounsType, "Pronouns"}
     impl_json_type_struct_serde! {TitleType, "Title"}
+    impl_json_type_struct_serde! {NicknameType, "Nickname"}
+    impl_json_type_struct_serde! {NoteType, "Note"}
+    impl_json_type_struct_serde! {AuthorType, "Author"}
+    impl_json_type_struct_serde! {OrganizationType, "Organization"}
 
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     #[non_exhaustive]
@@ -437,8 +329,12 @@ pub mod json_types {
     pub struct UTCDateTime(pub UnixTimestamp);
 
     impl UTCDateTime {
-        const fn is_none(&self) -> bool {
+        pub const fn is_none(&self) -> bool {
             matches!(self, Self(0))
+        }
+
+        pub fn now() -> Self {
+            Self(crate::utils::datetime::now())
         }
     }
 
@@ -533,7 +429,7 @@ pub mod json_types {
         #[serde(rename = "@type")]
         pub __type: CardType,
         pub version: CardVersion,
-        pub uid: String,
+        pub uid: uuid::Uuid,
         #[serde(default, skip_serializing_if = "UTCDateTime::is_none")]
         pub created: UTCDateTime,
         #[serde(default, skip_serializing_if = "UTCDateTime::is_none")]
@@ -548,11 +444,13 @@ pub mod json_types {
         #[serde(default, skip_serializing_if = "Name::is_empty")]
         pub name: Name,
         #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
-        pub nicknames: IndexMap<String, serde_json::Value>,
+        pub nicknames: IndexMap<String, Nickname>,
         #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
-        pub organizations: IndexMap<String, serde_json::Value>,
+        pub organizations: IndexMap<String, Organization>,
         #[serde(default, skip_serializing_if = "SpeakToAs::is_empty")]
         pub speak_to_as: SpeakToAs,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        pub titles: IndexMap<String, Title>,
         #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
         pub members: IndexMap<String, bool>,
         #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -588,7 +486,7 @@ pub mod json_types {
         #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
         pub keywords: IndexMap<String, bool>,
         #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
-        pub notes: IndexMap<String, serde_json::Value>,
+        pub notes: IndexMap<String, Note>,
         #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
         pub personal_info: IndexMap<String, PersonalInfo>,
         #[serde(default, flatten, skip_serializing_if = "IndexMap::is_empty")]
@@ -617,6 +515,21 @@ pub mod json_types {
         pub kind: NameComponentKind,
         #[serde(default, skip_serializing_if = "String::is_empty")]
         pub phonetic: String,
+        #[serde(default, flatten, skip_serializing_if = "IndexMap::is_empty")]
+        pub extra: IndexMap<String, serde_json::Value>,
+    }
+
+    impl NameComponent {
+        #[inline]
+        pub fn new(value: String, kind: NameComponentKind) -> Self {
+            Self {
+                __type: None,
+                value,
+                kind,
+                phonetic: String::new(),
+                extra: IndexMap::new(),
+            }
+        }
     }
 
     #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
@@ -632,10 +545,12 @@ pub mod json_types {
         pub default_separator: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub full: Option<String>,
+        #[serde(default, flatten, skip_serializing_if = "IndexMap::is_empty")]
+        pub extra: IndexMap<String, serde_json::Value>,
     }
 
     impl Name {
-        const fn is_empty(&self) -> bool {
+        pub const fn is_empty(&self) -> bool {
             self.components.is_empty() && self.full.is_none()
         }
     }
@@ -669,6 +584,38 @@ pub mod json_types {
         }
     }
 
+    impl From<String> for Name {
+        fn from(full: String) -> Self {
+            Self {
+                full: Some(full),
+                ..Self::default()
+            }
+        }
+    }
+
+    #[derive(Clone, Debug, Default, Serialize, Deserialize, Eq, PartialEq)]
+    #[serde(rename_all = "camelCase")]
+    pub struct Nickname {
+        #[serde(rename = "@type", default, skip_serializing_if = "Option::is_none")]
+        pub __type: Option<NicknameType>,
+        pub name: String,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        pub contexts: IndexMap<String, bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub pref: Option<u64>,
+        #[serde(default, flatten, skip_serializing_if = "IndexMap::is_empty")]
+        pub extra: IndexMap<String, serde_json::Value>,
+    }
+
+    impl From<String> for Nickname {
+        fn from(name: String) -> Self {
+            Self {
+                name,
+                ..Self::default()
+            }
+        }
+    }
+
     #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
     #[serde(rename_all = "camelCase")]
     pub struct EmailAddress {
@@ -681,6 +628,28 @@ pub mod json_types {
         pub pref: Option<u64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub label: Option<String>,
+        #[serde(default, flatten, skip_serializing_if = "IndexMap::is_empty")]
+        pub extra: IndexMap<String, serde_json::Value>,
+    }
+
+    impl From<String> for EmailAddress {
+        fn from(address: String) -> Self {
+            Self {
+                address,
+                ..Self::default()
+            }
+        }
+    }
+
+    impl EmailAddress {
+        #[inline]
+        pub fn new(address: String) -> Self {
+            Self {
+                __type: None,
+                address,
+                ..Self::default()
+            }
+        }
     }
 
     #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -697,8 +666,20 @@ pub mod json_types {
     }
 
     impl GrammaticalGender {
-        const fn is_none(&self) -> bool {
+        pub const fn is_none(&self) -> bool {
             matches!(self, Self::None)
+        }
+
+        pub const fn as_str(&self) -> &'static str {
+            match self {
+                Self::None => "none",
+                Self::Animate => "animate",
+                Self::Common => "common",
+                Self::Feminine => "feminine",
+                Self::Inanimate => "inanimate",
+                Self::Masculine => "masculine",
+                Self::Neuter => "neuter",
+            }
         }
     }
 
@@ -711,6 +692,8 @@ pub mod json_types {
         pub grammatical_gender: GrammaticalGender,
         #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
         pub pronouns: IndexMap<String, Pronouns>,
+        #[serde(default, flatten, skip_serializing_if = "IndexMap::is_empty")]
+        pub extra: IndexMap<String, serde_json::Value>,
     }
 
     impl SpeakToAs {
@@ -729,6 +712,8 @@ pub mod json_types {
         pub contexts: IndexMap<String, bool>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub pref: Option<u64>,
+        #[serde(default, flatten, skip_serializing_if = "IndexMap::is_empty")]
+        pub extra: IndexMap<String, serde_json::Value>,
     }
 
     #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -748,6 +733,8 @@ pub mod json_types {
         pub pref: Option<u64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub label: Option<String>,
+        #[serde(default, flatten, skip_serializing_if = "IndexMap::is_empty")]
+        pub extra: IndexMap<String, serde_json::Value>,
     }
 
     /// Abstract type for resource properties
@@ -763,6 +750,8 @@ pub mod json_types {
         pub pref: Option<u64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub label: Option<String>,
+        #[serde(default, flatten, skip_serializing_if = "IndexMap::is_empty")]
+        pub extra: IndexMap<String, serde_json::Value>,
     }
 
     #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -791,6 +780,8 @@ pub mod json_types {
         pub day: u32,
         #[serde(default, skip_serializing_if = "String::is_empty")]
         pub calendar_scale: String,
+        #[serde(default, flatten, skip_serializing_if = "IndexMap::is_empty")]
+        pub extra: IndexMap<String, serde_json::Value>,
     }
 
     #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -799,6 +790,18 @@ pub mod json_types {
         #[serde(rename = "@type", default, skip_serializing_if = "Option::is_none")]
         pub __type: Option<TimestampType>,
         pub utc: UTCDateTime,
+        #[serde(default, flatten, skip_serializing_if = "IndexMap::is_empty")]
+        pub extra: IndexMap<String, serde_json::Value>,
+    }
+
+    impl Timestamp {
+        #[inline]
+        pub fn new(utc: UTCDateTime) -> Self {
+            Self {
+                utc,
+                ..Self::default()
+            }
+        }
     }
 
     #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -825,6 +828,21 @@ pub mod json_types {
         pub date: AnniversaryDate,
         #[serde(default, skip_serializing_if = "serde_json::Value::is_null")]
         pub place: serde_json::Value,
+        #[serde(default, flatten, skip_serializing_if = "IndexMap::is_empty")]
+        pub extra: IndexMap<String, serde_json::Value>,
+    }
+
+    impl Anniversary {
+        #[inline]
+        pub fn new(kind: AnniversaryKind, date: AnniversaryDate) -> Self {
+            Self {
+                __type: None,
+                kind,
+                date,
+                place: serde_json::Value::Null,
+                extra: IndexMap::new(),
+            }
+        }
     }
 
     #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -846,7 +864,7 @@ pub mod json_types {
     }
 
     impl PersonalInfoLevel {
-        const fn is_none(&self) -> bool {
+        pub const fn is_none(&self) -> bool {
             matches!(self, Self::None)
         }
     }
@@ -862,18 +880,97 @@ pub mod json_types {
         pub level: PersonalInfoLevel,
         #[serde(default, skip_serializing_if = "is_zero")]
         pub list_as: u32,
+        #[serde(default, flatten, skip_serializing_if = "IndexMap::is_empty")]
+        pub extra: IndexMap<String, serde_json::Value>,
+    }
+
+    #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct Note {
+        #[serde(rename = "@type", default, skip_serializing_if = "Option::is_none")]
+        pub __type: Option<NoteType>,
+        pub note: String,
+        #[serde(default, skip_serializing_if = "UTCDateTime::is_none")]
+        pub created: UTCDateTime,
+        #[serde(default, skip_serializing_if = "UTCDateTime::is_none")]
+        pub updated: UTCDateTime,
+        #[serde(default, skip_serializing_if = "Author::is_empty")]
+        pub author: Author,
+        #[serde(default, flatten, skip_serializing_if = "IndexMap::is_empty")]
+        pub extra: IndexMap<String, serde_json::Value>,
+    }
+
+    #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct Author {
+        #[serde(rename = "@type", default, skip_serializing_if = "Option::is_none")]
+        pub __type: Option<AuthorType>,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        pub name: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        pub uri: String,
+        #[serde(default, flatten, skip_serializing_if = "IndexMap::is_empty")]
+        pub extra: IndexMap<String, serde_json::Value>,
+    }
+
+    impl Author {
+        pub const fn is_empty(&self) -> bool {
+            self.name.is_empty() && self.uri.is_empty()
+        }
+    }
+
+    #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+    #[serde(rename_all = "lowercase")]
+    pub enum TitleKind {
+        #[default]
+        Title,
+        Role,
+    }
+
+    impl TitleKind {
+        pub const fn is_title(&self) -> bool {
+            matches!(self, Self::Title)
+        }
+    }
+
+    #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct Title {
+        #[serde(rename = "@type", default, skip_serializing_if = "Option::is_none")]
+        pub __type: Option<TitleType>,
+        pub name: String,
+        #[serde(default, skip_serializing_if = "TitleKind::is_title")]
+        pub kind: TitleKind,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        pub organization_id: String,
+        #[serde(default, flatten, skip_serializing_if = "IndexMap::is_empty")]
+        pub extra: IndexMap<String, serde_json::Value>,
+    }
+
+    #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct Organization {
+        #[serde(rename = "@type", default, skip_serializing_if = "Option::is_none")]
+        pub __type: Option<OrganizationType>,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        pub name: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        pub units: Vec<serde_json::Value>,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        pub sort_as: String,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        pub contexts: IndexMap<String, bool>,
+        #[serde(default, flatten, skip_serializing_if = "IndexMap::is_empty")]
+        pub extra: IndexMap<String, serde_json::Value>,
     }
 
     #[test]
     fn test_addressbook_jscontact() {
-        use super::JSContactVersion1;
-        use crate::contacts::{jscontact::JSContact, Card as MeliCard, CardId};
-
         assert_eq!(
             Card {
                 __type: CardType,
                 version: CardVersion::_1_0,
-                uid: "22B2C7DF-9120-4969-8460-05956FE6B065".to_string(),
+                uid: uuid::Uuid::try_parse("22B2C7DF-9120-4969-8460-05956FE6B065").unwrap(),
                 kind: CardKind::Individual,
                 name: Name {
                     __type: None,
@@ -881,6 +978,7 @@ pub mod json_types {
                     full: Some("full_name".to_string()),
                     is_ordered: false,
                     default_separator: None,
+                    ..Name::default()
                 },
                 emails: indexmap! {
                     "main".to_string() => EmailAddress {
@@ -889,6 +987,7 @@ pub mod json_types {
                         contexts: IndexMap::new(),
                         pref:None,
                         label: None,
+                        ..EmailAddress::default()
                     }
                 },
                 ..Card::default()
@@ -912,51 +1011,6 @@ pub mod json_types {
         }"#
             )
             .unwrap(),
-        );
-        assert_eq!(
-            MeliCard {
-                last_edited: 1727155810,
-                ..JSContact::<JSContactVersion1>::from(
-                    serde_json::from_str::<Card>(
-                        r#"{
-            "@type": "Card",
-            "version": "1.0",
-            "uid": "22B2C7DF-9120-4969-8460-05956FE6B065",
-            "kind": "individual",
-            "emails": {
-                "main": {
-                    "address": "user@example.com"
-                }
-            },
-            "name": {
-                "components": [],
-                "full": "full_name",
-                "isOrdered": false
-            }
-        }"#
-                    )
-                    .unwrap()
-                )
-                .into()
-            },
-            MeliCard {
-                id: CardId::Uuid(
-                    uuid::Uuid::try_parse("22B2C7DF-9120-4969-8460-05956FE6B065").unwrap()
-                ),
-                title: "".into(),
-                name: "full_name".into(),
-                additionalname: "".into(),
-                name_prefix: "".into(),
-                name_suffix: "".into(),
-                birthday: None,
-                email: "user@example.com".into(),
-                url: "".into(),
-                key: "".into(),
-                color: 0,
-                last_edited: 1727155810,
-                extra_properties: indexmap::indexmap! {},
-                external_resource: false
-            },
         );
     }
 }

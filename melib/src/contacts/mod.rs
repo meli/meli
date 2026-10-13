@@ -19,18 +19,12 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{
-    borrow::Borrow,
-    hash::{Hash, Hasher as _},
-    ops::Deref,
-    sync::Arc,
-};
+use std::{borrow::Borrow, hash::Hash, ops::Deref, sync::Arc};
 
 use indexmap::{IndexMap, IndexSet};
 use uuid::Uuid;
 
 pub mod backend;
-mod card;
 #[cfg(feature = "webdav")]
 pub mod carddav;
 pub mod jscontact;
@@ -38,31 +32,40 @@ pub mod mutt;
 pub mod notmuchcontact;
 pub mod vcard;
 
-pub use card::*;
+pub use jscontact::JSContactV1;
+pub type Card = JSContactV1;
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-#[serde(from = "String")]
-#[serde(into = "String")]
-pub enum CardId {
-    Uuid(Uuid),
-    Hash(u64),
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct CardId(Uuid);
+
+impl serde::Serialize for CardId {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for CardId {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = <Uuid>::deserialize(deserializer)?;
+        Ok(Self(s))
+    }
 }
 
 impl CardId {
-    pub const fn as_uuid(&self) -> Option<Uuid> {
-        let Self::Uuid(uuid) = self else {
-            return None;
-        };
-        Some(*uuid)
+    pub const fn as_uuid(&self) -> Uuid {
+        self.0
     }
 }
 
 impl std::fmt::Display for CardId {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Self::Uuid(u) => u.as_hyphenated().fmt(fmt),
-            Self::Hash(u) => u.fmt(fmt),
-        }
+        self.0.as_hyphenated().fmt(fmt)
     }
 }
 
@@ -72,19 +75,9 @@ impl From<CardId> for String {
     }
 }
 
-impl From<String> for CardId {
-    fn from(s: String) -> Self {
-        use std::{collections::hash_map::DefaultHasher, str::FromStr as _};
-
-        if let Ok(u) = Uuid::try_parse(s.as_str()) {
-            Self::Uuid(u)
-        } else if let Ok(num) = u64::from_str(s.trim()) {
-            Self::Hash(num)
-        } else {
-            let mut hasher = DefaultHasher::default();
-            s.hash(&mut hasher);
-            Self::Hash(hasher.finish())
-        }
+impl From<Uuid> for CardId {
+    fn from(u: Uuid) -> Self {
+        Self(u)
     }
 }
 
@@ -140,7 +133,7 @@ impl AddressBook {
     }
 
     pub fn add_card(&mut self, card: Card) {
-        self.cards.insert(card.id, card);
+        self.cards.insert(card.id(), card);
     }
 
     pub fn remove_card(&mut self, card_id: CardId) {
@@ -154,7 +147,10 @@ impl AddressBook {
     pub fn search(&self, term: &str) -> Vec<Card> {
         self.cards
             .values()
-            .filter(|c| c.email.contains(term) || c.name.contains(term))
+            .filter(|c| {
+                c.email().unwrap_or_default().contains(term)
+                    || c.name().unwrap_or_default().contains(term)
+            })
             .cloned()
             .collect()
     }

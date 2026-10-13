@@ -25,7 +25,10 @@
 use crate::conf::preprocessing::get_included_configs;
 use crate::version_migrations::*;
 
-use melib::contacts::{Card, CardId};
+use melib::{
+    contacts::{CardId, JSContactV1},
+    UnixTimestamp,
+};
 use toml_edit::DocumentMut;
 
 /// <https://release.meli-email.org/v0.9.0>
@@ -51,7 +54,230 @@ impl Version for V0_9_0 {
             Box::new(ServerPasswordCommand) as Box<dyn Migration + Send + Sync + 'static>,
             Box::new(AddressbookRefactor) as Box<dyn Migration + Send + Sync + 'static>,
             Box::new(ContactBackendRefactor) as Box<dyn Migration + Send + Sync + 'static>,
+            Box::new(JSContactsConversion) as Box<dyn Migration + Send + Sync + 'static>,
         ]
+    }
+}
+
+#[derive(Deserialize, Serialize)]
+struct Card {
+    id: String,
+    title: String,
+    name: String,
+    additionalname: String,
+    name_prefix: String,
+    name_suffix: String,
+    birthday: Option<UnixTimestamp>,
+    email: String,
+    url: String,
+    key: String,
+    color: u8,
+    last_edited: UnixTimestamp,
+    extra_properties: IndexMap<String, String>,
+    external_resource: bool,
+}
+
+impl From<JSContactV1> for Card {
+    fn from(val: JSContactV1) -> Self {
+        Self {
+            id: val.uid.into(),
+            name: val.name().unwrap_or_default().into_owned(),
+            email: val.email().unwrap_or_default().to_owned(),
+            url: val.url().unwrap_or_default().to_owned(),
+            key: val
+                .crypto_keys
+                .first()
+                .map(|(_, v)| v.resource.uri.clone())
+                .unwrap_or_default(),
+            birthday: val.birthday(),
+            last_edited: val.updated.0,
+            title: String::new(),
+            additionalname: String::new(),
+            name_prefix: String::new(),
+            name_suffix: String::new(),
+            color: 0,
+            extra_properties: IndexMap::default(),
+            external_resource: false,
+        }
+    }
+}
+
+impl From<Card> for JSContactV1 {
+    fn from(card: Card) -> Self {
+        use json_types::UTCDateTime;
+        use melib::contacts::jscontact::*;
+        use uuid::Uuid;
+
+        let Card {
+            id,
+            title,
+            name,
+            additionalname,
+            name_prefix,
+            name_suffix,
+            birthday,
+            email,
+            url,
+            key,
+            last_edited,
+            extra_properties,
+            external_resource: _,
+            color: _,
+        } = card;
+
+        let mut ret = Self(
+            json_types::Card::default(),
+            std::marker::PhantomData::<fn() -> JSContactVersion1>,
+        );
+        ret.0.updated = UTCDateTime(last_edited);
+        ret.0.uid = if let Ok(uid) = Uuid::try_parse(&id) {
+            uid
+        } else {
+            Uuid::new_v5(&Uuid::NAMESPACE_OID, id.as_bytes())
+        };
+        let need_fullname = title.is_empty()
+            && additionalname.is_empty()
+            && name_prefix.is_empty()
+            && name_suffix.is_empty();
+        if need_fullname {
+            if !name.is_empty() {
+                ret.0.name.full = Some(name);
+            }
+        } else {
+            use std::collections::VecDeque;
+
+            use json_types::{NameComponent, NameComponentKind::*};
+
+            let given;
+            let mut given2 = None;
+            let mut surname = None;
+            let mut surname2 = None;
+            let mut rest = None;
+
+            let words_no = name.chars().filter(|c| c.is_whitespace()).count() + 1;
+
+            if words_no == 1 {
+                given = Some(NameComponent::new(name, Given));
+            } else {
+                let mut words = name
+                    .split_whitespace()
+                    .map(|s| s.to_owned())
+                    .collect::<VecDeque<_>>();
+                given = words
+                    .pop_front()
+                    .map(|value| NameComponent::new(value, Given));
+                if words.len() > 1 {
+                    given2 = words
+                        .pop_front()
+                        .map(|value| NameComponent::new(value, Given2));
+                }
+                if words.len() > 1 {
+                    surname = words
+                        .pop_front()
+                        .map(|value| NameComponent::new(value, Surname));
+                }
+                surname2 = words
+                    .pop_front()
+                    .map(|value| NameComponent::new(value, Surname2));
+                if !words.is_empty() {
+                    rest = Some(
+                        words
+                            .into_iter()
+                            .map(|value| NameComponent::new(value, Surname2))
+                            .collect::<Vec<_>>(),
+                    );
+                }
+            }
+            if !title.is_empty() {
+                ret.0.name.components.push(NameComponent::new(title, Title));
+            }
+            if !name_prefix.is_empty() {
+                ret.0
+                    .name
+                    .components
+                    .push(NameComponent::new(name_prefix, Title));
+            }
+            if let Some(given) = given {
+                ret.0.name.components.push(given);
+            }
+            if !additionalname.is_empty() {
+                ret.0
+                    .name
+                    .components
+                    .push(NameComponent::new(additionalname, Given2));
+            }
+            if let Some(given2) = given2 {
+                ret.0.name.components.push(given2);
+            }
+            if let Some(surname) = surname {
+                ret.0.name.components.push(surname);
+            }
+            if let Some(surname2) = surname2 {
+                ret.0.name.components.push(surname2);
+            }
+            if let Some(rest) = rest {
+                ret.0.name.components.extend(rest);
+            }
+            if !name_suffix.is_empty() {
+                // Could also be `Generation` but the best we could do to detect that is heuristics
+                ret.0
+                    .name
+                    .components
+                    .push(NameComponent::new(name_suffix, Credential));
+            }
+        }
+        if let Some(birthday) = birthday {
+            use json_types::{Anniversary, AnniversaryDate, AnniversaryKind, Timestamp};
+
+            ret.0.anniversaries.insert(
+                "k0".into(),
+                Anniversary::new(
+                    AnniversaryKind::Birth,
+                    AnniversaryDate::Timestamp(Timestamp {
+                        __type: None,
+                        utc: UTCDateTime(birthday),
+                        extra: Default::default(),
+                    }),
+                ),
+            );
+        }
+        if !url.is_empty() {
+            use json_types::OnlineService;
+
+            ret.0.online_services.insert(
+                "k0".into(),
+                OnlineService {
+                    uri: url,
+                    ..OnlineService::default()
+                },
+            );
+        }
+        if !key.is_empty() {
+            use json_types::{CryptoKey, Resource};
+
+            ret.0.crypto_keys.insert(
+                "k0".into(),
+                CryptoKey {
+                    __type: None,
+                    resource: Resource {
+                        uri: key,
+                        ..Resource::default()
+                    },
+                },
+            );
+        }
+        if !extra_properties.is_empty() {
+            ret.0.extra.extend(
+                extra_properties
+                    .into_iter()
+                    .map(|(s, v)| (s, serde_json::Value::String(v))),
+            );
+        }
+        ret.0
+            .emails
+            .insert("main".into(), json_types::EmailAddress::new(email));
+
+        ret
     }
 }
 
@@ -229,10 +455,10 @@ impl AddressbookRefactor {
         #[derive(Deserialize, Serialize)]
         struct PreviousContacts {
             display_name: String,
-            cards: IndexMap<CardId, Card>,
+            cards: IndexMap<String, Card>,
         }
         let retval = if revert {
-            let cards: IndexMap<CardId, Card> = match serde_json::from_str(contents) {
+            let cards: IndexMap<String, Card> = match serde_json::from_str(contents) {
                 Ok(v) => v,
                 Err(err) => {
                     if serde_json::from_str::<PreviousContacts>(contents).is_ok() {
@@ -250,7 +476,7 @@ impl AddressbookRefactor {
             let previous: PreviousContacts = match serde_json::from_str(contents) {
                 Ok(v) => v,
                 Err(err) => {
-                    if serde_json::from_str::<IndexMap<CardId, Card>>(contents).is_ok() {
+                    if serde_json::from_str::<IndexMap<String, Card>>(contents).is_ok() {
                         return Ok(contents.to_string());
                     }
                     return Err(err.into());
@@ -616,6 +842,188 @@ impl Migration for ContactBackendRefactor {
     }
 }
 
+/// Change `contacts` serialization format
+///
+/// "The storage file for contacts, stored in the application's data folder, changed format."
+#[derive(Clone, Copy, Debug)]
+struct JSContactsConversion;
+
+impl JSContactsConversion {
+    fn create_backup_file(path: &Path, contents: &str, extension: &str) -> Result<PathBuf> {
+        let mut path = path.to_path_buf();
+        path.set_extension(extension);
+        let mut i: u8 = 0;
+        while path.try_exists().unwrap_or(false) {
+            if let Ok(c) = std::fs::read_to_string(&path) {
+                if c == contents {
+                    break;
+                }
+            }
+            if i == u8::MAX {
+                path.set_extension("");
+                return Err(Error::new(format!("Something has gone horribly wrong, and there are too many (over {}) backup files of path {}. Please cleanup the folder and try again. meli is aborting out of caution.", u8::MAX, path.display())).set_related_path(Some(path)));
+            }
+            i += 1;
+            path.set_extension(format!("{extension}{i}"));
+        }
+        Ok(path)
+    }
+
+    fn convert_contacts(contents: &str, revert: bool) -> Result<String> {
+        let retval = if revert {
+            let previous: IndexMap<CardId, JSContactV1> = match serde_json::from_str(contents) {
+                Ok(v) => v,
+                Err(err) => {
+                    if serde_json::from_str::<IndexMap<String, Card>>(contents).is_ok() {
+                        return Ok(contents.to_string());
+                    }
+                    return Err(err.into());
+                }
+            };
+            let cards: IndexMap<String, Card> = previous
+                .into_iter()
+                .map(|(k, v)| (k.into(), v.into()))
+                .collect();
+            serde_json::to_string(&cards)?
+        } else {
+            let cards: IndexMap<String, Card> = match serde_json::from_str(contents) {
+                Ok(v) => v,
+                Err(err) => {
+                    if serde_json::from_str::<IndexMap<CardId, JSContactV1>>(contents).is_ok() {
+                        return Ok(contents.to_string());
+                    }
+                    return Err(err.into());
+                }
+            };
+            let new: IndexMap<CardId, JSContactV1> = cards
+                .into_iter()
+                .map(|(_, v)| {
+                    let v: JSContactV1 = v.into();
+                    (v.id(), v)
+                })
+                .collect();
+            serde_json::to_string(&new)?
+        };
+
+        Ok(retval)
+    }
+}
+
+impl Migration for JSContactsConversion {
+    fn id(&self) -> &'static str {
+        melib::identify! { JSContactsConversion }
+    }
+
+    fn version(&self) -> &VersionIdentifier {
+        &V0_9_0_ID
+    }
+
+    fn description(&self) -> &str {
+        "The storage file for contacts, stored in the application's data folder, changed format."
+    }
+
+    fn question(&self) -> &str {
+        "Convert ${XDG_DATA_HOME}/meli/*/contacts files to new format? (you might want to backup manually before you do this; a backup will be created by default in the same folder with a .bkp suffixed filename)"
+    }
+
+    fn is_applicable(&self, config: &Path) -> Option<bool> {
+        if !config.try_exists().unwrap_or(false) {
+            return Some(false);
+        }
+        let Ok(settings) = FileSettings::validate(config.to_path_buf(), false) else {
+            return Some(false);
+        };
+        let mut any = false;
+        for account in settings.accounts.keys() {
+            let Ok(data_dir) = xdg::BaseDirectories::with_profile("meli", account) else {
+                return Some(false);
+            };
+            if let Ok(contacts) = data_dir.place_data_file("contacts") {
+                any |= contacts.try_exists().unwrap_or(false);
+            }
+        }
+        Some(any)
+    }
+
+    fn perform(&self, config: &Path, dry_run: bool, verbose: bool) -> Result<()> {
+        let settings = FileSettings::validate(config.to_path_buf(), false)?;
+
+        if !dry_run {
+            self.perform(config, true, false)
+                .chain_err_summary(|| "No files were converted.")?;
+        }
+        for account in settings.accounts.keys() {
+            let data_dir = xdg::BaseDirectories::with_profile("meli", account)?;
+            if let Ok(contacts) = data_dir.place_data_file("contacts") {
+                if !contacts.try_exists().unwrap_or(false) {
+                    continue;
+                }
+                let contents =
+                    std::fs::read_to_string(&contacts).chain_err_related_path(&contacts)?;
+                let new =
+                    Self::convert_contacts(&contents, false).chain_err_related_path(&contacts)?;
+                if !dry_run {
+                    let bkp_filepath = Self::create_backup_file(&contacts, &contents, "bkp")?;
+                    std::fs::write(&bkp_filepath, &contents)
+                        .chain_err_related_path(&bkp_filepath)?;
+                    if verbose {
+                        log::info!(
+                            "Migration {}/{}: {} is backed up at {}.",
+                            self.version().as_str(),
+                            self.id(),
+                            contacts.display(),
+                            bkp_filepath.display()
+                        );
+                    }
+                    std::fs::write(&contacts, &new).chain_err_related_path(&contacts)?;
+                }
+                if verbose {
+                    log::info!(
+                        "Migration {}/{}: Converted {}.",
+                        self.version().as_str(),
+                        self.id(),
+                        contacts.display()
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn revert(&self, config: &Path, dry_run: bool, verbose: bool) -> Result<()> {
+        let settings = FileSettings::validate(config.to_path_buf(), false)?;
+
+        if !dry_run {
+            self.revert(config, true, false)
+                .chain_err_summary(|| "No files were converted.")?;
+        }
+        for account in settings.accounts.keys() {
+            let data_dir = xdg::BaseDirectories::with_profile("meli", account)?;
+            if let Ok(contacts) = data_dir.place_data_file("contacts") {
+                if !contacts.try_exists().unwrap_or(false) {
+                    continue;
+                }
+                let contents =
+                    std::fs::read_to_string(&contacts).chain_err_related_path(&contacts)?;
+                let new =
+                    Self::convert_contacts(&contents, true).chain_err_related_path(&contacts)?;
+                if !dry_run {
+                    std::fs::write(&contacts, &new).chain_err_related_path(&contacts)?;
+                }
+                if verbose {
+                    log::info!(
+                            "Reverted migration {}/{}: Converted {}. You might wish to cleanup backed up files in the directory or use them instead.",
+                            self.version().as_str(),
+                            self.id(),
+                            contacts.display()
+                        );
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -638,6 +1046,11 @@ mod tests {
             fn test_contact_backend_refactor() {
                 run_contact_backend_refactor()
             }
+
+        #[test]
+        fn test_jscontact_conversion() {
+            run_jscontact_conversion()
+        }
     }
 
     fn run_version_migration_server_password_command() {
@@ -765,5 +1178,48 @@ contacts = { notmuch_address_book_query = { type = "NotmuchAddress", value = "no
         );
         ContactBackendRefactor::revert_transform(&mut doc, true).unwrap();
         assert_eq!(doc.to_string(), input);
+    }
+
+    fn run_jscontact_conversion() {
+        let _logger = Logger::new_with(LogLevel::TRACE, true);
+        let tempdir = tempfile::tempdir().unwrap();
+        const PREVIOUS: &str = r#"{"16178106601568626693":{"id":"16178106601568626693","title":"","name":"User 2","additionalname":"","name_prefix":"","name_suffix":"","birthday":null,"email":"user2@example.com","url":"","key":"","color":0,"last_edited":1740521725,"extra_properties":{},"external_resource":false}}"#;
+        const REVERT: &str = "{\"3ec00657-bcc5-59ec-aeb1-de6615987560\":{\"id\":\"3ec00657-bcc5-59ec-aeb1-de6615987560\",\"title\":\"\",\"name\":\"User 2\",\"additionalname\":\"\",\"name_prefix\":\"\",\"name_suffix\":\"\",\"birthday\":null,\"email\":\"user2@example.com\",\"url\":\"\",\"key\":\"\",\"color\":0,\"last_edited\":1740521725,\"extra_properties\":{},\"external_resource\":false}}";
+        const NEW: &str = "{\"3ec00657-bcc5-59ec-aeb1-de6615987560\":{\"@type\":\"Card\",\"version\":\"1.0\",\"uid\":\"3ec00657-bcc5-59ec-aeb1-de6615987560\",\"updated\":\"2025-02-25T22:15:25Z\",\"name\":{\"full\":\"User 2\"},\"emails\":{\"main\":{\"address\":\"user2@example.com\"}}}}";
+        let prev = tempdir.path().join("contacts_prev");
+        let new = tempdir.path().join("contacts_new");
+        std::fs::write(&prev, PREVIOUS).unwrap();
+        std::fs::write(&new, NEW).unwrap();
+        // perform
+        assert_eq!(
+            &JSContactsConversion::convert_contacts(PREVIOUS, false).unwrap(),
+            NEW
+        );
+        // revert
+        assert_eq!(
+            &JSContactsConversion::convert_contacts(NEW, true).unwrap(),
+            REVERT
+        );
+        // roundtrip
+        assert_eq!(
+            &JSContactsConversion::convert_contacts(
+                &JSContactsConversion::convert_contacts(NEW, true).unwrap(),
+                false
+            )
+            .unwrap(),
+            NEW
+        );
+        let bkp_filepath = JSContactsConversion::create_backup_file(&new, NEW, "bkp").unwrap();
+        assert_eq!(
+            bkp_filepath.file_name().unwrap().to_string_lossy().as_ref(),
+            "contacts_new.bkp"
+        );
+        std::fs::write(&bkp_filepath, b"1").unwrap();
+        let bkp_filepath =
+            JSContactsConversion::create_backup_file(&bkp_filepath, NEW, "bkp").unwrap();
+        assert_eq!(
+            bkp_filepath.file_name().unwrap().to_string_lossy().as_ref(),
+            "contacts_new.bkp1"
+        );
     }
 }

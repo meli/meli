@@ -26,12 +26,11 @@ use crate::{
     components::prelude::*,
     terminal::*,
     types::NotificationType,
-    utilities::form::{FormButtonAction, TextField},
+    utilities::form::{Field, FormButtonAction},
     AutoCompleteEntry, CellBuffer, Component, ComponentId, Context, File, Key, UIEvent,
 };
 
-type FormWidget =
-    crate::utilities::form::FormWidget<FormButtonAction, Cow<'static, str>, TextField>;
+type FormWidget = crate::utilities::form::FormWidget<FormButtonAction, Cow<'static, str>, Field>;
 
 #[derive(Debug)]
 pub struct ContactExportDialog {
@@ -125,6 +124,10 @@ impl ContactExportDialog {
                 }
             }),
         ));
+        form.push_choices((
+            "Format".into(),
+            vec!["VCard v4".into(), "JSContact v1".into()],
+        ));
         form.add_button(("Export".into(), FormButtonAction::Accept));
         Self {
             id: ComponentId::default(),
@@ -177,39 +180,47 @@ impl Component for ContactExportDialog {
             match self.form.buttons_result() {
                 None => {}
                 Some(FormButtonAction::Accept) => {
-                    let output_dir: String = self
-                        .form
-                        .values()
-                        .first()
-                        .map(|(_, v)| v.as_str().to_string())
-                        .expect("path field in form");
+                    let output_dir: String = self.form.values()["Path or directory"]
+                        .as_text_field()
+                        .expect("path field in form")
+                        .as_str()
+                        .to_owned();
+                    if output_dir.is_empty() {
+                        return true;
+                    }
                     let card = &self.card;
+                    let is_vcf: bool = {
+                        let field = self.form.values()["Format"]
+                            .as_choice_field()
+                            .expect("format field in form");
+                        field.values[field.cursor] == "VCard v4"
+                    };
                     let output_dir = std::path::Path::new(&output_dir).expand();
                     let filename = if output_dir.is_dir() {
                         Some(format!(
-                            "{prefix}{name}{suffix}{space}{additionalname}",
-                            prefix = card.name_prefix(),
-                            name = card.name(),
-                            suffix = card.name_suffix(),
-                            space = if card.additionalname().trim().is_empty() {
-                                ""
-                            } else {
-                                " "
-                            },
-                            additionalname = card.additionalname()
+                            "{prefix}_{name}",
+                            prefix = card.uid,
+                            name = card.name().unwrap_or_default(),
                         ))
                     } else {
                         None
                     };
+                    let extension_s = if is_vcf { "vcf" } else { "json" };
                     let extension = if output_dir.is_dir() {
-                        Some("vcf")
+                        Some(extension_s)
                     } else {
                         None
                     };
 
+                    let output_string = if is_vcf {
+                        card.to_vcard_string()
+                    } else {
+                        serde_json::to_string(&card).expect("serialize JSContact")
+                    };
+
                     let mut output_dir = Some(output_dir);
                     let res = File::create_temp_file(
-                        card.to_vcard_string().as_bytes(),
+                        output_string.as_bytes(),
                         filename.as_deref(),
                         output_dir.as_mut(),
                         extension,
@@ -218,10 +229,18 @@ impl Component for ContactExportDialog {
                     match res {
                         Ok(f) => {
                             context.replies.push_back(UIEvent::Notification {
-                                title: Some("Exported .vcf".into()),
+                                title: Some(
+                                    if is_vcf {
+                                        "Exported .vcf"
+                                    } else {
+                                        "Exported JSContact"
+                                    }
+                                    .into(),
+                                ),
                                 body: format!(
-                                    "Exported contact to vcard file to\n{}",
-                                    f.path().display()
+                                    "Exported contact to {fmt} file to\n{path}",
+                                    fmt = extension_s,
+                                    path = f.path().display()
                                 )
                                 .into(),
                                 kind: Some(NotificationType::Info),

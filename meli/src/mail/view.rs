@@ -28,8 +28,8 @@ use std::{
 
 use indexmap::IndexSet;
 use melib::{
-    email::attachment_types::ContentType, list_management, mailto::Mailto, parser::BytesExt as _,
-    Card, Draft, FlagOp, HeaderName, SpecialUsageMailbox,
+    contacts::Card, email::attachment_types::ContentType, list_management, mailto::Mailto,
+    parser::BytesExt as _, Draft, FlagOp, HeaderName, SpecialUsageMailbox,
 };
 use smallvec::SmallVec;
 
@@ -277,7 +277,7 @@ impl MailView {
             ret
         };
 
-        let mut entries: IndexMap<Card, (Card, String)> = IndexMap::default();
+        let mut entries: Vec<(Card, String)> = vec![];
         for addr in envelope
             .from()
             .iter()
@@ -288,19 +288,13 @@ impl MailView {
                 continue;
             }
             seen.insert(addr.clone());
-            let mut new_card: Card = Card::new();
-            new_card
-                .set_email(addr.get_email().to_string())
-                .set_id(addr.get_email().to_string().into());
-            if let Some(display_name) = addr.get_display_name() {
-                new_card.set_name(display_name.to_string());
-            }
-            entries.insert(new_card.clone(), (new_card, format!("{addr}")));
+            let new_contact: Card = Card::from(addr);
+            entries.push((new_contact, addr.to_string()));
         }
         drop(envelope);
         self.contact_selector = Some(Box::new(Selector::new(
             "select contacts to add",
-            entries.into_iter().map(|(_, v)| v).collect(),
+            entries,
             false,
             Some(Box::new(
                 move |id: ComponentId, results: &[Card], context| {
@@ -430,8 +424,8 @@ impl Component for MailView {
                     let account = &mut context.accounts[&coordinates.0];
                     {
                         if let Some((_, book)) = account.contacts.books.get_index_mut(0) {
-                            for card in results.iter() {
-                                book.add_card(card.clone());
+                            for contact in results.iter() {
+                                book.add_card(contact.clone());
                             }
                         }
                     }

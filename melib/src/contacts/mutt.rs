@@ -70,7 +70,7 @@ pub fn parse_mutt_contact<'a>() -> impl Parser<'a, Card> {
                 let mut tokens = l.split_whitespace().collect::<VecDeque<&str>>();
 
                 let mut ret = Card::new();
-                let title = tokens.pop_front().ok_or(l)?.to_string();
+                let nickname = tokens.pop_front().ok_or(l)?.to_string();
                 let mut email = tokens.pop_back().ok_or(l)?.to_string();
                 if email.starts_with('<') && email.ends_with('>') {
                     email.pop();
@@ -82,10 +82,11 @@ pub fn parse_mutt_contact<'a>() -> impl Parser<'a, Card> {
                     acc
                 });
                 name.pop();
-                if name.trim().is_empty() {
-                    name.clone_from(&title);
+                if !name.is_empty() {
+                    ret.name = name.into();
                 }
-                ret.set_title(title).set_email(email).set_name(name);
+                ret.nicknames.insert("k0".into(), nickname.into());
+                ret.emails.insert("k0".into(), email.into());
                 Ok::<Card, &'a str>(ret)
             },
         )
@@ -135,7 +136,7 @@ impl ContactBackend for MuttContacts {
                 }
             };
 
-            let cards = cards.into_iter().map(|c| (c.id, c)).collect();
+            let cards = cards.into_iter().map(|c| (c.id(), c)).collect();
             Ok(AddressBook {
                 name,
                 cards,
@@ -171,21 +172,27 @@ fn test_mutt_contacts() {
     let b = "alias mumon      foobar@example.com";
     let c = "alias <nickname> <long name> <address>";
 
-    let (other, a_card) = parse_mutt_contact().parse(a).unwrap();
+    let (other, card) = parse_mutt_contact().parse(a).unwrap();
     assert!(other.is_empty());
-    assert_eq!(a_card.name(), "My dear pupil Mumon");
-    assert_eq!(a_card.title(), "mumon");
-    assert_eq!(a_card.email(), "foobar@example.com");
+    assert_eq!(card.name.full.as_deref().unwrap(), "My dear pupil Mumon");
+    assert_eq!(&card.nicknames.first().unwrap().1.name, "mumon");
+    assert_eq!(
+        &card.emails.first().unwrap().1.address,
+        "foobar@example.com"
+    );
 
-    let (other, b_card) = parse_mutt_contact().parse(b).unwrap();
+    let (other, card) = parse_mutt_contact().parse(b).unwrap();
     assert!(other.is_empty());
-    assert_eq!(b_card.name(), "mumon");
-    assert_eq!(b_card.title(), "mumon");
-    assert_eq!(b_card.email(), "foobar@example.com");
+    assert_eq!(card.name.full.as_deref(), None);
+    assert_eq!(&card.nicknames.first().unwrap().1.name, "mumon");
+    assert_eq!(
+        &card.emails.first().unwrap().1.address,
+        "foobar@example.com"
+    );
 
-    let (other, c_card) = parse_mutt_contact().parse(c).unwrap();
+    let (other, card) = parse_mutt_contact().parse(c).unwrap();
     assert!(other.is_empty());
-    assert_eq!(c_card.name(), "<long name>");
-    assert_eq!(c_card.title(), "<nickname>");
-    assert_eq!(c_card.email(), "address");
+    assert_eq!(card.name.full.as_deref().unwrap(), "<long name>");
+    assert_eq!(&card.nicknames.first().unwrap().1.name, "<nickname>");
+    assert_eq!(&card.emails.first().unwrap().1.address, "address");
 }

@@ -165,19 +165,25 @@ mod tests {
 
         let tempdir = tempfile::tempdir().unwrap();
         let mut context = crate::Context::new_mock(&tempdir);
-        let card_a = Card {
-            email: "foo@example.com".into(),
-            ..Card::default()
+        let card_a = {
+            let mut card = Card::new();
+            card.emails
+                .insert("k0".into(), "foo@example.com".to_string().into());
+            card
         };
-        let card_b = Card {
-            name: "Bar Jr".into(),
-            email: "bar@example.com".into(),
-            ..Card::default()
+        let card_b = {
+            let mut card = Card::new();
+            card.name = "Bar Jr".to_string().into();
+            card.emails
+                .insert("k0".into(), "bar@example.com".to_string().into());
+            card
         };
-        let card_c = Card {
-            name: "Nightmare D. Macdonald".into(),
-            email: "nightd@example.com".into(),
-            ..Card::default()
+        let card_c = {
+            let mut card = Card::new();
+            card.name = "Nightmare D. Macdonald".to_string().into();
+            card.emails
+                .insert("k0".into(), "nightd@example.com".to_string().into());
+            card
         };
         let account_hash = context.accounts[0].hash;
         context.accounts[0].contacts.books[0].add_card(card_a);
@@ -193,7 +199,7 @@ mod tests {
             complete_fn(&context, "foo"),
             vec![AutoCompleteEntry {
                 entry: "foo@example.com".into(),
-                description: "default [meli Card]".into()
+                description: "default [meli JSContactV1]".into()
             }]
         );
         // Ensure first completion is not quoted if not necessary
@@ -201,7 +207,7 @@ mod tests {
             complete_fn(&context, "bar"),
             vec![AutoCompleteEntry {
                 entry: "Bar Jr <bar@example.com>".into(),
-                description: "default [meli Card]".into()
+                description: "default [meli JSContactV1]".into()
             }]
         );
         // Ensure first completion is properly quoted if necessary
@@ -209,7 +215,7 @@ mod tests {
             complete_fn(&context, "Nightmare"),
             vec![AutoCompleteEntry {
                 entry: "\"Nightmare D. Macdonald\" <nightd@example.com>".into(),
-                description: "default [meli Card]".into()
+                description: "default [meli JSContactV1]".into()
             }]
         );
         // Ensure a full match is not completed until you add a comma
@@ -219,12 +225,12 @@ mod tests {
             vec![
                 AutoCompleteEntry {
                     entry: "foo@example.com, Bar Jr <bar@example.com>".into(),
-                    description: "default [meli Card]".into()
+                    description: "default [meli JSContactV1]".into()
                 },
                 AutoCompleteEntry {
                     entry: "foo@example.com, \"Nightmare D. Macdonald\" <nightd@example.com>"
                         .into(),
-                    description: "default [meli Card]".into()
+                    description: "default [meli JSContactV1]".into()
                 }
             ]
         );
@@ -233,12 +239,12 @@ mod tests {
             vec![
                 AutoCompleteEntry {
                     entry: "foo@example.com, Bar Jr <bar@example.com>".into(),
-                    description: "default [meli Card]".into()
+                    description: "default [meli JSContactV1]".into()
                 },
                 AutoCompleteEntry {
                     entry: "foo@example.com, \"Nightmare D. Macdonald\" <nightd@example.com>"
                         .into(),
-                    description: "default [meli Card]".into()
+                    description: "default [meli JSContactV1]".into()
                 }
             ]
         );
@@ -248,7 +254,7 @@ mod tests {
             complete_fn(&context, "foo@example.com, Nightm"),
             vec![AutoCompleteEntry {
                 entry: "foo@example.com, \"Nightmare D. Macdonald\" <nightd@example.com>".into(),
-                description: "default [meli Card]".into()
+                description: "default [meli JSContactV1]".into()
             }]
         );
         // Ensure values are not repeated

@@ -127,17 +127,17 @@ impl AddressBookList {
 
         for c in contacts.values() {
             // name
-            let name = c.name().grapheme_len();
+            let name = c.name().unwrap_or_default().grapheme_len();
             if name > 0 {
                 min_width.0 = min_width.0.max(name + 1);
             }
             // email
-            let email = c.email().grapheme_len();
+            let email = c.email().unwrap_or_default().grapheme_len();
             if email > 0 {
                 min_width.1 = min_width.1.max(email + 1);
             }
             // url
-            let url = c.url().grapheme_len();
+            let url = c.url().unwrap_or_default().grapheme_len();
             if url > 0 {
                 min_width.2 = min_width.2.max(url + 1);
             }
@@ -153,40 +153,40 @@ impl AddressBookList {
         let mut book_values = contacts.values().collect::<Vec<&Card>>();
         book_values.sort_unstable_by_key(|c| c.name());
         for (idx, c) in book_values.iter().enumerate() {
-            self.id_positions.push(*c.id());
+            self.id_positions.push(c.id());
 
-            {
+            if let Some(name) = c.name() {
                 let area = self.data_columns.columns[0].area().nth_row(idx);
                 self.data_columns.columns[0].grid_mut().write_string(
-                    c.name(),
+                    &name,
                     &self.theme_default,
                     area,
                     None,
                     None,
-                )
-            };
+                );
+            }
 
-            {
+            if let Some(email) = c.email() {
                 let area = self.data_columns.columns[1].area().nth_row(idx);
                 self.data_columns.columns[1].grid_mut().write_string(
-                    c.email(),
+                    email,
                     &self.theme_default,
                     area,
                     None,
                     None,
-                )
-            };
+                );
+            }
 
-            {
+            if let Some(url) = c.url() {
                 let area = self.data_columns.columns[2].area().nth_row(idx);
                 self.data_columns.columns[2].grid_mut().write_string(
-                    c.url(),
+                    url,
                     &self.theme_default,
                     area,
                     None,
                     None,
-                )
-            };
+                );
+            }
         }
     }
 
@@ -502,8 +502,10 @@ impl Component for AddressBookList {
                 let card = &context.accounts[&self.account_hash].contacts.books[&self.backend_id]
                     [&self.id_positions[self.cursor_pos]];
                 let mut draft: Draft = Draft::default();
-                *draft.headers_mut().get_mut("To").unwrap() =
-                    format!("{} <{}>", card.name(), card.email());
+                *draft
+                    .headers_mut()
+                    .entry(melib::HeaderName::TO)
+                    .or_default() = card.as_address().to_string();
                 let mut composer = Composer::with_account(self.account_hash, context);
                 composer.set_draft(draft, context);
                 context

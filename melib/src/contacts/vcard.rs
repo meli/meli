@@ -27,15 +27,16 @@
 //! - Version 4 [RFC 6350: vCard Format Specification](https://datatracker.ietf.org/doc/rfc6350/)
 //! - Parameter escaping [RFC 6868 Parameter Value Encoding in iCalendar and vCard](https://datatracker.ietf.org/doc/rfc6868/)
 
-use std::{convert::TryInto, hash::Hasher as _, path::PathBuf};
+use std::{convert::TryInto, path::PathBuf};
 
 use indexmap::IndexMap;
+use uuid::Uuid;
 
 use crate::{
     backends::prelude::ResultFuture,
     contacts::{
         backend::{ContactBackend, ContactBackendCapabilities},
-        AddressBook, AddressBookName, Card, CardId,
+        AddressBook, AddressBookName, Card,
     },
     error::{Error, ErrorKind, Result, ResultIntoError as _},
     utils::{
@@ -232,71 +233,116 @@ impl CardDeserializer {
 impl<V: VCardVersion> TryInto<Card> for VCard<V> {
     type Error = crate::error::Error;
 
+    /// Lossily convert according to `RFC9555`.
+    ///
+    /// `Loffredo, M. and R. Stepanek, "JSContact: Converting from and to vCard", RFC 9555, DOI
+    /// 10.17487/RFC9555, May 2024, <https://www.rfc-editor.org/info/rfc9555/>.`
     fn try_into(mut self) -> Result<Card> {
         let mut card = Card::new();
-        card.set_id(CardId::Hash({
-            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        card.uid = if let Some(val) = self.0.get("UID") {
+            Uuid::try_parse(&val.value)?
+        } else {
+            let mut value = String::new();
             if let Some(val) = self.0.get("FN") {
-                hasher.write(val.value.as_bytes());
+                value.push_str(&val.value);
             }
             if let Some(val) = self.0.get("N") {
-                hasher.write(val.value.as_bytes());
+                value.push_str(&val.value);
             }
             if let Some(val) = self.0.get("EMAIL") {
-                hasher.write(val.value.as_bytes());
+                value.push_str(&val.value);
             }
-            hasher.finish()
-        }));
+            Uuid::new_v5(&Uuid::NAMESPACE_OID, value.as_bytes())
+        };
         if let Some(val) = self.0.swap_remove("FN") {
-            card.set_name(val.value);
-        } else {
-            return Err(Error::new("FN entry missing in VCard.").set_kind(ErrorKind::ValueError));
+            card.name = val.value.into();
         }
         if let Some(val) = self.0.swap_remove("NICKNAME") {
-            card.set_additionalname(val.value);
+            card.nicknames.insert("k0".into(), val.value.into());
         }
         if let Some(val) = self.0.swap_remove("BDAY") {
-            /* 4.3.4.  DATE-AND-OR-TIME
-
-            Either a DATE-TIME, a DATE, or a TIME value.  To allow unambiguous
-            interpretation, a stand-alone TIME value is always preceded by a "T".
-
-            Examples for "date-and-or-time":
-
-                      19961022T140000
-                      --1022T1400
-                      ---22T14
-                      19850412
-                      1985-04
-                      1985
-                      --0412
-                      ---12
-                      T102200
-                      T1022
-                      T10
-                      T-2200
-                      T--00
-                      T102200Z
-                      T102200-0800
-                      */
-            card.birthday =
+            // 4.3.4.  DATE-AND-OR-TIME
+            // Either a DATE-TIME, a DATE, or a TIME value.  To allow unambiguous
+            // interpretation, a stand-alone TIME value is always preceded by a "T".
+            // Examples for "date-and-or-time":
+            //           19961022T140000
+            //           --1022T1400
+            //           ---22T14
+            //           19850412
+            //           1985-04
+            //           1985
+            //           --0412
+            //           ---12
+            //           T102200
+            //           T1022
+            //           T10
+            //           T-2200
+            //           T--00
+            //           T102200Z
+            //           T102200-0800
+            use crate::contacts::jscontact::json_types::{
+                Anniversary, AnniversaryDate, AnniversaryKind, Timestamp, UTCDateTime,
+            };
+            if let Some(birthday) =
                 crate::utils::datetime::timestamp_from_string(val.value.as_str(), "%Y%m%d\0")
-                    .unwrap_or_default();
+                    .unwrap_or_default()
+            {
+                card.0.anniversaries.insert(
+                    "k0".into(),
+                    Anniversary::new(
+                        AnniversaryKind::Birth,
+                        AnniversaryDate::Timestamp(Timestamp::new(UTCDateTime(birthday))),
+                    ),
+                );
+            }
         }
         if let Some(val) = self.0.swap_remove("EMAIL") {
-            card.set_email(val.value);
+            if !val.value.is_empty() {
+                card.emails.insert("k0".into(), val.value.into());
+            }
         }
         if let Some(val) = self.0.swap_remove("URL") {
-            card.set_url(val.value);
+            use crate::contacts::jscontact::json_types::OnlineService;
+
+            if !val.value.is_empty() {
+                card.0.online_services.insert(
+                    "k0".into(),
+                    OnlineService {
+                        uri: val.value,
+                        ..OnlineService::default()
+                    },
+                );
+            }
         }
         if let Some(val) = self.0.swap_remove("KEY") {
-            card.set_key(val.value);
-        }
-        for (k, v) in self.0.into_iter() {
-            if k.eq_ignore_ascii_case("VERSION") || k.eq_ignore_ascii_case("N") {
-                continue;
+            use crate::contacts::jscontact::json_types::{CryptoKey, Resource};
+            if !val.value.is_empty() {
+                card.0.crypto_keys.insert(
+                    "k0".into(),
+                    CryptoKey {
+                        __type: None,
+                        resource: Resource {
+                            uri: val.value,
+                            ..Resource::default()
+                        },
+                    },
+                );
             }
-            card.set_extra_property(&k, v.value);
+        }
+        if let Some(val) = self.0.swap_remove("KIND") {
+            // RFC 9555 2.4.2. KIND
+            use crate::contacts::jscontact::json_types::CardKind;
+            card.0.kind = match val.value.as_str() {
+                v if v.eq_ignore_ascii_case(CardKind::Individual.as_str()) => CardKind::Individual,
+                v if v.eq_ignore_ascii_case(CardKind::Group.as_str()) => CardKind::Group,
+                v if v.eq_ignore_ascii_case(CardKind::Org.as_str()) => CardKind::Org,
+                v if v.eq_ignore_ascii_case(CardKind::Location.as_str()) => CardKind::Location,
+                v if v.eq_ignore_ascii_case(CardKind::Device.as_str()) => CardKind::Device,
+                v if v.eq_ignore_ascii_case(CardKind::Application.as_str()) => {
+                    CardKind::Application
+                }
+                _ => CardKind::default(),
+            };
         }
 
         Ok(card)
@@ -335,11 +381,6 @@ pub fn load_cards(p: &std::path::Path) -> Result<Vec<Card>> {
                         ret.push(
                             CardDeserializer::try_from_str(s)
                                 .and_then(TryInto::try_into)
-                                .map(|mut card| {
-                                    Card::set_external_resource(&mut card, true);
-                                    is_any_valid = true;
-                                    card
-                                })
                                 .map_err(|err| err.set_related_path(Some(&f))),
                         );
                     }
@@ -353,6 +394,8 @@ pub fn load_cards(p: &std::path::Path) -> Result<Vec<Card>> {
     for c in &ret {
         if c.is_err() {
             log::debug!("Error parsing contact from {}: {c:?}", p.display());
+        } else {
+            is_any_valid = true;
         }
     }
     if is_any_valid {
@@ -398,7 +441,7 @@ impl ContactBackend for VCardContacts {
                     err
                 })?
                 .into_iter()
-                .map(|c| (c.id, c))
+                .map(|c| (c.id(), c))
                 .collect();
 
             Ok(AddressBook {

@@ -684,6 +684,15 @@ impl From<base64::DecodeError> for Error {
     }
 }
 
+impl From<uuid::Error> for Error {
+    #[inline]
+    fn from(err: uuid::Error) -> Self {
+        Self::from_inner(Arc::new(err))
+            .set_summary("UUID parsing failed")
+            .set_kind(ErrorKind::ValueError)
+    }
+}
+
 impl From<xdg::BaseDirectoriesError> for Error {
     fn from(err: xdg::BaseDirectoriesError) -> Self {
         Self::from_inner(Arc::new(err))
