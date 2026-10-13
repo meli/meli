@@ -108,19 +108,210 @@ impl<V: JSContactVersion> From<JSContact<V>> for Card {
 
 impl From<Card> for JSContact<JSContactVersion1> {
     fn from(card: Card) -> Self {
+        use json_types::UTCDateTime;
+
+        let Card {
+            id,
+            title,
+            name,
+            additionalname,
+            name_prefix,
+            name_suffix,
+            birthday,
+            email,
+            url,
+            key,
+            last_edited,
+            extra_properties,
+            external_resource: _,
+            color: _,
+        } = card;
+
         let mut ret = Self(
             json_types::Card::default(),
             std::marker::PhantomData::<fn() -> JSContactVersion1>,
         );
-        if let CardId::Uuid(uid) = card.id {
+        ret.0.updated = UTCDateTime(last_edited);
+        if let CardId::Uuid(uid) = id {
             ret.0.uid = uid.to_string();
         }
-        ret.0.name.full = Some(card.name);
+        let need_fullname = title.is_empty()
+            && additionalname.is_empty()
+            && name_prefix.is_empty()
+            && name_suffix.is_empty();
+        if need_fullname {
+            if !name.is_empty() {
+                ret.0.name.full = Some(name);
+            }
+        } else {
+            use std::collections::VecDeque;
+
+            use json_types::{NameComponent, NameComponentKind::*};
+
+            let given;
+            let mut given2 = None;
+            let mut surname = None;
+            let mut surname2 = None;
+            let mut rest = None;
+
+            let words_no = name.chars().filter(|c| c.is_whitespace()).count() + 1;
+
+            if words_no == 1 {
+                given = Some(NameComponent {
+                    __type: None,
+                    value: name,
+                    kind: Given,
+                    phonetic: String::new(),
+                });
+            } else {
+                let mut words = name
+                    .split_whitespace()
+                    .map(|s| s.to_owned())
+                    .collect::<VecDeque<_>>();
+                given = words.pop_front().map(|value| NameComponent {
+                    __type: None,
+                    value,
+                    kind: Given,
+                    phonetic: String::new(),
+                });
+                if words.len() > 1 {
+                    given2 = words.pop_front().map(|value| NameComponent {
+                        __type: None,
+                        value,
+                        kind: Given2,
+                        phonetic: String::new(),
+                    });
+                }
+                if words.len() > 1 {
+                    surname = words.pop_front().map(|value| NameComponent {
+                        __type: None,
+                        value,
+                        kind: Surname,
+                        phonetic: String::new(),
+                    });
+                }
+                surname2 = words.pop_front().map(|value| NameComponent {
+                    __type: None,
+                    value,
+                    kind: Surname2,
+                    phonetic: String::new(),
+                });
+                if !words.is_empty() {
+                    rest = Some(
+                        words
+                            .into_iter()
+                            .map(|value| NameComponent {
+                                __type: None,
+                                value,
+                                kind: Surname2,
+                                phonetic: String::new(),
+                            })
+                            .collect::<Vec<_>>(),
+                    );
+                }
+            }
+            if !title.is_empty() {
+                ret.0.name.components.push(NameComponent {
+                    __type: None,
+                    value: title,
+                    kind: Title,
+                    phonetic: String::new(),
+                });
+            }
+            if !name_prefix.is_empty() {
+                ret.0.name.components.push(NameComponent {
+                    __type: None,
+                    value: name_prefix,
+                    kind: Title,
+                    phonetic: String::new(),
+                });
+            }
+            if let Some(given) = given {
+                ret.0.name.components.push(given);
+            }
+            if !additionalname.is_empty() {
+                ret.0.name.components.push(NameComponent {
+                    __type: None,
+                    value: additionalname,
+                    kind: Given2,
+                    phonetic: String::new(),
+                });
+            }
+            if let Some(given2) = given2 {
+                ret.0.name.components.push(given2);
+            }
+            if let Some(surname) = surname {
+                ret.0.name.components.push(surname);
+            }
+            if let Some(surname2) = surname2 {
+                ret.0.name.components.push(surname2);
+            }
+            if let Some(rest) = rest {
+                ret.0.name.components.extend(rest);
+            }
+            if !name_suffix.is_empty() {
+                // Could also be `Generation` but the best we could do to detect that is heuristics
+                ret.0.name.components.push(NameComponent {
+                    __type: None,
+                    value: name_suffix,
+                    kind: Credential,
+                    phonetic: String::new(),
+                });
+            }
+        }
+        if let Some(birthday) = birthday {
+            use json_types::{Anniversary, AnniversaryDate, AnniversaryKind, Timestamp};
+
+            ret.0.anniversaries.insert(
+                "k0".into(),
+                Anniversary {
+                    __type: None,
+                    kind: AnniversaryKind::Birth,
+                    date: AnniversaryDate::Timestamp(Timestamp {
+                        __type: None,
+                        utc: UTCDateTime(birthday),
+                    }),
+                    place: serde_json::Value::default(),
+                },
+            );
+        }
+        if !url.is_empty() {
+            use json_types::OnlineService;
+
+            ret.0.online_services.insert(
+                "k0".into(),
+                OnlineService {
+                    uri: url,
+                    ..OnlineService::default()
+                },
+            );
+        }
+        if !key.is_empty() {
+            use json_types::{CryptoKey, Resource};
+
+            ret.0.crypto_keys.insert(
+                "k0".into(),
+                CryptoKey {
+                    __type: None,
+                    resource: Resource {
+                        uri: key,
+                        ..Resource::default()
+                    },
+                },
+            );
+        }
+        if !extra_properties.is_empty() {
+            ret.0.extra.extend(
+                extra_properties
+                    .into_iter()
+                    .map(|(s, v)| (s, serde_json::Value::String(v))),
+            );
+        }
         ret.0.emails.insert(
             "main".into(),
             json_types::EmailAddress {
                 __type: None,
-                address: card.email,
+                address: email,
                 contexts: IndexMap::new(),
                 pref: None,
                 label: None,
