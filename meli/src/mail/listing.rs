@@ -32,8 +32,10 @@ use std::{
 
 use futures::future::try_join_all;
 use melib::{
-    backends::EnvelopeHashBatch, mbox::MboxMetadata, utils::datetime, Flag, FlagOp,
-    ShellExpandTrait as _, UnixTimestamp,
+    backends::EnvelopeHashBatch,
+    mbox::MboxMetadata,
+    utils::{datetime, shellexpand::ShellExpandTrait as _},
+    Flag, FlagOp, UnixTimestamp,
 };
 use smallvec::SmallVec;
 

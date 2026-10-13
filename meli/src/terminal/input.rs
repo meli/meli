@@ -26,7 +26,6 @@ use crossbeam::{
     channel::{Receiver, Sender},
     select,
 };
-use melib::log;
 use nix::poll::{poll, PollFd, PollFlags, PollTimeout};
 use termion::{
     event::{

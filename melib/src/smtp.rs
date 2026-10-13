@@ -33,7 +33,7 @@
 //! ```no_run
 //! extern crate melib;
 //!
-//! use melib::{conf::Secret, email::Address, futures, smol, smtp::*, Result};
+//! use melib::{conf::Secret, email::Address, smtp::*, Result};
 //! let conf = SmtpServerConf {
 //!     hostname: Secret::Value("smtp.example.com".into()),
 //!     port: 587,

@@ -9,16 +9,21 @@ flate2 = { version = "1" }
 futures = { version = "0.3.34", default-features = false, features = ["async-await", "executor", "std"] }
 indexmap = { version = "^2.3", default-features = false, features = ["serde", "std"] }
 libc = { version = "0.2", features = ["extra_traits"] }
+log = { version = "0.4", features = ["std"] }
 nix = { version = "0.30", default-features = false }
+nom = { version = "7" }
 regex = { version = "1" }
 rusty-fork = { version = "0.3.0" }
 serde = { version = "1" }
 serde_derive = { version = "1" }
 serde_json = { version = "1" }
+serde_path_to_error = { version = "0.1" }
 serde_test2 = { version = "2" }
 smallvec = { version = "^1.15", features = ["serde"] }
+smol = { version = "2" }
 tempfile = { version = "3.3" }
 toml = { version = "0.8", default-features = false, features = ["display", "preserve_order", "parse"] }
+uuid = { version = "^1", features = ["serde", "v4", "v5"] }
 
 [profile.release]
 lto = "fat"

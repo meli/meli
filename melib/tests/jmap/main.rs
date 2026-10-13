@@ -58,11 +58,11 @@ pub mod server {
         backends::prelude::*,
         email::address::MessageID,
         jmap::{argument::*, identity, methods::*, objects::*, session::Session, *},
-        smol::Async,
         Mail,
     };
     use serde::Serialize as _;
     use serde_json::Value;
+    use smol::Async;
 
     #[derive(Debug, serde_derive::Deserialize)]
     #[serde(rename_all = "camelCase")]

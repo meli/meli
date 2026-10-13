@@ -150,7 +150,7 @@ macro_rules! arg_init {
 //macro_rules! arg_value_check {
 //    ($tag:literal, $input:expr) => {{
 //        if tag::<&'_ str, &'_ str,
-// melib::nom::error::Error<&str>>($tag)($input).is_err() {            return
+// nom::error::Error<&str>>($tag)($input).is_err() {            return
 // Ok((                $input,
 //                Err(CommandError::BadValue {
 //                    inner: $tag.to_string().into(),

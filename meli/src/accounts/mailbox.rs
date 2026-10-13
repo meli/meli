@@ -24,7 +24,6 @@ use indexmap::IndexMap;
 use melib::{
     backends::{Mailbox, MailboxHash},
     error::Error,
-    log,
 };
 use smallvec::SmallVec;
 

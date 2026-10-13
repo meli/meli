@@ -44,8 +44,8 @@ pub mod prelude {
         sync::Arc,
     };
 
-    pub use indexmap::{self, IndexMap, IndexSet};
-    pub use smallvec::{self, SmallVec};
+    pub use indexmap::{IndexMap, IndexSet};
+    pub use smallvec::SmallVec;
 
     pub use super::{
         AccountHash, BackendEvent, BackendEventConsumer, BackendMailbox, EnvelopeHashBatch, FlagOp,

@@ -259,7 +259,7 @@ use std::{
 };
 
 use indexmap::{self, IndexMap};
-use melib::{error::*, log};
+use melib::error::*;
 
 use crate::{conf::FileSettings, terminal::Ask};
 

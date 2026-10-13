@@ -31,7 +31,6 @@ use melib::{
     attachment_types::{ContentType, MultipartType, Text},
     email::headers::HeaderName,
     error::*,
-    log,
     parser::BytesExt as _,
     text::Truncate as _,
     utils::xdg::query_default_app,

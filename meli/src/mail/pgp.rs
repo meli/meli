@@ -459,7 +459,7 @@ impl<'a> PGPBackend for PGPBackendInstance<'a> {
                 let get_key_command = cli.get_key_command.to_string();
                 let auto_key_locate = *auto_key_locate;
                 Ok(Box::pin(async move {
-                    melib::smol::unblock(move || {
+                    smol::unblock(move || {
                         let auto_key_locate = auto_key_locate.to_string();
                         let mut envs = vec![("AUTO_KEY_LOCATE", auto_key_locate.as_str())];
                         if secret {
@@ -510,7 +510,7 @@ impl<'a> PGPBackend for PGPBackendInstance<'a> {
                 let signature = File::create_temp_file(signature, None, None, None, true)?;
                 let text = File::create_temp_file(text, None, None, None, true)?;
                 Ok(Box::pin(async move {
-                    melib::smol::unblock(move || {
+                    smol::unblock(move || {
                         let output = Command::new(&verify_command)
                             .arg(signature.path())
                             .arg(text.path())
@@ -556,7 +556,7 @@ impl<'a> PGPBackend for PGPBackendInstance<'a> {
                 let auto_key_locate = *auto_key_locate;
                 let text = File::create_temp_file(text, None, None, None, true)?;
                 Ok(Box::pin(async move {
-                    melib::smol::unblock(move || {
+                    smol::unblock(move || {
                         let output = Command::new(&verify_command)
                             .arg(text.path())
                             .env("AUTO_KEY_LOCATE", auto_key_locate.to_string())
@@ -601,7 +601,7 @@ impl<'a> PGPBackend for PGPBackendInstance<'a> {
                 let keylist_command = cli.keylist_command.to_string();
                 let auto_key_locate = *auto_key_locate;
                 Ok(Box::pin(async move {
-                    melib::smol::unblock(move || {
+                    smol::unblock(move || {
                         let auto_key_locate = auto_key_locate.to_string();
                         let mut envs = vec![("AUTO_KEY_LOCATE", auto_key_locate.as_str())];
                         if secret {
@@ -659,7 +659,7 @@ impl<'a> PGPBackend for PGPBackendInstance<'a> {
                 let auto_key_locate = *auto_key_locate;
                 let text = File::create_temp_file(text, None, None, None, true)?;
                 Ok(Box::pin(async move {
-                    melib::smol::unblock(move || {
+                    smol::unblock(move || {
                         let mut cmd = Command::new(&sign_command);
                         cmd.env("AUTO_KEY_LOCATE", auto_key_locate.to_string())
                             .arg(text.path());
@@ -721,7 +721,7 @@ impl<'a> PGPBackend for PGPBackendInstance<'a> {
                 let auto_key_locate = *auto_key_locate;
                 let plain = File::create_temp_file(plain, None, None, None, true)?;
                 Ok(Box::pin(async move {
-                    melib::smol::unblock(move || {
+                    smol::unblock(move || {
                         let mut cmd = Command::new(&encrypt_command);
                         cmd.env("AUTO_KEY_LOCATE", auto_key_locate.to_string())
                             .arg(plain.path());
@@ -770,7 +770,7 @@ impl<'a> PGPBackend for PGPBackendInstance<'a> {
                 let auto_key_locate = *auto_key_locate;
                 let cipher = File::create_temp_file(cipher, None, None, None, true)?;
                 Ok(Box::pin(async move {
-                    melib::smol::unblock(move || {
+                    smol::unblock(move || {
                         let output = Command::new(&decrypt_command)
                             .env("AUTO_KEY_LOCATE", auto_key_locate.to_string())
                             .arg(cipher.path())
@@ -814,9 +814,7 @@ mod tests {
 
     use melib::{
         gpgme::{EngineInfo, Protocol},
-        log,
         pgp::{Summary, Validity},
-        smol,
         utils::logging::{LogLevel, Logger},
     };
     use rusty_fork::rusty_fork_test;

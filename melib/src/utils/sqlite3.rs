@@ -28,7 +28,7 @@ use std::{
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput};
 pub use rusqlite::{self, config::DbConfig, params, Connection};
 
-use crate::{error::*, log, Envelope};
+use crate::{error::*, Envelope};
 
 /// A description for creating, opening and handling application databases.
 #[derive(Clone, Debug)]

@@ -42,13 +42,13 @@
 use std::{borrow::Cow, path::Path};
 
 use indexmap::{IndexMap, IndexSet};
+use melib::utils::shellexpand::ShellExpandTrait as _;
 
 use crate::{
     command::{
         parser::{LexToken, LexTokenError, Lexer},
         Token, TokenStream, COMMAND_COMPLETION,
     },
-    melib::ShellExpandTrait as _,
     utilities::AutoCompleteEntry,
 };
 

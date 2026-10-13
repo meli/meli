@@ -26,7 +26,7 @@ use melib::{
     backends::{prelude::*, Mailbox, MailboxHash},
     error::Result,
     maildir::MaildirType,
-    smol, MailboxPermissions, SpecialUsageMailbox,
+    MailboxPermissions, SpecialUsageMailbox,
 };
 use tempfile::TempDir;
 

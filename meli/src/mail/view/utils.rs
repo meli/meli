@@ -21,7 +21,7 @@
 
 use std::{fs::File, io::Write as _, os::unix::fs::PermissionsExt as _, path::Path};
 
-use melib::{Result, ShellExpandTrait as _};
+use melib::{utils::shellexpand::ShellExpandTrait as _, Result};
 
 pub fn save_attachment(path: &Path, bytes: &[u8]) -> Result<()> {
     let mut f = File::options()

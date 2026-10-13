@@ -39,7 +39,8 @@ use melib::{
     conf::{ActionFlag, MailboxConf, Secret, ToggleFlag},
     error::*,
     search::Query,
-    Logger, ShellExpandTrait as _, SortField, SortOrder,
+    utils::shellexpand::ShellExpandTrait as _,
+    Logger, SortField, SortOrder,
 };
 
 use crate::{conf::deserializers::non_empty_opt_string, terminal::Color};
@@ -434,17 +435,15 @@ impl FileSettings {
 
     /// Validate configuration from `input` string.
     pub fn validate_string(s: String, clear_extras: bool) -> Result<Self> {
-        let _: toml::value::Table = melib::serde_path_to_error::deserialize(
-            toml::Deserializer::new(&s),
-        )
-        .map_err(|err| {
+        let _: toml::value::Table = serde_path_to_error::deserialize(toml::Deserializer::new(&s))
+            .map_err(|err| {
             Error::new("Config file is invalid TOML")
                 .set_source(Some(Box::new(err)))
                 .set_kind(ErrorKind::ValueError)
         })?;
 
-        let mut s: Self = melib::serde_path_to_error::deserialize(toml::Deserializer::new(&s))
-            .map_err(|err| {
+        let mut s: Self =
+            serde_path_to_error::deserialize(toml::Deserializer::new(&s)).map_err(|err| {
                 Error::new("Input contains errors")
                     .set_source(Some(Box::new(err)))
                     .set_kind(ErrorKind::Configuration)

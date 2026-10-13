@@ -39,7 +39,7 @@ use indexmap::IndexMap;
 use melib::{
     backends::{AccountHash, BackendEvent, MailboxHash},
     error::{Error, Result, ResultIntoError as _},
-    log, EnvelopeHash, RefreshEvent, RefreshEventKind, ThreadHash,
+    EnvelopeHash, RefreshEvent, RefreshEventKind, ThreadHash,
 };
 use nix::{errno::Errno, unistd::Pid};
 

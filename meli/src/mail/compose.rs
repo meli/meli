@@ -962,7 +962,7 @@ To: {}
 
                     match secret {
                         Secret::Value(ref literal) => read_sig_from_path(Path::new(&literal)),
-                        Secret::Evaluate { .. } => match melib::smol::block_on(
+                        Secret::Evaluate { .. } => match smol::block_on(
                             secret.value_with_timeout(Duration::from_millis(300)),
                         ) {
                             Err(err) => {

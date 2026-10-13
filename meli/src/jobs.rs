@@ -41,7 +41,8 @@ use crossbeam::{
 };
 pub use futures::channel::oneshot;
 use indexmap::IndexMap;
-use melib::{log, smol, utils::datetime, uuid::Uuid, UnixTimestamp};
+use melib::{utils::datetime, UnixTimestamp};
+use uuid::Uuid;
 
 use crate::types::{StatusEvent, ThreadEvent, UIEvent};
 

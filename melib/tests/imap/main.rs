@@ -65,7 +65,8 @@ pub mod server {
         fetch::MessageDataItem,
         response::{Capability, Code, CommandContinuationRequest, Data, Response, Status},
     };
-    use melib::{backends::prelude::*, imap::*, parser::BytesExt as _, smol::Async, Mail};
+    use melib::{backends::prelude::*, imap::*, parser::BytesExt as _, Mail};
+    use smol::Async;
 
     #[derive(Debug)]
     pub enum SessionState {

@@ -28,12 +28,10 @@ use std::{
 use melib::{
     backends::MailBackend,
     email::{attachment_types::Text, Envelope, EnvelopeHash},
-    log,
     search::{
         escape_double_quote,
         Query::{self, *},
     },
-    smol,
     utils::sqlite3::{
         rusqlite::{params, OptionalExtension as _},
         DatabaseDescription,

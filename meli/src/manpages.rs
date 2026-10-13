@@ -27,7 +27,7 @@ use std::{
 };
 
 use flate2::bufread::GzDecoder;
-use melib::{log, ShellExpandTrait as _};
+use melib::utils::shellexpand::ShellExpandTrait as _;
 
 use crate::{Error, Result};
 

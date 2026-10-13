@@ -28,10 +28,7 @@ use std::{
     ops::{Deref, DerefMut, Index, IndexMut},
 };
 
-use melib::{
-    log,
-    text::{search::KMP, wcwidth, TextPresentation as _},
-};
+use melib::text::{search::KMP, wcwidth, TextPresentation as _};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use smallvec::SmallVec;
 

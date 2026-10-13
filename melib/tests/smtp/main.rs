@@ -49,7 +49,8 @@ pub mod server {
         io::{AsyncReadExt as _, AsyncWriteExt as _},
         StreamExt as _,
     };
-    use melib::{backends::prelude::*, smol::Async, smtp::*};
+    use melib::{backends::prelude::*, smtp::*};
+    use smol::Async;
 
     #[derive(Debug)]
     pub enum ServerEvent {

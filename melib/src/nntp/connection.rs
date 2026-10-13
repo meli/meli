@@ -23,7 +23,6 @@ use crate::{
     backends::{BackendMailbox as _, MailboxHash},
     email::parser::BytesExt as _,
     error::*,
-    log,
     utils::connections::{std_net::connect as tcp_stream_connect, Connection},
 };
 extern crate native_tls;

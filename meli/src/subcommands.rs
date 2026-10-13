@@ -26,7 +26,10 @@ use std::{
 };
 
 use crossbeam::channel::{Receiver, Sender};
-use melib::{utils::futures::timeout, Result, ShellExpandTrait as _};
+use melib::{
+    utils::{futures::timeout, shellexpand::ShellExpandTrait as _},
+    Result,
+};
 
 use crate::{
     args::{MigrationOpt, PathOrStdio, ToolOpt},
@@ -253,7 +256,7 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
                 panic!("smtp shell requires an smtp configuration for account {account}");
             };
             std::thread::spawn(move || {
-                let ex = melib::smol::Executor::new();
+                let ex = smol::Executor::new();
                 futures::executor::block_on(ex.run(futures::future::pending::<()>()));
             });
 
@@ -303,7 +306,7 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
             )?;
 
             std::thread::spawn(move || {
-                let ex = melib::smol::Executor::new();
+                let ex = smol::Executor::new();
                 futures::executor::block_on(ex.run(futures::future::pending::<()>()));
             });
 
@@ -392,7 +395,7 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
                     let lore = PublicInboxHTTP::new(url.as_str()).unwrap();
                     let msg_id = MessageID::new(message_id);
                     std::thread::spawn(move || {
-                        let ex = melib::smol::Executor::new();
+                        let ex = smol::Executor::new();
                         futures::executor::block_on(ex.run(futures::future::pending::<()>()));
                     });
 

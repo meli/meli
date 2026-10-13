@@ -30,7 +30,7 @@ use std::{
     },
 };
 
-use melib::{error::*, log};
+use melib::error::*;
 #[cfg(not(target_os = "macos"))]
 use nix::{
     fcntl::{open, OFlag},

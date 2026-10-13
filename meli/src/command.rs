@@ -52,7 +52,7 @@ pub use crate::actions::{
 pub type CommandCompletionEntry = (
     &'static str,
     TokenStream,
-    fn(&str) -> melib::nom::IResult<&str, Result<Action, CommandError>>,
+    fn(&str) -> nom::IResult<&str, Result<Action, CommandError>>,
 );
 
 /// Macro to create a const table with every command part that can be

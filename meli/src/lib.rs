@@ -42,7 +42,6 @@ pub use std::{collections::VecDeque, path::PathBuf};
 #[macro_use]
 extern crate serde_derive;
 extern crate linkify;
-pub use melib::uuid;
 
 pub extern crate bitflags;
 pub extern crate serde_json;
@@ -56,8 +55,8 @@ static GLOBAL: System = System;
 
 pub extern crate melib;
 pub use melib::{
-    error::*, log, AccountHash, ActionFlag, Envelope, EnvelopeHash, EnvelopeRef, Flag, LogLevel,
-    Mail, Mailbox, MailboxHash, ThreadHash, ToggleFlag,
+    error::*, AccountHash, ActionFlag, Envelope, EnvelopeHash, EnvelopeRef, Flag, LogLevel, Mail,
+    Mailbox, MailboxHash, ThreadHash, ToggleFlag,
 };
 
 pub mod args;

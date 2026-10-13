@@ -23,20 +23,17 @@
 
 use std::borrow::Cow;
 
-use melib::{
-    email::MessageID,
-    nom::{
-        self,
-        branch::alt,
-        bytes::complete::{is_a, tag, take_until, take_while},
-        character::complete::{digit1, not_line_ending},
-        combinator::{map, map_res},
-        error::{Error as NomError, FromExternalError as _},
-        multi::separated_list1,
-        sequence::{pair, preceded, separated_pair},
-        IResult,
-    },
-    SortField, SortOrder,
+use melib::{email::MessageID, SortField, SortOrder};
+use nom::{
+    self,
+    branch::alt,
+    bytes::complete::{is_a, tag, take_until, take_while},
+    character::complete::{digit1, not_line_ending},
+    combinator::{map, map_res},
+    error::{Error as NomError, FromExternalError as _},
+    multi::separated_list1,
+    sequence::{pair, preceded, separated_pair},
+    IResult,
 };
 
 use super::*;
@@ -85,14 +82,14 @@ macro_rules! command_err {
 
 macro_rules! tag {
     () => {{
-        tag::<&'_ str, &'_ str, melib::nom::error::Error<&str>>
+        tag::<&'_ str, &'_ str, nom::error::Error<&str>>
     }};
 }
 
 fn usize_c(input: &str) -> IResult<&str, usize> {
     let (input, digits) = digit1(input)?;
     let digits = digits.parse().map_err(|err| {
-        nom::Err::Error(melib::nom::error::Error::from_external_error(
+        nom::Err::Error(nom::error::Error::from_external_error(
             digits,
             nom::error::ErrorKind::MapRes,
             err,
@@ -646,7 +643,7 @@ pub(super) fn mailto(input: &str) -> IResult<&str, Result<Action, CommandError>>
         None
     );
     let input = std::str::from_utf8(input).map_err(|err| {
-        nom::Err::Error(melib::nom::error::Error::from_external_error(
+        nom::Err::Error(nom::error::Error::from_external_error(
             raw_val,
             nom::error::ErrorKind::MapRes,
             err,

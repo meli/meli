@@ -64,20 +64,25 @@ itoa = { version = "1", default-features = false }
 libc = { workspace = true }
 libz-sys = { version = "1.1", features = ["static"], optional = true }
 linkify = { version = "^0.10", default-features = false }
+log = { workspace = true }
 melib = { path = "../melib", version = "0.8.13", features = [] }
 nix = { workspace = true, default-features = false, features = ["signal", "poll", "term", "ioctl", "process"] }
+nom = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true }
 serde_derive = { workspace = true }
 serde_json = { workspace = true }
+serde_path_to_error = { workspace = true }
 signal-hook = { version = "^0.3", default-features = false, features = ["iterator"] }
 signal-hook-registry = { version = "1.2.0", default-features = false }
 smallvec = { workspace = true }
+smol = { workspace = true }
 structopt = { version = "0.3.26", default-features = false }
 # svg_crate = { version = "^0.13", optional = true, package = "svg" }
 termion = { version = "1.5.1", default-features = false }
 toml = { workspace = true }
 toml_edit = { version = "0.22.20" }
+uuid = { workspace = true }
 xdg = { version = "2.1.0" }
 
 [target.'cfg(target_os="linux")'.dependencies]

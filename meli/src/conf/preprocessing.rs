@@ -30,8 +30,7 @@ use std::{
 
 use melib::{
     error::{Error, ErrorKind, Result, ResultIntoError as _, WrapResultIntoError as _},
-    utils::parsec::*,
-    ShellExpandTrait as _,
+    utils::{parsec::*, shellexpand::ShellExpandTrait as _},
 };
 
 /// Try to parse line into a path to be included.

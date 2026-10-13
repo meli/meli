@@ -34,11 +34,10 @@ use std::{
 
 use melib::{
     email::{attachment_types::ContentType, Attachment},
-    log,
     utils::fnmatch::Fnmatch as _,
-    uuid::Uuid,
     Error, ErrorKind, Result,
 };
+use uuid::Uuid;
 
 use crate::{
     components::ComponentId,

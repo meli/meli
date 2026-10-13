@@ -100,23 +100,15 @@ pub mod smtp;
 
 #[macro_use]
 extern crate serde_derive;
-pub extern crate log;
-/* parser */
+
 extern crate data_encoding;
-pub extern crate nom;
 
 #[macro_use]
 extern crate bitflags;
-pub extern crate futures;
-#[allow(unused_imports)]
-#[macro_use]
-pub extern crate indexmap;
 #[cfg(feature = "sqlite3")]
 pub extern crate rusqlite;
-pub extern crate serde_path_to_error;
-pub extern crate smallvec;
-pub extern crate smol;
-pub extern crate uuid;
+#[macro_use]
+extern crate indexmap;
 
 #[derive(Clone, Copy, Debug)]
 #[repr(transparent)]
@@ -147,5 +139,3 @@ impl std::fmt::Display for BytesDisplay {
         }
     }
 }
-
-pub use utils::shellexpand::ShellExpandTrait;

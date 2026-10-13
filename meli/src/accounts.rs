@@ -38,7 +38,6 @@ use melib::{
     backends::{prelude::*, Backends},
     contacts::{backend::ContactBackend, Contacts},
     error::{Error, ErrorKind, NetworkErrorKind, Result},
-    log,
     thread::Threads,
     utils::{fnmatch::Fnmatch as _, futures::sleep, random, shellexpand::ShellExpandTrait as _},
     SortField, SortOrder,

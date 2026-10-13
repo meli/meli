@@ -249,7 +249,7 @@ impl EscapeSequenceParse for Color {
     fn parse(mut bytes: &str) -> Option<Self> {
         // OSC Escape sequence.
         // Terminal background report:
-        melib::log::trace!("osc10/11 background query: {:?}", bytes,);
+        log::trace!("osc10/11 background query: {:?}", bytes,);
 
         // meli::terminal::keys: EscapeSequence is [27, 93, 49, 49, 59, 114, 103, 98,
         // 58, 49, 99, 49, 99, 47, 49, 98, 49, 98, 47, 49, 57, 49, 57] ==

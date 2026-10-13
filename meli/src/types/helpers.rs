@@ -30,9 +30,9 @@ use std::{
 use melib::{
     error::*,
     text::{TextProcessing as _, Truncate as _},
-    uuid::Uuid,
-    ShellExpandTrait as _,
+    utils::shellexpand::ShellExpandTrait as _,
 };
+use uuid::Uuid;
 
 /// Temporary file that can optionally cleaned up when it is dropped.
 #[derive(Debug)]

@@ -20,7 +20,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
-use melib::{contacts::Card, ShellExpandTrait as _};
+use melib::{contacts::Card, utils::shellexpand::ShellExpandTrait as _};
 
 use crate::{
     conf::themes::ThemeAttribute,
