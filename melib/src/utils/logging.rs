@@ -380,13 +380,15 @@ impl Log for Logger {
                 });
             }
             (Destination::Stderr, true) => {
-                _ = self.dest.lock().ok().and_then(|mut d| {
-                    write(
-                        d.writer.deref_mut(),
-                        record,
-                        (self.print_level, self.print_module_names),
-                    )
-                });
+                if record.metadata().level() < Level::Debug {
+                    _ = self.dest.lock().ok().and_then(|mut d| {
+                        write(
+                            d.writer.deref_mut(),
+                            record,
+                            (self.print_level, self.print_module_names),
+                        )
+                    });
+                }
                 _ = write(
                     &mut std::io::stderr(),
                     record,
