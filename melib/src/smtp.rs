@@ -1086,7 +1086,11 @@ async fn read_lines<'r>(
                     buffer.extend(ret.drain(last_line_idx + pos + "\r\n".len()..));
                     break 'read_loop;
                 }
-                returned_code = Some(ReplyCode::try_from(&ret[last_line_idx..3])?);
+                returned_code = Some(
+                    ReplyCode::try_from(&ret[last_line_idx..][..3]).chain_err_summary(|| {
+                        format!("Invalid SMTP reply: {:?}", &ret[last_line_idx..][..3])
+                    })?,
+                );
             }
             last_line_idx += pos + "\r\n".len();
         }
