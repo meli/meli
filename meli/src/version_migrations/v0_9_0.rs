@@ -55,6 +55,7 @@ impl Version for V0_9_0 {
             Box::new(AddressbookRefactor) as Box<dyn Migration + Send + Sync + 'static>,
             Box::new(ContactBackendRefactor) as Box<dyn Migration + Send + Sync + 'static>,
             Box::new(JSContactsConversion) as Box<dyn Migration + Send + Sync + 'static>,
+            Box::new(SmtpAuthPasswordCommand) as Box<dyn Migration + Send + Sync + 'static>,
         ]
     }
 }
@@ -1024,6 +1025,205 @@ impl Migration for JSContactsConversion {
     }
 }
 
+/// Transform `send_mail = { auth = { type = "auto", password = { type = "raw", value = "..." } } }` to Secret
+#[derive(Clone, Copy, Debug)]
+struct SmtpAuthPasswordCommand;
+
+impl SmtpAuthPasswordCommand {
+    fn transform(doc: &mut DocumentMut, verbose: bool) -> Result<()> {
+        if let Some(accs) = doc.get_mut("accounts") {
+            let Some(accs) = accs.as_table_mut() else {
+                return Err(Error::new(format!("invalid accounts value, got: {accs:?}")));
+            };
+            for (acc_name, acc) in accs.iter_mut() {
+                let Some(acc) = acc.as_table_like_mut() else {
+                    continue;
+                };
+                let Some(send_mail) = acc.get_mut("send_mail") else {
+                    continue;
+                };
+                let Some(send_mail_table) = send_mail.as_table_like_mut() else {
+                    continue;
+                };
+                let Some(auth) = send_mail_table.get_mut("auth") else {
+                    continue;
+                };
+                let Some(auth_table_like) = auth.as_table_like_mut() else {
+                    continue;
+                };
+                let Some(password) = auth_table_like.get_mut("password") else {
+                    continue;
+                };
+                let Some(type_) = password.get("type") else {
+                    continue;
+                };
+                if matches!(type_.as_str(), Some(raw) if raw.eq_ignore_ascii_case("raw")) {
+                    let Some(value) = password
+                        .get("value")
+                        .and_then(|v| v.as_str())
+                        .map(|v| v.to_owned())
+                    else {
+                        continue;
+                    };
+                    if let Some(prev) = auth_table_like.remove("password") {
+                        let new = toml_edit::Item::Value(toml_edit::Value::from(value));
+                        if verbose {
+                            log::info!("Account {acc_name}: converting send_mail.auth.password = {prev} to send_mail.auth.password = {new}.");
+                        }
+                        auth_table_like.insert("password", new);
+                    }
+                } else if matches!(type_.as_str(), Some(raw) if raw.eq_ignore_ascii_case("command_eval") || raw.eq_ignore_ascii_case("command_evaluation") || raw.eq_ignore_ascii_case("CommandEval"))
+                {
+                    let Some(value) = password
+                        .get("value")
+                        .and_then(|v| v.as_str())
+                        .map(|v| v.to_owned())
+                    else {
+                        continue;
+                    };
+                    if let Some(prev) = auth_table_like.remove("password") {
+                        let mut new_entry = toml_edit::InlineTable::new();
+                        new_entry.insert("command", toml_edit::Value::from(value));
+                        let new = toml_edit::Item::Value(toml_edit::Value::from(new_entry));
+                        if verbose {
+                            log::info!("Account {acc_name}: converting send_mail.auth.password = {prev} to send_mail.auth.password = {new}.");
+                        }
+                        auth_table_like.insert("password", new);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn revert_transform(doc: &mut DocumentMut, verbose: bool) -> Result<()> {
+        if let Some(accs) = doc.get_mut("accounts") {
+            let Some(accs) = accs.as_table_mut() else {
+                return Err(Error::new(format!("invalid accounts value, got: {accs:?}")));
+            };
+            for (acc_name, acc) in accs.iter_mut() {
+                let Some(acc) = acc.as_table_like_mut() else {
+                    continue;
+                };
+                let Some(send_mail) = acc.get_mut("send_mail") else {
+                    continue;
+                };
+                let Some(send_mail_table) = send_mail.as_table_like_mut() else {
+                    continue;
+                };
+                let Some(auth) = send_mail_table.get_mut("auth") else {
+                    continue;
+                };
+                let Some(auth_table_like) = auth.as_table_like_mut() else {
+                    continue;
+                };
+                let Some(password) = auth_table_like.get_mut("password") else {
+                    continue;
+                };
+                if let Some(value) = password.as_str().map(|v| v.to_owned()) {
+                    if let Some(prev) = auth_table_like.remove("password") {
+                        let mut new = toml_edit::InlineTable::new();
+                        new.insert("type", "raw".into());
+                        new.insert("value", toml_edit::Value::from(value));
+                        let new = toml_edit::Item::Value(toml_edit::Value::InlineTable(new));
+                        if verbose {
+                            log::info!("Account {acc_name}: reverting send_mail.auth.password = {prev} to send_mail.auth.password = {new}.");
+                        }
+                        auth_table_like.insert("password", new);
+                    }
+                } else if let Some(pass_table) = password.as_table_like() {
+                    if let Some(command) = pass_table
+                        .get("command")
+                        .and_then(|v| v.as_str())
+                        .map(|v| v.to_owned())
+                    {
+                        if let Some(prev) = auth_table_like.remove("password") {
+                            let mut new = toml_edit::InlineTable::new();
+                            new.insert("type", "command_evaluation".into());
+                            new.insert("value", toml_edit::Value::from(command));
+                            let new = toml_edit::Item::Value(toml_edit::Value::InlineTable(new));
+                            if verbose {
+                                log::info!("Account {acc_name}: reverting send_mail.auth.password = {prev} to send_mail.auth.password = {new}.");
+                            }
+                            auth_table_like.insert("password", new);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Migration for SmtpAuthPasswordCommand {
+    fn id(&self) -> &'static str {
+        melib::identify! { SmtpAuthPasswordCommand }
+    }
+
+    fn version(&self) -> &VersionIdentifier {
+        &V0_9_0_ID
+    }
+
+    fn description(&self) -> &str {
+        "Transform `send_mail = { password = { type = \"raw\", value = \"...\" } }` to new syntax: `send_mail = { password = \"...\" }`"
+    }
+
+    fn question(&self) -> &str {
+        "Transform `send_mail = { password = { type = \"raw\", value = \"...\" } }` to new syntax?"
+    }
+
+    fn is_applicable(&self, config: &Path) -> Option<bool> {
+        for c in get_included_configs(config).ok()? {
+            let raw = std::fs::read_to_string(&c).ok()?;
+            if raw.contains("send_mail") {
+                return Some(true);
+            }
+        }
+
+        Some(false)
+    }
+
+    fn perform(&self, config: &Path, dry_run: bool, verbose: bool) -> Result<()> {
+        for c in get_included_configs(config)? {
+            if !dry_run {
+                self.perform(config, true, false)
+                    .chain_err_summary(|| "No migration was performed.")?;
+            }
+            let raw = std::fs::read_to_string(&c).chain_err_related_path(&c)?;
+            let Ok(mut doc) = raw.parse::<DocumentMut>() else {
+                continue;
+            };
+
+            Self::transform(&mut doc, verbose).chain_err_related_path(&c)?;
+
+            if !dry_run {
+                std::fs::write(&c, doc.to_string()).chain_err_related_path(&c)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn revert(&self, config: &Path, dry_run: bool, verbose: bool) -> Result<()> {
+        for c in get_included_configs(config)? {
+            if !dry_run {
+                self.perform(config, true, false)
+                    .chain_err_summary(|| "No migration revert was performed.")?;
+            }
+            let raw = std::fs::read_to_string(&c).chain_err_related_path(&c)?;
+            let Ok(mut doc) = raw.parse::<DocumentMut>() else {
+                continue;
+            };
+
+            Self::revert_transform(&mut doc, verbose).chain_err_related_path(&c)?;
+
+            if !dry_run {
+                std::fs::write(&c, doc.to_string()).chain_err_related_path(&c)?;
+            }
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1050,6 +1250,11 @@ mod tests {
         #[test]
         fn test_jscontact_conversion() {
             run_jscontact_conversion()
+        }
+
+        #[test]
+        fn test_smtp_auth_password_command() {
+            run_test_smtp_auth_password_command()
         }
     }
 
@@ -1221,5 +1426,35 @@ contacts = { notmuch_address_book_query = { type = "NotmuchAddress", value = "no
             bkp_filepath.file_name().unwrap().to_string_lossy().as_ref(),
             "contacts_new.bkp1"
         );
+    }
+
+    fn run_test_smtp_auth_password_command() {
+        let _logger = Logger::new_with(LogLevel::TRACE, true);
+        let input = r#"
+accounts.imap2 = { send_mail = { auth = { type = "auto", username = "user@example.com", password = { type = "raw", value = "hunter2" } }, security = { type = "STARTTLS" } } }
+
+[accounts.imap]
+send_mail = { auth = { type = "auto", username = "user@example.com", password = { type = "raw", value = "hunter2" } }, security = { type = "STARTTLS" } }
+
+[accounts.imap3]
+send_mail = { auth = { type = "auto", username = "user@example.com", password = { type = "command_evaluation", value = "echo hunter2" } }, security = { type = "STARTTLS" } }
+"#;
+        let mut doc = input.parse::<DocumentMut>().unwrap();
+
+        SmtpAuthPasswordCommand::transform(&mut doc, true).unwrap();
+        assert_eq!(
+            doc.to_string(),
+            r#"
+accounts.imap2 = { send_mail = { auth = { type = "auto", username = "user@example.com", password = "hunter2" }, security = { type = "STARTTLS" } } }
+
+[accounts.imap]
+send_mail = { auth = { type = "auto", username = "user@example.com", password = "hunter2" }, security = { type = "STARTTLS" } }
+
+[accounts.imap3]
+send_mail = { auth = { type = "auto", username = "user@example.com", password = { command = "echo hunter2" } }, security = { type = "STARTTLS" } }
+"#
+        );
+        SmtpAuthPasswordCommand::revert_transform(&mut doc, true).unwrap();
+        assert_eq!(doc.to_string(), input);
     }
 }
