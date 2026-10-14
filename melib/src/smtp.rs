@@ -703,6 +703,13 @@ impl SmtpConnection {
             self.send_command(&[b"BDAT ", mail_length.as_bytes(), b" LAST"])
                 .await?;
             self.stream.write_all(mail.as_bytes()).await?;
+
+            // Client SMTP implementations that employ pipelining MUST check ALL statuses
+            // associated with each command in a group. For example, if none of
+            for expected_reply_code in pipelining_queue {
+                let reply = self.read_lines(&mut res, expected_reply_code).await?;
+                pipelining_results.push(reply.into());
+            }
         } else {
             // The third step in the procedure is the DATA command
             // (or some alternative specified in a service extension).
