@@ -697,7 +697,7 @@ impl SmtpConnection {
 
         if self.server_conf.extensions.binarymime {
             let mail_length = format!("{}", mail.len());
-            self.send_command(&[b"BDAT", mail_length.as_bytes(), b"LAST"])
+            self.send_command(&[b"BDAT ", mail_length.as_bytes(), b" LAST"])
                 .await?;
             self.stream.write_all(mail.as_bytes()).await?;
         } else {
