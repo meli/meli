@@ -56,6 +56,7 @@ impl Version for V0_9_0 {
             Box::new(ContactBackendRefactor) as Box<dyn Migration + Send + Sync + 'static>,
             Box::new(JSContactsConversion) as Box<dyn Migration + Send + Sync + 'static>,
             Box::new(SmtpAuthPasswordCommand) as Box<dyn Migration + Send + Sync + 'static>,
+            Box::new(SmtpAuthTokenCommand) as Box<dyn Migration + Send + Sync + 'static>,
         ]
     }
 }
@@ -1224,6 +1225,165 @@ impl Migration for SmtpAuthPasswordCommand {
     }
 }
 
+/// Transform `send_mail = { auth = { type = "xoauth2", token_command = "..." } }` to Secret
+#[derive(Clone, Copy, Debug)]
+struct SmtpAuthTokenCommand;
+
+impl SmtpAuthTokenCommand {
+    fn transform(doc: &mut DocumentMut, verbose: bool) -> Result<()> {
+        if let Some(accs) = doc.get_mut("accounts") {
+            let Some(accs) = accs.as_table_mut() else {
+                return Err(Error::new(format!("invalid accounts value, got: {accs:?}")));
+            };
+            for (acc_name, acc) in accs.iter_mut() {
+                let Some(acc) = acc.as_table_like_mut() else {
+                    continue;
+                };
+                let Some(send_mail) = acc.get_mut("send_mail") else {
+                    continue;
+                };
+                let Some(send_mail_table) = send_mail.as_table_like_mut() else {
+                    continue;
+                };
+                let Some(auth) = send_mail_table.get_mut("auth") else {
+                    continue;
+                };
+                let Some(auth_table_like) = auth.as_table_like_mut() else {
+                    continue;
+                };
+                let Some(value) = auth_table_like
+                    .get("token_command")
+                    .and_then(|v| v.as_str())
+                    .map(|v| v.to_owned())
+                else {
+                    continue;
+                };
+                if let Some(prev) = auth_table_like.remove("token_command") {
+                    let mut new_entry = toml_edit::InlineTable::new();
+                    new_entry.insert("command", toml_edit::Value::from(value));
+                    let new = toml_edit::Item::Value(toml_edit::Value::from(new_entry));
+                    if verbose {
+                        log::info!("Account {acc_name}: converting send_mail.auth.token_command = {prev} to send_mail.auth.token = {new}.");
+                    }
+                    auth_table_like.insert("token", new);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn revert_transform(doc: &mut DocumentMut, verbose: bool) -> Result<()> {
+        if let Some(accs) = doc.get_mut("accounts") {
+            let Some(accs) = accs.as_table_mut() else {
+                return Err(Error::new(format!("invalid accounts value, got: {accs:?}")));
+            };
+            for (acc_name, acc) in accs.iter_mut() {
+                let Some(acc) = acc.as_table_like_mut() else {
+                    continue;
+                };
+                let Some(send_mail) = acc.get_mut("send_mail") else {
+                    continue;
+                };
+                let Some(send_mail_table) = send_mail.as_table_like_mut() else {
+                    continue;
+                };
+                let Some(auth) = send_mail_table.get_mut("auth") else {
+                    continue;
+                };
+                let Some(auth_table_like) = auth.as_table_like_mut() else {
+                    continue;
+                };
+                let Some(value) = auth_table_like
+                    .get("token")
+                    .and_then(|v| v.as_table_like())
+                    .and_then(|v| v.get("command"))
+                    .and_then(|v| v.as_str())
+                    .map(|v| v.to_owned())
+                else {
+                    continue;
+                };
+                if let Some(prev) = auth_table_like.remove("token") {
+                    let new = toml_edit::Item::Value(toml_edit::Value::from(value));
+                    if verbose {
+                        log::info!("Account {acc_name}: reverting send_mail.auth.token = {prev} to send_mail.auth.token_command = {new}.");
+                    }
+                    auth_table_like.insert("token_command", new);
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Migration for SmtpAuthTokenCommand {
+    fn id(&self) -> &'static str {
+        melib::identify! { SmtpAuthTokenCommand }
+    }
+
+    fn version(&self) -> &VersionIdentifier {
+        &V0_9_0_ID
+    }
+
+    fn description(&self) -> &str {
+        "Transform `send_mail = { auth = { type = \"xoauth2\", token_command = \"...\" } }` to Secret"
+    }
+
+    fn question(&self) -> &str {
+        "Transform `send_mail = { auth = { type = \"xoauth2\", token_command = \"...\" } }` to new syntax?"
+    }
+
+    fn is_applicable(&self, config: &Path) -> Option<bool> {
+        for c in get_included_configs(config).ok()? {
+            let raw = std::fs::read_to_string(&c).ok()?;
+            if raw.contains("xoauth2") || raw.contains("XOAuth2") {
+                return Some(true);
+            }
+        }
+
+        Some(false)
+    }
+
+    fn perform(&self, config: &Path, dry_run: bool, verbose: bool) -> Result<()> {
+        for c in get_included_configs(config)? {
+            if !dry_run {
+                self.perform(config, true, false)
+                    .chain_err_summary(|| "No migration was performed.")?;
+            }
+            let raw = std::fs::read_to_string(&c).chain_err_related_path(&c)?;
+            let Ok(mut doc) = raw.parse::<DocumentMut>() else {
+                continue;
+            };
+
+            Self::transform(&mut doc, verbose).chain_err_related_path(&c)?;
+
+            if !dry_run {
+                std::fs::write(&c, doc.to_string()).chain_err_related_path(&c)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn revert(&self, config: &Path, dry_run: bool, verbose: bool) -> Result<()> {
+        for c in get_included_configs(config)? {
+            if !dry_run {
+                self.perform(config, true, false)
+                    .chain_err_summary(|| "No migration revert was performed.")?;
+            }
+            let raw = std::fs::read_to_string(&c).chain_err_related_path(&c)?;
+            let Ok(mut doc) = raw.parse::<DocumentMut>() else {
+                continue;
+            };
+
+            Self::revert_transform(&mut doc, verbose).chain_err_related_path(&c)?;
+
+            if !dry_run {
+                std::fs::write(&c, doc.to_string()).chain_err_related_path(&c)?;
+            }
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1255,6 +1415,11 @@ mod tests {
         #[test]
         fn test_smtp_auth_password_command() {
             run_test_smtp_auth_password_command()
+        }
+
+        #[test]
+        fn test_smtp_auth_token_command() {
+            run_test_smtp_auth_token_command()
         }
     }
 
@@ -1455,6 +1620,30 @@ send_mail = { auth = { type = "auto", username = "user@example.com", password = 
 "#
         );
         SmtpAuthPasswordCommand::revert_transform(&mut doc, true).unwrap();
+        assert_eq!(doc.to_string(), input);
+    }
+
+    fn run_test_smtp_auth_token_command() {
+        let _logger = Logger::new_with(LogLevel::TRACE, true);
+        let input = r#"
+accounts.imap2 = { send_mail = { auth = { type = "xoauth2", token_command = "echo hunter2" } } }
+
+[accounts.imap]
+send_mail = { auth = { type = "xoauth2", token_command = "echo hunter2" } }
+"#;
+        let mut doc = input.parse::<DocumentMut>().unwrap();
+
+        SmtpAuthTokenCommand::transform(&mut doc, true).unwrap();
+        assert_eq!(
+            doc.to_string(),
+            r#"
+accounts.imap2 = { send_mail = { auth = { type = "xoauth2", token = { command = "echo hunter2" } } } }
+
+[accounts.imap]
+send_mail = { auth = { type = "xoauth2", token = { command = "echo hunter2" } } }
+"#
+        );
+        SmtpAuthTokenCommand::revert_transform(&mut doc, true).unwrap();
         assert_eq!(doc.to_string(), input);
     }
 }
