@@ -371,7 +371,6 @@ pub enum UIEvent {
     EnvelopeUpdate(EnvelopeHash),
     EnvelopeRename(EnvelopeHash, EnvelopeHash), // old_hash, new_hash
     EnvelopeRemove(EnvelopeHash, ThreadHash),
-    Compose(ComposeEvent),
     FinishedUIDialog(ComponentId, UIMessage),
     IntraComm {
         from: ComponentId,
@@ -610,11 +609,6 @@ impl RateLimit {
     pub fn id(&self) -> TimerId {
         self.timer.id()
     }
-}
-
-#[derive(Debug)]
-pub enum ComposeEvent {
-    SetRecipients(Vec<melib::Address>),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
