@@ -44,6 +44,10 @@ pub trait AccountEntryTrait: Component + Sized {
         area: Area,
         context: &mut Context,
     );
+
+    fn event_interest(_: &UIEvent) -> bool {
+        false
+    }
 }
 
 #[derive(Debug)]
@@ -52,6 +56,7 @@ enum AccountEntry<E: AccountEntryTrait> {
         account_hash: AccountHash,
         err: Error,
         messages: Vec<Cow<'static, str>>,
+        interested_events: Vec<UIEvent>,
         dirty: bool,
         id: ComponentId,
     },
@@ -150,9 +155,20 @@ impl<E: AccountEntryTrait> Component for AccountEntry<E> {
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        if let Self::Loaded(ref mut inner) = self {
-            if inner.process_event(event, context) {
-                return true;
+        match self {
+            Self::Loaded(inner) => {
+                if inner.process_event(event, context) {
+                    return true;
+                }
+            }
+            Self::Offline {
+                interested_events, ..
+            } => {
+                if E::event_interest(event) {
+                    if let Some(event) = event.cloned() {
+                        interested_events.push(event);
+                    }
+                }
             }
         }
 
@@ -164,13 +180,19 @@ impl<E: AccountEntryTrait> Component for AccountEntry<E> {
                     Self::Offline {
                         ref account_hash,
                         ref mut messages,
+                        ref mut interested_events,
                         ref id,
                         ..
                     } => {
                         if context.accounts[account_hash].is_online(false).is_ok() {
+                            let interested_events = std::mem::take(interested_events);
                             let parent_id = self.id();
                             let id = *id;
-                            let entry = E::new(parent_id, id, *account_hash, context).unwrap();
+                            let mut entry = E::new(parent_id, id, *account_hash, context).unwrap();
+                            for mut ev in interested_events {
+                                entry.process_event(&mut ev, context);
+                            }
+
                             *self = Self::Loaded(entry);
                         } else {
                             if let Some(ref msg) = msg {
@@ -194,6 +216,7 @@ impl<E: AccountEntryTrait> Component for AccountEntry<E> {
                                 } else {
                                     vec![]
                                 },
+                                interested_events: vec![],
                             };
                         }
                     }
@@ -289,6 +312,7 @@ impl<E: AccountEntryTrait> List<E> {
                             dirty: true,
                             err,
                             messages: vec![],
+                            interested_events: vec![],
                             id: entry_id,
                         }),
                     }
@@ -398,7 +422,13 @@ impl<E: AccountEntryTrait> Component for List<E> {
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        if self.accounts[self.account_pos].process_event(event, context) {
+        if E::event_interest(event) {
+            for acc in self.accounts.values_mut() {
+                if acc.process_event(event, context) {
+                    return true;
+                }
+            }
+        } else if self.accounts[self.account_pos].process_event(event, context) {
             return true;
         }
 
