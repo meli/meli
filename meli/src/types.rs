@@ -340,6 +340,14 @@ pub struct ProcessRequest {
     pub temporary_files: Vec<Arc<File>>,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum ContactBackendStatusChangeKind {
+    Modification(melib::contacts::CardId),
+    Creation(melib::contacts::CardId),
+    Deletion(melib::contacts::CardId),
+    NewBook,
+}
+
 #[derive(Debug)]
 pub enum UIEvent {
     Input(Key),
@@ -364,6 +372,12 @@ pub enum UIEvent {
     MailboxDelete((AccountHash, MailboxHash)),
     MailboxCreate((AccountHash, MailboxHash)),
     AccountStatusChange(AccountHash, Option<Cow<'static, str>>),
+    ContactBackendStatusChange(
+        AccountHash,
+        Arc<melib::contacts::ContactBackendID>,
+        melib::contacts::AddressBookName,
+        ContactBackendStatusChangeKind,
+    ),
     ComponentUnrealize(ComponentId),
     BackendEvent(AccountHash, BackendEvent),
     StartupCheck(MailboxHash),
@@ -417,6 +431,17 @@ impl UIEvent {
             Self::AccountStatusChange(account_hash, cow) => {
                 Self::AccountStatusChange(*account_hash, cow.clone())
             }
+            Self::ContactBackendStatusChange(
+                account_hash,
+                contact_backend_id,
+                address_book_name,
+                contact_backend_status_change_kind,
+            ) => Self::ContactBackendStatusChange(
+                *account_hash,
+                contact_backend_id.clone(),
+                address_book_name.clone(),
+                *contact_backend_status_change_kind,
+            ),
             Self::ComponentUnrealize(component_id) => Self::ComponentUnrealize(*component_id),
             Self::BackendEvent(account_hash, backend_event) => {
                 Self::BackendEvent(*account_hash, backend_event.clone())

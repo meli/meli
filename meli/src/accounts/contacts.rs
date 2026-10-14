@@ -43,6 +43,7 @@ use melib::{
 use crate::{
     accounts::{Account, JobRequest},
     jobs::{IsAsync, JobId, JoinHandle},
+    types::ContactBackendStatusChangeKind,
     NotificationType, StatusEvent, ThreadEvent, UIEvent,
 };
 
@@ -475,10 +476,15 @@ impl Account {
                             }));
                     }
                     Ok(Some(Ok(b))) => {
-                        self.contacts.add_book(backend_id, b);
                         self.main_loop_handler.send(ThreadEvent::UIEvent(
-                            UIEvent::AccountStatusChange(self.hash, None),
+                            UIEvent::ContactBackendStatusChange(
+                                self.hash,
+                                backend_id.clone(),
+                                book,
+                                ContactBackendStatusChangeKind::NewBook,
+                            ),
                         ));
+                        self.contacts.add_book(backend_id, b);
                     }
                 }
             }
@@ -514,10 +520,15 @@ impl Account {
                             }));
                     }
                     Ok(Some(Ok(new_card))) => {
-                        self.contacts.books[&(backend_id, book)].add_card(new_card);
                         self.main_loop_handler.send(ThreadEvent::UIEvent(
-                            UIEvent::AccountStatusChange(self.hash, None),
+                            UIEvent::ContactBackendStatusChange(
+                                self.hash,
+                                backend_id.clone(),
+                                book.clone(),
+                                ContactBackendStatusChangeKind::Creation(new_card.id()),
+                            ),
                         ));
+                        self.contacts.books[&(backend_id, book)].add_card(new_card);
                     }
                 }
             }
@@ -556,13 +567,18 @@ impl Account {
                         if self.contacts.books[&(Arc::clone(&backend_id), book.clone())]
                             .card_exists(card_id)
                         {
+                            self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                UIEvent::ContactBackendStatusChange(
+                                    self.hash,
+                                    backend_id.clone(),
+                                    book.clone(),
+                                    ContactBackendStatusChangeKind::Modification(card_id),
+                                ),
+                            ));
                             self.contacts.books[&(backend_id, book)]
                                 .cards
                                 .insert(card_id, new_card);
                         }
-                        self.main_loop_handler.send(ThreadEvent::UIEvent(
-                            UIEvent::AccountStatusChange(self.hash, None),
-                        ));
                     }
                 }
             }
@@ -600,13 +616,18 @@ impl Account {
                         if self.contacts.books[&(Arc::clone(&backend_id), book.clone())]
                             .card_exists(card_id)
                         {
+                            self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                UIEvent::ContactBackendStatusChange(
+                                    self.hash,
+                                    backend_id.clone(),
+                                    book.clone(),
+                                    ContactBackendStatusChangeKind::Deletion(card_id),
+                                ),
+                            ));
                             self.contacts.books[&(backend_id, book)]
                                 .cards
                                 .shift_remove(&card_id);
                         }
-                        self.main_loop_handler.send(ThreadEvent::UIEvent(
-                            UIEvent::AccountStatusChange(self.hash, None),
-                        ));
                     }
                 }
             }

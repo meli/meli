@@ -48,8 +48,9 @@ use crate::{
     components::prelude::*,
     contacts::{editor::ContactEditor, export::ContactExportDialog},
     mail::compose::Composer,
+    types::{ContactBackendStatusChangeKind, NotificationType},
     utilities::listings::{AccountEntryTrait, List},
-    NotificationType, UIConfirmationDialog,
+    UIConfirmationDialog,
 };
 
 #[derive(Debug)]
@@ -410,6 +411,23 @@ impl Component for AddressBookList {
             | UIEvent::ConfigReload { old_settings: _ }
             | UIEvent::VisibilityChange(_) => {
                 self.set_dirty(true);
+                return false;
+            }
+            UIEvent::ContactBackendStatusChange(
+                ref account_hash,
+                ref backend_id,
+                ref book,
+                ContactBackendStatusChangeKind::Modification(card_id)
+                | ContactBackendStatusChangeKind::Creation(card_id)
+                | ContactBackendStatusChangeKind::Deletion(card_id),
+            ) if account_hash == &self.account_hash
+                && backend_id == &self.backend_id.0
+                && book == &self.backend_id.1 =>
+            {
+                if self.id_positions.contains(card_id) {
+                    self.initialized = false;
+                    self.set_dirty(true);
+                }
                 return false;
             }
             _ => {}
@@ -778,6 +796,10 @@ impl AccountEntryTrait for AccountContacts {
             None,
         );
     }
+
+    fn event_interest(event: &UIEvent) -> bool {
+        matches!(event, UIEvent::ContactBackendStatusChange(..))
+    }
 }
 
 impl std::fmt::Display for AccountContacts {
@@ -818,26 +840,26 @@ impl Component for AccountContacts {
         }
         let shortcuts = self.shortcuts(context);
         match *event {
-            UIEvent::AccountStatusChange(ref account_hash, _)
-                if account_hash == self.account_hash() =>
-            {
-                if context.accounts[account_hash].is_online(false).is_ok() {
-                    self.books = context.accounts[account_hash]
-                        .contacts
-                        .books
-                        .iter()
-                        .map(|(book_id, book)| {
-                            (
-                                book_id.clone(),
-                                Box::new(AddressBookList::new(
-                                    book_id.clone(),
-                                    book,
-                                    self.account_hash,
-                                    context,
-                                )),
-                            )
-                        })
-                        .collect();
+            UIEvent::ContactBackendStatusChange(
+                ref account_hash,
+                ref backend_id,
+                ref book,
+                ContactBackendStatusChangeKind::NewBook,
+            ) if account_hash == self.account_hash() => {
+                if let Some(b) = context.accounts[account_hash]
+                    .contacts
+                    .books
+                    .get(&(backend_id.clone(), book.clone()))
+                {
+                    self.books.insert(
+                        (backend_id.clone(), book.clone()),
+                        Box::new(AddressBookList::new(
+                            (backend_id.clone(), book.clone()),
+                            b,
+                            self.account_hash,
+                            context,
+                        )),
+                    );
                     self.set_dirty(true);
                 }
             }
