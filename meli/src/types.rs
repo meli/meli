@@ -389,6 +389,64 @@ pub enum UIEvent {
     VisibilityChange(bool),
 }
 
+impl UIEvent {
+    pub fn cloned(&self) -> Option<Self> {
+        Some(match self {
+            Self::Input(key) => Self::Input(key.clone()),
+            Self::CmdInput(key) => Self::CmdInput(key.clone()),
+            Self::InsertInput(key) => Self::InsertInput(key.clone()),
+            Self::EmbeddedInput((key, bytes)) => Self::EmbeddedInput((key.clone(), bytes.clone())),
+            Self::Resize => Self::Resize,
+            Self::ChangeMailbox(v) => Self::ChangeMailbox(*v),
+            Self::ChangeMode(uimode) => Self::ChangeMode(*uimode),
+            Self::Command(v) => Self::Command(v.clone()),
+            Self::Notification {
+                title,
+                body,
+                source,
+                kind,
+            } => Self::Notification {
+                title: title.clone(),
+                body: body.clone(),
+                source: source.clone(),
+                kind: *kind,
+            },
+            Self::MailboxUpdate((a, m)) => Self::MailboxUpdate((*a, *m)),
+            Self::MailboxDelete((a, m)) => Self::MailboxDelete((*a, *m)),
+            Self::MailboxCreate((a, m)) => Self::MailboxCreate((*a, *m)),
+            Self::AccountStatusChange(account_hash, cow) => {
+                Self::AccountStatusChange(*account_hash, cow.clone())
+            }
+            Self::ComponentUnrealize(component_id) => Self::ComponentUnrealize(*component_id),
+            Self::BackendEvent(account_hash, backend_event) => {
+                Self::BackendEvent(*account_hash, backend_event.clone())
+            }
+            Self::StartupCheck(mailbox_hash) => Self::StartupCheck(*mailbox_hash),
+            Self::RefreshEvent(refresh_event) => Self::RefreshEvent(refresh_event.clone()),
+            Self::EnvelopeUpdate(envelope_hash) => Self::EnvelopeUpdate(*envelope_hash),
+            Self::EnvelopeRename(envelope_hash, envelope_hash1) => {
+                Self::EnvelopeRename(*envelope_hash, *envelope_hash1)
+            }
+            Self::EnvelopeRemove(envelope_hash, thread_hash) => {
+                Self::EnvelopeRemove(*envelope_hash, *thread_hash)
+            }
+            Self::Timer(timer_id) => Self::Timer(*timer_id),
+            Self::ConfigReload { old_settings } => Self::ConfigReload {
+                old_settings: old_settings.clone(),
+            },
+            Self::VisibilityChange(v) => Self::VisibilityChange(*v),
+            Self::Action(..)
+            | Self::StatusEvent(..)
+            | Self::Fork(..)
+            | Self::ProcessRequest(..)
+            | Self::FinishedUIDialog(..)
+            | Self::IntraComm { .. }
+            | Self::Callback(..)
+            | Self::GlobalUIDialog { .. } => return None,
+        })
+    }
+}
+
 macro_rules! declare_fn_newtype {
     ($($id:ident: $ty:ty),*$(,)?) => {
         $(
