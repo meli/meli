@@ -550,7 +550,9 @@ impl SmtpConnection {
         self.server_conf.extensions.chunking &= reply.lines.contains(&"CHUNKING");
         self.server_conf.extensions.prdr &= reply.lines.contains(&"PRDR");
         self.server_conf.extensions._8bitmime &= reply.lines.contains(&"8BITMIME");
-        self.server_conf.extensions.binarymime &= reply.lines.contains(&"BINARYMIME");
+        // RFC 3030 §3: binarymime can only be active if chunking also is.
+        self.server_conf.extensions.binarymime &=
+            reply.lines.contains(&"BINARYMIME") && self.server_conf.extensions.chunking;
         self.server_conf.extensions.smtputf8 &= reply.lines.contains(&"SMTPUTF8");
         if !reply.lines.contains(&"DSN") {
             self.server_conf.extensions.dsn_notify = None;
@@ -624,7 +626,8 @@ impl SmtpConnection {
         if self.server_conf.extensions.prdr {
             current_command.push(b" PRDR");
         }
-        if self.server_conf.extensions.binarymime {
+        // binarymime and chunking need to be set together, according to RFC 3030 §3
+        if self.server_conf.extensions.binarymime && self.server_conf.extensions.chunking {
             current_command.push(b" BODY=BINARYMIME");
         } else if self.server_conf.extensions._8bitmime {
             current_command.push(b" BODY=8BITMIME");
