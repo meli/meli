@@ -47,6 +47,14 @@ impl From<bool> for ToggleFlag {
 }
 
 impl ToggleFlag {
+    pub fn internal_true() -> Self {
+        Self::InternalVal(true)
+    }
+
+    pub fn internal_false() -> Self {
+        Self::InternalVal(false)
+    }
+
     pub fn is_unset(&self) -> bool {
         Self::Unset == *self
     }
