@@ -506,7 +506,7 @@ pub mod tests {
             extensions: Default::default(),
             trace: true,
         };
-        let _smtp_handle = thread::spawn(move || block_on(server.serve()));
+        let smtp_handle = thread::spawn(move || block_on(server.serve()));
         let new_mail = r#"From: "some name" <some@example.com>
 To: "me" <myself@example.com>
 Cc:
@@ -516,34 +516,42 @@ Content-Type: text/plain
 
 hello world.
 "#;
-        {
-            let mut connection =
-                block_on(SmtpConnection::new_connection(smtp_server_conf.clone())).unwrap();
-            block_on(connection.mail_transaction(
-                new_mail,
-                /* tos */
-                Some(&[
-                    Address::new(None::<&str>, "user2@example.com"),
-                    Address::new(None::<&str>, "postmaster@example.com"),
-                ]),
-            ))
-            .unwrap();
-            block_on(connection.quit()).unwrap();
-            let stored = std::mem::take(&mut server_state.lock().unwrap().stored);
-            assert_eq!(stored.len(), 2);
-            assert_eq!(stored[0].0, "user2@example.com");
-            assert_eq!(stored[1].0, "postmaster@example.com");
-        }
-        {
-            let mut connection =
-                block_on(SmtpConnection::new_connection(smtp_server_conf.clone())).unwrap();
-            block_on(connection.mail_transaction(new_mail, /* tos */ None)).unwrap();
-            block_on(connection.quit()).unwrap();
-            let stored = std::mem::take(&mut server_state.lock().unwrap().stored);
-            assert_eq!(stored.len(), 1);
-            assert_eq!(stored[0].0, "myself@example.com");
-        }
-        let new_mail = r#"From: "some name" <some@example.com>
+        block_on(async move {
+            {
+                let mut connection = SmtpConnection::new_connection(smtp_server_conf.clone())
+                    .await
+                    .unwrap();
+                connection
+                    .mail_transaction(
+                        new_mail,
+                        /* tos */
+                        Some(&[
+                            Address::new(None::<&str>, "user2@example.com"),
+                            Address::new(None::<&str>, "postmaster@example.com"),
+                        ]),
+                    )
+                    .await
+                    .unwrap();
+                connection.quit().await.unwrap();
+                let stored = std::mem::take(&mut server_state.lock().unwrap().stored);
+                assert_eq!(stored.len(), 2);
+                assert_eq!(stored[0].0, "user2@example.com");
+                assert_eq!(stored[1].0, "postmaster@example.com");
+            }
+            {
+                let mut connection = SmtpConnection::new_connection(smtp_server_conf.clone())
+                    .await
+                    .unwrap();
+                connection
+                    .mail_transaction(new_mail, /* tos */ None)
+                    .await
+                    .unwrap();
+                connection.quit().await.unwrap();
+                let stored = std::mem::take(&mut server_state.lock().unwrap().stored);
+                assert_eq!(stored.len(), 1);
+                assert_eq!(stored[0].0, "myself@example.com");
+            }
+            let new_mail = r#"From: "some name" <some@example.com>
 To: "first m. name" <myself@example.com>
 Cc: "first m. name" <myself@example.com>, "Bj=?UTF-8?B?w7Y=?=rn" <bjorn@example.com>
 Subject: RE: your e-mail
@@ -552,19 +560,25 @@ Content-Type: text/plain
 
 hello world.
 "#;
-        {
-            let mut connection =
-                block_on(SmtpConnection::new_connection(smtp_server_conf)).unwrap();
-            block_on(connection.mail_transaction(new_mail, /* tos */ None)).unwrap();
-            block_on(connection.quit()).unwrap();
-            let stored = std::mem::take(&mut server_state.lock().unwrap().stored);
-            assert_eq!(stored.len(), 3);
-            assert_eq!(stored[0].0, "myself@example.com");
-            assert_eq!(stored[1].0, "myself@example.com");
-            assert_eq!(stored[2].0, "bjorn@example.com");
-        }
+            {
+                let mut connection = SmtpConnection::new_connection(smtp_server_conf)
+                    .await
+                    .unwrap();
+                connection
+                    .mail_transaction(new_mail, /* tos */ None)
+                    .await
+                    .unwrap();
+                connection.quit().await.unwrap();
+                let stored = std::mem::take(&mut server_state.lock().unwrap().stored);
+                assert_eq!(stored.len(), 3);
+                assert_eq!(stored[0].0, "myself@example.com");
+                assert_eq!(stored[1].0, "myself@example.com");
+                assert_eq!(stored[2].0, "bjorn@example.com");
+            }
+        });
         server_event_sender
             .unbounded_send(ServerEvent::Quit)
             .unwrap();
+        _ = smtp_handle.join().unwrap();
     }
 }
