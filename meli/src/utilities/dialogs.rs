@@ -305,7 +305,9 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
                 return true;
             }
             (UIEvent::Input(ref key), _)
-                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_up"])
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_left"])
+                    || shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_right"])
+                    || shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_up"])
                     || shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_down"]) =>
             {
                 return true;
