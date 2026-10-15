@@ -536,6 +536,9 @@ impl std::fmt::Display for ChoiceField {
 #[derive(Clone)]
 pub struct DictField {
     pub values: Box<FormWidget<(), Cow<'static, str>, Field>>,
+    /// If `true`, it implies the dict field represents a set of unique values instead of a
+    /// dictionary, i.e. it hides the keys.
+    pub is_a_set: bool,
     pub rename_entry: Option<Box<FormWidget<FormButtonAction, Cow<'static, str>, TextField>>>,
     pub new_entry_constructor: Arc<dyn Fn() -> Field + Send + Sync>,
 }
@@ -585,6 +588,7 @@ impl Component for DictField {
         }
 
         if self.values.is_dirty() {
+            self.values.hide_field_names = self.is_a_set;
             if self.values.focused {
                 let shortcuts = self.shortcuts(context);
                 let help_area = area.take_rows(1);
@@ -648,7 +652,10 @@ impl Component for DictField {
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Self::SHORTCUTS_KEY][Self::SHORTCUTS_RENAME]) =>
             {
-                if let Some(field) = self
+                if self.is_a_set {
+                    self.values
+                        .process_event(&mut UIEvent::Input(Key::Char('\n')), context);
+                } else if let Some(field) = self
                     .values
                     .fields
                     .get_index(self.values.cursor)
@@ -1121,6 +1128,7 @@ where
     focus: FormFocus,
     focused: bool,
     hide_buttons: bool,
+    hide_field_names: bool,
     dirty: bool,
     pub cursor_up_shortcut: Key,
     pub cursor_down_shortcut: Key,
@@ -1143,6 +1151,7 @@ impl<
             focus: self.focus,
             focused: self.focused,
             hide_buttons: self.hide_buttons,
+            hide_field_names: self.hide_field_names,
             field_name_max_length: self.field_name_max_length,
             cursor: self.cursor,
             dirty: true,
@@ -1168,6 +1177,7 @@ impl<
             padding: 3,
             focus: FormFocus::Fields,
             hide_buttons: false,
+            hide_field_names: false,
             field_name_max_length: 10,
             cursor: 0,
             focused: true,
@@ -1213,6 +1223,7 @@ impl<
             ),
             focus: FormFocus::Fields,
             hide_buttons: false,
+            hide_field_names: false,
             cursor_up_shortcut,
             cursor_down_shortcut,
             cursor_right_shortcut,
@@ -1371,6 +1382,7 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync, L: FormWidgetL
                 values: Box::new(dict),
                 rename_entry: None,
                 new_entry_constructor,
+                is_a_set: false,
             }),
         );
         let Field::Dict(field) = &mut self.fields[&field_name] else {
@@ -1440,25 +1452,34 @@ impl<
                     } else {
                         label_attrs
                     };
-                // Write field label
-                grid.write_string(&k.display(), &theme_attr, field_area, None, None);
-                // draw field
-                f.draw(
-                    grid,
-                    field_area.skip_cols(self.field_name_max_length + 2),
-                    context,
-                );
+                if self.hide_field_names {
+                    f.draw(grid, field_area, context);
+                    // Highlight if necessary
+                    if self.focused && i == self.cursor && self.focus == FormFocus::TextInput {
+                        highlight_offset =
+                            Some((i, (field_area, area.skip_rows(i + y_offset + 1))));
+                    }
+                } else {
+                    // Write field label
+                    grid.write_string(&k.display(), &theme_attr, field_area, None, None);
+                    // draw field
+                    f.draw(
+                        grid,
+                        field_area.skip_cols(self.field_name_max_length + 2),
+                        context,
+                    );
 
-                // Highlight if necessary
-                if self.focused && i == self.cursor && self.focus == FormFocus::TextInput {
-                    highlight_offset = Some((
-                        i,
-                        (
-                            field_area.skip_cols(self.field_name_max_length + 2),
-                            area.skip_rows(i + y_offset + 1)
-                                .skip_cols(self.field_name_max_length + 2),
-                        ),
-                    ));
+                    // Highlight if necessary
+                    if self.focused && i == self.cursor && self.focus == FormFocus::TextInput {
+                        highlight_offset = Some((
+                            i,
+                            (
+                                field_area.skip_cols(self.field_name_max_length + 2),
+                                area.skip_rows(i + y_offset + 1)
+                                    .skip_cols(self.field_name_max_length + 2),
+                            ),
+                        ));
+                    }
                 }
                 y_offset += height.saturating_sub(1);
             }

@@ -569,24 +569,26 @@ impl ContactEditor {
                 as Box<dyn Fn() -> Field + Send + Sync>)
                 .into(),
         );
-        self.form.push_dict(
-            (
-                ContactFieldLabel::Keywords,
-                self.card
-                    .keywords
-                    .iter()
-                    .map(|(k, _)| {
-                        (
-                            k.to_owned(),
-                            Field::Text(TextField::new(UText::new(k.to_owned()), None)),
-                        )
-                    })
-                    .collect(),
-            ),
-            (Box::new(|| Field::Text(TextField::new(UText::new(String::new()), None)))
-                as Box<dyn Fn() -> Field + Send + Sync>)
-                .into(),
-        );
+        self.form
+            .push_dict(
+                (
+                    ContactFieldLabel::Keywords,
+                    self.card
+                        .keywords
+                        .iter()
+                        .map(|(k, _)| {
+                            (
+                                k.to_owned(),
+                                Field::Text(TextField::new(UText::new(k.to_owned()), None)),
+                            )
+                        })
+                        .collect(),
+                ),
+                (Box::new(|| Field::Text(TextField::new(UText::new(String::new()), None)))
+                    as Box<dyn Fn() -> Field + Send + Sync>)
+                    .into(),
+            )
+            .is_a_set = true;
         self.form.push_dict(
             (
                 ContactFieldLabel::CryptoKey,
