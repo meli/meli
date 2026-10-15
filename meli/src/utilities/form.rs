@@ -32,7 +32,7 @@ use melib::{
 use crate::{
     components::prelude::*,
     terminal::text_editing::UText,
-    utilities::{widgets::AutoComplete, AutoCompleteFn},
+    utilities::autocomplete::{AutoComplete, AutoCompleteFn},
 };
 
 trait GetIndex {

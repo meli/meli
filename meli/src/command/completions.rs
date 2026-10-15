@@ -49,7 +49,7 @@ use crate::{
         parser::{LexToken, LexTokenError, Lexer},
         Token, TokenStream, COMMAND_COMPLETION,
     },
-    utilities::AutoCompleteEntry,
+    utilities::autocomplete::AutoCompleteEntry,
 };
 
 /// Generate command completions.

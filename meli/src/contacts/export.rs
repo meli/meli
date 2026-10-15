@@ -25,9 +25,11 @@ use melib::{contacts::Card, utils::shellexpand::ShellExpandTrait as _};
 use crate::{
     components::prelude::*,
     terminal::*,
-    types::NotificationType,
-    utilities::form::{Field, FormButtonAction},
-    AutoCompleteEntry, CellBuffer, Component, ComponentId, Context, File, Key, UIEvent,
+    types::{File, NotificationType},
+    utilities::{
+        autocomplete::generic_file_path_complete_fn,
+        form::{Field, FormButtonAction},
+    },
 };
 
 type FormWidget = crate::utilities::form::FormWidget<FormButtonAction, Cow<'static, str>, Field>;
@@ -65,65 +67,7 @@ impl ContactExportDialog {
         form.push_cl((
             "Path or directory".into(),
             String::new(),
-            Box::new(move |_, term| {
-                use crate::command::parser::Lexer;
-
-                let mut lexer = Lexer::new(term);
-                let Some(input) = lexer.next() else {
-                    return vec![];
-                };
-                if lexer.next().is_some() {
-                    return vec![];
-                }
-                match input {
-                    Ok(input) => std::path::Path::new(input.value())
-                        .complete(true, input.value().ends_with('/'))
-                        .into_iter()
-                        .take(100)
-                        .map(|m| {
-                            format!(
-                                "{input}{path}",
-                                input = term.strip_suffix(input.raw()).unwrap(),
-                                path = input.append(&m)
-                            )
-                        })
-                        .map(AutoCompleteEntry::from)
-                        .collect::<Vec<AutoCompleteEntry>>(),
-                    Err(lex_token_err) => {
-                        if let (Some(raw), Some(value)) =
-                            (lex_token_err.raw(), lex_token_err.value())
-                        {
-                            std::path::Path::new(value)
-                                .complete(true, value.ends_with('/'))
-                                .into_iter()
-                                .take(100)
-                                .map(|m| {
-                                    if lex_token_err.is_quoted()
-                                        || m.contains('"')
-                                        || m.contains(' ')
-                                    {
-                                        format!(
-                                            "{input}\"{value}{m}\"",
-                                            input = term.strip_suffix(raw).unwrap(),
-                                            value = value,
-                                            m = m.replace('"', "\\\""),
-                                        )
-                                    } else {
-                                        format!(
-                                            "{input}{value}{m}",
-                                            input = term.strip_suffix(raw).unwrap(),
-                                            value = value,
-                                        )
-                                    }
-                                })
-                                .map(AutoCompleteEntry::from)
-                                .collect::<Vec<AutoCompleteEntry>>()
-                        } else {
-                            vec![]
-                        }
-                    }
-                }
-            }),
+            generic_file_path_complete_fn(),
         ));
         form.push_choices((
             "Format".into(),

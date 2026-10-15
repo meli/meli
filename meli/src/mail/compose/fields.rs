@@ -26,7 +26,10 @@ use melib::{parser::BytesExt as _, text::Truncate as _, AccountHash, Contacts};
 
 use crate::{
     account_settings,
-    utilities::{form::ValidateFn, AutoCompleteEntry, AutoCompleteFn},
+    utilities::{
+        autocomplete::{AutoCompleteEntry, AutoCompleteFn},
+        form::ValidateFn,
+    },
 };
 
 #[inline]

@@ -32,7 +32,7 @@ use crate::{
         parser::{self, lex, LexToken, LexTokenError},
         CommandError,
     },
-    utilities::AutoCompleteEntry,
+    utilities::autocomplete::AutoCompleteEntry,
 };
 
 #[test]
