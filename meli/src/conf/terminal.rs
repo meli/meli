@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-//! Settings for terminal display
+//! Settings for terminal display and behaviour
 
 use melib::{Error, Result, ToggleFlag};
 
@@ -66,6 +66,9 @@ pub struct TerminalSettings {
     /// animation. Default: 0
     #[serde(default)]
     pub progress_spinner_sequence: Option<ProgressSpinnerSequence>,
+    /// Whether the `shortcuts.general.quit` shortcut needs a confirmation to quit.
+    #[serde(default = "ToggleFlag::internal_true")]
+    pub quit_confirmation: ToggleFlag,
 }
 
 const fn tab_width() -> u8 {
@@ -87,6 +90,7 @@ impl Default for TerminalSettings {
             window_title: Some("meli".to_string()),
             file_picker_command: None,
             progress_spinner_sequence: None,
+            quit_confirmation: ToggleFlag::InternalVal(true),
         }
     }
 }
@@ -110,6 +114,11 @@ impl TerminalSettings {
     pub fn draw_hyperlinks(&self) -> bool {
         self.draw_hyperlinks.is_true()
     }
+
+    #[inline]
+    pub fn quit_confirmation(&self) -> bool {
+        self.quit_confirmation.is_true()
+    }
 }
 
 impl DotAddressable for TerminalSettings {
@@ -132,6 +141,7 @@ impl DotAddressable for TerminalSettings {
                     "progress_spinner_sequence" => {
                         self.progress_spinner_sequence.lookup(field, tail)
                     }
+                    "quit_confirmation" => self.quit_confirmation.lookup(field, tail),
                     other => Err(Error::new(format!(
                         "{parent_field} has no field named {other}"
                     ))),

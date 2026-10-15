@@ -225,6 +225,10 @@ fn run_app(mut opt: Opt) -> Result<()> {
                             }
                             state.rcv_event(UIEvent::StatusEvent(StatusEvent::JobFinished(id)));
                         },
+                        ThreadEvent::Quit => {
+                            drop(state);
+                            break 'main;
+                        }
                     }
                 },
                 recv(signal_recvr) -> sig => {

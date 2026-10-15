@@ -86,6 +86,8 @@ pub enum ThreadEvent {
     /// A thread has updated some of its information
     Pulse,
     JobFinished(JobId),
+    /// Force app exit
+    Quit,
 }
 
 impl ThreadEvent {

@@ -804,7 +804,32 @@ impl State {
             ref context,
             ..
         } = self;
-        components.values_mut().all(|c| c.can_quit_cleanly(context))
+        if !components.values_mut().all(|c| c.can_quit_cleanly(context)) {
+            return false;
+        }
+        if self.context.settings.terminal.quit_confirmation() {
+            let on_confirm_cb = Box::new({
+                move |_: ComponentId, result: bool, context: &mut Context| {
+                    if !result {
+                        return;
+                    }
+                    _ = context.main_loop_handler.sender.send(ThreadEvent::Quit);
+                }
+            });
+            let value = Box::new(UIConfirmationDialog::new(
+                "Quit meli?",
+                vec![(true, "yes".to_string()), (false, "no".to_string())],
+                true,
+                Some(on_confirm_cb),
+                &self.context,
+            ));
+            self.context.replies.push_back(UIEvent::GlobalUIDialog {
+                value,
+                parent: None,
+            });
+            return false;
+        }
+        true
     }
 
     pub fn register_component(&mut self, component: Box<dyn Component>) {
