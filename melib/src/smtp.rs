@@ -1023,7 +1023,11 @@ pub struct Reply<'s> {
 impl<'s> From<Reply<'s>> for Result<ReplyCode> {
     fn from(val: Reply<'s>) -> Self {
         if val.code.is_err() {
-            Err(Error::new(val.lines.join("\n")).set_summary(val.code.as_str()))
+            Err(Error::new(val.lines.join("\n")).set_details(format!(
+                "SMTP {code} error: {msg}",
+                code = val.code.value(),
+                msg = val.code.as_str()
+            )))
         } else {
             Ok(val.code)
         }
