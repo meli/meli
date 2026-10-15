@@ -151,22 +151,22 @@ impl std::fmt::Debug for ActionFn {
 
 #[derive(Debug)]
 enum ViewMode {
-    Discard(ComponentId, UIDialog<char>),
+    Discard(ComponentId, Box<UIDialog<char>>),
     EditAttachments {
         widget: Box<EditAttachments>,
     },
     Edit,
     EmbeddedPty,
-    SelectRecipients(UIDialog<Address>),
-    SelectKey(bool, pgp::KeySelection),
+    SelectRecipients(Box<UIDialog<Address>>),
+    SelectKey(bool, Box<pgp::KeySelection>),
     Send {
-        widget: UIConfirmationDialog,
+        widget: Box<UIConfirmationDialog>,
     },
     PerformAction {
-        widget: UIConfirmationDialog,
+        widget: Box<UIConfirmationDialog>,
         action: ActionFn,
     },
-    WaitingForSendResult(UIDialog<char>, JoinHandle<Result<()>>),
+    WaitingForSendResult(Box<UIDialog<char>>, JoinHandle<Result<()>>),
 }
 
 impl ViewMode {
@@ -294,7 +294,8 @@ impl Composer {
                             .push_back(UIEvent::FinishedUIDialog(id, Box::new(result)));
                     })),
                     context,
-                ),
+                )
+                .into(),
                 action: ActionFn(Box::new(|composer, _context| {
                     let now = melib::utils::datetime::timestamp_to_string(
                         melib::utils::datetime::now(),
@@ -518,26 +519,29 @@ impl Composer {
                             let add_s = add.to_string();
                             addresses.push((add, add_s));
                         }
-                        ret.mode = ViewMode::SelectRecipients(UIDialog::new(
-                            "select recipients",
-                            addresses,
-                            false,
-                            Some(Box::new(
-                                move |id: ComponentId, results: &[Address], context| {
-                                    context.replies.push_back(UIEvent::FinishedUIDialog(
-                                        id,
-                                        Box::new(
-                                            results
-                                                .iter()
-                                                .map(|a| a.to_string())
-                                                .collect::<Vec<String>>()
-                                                .join(", "),
-                                        ),
-                                    ));
-                                },
-                            )),
-                            context,
-                        ));
+                        ret.mode = ViewMode::SelectRecipients(
+                            UIDialog::new(
+                                "select recipients",
+                                addresses,
+                                false,
+                                Some(Box::new(
+                                    move |id: ComponentId, results: &[Address], context| {
+                                        context.replies.push_back(UIEvent::FinishedUIDialog(
+                                            id,
+                                            Box::new(
+                                                results
+                                                    .iter()
+                                                    .map(|a| a.to_string())
+                                                    .collect::<Vec<String>>()
+                                                    .join(", "),
+                                            ),
+                                        ));
+                                    },
+                                )),
+                                context,
+                            )
+                            .into(),
+                        );
                     }
                 }
             }
@@ -1182,20 +1186,15 @@ impl Component for Composer {
                 ));
                 widget.draw(grid, inner_area, context);
             }
-            ViewMode::SelectKey(
-                _,
-                pgp::KeySelection::Loaded {
-                    ref mut widget,
-                    keys: _,
-                },
-            ) => {
-                let inner_area = area.center_inside((
-                    area.width().saturating_sub(2),
-                    area.height().saturating_sub(2),
-                ));
-                widget.draw(grid, inner_area, context);
+            ViewMode::SelectKey(_, ref mut widget) => {
+                if let pgp::KeySelection::Loaded { widget, keys: _ } = widget.as_mut() {
+                    let inner_area = area.center_inside((
+                        area.width().saturating_sub(2),
+                        area.height().saturating_sub(2),
+                    ));
+                    widget.draw(grid, inner_area, context);
+                }
             }
-            ViewMode::SelectKey(_, _) => {}
             ViewMode::SelectRecipients(ref mut s) => {
                 let inner_area = area.center_inside((
                     area.width().saturating_sub(2),
@@ -1376,7 +1375,8 @@ impl Component for Composer {
                                         },
                                     )),
                                     context,
-                                ),
+                                )
+                                .into(),
                                 handle,
                             );
                         }
@@ -1676,7 +1676,8 @@ impl Component for Composer {
                                 .push_back(UIEvent::FinishedUIDialog(id, Box::new(result)));
                         })),
                         context,
-                    ),
+                    )
+                    .into(),
                 };
                 return true;
             }
@@ -1851,7 +1852,7 @@ impl Component for Composer {
                 {
                     Ok(widget) => {
                         self.pgp_state.sign_mail = Some(ActionFlag::from(true));
-                        self.mode = ViewMode::SelectKey(false, widget);
+                        self.mode = ViewMode::SelectKey(false, Box::new(widget));
                     }
                     Err(err) => {
                         context.replies.push_back(UIEvent::Notification {
@@ -1898,7 +1899,7 @@ impl Component for Composer {
                 match result.map(Into::into) {
                     Ok(widget) => {
                         self.pgp_state.encrypt_mail = Some(ActionFlag::from(true));
-                        self.mode = ViewMode::SelectKey(true, widget);
+                        self.mode = ViewMode::SelectKey(true, Box::new(widget));
                     }
                     Err(err) => {
                         context.replies.push_back(UIEvent::Notification {
@@ -1940,7 +1941,8 @@ impl Component for Composer {
                                 .push_back(UIEvent::FinishedUIDialog(id, Box::new(result)));
                         })),
                         context,
-                    ),
+                    )
+                    .into(),
                     action: ActionFn(Box::new(|composer, _context| {
                         let now = melib::utils::datetime::timestamp_to_string(
                             melib::utils::datetime::now(),
@@ -1977,7 +1979,8 @@ impl Component for Composer {
                                 .push_back(UIEvent::FinishedUIDialog(id, Box::new(result)))
                         })),
                         context,
-                    ),
+                    )
+                    .into(),
                     action: ActionFn(Box::new(|composer, context| {
                         composer.draft.set_body(String::new());
                         if *account_settings!(
@@ -2627,7 +2630,8 @@ impl Component for Composer {
                     },
                 )),
                 context,
-            ),
+            )
+            .into(),
         );
     }
 
@@ -2677,7 +2681,8 @@ impl Component for Composer {
                     },
                 )),
                 context,
-            ),
+            )
+            .into(),
         );
         self.set_dirty(true);
         false
