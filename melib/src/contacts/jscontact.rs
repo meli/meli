@@ -22,7 +22,7 @@
 
 use std::borrow::Cow;
 
-use crate::{email::Address, error::Result};
+use crate::email::Address;
 
 pub type JSContactV1 = JSContact<JSContactVersion1>;
 
@@ -38,8 +38,9 @@ impl JSContactVersion for JSContactVersionUnknown {}
 pub struct JSContactVersion1;
 impl JSContactVersion for JSContactVersion1 {}
 
-pub struct CardDeserializer;
-
+/// A generic representation of a `JSContact`.
+///
+/// Currently, only v1 is supported which can be accessed through the [`JSContactV1`] type alias.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct JSContact<T: JSContactVersion>(
     pub json_types::Card,
@@ -71,6 +72,7 @@ impl<V: JSContactVersion> std::fmt::Display for JSContact<V> {
 }
 
 impl JSContact<JSContactVersion1> {
+    /// Create a new v1 `JSContact` with a random `UUIDv4` uid.
     pub fn new() -> Self {
         Self(
             json_types::Card {
@@ -81,6 +83,7 @@ impl JSContact<JSContactVersion1> {
         )
     }
 
+    /// Generate a [`CardId`] out of the [`json_types::Card::uid`] UUID field.
     #[inline(always)]
     pub fn id(&self) -> crate::contacts::CardId {
         self.0.uid.into()
@@ -94,11 +97,14 @@ impl Default for JSContact<JSContactVersion1> {
 }
 
 impl<V: JSContactVersion> JSContact<V> {
+    /// Creates a new version 1 `JSContact`.
+    ///
+    /// To create a non-generic version, use [`JSContactV1::new`].
     pub fn new_v1() -> JSContact<impl JSContactVersion> {
         JSContactV1::new()
     }
 
-    /// Return an [`Address`] for this contact.
+    /// Create an [`Address`] for this contact.
     pub fn as_address(&self) -> Address {
         Address::new(
             self.name().map(|n| n.into_owned()),
@@ -106,6 +112,7 @@ impl<V: JSContactVersion> JSContact<V> {
         )
     }
 
+    /// Name of this contact.
     pub fn name(&'_ self) -> Option<Cow<'_, str>> {
         if self.name.is_empty() {
             None
@@ -139,16 +146,19 @@ impl<V: JSContactVersion> JSContact<V> {
         }
     }
 
+    /// The first entry in [`Self::emails`].
     pub fn email(&'_ self) -> Option<&str> {
         let (_, email) = self.emails.first()?;
         Some(&email.address)
     }
 
+    /// The first entry in [`Self::online_services`].
     pub fn url(&'_ self) -> Option<&str> {
         let (_, service) = self.online_services.first()?;
         Some(&service.uri)
     }
 
+    /// Locate birthday anniversary of this contact in [`Self::anniversaries`].
     pub fn birthday(&self) -> Option<crate::UnixTimestamp> {
         use json_types::{AnniversaryDate, AnniversaryKind};
         self.anniversaries.values().find_map(|a| {
@@ -164,10 +174,13 @@ impl<V: JSContactVersion> JSContact<V> {
         })
     }
 
+    /// Serialise `self` to a v4 vCard.
     pub fn to_vcard_string(&self) -> String {
         use crate::utils::vobject::{vcard::VcardBuilder, write_component};
 
-        let mut builder = VcardBuilder::new().with_uid(self.uid.as_urn().to_string());
+        let mut builder = VcardBuilder::new()
+            .with_uid(self.uid.as_urn().to_string())
+            .with_version("4.0".to_string());
         if let Some(email) = self.email() {
             builder = builder.with_email(email.to_owned());
         }
@@ -182,14 +195,6 @@ impl<V: JSContactVersion> JSContact<V> {
         }
 
         write_component(&builder.build().unwrap())
-    }
-}
-
-impl CardDeserializer {
-    pub fn try_from_str(input: &str) -> Result<JSContact<JSContactVersion1>> {
-        let inner: json_types::Card = serde_json::from_str(input)?;
-
-        Ok(JSContact(inner, std::marker::PhantomData))
     }
 }
 
