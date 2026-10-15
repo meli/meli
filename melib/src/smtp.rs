@@ -182,12 +182,12 @@ pub struct SmtpServerConf {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SmtpExtensionSupport {
     #[serde(default = "crate::conf::true_val")]
-    pipelining: bool,
+    pub pipelining: bool,
     #[serde(default = "crate::conf::true_val")]
-    chunking: bool,
+    pub chunking: bool,
     /// [RFC 6152: SMTP Service Extension for 8-bit MIME Transport](https://www.rfc-editor.org/rfc/rfc6152)
     #[serde(alias = "8bitmime", default = "crate::conf::true_val")]
-    _8bitmime: bool,
+    pub _8bitmime: bool,
     /// Essentially, the PRDR extension to SMTP allows (but does not require) an
     /// SMTP server to issue multiple responses after a message has been
     /// transferred, by mutual consent of the client and server. SMTP
@@ -195,17 +195,17 @@ pub struct SmtpExtensionSupport {
     /// responses as supplemental data to the responses that were received
     /// during the earlier envelope exchange.
     #[serde(default = "crate::conf::true_val")]
-    prdr: bool,
+    pub prdr: bool,
     #[serde(default = "crate::conf::true_val")]
-    binarymime: bool,
+    pub binarymime: bool,
     /// Resources:
     /// - <http://www.postfix.org/SMTPUTF8_README.html>
     #[serde(default = "crate::conf::true_val")]
-    smtputf8: bool,
+    pub smtputf8: bool,
     #[serde(default = "crate::conf::true_val")]
-    auth: bool,
+    pub auth: bool,
     #[serde(default = "default_dsn")]
-    dsn_notify: Option<Cow<'static, str>>,
+    pub dsn_notify: Option<Cow<'static, str>>,
 }
 
 fn default_dsn() -> Option<Cow<'static, str>> {
