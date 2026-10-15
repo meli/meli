@@ -1234,6 +1234,15 @@ impl<
         }
     }
 
+    pub fn height(&self) -> usize {
+        self.values()
+            .values()
+            .map(|f| f.height())
+            .sum::<usize>()
+            .max(1)
+            + usize::from(!self.hide_buttons) * (1 + self.padding)
+    }
+
     pub fn cursor(&self) -> usize {
         self.cursor
     }

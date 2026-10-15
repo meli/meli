@@ -148,7 +148,7 @@ impl Component for ContactExportDialog {
         // //FIXME
         //     return;
         // }
-        let area = area.center_inside((48, 10));
+        let area = area.center_inside((60, self.form.height() + 8));
         grid.clear_area(area, self.theme_default);
 
         let form_area = create_box(grid, area);
