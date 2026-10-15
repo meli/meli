@@ -227,6 +227,20 @@ impl Default for SmtpExtensionSupport {
     }
 }
 
+impl SmtpExtensionSupport {
+    /// Check that the set extension combinations are valid.
+    pub fn validate(&mut self) -> Result<()> {
+        if self.binarymime && !self.chunking {
+            self.binarymime = false;
+            return Err(Error::new(
+                "The BINARYMIME service extension can only be used with the \"CHUNKING\" service \
+                 extension.",
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// SMTP client session object.
 ///
 /// See module-wide documentation.
@@ -545,6 +559,7 @@ impl SmtpConnection {
         if !reply.lines.contains(&"DSN") {
             self.server_conf.extensions.dsn_notify = None;
         }
+        _ = self.server_conf.extensions.validate();
     }
 
     pub async fn read_lines<'r>(
