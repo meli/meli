@@ -53,7 +53,9 @@ pub mod listings;
 #[cfg(test)]
 pub mod tests;
 
-pub type AutoCompleteFn = Box<dyn Fn(&Context, &str) -> Vec<AutoCompleteEntry> + Send + Sync>;
+pub mod autocomplete;
+
+use autocomplete::{AutoComplete, AutoCompleteEntry};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum SearchMovement {
