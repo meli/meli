@@ -72,6 +72,7 @@ pub struct Selector<
     entries: Vec<(T, bool)>,
     entry_titles: Vec<String>,
     theme_default: ThemeAttribute,
+    highlighted_attrs: ThemeAttribute,
 
     cursor: SelectorCursor,
     scroll_x_cursor: usize,
@@ -553,6 +554,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static 
         }
 
         let theme_default = crate::conf::theme_value(context, "theme_default");
+        let highlighted_attrs = crate::conf::theme_value(context, "widgets.options.highlighted");
         let mut ret = Self {
             single_only,
             entries: identifiers,
@@ -570,6 +572,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static 
             done_fn,
             dirty: true,
             theme_default,
+            highlighted_attrs,
             id: ComponentId::default(),
         };
         ret.initialise(context);
@@ -607,6 +610,10 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static 
 
     fn initialise(&mut self, context: &Context) {
         self.theme_default = crate::conf::theme_value(context, "theme_default");
+        self.highlighted_attrs = crate::conf::theme_value(context, "widgets.options.highlighted");
+        if !context.settings.terminal.use_color() {
+            self.highlighted_attrs.attrs |= Attr::REVERSE;
+        }
     }
 
     pub fn is_done(&self) -> bool {
@@ -622,11 +629,6 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static 
     }
 
     fn initialize(&mut self, context: &Context) {
-        let mut highlighted_attrs =
-            crate::conf::theme_value(context, "widgets.options.highlighted");
-        if !context.settings.terminal.use_color() {
-            highlighted_attrs.attrs |= Attr::REVERSE;
-        }
         let shortcuts = context.settings.shortcuts.general.key_values();
         let navigate_help_string = format!(
             "Navigate options with {} to go down, {} to go up, select with {}, cancel with {}",
@@ -678,7 +680,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static 
         if self.single_only {
             for (i, e) in self.entry_titles.iter().enumerate() {
                 let attr = if matches!(self.cursor, SelectorCursor::Entry(e) if e == i) {
-                    highlighted_attrs
+                    self.highlighted_attrs
                 } else {
                     self.theme_default
                 };
@@ -689,7 +691,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static 
         } else {
             for (i, e) in self.entry_titles.iter().enumerate() {
                 let attr = if matches!(self.cursor, SelectorCursor::Entry(e) if e == i) {
-                    highlighted_attrs
+                    self.highlighted_attrs
                 } else {
                     self.theme_default
                 };
@@ -703,7 +705,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static 
             }
             let inner_area = inner_area.nth_row(self.entry_titles.len() + 2).skip_cols(2);
             let attr = if matches!(self.cursor, SelectorCursor::Ok) {
-                highlighted_attrs
+                self.highlighted_attrs
             } else {
                 self.theme_default
             };
@@ -715,7 +717,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static 
                 None,
             );
             let attr = if matches!(self.cursor, SelectorCursor::Cancel) {
-                highlighted_attrs
+                self.highlighted_attrs
             } else {
                 self.theme_default
             };
@@ -731,11 +733,6 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static 
     }
 
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        let mut highlighted_attrs =
-            crate::conf::theme_value(context, "widgets.options.highlighted");
-        if !context.settings.terminal.use_color() {
-            highlighted_attrs.attrs |= Attr::REVERSE;
-        }
         if !self.initialized {
             // [ref:FIXME]: don't re-initialize when the only change is highlight index.
             self.initialize(context);
