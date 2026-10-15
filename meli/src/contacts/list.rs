@@ -46,7 +46,10 @@ use melib::{
 use crate::{
     account_settings,
     components::prelude::*,
-    contacts::{editor::ContactEditor, export::ContactExportDialog},
+    contacts::{
+        editor::ContactEditor,
+        export::{ContactExportDialog, ContactImportDialog},
+    },
     mail::compose::Composer,
     types::{ContactBackendStatusChangeKind, NotificationType},
     utilities::listings::{AccountEntryTrait, List},
@@ -508,6 +511,17 @@ impl Component for AddressBookList {
                 context.replies.push_back(UIEvent::GlobalUIDialog {
                     value: Box::new(ContactExportDialog::new(card, context)),
                     parent: None,
+                });
+                return true;
+            }
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["import_contact"]) =>
+            {
+                let import =
+                    ContactImportDialog::new(self.account_hash, self.backend_id.clone(), context);
+                context.replies.push_back(UIEvent::GlobalUIDialog {
+                    value: Box::new(import),
+                    parent: Some(self.id),
                 });
                 return true;
             }

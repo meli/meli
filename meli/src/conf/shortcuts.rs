@@ -197,6 +197,7 @@ shortcut_key_values! { "contact-list",
         create_contact |> "Create new contact." |> Key::Char('c'),
         edit_contact |> "Edit contact under cursor." |> Key::Char('e'),
         export_contact |> "Export contact under cursor to .vcf." |> Key::Char('E'),
+        import_contact |> "Import contact from .vcf file." |> Key::Char('I'),
         delete_contact |> "Delete contact under cursor." |> Key::Char('d'),
         mail_contact |> "Mail contact under cursor." |> Key::Char('m'),
     }

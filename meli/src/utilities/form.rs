@@ -27,6 +27,7 @@ use std::{borrow::Cow, sync::Arc};
 use melib::{
     error::{Error, ErrorKind, Result},
     text::Truncate as _,
+    utils::shellexpand::ShellExpandTrait as _,
 };
 
 use crate::{
@@ -1884,4 +1885,20 @@ where
     fn id(&self) -> ComponentId {
         self.id
     }
+}
+
+#[inline]
+pub fn generic_file_path_validate_fn() -> Option<ValidateFn> {
+    Some(Arc::new(|d| -> bool {
+        use crate::command::parser::Lexer;
+
+        let mut lexer = Lexer::new(d);
+        let Some(input) = lexer.next() else {
+            return false;
+        };
+        if lexer.next().is_some() {
+            return false;
+        }
+        matches!(input, Ok(input) if matches!(std::path::Path::new(input.value()).expand().try_exists(), Ok(true)))
+    }))
 }
