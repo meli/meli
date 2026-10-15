@@ -497,17 +497,6 @@ impl Component for TextField {
 
     fn set_dirty(&mut self, _value: bool) {}
 
-    fn shortcuts(&self, _: &Context) -> ShortcutMaps {
-        let mut map = ShortcutMaps::default();
-        if !self.read_only {
-            let mut our_map: ShortcutMap = Default::default();
-            our_map.insert("toggle field editing", Key::Char('\n'));
-            map.insert("text entry", our_map);
-        }
-
-        map
-    }
-
     fn id(&self) -> ComponentId {
         self.id
     }
@@ -1681,14 +1670,14 @@ impl<
             Default::default()
         };
         let mut our_map: ShortcutMap = Default::default();
-        our_map.insert("up", self.cursor_up_shortcut.clone());
-        our_map.insert("down", self.cursor_down_shortcut.clone());
+        our_map.insert("scroll_up", self.cursor_up_shortcut.clone());
+        our_map.insert("scroll_down", self.cursor_down_shortcut.clone());
 
         if let Some(field) = self.fields.get_indexed(self.cursor) {
             map.extend(field.shortcuts(context));
         }
 
-        map.insert("fields input", our_map);
+        map.insert(Shortcuts::GENERAL, our_map);
 
         map
     }
@@ -1830,9 +1819,12 @@ where
         }
     }
 
-    fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        let shortcuts = self.shortcuts(context);
         match *event {
-            UIEvent::Input(Key::Char('\n')) => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["open_entry"]) =>
+            {
                 self.result = Some(
                     self.buttons
                         .get_indexed(self.cursor)
@@ -1842,15 +1834,17 @@ where
                 self.set_dirty(true);
                 return true;
             }
-            UIEvent::Input(ref k) if *k == self.cursor_left_shortcut => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_left"]) =>
+            {
                 if self.cursor > 0 {
                     self.cursor -= 1;
                     self.set_dirty(true);
                     return true;
                 }
             }
-            UIEvent::Input(ref k)
-                if *k == self.cursor_right_shortcut
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_right"])
                     && self.cursor < self.buttons.len().saturating_sub(1) =>
             {
                 self.cursor += 1;
@@ -1870,14 +1864,17 @@ where
         self.dirty = value;
     }
 
-    fn shortcuts(&self, _: &Context) -> ShortcutMaps {
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = ShortcutMaps::default();
 
         let mut our_map: ShortcutMap = Default::default();
-        our_map.insert("right", self.cursor_right_shortcut.clone());
-        our_map.insert("left", self.cursor_left_shortcut.clone());
-        our_map.insert("select", Key::Char('\n'));
-        map.insert("buttons", our_map);
+        our_map.insert("scroll_right", self.cursor_right_shortcut.clone());
+        our_map.insert("scroll_left", self.cursor_left_shortcut.clone());
+        our_map.insert(
+            "open_entry",
+            context.settings.shortcuts.general.open_entry.clone(),
+        );
+        map.insert(Shortcuts::GENERAL, our_map);
 
         map
     }
