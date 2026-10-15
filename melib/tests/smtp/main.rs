@@ -35,6 +35,11 @@ rusty_fork_test! {
     fn test_smtp_transaction() {
         tests::run_smtp_transaction();
     }
+
+    #[test]
+    fn test_smtp_pipelining() {
+        tests::run_smtp_pipelining();
+    }
 }
 
 pub mod server {
@@ -86,6 +91,7 @@ pub mod server {
     #[derive(Debug)]
     pub struct ServerState {
         pub messages: Vec<QueuedMessage>,
+        pub reject_mailboxes: Vec<String>,
         pub stored: Vec<(String, Envelope)>,
         pub auth: SmtpAuth,
         pub security: SmtpSecurity,
@@ -95,6 +101,7 @@ pub mod server {
     impl ServerState {
         pub fn clear(&mut self) {
             self.messages.clear();
+            self.reject_mailboxes.clear();
             self.stored.clear();
         }
 
@@ -172,6 +179,11 @@ pub mod server {
         fn rcpt(&mut self, _to: &str) -> ReplyCode {
             eprintln!("rcpt() to {_to:?}");
             if let Some((_, message)) = self.messages.last_mut() {
+                if let Some(pos) = self.reject_mailboxes.iter().position(|rej| rej == _to) {
+                    self.reject_mailboxes.remove(pos);
+                    return ReplyCode::_550;
+                }
+
                 eprintln!("rcpt mail is {:?}", message);
                 if let Message::Mail { from } = message {
                     *message = Message::Rcpt {
@@ -264,6 +276,7 @@ pub mod server {
             let state = Arc::new(Mutex::new(ServerState {
                 messages: vec![],
                 stored: vec![],
+                reject_mailboxes: vec![],
                 auth,
                 security,
                 extensions,
@@ -574,6 +587,134 @@ hello world.
                 assert_eq!(stored[0].0, "myself@example.com");
                 assert_eq!(stored[1].0, "myself@example.com");
                 assert_eq!(stored[2].0, "bjorn@example.com");
+            }
+        });
+        server_event_sender
+            .unbounded_send(ServerEvent::Quit)
+            .unwrap();
+        _ = smtp_handle.join().unwrap();
+    }
+
+    pub fn run_smtp_pipelining() {
+        let mut _logger = Logger::new_with(LogLevel::TRACE, true);
+        let (server_event_sender, server_event_receiver) = unbounded();
+        let server = SmtpServer::new(
+            server_event_receiver,
+            SmtpAuth::None,
+            SmtpSecurity::None,
+            SmtpExtensionSupport {
+                pipelining: true,
+                chunking: false,
+                _8bitmime: false,
+                prdr: false,
+                binarymime: false,
+                smtputf8: false,
+                auth: false,
+                dsn_notify: None,
+            },
+        );
+        let server_state = server.state.clone();
+
+        let smtp_server_conf = SmtpServerConf {
+            hostname: Secret::Value(server.addr.ip().to_string()),
+            port: server.addr.port(),
+            envelope_from: "user@example.com".into(),
+            auth: SmtpAuth::None,
+            security: SmtpSecurity::None,
+            extensions: Default::default(),
+            trace: true,
+        };
+        let smtp_handle = thread::spawn(move || block_on(server.serve()));
+        let new_mail = r#"From: "some name" <some@example.com>
+To: "me" <myself@example.com>
+Cc:
+Subject: RE: your e-mail
+Message-ID: <h2g7f.z0gy2pgaen5m@example.com>
+Content-Type: text/plain
+
+hello world.
+"#;
+        block_on(async move {
+            {
+                let mut connection = SmtpConnection::new_connection(smtp_server_conf.clone())
+                    .await
+                    .unwrap();
+                connection
+                    .mail_transaction(
+                        new_mail,
+                        /* tos */
+                        Some(&[
+                            Address::new(None::<&str>, "user2@example.com"),
+                            Address::new(None::<&str>, "postmaster@example.com"),
+                        ]),
+                    )
+                    .await
+                    .unwrap();
+                connection.quit().await.unwrap();
+                let stored = std::mem::take(&mut server_state.lock().unwrap().stored);
+                assert_eq!(stored.len(), 2);
+                assert_eq!(stored[0].0, "user2@example.com");
+                assert_eq!(stored[1].0, "postmaster@example.com");
+            }
+            {
+                server_state
+                    .lock()
+                    .unwrap()
+                    .reject_mailboxes
+                    .push("user2@example.com".to_string());
+                let mut connection = SmtpConnection::new_connection(smtp_server_conf.clone())
+                    .await
+                    .unwrap();
+                let err = connection
+                    .mail_transaction(
+                        new_mail,
+                        /* tos */
+                        Some(&[
+                            Address::new(None::<&str>, "user2@example.com"),
+                            Address::new(None::<&str>, "postmaster@example.com"),
+                        ]),
+                    )
+                    .await
+                    .unwrap_err();
+                assert!(
+                    err.details.as_ref().unwrap().starts_with("SMTP 550 error"),
+                    "{err:?}"
+                );
+                connection.quit().await.unwrap();
+                let mut server_state = server_state.lock().unwrap();
+                let stored = std::mem::take(&mut server_state.stored);
+                assert_eq!(stored.len(), 0);
+                server_state.clear();
+            }
+            {
+                server_state
+                    .lock()
+                    .unwrap()
+                    .reject_mailboxes
+                    .push("postmaster@example.com".to_string());
+                let mut connection = SmtpConnection::new_connection(smtp_server_conf.clone())
+                    .await
+                    .unwrap();
+                let err = connection
+                    .mail_transaction(
+                        new_mail,
+                        /* tos */
+                        Some(&[
+                            Address::new(None::<&str>, "user2@example.com"),
+                            Address::new(None::<&str>, "postmaster@example.com"),
+                        ]),
+                    )
+                    .await
+                    .unwrap_err();
+                assert!(
+                    err.details.as_ref().unwrap().starts_with("SMTP 550 error"),
+                    "{err:?}"
+                );
+                connection.quit().await.unwrap();
+                let mut server_state = server_state.lock().unwrap();
+                let stored = std::mem::take(&mut server_state.stored);
+                assert_eq!(stored.len(), 0);
+                server_state.clear();
             }
         });
         server_event_sender
