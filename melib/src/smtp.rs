@@ -177,7 +177,6 @@ pub struct SmtpServerConf {
     pub trace: bool,
 }
 
-//example: "SIZE 52428800", "8BITMIME", "PIPELINING", "CHUNKING", "PRDR",
 /// Configured SMTP extensions to use
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SmtpExtensionSupport {
@@ -326,7 +325,6 @@ impl SmtpConnection {
                     )
                     .await?;
                     drop(pre_tls_extensions_reply);
-                    //debug!(pre_tls_extensions_reply);
                     socket.write_all(b"STARTTLS\r\n").await?;
                     let _post_starttls_extensions_reply = read_lines(
                         &mut socket,
@@ -335,7 +333,6 @@ impl SmtpConnection {
                         &mut String::new(),
                     )
                     .await?;
-                    //debug!(post_starttls_extensions_reply);
                 }
 
                 let mut ret = {
@@ -539,7 +536,6 @@ impl SmtpConnection {
                 ret.set_extension_support(extensions_reply);
             }
         }
-        //debug!(&res);
         Ok(ret)
     }
 
@@ -603,7 +599,7 @@ impl SmtpConnection {
             ));
         }
         let mut current_command: SmallVec<[&[u8]; 16]> = SmallVec::new();
-        //first step in the procedure is the MAIL command.
+        // first step in the procedure is the MAIL command.
         // `MAIL FROM:<reverse-path> [SP <mail-parameters> ] <CRLF>`
         current_command.push(b"MAIL FROM:<");
         if !envelope_from.is_empty() {
@@ -641,7 +637,7 @@ impl SmtpConnection {
             self.read_lines(&mut res, Some((ReplyCode::_250, &[])))
                 .await?;
         }
-        //The second step in the procedure is the RCPT command. This step of the
+        // The second step in the procedure is the RCPT command. This step of the
         // procedure can be repeated any number of times. If accepted, the SMTP
         // server returns a "250 OK" reply. If the mailbox specification is not
         // acceptable for some reason, the server MUST return a reply indicating
@@ -672,7 +668,7 @@ impl SmtpConnection {
                     // <https://www.rfc-editor.org/info/rfc5321/#section-4.3.2>
                     //  S: 250, 251 (but see Section 3.4 for discussion of 251 and 551)
                     // E: 550, 551, 552, 553, 450, 451, 452, 503, 455, 555
-                    //`RCPT TO:<forward-path> [ SP <rcpt-parameters> ] <CRLF>`
+                    // `RCPT TO:<forward-path> [ SP <rcpt-parameters> ] <CRLF>`
                     // If accepted, the SMTP server returns a "250 OK" reply and stores the
                     // forward-path.
                     if self.server_conf.extensions.pipelining {
@@ -705,11 +701,11 @@ impl SmtpConnection {
                 .await?;
             self.stream.write_all(mail.as_bytes()).await?;
         } else {
-            //The third step in the procedure is the DATA command
-            //(or some alternative specified in a service extension).
-            //DATA `<CRLF>`
+            // The third step in the procedure is the DATA command
+            // (or some alternative specified in a service extension).
+            // DATA `<CRLF>`
             self.send_command(&[b"DATA"]).await?;
-            //Client SMTP implementations that employ pipelining MUST check ALL statuses
+            // Client SMTP implementations that employ pipelining MUST check ALL statuses
             // associated with each command in a group. For example, if none of
             // the RCPT TO recipient addresses were accepted the client must
             // then check the response to the DATA command -- the client
@@ -730,7 +726,7 @@ impl SmtpConnection {
                 pipelining_results.push(reply.into());
             }
 
-            //If accepted, the SMTP server returns a 354 Intermediate reply and considers
+            // If accepted, the SMTP server returns a 354 Intermediate reply and considers
             // all succeeding lines up to but not including the end of mail data
             // indicator to be the message text. When the end of text is
             // successfully received and stored, the SMTP-receiver sends a "250
@@ -738,7 +734,7 @@ impl SmtpConnection {
             self.read_lines(&mut res, Some((ReplyCode::_354, &[])))
                 .await?;
 
-            //Before sending a line of mail text, the SMTP client checks the first
+            // Before sending a line of mail text, the SMTP client checks the first
             // character of the line.If it is a period, one additional period is
             // inserted at the beginning of the line.
             for line in mail.lines() {
@@ -749,7 +745,7 @@ impl SmtpConnection {
                 self.stream.write_all(b"\r\n").await?;
             }
 
-            //The mail data are terminated by a line containing only a period, that is, the
+            // The mail data are terminated by a line containing only a period, that is, the
             // character sequence "`<CRLF>`.`<CRLF>`", where the first `<CRLF>` is
             // actually the terminator of the previous line (see Section 4.5.2).
             // This is the end of mail data indication.
@@ -757,7 +753,7 @@ impl SmtpConnection {
         }
         self.stream.flush().await?;
 
-        //The end of mail data indicator also confirms the mail transaction and tells
+        // The end of mail data indicator also confirms the mail transaction and tells
         // the SMTP server to now process the stored recipients and mail data.
         // If accepted, the SMTP server returns a "250 OK" reply.
         let reply_code = self
@@ -1103,7 +1099,6 @@ async fn read_lines<'r>(
     }
     let code = ReplyCode::try_from(&ret[..3])?;
     let reply = Reply::new(ret, code);
-    //debug!(&reply);
     if expected_reply_code
         .map(|(exp, exp_list)| exp != reply.code && !exp_list.contains(&reply.code))
         .unwrap_or(false)
