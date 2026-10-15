@@ -82,6 +82,7 @@ impl ContactExportDialog {
             vec!["VCard v4".into(), "JSContact v1".into()],
         ));
         form.add_button(("Export".into(), FormButtonAction::Accept));
+        form.set_padding(1);
         Self {
             id: ComponentId::default(),
             card,

@@ -1241,6 +1241,11 @@ impl<
         self.cursor = new_cursor;
     }
 
+    pub fn set_padding(&mut self, padding: usize) {
+        self.padding = padding;
+        self.dirty = true;
+    }
+
     pub fn set_focused(&mut self, focused: bool) {
         self.focused = focused;
         self.dirty = true;
