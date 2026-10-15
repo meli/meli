@@ -38,16 +38,20 @@ pub struct TerminalSettings {
     /// Default: 4.
     pub tab_width: u8,
     pub ascii_drawing: bool,
+    #[serde(default = "ToggleFlag::internal_true")]
     pub use_color: ToggleFlag,
     /// Draw `OSC8` hyperlinks.
     /// Default: True
+    #[serde(default = "ToggleFlag::internal_true")]
     pub draw_hyperlinks: ToggleFlag,
     /// Try forcing text presentations of symbols and emoji as much as possible.
     /// Might not work on all non-text symbols and is experimental.
+    #[serde(default = "ToggleFlag::internal_false")]
     pub force_text_presentation: ToggleFlag,
     /// Use mouse events. This will disable text selection, but you will be able
     /// to resize some widgets.
     /// Default: False
+    #[serde(default = "ToggleFlag::internal_false")]
     pub use_mouse: ToggleFlag,
     /// String to show in status bar if mouse is active.
     /// Default: "🖱️ "
