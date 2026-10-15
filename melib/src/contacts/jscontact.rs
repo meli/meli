@@ -298,6 +298,7 @@ pub mod json_types {
     impl_json_type_struct_serde! {NoteType, "Note"}
     impl_json_type_struct_serde! {AuthorType, "Author"}
     impl_json_type_struct_serde! {OrganizationType, "Organization"}
+    impl_json_type_struct_serde! {LinkType, "Link"}
 
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     #[non_exhaustive]
@@ -481,7 +482,7 @@ pub mod json_types {
         #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
         pub directories: IndexMap<String, serde_json::Value>,
         #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
-        pub links: IndexMap<String, serde_json::Value>,
+        pub links: IndexMap<String, Link>,
         #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
         pub media: IndexMap<String, serde_json::Value>,
         #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
@@ -764,6 +765,31 @@ pub mod json_types {
     pub struct CryptoKey {
         #[serde(rename = "@type", default, skip_serializing_if = "Option::is_none")]
         pub __type: Option<CryptoKeyType>,
+        #[serde(flatten)]
+        pub resource: Resource,
+    }
+
+    #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+    #[non_exhaustive]
+    #[serde(rename_all = "lowercase")]
+    pub enum LinkKind {
+        #[default]
+        Contact,
+    }
+
+    impl LinkKind {
+        pub const fn is_contact(&self) -> bool {
+            matches!(self, Self::Contact)
+        }
+    }
+
+    #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct Link {
+        #[serde(rename = "@type", default, skip_serializing_if = "Option::is_none")]
+        pub __type: Option<LinkType>,
+        #[serde(default, skip_serializing_if = "LinkKind::is_contact")]
+        pub kind: LinkKind,
         #[serde(flatten)]
         pub resource: Resource,
     }
