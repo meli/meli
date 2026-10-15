@@ -30,8 +30,7 @@
 //! [`UIMode`] describes the application's... mode. Same as in the modal editor
 //! `vi`.
 //!
-//! [`UIEvent`] is the type passed around
-//! [`Component`]'s when something happens.
+//! [`UIEvent`] is the type passed around UI widgets/components when something happens.
 
 use std::{borrow::Cow, sync::Arc};
 
@@ -48,7 +47,7 @@ use super::{
     jobs::{JobExecutor, JobId, TimerId},
     terminal::*,
 };
-use crate::components::{Component, ComponentId, ScrollUpdate};
+use crate::components::{ComponentId, OverlayComponent, ScrollUpdate};
 
 #[macro_use]
 mod helpers;
@@ -395,7 +394,7 @@ pub enum UIEvent {
     },
     Callback(CallbackFn),
     GlobalUIDialog {
-        value: Box<dyn Component>,
+        value: Box<dyn OverlayComponent>,
         parent: Option<ComponentId>,
     },
     Timer(TimerId),

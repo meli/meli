@@ -373,7 +373,7 @@ pub struct State {
     draw_rate_limit: RateLimit,
     child: Option<ForkedProcess>,
     pub mode: UIMode,
-    overlay: IndexMap<ComponentId, Box<dyn Component>>,
+    overlay: IndexMap<ComponentId, Box<dyn OverlayComponent>>,
     components: IndexMap<ComponentId, Box<dyn Component>>,
     component_tree: IndexMap<ComponentId, ComponentPath>,
     pub context: Box<Context>,
@@ -707,28 +707,43 @@ impl State {
                 .unwrap_or(false)
             {
                 self.message_box.deactivate();
-                areas.push(self.screen.area());
             }
         }
 
         /* Sort by x_start, ie upper_left corner's x coordinate */
         areas.sort_by(|a, b| a.upper_left().0.partial_cmp(&b.upper_left().0).unwrap());
 
-        if self.message_box.active && can_draw_above_screen {
-            /* Check if any dirty area intersects with the area occupied by
-             * floating notification box */
-            let displ = self.message_box.cached_area();
-            let (displ_top, displ_bot) = (displ.upper_left(), displ.bottom_right());
-            let mut is_dirty = self.message_box.is_dirty();
-            for a in &areas {
-                let (top_x, top_y) = a.upper_left();
-                let (bottom_x, bottom_y) = a.bottom_right();
-                is_dirty |= !(bottom_y < displ_top.1
-                    || displ_bot.1 < top_y
-                    || bottom_x < displ_top.0
-                    || displ_bot.0 < top_x);
+        if can_draw_above_screen {
+            // Check if any dirty area intersects with the area occupied by floating notification box and overlays
+            for overlay in self
+                .overlay
+                .values_mut()
+                .map(|c| c as &mut dyn OverlayComponent)
+                .chain(
+                    self.message_box
+                        .active
+                        .then_some(&mut self.message_box as &mut dyn OverlayComponent),
+                )
+            {
+                let cached_area = overlay.cached_area();
+                if cached_area.generation() != self.screen.generation() {
+                    overlay.set_dirty(true);
+                } else {
+                    let (top, bot) = (cached_area.upper_left(), cached_area.bottom_right());
+                    let mut is_dirty = overlay.is_dirty();
+                    for a in &areas {
+                        let (top_x, top_y) = a.upper_left();
+                        let (bottom_x, bottom_y) = a.bottom_right();
+                        is_dirty |= !(bottom_y < top.1
+                            || bot.1 < top_y
+                            || bottom_x < top.0
+                            || bot.0 < top_x);
+                    }
+                    if is_dirty {
+                        overlay.set_dirty(is_dirty);
+                    }
+                }
             }
-            self.message_box.set_dirty(is_dirty);
         }
         /* draw each dirty area */
         let rows = self.screen.area().height();
@@ -764,59 +779,81 @@ impl State {
                 self.screen.draw(x_start..(x_end + 1), y);
             }
         }
+        areas.clear();
 
-        if self.message_box.is_dirty() && self.message_box.active && can_draw_above_screen {
-            if !self.message_box.is_empty() {
-                if !self.message_box.initialised {
-                    {
-                        let cached_area = self.message_box.cached_area();
-                        // Clear area previously occupied by floating notification box
-                        if cached_area.generation() == self.screen.area().generation() {
-                            for row in self.screen.grid().bounds_iter(cached_area) {
-                                self.screen.draw(row.cols(), row.row_index());
-                            }
-                            let (grid, overlay_grid) = self.screen.grid_and_overlay_grid_mut();
-                            overlay_grid.copy_area(grid, cached_area, cached_area);
+        if can_draw_above_screen {
+            if !self.message_box.initialised {
+                {
+                    let cached_area = self.message_box.cached_area();
+                    // Clear area previously occupied by floating notification box
+                    if cached_area.generation() == self.screen.area().generation() {
+                        for row in self.screen.grid().bounds_iter(cached_area) {
+                            self.screen.draw(row.cols(), row.row_index());
                         }
+                        let (_, overlay_grid) = self.screen.grid_and_overlay_grid_mut();
+                        overlay_grid.clear_area(
+                            cached_area,
+                            crate::conf::theme_value(&self.context, "theme_default"),
+                        );
                     }
                 }
-                let area = self.screen.area();
-                self.message_box
-                    .draw(self.screen.overlay_grid_mut(), area, &mut self.context);
-                for row in self
-                    .screen
-                    .overlay_grid()
-                    .bounds_iter(self.message_box.cached_area())
-                {
-                    self.screen.draw_overlay(row.cols(), row.row_index());
-                }
             }
-            self.message_box.set_dirty(false);
-        } else if self.message_box.is_dirty() && can_draw_above_screen {
-            /* Clear area previously occupied by floating notification box */
-            if self.message_box.cached_area().generation() == self.screen.area().generation() {
-                for row in self
-                    .screen
-                    .grid()
-                    .bounds_iter(self.message_box.cached_area())
-                {
-                    self.screen.draw(row.cols(), row.row_index());
-                }
-            }
-            self.message_box.set_dirty(false);
-        }
-
-        if let (Some((_, overlay_widget)), true) =
-            (self.overlay.get_index_mut(0), can_draw_above_screen)
-        {
-            let area: Area = self.screen.area();
+            for overlay in self
+                .overlay
+                .values_mut()
+                .map(|c| c as &mut dyn OverlayComponent)
+                .chain(
+                    self.message_box
+                        .active
+                        .then_some(&mut self.message_box as &mut dyn OverlayComponent),
+                )
             {
-                let (grid, overlay_grid) = self.screen.grid_and_overlay_grid_mut();
-                overlay_grid.copy_area(grid, area, area);
-                overlay_widget.draw(overlay_grid, area, &mut self.context);
+                if !overlay.is_dirty() {
+                    continue;
+                }
+                let area: Area = self.screen.area();
+                let (_, overlay_grid) = self.screen.grid_and_overlay_grid_mut();
+                overlay.draw(overlay_grid, area, &mut self.context);
+                let cached_area = overlay.cached_area();
+                if cached_area.generation() == area.generation() {
+                    for row in self.screen.overlay_grid().bounds_iter(cached_area) {
+                        self.screen.draw_overlay(row.cols(), row.row_index());
+                    }
+                }
             }
-            for row in self.screen.overlay_grid().bounds_iter(area) {
-                self.screen.draw_overlay(row.cols(), row.row_index());
+        }
+        areas.extend(self.context.dirty_areas.drain(..));
+        let rows = self.screen.area().height();
+        for y in 0..rows {
+            let mut segment = None;
+            for ((x_start, y_start), (x_end, y_end)) in
+                areas.iter().map(|a| (a.upper_left(), a.bottom_right()))
+            {
+                if y < y_start || y > y_end {
+                    continue;
+                }
+                if let Some((x_start, x_end)) = segment.take() {
+                    self.screen.draw_overlay(x_start..(x_end + 1), y);
+                }
+                match segment {
+                    None => {
+                        segment = Some((x_start, x_end));
+                    }
+                    Some((p_x_start, p_x_end)) if p_x_end < x_start => {
+                        self.screen.draw_overlay(p_x_start..(p_x_end + 1), y);
+                        segment = Some((x_start, x_end));
+                    }
+                    Some((p_x_start, p_x_end)) if p_x_end < x_end => {
+                        self.screen.draw_overlay(p_x_start..(p_x_end + 1), y);
+                        segment = Some((p_x_end, x_end));
+                    }
+                    Some((_, ref mut x)) => {
+                        *x = x_end;
+                    }
+                }
+            }
+            if let Some((x_start, x_end)) = segment {
+                self.screen.draw_overlay(x_start..(x_end + 1), y);
             }
         }
         self.flush();
@@ -1302,7 +1339,7 @@ impl State {
                 return;
             }
             UIEvent::GlobalUIDialog { value, parent } => {
-                self.context.realized.insert(value.id(), parent);
+                value.realize(parent, &mut self.context);
                 self.overlay.insert(value.id(), value);
                 self.process_realizations();
                 return;
@@ -1389,10 +1426,20 @@ impl State {
             ..
         } = self;
 
-        /* inform each component */
-        for c in overlay.values_mut().chain(components.values_mut()) {
-            if c.process_event(&mut event, context) {
+        // inform each component
+        let mut handled = false;
+        for c in overlay.values_mut().map(|o| o as &mut dyn Component) {
+            if c.process_event(&mut event, context) || matches!(event, UIEvent::Input(_)) {
+                handled = true;
                 break;
+            }
+        }
+
+        if !handled {
+            for c in components.values_mut() {
+                if c.process_event(&mut event, context) {
+                    break;
+                }
             }
         }
 
@@ -1488,7 +1535,14 @@ impl State {
             self.context.unrealized.extend(to_delete);
             self.component_tree.shift_remove(&id);
             self.components.shift_remove(&id);
-            self.overlay.shift_remove(&id);
+            if let Some(overlay) = self.overlay.shift_remove(&id) {
+                let cached_area = overlay.cached_area();
+                if cached_area.generation() == self.screen.generation() {
+                    self.context.dirty_areas.push_back(cached_area);
+                    let (grid, overlay_grid) = self.screen.grid_and_overlay_grid_mut();
+                    overlay_grid.copy_area(grid, cached_area, cached_area);
+                }
+            }
         }
     }
 

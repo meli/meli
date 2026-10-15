@@ -64,6 +64,8 @@ pub struct Selector<
     horizontal_alignment: Alignment,
     title: String,
     content: Screen<Virtual>,
+    /// The last [`Area`] this widget used to be drawn.
+    cached_area: Area,
     initialized: bool,
     /// If `true`, user has finished their selection
     done: bool,
@@ -320,6 +322,14 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
     }
 }
 
+impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> OverlayComponent
+    for UIDialog<T>
+{
+    fn cached_area(&self) -> Area {
+        self.cached_area
+    }
+}
+
 impl Component for UIConfirmationDialog {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         Selector::draw(self, grid, area, context);
@@ -496,7 +506,13 @@ impl Component for UIConfirmationDialog {
     }
 }
 
-impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + Send>
+impl OverlayComponent for UIConfirmationDialog {
+    fn cached_area(&self) -> Area {
+        self.cached_area
+    }
+}
+
+impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + Send>
     Selector<T, F>
 {
     pub fn new(
@@ -530,6 +546,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             horizontal_alignment: Alignment::Center,
             title,
             content: Screen::<Virtual>::new(theme_default),
+            cached_area: Area::new_empty(Default::default()),
             initialized: false,
             done: false,
             done_fn,
@@ -682,6 +699,8 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             self.horizontal_alignment,
             self.vertical_alignment,
         );
+        grid.clear_area(dialog_area, self.theme_default);
+        self.cached_area = dialog_area;
         let inner_area = create_box(grid, dialog_area);
         let rows = inner_area.height();
         if let Some(mvm) = self.movement.take() {

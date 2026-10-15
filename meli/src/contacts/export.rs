@@ -38,6 +38,7 @@ pub struct ContactExportDialog {
     card: Card,
     form: FormWidget,
     theme_default: ThemeAttribute,
+    cached_area: Area,
     dirty: bool,
 }
 
@@ -133,6 +134,7 @@ impl ContactExportDialog {
             id: ComponentId::default(),
             card,
             form,
+            cached_area: Area::new_empty(Default::default()),
             theme_default,
             dirty: true,
         }
@@ -141,33 +143,42 @@ impl ContactExportDialog {
 
 impl Component for ContactExportDialog {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        // [ref: FIXME]: overlay components need to always be dirty otherwise they are not shown
-        // when State::redraw finishes
-        self.set_dirty(true);
-        // if !self.is_dirty() {
-        // //FIXME
-        //     return;
-        // }
+        if !self.is_dirty() {
+            return;
+        }
         let area = area.center_inside((60, self.form.height() + 8));
+        self.cached_area = area;
         grid.clear_area(area, self.theme_default);
 
-        let form_area = create_box(grid, area);
-        let (_, y) = grid.write_string(
-            &format!(
-                "Navigate options with {} to go down, {} to go up, select with {}, cancel with {}",
-                self.form.cursor_down_shortcut,
-                self.form.cursor_up_shortcut,
-                Key::Char('\n'),
-                Key::Esc
-            ),
-            &self.theme_default,
-            form_area,
-            Some(2),
-            Some(0),
-        );
+        let form_area = create_box(grid, area).skip_cols(1).skip_cols_from_end(1);
+        let mut y =
+            grid.write_string(
+                &format!("Export {}?", self.card),
+                &self.theme_default,
+                form_area,
+                None,
+                Some(0),
+            )
+            .1 + 2;
+        y +=
+            grid.write_string(
+                &format!(
+                    "Navigate options with {} to go down, {} to go up, select with {}, cancel \
+                     with {}",
+                    self.form.cursor_down_shortcut,
+                    self.form.cursor_up_shortcut,
+                    Key::Char('\n'),
+                    Key::Esc
+                ),
+                &self.theme_default,
+                form_area.skip_rows(y),
+                None,
+                Some(0),
+            )
+            .1 + 2;
 
-        self.form.draw(grid, form_area.skip_rows(y + 1), context);
-        // self.set_dirty(false);
+        self.form.draw(grid, form_area.skip_rows(y), context);
+        self.set_dirty(false);
         context.dirty_areas.push_back(area);
     }
 
@@ -284,11 +295,21 @@ impl Component for ContactExportDialog {
         self.form.set_dirty(value);
     }
 
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
+        self.form.shortcuts(context)
+    }
+
     fn id(&self) -> ComponentId {
         self.id
     }
 
     fn can_quit_cleanly(&mut self, context: &Context) -> bool {
         self.form.can_quit_cleanly(context)
+    }
+}
+
+impl OverlayComponent for ContactExportDialog {
+    fn cached_area(&self) -> Area {
+        self.cached_area
     }
 }

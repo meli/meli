@@ -507,7 +507,7 @@ impl Component for AddressBookList {
                     .clone();
                 context.replies.push_back(UIEvent::GlobalUIDialog {
                     value: Box::new(ContactExportDialog::new(card, context)),
-                    parent: Some(self.id),
+                    parent: None,
                 });
                 return true;
             }
@@ -712,6 +712,28 @@ impl Component for AddressBookList {
 
     fn id(&self) -> ComponentId {
         self.id
+    }
+
+    fn is_visible(&self) -> bool {
+        true
+    }
+
+    fn kill(&mut self, _id: ComponentId, _context: &mut Context) {}
+
+    fn children(&self) -> IndexMap<ComponentId, &dyn Component> {
+        if let Some(editor) = &self.editor {
+            std::iter::once((editor.id(), editor.as_ref() as &dyn Component)).collect()
+        } else {
+            IndexMap::default()
+        }
+    }
+
+    fn children_mut(&mut self) -> IndexMap<ComponentId, &mut dyn Component> {
+        if let Some(editor) = &mut self.editor {
+            std::iter::once((editor.id(), editor.as_mut() as &mut dyn Component)).collect()
+        } else {
+            IndexMap::default()
+        }
     }
 }
 
@@ -954,6 +976,34 @@ impl Component for AccountContacts {
 
     fn id(&self) -> ComponentId {
         self.id
+    }
+
+    fn is_visible(&self) -> bool {
+        self.books
+            .get_index(self.book_pos)
+            .map(|(_, b)| b.is_visible())
+            .unwrap_or(false)
+    }
+
+    fn can_quit_cleanly(&mut self, context: &Context) -> bool {
+        self.books
+            .get_index_mut(self.book_pos)
+            .map(|(_, b)| b.can_quit_cleanly(context))
+            .unwrap_or(true)
+    }
+
+    fn children(&self) -> IndexMap<ComponentId, &dyn Component> {
+        self.books
+            .values()
+            .map(|c| (c.id(), c.as_ref() as &dyn Component))
+            .collect()
+    }
+
+    fn children_mut(&mut self) -> IndexMap<ComponentId, &mut dyn Component> {
+        self.books
+            .values_mut()
+            .map(|c| (c.id(), c.as_mut() as &mut dyn Component))
+            .collect()
     }
 }
 

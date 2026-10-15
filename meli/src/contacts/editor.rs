@@ -873,7 +873,7 @@ impl Component for ContactEditor {
                             };
                             context.replies.push_back(UIEvent::GlobalUIDialog {
                                 value: Box::new(ContactExportDialog::new(card, context)),
-                                parent: Some(self.id),
+                                parent: None,
                             });
                             return true;
                         }

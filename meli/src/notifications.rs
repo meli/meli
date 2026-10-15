@@ -374,12 +374,6 @@ impl DisplayMessageBox {
         }
     }
 
-    /// Returns the last [`Area`] this widget used to be drawn.
-    #[inline]
-    pub fn cached_area(&self) -> Area {
-        self.cached_area
-    }
-
     /// Returns `true` if there are no messages.
     #[inline]
     pub fn is_empty(&self) -> bool {
@@ -545,6 +539,8 @@ impl Component for DisplayMessageBox {
                     Some(0),
                 );
             }
+            self.initialised = true;
+            context.dirty_areas.push_back(self.cached_area);
         } else {
             self.cached_area = area.into_empty();
         }
@@ -556,7 +552,7 @@ impl Component for DisplayMessageBox {
     }
 
     fn is_dirty(&self) -> bool {
-        self.dirty
+        self.active || self.dirty
     }
 
     fn set_dirty(&mut self, value: bool) {
@@ -565,5 +561,13 @@ impl Component for DisplayMessageBox {
 
     fn id(&self) -> ComponentId {
         self.id
+    }
+}
+
+impl OverlayComponent for DisplayMessageBox {
+    /// Returns the last [`Area`] this widget used to be drawn.
+    #[inline]
+    fn cached_area(&self) -> Area {
+        self.cached_area
     }
 }

@@ -321,6 +321,79 @@ impl ComponentPath {
     }
 }
 
+pub trait OverlayComponent: Component {
+    /// Returns the last [`Area`] this widget used to be drawn.
+    fn cached_area(&self) -> Area;
+}
+
+impl Component for Box<dyn OverlayComponent> {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        (**self).draw(grid, area, context)
+    }
+
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        (**self).process_event(event, context)
+    }
+
+    fn is_dirty(&self) -> bool {
+        (**self).is_dirty()
+    }
+
+    fn set_dirty(&mut self, value: bool) {
+        (**self).set_dirty(value)
+    }
+
+    fn id(&self) -> ComponentId {
+        (**self).id()
+    }
+
+    fn is_visible(&self) -> bool {
+        (**self).is_visible()
+    }
+
+    fn can_quit_cleanly(&mut self, context: &Context) -> bool {
+        (**self).can_quit_cleanly(context)
+    }
+
+    fn kill(&mut self, id: ComponentId, context: &mut Context) {
+        (**self).kill(id, context)
+    }
+
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
+        (**self).shortcuts(context)
+    }
+
+    fn status(&self, context: &Context) -> String {
+        (**self).status(context)
+    }
+
+    fn attributes(&self) -> &'static ComponentAttr {
+        (**self).attributes()
+    }
+
+    fn children(&self) -> IndexMap<ComponentId, &dyn Component> {
+        (**self).children()
+    }
+
+    fn children_mut(&mut self) -> IndexMap<ComponentId, &mut dyn Component> {
+        (**self).children_mut()
+    }
+
+    fn realize(&self, parent: Option<ComponentId>, context: &mut Context) {
+        (**self).realize(parent, context)
+    }
+
+    fn unrealize(&self, context: &mut Context) {
+        (**self).unrealize(context)
+    }
+}
+
+impl OverlayComponent for Box<dyn OverlayComponent> {
+    fn cached_area(&self) -> Area {
+        (**self).cached_area()
+    }
+}
+
 pub mod prelude {
     pub use std::borrow::Cow;
 
@@ -331,7 +404,7 @@ pub mod prelude {
         command::*,
         components::{
             Component, ComponentAttr, ComponentId, ComponentPath, ExtendShortcutsMaps,
-            PageMovement, ScrollContext, ScrollUpdate, ShortcutMap, ShortcutMaps,
+            OverlayComponent, PageMovement, ScrollContext, ScrollUpdate, ShortcutMap, ShortcutMaps,
         },
         conf::themes::ThemeAttribute,
         jobs::{JobId, JobMetadata},
