@@ -1806,20 +1806,23 @@ impl Component for EnvelopeView {
                     (Some(Charset::KOI8R), Charset::KOI8R.to_string()),
                     (Some(Charset::KOI8U), Charset::KOI8U.to_string()),
                 ];
-                self.force_charset = Some(Box::new(Selector::new(
-                    "select charset to force",
-                    entries,
-                    true,
-                    Some(Box::new(
-                        move |id: ComponentId, results: &[Option<Charset>], context| {
-                            context.replies.push_back(UIEvent::FinishedUIDialog(
-                                id,
-                                Box::new(results.to_vec()),
-                            ));
-                        },
-                    )),
-                    context,
-                )));
+                self.force_charset = Some(Box::new(
+                    UIDialog::new(
+                        "select charset to force",
+                        entries,
+                        true,
+                        Some(Box::new(
+                            move |id: ComponentId, results: &[Option<Charset>], context| {
+                                context.replies.push_back(UIEvent::FinishedUIDialog(
+                                    id,
+                                    Box::new(results.to_vec()),
+                                ));
+                            },
+                        )),
+                        context,
+                    )
+                    .with_cursor(0usize.into()),
+                ));
                 self.dirty = true;
                 return true;
             }

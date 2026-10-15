@@ -518,31 +518,34 @@ impl Component for MailView {
                         .forward_as_attachment
                 ) {
                     f if f.is_ask() => {
-                        self.forward_dialog = Some(Box::new(UIDialog::new(
-                            "How do you want the email to be forwarded?",
-                            vec![
-                                (
-                                    Some(PendingReplyAction::ForwardInline),
-                                    "inline".to_string(),
-                                ),
-                                (
-                                    Some(PendingReplyAction::ForwardAttachment),
-                                    "as attachment".to_string(),
-                                ),
-                            ],
-                            true,
-                            Some(Box::new(
-                                move |id: ComponentId,
-                                      result: &[Option<PendingReplyAction>],
-                                      context| {
-                                    context.replies.push_back(UIEvent::FinishedUIDialog(
-                                        id,
-                                        Box::new(result.first().cloned().flatten()),
-                                    ));
-                                },
-                            )),
-                            context,
-                        )));
+                        self.forward_dialog = Some(Box::new(
+                            UIDialog::new(
+                                "How do you want the email to be forwarded?",
+                                vec![
+                                    (
+                                        Some(PendingReplyAction::ForwardInline),
+                                        "inline".to_string(),
+                                    ),
+                                    (
+                                        Some(PendingReplyAction::ForwardAttachment),
+                                        "as attachment".to_string(),
+                                    ),
+                                ],
+                                true,
+                                Some(Box::new(
+                                    move |id: ComponentId,
+                                          result: &[Option<PendingReplyAction>],
+                                          context| {
+                                        context.replies.push_back(UIEvent::FinishedUIDialog(
+                                            id,
+                                            Box::new(result.first().cloned().flatten()),
+                                        ));
+                                    },
+                                )),
+                                context,
+                            )
+                            .with_cursor(0usize.into()),
+                        ));
                     }
                     f if f.is_true() => {
                         self.perform_action(PendingReplyAction::ForwardAttachment, context);

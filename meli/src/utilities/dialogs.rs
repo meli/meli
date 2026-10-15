@@ -30,7 +30,7 @@ const CANCEL: &str = "Cancel";
 const CANCEL_OFFSET: usize = "OK    ".len();
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum SelectorCursor {
+pub enum SelectorCursor {
     Unfocused,
     /// Cursor is at an entry
     Entry(usize),
@@ -38,6 +38,22 @@ enum SelectorCursor {
     Ok,
     /// Cursor is located on the Cancel button
     Cancel,
+}
+
+impl From<usize> for SelectorCursor {
+    fn from(entry: usize) -> Self {
+        Self::Entry(entry)
+    }
+}
+
+impl From<Option<bool>> for SelectorCursor {
+    fn from(value: Option<bool>) -> Self {
+        match value {
+            None => Self::Unfocused,
+            Some(true) => Self::Ok,
+            Some(false) => Self::Cancel,
+        }
+    }
 }
 
 /// Shows a little window with options for user to select.
@@ -398,16 +414,18 @@ impl Component for UIConfirmationDialog {
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Entry(c))
-                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_up"]) && c > 0 =>
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_up"]) =>
             {
-                if self.single_only {
-                    // Redraw selection
-                    self.entries[c].1 = false;
-                    self.entries[c - 1].1 = true;
+                if c > 0 {
+                    if self.single_only {
+                        // Redraw selection
+                        self.entries[c].1 = false;
+                        self.entries[c - 1].1 = true;
+                    }
+                    self.cursor = SelectorCursor::Entry(c - 1);
+                    self.set_dirty(true);
+                    self.initialized = false;
                 }
-                self.cursor = SelectorCursor::Entry(c - 1);
-                self.set_dirty(true);
-                self.initialized = false;
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Ok)
@@ -556,6 +574,35 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static 
         };
         ret.initialise(context);
         ret
+    }
+
+    /// Modify cursor in place.
+    ///
+    /// If provided `cursor` value is invalid (i.e. out of range) it is ignored.
+    pub fn with_cursor(mut self, cursor: SelectorCursor) -> Self {
+        self.set_cursor(cursor);
+        self
+    }
+
+    /// Try to set cursor.
+    ///
+    /// Returns `false` if provided `cursor` value is invalid (i.e. out of range), otherwise
+    /// returns `true`.
+    pub fn set_cursor(&mut self, cursor: SelectorCursor) -> bool {
+        if let SelectorCursor::Entry(i) = cursor {
+            let Some(e) = self.entries.get_mut(i) else {
+                return false;
+            };
+            e.1 = true;
+            for e in &mut self.entries[0..i] {
+                e.1 = false;
+            }
+            for e in &mut self.entries[i..] {
+                e.1 = false;
+            }
+        }
+        self.cursor = cursor;
+        true
     }
 
     fn initialise(&mut self, context: &Context) {

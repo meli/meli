@@ -295,6 +295,7 @@ impl Composer {
                     })),
                     context,
                 )
+                .with_cursor(1_usize.into())
                 .into(),
                 action: ActionFn(Box::new(|composer, _context| {
                     let now = melib::utils::datetime::timestamp_to_string(
@@ -2631,6 +2632,7 @@ impl Component for Composer {
                 )),
                 context,
             )
+            .with_cursor(2_usize.into())
             .into(),
         );
     }
@@ -2682,6 +2684,7 @@ impl Component for Composer {
                 )),
                 context,
             )
+            .with_cursor(2_usize.into())
             .into(),
         );
         self.set_dirty(true);

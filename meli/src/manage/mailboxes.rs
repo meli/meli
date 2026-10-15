@@ -712,26 +712,29 @@ impl Component for AccountMailboxManager {
                 if shortcut!(key == shortcuts[Shortcuts::GENERAL]["open_entry"]) =>
             {
                 self.set_dirty(true);
-                self.mode = ViewMode::Action(Box::new(UIDialog::new(
-                    "select action",
-                    vec![
-                        (MailboxAction::Rename, "rename".into()),
-                        (MailboxAction::Move, "move".into()),
-                        (MailboxAction::Subscribe, "subscribe".into()),
-                        (MailboxAction::Unsubscribe, "unsubscribe".into()),
-                        (MailboxAction::Delete, "delete (cannot be undone!)".into()),
-                    ],
-                    true,
-                    Some(Box::new(
-                        move |id: ComponentId, results: &[MailboxAction], context| {
-                            context.replies.push_back(UIEvent::FinishedUIDialog(
-                                id,
-                                Box::new(results.to_vec()),
-                            ))
-                        },
-                    )),
-                    context,
-                )));
+                self.mode = ViewMode::Action(Box::new(
+                    UIDialog::new(
+                        "select action",
+                        vec![
+                            (MailboxAction::Rename, "rename".into()),
+                            (MailboxAction::Move, "move".into()),
+                            (MailboxAction::Subscribe, "subscribe".into()),
+                            (MailboxAction::Unsubscribe, "unsubscribe".into()),
+                            (MailboxAction::Delete, "delete (cannot be undone!)".into()),
+                        ],
+                        true,
+                        Some(Box::new(
+                            move |id: ComponentId, results: &[MailboxAction], context| {
+                                context.replies.push_back(UIEvent::FinishedUIDialog(
+                                    id,
+                                    Box::new(results.to_vec()),
+                                ))
+                            },
+                        )),
+                        context,
+                    )
+                    .with_cursor(Some(false).into()),
+                ));
                 return true;
             }
             _ => {}
