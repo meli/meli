@@ -24,7 +24,7 @@
 //! ## Resources
 //!
 //! [^0]: <https://web.archive.org/web/20160812091518/https://jdebp.eu./FGA/mail-mbox-formats.html>
-//! [^1]: <https://wiki2.dovecot.org/MailboxFormat/mbox>
+//! [^1]: <https://doc.dovecot.org/2.4.5/core/config/mailbox_formats/mbox.html#dovecot-s-metadata>
 //! [^2]: <https://manpages.debian.org/buster/mutt/mbox.5.en.html>
 //!
 //! ## `mbox` format
@@ -72,7 +72,7 @@
 //!
 //! ## Metadata
 //!
-//! `melib` recognizes the `CClient` (a [Pine client API](https://web.archive.org/web/20050203003235/http://www.washington.edu/imap/)) convention for metadata in `mbox` format:
+//! `melib` recognizes the `CClient` (a [Pine client API](https://web.archive.org/web/20050203003235/http://www.washington.edu/imap/)) convention for metadata in `mbox` format: [^1]
 //!
 //! - `Status`: R (Seen) and O (non-Recent) flags
 //! - `X-Status`: A (Answered), F (Flagged), T (Draft) and D (Deleted) flags
