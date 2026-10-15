@@ -46,25 +46,25 @@ use crate::{
 };
 
 /* Supported vcard versions */
-pub trait VCardVersion: std::fmt::Debug {
+pub trait VCardVersion: Clone + std::fmt::Debug {
     const NAME: &str;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct VCardVersionUnknown;
 impl VCardVersion for VCardVersionUnknown {
     const NAME: &str = "Unknown";
 }
 
 /// Version 4 <https://tools.ietf.org/html/rfc6350>
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct VCardVersion4;
 impl VCardVersion for VCardVersion4 {
     const NAME: &str = "4";
 }
 
 /// <https://tools.ietf.org/html/rfc2426>
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct VCardVersion3;
 impl VCardVersion for VCardVersion3 {
     const NAME: &str = "3";
@@ -79,17 +79,17 @@ const FOOTER_LF: &str = "END:VCARD\n";
 const HEADER: &str = "BEGIN:VCARD"; //VERSION:4.0";
 const FOOTER: &str = "END:VCARD";
 
-#[derive(Debug)]
-pub struct VCard<T: VCardVersion>(
+#[derive(Debug, Clone)]
+pub struct VCard<V: VCardVersion>(
     IndexMap<String, ContentLine>,
-    std::marker::PhantomData<*const T>,
+    std::marker::PhantomData<fn() -> V>,
 );
 
 impl<V: VCardVersion> VCard<V> {
     pub fn new_v4() -> VCard<impl VCardVersion> {
         VCard(
             IndexMap::default(),
-            std::marker::PhantomData::<*const VCardVersion4>,
+            std::marker::PhantomData::<fn() -> VCardVersion4>,
         )
     }
 
@@ -103,6 +103,7 @@ pub struct ContentLine {
     group: Option<String>,
     params: Vec<String>,
     value: String,
+    others: Vec<Self>,
 }
 
 impl CardDeserializer {
@@ -133,7 +134,7 @@ impl CardDeserializer {
             &input[HEADER_LF.len()..input.len() - FOOTER_LF.len()]
         };
 
-        let mut ret = IndexMap::default();
+        let mut ret: IndexMap<String, ContentLine> = IndexMap::default();
 
         enum Stage {
             Group,
@@ -224,9 +225,16 @@ impl CardDeserializer {
                 value = value.replace(fold, "");
             }
             el.value = value;
-            ret.insert(name, el);
+            if ret.contains_key(&name) {
+                ret.entry(name).or_default().others.push(el);
+            } else {
+                ret.insert(name, el);
+            }
         }
-        Ok(VCard(ret, std::marker::PhantomData::<*const VCardVersion4>))
+        Ok(VCard(
+            ret,
+            std::marker::PhantomData::<fn() -> VCardVersion4>,
+        ))
     }
 }
 
@@ -296,37 +304,299 @@ impl<V: VCardVersion> TryInto<Card> for VCard<V> {
                 );
             }
         }
-        if let Some(val) = self.0.swap_remove("EMAIL") {
-            if !val.value.is_empty() {
-                card.emails.insert("k0".into(), val.value.into());
+        if let Some(mut val) = self.0.swap_remove("EMAIL") {
+            use crate::contacts::jscontact::json_types::EmailAddress;
+
+            let add_email =
+                |card: &'_ mut Card, val: ContentLine, ctr: &mut u32| -> (String, EmailAddress) {
+                    let ContentLine {
+                        group,
+                        value,
+                        others,
+                        params,
+                    } = val;
+                    debug_assert!(others.is_empty());
+
+                    let mut group = group.unwrap_or_else(|| format!("EMAIL-{ctr}"));
+                    let pref = params
+                        .iter()
+                        .find_map(|p| p.strip_prefix("PREF=")?.parse::<u64>().ok());
+                    let contexts = params
+                        .iter()
+                        .find_map(|p| Some((p.strip_prefix("TYPE=")?.to_string(), true)))
+                        .into_iter()
+                        .collect();
+                    while card.emails.contains_key(&group) {
+                        *ctr += 1;
+                        group = format!("EMAIL-{ctr}");
+                    }
+                    *ctr += 1;
+                    (
+                        group,
+                        EmailAddress {
+                            address: value,
+                            pref,
+                            contexts,
+                            ..EmailAddress::default()
+                        },
+                    )
+                };
+
+            let mut ctr = 1;
+            let others = std::mem::take(&mut val.others);
+            let (group, entry) = add_email(&mut card, val, &mut ctr);
+            card.0.emails.insert(group, entry);
+            for val in others {
+                let (group, entry) = add_email(&mut card, val, &mut ctr);
+                card.0.emails.insert(group, entry);
             }
         }
-        if let Some(val) = self.0.swap_remove("URL") {
+        if let Some(val) = self.0.swap_remove("CATEGORIES") {
+            let ContentLine {
+                group: _,
+                value,
+                others,
+                ..
+            } = val;
+            if !value.is_empty() {
+                card.keywords.insert(value, true);
+            }
+            for val in others {
+                let ContentLine { value, others, .. } = val;
+                debug_assert!(others.is_empty());
+                card.keywords.insert(value, true);
+            }
+        }
+        if let Some(mut val) = self.0.swap_remove("URL") {
+            use crate::contacts::jscontact::json_types::{Link, Resource};
+
+            let add_link =
+                |card: &'_ mut Card, val: ContentLine, ctr: &mut u32| -> (String, Link) {
+                    let ContentLine {
+                        group,
+                        value,
+                        others,
+                        params,
+                    } = val;
+                    debug_assert!(others.is_empty());
+
+                    let mut group = group.unwrap_or_else(|| format!("LINK-{ctr}"));
+                    let pref = params
+                        .iter()
+                        .find_map(|p| p.strip_prefix("PREF=")?.parse::<u64>().ok());
+                    let contexts = params
+                        .iter()
+                        .find_map(|p| Some((p.strip_prefix("TYPE=")?.to_string(), true)))
+                        .into_iter()
+                        .collect();
+                    while card.links.contains_key(&group) {
+                        *ctr += 1;
+                        group = format!("LINK-{ctr}");
+                    }
+                    *ctr += 1;
+                    (
+                        group,
+                        Link {
+                            resource: Resource {
+                                uri: value,
+                                pref,
+                                contexts,
+                                ..Resource::default()
+                            },
+                            ..Link::default()
+                        },
+                    )
+                };
+
+            let mut ctr = 1;
+            let others = std::mem::take(&mut val.others);
+            let (group, entry) = add_link(&mut card, val, &mut ctr);
+            card.0.links.insert(group, entry);
+            for val in others {
+                let (group, entry) = add_link(&mut card, val, &mut ctr);
+                card.0.links.insert(group, entry);
+            }
+        }
+
+        {
             use crate::contacts::jscontact::json_types::OnlineService;
 
-            if !val.value.is_empty() {
-                card.0.online_services.insert(
-                    "k0".into(),
-                    OnlineService {
-                        uri: val.value,
-                        ..OnlineService::default()
-                    },
-                );
+            let add_os =
+                |card: &'_ mut Card, val: ContentLine, ctr: &mut u32| -> (String, OnlineService) {
+                    let ContentLine {
+                        group,
+                        value,
+                        others,
+                        params,
+                    } = val;
+                    debug_assert!(others.is_empty());
+
+                    let mut group = group.unwrap_or_else(|| format!("OS-{ctr}"));
+                    let service = params
+                        .iter()
+                        .find_map(|p| Some(p.strip_prefix("SERVICE-TYPE=")?.to_string()))
+                        .unwrap_or_default();
+                    let user = params
+                        .iter()
+                        .find_map(|p| Some(p.strip_prefix("USERNAME=")?.to_string()))
+                        .unwrap_or_default();
+                    let pref = params
+                        .iter()
+                        .find_map(|p| p.strip_prefix("PREF=")?.parse::<u64>().ok());
+                    let contexts = params
+                        .iter()
+                        .find_map(|p| Some((p.strip_prefix("TYPE=")?.to_string(), true)))
+                        .into_iter()
+                        .collect();
+                    while card.online_services.contains_key(&group) {
+                        *ctr += 1;
+                        group = format!("OS-{ctr}");
+                    }
+                    *ctr += 1;
+                    (
+                        group,
+                        OnlineService {
+                            service,
+                            uri: value,
+                            user,
+                            pref,
+                            contexts,
+                            ..OnlineService::default()
+                        },
+                    )
+                };
+            if let Some(mut val) = self.0.swap_remove("IMPP") {
+                let others = std::mem::take(&mut val.others);
+                let mut ctr = 1;
+                let (group, mut entry) = add_os(&mut card, val, &mut ctr);
+                entry.extra.insert("vCardName".into(), "impp".into());
+                card.0.online_services.insert(group, entry);
+                for val in others {
+                    let (group, mut entry) = add_os(&mut card, val, &mut ctr);
+                    entry.extra.insert("vCardName".into(), "impp".into());
+                    card.0.online_services.insert(group, entry);
+                }
+            }
+
+            if let Some(mut val) = self.0.swap_remove("SOCIALPROFILE") {
+                let others = std::mem::take(&mut val.others);
+                let mut ctr = 1;
+                let (group, mut entry) = add_os(&mut card, val, &mut ctr);
+                if url::Url::parse(&entry.uri).is_err() {
+                    std::mem::swap(&mut entry.user, &mut entry.uri);
+                }
+                entry
+                    .extra
+                    .insert("vCardName".into(), "socialprofile".into());
+                card.0.online_services.insert(group, entry);
+                for val in others {
+                    let (group, mut entry) = add_os(&mut card, val, &mut ctr);
+                    if url::Url::parse(&entry.uri).is_err() {
+                        std::mem::swap(&mut entry.user, &mut entry.uri);
+                    }
+                    entry
+                        .extra
+                        .insert("vCardName".into(), "socialprofile".into());
+                    card.0.online_services.insert(group, entry);
+                }
             }
         }
-        if let Some(val) = self.0.swap_remove("KEY") {
+
+        if let Some(mut val) = self.0.swap_remove("KEY") {
             use crate::contacts::jscontact::json_types::{CryptoKey, Resource};
-            if !val.value.is_empty() {
-                card.0.crypto_keys.insert(
-                    "k0".into(),
-                    CryptoKey {
-                        __type: None,
-                        resource: Resource {
-                            uri: val.value,
-                            ..Resource::default()
+
+            let add_key =
+                |card: &'_ mut Card, val: ContentLine, ctr: &mut u32| -> (String, CryptoKey) {
+                    let ContentLine {
+                        group,
+                        value,
+                        others,
+                        params,
+                    } = val;
+                    debug_assert!(others.is_empty());
+
+                    let mut group = group.unwrap_or_else(|| format!("KEY-{ctr}"));
+                    let pref = params
+                        .iter()
+                        .find_map(|p| p.strip_prefix("PREF=")?.parse::<u64>().ok());
+                    let contexts = params
+                        .iter()
+                        .find_map(|p| Some((p.strip_prefix("TYPE=")?.to_string(), true)))
+                        .into_iter()
+                        .collect();
+                    while card.crypto_keys.contains_key(&group) {
+                        *ctr += 1;
+                        group = format!("KEY-{ctr}");
+                    }
+                    *ctr += 1;
+                    (
+                        group,
+                        CryptoKey {
+                            __type: None,
+                            resource: Resource {
+                                uri: value,
+                                contexts,
+                                pref,
+                                ..Resource::default()
+                            },
                         },
-                    },
-                );
+                    )
+                };
+
+            let mut ctr = 1;
+            let others = std::mem::take(&mut val.others);
+            let (group, entry) = add_key(&mut card, val, &mut ctr);
+            card.0.crypto_keys.insert(group, entry);
+            for val in others {
+                let (group, entry) = add_key(&mut card, val, &mut ctr);
+                card.0.crypto_keys.insert(group, entry);
+            }
+        }
+        if let Some(mut val) = self.0.swap_remove("NICKNAME") {
+            use crate::contacts::jscontact::json_types::Nickname;
+
+            let add_nick =
+                |card: &'_ mut Card, val: ContentLine, ctr: &mut u32| -> (String, Nickname) {
+                    let ContentLine {
+                        group,
+                        value,
+                        others,
+                        params,
+                    } = val;
+                    debug_assert!(others.is_empty());
+
+                    let mut group = group.unwrap_or_else(|| format!("NICK-{ctr}"));
+                    let pref = params
+                        .iter()
+                        .find_map(|p| p.strip_prefix("PREF=")?.parse::<u64>().ok());
+                    let contexts = params
+                        .iter()
+                        .find_map(|p| Some((p.strip_prefix("TYPE=")?.to_string(), true)))
+                        .into_iter()
+                        .collect();
+                    while card.nicknames.contains_key(&group) {
+                        *ctr += 1;
+                        group = format!("NICK-{ctr}");
+                    }
+                    *ctr += 1;
+                    (
+                        group,
+                        Nickname {
+                            name: value,
+                            contexts,
+                            pref,
+                            ..Nickname::default()
+                        },
+                    )
+                };
+
+            let mut ctr = 1;
+            let others = std::mem::take(&mut val.others);
+            let (group, entry) = add_nick(&mut card, val, &mut ctr);
+            card.0.nicknames.insert(group, entry);
+            for val in others {
+                let (group, entry) = add_nick(&mut card, val, &mut ctr);
+                card.0.nicknames.insert(group, entry);
             }
         }
         if let Some(val) = self.0.swap_remove("KIND") {
@@ -344,6 +614,13 @@ impl<V: VCardVersion> TryInto<Card> for VCard<V> {
                 _ => CardKind::default(),
             };
         }
+        if let Some(val) = self.0.swap_remove("PRODID") {
+            card.0.prod_id = val.value;
+        }
+        // [ref:TODO]: updated value
+        // if let Some(val) = self.0.swap_remove("REV") {
+        //     card.0.updated = ...
+        // }
 
         Ok(card)
     }
@@ -474,7 +751,7 @@ impl ContactBackend for VCardContacts {
 }
 
 #[test]
-fn test_vcard_v4_parse() {
+fn test_vcard_parse() {
     // Test with CRLF endings
     let j = "BEGIN:VCARD\r\nVERSION:4.0\r\nN:Gump;Forrest;;Mr.;\r\nFN:Forrest Gump\r\nORG:Bubba Gump Shrimp Co.\r\nTITLE:Shrimp Man\r\nPHOTO;MEDIATYPE=image/gif:http://www.example.com/dir_photos/my_photo.gif\r\nTEL;TYPE=work,voice;VALUE=uri:tel:+1-111-555-1212\r\nTEL;TYPE=home,voice;VALUE=uri:tel:+1-404-555-1212\r\nADR;TYPE=WORK;PREF=1;LABEL=\"100 Waters Edge\\nBaytown\\, LA 30314\\nUnited States of America\":;;100 Waters Edge;Baytown;LA;30314;United States of America\r\nADR;TYPE=HOME;LABEL=\"42 Plantation St.\\nBaytown\\, LA 30314\\nUnited States of America\":;;42 Plantation St.;Baytown;LA;30314;United States of America\r\nEMAIL:forrestgump@example.com\r\nREV:20080424T195243Z\r\nx-qq:21588891\r\nEND:VCARD\r\n";
 
@@ -484,26 +761,31 @@ fn test_vcard_v4_parse() {
             group: None,
             params: vec![],
             value: "4.0".to_string(),
+            others: vec![],
         },
         "N".to_string() => ContentLine {
             group: None,
             params: vec![],
             value: "Gump;Forrest;;Mr.;".to_string(),
+            others: vec![],
         },
         "FN".to_string() => ContentLine {
             group: None,
             params: vec![],
             value: "Forrest Gump".to_string(),
+            others: vec![],
         },
         "ORG".to_string() => ContentLine {
             group: None,
             params: vec![],
             value: "Bubba Gump Shrimp Co.".to_string(),
+            others: vec![],
         },
         "TITLE".to_string() => ContentLine {
             group: None,
             params: vec![],
             value: "Shrimp Man".to_string(),
+            others: vec![],
         },
         "PHOTO".to_string() => ContentLine {
             group: None,
@@ -511,37 +793,59 @@ fn test_vcard_v4_parse() {
                 "MEDIATYPE=image/gif".to_string(),
             ],
             value: "http://www.example.com/dir_photos/my_photo.gif".to_string(),
+            others: vec![],
         },
         "TEL".to_string() => ContentLine {
-            group: None,
-            params: vec![
-                "TYPE=home,voice".to_string(),
-                "VALUE=uri".to_string(),
-            ],
-            value: "tel:+1-404-555-1212".to_string(),
+             group: None,
+             params: vec!["TYPE=work,voice".into(), "VALUE=uri".into()],
+             value: "tel:+1-111-555-1212".into(),
+             others: vec![
+                 ContentLine {
+                     group: None,
+                     params: vec![
+                         "TYPE=home,voice".to_string(),
+                         "VALUE=uri".to_string(),
+                     ],
+                     value: "tel:+1-404-555-1212".to_string(),
+                     others: vec![],
+                 }
+             ],
         },
         "ADR".to_string() => ContentLine {
+            group: None,
+            params: vec![
+                "TYPE=WORK".to_string(),
+                "PREF=1".to_string(),
+                "LABEL=\"100 Waters Edge\\nBaytown\\, LA 30314\\nUnited States of America\"".to_string()
+            ],
+            value: ";;100 Waters Edge;Baytown;LA;30314;United States of America".to_string(),
+            others: vec![ContentLine {
             group: None,
             params: vec![
                 "TYPE=HOME".to_string(),
                 "LABEL=\"42 Plantation St.\\nBaytown\\, LA 30314\\nUnited States of America\"".to_string(),
             ],
             value: ";;42 Plantation St.;Baytown;LA;30314;United States of America".to_string(),
+            others: vec![],
+        }],
         },
         "EMAIL".to_string() => ContentLine {
             group: None,
             params: vec![],
             value: "forrestgump@example.com".to_string(),
+            others: vec![],
         },
         "REV".to_string() => ContentLine {
             group: None,
             params: vec![],
             value: "20080424T195243Z".to_string(),
+            others: vec![],
         },
         "x-qq".to_string() => ContentLine {
             group: None,
             params: vec![],
             value: "21588891".to_string(),
+            others: vec![],
         },
     };
     assert_eq!(parsed.version(), VCardVersion4::NAME);
