@@ -577,20 +577,11 @@ impl SmtpConnection {
     }
 
     pub async fn send_command(&mut self, command: &[&[u8]]) -> Result<()> {
-        //debug!(
-        //    "sending command: {}",
-        //    command
-        //        .iter()
-        //        .fold(String::new(), |mut acc, b| {
-        //            acc.push_str(unsafe { std::str::from_utf8_unchecked(b) });
-        //            acc
-        //        })
-        //        .trim()
-        //);
         for c in command {
             self.stream.write_all(c).await?;
         }
         self.stream.write_all(b"\r\n").await?;
+        self.stream.flush().await?;
         Ok(())
     }
 
@@ -761,6 +752,7 @@ impl SmtpConnection {
             // This is the end of mail data indication.
             self.stream.write_all(b".\r\n").await?;
         }
+        self.stream.flush().await?;
 
         //The end of mail data indicator also confirms the mail transaction and tells
         // the SMTP server to now process the stored recipients and mail data.
