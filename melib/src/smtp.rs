@@ -635,11 +635,11 @@ impl SmtpConnection {
         }
         self.send_command(&current_command).await?;
         current_command.clear();
-        if !self.server_conf.extensions.pipelining {
+        if self.server_conf.extensions.pipelining {
+            pipelining_queue.push(Some((ReplyCode::_250, &[])));
+        } else {
             self.read_lines(&mut res, Some((ReplyCode::_250, &[])))
                 .await?;
-        } else {
-            pipelining_queue.push(Some((ReplyCode::_250, &[])));
         }
         //The second step in the procedure is the RCPT command. This step of the
         // procedure can be repeated any number of times. If accepted, the SMTP
@@ -669,14 +669,17 @@ impl SmtpConnection {
                     }
                     self.send_command(&current_command).await?;
 
+                    // <https://www.rfc-editor.org/info/rfc5321/#section-4.3.2>
+                    //  S: 250, 251 (but see Section 3.4 for discussion of 251 and 551)
+                    // E: 550, 551, 552, 553, 450, 451, 452, 503, 455, 555
                     //`RCPT TO:<forward-path> [ SP <rcpt-parameters> ] <CRLF>`
                     // If accepted, the SMTP server returns a "250 OK" reply and stores the
                     // forward-path.
-                    if !self.server_conf.extensions.pipelining {
-                        self.read_lines(&mut res, Some((ReplyCode::_250, &[])))
-                            .await?;
+                    if self.server_conf.extensions.pipelining {
+                        pipelining_queue.push(Some((ReplyCode::_250, &[ReplyCode::_251])));
                     } else {
-                        pipelining_queue.push(Some((ReplyCode::_250, &[])));
+                        self.read_lines(&mut res, Some((ReplyCode::_250, &[ReplyCode::_251])))
+                            .await?;
                     }
                 }};
             }
