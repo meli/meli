@@ -259,6 +259,14 @@ impl Component for ContactExportDialog {
     fn can_quit_cleanly(&mut self, context: &Context) -> bool {
         self.form.can_quit_cleanly(context)
     }
+
+    fn children(&self) -> IndexMap<ComponentId, &dyn Component> {
+        std::iter::once((self.form.id(), &self.form as &dyn Component)).collect()
+    }
+
+    fn children_mut(&mut self) -> IndexMap<ComponentId, &mut dyn Component> {
+        std::iter::once((self.form.id(), &mut self.form as &mut dyn Component)).collect()
+    }
 }
 
 impl OverlayComponent for ContactExportDialog {

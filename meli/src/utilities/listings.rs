@@ -267,6 +267,48 @@ impl<E: AccountEntryTrait> Component for AccountEntry<E> {
             Self::Loaded(ref inner) => inner.id(),
         }
     }
+
+    fn is_visible(&self) -> bool {
+        match self {
+            Self::Offline { .. } => true,
+            Self::Loaded(inner) => inner.is_visible(),
+        }
+    }
+
+    fn can_quit_cleanly(&mut self, context: &Context) -> bool {
+        match self {
+            Self::Offline { .. } => true,
+            Self::Loaded(inner) => inner.can_quit_cleanly(context),
+        }
+    }
+
+    fn kill(&mut self, id: ComponentId, context: &mut Context) {
+        match self {
+            Self::Offline { .. } => {}
+            Self::Loaded(inner) => inner.kill(id, context),
+        }
+    }
+
+    fn attributes(&self) -> &'static ComponentAttr {
+        match self {
+            Self::Offline { .. } => &ComponentAttr::DEFAULT,
+            Self::Loaded(inner) => inner.attributes(),
+        }
+    }
+
+    fn children(&self) -> IndexMap<ComponentId, &dyn Component> {
+        match self {
+            Self::Offline { .. } => IndexMap::default(),
+            Self::Loaded(inner) => inner.children(),
+        }
+    }
+
+    fn children_mut(&mut self) -> IndexMap<ComponentId, &mut dyn Component> {
+        match self {
+            Self::Offline { .. } => IndexMap::default(),
+            Self::Loaded(inner) => inner.children_mut(),
+        }
+    }
 }
 
 /// Display all account address books and a sidebar.
@@ -555,5 +597,31 @@ impl<E: AccountEntryTrait> Component for List<E> {
 
     fn id(&self) -> ComponentId {
         self.id
+    }
+
+    fn is_visible(&self) -> bool {
+        self.accounts[self.account_pos].is_visible()
+    }
+
+    fn can_quit_cleanly(&mut self, context: &Context) -> bool {
+        self.accounts[self.account_pos].can_quit_cleanly(context)
+    }
+
+    fn attributes(&self) -> &'static ComponentAttr {
+        &ComponentAttr::CONTAINER
+    }
+
+    fn children(&self) -> IndexMap<ComponentId, &dyn Component> {
+        self.accounts
+            .values()
+            .map(|c| (c.id(), c.as_ref() as &dyn Component))
+            .collect()
+    }
+
+    fn children_mut(&mut self) -> IndexMap<ComponentId, &mut dyn Component> {
+        self.accounts
+            .values_mut()
+            .map(|c| (c.id(), c.as_mut() as &mut dyn Component))
+            .collect()
     }
 }
