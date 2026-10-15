@@ -360,34 +360,48 @@ fn parse_card<'a>() -> impl Parser<'a, Vec<&'a str>> {
 }
 
 pub fn load_cards(p: &std::path::Path) -> Result<Vec<Card>> {
-    let vcf_dir = std::fs::read_dir(p).chain_err_related_path(p)?;
-    let mut ret: Vec<Result<_>> = Vec::new();
-    let mut is_any_valid = false;
-    let mut contents = String::with_capacity(256);
-    for f in vcf_dir {
-        if f.is_err() {
-            continue;
+    fn read_file(
+        f: &std::path::Path,
+        ret: &mut Vec<Result<Card>>,
+        contents: &mut String,
+    ) -> Result<()> {
+        use std::io::Read as _;
+        contents.clear();
+        std::fs::File::open(f)
+            .chain_err_related_path(f)?
+            .read_to_string(contents)
+            .chain_err_related_path(f)?;
+        match parse_card().parse(contents.as_str()) {
+            Ok((_, c)) => {
+                for s in c {
+                    ret.push(
+                        CardDeserializer::try_from_str(s)
+                            .and_then(TryInto::try_into)
+                            .map_err(|err| err.set_related_path(Some(&f))),
+                    );
+                }
+            }
+            Err(err) => {
+                log::warn!("Could not parse vcard from {}: {}", f.display(), err);
+            }
         }
-        let f = f.chain_err_related_path(p)?.path();
-        if f.is_file() {
-            use std::io::Read as _;
-            contents.clear();
-            std::fs::File::open(&f)?
-                .read_to_string(&mut contents)
-                .chain_err_related_path(&f)?;
-            match parse_card().parse(contents.as_str()) {
-                Ok((_, c)) => {
-                    for s in c {
-                        ret.push(
-                            CardDeserializer::try_from_str(s)
-                                .and_then(TryInto::try_into)
-                                .map_err(|err| err.set_related_path(Some(&f))),
-                        );
-                    }
-                }
-                Err(err) => {
-                    log::warn!("Could not parse vcard from {}: {}", f.display(), err);
-                }
+        Ok(())
+    }
+
+    let mut ret: Vec<Result<_>> = Vec::new();
+    let mut contents = String::with_capacity(256);
+    let mut is_any_valid = false;
+    if !p.is_dir() {
+        read_file(p, &mut ret, &mut contents)?;
+    } else {
+        let vcf_dir = std::fs::read_dir(p).chain_err_related_path(p)?;
+        for f in vcf_dir {
+            if f.is_err() {
+                continue;
+            }
+            let f = f.chain_err_related_path(p)?.path();
+            if f.is_file() {
+                read_file(&f, &mut ret, &mut contents)?;
             }
         }
     }

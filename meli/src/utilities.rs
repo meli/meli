@@ -124,7 +124,7 @@ impl StatusBar {
             None => {}
         }
 
-        let mut auto_complete = AutoComplete::new(Vec::new());
+        let mut auto_complete = autocomplete::AutoComplete::new(Vec::new());
         auto_complete.set_reversed(true);
         let mut complgen = crate::command::completions::CompletionsGenerator::default();
         for acc in context.accounts.values() {

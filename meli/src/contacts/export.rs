@@ -20,7 +20,15 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
-use melib::{contacts::Card, utils::shellexpand::ShellExpandTrait as _};
+use std::sync::Arc;
+
+use futures::channel::oneshot;
+use melib::{
+    contacts::Card,
+    error::{Error, ErrorKind, Result},
+    utils::shellexpand::ShellExpandTrait as _,
+    AddressBookName, ContactBackendID,
+};
 
 use crate::{
     components::prelude::*,
@@ -234,5 +242,307 @@ impl Component for ContactExportDialog {
 
     fn can_quit_cleanly(&mut self, context: &Context) -> bool {
         self.form.can_quit_cleanly(context)
+    }
+}
+
+#[derive(Debug)]
+enum ContactImportState {
+    Form(FormWidget),
+    Waiting {
+        jobs: Vec<(JobId, oneshot::Receiver<Result<()>>)>,
+        job_results: Vec<Result<()>>,
+        path: PathhBuf,
+    },
+}
+
+#[derive(Debug)]
+pub struct ContactImportDialog {
+    id: ComponentId,
+    account_hash: AccountHash,
+    state: ContactImportState,
+    book_id: (Arc<ContactBackendID>, AddressBookName),
+    theme_default: ThemeAttribute,
+    dirty: bool,
+}
+
+impl std::fmt::Display for ContactImportDialog {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "import")
+    }
+}
+
+impl ContactImportDialog {
+    pub fn new(
+        account_hash: AccountHash,
+        book_id: (Arc<ContactBackendID>, AddressBookName),
+        context: &Context,
+    ) -> Self {
+        let theme_default: ThemeAttribute = crate::conf::theme_value(context, "theme_default");
+        let mut form = FormWidget::new(
+            ("Cancel(Esc)".into(), FormButtonAction::Cancel),
+            // cursor_up_shortcut
+            context.settings.shortcuts.general.scroll_up.clone(),
+            // cursor_down_shortcut
+            context.settings.shortcuts.general.scroll_down.clone(),
+            // cursor_right_shortcut
+            context.settings.shortcuts.general.scroll_right.clone(),
+            // cursor_left_shortcut
+            context.settings.shortcuts.general.scroll_left.clone(),
+        );
+        form.push_cl((
+            "Path or directory".into(),
+            String::new(),
+            generic_file_path_complete_fn(),
+        ));
+        form.add_button(("Import".into(), FormButtonAction::Accept));
+        Self {
+            id: ComponentId::default(),
+            account_hash,
+            book_id,
+            state: ContactImportState::Form(form),
+            theme_default,
+            dirty: true,
+        }
+    }
+}
+
+impl Component for ContactImportDialog {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        // [ref: FIXME]: overlay components need to always be dirty otherwise they are not shown
+        // when State::redraw finishes
+        self.set_dirty(true);
+        // if !self.is_dirty() {
+        // //FIXME
+        //     return;
+        // }
+        let area = area.center_inside((48, 10));
+        grid.clear_area(area, self.theme_default);
+
+        let form_area = create_box(grid, area);
+        match &mut self.state {
+            ContactImportState::Form(form) => {
+                let (_, y) = grid.write_string(
+                    &format!(
+                        "Navigate options with {} to go down, {} to go up, select with {}, cancel \
+                         with {}",
+                        form.cursor_down_shortcut,
+                        form.cursor_up_shortcut,
+                        Key::Char('\n'),
+                        Key::Esc
+                    ),
+                    &self.theme_default,
+                    form_area,
+                    Some(2),
+                    Some(0),
+                );
+                form.draw(grid, form_area.skip_rows(y + 1), context);
+            }
+            ContactImportState::Waiting {
+                jobs,
+                job_results,
+                path: _,
+            } => {
+                let count = jobs.len();
+                let singular = jobs.len() == 1;
+                let (_, y) = grid.write_string(
+                    &format!(
+                        "Importing {count}/{total} contact{s}",
+                        s = if singular { "" } else { "s" },
+                        total = count + job_results.len(),
+                    ),
+                    &self.theme_default,
+                    form_area,
+                    Some(2),
+                    Some(0),
+                );
+                let failures = job_results.iter().filter(|r| r.is_err()).count();
+                if failures > 0 {
+                    let (_, y) = grid.write_string(
+                        &format!(
+                            "{failures} failure{s}",
+                            s = if failures == 1 { "" } else { "s" },
+                        ),
+                        &self.theme_default,
+                        form_area.skip_rows(y + 1),
+                        Some(2),
+                        Some(0),
+                    );
+                }
+            }
+        }
+        // self.set_dirty(false);
+        context.dirty_areas.push_back(area);
+    }
+
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        if let UIEvent::ConfigReload { old_settings: _ } = event {
+            self.theme_default = crate::conf::theme_value(context, "theme_default");
+            self.set_dirty(true);
+        }
+        match &mut self.state {
+            ContactImportState::Form(form) => {
+                if form.process_event(event, context) {
+                    match form.buttons_result() {
+                        None => {}
+                        Some(FormButtonAction::Accept) => {
+                            let input: String = form.values()["Path or directory"]
+                                .as_text_field()
+                                .expect("path field in form")
+                                .as_str()
+                                .to_owned();
+                            if input.is_empty() {
+                                return true;
+                            }
+                            let input = std::path::Path::new(&input).expand();
+                            match melib::contacts::vcard::load_cards(&input).and_then(|cards| {
+                                cards
+                                    .into_iter()
+                                    .map(|c| {
+                                        context.accounts[&self.account_hash]
+                                            .add_card(self.book_id.clone(), c)
+                                    })
+                                    .collect::<Result<Vec<_>>>()
+                            }) {
+                                Ok(jobs) => {
+                                    self.state = ContactImportState::Waiting {
+                                        jobs,
+                                        job_results: vec![],
+                                        path: input,
+                                    };
+                                }
+                                Err(err) => {
+                                    context.replies.push_back(UIEvent::Notification {
+                                        title: Some("Could not import contact.".into()),
+                                        body: err.to_string().into(),
+                                        kind: Some(NotificationType::Error(err.kind)),
+                                        source: Some(err),
+                                    });
+                                }
+                            }
+                            self.set_dirty(true);
+                        }
+                        Some(FormButtonAction::Reset | FormButtonAction::Other(_))
+                        | Some(FormButtonAction::Cancel) => {
+                            self.unrealize(context);
+                        }
+                    }
+                    self.set_dirty(true);
+                    return true;
+                }
+            }
+            ContactImportState::Waiting {
+                jobs,
+                job_results,
+                path,
+            } => match event {
+                UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id)) => {
+                    if let Some(pos) = jobs.iter().position(|(j, _)| j == job_id) {
+                        let (_, mut job) = jobs.remove(pos);
+                        match job.try_recv() {
+                            Err(_) => {
+                                job_results.push(Err(Error::new("Import job was canceled")));
+                            }
+                            Ok(None) => {
+                                job_results.push(Err(Error::new(
+                                    "No import result; perhaps a worker thread panicked",
+                                )
+                                .set_kind(ErrorKind::Bug)));
+                            }
+                            Ok(Some(res)) => job_results.push(res),
+                        }
+                        if jobs.is_empty() {
+                            let imported = job_results.iter().filter(|r| r.is_ok()).count();
+                            let failures = job_results.iter().filter(|r| r.is_err()).count();
+                            let body = match (imported > 0, failures > 0) {
+                                (true, false) => {
+                                    format!(
+                                        "Imported {count} contact{s} from {path}",
+                                        count = imported,
+                                        s = if imported == 1 { "" } else { "s" },
+                                        path = path.display()
+                                    )
+                                }
+                                (true, true) => {
+                                    format!(
+                                        "Imported {count} contact{s} from {path}, rejected \
+                                         {failures} contacts: {errs:?}",
+                                        count = imported,
+                                        s = if imported == 1 { "" } else { "s" },
+                                        path = path.display(),
+                                        errs = job_results
+                                            .iter()
+                                            .filter(|r| r.is_err())
+                                            .collect::<Vec<_>>(),
+                                    )
+                                }
+                                (false, true) => {
+                                    format!(
+                                        "Could not import any contacts from {path}, encountered \
+                                         {failures} error{s}: {errs:?}",
+                                        s = if failures == 1 { "" } else { "s" },
+                                        path = path.display(),
+                                        errs = job_results
+                                            .iter()
+                                            .filter(|r| r.is_err())
+                                            .collect::<Vec<_>>(),
+                                    )
+                                }
+                                (false, false) => {
+                                    format!(
+                                        "Did not find any contacts in {path}, so nothing was \
+                                         imported",
+                                        path = path.display(),
+                                    )
+                                }
+                            };
+                            context.replies.push_back(UIEvent::Notification {
+                                title: None,
+                                body: body.into(),
+                                kind: Some(NotificationType::Info),
+                                source: None,
+                            });
+                            self.unrealize(context);
+                        }
+                    }
+                }
+                _ => {}
+            },
+        }
+        if matches!(event, UIEvent::Input(Key::Esc)) {
+            self.set_dirty(true);
+            self.unrealize(context);
+            return true;
+        }
+        false
+    }
+
+    fn is_dirty(&self) -> bool {
+        self.dirty
+            || if let ContactImportState::Form(form) = &self.state {
+                form.is_dirty()
+            } else {
+                false
+            }
+    }
+
+    fn set_dirty(&mut self, value: bool) {
+        self.dirty = value;
+        {
+            if let ContactImportState::Form(form) = &mut self.state {
+                form.set_dirty(value);
+            }
+        }
+    }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+
+    fn can_quit_cleanly(&mut self, context: &Context) -> bool {
+        if let ContactImportState::Form(form) = &mut self.state {
+            form.can_quit_cleanly(context)
+        } else {
+            true
+        }
     }
 }
