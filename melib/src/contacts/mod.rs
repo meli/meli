@@ -150,6 +150,9 @@ impl AddressBook {
             .filter(|c| {
                 c.email().unwrap_or_default().contains(term)
                     || c.name().unwrap_or_default().contains(term)
+                    || c.nicknames.values().any(|nick| nick.name.contains(term))
+                    || c.organizations.values().any(|org| org.name.contains(term))
+                    || c.keywords.keys().any(|keyword| keyword.contains(term))
             })
             .cloned()
             .collect()
