@@ -202,6 +202,7 @@ impl Composer {
         pager.set_show_scrollbar(true);
         let mut form = FormWidget::default();
         form.set_cursor(2);
+        form.set_focused(true);
         Self {
             reply_context: None,
             account_hash: AccountHash::default(),
@@ -1247,6 +1248,7 @@ impl Component for Composer {
                         if self.form.process_event(event, context) {
                             Focus::Headers
                         } else {
+                            self.form.set_focused(false);
                             Focus::Attachments
                         }
                     }
@@ -1261,14 +1263,18 @@ impl Component for Composer {
                 if self.mode.is_edit()
                     && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["scroll_up"]) =>
             {
-                if !matches!(self.focus, Focus::Headers) || self.form.process_event(event, context)
-                {
+                if !matches!(self.focus, Focus::Headers) {
                     self.set_dirty(true);
                 }
                 self.focus = match self.focus {
-                    Focus::Headers => Focus::Headers,
+                    Focus::Headers => {
+                        if !self.form.process_event(event, context) {
+                            return false;
+                        }
+                        Focus::Headers
+                    }
                     Focus::Attachments => {
-                        self.form.process_event(event, context);
+                        self.form.set_focused(true);
                         Focus::Headers
                     }
                     Focus::Encrypt => Focus::Sign,
