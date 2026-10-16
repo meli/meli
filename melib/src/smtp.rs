@@ -713,16 +713,8 @@ impl SmtpConnection {
             // RCPT TO commands worked. If the DATA command was properly
             // rejected the client SMTP can just issue RSET, but if the DATA
             // command was accepted the client SMTP should send a single dot.
-            let mut _all_error = self.server_conf.extensions.pipelining;
-            let mut _any_error = false;
-            let mut ignore_mailfrom = true;
             for expected_reply_code in pipelining_queue {
                 let reply = self.read_lines(&mut res, expected_reply_code).await?;
-                if !ignore_mailfrom {
-                    _all_error &= reply.code.is_err();
-                    _any_error |= reply.code.is_err();
-                }
-                ignore_mailfrom = false;
                 pipelining_results.push(reply.into());
             }
 
