@@ -26,7 +26,6 @@
  *
  * - [tag:FIXME]
  * - [tag:TODO]
- * - [tag:VERIFY] Verify whether this is the correct way to do something
  * - [tag:DEBT] Technical debt
  * - [tag:msrv] Code that might need change when MSRV is bumped
  */
