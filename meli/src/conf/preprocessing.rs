@@ -1,7 +1,7 @@
 //
 // meli
 //
-// Copyright 2017 Emmanouil Pitsidianakis <manos@pitsidianak.is>
+// Copyright 2017, 2026 Manos Pitsidianakis <manos@pitsidianak.is>
 //
 // This file is part of meli.
 //
@@ -23,15 +23,165 @@
 //! Preprocess configuration files by unfolding `include` macros.
 
 use std::{
-    io::{self, BufRead as _, Write as _},
+    borrow::Cow,
+    collections::VecDeque,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
 };
 
+use indexmap::IndexMap;
 use melib::{
     error::{Error, ErrorKind, Result, ResultIntoError as _, WrapResultIntoError as _},
     utils::{parsec::*, shellexpand::ShellExpandTrait as _},
 };
+
+/// An included configuration file
+#[derive(Clone, Debug)]
+pub struct Spanned {
+    /// Byte range inside expanded configuration.
+    pub span: std::ops::Range<usize>,
+    /// The path source.
+    pub path: PathBuf,
+    /// The spanned value.
+    pub value: String,
+}
+
+/// An expanded configuration.
+#[derive(Clone, Debug)]
+pub struct Preprocessed {
+    /// The main configuration file.
+    pub source: PathBuf,
+    /// The expanded contents.
+    pub expanded_contents: String,
+    /// Any unfolded expansions.
+    pub expansions: IndexMap<std::ops::Range<usize>, Spanned>,
+}
+
+impl Preprocessed {
+    /// Preprocess the contents of file at `conf_path`.
+    pub fn new(conf_path: &Path) -> Result<Self> {
+        let source: PathBuf = if conf_path.is_relative() {
+            conf_path
+                .expand()
+                .canonicalize()
+                .chain_err_related_path(conf_path)?
+        } else {
+            conf_path.expand()
+        };
+        let contents = std::fs::read_to_string(&source).chain_err_related_path(&source)?;
+
+        let mut expanded_contents = String::with_capacity(contents.len());
+
+        struct Item<'a> {
+            path: Cow<'a, Path>,
+            row: usize,
+            start: usize,
+            contents: String,
+        }
+
+        let mut stack: VecDeque<Item<'_>> = VecDeque::new();
+        stack.push_front(Item {
+            path: Cow::Borrowed(&source),
+            row: 0,
+            start: 0,
+            contents,
+        });
+        let mut expansions = IndexMap::new();
+
+        'stack: while let Some(item) = stack.pop_back() {
+            let mut line_iter = item
+                .contents
+                .split_inclusive('\n')
+                .skip(item.row)
+                .enumerate();
+            while let Some((i, line)) = line_iter.next() {
+                let (_, Some(sub_path)) = include_directive().parse(line).map_err(|line| {
+                    Error::new(format!(
+                        "Malformed include directive in line {i} of file {file}: \
+                         {line}\nConfiguration uses the standard m4 macro include(\"filename\").",
+                        file = item.path.as_ref().display(),
+                    ))
+                    .set_related_path(Some(item.path.as_ref()))
+                    .set_kind(ErrorKind::ValueError)
+                })?
+                else {
+                    expanded_contents.push_str(line);
+                    continue;
+                };
+                let mut sub_path = Path::new(sub_path).expand();
+                drop(line_iter);
+                if sub_path.is_relative() {
+                    if let Some(prefix) = item.path.parent() {
+                        sub_path = prefix.join(sub_path);
+                    }
+                }
+                let contents =
+                    match std::fs::read_to_string(&sub_path).chain_err_related_path(&sub_path) {
+                        Ok(v) => v,
+                        Err(err) => {
+                            return Err(Error::new(format!(
+                                "Path {} which is included in {in_parent} line {i} {msg}",
+                                sub_path.display(),
+                                in_parent = item.path.display(),
+                                msg = if !sub_path.exists() {
+                                    "does not exist"
+                                } else {
+                                    "is a directory, not a text file"
+                                }
+                            ))
+                            .set_related_path(Some(item.path.as_ref()))
+                            .set_source(Some(Box::new(err)))
+                            .set_kind(ErrorKind::ValueError));
+                        }
+                    };
+                {
+                    {
+                        let Item {
+                            path,
+                            row,
+                            start,
+                            contents,
+                        } = item;
+                        stack.push_back(Item {
+                            path,
+                            row: row + i + 1,
+                            start,
+                            contents,
+                        });
+                    }
+                }
+                stack.push_back(Item {
+                    path: Cow::Owned(sub_path),
+                    row: 0,
+                    contents,
+                    start: expanded_contents.len(),
+                });
+                continue 'stack;
+            }
+            let Item {
+                path,
+                row: _,
+                start,
+                contents,
+            } = item;
+            if let Cow::Owned(path) = path {
+                expansions.insert(
+                    start..expanded_contents.len(),
+                    Spanned {
+                        span: start..expanded_contents.len(),
+                        path,
+                        value: contents,
+                    },
+                );
+            }
+        }
+
+        Ok(Self {
+            source,
+            expansions,
+            expanded_contents,
+        })
+    }
+}
 
 /// Try to parse line into a path to be included.
 pub fn include_directive<'a>() -> impl Parser<'a, Option<&'a str>> {
@@ -90,55 +240,20 @@ pub fn include_directive<'a>() -> impl Parser<'a, Option<&'a str>> {
     }
 }
 
-/// Expands `include` macros in path.
-fn pp_helper(path: &Path, level: u8) -> Result<String> {
-    if level > 7 {
-        return Err(Error::new(format!(
-            "Maximum recursion limit reached while unfolding include directives in {}. Have you \
-             included a config file within itself?",
-            path.display()
-        ))
-        .set_kind(ErrorKind::ValueError));
-    }
-    let contents = std::fs::read_to_string(path).chain_err_related_path(path)?;
-    let mut ret = String::with_capacity(contents.len());
-
-    for (i, l) in contents.lines().enumerate() {
-        if let (_, Some(sub_path)) = include_directive().parse(l).map_err(|l| {
-            Error::new(format!(
-                "Malformed include directive in line {} of file {}: {}\nConfiguration uses the \
-                 standard m4 macro include(\"filename\").",
-                i,
-                path.display(),
-                l
-            ))
-            .set_kind(ErrorKind::ValueError)
-        })? {
-            let mut p = Path::new(sub_path).expand();
-            if p.is_relative() {
-                /* We checked that path is ok above so we can do unwrap here */
-                let prefix = path.parent().unwrap();
-                p = prefix.join(p)
-            }
-
-            ret.push_str(&pp_helper(&p, level + 1).chain_err_related_path(&p)?);
-        } else {
-            ret.push_str(l);
-            ret.push('\n');
-        }
-    }
-
-    Ok(ret)
-}
-
+/// Expand `path` with [`Preprocessed::new`] function and also appends theme files from
+/// any `$XDG_CONFIG_DIRS/meli/themes` directory.
 fn pp_inner(path: &Path) -> Result<String> {
-    let p_buf: PathBuf = if path.is_relative() {
+    let conf_path: PathBuf = if path.is_relative() {
         path.expand().canonicalize()?
     } else {
         path.expand()
     };
 
-    let mut ret = expand_config(&p_buf)?;
+    let Preprocessed {
+        source: _,
+        expanded_contents: mut ret,
+        expansions: _,
+    } = Preprocessed::new(&conf_path)?;
     if let Ok(xdg_dirs) = xdg::BaseDirectories::with_prefix("meli") {
         for theme_mailbox in xdg_dirs.find_config_files("themes") {
             let read_dir =
@@ -147,9 +262,12 @@ fn pp_inner(path: &Path) -> Result<String> {
                 let theme_path = theme?.path();
                 if let Some(extension) = theme_path.extension() {
                     if extension == "toml" {
-                        ret.push_str(
-                            &pp_helper(&theme_path, 0).chain_err_related_path(&theme_path)?,
-                        );
+                        let Preprocessed {
+                            source: _,
+                            expanded_contents: theme,
+                            expansions: _,
+                        } = Preprocessed::new(&theme_path)?;
+                        ret.push_str(&theme);
                     }
                 }
             }
@@ -159,7 +277,7 @@ fn pp_inner(path: &Path) -> Result<String> {
 }
 
 /// Expands `include` macros in configuration file and other configuration
-/// files (eg. themes) in the filesystem.
+/// files (eg. themes from any `$XDG_CONFIG_DIRS/meli/themes` directory).
 pub fn pp(path: &Path) -> Result<String> {
     pp_inner(path)
         .wrap_err(|| "Could not preprocess configuration file")
@@ -167,104 +285,14 @@ pub fn pp(path: &Path) -> Result<String> {
         .chain_err_kind(ErrorKind::Configuration)
 }
 
-pub fn expand_config(conf_path: &Path) -> Result<String> {
-    fn inner(conf_path: &Path) -> Result<String> {
-        let _paths = get_included_configs(conf_path)?;
-        const M4_PREAMBLE: &str = r#"define(`builtin_include', defn(`include'))dnl
-define(`include', `builtin_include(substr($1,1,decr(decr(len($1)))))dnl')dnl
-"#;
-        let contents = std::fs::read_to_string(conf_path).chain_err_related_path(conf_path)?;
-
-        let mut handle = Command::new("m4")
-            .current_dir(conf_path.parent().unwrap_or_else(|| Path::new("/")))
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
-        let mut stdin = handle.stdin.take().unwrap();
-        stdin.write_all(M4_PREAMBLE.as_bytes())?;
-        stdin.write_all(contents.as_bytes())?;
-        drop(stdin);
-        let stdout = handle.wait_with_output()?.stdout;
-        Ok(String::from_utf8_lossy(&stdout).to_string())
-    }
-
-    inner(conf_path).chain_err_related_path(conf_path)
-}
-
 pub fn get_included_configs(conf_path: &Path) -> Result<Vec<PathBuf>> {
-    const M4_PREAMBLE: &str = r#"divert(-1)dnl
-define(`include', `divert(0)$1
-divert(-1)
-')dnl
-changequote(`"', `"')dnl
-"#;
-    let mut ret = vec![];
-    let prefix = conf_path.parent().unwrap().to_path_buf();
-    let mut stack = vec![(None::<PathBuf>, conf_path.to_path_buf())];
-    while let Some((parent, p)) = stack.pop() {
-        if !p.exists() || p.is_dir() {
-            return Err(Error::new(format!(
-                "Path {}{included}{in_parent} {msg}.",
-                p.display(),
-                included = if parent.is_some() {
-                    " which is included in "
-                } else {
-                    ""
-                },
-                in_parent = if let Some(parent) = parent {
-                    std::borrow::Cow::Owned(parent.display().to_string())
-                } else {
-                    std::borrow::Cow::Borrowed("")
-                },
-                msg = if !p.exists() {
-                    "does not exist"
-                } else {
-                    "is a directory, not a text file"
-                }
-            ))
-            .set_kind(ErrorKind::ValueError));
-        }
-        let contents = std::fs::read_to_string(&p).chain_err_related_path(&p)?;
+    let Preprocessed {
+        source,
+        expanded_contents: _,
+        expansions,
+    } = Preprocessed::new(conf_path)?;
 
-        let mut handle = match Command::new("m4")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-        {
-            Ok(handle) => handle,
-            Err(err) => match err.kind() {
-                io::ErrorKind::NotFound => {
-                    return Err(Error::new(
-                        "`m4` executable not found in PATH. Please provide an m4 binary.",
-                    )
-                    .set_kind(ErrorKind::Platform))
-                }
-                _ => {
-                    return Err(Error::new("Could not process configuration with `m4`")
-                        .set_source(Some(Box::new(err)))
-                        .set_kind(ErrorKind::Platform))
-                }
-            },
-        };
-
-        let mut stdin = handle.stdin.take().unwrap();
-        stdin.write_all(M4_PREAMBLE.as_bytes())?;
-        stdin.write_all(contents.as_bytes())?;
-        drop(stdin);
-        let stdout = handle.wait_with_output()?.stdout.clone();
-        for subpath in stdout.lines() {
-            let subpath = subpath?;
-            let path = &Path::new(&subpath);
-            if path.is_absolute() {
-                stack.push((Some(p.to_path_buf()), path.to_path_buf()));
-            } else {
-                stack.push((Some(p.to_path_buf()), prefix.join(path)));
-            }
-        }
-        ret.push(p.to_path_buf());
-    }
-
-    Ok(ret)
+    Ok(std::iter::once(source)
+        .chain(expansions.into_iter().map(|(_, s)| s.path))
+        .collect())
 }
