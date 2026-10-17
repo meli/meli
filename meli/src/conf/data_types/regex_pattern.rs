@@ -118,9 +118,6 @@ impl<'de> Deserialize<'de> for RegexValue {
     where
         D: Deserializer<'de>,
     {
-        // [ref:FIXME]: clippy false positive, remove when resolved.
-        #![allow(clippy::collection_is_never_read)]
-
         #[derive(Deserialize)]
         #[serde(untagged)]
         enum Inner<'a> {
