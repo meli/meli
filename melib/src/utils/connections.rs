@@ -303,7 +303,6 @@ impl Connection {
             #[cfg(feature = "tls")]
             Tls { ref inner, .. } => inner.get_ref().set_nonblocking(nonblocking),
             Fd { inner, .. } => {
-                // [ref:VERIFY]
                 nix::fcntl::fcntl(
                     inner.as_fd(),
                     nix::fcntl::FcntlArg::F_SETFL(if nonblocking {
