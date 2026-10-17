@@ -19,17 +19,12 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{
-    collections::HashSet,
-    convert::TryFrom as _,
-    io::Write as _,
-    process::{Command, Stdio},
-};
+use std::{collections::HashSet, convert::TryFrom as _, io::Write as _};
 
 use indexmap::IndexSet;
 use melib::{
-    contacts::Card, email::attachment_types::ContentType, list_management, mailto::Mailto,
-    parser::BytesExt as _, Draft, FlagOp, HeaderName, SpecialUsageMailbox,
+    contacts::Card, email::attachment_types::ContentType, list_management, parser::BytesExt as _,
+    FlagOp, HeaderName,
 };
 use smallvec::SmallVec;
 
@@ -668,210 +663,17 @@ impl Component for MailView {
                 self.coordinates.as_mut().unwrap().2 = new_hash;
             }
             UIEvent::Action(MailingListAction(ref e)) => {
-                let account = &context.accounts[&coordinates.0];
-                let Some(envelope) = account.collection.get_env(coordinates.2) else {
-                    // The envelope has been renamed or removed, so wait for the appropriate event
-                    // to arrive
-                    return true;
+                let available_actions = {
+                    let account = &context.accounts[&coordinates.0];
+                    let Some(envelope) = account.collection.get_env(coordinates.2) else {
+                        // The envelope has been renamed or removed, so wait for the appropriate
+                        // event to arrive
+                        return true;
+                    };
+                    list_management::ListActions::detect(&envelope).unwrap_or_default()
                 };
-                let detect = list_management::ListActions::detect(&envelope);
-                if let Some(ref actions) = detect {
-                    match e {
-                        MailingListAction::ListPost if actions.post.is_some() => {
-                            /* open composer */
-                            let mut failure = true;
-                            if let list_management::ListAction::Email(list_post_addr) =
-                                actions.post.as_ref().unwrap()[0]
-                            {
-                                if let Ok(mailto) = Mailto::try_from(list_post_addr) {
-                                    let draft: Draft = mailto.into();
-                                    let mut composer =
-                                        Composer::with_account(coordinates.0, context);
-                                    composer.set_draft(draft, context);
-                                    context.replies.push_back(UIEvent::Action(Tab(New(Some(
-                                        Box::new(composer),
-                                    )))));
-                                    failure = false;
-                                }
-                            }
-                            if failure {
-                                context.replies.push_back(UIEvent::Notification {
-                                    title: None,
-                                    source: None,
-                                    body: "Couldn't parse List-Post header value".into(),
-                                    kind: None,
-                                });
-                            }
-                            return true;
-                        }
-                        MailingListAction::ListUnsubscribe if actions.unsubscribe.is_some() => {
-                            /* autosend or open unsubscribe option */
-                            let unsubscribe = actions.unsubscribe.as_ref().unwrap();
-                            for option in unsubscribe.iter() {
-                                /* [ref:TODO]: Ask for confirmation before proceeding with an action */
-                                match option {
-                                    list_management::ListAction::Email(email) => {
-                                        if let Ok(mailto) = Mailto::try_from(*email) {
-                                            let mut draft: Draft = mailto.into();
-                                            draft.set_header(
-                                                HeaderName::FROM,
-                                                context.accounts[&coordinates.0]
-                                                    .settings
-                                                    .account()
-                                                    .main_identity_address()
-                                                    .to_string(),
-                                            );
-                                            /* Manually drop stuff because borrowck doesn't do it
-                                             * on its own */
-                                            drop(detect);
-                                            drop(envelope);
-                                            match super::compose::send_draft_async(
-                                                Default::default(),
-                                                context,
-                                                coordinates.0,
-                                                draft,
-                                                SpecialUsageMailbox::Sent,
-                                                Flag::SEEN,
-                                            ) {
-                                                Err(err) => {
-                                                    context.replies.push_back(
-                                                        UIEvent::Notification {
-                                                            title: Some(
-                                                                "Couldn't send unsubscribe e-mail"
-                                                                    .into(),
-                                                            ),
-                                                            source: None,
-                                                            body: err.to_string().into(),
-                                                            kind: Some(NotificationType::Error(
-                                                                err.kind,
-                                                            )),
-                                                        },
-                                                    );
-                                                }
-                                                Ok(fut) => {
-                                                    let account =
-                                                        &mut context.accounts[&coordinates.0];
-                                                    let handle = account
-                                                        .main_loop_handler
-                                                        .job_executor
-                                                        .spawn(
-                                                            "list-unsubscribe".into(),
-                                                            fut,
-                                                            account.is_async(),
-                                                        );
-                                                    let job_id = handle.job_id;
-                                                    context.accounts[&coordinates.0].insert_job(
-                                                        job_id,
-                                                        JobRequest::Generic {
-                                                            name: "list-unsubscribe".into(),
-                                                            handle,
-                                                            on_finish: None,
-                                                            log_level: LogLevel::INFO,
-                                                        },
-                                                    );
-                                                }
-                                            }
-                                            return true;
-                                        }
-                                    }
-                                    list_management::ListAction::Url(url) => {
-                                        let url_launcher = mailbox_settings!(
-                                            context[&coordinates.0][&coordinates.1]
-                                                .pager
-                                                .url_launcher
-                                        )
-                                        .as_ref()
-                                        .map(|s| s.as_str())
-                                        .unwrap_or(if cfg!(target_os = "macos") {
-                                            "open"
-                                        } else {
-                                            "xdg-open"
-                                        });
-                                        let url_arg = String::from_utf8_lossy(url).into_owned();
-                                        match Command::new(url_launcher)
-                                            .arg(&url_arg)
-                                            .stdin(Stdio::piped())
-                                            .stdout(Stdio::piped())
-                                            .spawn()
-                                        {
-                                            Ok(child) => {
-                                                context
-                                                    .children
-                                                    .entry(url_launcher.to_string().into())
-                                                    .or_default()
-                                                    .push(ForkedProcess::Generic {
-                                                        id: url_launcher.to_string().into(),
-                                                        command: Some(
-                                                            format!("{url_launcher} {url_arg}")
-                                                                .into(),
-                                                        ),
-                                                        child,
-                                                    });
-                                            }
-                                            Err(err) => {
-                                                context.replies.push_back(UIEvent::Notification {
-                                                    title: Some(
-                                                        format!("Couldn't launch {url_launcher}")
-                                                            .into(),
-                                                    ),
-                                                    source: None,
-                                                    body: err.to_string().into(),
-                                                    kind: Some(NotificationType::Error(
-                                                        err.kind().into(),
-                                                    )),
-                                                });
-                                            }
-                                        }
-                                        return true;
-                                    }
-                                    list_management::ListAction::No => {}
-                                }
-                            }
-                        }
-                        MailingListAction::ListArchive if actions.archive.is_some() => {
-                            /* open archive url with url_launcher */
-                            let url_launcher = mailbox_settings!(
-                                context[&coordinates.0][&coordinates.1].pager.url_launcher
-                            )
-                            .as_ref()
-                            .map(|s| s.as_str())
-                            .unwrap_or(if cfg!(target_os = "macos") {
-                                "open"
-                            } else {
-                                "xdg-open"
-                            });
-                            let url_arg = actions.archive.unwrap();
-                            match Command::new(url_launcher)
-                                .arg(url_arg)
-                                .stdin(Stdio::piped())
-                                .stdout(Stdio::piped())
-                                .spawn()
-                            {
-                                Ok(child) => context
-                                    .children
-                                    .entry(url_launcher.to_string().into())
-                                    .or_default()
-                                    .push(ForkedProcess::Generic {
-                                        id: url_launcher.to_string().into(),
-                                        command: Some(format!("{url_launcher} {url_arg}").into()),
-                                        child,
-                                    }),
-                                Err(err) => {
-                                    context.replies.push_back(UIEvent::Notification {
-                                        title: Some(
-                                            format!("Couldn't launch {url_launcher}").into(),
-                                        ),
-                                        source: None,
-                                        body: err.to_string().into(),
-                                        kind: Some(NotificationType::Error(err.kind().into())),
-                                    });
-                                }
-                            }
-                            return true;
-                        }
-                        _ => { /* error print message to user */ }
-                    }
-                };
+                handle_mailing_list_action(e, available_actions, coordinates, context);
+                return true;
             }
             UIEvent::Action(Listing(OpenInNewTab)) => {
                 let mut new_tab = Self::new(self.coordinates, true, context);

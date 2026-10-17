@@ -29,6 +29,7 @@ use std::convert::TryFrom;
 use super::*;
 use crate::{
     email::headers::HeaderMap,
+    error::Error,
     utils::percent_encoding::{AsciiSet, CONTROLS},
 };
 
@@ -138,28 +139,30 @@ impl From<&Mailto> for Draft {
 }
 
 impl TryFrom<&[u8]> for Mailto {
-    type Error = String;
+    type Error = Error;
 
     fn try_from(value: &[u8]) -> std::result::Result<Self, Self::Error> {
         super::parser::generic::mailto(value)
             .map(|(_, v)| v)
             .map_err(|err| {
-                let value = String::from_utf8_lossy(value);
-                log::debug!("parser::mailto returned error while parsing {value}:\n{err:?}");
-                format!("{err:?}")
+                let err = Error::from(err);
+                err.set_details(format!(
+                    "mailto value was {}",
+                    String::from_utf8_lossy(value)
+                ))
             })
     }
 }
 
 impl TryFrom<&str> for Mailto {
-    type Error = String;
+    type Error = Error;
 
     fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
         super::parser::generic::mailto(value.as_bytes())
             .map(|(_, v)| v)
             .map_err(|err| {
-                log::debug!("parser::mailto returned error while parsing {value}:\n{err:?}");
-                format!("{err:?}")
+                let err = Error::from(err);
+                err.set_details(format!("mailto value was {value}",))
             })
     }
 }

@@ -568,10 +568,13 @@ pub(super) fn mailinglist(input: &str) -> IResult<&str, Result<Action, CommandEr
     let mut check = arg_init! { min_arg:0, max_arg: 0, mailinglist};
     arg_chk!(start check, input);
     let (input, ret) = alt((
-        map(tag("list-post"), |_| MailingListAction(ListPost)),
+        map(tag("list-help"), |_| MailingListAction(ListHelp)),
         map(tag("list-unsubscribe"), |_| {
             MailingListAction(ListUnsubscribe)
         }),
+        map(tag("list-subscribe"), |_| MailingListAction(ListSubscribe)),
+        map(tag("list-post"), |_| MailingListAction(ListPost)),
+        map(tag("list-owner"), |_| MailingListAction(ListOwner)),
         map(tag("list-archive"), |_| MailingListAction(ListArchive)),
     ))(input.trim())?;
     arg_chk!(finish check, input);

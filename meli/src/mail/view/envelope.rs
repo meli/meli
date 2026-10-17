@@ -922,13 +922,24 @@ impl Component for EnvelopeView {
                     }
                 }
                 if let Some(list_management::ListActions {
-                    ref id,
-                    ref archive,
-                    ref post,
-                    ref unsubscribe,
+                    id,
+                    archive,
+                    post,
+                    unsubscribe,
+                    subscribe,
+                    owner,
+                    help,
                 }) = list_management::ListActions::detect(envelope)
                 {
                     let mut x = 0;
+                    let actions = [
+                        ("list-archive", archive.is_some()),
+                        ("list-post", post.is_some()),
+                        ("list-unsubscribe", unsubscribe.is_some()),
+                        ("list-subscribe", subscribe.is_some()),
+                        ("list-owner", owner.is_some()),
+                        ("list-help", help.is_some()),
+                    ];
                     if let Some(id) = id {
                         if sticky || skip_header_ctr == 0 {
                             grid.clear_area(area.nth_row(y), hdr_area_theme);
@@ -946,25 +957,25 @@ impl Component for EnvelopeView {
                             }
                             y += _y;
                             let (_x, _y) = grid.write_string(
-                                id,
+                                &id,
                                 &hdr_theme,
                                 area.nth_row(y),
                                 Some(x),
                                 Some(0),
                             );
                             if _y != 0 {
-                                x = _x;
+                                x = _x + 1;
                             } else {
-                                x += _x;
+                                x += _x + 1;
                             }
                             y += _y;
                         }
                         self.headers_no += 1;
                     }
-                    if sticky || skip_header_ctr == 0 {
-                        if archive.is_some() || post.is_some() || unsubscribe.is_some() {
+                    if actions.iter().any(|(_, b)| *b) && sticky || skip_header_ctr == 0 {
+                        {
                             let (_x, _y) = grid.write_string(
-                                " Available actions: [ ",
+                                "Available actions: [ ",
                                 &hdr_name_theme,
                                 area.skip(0, y),
                                 Some(x),
@@ -977,9 +988,10 @@ impl Component for EnvelopeView {
                             }
                             y += _y;
                         }
-                        if archive.is_some() {
+                        let mut actions = actions.into_iter().filter(|(_, b)| *b).peekable();
+                        while let Some((action, _)) = actions.next() {
                             let (_x, _y) = grid.write_string(
-                                "list-archive, ",
+                                action,
                                 &hdr_theme,
                                 area.skip(0, y),
                                 Some(x),
@@ -991,54 +1003,26 @@ impl Component for EnvelopeView {
                                 x += _x;
                             }
                             y += _y;
-                        }
-                        if post.is_some() {
-                            let (_x, _y) = grid.write_string(
-                                "list-post, ",
-                                &hdr_theme,
-                                area.skip(0, y),
-                                Some(x),
-                                Some(0),
-                            );
-                            if _y != 0 {
-                                x = _x;
-                            } else {
-                                x += _x;
-                            }
-                            y += _y;
-                        }
-                        if unsubscribe.is_some() {
-                            let (_x, _y) = grid.write_string(
-                                "list-unsubscribe, ",
-                                &hdr_theme,
-                                area.skip(0, y),
-                                Some(x),
-                                Some(0),
-                            );
-                            if _y != 0 {
-                                x = _x;
-                            } else {
-                                x += _x;
-                            }
-                            y += _y;
-                        }
-                        if archive.is_some() || post.is_some() || unsubscribe.is_some() {
-                            if x >= 2 {
-                                for c in grid.row_iter(area, (x - 2)..(x - 1), y) {
-                                    grid[c].set_ch(' ');
+                            if actions.peek().is_some() {
+                                let (_x, _y) = grid.write_string(
+                                    ", ",
+                                    &hdr_theme,
+                                    area.skip(0, y),
+                                    Some(x),
+                                    Some(0),
+                                );
+                                if _y != 0 {
+                                    x = _x;
+                                } else {
+                                    x += _x;
                                 }
-                            }
-                            if x > 0 {
-                                for c in grid.row_iter(area, (x - 1)..x, y) {
-                                    grid[c]
-                                        .set_ch(']')
-                                        .set_fg(hdr_name_theme.fg)
-                                        .set_bg(hdr_name_theme.bg)
-                                        .set_attrs(hdr_name_theme.attrs);
-                                }
+                                y += _y;
                             }
                         }
-                        y += 1;
+                        y += grid
+                            .write_string(" ]", &hdr_name_theme, area.skip(0, y), Some(x), Some(0))
+                            .1
+                            + 1;
                     }
                 }
 

@@ -417,7 +417,7 @@ impl Composer {
 
             if let Some(actions) = list_management::ListActions::detect(envelope) {
                 if let Some(post) = actions.post {
-                    if let list_management::ListAction::Email(list_post_addr) = post[0] {
+                    if let list_management::ListAction::Email(list_post_addr) = &post[0] {
                         if let Ok(list_address) =
                             melib::email::parser::generic::mailto(list_post_addr)
                                 .map(|(_, m)| m.address)
@@ -511,7 +511,7 @@ impl Composer {
         // want to reply to the mailing list or the submitter of the message
         if let Some(actions) = list_management::ListActions::detect(parent_message) {
             if let Some(post) = actions.post {
-                if let list_management::ListAction::Email(list_post_addr) = post[0] {
+                if let list_management::ListAction::Email(list_post_addr) = &post[0] {
                     if let Ok((_, mailto)) = melib::email::parser::generic::mailto(list_post_addr) {
                         let mut addresses = vec![(
                             parent_message.from()[0].clone(),

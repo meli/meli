@@ -110,11 +110,28 @@ pub enum TabAction {
     Man(crate::manpages::ManPages),
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MailingListAction {
-    ListPost,
-    ListArchive,
+    ListHelp,
     ListUnsubscribe,
+    ListSubscribe,
+    ListPost,
+    ListOwner,
+    ListArchive,
+}
+
+impl MailingListAction {
+    /// Return the header name associated with this action.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::ListHelp => "List-Help",
+            Self::ListUnsubscribe => "List-Unsubscribe",
+            Self::ListSubscribe => "List-Subscribe",
+            Self::ListPost => "List-Post",
+            Self::ListOwner => "List-Owner",
+            Self::ListArchive => "List-Archive",
+        }
+    }
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -178,10 +195,7 @@ impl Action {
     pub fn needs_confirmation(&self) -> bool {
         matches!(
             self,
-            Self::Listing(ListingAction::Delete)
-                | Self::MailingListAction(_)
-                | Self::Mailbox(_, _)
-                | Self::Quit
+            Self::Listing(ListingAction::Delete) | Self::Mailbox(_, _) | Self::Quit
         )
     }
 }

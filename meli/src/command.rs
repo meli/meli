@@ -199,8 +199,8 @@ define_commands!([
         parser: parser::export_mbox
     },
     {
-        desc: "list-[unsubscribe/post/archive]",
-        tokens: &[Alternatives(&["list-archive", "list-post", "list-unsubscribe"])],
+        desc: "mailing list command",
+        tokens: &[Alternatives(&["list-help", "list-unsubscribe", "list-subscribe", "list-post", "list-owner", "list-archive"])],
         parser: parser::mailinglist
     },
     {

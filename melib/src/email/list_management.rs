@@ -21,38 +21,37 @@
 
 //! Parsing of `RFC2369` and `RFC2919` `List-*` headers.
 
-use smallvec::SmallVec;
-
 use super::{parser, Envelope};
+use crate::HeaderName;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ListAction<'a> {
-    Url(&'a [u8]),
-    Email(&'a [u8]),
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ListAction {
+    Url(Vec<u8>),
+    Email(Vec<u8>),
     ///`List-Post` field may contain the special value "NO".
     No,
 }
 
-impl<'a> From<&'a [u8]> for ListAction<'a> {
-    fn from(value: &'a [u8]) -> Self {
+impl From<&[u8]> for ListAction {
+    fn from(value: &[u8]) -> Self {
         if value.starts_with(b"mailto:") {
             /* if branch looks if value looks like a mailto url but doesn't validate it.
              * parser::mailto() will handle this if user tries to unsubscribe.
              */
-            ListAction::Email(value)
+            Self::Email(value.to_vec())
         } else if value.starts_with(b"NO") {
-            ListAction::No
+            Self::No
         } else {
             /* Otherwise treat it as url. There's no foolproof way to check if this is
              * valid, so postpone it until we try an HTTP request.
              */
-            ListAction::Url(value)
+            Self::Url(value.to_vec())
         }
     }
 }
 
-impl<'a> ListAction<'a> {
-    pub fn parse_options_list(input: &'a [u8]) -> Option<SmallVec<[Self; 4]>> {
+impl ListAction {
+    pub fn parse_options_list(input: &[u8]) -> Option<Vec<Self>> {
         parser::mailing_lists::rfc_2369_list_headers_action_list(input)
             .map(|(_, mut vec)| {
                 /* Prefer email options first, since this _is_ a mail client after all and
@@ -65,27 +64,39 @@ impl<'a> ListAction<'a> {
                     }
                 });
 
-                vec.into_iter()
-                    .map(ListAction::from)
-                    .collect::<SmallVec<[ListAction<'a>; 4]>>()
+                vec.into_iter().map(Self::from).collect::<Vec<Self>>()
             })
             .ok()
+            .filter(|l| !l.is_empty())
+    }
+
+    /// Returns `true` if `self` is [`Self::Url`].
+    pub const fn is_url(&self) -> bool {
+        matches!(self, Self::Url(_))
+    }
+
+    /// Returns `true` if `self` is [`Self::Email`].
+    pub const fn is_email(&self) -> bool {
+        matches!(self, Self::Email(_))
     }
 }
 
 #[derive(Debug, Default)]
-pub struct ListActions<'a> {
-    pub id: Option<&'a str>,
-    pub archive: Option<&'a str>,
-    pub post: Option<SmallVec<[ListAction<'a>; 4]>>,
-    pub unsubscribe: Option<SmallVec<[ListAction<'a>; 4]>>,
+pub struct ListActions {
+    pub id: Option<String>,
+    pub archive: Option<Vec<ListAction>>,
+    pub post: Option<Vec<ListAction>>,
+    pub unsubscribe: Option<Vec<ListAction>>,
+    pub subscribe: Option<Vec<ListAction>>,
+    pub owner: Option<Vec<ListAction>>,
+    pub help: Option<Vec<ListAction>>,
 }
 
-pub fn list_id_header(envelope: &'_ Envelope) -> Option<&'_ str> {
+pub fn list_id_header(envelope: &Envelope) -> Option<String> {
     envelope
         .other_headers()
-        .get("List-ID")
-        .or_else(|| envelope.other_headers().get("List-Id"))
+        .get(HeaderName::LIST_ID)
+        .map(|s| s.to_owned())
 }
 
 pub fn list_id(header: Option<&'_ str>) -> Option<&'_ str> {
@@ -103,42 +114,44 @@ pub fn list_id(header: Option<&'_ str>) -> Option<&'_ str> {
     })
 }
 
-impl<'a> ListActions<'a> {
-    pub fn detect(envelope: &'a Envelope) -> Option<Self> {
+impl ListActions {
+    pub fn detect(envelope: &Envelope) -> Option<Self> {
         let mut ret = Self {
             id: list_id_header(envelope),
             ..Self::default()
         };
 
-        if let Some(archive) = envelope.other_headers().get("List-Archive") {
-            if archive.starts_with('<') {
-                if let Some(pos) = archive.find('>') {
-                    ret.archive = Some(&archive[1..pos]);
-                } else {
-                    ret.archive = Some(archive);
-                }
-            } else {
-                ret.archive = Some(archive);
-            }
+        if let Some(archive) = envelope.other_headers().get(HeaderName::LIST_ARCHIVE) {
+            ret.archive = ListAction::parse_options_list(archive.as_bytes());
         }
 
-        if let Some(post) = envelope.other_headers().get("List-Post") {
+        if let Some(post) = envelope.other_headers().get(HeaderName::LIST_POST) {
             ret.post = ListAction::parse_options_list(post.as_bytes());
-            if let Some(ref l) = ret.post {
-                if l.starts_with(&[ListAction::No]) {
-                    ret.post = None;
-                }
-            }
         }
 
-        if let Some(unsubscribe) = envelope.other_headers().get("List-Unsubscribe") {
+        if let Some(unsubscribe) = envelope.other_headers().get(HeaderName::LIST_UNSUBSCRIBE) {
             ret.unsubscribe = ListAction::parse_options_list(unsubscribe.as_bytes());
+        }
+
+        if let Some(subscribe) = envelope.other_headers().get(HeaderName::LIST_SUBSCRIBE) {
+            ret.subscribe = ListAction::parse_options_list(subscribe.as_bytes());
+        }
+
+        if let Some(help) = envelope.other_headers().get(HeaderName::LIST_HELP) {
+            ret.help = ListAction::parse_options_list(help.as_bytes());
+        }
+
+        if let Some(owner) = envelope.other_headers().get(HeaderName::LIST_OWNER) {
+            ret.owner = ListAction::parse_options_list(owner.as_bytes());
         }
 
         if ret.id.is_none()
             && ret.archive.is_none()
             && ret.post.is_none()
             && ret.unsubscribe.is_none()
+            && ret.subscribe.is_none()
+            && ret.help.is_none()
+            && ret.owner.is_none()
         {
             None
         } else {
