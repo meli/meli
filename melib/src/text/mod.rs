@@ -193,13 +193,6 @@ impl TextPresentation for str {
     fn text_pr(&self) -> std::borrow::Cow<'_, str> {
         use std::{borrow::Cow, str::FromStr as _};
 
-        // [ref:FIXME]: add all relevant Unicode range/blocks to TextPresentation::text_pr()
-
-        // [ref:VERIFY]: Check whether our existing unicode tables can be used for TextPresentation::text_pr()
-
-        // [ref:DEBT]: TextPresentation::text_pr() is not tied to text submodule which can be updated for
-        // each Unicode release
-
         let get_base_char = |grapheme: &Self| -> Option<char> {
             char::from_str(grapheme.get(0..4).or_else(|| {
                 grapheme
