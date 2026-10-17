@@ -322,6 +322,7 @@ impl SubjectPrefix for &[u8] {
         let result = {
             let mut slice = self.trim();
             loop {
+                slice = slice.trim_ascii_start();
                 if slice.starts_with(b"RE: ")
                     || slice.starts_with(b"Re: ")
                     || slice.starts_with(b"FW: ")
@@ -335,11 +336,6 @@ impl SubjectPrefix for &[u8] {
                     || slice.starts_with(b"fwd: ")
                 {
                     slice = &slice[b"FWD: ".len()..];
-                    continue;
-                }
-                if slice.starts_with(b" ") || slice.starts_with(b"\t") || slice.starts_with(b"\r") {
-                    // [ref:FIXME]: just trim whitespace
-                    slice = &slice[b" ".len()..];
                     continue;
                 }
                 if slice.starts_with(b"[")
@@ -397,6 +393,7 @@ impl SubjectPrefix for &str {
         let result = {
             let mut slice = self.trim();
             loop {
+                slice = slice.trim_ascii_start();
                 if slice.starts_with("RE: ")
                     || slice.starts_with("Re: ")
                     || slice.starts_with("FW: ")
@@ -410,11 +407,6 @@ impl SubjectPrefix for &str {
                     || slice.starts_with("fwd: ")
                 {
                     slice = &slice["FWD: ".len()..];
-                    continue;
-                }
-                if slice.starts_with(' ') || slice.starts_with('\t') || slice.starts_with('\r') {
-                    // [ref:FIXME]: just trim whitespace
-                    slice = &slice[1..];
                     continue;
                 }
                 if slice.starts_with('[')
