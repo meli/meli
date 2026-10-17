@@ -1297,8 +1297,6 @@ impl Component for ThreadView {
                 true
             }
             _ => {
-                // [ref:VERIFY]: In what case do we need to forward a handled UIEvent to all
-                // entries?
                 if self
                     .entries
                     .iter_mut()
