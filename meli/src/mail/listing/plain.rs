@@ -284,7 +284,6 @@ impl ListingTrait for PlainListing {
             .get_env_under_cursor(self.new_cursor_pos.2 + 1)
             .is_some()
         {
-            // [ref:TODO]: makes this less ugly.
             self.movement = Some(PageMovement::Down(1));
             self.perform_movement(None);
             self.force_draw = true;
@@ -301,7 +300,6 @@ impl ListingTrait for PlainListing {
             .get_env_under_cursor(self.new_cursor_pos.2 - 1)
             .is_some()
         {
-            // [ref:TODO]: makes this less ugly.
             self.movement = Some(PageMovement::Up(1));
             self.perform_movement(None);
             self.force_draw = true;
