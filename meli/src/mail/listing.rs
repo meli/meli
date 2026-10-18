@@ -895,32 +895,55 @@ pub trait MailListingTrait: ListingTrait {
                     }
                 }
                 ListingAction::Delete => {
-                    let job = account
-                        .backend
-                        .lock()
-                        .unwrap()
-                        .delete_messages(env_hashes.clone(), mailbox_hash);
-                    match job {
-                        Err(err) => {
-                            context.replies.push_back(UIEvent::Notification {
-                                title: Some("Could not delete mail".into()),
-                                source: None,
-                                body: err.to_string().into(),
-                                kind: Some(NotificationType::Error(err.kind)),
-                            });
-                        }
-                        Ok(fut) => {
-                            let handle = account.main_loop_handler.job_executor.spawn(
-                                "delete".into(),
-                                fut,
-                                account.is_async(),
-                            );
-                            account.insert_job(
-                                handle.job_id,
-                                JobRequest::DeleteMessages { env_hashes, handle },
-                            );
-                        }
-                    }
+                    let question = format!(
+                        "*Permanently* delete {count} e-mail{s}?",
+                        count = env_hashes.len(),
+                        s = if env_hashes.len() == 1 { "" } else { "s" }
+                    );
+                    let on_confirm_cb = Box::new(
+                        move |_id: ComponentId, result: bool, context: &mut Context| {
+                            if !result {
+                                return;
+                            }
+                            let account = &mut context.accounts[&account_hash];
+                            let job = account
+                                .backend
+                                .lock()
+                                .unwrap()
+                                .delete_messages(env_hashes.clone(), mailbox_hash);
+                            match job {
+                                Err(err) => {
+                                    context.replies.push_back(UIEvent::Notification {
+                                        title: Some("Could not delete mail".into()),
+                                        source: None,
+                                        body: err.to_string().into(),
+                                        kind: Some(NotificationType::Error(err.kind)),
+                                    });
+                                }
+                                Ok(fut) => {
+                                    let handle = account.main_loop_handler.job_executor.spawn(
+                                        "delete".into(),
+                                        fut,
+                                        account.is_async(),
+                                    );
+                                    account.insert_job(
+                                        handle.job_id,
+                                        JobRequest::DeleteMessages { env_hashes, handle },
+                                    );
+                                }
+                            }
+                        },
+                    );
+                    context.replies.push_back(UIEvent::GlobalUIDialog {
+                        value: Box::new(UIConfirmationDialog::new(
+                            question,
+                            vec![(true, "yes".to_string()), (false, "no".to_string())],
+                            true,
+                            Some(on_confirm_cb),
+                            context,
+                        )),
+                        parent: None,
+                    });
                 }
                 ListingAction::CopyTo(ref mailbox_path) => {
                     match account.mailbox_by_path(mailbox_path).and_then(
