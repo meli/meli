@@ -29,9 +29,10 @@ use crate::{
     terminal::{
         cells::{Cell, CellBuffer},
         color::{Color, ColorContrast},
-        Alignment, BracketModeEnd, BracketModeStart, DisableAlternateScrollMode, DisableMouse,
-        DisableSGRMouse, DisableWraparoundMode, EnableAlternateScrollMode, EnableMouse,
-        EnableSGRMouse, Pos, QueryBackground, QueryForeground, QuerySynchronizedOutputSupport,
+        Alignment, BeginSynchronizedUpdate, BracketModeEnd, BracketModeStart,
+        DisableAlternateScrollMode, DisableMouse, DisableSGRMouse, DisableWraparoundMode,
+        EnableAlternateScrollMode, EnableMouse, EnableSGRMouse, EndSynchronizedUpdate, Pos,
+        QueryBackground, QueryForeground, QuerySynchronizedOutputSupport,
         RestoreWindowTitleIconFromStack, RestoreWraparoundMode, SaveWindowTitleIconToStack,
         SaveWraparoundMode,
     },
@@ -84,6 +85,7 @@ pub struct Tty {
     /// Foreground and Background color.
     color_scheme: Option<(ColorContrast, Color, Color)>,
     mouse: bool,
+    dec_mode_2026: bool,
     draw_horizontal_segment_fn: DrawHorizontalSegmentFn,
 }
 
@@ -282,6 +284,7 @@ impl Screen<Tty> {
                 stdout: None,
                 mouse: false,
                 color_scheme: None,
+                dec_mode_2026: false,
                 draw_horizontal_segment_fn: Self::draw_horizontal_segment,
             },
             theme_default,
@@ -317,6 +320,32 @@ impl Screen<Tty> {
             return;
         };
         (self.display.draw_horizontal_segment_fn)(&mut self.overlay_grid, stdout, xs, y);
+    }
+
+    #[inline]
+    pub fn draw_start(&mut self) {
+        if !self.display.dec_mode_2026 {
+            return;
+        }
+        let Some(stdout) = self.display.stdout.as_mut() else {
+            return;
+        };
+        log::trace!("draw_start");
+        write!(stdout, "{}", BeginSynchronizedUpdate.as_ref()).expect("Could not write to stdout");
+        _ = stdout.flush();
+    }
+
+    #[inline]
+    pub fn draw_end(&mut self) {
+        if !self.display.dec_mode_2026 {
+            return;
+        }
+        let Some(stdout) = self.display.stdout.as_mut() else {
+            return;
+        };
+        log::trace!("draw_end");
+        write!(stdout, "{}", EndSynchronizedUpdate.as_ref()).expect("Could not write to stdout");
+        _ = stdout.flush();
     }
 
     /// On `SIGWNICH` the `State` redraws itself according to the new
@@ -519,6 +548,14 @@ impl Screen<Tty> {
                 }
             }
         }
+    }
+
+    pub const fn set_dec_mode_2026(&mut self, dec_mode_2026: bool) {
+        self.display.dec_mode_2026 = dec_mode_2026;
+    }
+
+    pub const fn dec_mode_2026(&self) -> bool {
+        self.display.dec_mode_2026
     }
 
     pub const fn set_color_scheme(&mut self, color_scheme: Option<(ColorContrast, Color, Color)>) {

@@ -137,7 +137,14 @@ impl From<TerminalEvent> for ThreadEvent {
 
 #[derive(Debug)]
 pub enum TerminalEvent {
-    ColorScheme { fg: Color, bg: Color },
+    ColorScheme {
+        fg: Color,
+        bg: Color,
+    },
+    DECModeReport {
+        mode: u16,
+        state: crate::terminal::input::ANSIDECModeSetting,
+    },
 }
 
 #[derive(Debug)]

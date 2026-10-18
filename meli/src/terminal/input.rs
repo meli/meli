@@ -105,13 +105,25 @@ impl From<TermionKey> for Key {
 /// See <https://vt100.net/docs/vt510-rm/DECRPM.html>.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 #[repr(u8)]
-enum ANSIDECModeSetting {
+pub enum ANSIDECModeSetting {
     #[default]
     ModeNotRecognized = 0,
     Set = 1,
     Reset = 2,
     PermanentlySet = 3,
     PermanentlyReset = 4,
+}
+
+impl ANSIDECModeSetting {
+    #[inline]
+    pub fn is_set(&self) -> bool {
+        matches!(self, Self::Set | Self::PermanentlySet)
+    }
+
+    #[inline]
+    pub fn is_reset(&self) -> bool {
+        matches!(self, Self::Reset)
+    }
 }
 
 /// Report Mode, Terminal to Host.
@@ -133,11 +145,11 @@ enum DECRPMReport {
     },
     WaitingForDollar {
         mode: u16,
-        setting: ANSIDECModeSetting,
+        state: ANSIDECModeSetting,
     },
     WaitingForEnd {
         mode: u16,
-        setting: ANSIDECModeSetting,
+        state: ANSIDECModeSetting,
     },
 }
 
@@ -285,7 +297,7 @@ pub fn get_events(
                                         input_mode = InputMode::Normal;
                                     }
                                     (d, DECRPMReport::Semicolon { mode }) if d.is_ascii_digit() => {
-                                        let setting = match d {
+                                        let state = match d {
                                             '0' => ANSIDECModeSetting::ModeNotRecognized,
                                             '1' => ANSIDECModeSetting::Set,
                                             '2' => ANSIDECModeSetting::Reset,
@@ -296,7 +308,7 @@ pub fn get_events(
                                                 ANSIDECModeSetting::default()
                                             }
                                         };
-                                        input_mode = InputMode::DECRPM(DECRPMReport::WaitingForDollar { mode: *mode, setting });
+                                        input_mode = InputMode::DECRPM(DECRPMReport::WaitingForDollar { mode: *mode, state });
                                     },
                                     (other, DECRPMReport::Semicolon { ref mode }) => {
                                         log::trace!("Received invalid DECRPM response: Was waiting for an ASCII digit reporting setting value (`Ps` argument), for mode {mode:?} but instead got character {other:?}");
@@ -304,20 +316,21 @@ pub fn get_events(
                                         // up the user's terminal input
                                         input_mode = InputMode::Normal;
                                     }
-                                    ('$', DECRPMReport::WaitingForDollar { mode, setting }) => {
-                                        input_mode = InputMode::DECRPM(DECRPMReport::WaitingForEnd { mode: *mode, setting: *setting });
+                                    ('$', DECRPMReport::WaitingForDollar { mode, state }) => {
+                                        input_mode = InputMode::DECRPM(DECRPMReport::WaitingForEnd { mode: *mode, state: *state });
                                     },
-                                    (other, DECRPMReport::WaitingForDollar { mode, setting }) => {
-                                        log::trace!("Received invalid DECRPM response: Was waiting for an ASCII `$` character (`Pm` argument was {mode:?} and `Ps` argument was {setting:?}) but instead got character {other:?}");
+                                    (other, DECRPMReport::WaitingForDollar { mode, state }) => {
+                                        log::trace!("Received invalid DECRPM response: Was waiting for an ASCII `$` character (`Pm` argument was {mode:?} and `Ps` argument was {state:?}) but instead got character {other:?}");
                                         // Revert to normal input mode, to prevent locking
                                         // up the user's terminal input
                                         input_mode = InputMode::Normal;
                                     }
-                                    (c, DECRPMReport::WaitingForEnd { mode, setting }) => {
+                                    (c, DECRPMReport::WaitingForEnd { mode, state }) => {
                                         if c != 'y' {
-                                            log::trace!("Received invalid DECRPM response: Was waiting for an ASCII `y` character (`Pm` argument was {mode:?} and `Ps` argument was {setting:?}) but instead got character {c:?}");
+                                            log::trace!("Received invalid DECRPM response: Was waiting for an ASCII `y` character (`Pm` argument was {mode:?} and `Ps` argument was {state:?}) but instead got character {c:?}");
                                         } else {
-                                            log::trace!("Got an DECRPM Terminal mode report: Mode {mode:?} is set to {setting:?}");
+                                            log::trace!("Got an DECRPM Terminal mode report: Mode {mode:?} is set to {state:?}");
+                                            state_tx.send(TerminalEvent::DECModeReport { mode: *mode, state: *state }.into()).unwrap();
                                         }
                                         // end of report sequence.
                                         input_mode = InputMode::Normal;

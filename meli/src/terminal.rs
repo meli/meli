@@ -459,6 +459,16 @@ derive_csi_sequence!(
     (QuerySynchronizedOutputSupport, "?2026$p")
 );
 
+derive_csi_sequence!(
+    #[doc = "`BSU` (begin synchronized update, `CSI ? 2026 h`)"]
+    (BeginSynchronizedUpdate, "?2026h")
+);
+
+derive_csi_sequence!(
+    #[doc = "`ESU` (end synchronized update, `CSI ? 2026 l`)"]
+    (EndSynchronizedUpdate, "?2026l")
+);
+
 pub struct Ask<'m> {
     message: Cow<'m, str>,
     default: Option<bool>,

@@ -745,6 +745,7 @@ impl State {
                 }
             }
         }
+        self.screen.draw_start();
         /* draw each dirty area */
         let rows = self.screen.area().height();
         for y in 0..rows {
@@ -856,6 +857,7 @@ impl State {
                 self.screen.draw_overlay(x_start..(x_end + 1), y);
             }
         }
+        self.screen.draw_end();
         self.flush();
     }
 
@@ -1473,6 +1475,12 @@ impl State {
                         .replies
                         .push_back(UIEvent::ConfigReload { old_settings });
                     self.context.replies.push_back(UIEvent::Resize);
+                }
+            }
+            TerminalEvent::DECModeReport { mode, state } => {
+                if mode == 2026 {
+                    self.screen
+                        .set_dec_mode_2026(state.is_reset() || state.is_set());
                 }
             }
         }
