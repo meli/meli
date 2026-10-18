@@ -1445,14 +1445,18 @@ impl State {
                 if let Some(content) = content {
                     if content.is::<UIEvent>() {
                         self.rcv_event(*content.downcast::<UIEvent>().unwrap());
-                    } else {
+                        return;
+                    } else if let Some(owner) = owner {
                         self.rcv_event(UIEvent::IntraComm {
                             from: owner,
                             to: owner,
                             content,
                         });
+                        return;
                     }
                 }
+                // No owner, so set ourselves dirty.
+                self.screen.update_size();
                 return;
             }
             _ => {}

@@ -341,7 +341,7 @@ impl std::fmt::Display for NotificationType {
 
 #[derive(Debug)]
 pub struct ProcessRequest {
-    pub owner: ComponentId,
+    pub owner: Option<ComponentId>,
     pub command: std::process::Command,
     pub spawn: Option<SpawnInteractionFn>,
     pub result_cb: ProcessResultFn,

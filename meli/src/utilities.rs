@@ -564,7 +564,7 @@ impl Component for StatusBar {
                 context
                     .replies
                     .push_back(UIEvent::ProcessRequest(Box::new(ProcessRequest {
-                        owner: self.id,
+                        owner: Some(self.id),
                         command: {
                             let mut cmd = Command::new("sh");
                             cmd.arg("-c")

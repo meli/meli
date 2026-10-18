@@ -2203,7 +2203,7 @@ impl Component for Composer {
                 context
                     .replies
                     .push_back(UIEvent::ProcessRequest(Box::new(ProcessRequest {
-                        owner: self.id,
+                        owner: Some(self.id),
                         command: {
                             let mut cmd = Command::new("sh");
                             cmd.args(["-c", &editor_command])
@@ -2253,7 +2253,7 @@ impl Component for Composer {
                     context
                         .replies
                         .push_back(UIEvent::ProcessRequest(Box::new(ProcessRequest {
-                            owner: self.id,
+                            owner: Some(self.id),
                             command: {
                                 let mut cmd = Command::new("sh");
                                 cmd.args(["-c", command])
@@ -2326,7 +2326,7 @@ impl Component for Composer {
                     context
                         .replies
                         .push_back(UIEvent::ProcessRequest(Box::new(ProcessRequest {
-                            owner: self.id,
+                            owner: Some(self.id),
                             command: {
                                 let mut cmd = Command::new("sh");
                                 cmd.args(["-c", command])
