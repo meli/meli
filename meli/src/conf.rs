@@ -375,7 +375,7 @@ fn json_from_toml(t: toml::Value) -> Result<serde_json::Value> {
 
 pub fn get_config_file() -> Result<PathBuf> {
     if let Ok(path) = env::var("MELI_CONFIG") {
-        return Ok(PathBuf::from(path).expand());
+        return Ok(PathBuf::from(&path).expand());
     }
     let xdg_dirs = xdg::BaseDirectories::with_prefix("meli")?;
     xdg_dirs
