@@ -27,11 +27,13 @@ use termion::{clear, cursor, raw::IntoRawMode as _, screen::AlternateScreen};
 use crate::{
     conf::themes::ThemeAttribute,
     terminal::{
-        cells::CellBuffer, Alignment, BracketModeEnd, BracketModeStart, Cell, Color,
-        DisableAlternateScrollMode, DisableMouse, DisableSGRMouse, DisableWraparoundMode,
-        EnableAlternateScrollMode, EnableMouse, EnableSGRMouse, Pos, QueryBackground,
-        QueryForeground, QuerySynchronizedOutputSupport, RestoreWindowTitleIconFromStack,
-        RestoreWraparoundMode, SaveWindowTitleIconToStack, SaveWraparoundMode,
+        cells::{Cell, CellBuffer},
+        color::{Color, ColorContrast},
+        Alignment, BracketModeEnd, BracketModeStart, DisableAlternateScrollMode, DisableMouse,
+        DisableSGRMouse, DisableWraparoundMode, EnableAlternateScrollMode, EnableMouse,
+        EnableSGRMouse, Pos, QueryBackground, QueryForeground, QuerySynchronizedOutputSupport,
+        RestoreWindowTitleIconFromStack, RestoreWraparoundMode, SaveWindowTitleIconToStack,
+        SaveWraparoundMode,
     },
     Attr, Context,
 };
@@ -79,7 +81,8 @@ pub struct Virtual;
 
 pub struct Tty {
     stdout: Option<StateStdout>,
-    background_query: Option<Color>,
+    /// Foreground and Background color.
+    color_scheme: Option<(ColorContrast, Color, Color)>,
     mouse: bool,
     draw_horizontal_segment_fn: DrawHorizontalSegmentFn,
 }
@@ -278,7 +281,7 @@ impl Screen<Tty> {
             Tty {
                 stdout: None,
                 mouse: false,
-                background_query: None,
+                color_scheme: None,
                 draw_horizontal_segment_fn: Self::draw_horizontal_segment,
             },
             theme_default,
@@ -518,11 +521,15 @@ impl Screen<Tty> {
         }
     }
 
-    pub const fn background_query(&self) -> Option<Color> {
-        self.display.background_query
+    pub const fn set_color_scheme(&mut self, color_scheme: Option<(ColorContrast, Color, Color)>) {
+        self.display.color_scheme = color_scheme;
     }
 
-    pub fn do_background_query(&mut self) {
+    pub const fn color_scheme(&self) -> Option<(ColorContrast, Color, Color)> {
+        self.display.color_scheme
+    }
+
+    pub fn do_tty_queries(&mut self) {
         let Some(stdout) = self.display.stdout.as_mut() else {
             return;
         };
