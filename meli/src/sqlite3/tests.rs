@@ -27,12 +27,15 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use melib::{backends::prelude::*, maildir::MaildirType};
+use melib::{
+    backends::prelude::*,
+    maildir::MaildirType,
+    utils::logging::{LogLevel, Logger},
+};
 use rusty_fork::rusty_fork_test;
 use tempfile::TempDir;
 
 use super::*;
-use crate::utilities::tests::{eprint_step_fn, eprintln_ok_fn};
 
 #[test]
 fn test_sqlite3_query_to_sql() {
@@ -106,13 +109,7 @@ fn test_sqlite3_reindex() {
     const ACCOUNT_NAME: &str = "test";
     const DB_FILE_SHOULD_EXIST_ERR_MSG: &str = "A db file should now exist, after indexing.";
 
-    let eprintln_ok = eprintln_ok_fn();
-    let mut eprint_step_closure = eprint_step_fn();
-    macro_rules! eprint_step {
-        ($($arg:tt)+) => {{
-            eprint_step_closure(format_args!($($arg)+));
-        }};
-    }
+    let _logger = Logger::new_with(LogLevel::TRACE, true);
 
     /// Helper functions
     mod helpers {
@@ -191,7 +188,7 @@ fn test_sqlite3_reindex() {
 
     let temp_dir = TempDir::new().unwrap();
 
-    eprint_step!("Sanitize environment...");
+    log::info!("Sanitize environment...");
     for var in [
         "PAGER",
         "MANPATH",
@@ -214,8 +211,7 @@ fn test_sqlite3_reindex() {
         temp_dir.path().join(".local").join(".share"),
     );
 
-    eprintln_ok();
-    eprint_step!("Create maildir backend we will use for the sqlite3 index database...");
+    log::info!("Create maildir backend we will use for the sqlite3 index database...");
     let backend_event_queue = Arc::new(Mutex::new(VecDeque::with_capacity(16)));
 
     let backend_event_consumer = {
@@ -231,8 +227,7 @@ fn test_sqlite3_reindex() {
     let acc_name = Arc::<str>::from(maildir.account_name.to_string());
     let collection = melib::Collection::default();
 
-    eprintln_ok();
-    eprint_step!(
+    log::info!(
         "Confirm the root mailbox was created by fetching all mailboxes and inspecting their \
          contents..."
     );
@@ -255,8 +250,7 @@ fn test_sqlite3_reindex() {
     assert_eq!(mailbox.special_usage(), SpecialUsageMailbox::Normal);
     assert_eq!(mailbox.count().unwrap(), (0, 0));
 
-    eprintln_ok();
-    eprint_step!("Insert actual email into our backend...");
+    log::info!("Insert actual email into our backend...");
 
     macro_rules! batch_entry {
         ($path:literal) => {
@@ -276,8 +270,7 @@ fn test_sqlite3_reindex() {
         batch_entry!("../../../melib/tests/data/git-am-breakage-with-MIME-decoding.mbox.gz"),
     ];
 
-    eprintln_ok();
-    eprint_step!(
+    log::info!(
         "Perform a save operation for {} emails...",
         mail_batch.len()
     );
@@ -291,8 +284,7 @@ fn test_sqlite3_reindex() {
         .collect::<Result<Vec<()>>>()
         .unwrap();
 
-    eprintln_ok();
-    eprint_step!(
+    log::info!(
         "Perform a manual refresh operation, since we have not spawned any watcher threads with \
          `MailBackend::watch` (we do not need to)..."
     );
@@ -321,8 +313,7 @@ fn test_sqlite3_reindex() {
         }
     }
 
-    eprintln_ok();
-    eprint_step!("Backend setup over, we're now finally ready to test sqlite3 indexing...");
+    log::info!("Backend setup over, we're now finally ready to test sqlite3 indexing...");
     let backend_mutex = Arc::new(Mutex::new(maildir as Box<dyn MailBackend>));
 
     assert_eq!(
@@ -355,8 +346,7 @@ fn test_sqlite3_reindex() {
     );
 
     assert_eq!(list_xdg_data_home_dir_entries(), vec![db_path.clone()],);
-    eprintln_ok();
-    eprint_step!("Ensure re-indexing for a second time does not trigger any errors...");
+    log::info!("Ensure re-indexing for a second time does not trigger any errors...");
     perform_reindex(
         Arc::clone(&acc_name),
         collection.clone(),
@@ -368,8 +358,7 @@ fn test_sqlite3_reindex() {
     assert_eq!(db_path, db_path_2);
     assert_eq!(list_xdg_data_home_dir_entries(), vec![db_path],);
 
-    eprintln_ok();
-    eprint_step!("Search for all envelopes, as a smoke test...");
+    log::info!("Search for all envelopes, as a smoke test...");
     let search_results = perform_search(&acc_name, Query::Body(String::new()));
     assert_eq!(
         search_results.len(),
@@ -384,8 +373,7 @@ fn test_sqlite3_reindex() {
             .collect::<HashSet<EnvelopeHash>>(),
         *collection.get_mailbox(root_mailbox_hash).expect("mailbox")
     );
-    eprintln_ok();
-    eprint_step!(
+    log::info!(
         "Search for torvalds as a submitter, since he sent all those patches we inserted into the \
          backend. So this should return all envelopes as well..."
     );
@@ -402,8 +390,7 @@ fn test_sqlite3_reindex() {
             .collect::<HashSet<EnvelopeHash>>(),
     );
 
-    eprintln_ok();
-    eprint_step!("Search for only specific recipients, which should not return all envelopes...");
+    log::info!("Search for only specific recipients, which should not return all envelopes...");
     let search_results = perform_search(&acc_name, Query::To("marc.stevens@cwi.nl".into()));
     assert_eq!(
         search_results.len(),
@@ -424,6 +411,5 @@ fn test_sqlite3_reindex() {
             .map(|env| env.hash())
             .collect::<HashSet<EnvelopeHash>>()
     );
-    eprintln_ok();
 }
 }

@@ -26,14 +26,15 @@ use melib::{
     backends::{prelude::*, Mailbox, MailboxHash},
     error::Result,
     maildir::MaildirType,
+    utils::logging::{LogLevel, Logger},
     MailboxPermissions, SpecialUsageMailbox,
 };
+use rusty_fork::rusty_fork_test;
 use tempfile::TempDir;
 
 use crate::{
     accounts::{AccountConf, FileMailboxConf, MailboxEntry, MailboxStatus},
     command::actions::MailboxOperation,
-    utilities::tests::{eprint_step_fn, eprintln_ok_fn},
 };
 
 #[test]
@@ -182,20 +183,20 @@ fn new_maildir_backend(
     Ok((root_mailbox, account_conf.into(), maildir))
 }
 
+rusty_fork_test! {
 #[test]
-fn test_accounts_mailbox_by_path_error_msg() {
+    fn test_accounts_mailbox_by_path_error_msg() {
+        run_accounts_mailbox_by_path_error_msg();
+    }
+}
+
+fn run_accounts_mailbox_by_path_error_msg() {
     const ACCOUNT_NAME: &str = "test";
 
-    let eprintln_ok = eprintln_ok_fn();
-    let mut eprint_step_closure = eprint_step_fn();
-    macro_rules! eprint_step {
-        ($($arg:tt)+) => {{
-            eprint_step_closure(format_args!($($arg)+));
-        }};
-    }
+    let _logger = Logger::new_with(LogLevel::TRACE, true);
     let temp_dir = TempDir::new().unwrap();
     {
-        eprint_step!(
+        log::info!(
             "Create maildir backend with a root mailbox, \"inbox\" which will be a valid maildir \
              folder because it will contain cur, new, tmp subdirectories..."
         );
@@ -214,7 +215,6 @@ fn test_accounts_mailbox_by_path_error_msg() {
 
         let (root_mailbox, settings, maildir) =
             new_maildir_backend(&temp_dir, ACCOUNT_NAME, backend_event_consumer, true).unwrap();
-        eprintln_ok();
         let name = maildir.account_name.to_string();
         let account_hash = maildir.account_hash;
         let mut backend = maildir as Box<dyn MailBackend>;
@@ -251,10 +251,9 @@ fn test_accounts_mailbox_by_path_error_msg() {
                 }
             }
         }
-        eprint_step!("Assert that mailbox_by_path(\"inbox\") returns the root mailbox...");
+        log::info!("Assert that mailbox_by_path(\"inbox\") returns the root mailbox...");
         account.mailbox_by_path("inbox").unwrap();
-        eprintln_ok();
-        eprint_step!(
+        log::info!(
             "Assert that mailbox_by_path(\"box\") returns an error mentioning the root mailbox..."
         );
         assert_eq!(
@@ -273,7 +272,6 @@ fn test_accounts_mailbox_by_path_error_msg() {
             }
             .to_string()
         );
-        eprintln_ok();
 
         macro_rules! wait_for_job {
             ($job_id:expr) => {{
@@ -293,7 +291,7 @@ fn test_accounts_mailbox_by_path_error_msg() {
                 }
             }};
         }
-        eprint_step!(
+        log::info!(
             "Create new mailboxes: \"Sent\", \"Trash\", \"Drafts\", \"Archive\", \"Outbox\", \
              \"Archive/Archive (old)\"..."
         );
@@ -317,8 +315,7 @@ fn test_accounts_mailbox_by_path_error_msg() {
                 "inbox/Archive/Archive (old)".to_string(),
             ))
             .unwrap());
-        eprintln_ok();
-        eprint_step!(
+        log::info!(
             "Assert that mailbox_by_path(\"rchive\") returns an error and mentions matching \
              archives with mailboxes with the least depth in the tree hierarchy of mailboxes \
              mentioned first..."
@@ -340,8 +337,7 @@ fn test_accounts_mailbox_by_path_error_msg() {
             }
             .to_string()
         );
-        eprintln_ok();
-        eprint_step!("Create \"inbox/Archive/Archive{{1,2,3,4,5,6,7,8,9,10}}\" mailboxes...");
+        log::info!("Create \"inbox/Archive/Archive{{1,2,3,4,5,6,7,8,9,10}}\" mailboxes...");
         for i in 1..=10 {
             wait_for_job!(account
                 .mailbox_operation(MailboxOperation::Create(format!(
@@ -349,8 +345,7 @@ fn test_accounts_mailbox_by_path_error_msg() {
                 )))
                 .unwrap());
         }
-        eprintln_ok();
-        eprint_step!(
+        log::info!(
             "Assert that mailbox_by_path(\"inbox/Archive/Archive{{n}}\") works, i.e. we have to \
              specify the root prefix \"inbox\"..."
         );
@@ -362,8 +357,7 @@ fn test_accounts_mailbox_by_path_error_msg() {
                 .mailbox_by_path(&format!("Archive/Archive{i}"))
                 .unwrap_err();
         }
-        eprintln_ok();
-        eprint_step!(
+        log::info!(
             "Assert that mailbox_by_path(\"rchive\") returns and error and truncates the matching \
              mailbox paths to 5 maximum..."
         );
@@ -386,21 +380,18 @@ fn test_accounts_mailbox_by_path_error_msg() {
             }
             .to_string()
         );
-        eprintln_ok();
-        eprint_step!(
+        log::info!(
             "Assert that mailbox_by_path(\"inbox/Archive\") returns a valid result (since the \
              root mailbox is a valid maildir folder)..."
         );
         account.mailbox_by_path("inbox/Archive").unwrap();
-        eprintln_ok();
 
-        eprint_step!("Cleanup maildir account with valid root mailbox...");
+        log::info!("Cleanup maildir account with valid root mailbox...");
         std::fs::remove_dir_all(root_mailbox).unwrap();
-        eprintln_ok();
     }
 
     {
-        eprint_step!(
+        log::info!(
             "Create maildir backend with a root mailbox, \"inbox\" which will NOT be a valid \
              maildir folder because it will NOT contain cur, new, tmp subdirectories..."
         );
@@ -419,17 +410,15 @@ fn test_accounts_mailbox_by_path_error_msg() {
 
         let (_root_mailbox, settings, maildir) =
             new_maildir_backend(&temp_dir, ACCOUNT_NAME, backend_event_consumer, false).unwrap();
-        eprintln_ok();
         let name = maildir.account_name.to_string();
         let account_hash = maildir.account_hash;
         let mut backend = maildir as Box<dyn MailBackend>;
         let ref_mailboxes = smol::block_on(backend.mailboxes().unwrap()).unwrap();
-        eprint_step!("Assert that created account has no mailboxes at all...");
+        log::info!("Assert that created account has no mailboxes at all...");
         assert!(
             ref_mailboxes.is_empty(),
             "ref_mailboxes were not empty: {ref_mailboxes:?}"
         );
-        eprintln_ok();
         let contacts = melib::contacts::Contacts::new(name.to_string());
 
         let mut account = super::Account {
@@ -462,7 +451,7 @@ fn test_accounts_mailbox_by_path_error_msg() {
                 }
             }
         }
-        eprint_step!(
+        log::info!(
             "Assert that mailbox_by_path(\"inbox\") does not return a valid result (there are no \
              mailboxes)..."
         );
@@ -482,10 +471,7 @@ fn test_accounts_mailbox_by_path_error_msg() {
             }
             .to_string()
         );
-        eprintln_ok();
-        eprint_step!(
-            "Create multiple maildir folders \"inbox/Archive{{1,2,3,4,5,6,7,8,9,10}}\"..."
-        );
+        log::info!("Create multiple maildir folders \"inbox/Archive{{1,2,3,4,5,6,7,8,9,10}}\"...");
         macro_rules! wait_for_job {
             ($job_id:expr) => {{
                 let wait_for = $job_id;
@@ -509,16 +495,14 @@ fn test_accounts_mailbox_by_path_error_msg() {
                 .mailbox_operation(MailboxOperation::Create(format!("inbox/Archive{i}")))
                 .unwrap());
         }
-        eprintln_ok();
-        eprint_step!(
+        log::info!(
             "Assert that mailbox_by_path(\"Archive{{n}}\") works, and that we don't have to \
              specify the root prefix \"inbox\"..."
         );
         for i in 1..=10 {
             account.mailbox_by_path(&format!("Archive{i}")).unwrap();
         }
-        eprintln_ok();
-        eprint_step!(
+        log::info!(
             "Assert that mailbox_by_path(\"rchive\") returns an error message with matches..."
         );
         assert_eq!(
@@ -538,8 +522,7 @@ fn test_accounts_mailbox_by_path_error_msg() {
             }
             .to_string()
         );
-        eprintln_ok();
-        eprint_step!(
+        log::info!(
             "Assert that mailbox_by_path(\"inbox/Archive{{n}}\") does not return a valid result..."
         );
         assert_eq!(
@@ -561,6 +544,5 @@ fn test_accounts_mailbox_by_path_error_msg() {
             }
             .to_string()
         );
-        eprintln_ok();
     }
 }
