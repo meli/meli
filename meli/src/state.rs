@@ -1074,14 +1074,13 @@ impl State {
                 self.rcv_event(UIEvent::StatusEvent(StatusEvent::SetMouse(new_val)));
             }
             Quit => {
-                self.context
-                    .main_loop_handler
-                    .sender
-                    .send(ThreadEvent::Input((
-                        self.context.settings.shortcuts.general.quit.clone(),
-                        vec![],
-                    )))
-                    .unwrap();
+                if self.can_quit_cleanly() {
+                    self.context
+                        .main_loop_handler
+                        .sender
+                        .send(ThreadEvent::Quit)
+                        .unwrap();
+                }
             }
             #[cfg(feature = "cli-docs")]
             Tab(Man(manpage)) => match manpage
