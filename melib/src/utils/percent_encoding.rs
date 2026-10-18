@@ -172,6 +172,29 @@ pub const NON_ALPHANUMERIC: &AsciiSet = &CONTROLS
     .add(b'}')
     .add(b'~');
 
+/// Reserved characters from `RFC3986`
+///
+/// `RFC 3986 section 2.2 Reserved Characters (January 2005)`
+pub const RESERVED: &AsciiSet = &CONTROLS
+    .add(b'!')
+    .add(b'#')
+    .add(b'$')
+    .add(b'&')
+    .add(b'(')
+    .add(b'(')
+    .add(b')')
+    .add(b'*')
+    .add(b'+')
+    .add(b',')
+    .add(b'/')
+    .add(b':')
+    .add(b';')
+    .add(b'=')
+    .add(b'?')
+    .add(b'@')
+    .add(b'[')
+    .add(b']');
+
 /// Return the percent-encoding of the given byte.
 ///
 /// This is unconditional, unlike `percent_encode()` which has an `AsciiSet`
