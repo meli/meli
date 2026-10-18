@@ -1154,6 +1154,39 @@ impl SmtpAuthPasswordCommand {
         }
         Ok(())
     }
+
+    fn is_applicable(doc: &DocumentMut) -> Result<bool> {
+        if let Some(accs) = doc.get("accounts") {
+            let Some(accs) = accs.as_table() else {
+                return Err(Error::new(format!("invalid accounts value, got: {accs:?}")));
+            };
+            for (_, acc) in accs.iter() {
+                let Some(acc) = acc.as_table_like() else {
+                    continue;
+                };
+                let Some(send_mail) = acc.get("send_mail") else {
+                    continue;
+                };
+                let Some(send_mail_table) = send_mail.as_table_like() else {
+                    continue;
+                };
+                let Some(auth) = send_mail_table.get("auth") else {
+                    continue;
+                };
+                let Some(auth_table_like) = auth.as_table_like() else {
+                    continue;
+                };
+                let Some(password) = auth_table_like.get("password") else {
+                    continue;
+                };
+                if password.get("type").is_some() {
+                    return Ok(true);
+                };
+                continue;
+            }
+        }
+        Ok(false)
+    }
 }
 
 impl Migration for SmtpAuthPasswordCommand {
@@ -1176,7 +1209,13 @@ impl Migration for SmtpAuthPasswordCommand {
     fn is_applicable(&self, config: &Path) -> Option<bool> {
         for c in get_included_configs(config).ok()? {
             let raw = std::fs::read_to_string(&c).ok()?;
-            if raw.contains("send_mail") {
+            let Ok(doc) = raw.parse::<DocumentMut>() else {
+                continue;
+            };
+            let Ok(applicable) = Self::is_applicable(&doc) else {
+                continue;
+            };
+            if applicable {
                 return Some(true);
             }
         }
