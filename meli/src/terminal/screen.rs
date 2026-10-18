@@ -330,7 +330,6 @@ impl Screen<Tty> {
         let Some(stdout) = self.display.stdout.as_mut() else {
             return;
         };
-        log::trace!("draw_start");
         write!(stdout, "{}", BeginSynchronizedUpdate.as_ref()).expect("Could not write to stdout");
         _ = stdout.flush();
     }
@@ -343,7 +342,6 @@ impl Screen<Tty> {
         let Some(stdout) = self.display.stdout.as_mut() else {
             return;
         };
-        log::trace!("draw_end");
         write!(stdout, "{}", EndSynchronizedUpdate.as_ref()).expect("Could not write to stdout");
         _ = stdout.flush();
     }
