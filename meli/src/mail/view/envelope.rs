@@ -25,6 +25,7 @@ use std::{
 };
 
 use melib::utils::{shellexpand::ShellExpandTrait as _, xdg::query_default_app};
+use smallvec::SmallVec;
 
 use super::*;
 use crate::{command::actions::FileAction, jobs::IsAsync, ThreadEvent};
@@ -614,19 +615,20 @@ impl Component for EnvelopeView {
         if self.filters.is_empty() {
             let body = self.mail.body();
             if body.is_html() {
-                let attachment = if let Some(sub) = match body.content_type {
+                let attachment = match body.content_type {
                     ContentType::Multipart {
                         kind: MultipartType::Alternative,
                         ref parts,
                         ..
-                    } => parts.iter().find(|p| p.is_html()),
+                    } => parts.iter().position(|p| p.is_html()),
                     _ => None,
-                } {
-                    sub
-                } else {
-                    &body
                 };
-                if let Ok(filter) = ViewFilter::new_html(attachment, &self.view_settings, context) {
+                if let Ok(filter) = ViewFilter::new_html(
+                    &body,
+                    attachment.into_iter().collect(),
+                    &self.view_settings,
+                    context,
+                ) {
                     self.filters.push(filter);
                 }
             } else if self.view_settings.auto_choose_multipart_alternative
@@ -642,23 +644,25 @@ impl Component for EnvelopeView {
                 }
             {
                 if let Ok(filter) = ViewFilter::new_html(
+                    &body,
                     body.content_type
                         .parts()
                         .unwrap()
                         .iter()
-                        .find(|a| a.is_html())
-                        .unwrap_or(&body),
+                        .position(|a| a.is_html())
+                        .into_iter()
+                        .collect(),
                     &self.view_settings,
                     context,
                 ) {
                     self.filters.push(filter);
                 } else if let Ok(filter) =
-                    ViewFilter::new_attachment(&body, &self.view_settings, context)
+                    ViewFilter::new_attachment(&body, SmallVec::new(), &self.view_settings, context)
                 {
                     self.filters.push(filter);
                 }
             } else if let Ok(filter) =
-                ViewFilter::new_attachment(&body, &self.view_settings, context)
+                ViewFilter::new_attachment(&body, SmallVec::new(), &self.view_settings, context)
             {
                 self.filters.push(filter);
             }
@@ -1579,9 +1583,12 @@ impl Component for EnvelopeView {
                         | ContentType::Text { .. }
                         | ContentType::PGPSignature
                         | ContentType::CMSSignature => {
-                            if let Ok(filter) =
-                                ViewFilter::new_attachment(attachment, &self.view_settings, context)
-                            {
+                            if let Ok(filter) = ViewFilter::new_attachment(
+                                attachment,
+                                SmallVec::new(),
+                                &self.view_settings,
+                                context,
+                            ) {
                                 self.filters.push(filter);
                             }
                             self.initialised = false;
@@ -1633,9 +1640,12 @@ impl Component for EnvelopeView {
                                         });
                                     }
                                 }
-                            } else if let Ok(filter) =
-                                ViewFilter::new_attachment(attachment, &self.view_settings, context)
-                            {
+                            } else if let Ok(filter) = ViewFilter::new_attachment(
+                                attachment,
+                                SmallVec::new(),
+                                &self.view_settings,
+                                context,
+                            ) {
                                 self.filters.push(filter);
                                 self.initialised = false;
                                 self.set_dirty(true);

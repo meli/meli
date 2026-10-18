@@ -19,6 +19,7 @@
 // along with meli. If not, see <http://www.gnu.org/licenses/>.
 
 use rusty_fork::rusty_fork_test;
+use smallvec::SmallVec;
 
 use crate::{
     melib::{Attachment, AttachmentBuilder},
@@ -38,7 +39,7 @@ foobar
     let tempdir = tempfile::tempdir().unwrap();
     let ctx = Context::new_mock(&tempdir);
     let att: Attachment = AttachmentBuilder::new(bytes).build();
-    let value = ViewFilter::new_attachment(&att, &settings, &ctx).unwrap();
+    let value = ViewFilter::new_attachment(&att, SmallVec::new(), &settings, &ctx).unwrap();
     assert_eq!(&value.content_type.to_string(), "text/plain");
 }
 
@@ -53,7 +54,7 @@ foobar
     let tempdir = tempfile::tempdir().unwrap();
     let ctx = Context::new_mock(&tempdir);
     let att: Attachment = AttachmentBuilder::new(bytes).build();
-    let value = ViewFilter::new_attachment(&att, &settings, &ctx).unwrap();
+    let value = ViewFilter::new_attachment(&att, SmallVec::new(), &settings, &ctx).unwrap();
     assert_eq!(&value.content_type.to_string(), "text/html");
 }
 
@@ -82,7 +83,7 @@ html foobar
     let tempdir = tempfile::tempdir().unwrap();
     let ctx = Context::new_mock(&tempdir);
     let att: Attachment = AttachmentBuilder::new(bytes).build();
-    let value = ViewFilter::new_attachment(&att, &settings, &ctx).unwrap();
+    let value = ViewFilter::new_attachment(&att, SmallVec::new(), &settings, &ctx).unwrap();
     assert_eq!(&value.content_type.to_string(), "text/plain");
 }
 
@@ -109,12 +110,12 @@ html foobar
     let tempdir = tempfile::tempdir().unwrap();
     let ctx = Context::new_mock(&tempdir);
     let att: Attachment = AttachmentBuilder::new(bytes).build();
-    let value = ViewFilter::new_attachment(&att, &settings, &ctx).unwrap();
+    let value = ViewFilter::new_attachment(&att, SmallVec::new(), &settings, &ctx).unwrap();
     assert_eq!(&value.content_type.to_string(), "text/html");
 
     settings.auto_choose_multipart_alternative = false;
 
-    let value = ViewFilter::new_attachment(&att, &settings, &ctx).unwrap();
+    let value = ViewFilter::new_attachment(&att, SmallVec::new(), &settings, &ctx).unwrap();
     assert_eq!(&value.content_type.to_string(), "text/plain");
 }
 }

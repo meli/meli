@@ -186,9 +186,12 @@ impl std::fmt::Display for ViewFilter {
     }
 }
 
+type AttachmentPath = SmallVec<[usize; 8]>;
+
 impl ViewFilter {
     pub fn new_html(
-        body: &Attachment,
+        main: &Attachment,
+        path: AttachmentPath,
         view_settings: &ViewSettings,
         context: &Context,
     ) -> Result<Self> {
@@ -212,80 +215,15 @@ impl ViewFilter {
             )
             .into())
         }
-
-        let mut att = body;
-        let mut stack = vec![body];
-        while let Some(a) = stack.pop() {
-            match a.content_type {
-                ContentType::Text {
-                    kind: Text::Html, ..
-                } => {
-                    att = a;
-                    break;
-                }
-                ContentType::Text { .. }
-                | ContentType::PGPSignature
-                | ContentType::CMSSignature => {
-                    continue;
-                }
-                ContentType::Multipart {
-                    kind: MultipartType::Related,
-                    ref parts,
-                    ref parameters,
-                    ..
-                } => {
-                    if let Some(main_attachment) = parameters
-                        .iter()
-                        .find_map(|(k, v)| if k == b"type" { Some(v) } else { None })
-                        .and_then(|t| parts.iter().find(|a| a.content_type == t.as_slice()))
-                    {
-                        stack.push(main_attachment);
-                    } else {
-                        for a in parts {
-                            if let ContentType::Text {
-                                kind: Text::Html, ..
-                            } = a.content_type
-                            {
-                                att = a;
-                                break;
-                            }
-                        }
-                        stack.extend(parts);
-                    }
-                }
-                ContentType::Multipart {
-                    kind: MultipartType::Alternative,
-                    ref parts,
-                    ..
-                } => {
-                    for a in parts {
-                        if let ContentType::Text {
-                            kind: Text::Html, ..
-                        } = a.content_type
-                        {
-                            att = a;
-                            break;
-                        }
-                    }
-                    stack.extend(parts);
-                }
-                ContentType::Multipart {
-                    kind: _, ref parts, ..
-                } => {
-                    for a in parts {
-                        if let ContentType::Text {
-                            kind: Text::Html, ..
-                        } = a.content_type
-                        {
-                            att = a;
-                            break;
-                        }
-                    }
-                    stack.extend(parts);
-                }
-                _ => {}
+        let body = {
+            let mut cursor = main;
+            for i in &path {
+                cursor = &cursor.parts()[*i];
             }
-        }
+            cursor
+        };
+
+        let att = body;
         let settings = &context.settings;
         let (filter_invocation, cmd, args): (
             Cow<'static, str>,
@@ -380,10 +318,18 @@ impl ViewFilter {
     }
 
     pub fn new_attachment(
-        att: &Attachment,
+        main: &Attachment,
+        path: AttachmentPath,
         view_settings: &ViewSettings,
         context: &Context,
     ) -> Result<Self> {
+        let att = {
+            let mut cursor = main;
+            for i in &path {
+                cursor = &cursor.parts()[*i];
+            }
+            cursor
+        };
         if matches!(
             att.content_type,
             ContentType::Other { .. } | ContentType::OctetStream { .. }
@@ -456,9 +402,12 @@ impl ViewFilter {
                     }
                 }
             }
-            if let Ok(mut v) =
-                Self::new_attachment(&parts[chosen_attachment_idx], view_settings, context)
-            {
+            if let Ok(mut v) = Self::new_attachment(
+                &parts[chosen_attachment_idx],
+                SmallVec::new(),
+                view_settings,
+                context,
+            ) {
                 v.event_handler = Some(Self::html_process_event);
                 v.unfiltered = parts[html_attachment_idx].decode(view_settings.charset.into());
                 return Ok(v);
@@ -466,7 +415,7 @@ impl ViewFilter {
             if let Some(Ok(v)) = parts
                 .iter()
                 .find(|p| p.is_text() && !p.body().trim().is_empty())
-                .map(|p| Self::new_attachment(p, view_settings, context))
+                .map(|p| Self::new_attachment(p, SmallVec::new(), view_settings, context))
             {
                 return Ok(v);
             }
@@ -483,12 +432,14 @@ impl ViewFilter {
                 notice: None,
                 headers: vec![],
                 body_text: ViewFilterContent::InlineAttachments {
-                    parts: parts
-                        .iter()
-                        .map(|p| {
-                            Self::new_attachment(p, view_settings, context)
+                    parts: (0..parts.len())
+                        .into_iter()
+                        .map(|i| {
+                            let mut path = path.clone();
+                            path.push(i);
+                            Self::new_attachment(main, path.clone(), view_settings, context)
                                 .ok()
-                                .unwrap_or_else(|| Self::new_placeholder(p, view_settings))
+                                .unwrap_or_else(|| Self::new_placeholder(main, path, view_settings))
                         })
                         .collect::<Vec<Self>>(),
                     metadata: None,
@@ -499,7 +450,7 @@ impl ViewFilter {
             });
         }
         if att.is_html() {
-            return Self::new_html(att, view_settings, context);
+            return Self::new_html(main, path, view_settings, context);
         }
         if matches!(
             att.content_type,
@@ -538,7 +489,7 @@ impl ViewFilter {
                 };
                 return Ok(Self {
                     notice: Some("Unverified signature.".into()),
-                    ..Self::new_attachment(&att, view_settings, context)?
+                    ..Self::new_attachment(&att, SmallVec::new(), view_settings, context)?
                 });
             }
             for a in parts {
@@ -753,7 +704,12 @@ impl ViewFilter {
                 let root_attachment = env.body_bytes(unfiltered.as_slice());
                 Ok((
                     env,
-                    Self::new_attachment(&root_attachment, view_settings, context)?,
+                    Self::new_attachment(
+                        &root_attachment,
+                        SmallVec::new(),
+                        view_settings,
+                        context,
+                    )?,
                 ))
             }) {
                 return Ok(Self {
@@ -824,7 +780,18 @@ impl ViewFilter {
     /// [`ViewFilterContent::InlineAttachments`] we want to show an empty,
     /// placeholder value.
     #[inline]
-    fn new_placeholder(att: &Attachment, view_settings: &ViewSettings) -> Self {
+    fn new_placeholder(
+        main: &Attachment,
+        path: AttachmentPath,
+        view_settings: &ViewSettings,
+    ) -> Self {
+        let att = {
+            let mut cursor = main;
+            for i in path.into_iter() {
+                cursor = &cursor.parts()[i];
+            }
+            cursor
+        };
         Self {
             filter_invocation: String::new(),
             content_type: att.content_type.clone(),
@@ -978,7 +945,7 @@ impl ViewFilter {
                 } = output;
                 self.event_handler = None;
                 log::trace!("job_process_event: OK ");
-                match Self::new_attachment(&attachment, view_settings, context) {
+                match Self::new_attachment(&attachment, SmallVec::new(), view_settings, context) {
                     Ok(mut new_self) => {
                         if self.content_type.is_text_html() {
                             new_self.event_handler = Some(Self::html_process_event);

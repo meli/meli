@@ -672,6 +672,13 @@ impl Attachment {
         ret
     }
 
+    pub fn parts(&self) -> &[Self] {
+        match &self.content_type {
+            ContentType::Multipart { parts, .. } => parts.as_slice(),
+            _ => &[],
+        }
+    }
+
     pub fn count_attachments(&self) -> usize {
         self.attachments().len()
     }
