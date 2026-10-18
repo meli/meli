@@ -203,8 +203,7 @@ pub fn parse_command(input: &str) -> Result<Action, CommandError> {
         subsort,
         close,
         mailinglist,
-        setenv,
-        alt((printenv, currentdir, change_currentdir)),
+        alt((setenv, printenv, terminal, currentdir, change_currentdir)),
         view,
         create_mailbox,
         sub_mailbox,
@@ -704,6 +703,35 @@ pub(super) fn filter(input: &'_ str) -> IResult<&'_ str, Result<Action, CommandE
     let (input, cmd) = not_line_ending(input)?;
     arg_chk!(finish check, input);
     Ok((input, Ok(View(Filter(Some(cmd.to_string()))))))
+}
+
+pub(super) fn terminal<'a>(input: &'a str) -> IResult<&'a str, Result<Action, CommandError>> {
+    alt((
+        |input: &'a str| -> IResult<&'a str, Result<Action, CommandError>> {
+            let mut check = arg_init! { min_arg:0, max_arg: { u8::MAX }, terminal};
+            let (input, _) = tag("terminal")(input.trim())?;
+            arg_chk!(start check, input);
+            let (input, _) = is_a(" ")(input)?;
+            arg_chk!(inc check, input);
+            let (input, string) = not_line_ending(input)?;
+            arg_chk!(finish check, input);
+            let (input, _) = eof(input)?;
+            let val = if string.trim().is_empty() {
+                None
+            } else {
+                Some(string.to_owned())
+            };
+            Ok((input, Ok(Terminal(val))))
+        },
+        |input: &'a str| -> IResult<&'a str, Result<Action, CommandError>> {
+            let mut check = arg_init! { min_arg:0, max_arg: 0, terminal};
+            let (input, _) = tag("terminal")(input.trim())?;
+            arg_chk!(start check, input);
+            arg_chk!(finish check, input);
+            let (input, _) = eof(input)?;
+            Ok((input, Ok(Terminal(None))))
+        },
+    ))(input)
 }
 
 pub(super) fn add_attachment<'a>(input: &'a str) -> IResult<&'a str, Result<Action, CommandError>> {

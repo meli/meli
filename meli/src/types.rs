@@ -505,6 +505,12 @@ impl Default for SpawnInteractionFn {
     }
 }
 
+impl Default for ProcessResultFn {
+    fn default() -> Self {
+        Self(Box::new(|_| None))
+    }
+}
+
 impl From<RefreshEvent> for UIEvent {
     fn from(event: RefreshEvent) -> Self {
         Self::RefreshEvent(Box::new(event))

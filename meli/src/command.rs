@@ -214,6 +214,11 @@ define_commands!([
         parser: parser::printenv
     },
     {
+        desc: "terminal [EXECUTABLE [ARGS]], Launch a $SHELL process or the provided executable and arguments in the current directory of the meli process",
+        tokens: &[Literal("terminal"), RestOfStringValue],
+        parser: parser::terminal
+    },
+    {
         desc: "cd PATH, change process directory",
         tokens: &[Literal("cd"), Filepath],
         parser: parser::change_currentdir

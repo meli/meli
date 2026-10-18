@@ -1143,6 +1143,42 @@ impl State {
                     kind: Some(NotificationType::Error(ErrorKind::Bug)),
                 }),
             },
+            Action::Terminal(command) => {
+                let process_request = ProcessRequest {
+                    owner: None,
+                    command: {
+                        use std::process::{Command, Stdio};
+
+                        let mut cmd = if let Some(command) = command {
+                            let mut cmd = Command::new("sh");
+                            cmd.args(["-c", &command]);
+                            cmd
+                        } else if let Ok(shell) = std::env::var("SHELL") {
+                            Command::new(shell)
+                        } else {
+                            self.context.replies.push_back(UIEvent::Notification {
+                                title: None,
+                                source: None,
+                                body: "$SHELL is not set. You can change an envvar's value with \
+                                       setenv."
+                                    .into(),
+                                kind: Some(NotificationType::Error(melib::error::ErrorKind::None)),
+                            });
+                            return;
+                        };
+
+                        cmd.stdin(Stdio::inherit())
+                            .stdout(Stdio::inherit())
+                            .stderr(Stdio::inherit());
+                        cmd
+                    },
+                    spawn: Some(Default::default()),
+                    result_cb: Default::default(),
+                    temporary_files: vec![],
+                }
+                .into();
+                self.rcv_event(UIEvent::ProcessRequest(process_request));
+            }
             v => {
                 self.rcv_event(UIEvent::Action(v));
             }
@@ -1352,6 +1388,11 @@ impl State {
             {
                 self.message_box.show_next();
                 return;
+            }
+            UIEvent::Input(ref key)
+                if *key == self.context.settings.shortcuts.general.open_terminal =>
+            {
+                return self.exec_command(Action::Terminal(None));
             }
             UIEvent::Notification {
                 ref title,

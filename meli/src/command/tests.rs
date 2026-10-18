@@ -134,6 +134,12 @@ fn test_command_parser_all() {
         ("close  ", Action::Tab(TabAction::Close)),
         ("go 5", Action::ViewMailbox(5)),
         ("quit", Action::Quit),
+        ("terminal", Action::Terminal(None)),
+        ("terminal    ", Action::Terminal(None)),
+        (
+            "terminal git status | less",
+            Action::Terminal(Some("git status | less".into())),
+        ),
     ] {
         assert_eq!(
             parse_command(cmd).unwrap_or_else(|err| panic!("{cmd} failed {err}")),

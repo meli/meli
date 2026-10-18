@@ -218,6 +218,7 @@ shortcut_key_values! { "general",
     pub struct GeneralShortcuts {
         toggle_help |> "Toggle help and shortcuts view." |> Key::Char('?'),
         enter_command_mode |> "Enter COMMAND mode." |> Key::Char(':'),
+        open_terminal |> "Opens $SHELL in current directory." |> Key::Ctrl('t'),
         quit |> "Quit meli." |> Key::Char('q'),
         go_to_tab |> "Go to the nth tab." |> Key::Alt('n'),
         next_tab |> "Go to the next tab." |> Key::Char('T'),

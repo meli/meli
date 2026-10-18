@@ -178,6 +178,7 @@ pub enum Action {
     Tab(TabAction),
     MailingListAction(MailingListAction),
     View(ViewAction),
+    Terminal(Option<String>),
     SetEnv(String, String),
     PrintEnv(String),
     CurrentDirectory,
