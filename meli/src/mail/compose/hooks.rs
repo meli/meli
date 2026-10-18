@@ -278,8 +278,11 @@ pub const EMPTYDRAFTWARN: Hook = Hook {
 
 #[cfg(test)]
 mod tests {
+    use rusty_fork::rusty_fork_test;
+
     use super::*;
 
+    rusty_fork_test! {
     #[test]
     fn test_draft_hook_datewarn() {
         let tempdir = tempfile::tempdir().unwrap();
@@ -290,8 +293,8 @@ mod tests {
             .set_header(HeaderName::SUBJECT, "test_update()".into())
             .set_header(HeaderName::DATE, "Sun, 16 Jun 2013 17:56:45 +0200".into());
         println!("Check that past Date header value produces a warning…");
-        #[allow(const_item_mutation)]
-        let err_msg = PASTDATEWARN(&mut ctx, &mut draft).unwrap_err().to_string();
+        let mut pastdatewarn = PASTDATEWARN;
+        let err_msg = pastdatewarn(&mut ctx, &mut draft).unwrap_err().to_string();
         assert!(
             err_msg.starts_with("Value of Date header is "),
             "PASTDATEWARN should complain about Date value being in the past: {err_msg}"
@@ -432,5 +435,6 @@ mod tests {
         println!("Check that non-empty draft produces no warning…");
         draft.set_header(HeaderName::SUBJECT, "Ping".into());
         hook(&mut ctx, &mut draft).unwrap();
+    }
     }
 }

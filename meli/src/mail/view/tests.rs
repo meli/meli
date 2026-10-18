@@ -18,12 +18,15 @@
 // You should have received a copy of the GNU General Public License
 // along with meli. If not, see <http://www.gnu.org/licenses/>.
 
+use rusty_fork::rusty_fork_test;
+
 use crate::{
     melib::{Attachment, AttachmentBuilder},
     view::{ViewFilter, ViewSettings},
     Context,
 };
 
+rusty_fork_test! {
 #[test]
 fn test_view_filter_text_plain() {
     let bytes = b"Content-Transfer-Encoding: 8bit
@@ -113,4 +116,5 @@ html foobar
 
     let value = ViewFilter::new_attachment(&att, &settings, &ctx).unwrap();
     assert_eq!(&value.content_type.to_string(), "text/plain");
+}
 }
