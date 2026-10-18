@@ -49,7 +49,7 @@ jobs:
           printf "Rust MSRV is %s\n" $(grep -m1 rust-version meli/Cargo.toml | head -n1 | cut -d'"' -f 2 | head -n1)
       - name: Cache rustup
         id: cache-rustup
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.rustup/
@@ -95,23 +95,9 @@ jobs:
         shell: bash
         run: |
           cargo install --version 0.18.4 --target "${{ matrix.target }}" cargo-msrv
-      - if: steps.cache-rustup.outputs.cache-hit != 'true'
-        name: Save rust toolchains
-        id: save-cache-deps
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ~/.rustup/
-            ~/.cargo/env
-            ~/.cargo/config.toml
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-          key: lints-workflow-${{ matrix.build }}-rustup
       - name: Restore build artifacts cache in target dir
         id: cache-deps
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: target/
           key: workflow-${{ matrix.build }}-cargo-${{ hashFiles('**/Cargo.lock') }}
@@ -120,10 +106,9 @@ jobs:
         run: |
           source "${HOME}/.cargo/env"
           make -f .gitea/Makefile.lint clippy
-      - if: steps.cache-deps.outputs.cache-hit != 'true'
-        name: Save build artifacts in target dir
+      - name: Save build artifacts in target dir
         id: save-cache-deps
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: target/
           key: workflow-${{ matrix.build }}-cargo-${{ hashFiles('**/Cargo.lock') }}

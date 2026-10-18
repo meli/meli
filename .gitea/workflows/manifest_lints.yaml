@@ -44,7 +44,7 @@ jobs:
           apt-get install -y mandoc
       - name: Cache rustup
         id: cache-rustup
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.rustup/
