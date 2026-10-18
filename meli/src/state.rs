@@ -930,8 +930,46 @@ impl State {
                 );
             }
             ChangeCurrentDirectory(dir) => {
-                self.context.current_dir = dir.expand();
-                self.show_display_message(self.context.current_dir.display().to_string());
+                let mut dir = if dir.starts_with('~') {
+                    Path::new(&dir).expand_tilde().into_owned()
+                } else {
+                    Path::new(&dir).to_path_buf()
+                };
+                if dir.is_relative() {
+                    if let Some(parent) = self.context.current_dir.parent() {
+                        dir = parent.join(&dir).canonicalize().unwrap_or(dir);
+                    } else {
+                        dir = dir.canonicalize().unwrap_or(dir);
+                    }
+                }
+                if !matches!(dir.try_exists(), Ok(true)) || !dir.is_dir() {
+                    self.context.replies.push_back(UIEvent::Notification {
+                        title: None,
+                        source: None,
+                        body: format!(
+                            "Directory {} does not exist or is not a directory",
+                            dir.display()
+                        )
+                        .into(),
+                        kind: Some(NotificationType::Info),
+                    });
+                } else if let Err(err) = std::env::set_current_dir(&dir)
+                    .map_err(Error::from)
+                    .chain_err_related_path(&dir)
+                {
+                    self.context.replies.push_back(UIEvent::Notification {
+                        title: Some("Could not change directory".into()),
+                        source: None,
+                        kind: Some(NotificationType::Error(err.kind)),
+                        body: err.to_string().into(),
+                    });
+                } else {
+                    self.context.current_dir = dir;
+                    self.show_display_message(format!(
+                        "Changed directory to: {}",
+                        self.context.current_dir.display()
+                    ));
+                }
             }
             CurrentDirectory => {
                 self.show_display_message(self.context.current_dir.display().to_string());
