@@ -263,10 +263,10 @@ pub fn percent_encode_byte(byte: u8) -> &'static str {
 /// );
 /// ```
 #[inline]
-pub const fn percent_encode<'a>(
+pub const fn percent_encode<'a, 's>(
     input: &'a [u8],
-    ascii_set: &'static AsciiSet,
-) -> PercentEncode<'a> {
+    ascii_set: &'s AsciiSet,
+) -> PercentEncode<'a, 's> {
     PercentEncode {
         bytes: input,
         ascii_set,
@@ -288,18 +288,21 @@ pub const fn percent_encode<'a>(
 /// );
 /// ```
 #[inline]
-pub fn utf8_percent_encode<'a>(input: &'a str, ascii_set: &'static AsciiSet) -> PercentEncode<'a> {
+pub fn utf8_percent_encode<'a, 's>(
+    input: &'a str,
+    ascii_set: &'s AsciiSet,
+) -> PercentEncode<'a, 's> {
     percent_encode(input.as_bytes(), ascii_set)
 }
 
 /// The return type of [`percent_encode`] and [`utf8_percent_encode`].
 #[derive(Clone)]
-pub struct PercentEncode<'a> {
+pub struct PercentEncode<'a, 's> {
     bytes: &'a [u8],
-    ascii_set: &'static AsciiSet,
+    ascii_set: &'s AsciiSet,
 }
 
-impl<'a> Iterator for PercentEncode<'a> {
+impl<'a, 's> Iterator for PercentEncode<'a, 's> {
     type Item = &'a str;
 
     fn next(&mut self) -> Option<&'a str> {
@@ -336,7 +339,7 @@ impl<'a> Iterator for PercentEncode<'a> {
     }
 }
 
-impl std::fmt::Display for PercentEncode<'_> {
+impl std::fmt::Display for PercentEncode<'_, '_> {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for c in (*self).clone() {
             formatter.write_str(c)?
@@ -345,8 +348,8 @@ impl std::fmt::Display for PercentEncode<'_> {
     }
 }
 
-impl<'a> From<PercentEncode<'a>> for Cow<'a, str> {
-    fn from(mut iter: PercentEncode<'a>) -> Self {
+impl<'a, 's> From<PercentEncode<'a, 's>> for Cow<'a, str> {
+    fn from(mut iter: PercentEncode<'a, 's>) -> Self {
         iter.next().map_or_else(
             || "".into(),
             |first| {
