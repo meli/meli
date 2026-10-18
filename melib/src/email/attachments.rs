@@ -1143,6 +1143,31 @@ impl Attachment {
     pub fn size(&self) -> usize {
         self.raw.len()
     }
+
+    /// Returns value of `Content-ID` header if set.
+    pub fn content_id(&self) -> Option<Cow<'_, str>> {
+        let (_, (headers, _)) = parser::attachments::attachment(&self.raw).ok()?;
+        for (name, value) in headers {
+            if name == HeaderName::CONTENT_ID {
+                let mut value = value.trim();
+                if value.starts_with(b"<") && value.ends_with(b">") {
+                    value = value
+                        .strip_prefix(b"<")
+                        .unwrap_or(value)
+                        .strip_suffix(b">")
+                        .unwrap_or(value);
+                }
+                if let Ok((_, v)) = crate::email::parser::encodings::phrase(value, false) {
+                    if let Ok(v) = String::from_utf8(v) {
+                        return Some(Cow::Owned(v));
+                    }
+                }
+                return Some(String::from_utf8_lossy(value));
+            }
+        }
+
+        None
+    }
 }
 
 /// Helper struct to return slices from a struct field on demand.

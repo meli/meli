@@ -21,6 +21,7 @@
 
 use std::{
     borrow::Cow,
+    collections::HashMap,
     io::Write as _,
     process::{Command, Stdio},
 };
@@ -33,7 +34,7 @@ use melib::{
     error::*,
     parser::BytesExt as _,
     text::Truncate as _,
-    utils::xdg::query_default_app,
+    utils::{percent_encoding, xdg::query_default_app},
     Attachment, AttachmentBuilder, Result,
 };
 use smallvec::SmallVec;
@@ -161,6 +162,7 @@ pub struct ViewFilter {
     pub size: usize,
     pub body_text: ViewFilterContent,
     pub unfiltered: Vec<u8>,
+    pub cids: HashMap<String, (Option<String>, Vec<u8>)>,
     pub event_handler: Option<ProcessEventFn>,
     pub id: ComponentId,
 }
@@ -171,6 +173,7 @@ impl std::fmt::Debug for ViewFilter {
             .field("filter_invocation", &self.filter_invocation)
             .field("content_type", &self.content_type)
             .field("headers", &self.headers)
+            .field("cids", &self.cids)
             .field("notice", &self.notice)
             .field("size", &self.size)
             .field("body_text", &self.body_text)
@@ -215,9 +218,11 @@ impl ViewFilter {
             )
             .into())
         }
+        let mut parent = None;
         let body = {
             let mut cursor = main;
             for i in &path {
+                parent = Some(cursor);
                 cursor = &cursor.parts()[*i];
             }
             cursor
@@ -243,6 +248,36 @@ impl ViewFilter {
             )
         };
         let bytes: Vec<u8> = att.decode(view_settings.charset.into());
+        let mut cids = HashMap::default();
+        if let Some(parent) = parent {
+            if let ContentType::Multipart {
+                kind: MultipartType::Related,
+                ref parts,
+                ..
+            } = parent.content_type
+            {
+                for p in parts {
+                    if let Some(cid) = p.content_id() {
+                        let cid = format!("cid:{cid}");
+                        if bytes.contains_subsequence(&cid) {
+                            cids.insert(
+                                cid,
+                                (
+                                    p.filename().map(|c| {
+                                        percent_encoding::utf8_percent_encode(
+                                            c.as_ref(),
+                                            percent_encoding::RESERVED,
+                                        )
+                                        .to_string()
+                                    }),
+                                    p.decode(view_settings.charset.into()),
+                                ),
+                            );
+                        }
+                    }
+                }
+            }
+        }
 
         let filter_invocation2 = filter_invocation.to_string();
         let bytes2 = bytes.clone();
@@ -292,6 +327,7 @@ impl ViewFilter {
             size: att.size(),
             notice: None,
             headers: vec![],
+            cids,
             unfiltered: bytes,
             body_text: ViewFilterContent::empty(),
             event_handler: None,
@@ -344,6 +380,7 @@ impl ViewFilter {
                         size: att.size(),
                         notice: None,
                         headers: vec![],
+                        cids: HashMap::default(),
                         unfiltered: text.as_bytes().to_vec(),
                         body_text: ViewFilterContent::Filtered {
                             inner: text,
@@ -373,6 +410,7 @@ impl ViewFilter {
                     size: att.size(),
                     notice: None,
                     headers: vec![],
+                    cids: HashMap::default(),
                     unfiltered: att.decode(view_settings.charset.into()),
                     body_text: ViewFilterContent::empty(),
                     event_handler: None,
@@ -431,6 +469,7 @@ impl ViewFilter {
                 size: att.size(),
                 notice: None,
                 headers: vec![],
+                cids: HashMap::default(),
                 body_text: ViewFilterContent::InlineAttachments {
                     parts: (0..parts.len())
                         .into_iter()
@@ -465,6 +504,7 @@ impl ViewFilter {
                 size: att.size(),
                 notice: None,
                 headers: vec![],
+                cids: HashMap::default(),
                 body_text: ViewFilterContent::empty(),
                 unfiltered: vec![],
                 event_handler: None,
@@ -541,6 +581,7 @@ impl ViewFilter {
                         size: att.size(),
                         notice: None,
                         headers: vec![],
+                        cids: HashMap::default(),
                         body_text: ViewFilterContent::empty(),
                         unfiltered: att.decode(Default::default()).to_vec(),
                         event_handler: None,
@@ -605,6 +646,7 @@ impl ViewFilter {
                         size: att.size(),
                         notice: None,
                         headers: vec![],
+                        cids: HashMap::default(),
                         body_text: ViewFilterContent::empty(),
                         unfiltered: att.decode(Default::default()).to_vec(),
                         event_handler: None,
@@ -673,6 +715,7 @@ impl ViewFilter {
                     size: att.size(),
                     notice: None,
                     headers: vec![],
+                    cids: HashMap::default(),
                     body_text: ViewFilterContent::empty(),
                     unfiltered: content.into_bytes(),
                     event_handler: None,
@@ -721,6 +764,7 @@ impl ViewFilter {
                         .header_iter(&env)
                         .map(|(hdr, val)| (hdr.clone(), val.into()))
                         .collect::<Vec<_>>(),
+                    cids: HashMap::default(),
                     body_text: ViewFilterContent::InlineAttachments {
                         parts: vec![vf],
                         metadata: None,
@@ -737,6 +781,7 @@ impl ViewFilter {
                 size: att.size(),
                 notice: None,
                 headers: vec![],
+                cids: HashMap::default(),
                 body_text: ViewFilterContent::Filtered {
                     inner: filtered,
                     metadata: None,
@@ -769,6 +814,7 @@ impl ViewFilter {
             size: att.size(),
             notice,
             headers: vec![],
+            cids: HashMap::default(),
             body_text,
             unfiltered: att.decode(view_settings.charset.into()),
             event_handler: None,
@@ -798,6 +844,7 @@ impl ViewFilter {
             size: att.size(),
             notice: None,
             headers: vec![],
+            cids: HashMap::default(),
             unfiltered: att.decode(view_settings.charset.into()),
             body_text: ViewFilterContent::empty(),
             event_handler: None,
@@ -805,70 +852,75 @@ impl ViewFilter {
         }
     }
 
+    pub fn launch_html_open(&self, context: &mut Context) -> Result<()> {
+        let command = context
+            .settings
+            .pager
+            .html_open
+            .as_ref()
+            .map(|s| Cow::Owned(s.to_string()))
+            .or_else(|| query_default_app("text/html").ok().map(Cow::Owned));
+        let command = if cfg!(target_os = "macos") {
+            command.or(Some(Cow::Borrowed("open")))
+        } else if cfg!(target_os = "linux") {
+            command.or(Some(Cow::Borrowed("xdg-open")))
+        } else {
+            command
+        };
+        let Some(command) = command else {
+            return Err(Error::new(
+                "Couldn't find a default application for html files.",
+            ));
+        };
+
+        let unfiltered = if self.cids.is_empty() {
+            Cow::Borrowed(&self.unfiltered)
+        } else {
+            let mut unfiltered = self.unfiltered.clone();
+            for (cid, (filename, bytes)) in &self.cids {
+                let f = File::create_temp_file(bytes, filename.as_deref(), None, None, true)?;
+                unfiltered =
+                    unfiltered.replace(cid.as_bytes(), f.path().display().to_string().as_bytes());
+                context.temp_files.push(f);
+            }
+            Cow::Owned(unfiltered)
+        };
+        let p = File::create_temp_file(unfiltered.as_ref(), None, None, Some("html"), true)?;
+        let exec_cmd = desktop_exec_to_command(&command, p.path().display().to_string(), false);
+
+        let child = Command::new("sh")
+            .args(["-c", &exec_cmd])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .wrap_err(|| format!("Failed to start `{command}`"))?;
+        context
+            .replies
+            .push_back(UIEvent::StatusEvent(StatusEvent::UpdateSubStatus(
+                command.to_string(),
+            )));
+        context.temp_files.push(p);
+        context
+            .children
+            .entry(command.clone())
+            .or_default()
+            .push(ForkedProcess::Generic {
+                id: command.clone(),
+                command: Some(command),
+                child,
+            });
+        Ok(())
+    }
+
     fn html_process_event(self_: &mut Self, event: &mut UIEvent, context: &mut Context) -> bool {
         if matches!(event, UIEvent::Input(key) if *key == context.settings.shortcuts.envelope_view.open_html)
         {
-            let command = context
-                .settings
-                .pager
-                .html_open
-                .as_ref()
-                .map(|s| Cow::Owned(s.to_string()))
-                .or_else(|| query_default_app("text/html").ok().map(Cow::Owned));
-            let command = if cfg!(target_os = "macos") {
-                command.or(Some(Cow::Borrowed("open")))
-            } else if cfg!(target_os = "linux") {
-                command.or(Some(Cow::Borrowed("xdg-open")))
-            } else {
-                command
-            };
-            if let Some(command) = command {
-                let res = File::create_temp_file(&self_.unfiltered, None, None, Some("html"), true)
-                    .and_then(|p| {
-                        let exec_cmd = desktop_exec_to_command(
-                            &command,
-                            p.path().display().to_string(),
-                            false,
-                        );
-
-                        Ok((
-                            p,
-                            Command::new("sh")
-                                .args(["-c", &exec_cmd])
-                                .stdin(Stdio::piped())
-                                .stdout(Stdio::piped())
-                                .spawn()?,
-                        ))
-                    });
-                match res {
-                    Ok((p, child)) => {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::UpdateSubStatus(command.to_string()),
-                        ));
-                        context.temp_files.push(p);
-                        context.children.entry(command.clone()).or_default().push(
-                            ForkedProcess::Generic {
-                                id: command.clone(),
-                                command: Some(command),
-                                child,
-                            },
-                        );
-                    }
-                    Err(err) => {
-                        context.replies.push_back(UIEvent::Notification {
-                            title: Some(format!("Failed to start `{command}`",).into()),
-                            source: None,
-                            body: err.to_string().into(),
-                            kind: Some(NotificationType::Error(err.kind)),
-                        });
-                    }
-                }
-            } else {
+            if let Err(err) = self_.launch_html_open(context) {
                 context.replies.push_back(UIEvent::Notification {
                     title: None,
                     source: None,
-                    body: "Couldn't find a default application for html files.".into(),
-                    kind: None,
+                    body: err.to_string().into(),
+                    kind: Some(NotificationType::Error(err.kind)),
                 });
             }
             return true;
@@ -896,7 +948,6 @@ impl ViewFilter {
                     view_settings,
                 } = std::mem::replace(&mut self.body_text, ViewFilterContent::empty())
                 {
-                    log::trace!("job_process_event: inside if let ");
                     let job_result = job_handle.chan.try_recv();
                     self.process_job_result(job_result, &view_settings, context);
                 }
@@ -944,18 +995,19 @@ impl ViewFilter {
                     metadata,
                 } = output;
                 self.event_handler = None;
-                log::trace!("job_process_event: OK ");
                 match Self::new_attachment(&attachment, SmallVec::new(), view_settings, context) {
-                    Ok(mut new_self) => {
+                    Ok(new_self) => {
                         if self.content_type.is_text_html() {
-                            new_self.event_handler = Some(Self::html_process_event);
+                            self.event_handler = Some(Self::html_process_event);
+                        } else {
+                            self.content_type = new_self.content_type;
                         }
-                        new_self.unfiltered = raw;
-                        new_self.notice = notice;
-                        if new_self.body_text.metadata().is_none() {
-                            new_self.body_text.set_metadata(metadata);
+                        self.body_text = new_self.body_text;
+                        self.unfiltered = raw;
+                        self.notice = notice;
+                        if self.body_text.metadata().is_none() {
+                            self.body_text.set_metadata(metadata);
                         }
-                        *self = new_self;
                     }
                     Err(err) => {
                         self.body_text = ViewFilterContent::Error { inner: err };
