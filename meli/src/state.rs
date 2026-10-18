@@ -49,7 +49,7 @@ use melib::{
     backends::{
         AccountHash, BackendEvent, BackendEventConsumer, Backends, RefreshEvent, RefreshEventKind,
     },
-    utils::datetime,
+    utils::{datetime, shellexpand::ShellExpandTrait as _},
 };
 use smallvec::SmallVec;
 
@@ -281,7 +281,7 @@ impl Context {
             realized: IndexMap::default(),
             unrealized: IndexSet::default(),
             temp_files: Vec::new(),
-            current_dir: std::env::current_dir().unwrap(),
+            current_dir: std::env::current_dir().unwrap().expand(),
             children: IndexMap::default(),
             cmd_buf: None,
 
@@ -563,7 +563,7 @@ impl State {
                 unrealized: IndexSet::default(),
                 temp_files: Vec::new(),
                 component_states,
-                current_dir: std::env::current_dir()?,
+                current_dir: std::env::current_dir()?.expand(),
                 children: IndexMap::default(),
                 cmd_buf: None,
                 input_thread: InputHandler {
@@ -930,7 +930,7 @@ impl State {
                 );
             }
             ChangeCurrentDirectory(dir) => {
-                self.context.current_dir = dir;
+                self.context.current_dir = dir.expand();
                 self.show_display_message(self.context.current_dir.display().to_string());
             }
             CurrentDirectory => {
@@ -1353,10 +1353,12 @@ impl State {
                     result_cb,
                     temporary_files: _,
                 } = *process_request;
+                command.current_dir(&self.context.current_dir);
                 log::trace!(
-                    "Executing: {:?} {:?}",
+                    "Executing: {:?} {:?} in {:?}",
                     command.get_program(),
-                    command.get_args().collect::<Vec<_>>()
+                    command.get_args().collect::<Vec<_>>(),
+                    self.context.current_dir,
                 );
                 let content = if let Some(spawn_fn) = spawn {
                     // Kill input thread so that spawned command can be sole receiver of stdin
