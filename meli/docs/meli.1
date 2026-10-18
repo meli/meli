@@ -552,6 +552,35 @@ command or the
 .Shortcut Ctrl-t general open_terminal
 shortcut.
 .Sh COMMAND
+In
+.Em COMMAND
+mode you can use the following hard-coded shortcuts to edit text:
+.Bl -tag -width 12n -compact -offset indent
+.It Ctrl-p
+Previous history entry.
+.It Ctrl-n
+Next history entry.
+.It Ctrl-u
+Clear entry.
+.It Ctrl-g
+Open text entry in
+.Ev $EDITOR Ns
+\&.
+.It Left / right
+Move cursor to the left and right.
+.It Up / Down
+Move focus to autocomplete suggestions.
+.It Enter
+Select autocomplete suggestion entry or perform command.
+.It Tab
+Complete to longest common prefix of autocomplete suggestions.
+.It Backspace
+Delete character to the left of the cursor.
+.It Esc
+Discard text contents and exit
+.Em COMMAND
+mode.
+.El
 .Ss Mail listing commands
 .HorizontalRule
 .Bl -tag -width 36n
