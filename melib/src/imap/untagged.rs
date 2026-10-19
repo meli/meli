@@ -315,7 +315,7 @@ impl ImapConnection {
                         }
                     }
                 } else {
-                    let sequence_set = if (previous_exists + 1) == n {
+                    let sequence_set = if previous_exists == n || (previous_exists + 1) == n {
                         n.try_into()?
                     } else {
                         SequenceSet::try_from((previous_exists + 1)..=n)?
