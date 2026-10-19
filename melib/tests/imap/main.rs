@@ -21,7 +21,6 @@
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
 #![cfg(feature = "imap")]
-#![allow(clippy::print_stderr)]
 
 use rusty_fork::rusty_fork_test;
 
@@ -116,7 +115,7 @@ pub mod server {
                     StreamEvent::Untagged(UntaggedEvent::New(uid))
                 }
                 ServerStateEvent::Delete(uid, on_success) => {
-                    eprintln!(
+                    log::debug!(
                         "removing uid = {uid} mail = {:?}",
                         self.envelopes.shift_remove(&uid)
                     );
@@ -136,7 +135,7 @@ pub mod server {
                         })
                         .collect::<Vec<UID>>();
                     for uid in &uids {
-                        eprintln!(
+                        log::debug!(
                             "removing uid = {uid} mail = {:?}",
                             self.envelopes.shift_remove(uid)
                         );
@@ -403,7 +402,7 @@ pub mod server {
                             };
                             for (i, stream) in streams.values_mut().enumerate() {
                                 if stream.sender.unbounded_send(event.clone()).is_err() {
-                                    eprintln!(
+                                    log::warn!(
                                         "Did not send event {event:?} to stream {i} because it \
                                          disconnected"
                                     );
@@ -461,7 +460,7 @@ pub mod server {
                             }
                         }
                     }
-                    eprintln!("waiting on {} stream handles", streams.len());
+                    log::debug!("waiting on {} stream handles", streams.len());
                     for handle in streams.into_values() {
                         handle.join_handle.join().unwrap();
                     }
@@ -659,7 +658,7 @@ pub mod server {
                         }
                     };
                     let input = String::from_utf8_lossy(input).to_string();
-                    eprintln!("loop_handler 'idle received: {input:?}");
+                    log::debug!("loop_handler 'idle received: {input:?}");
                     if input == "DONE\r\n" {
                         tcp_stream.write_all(idle_cmd_id.as_bytes()).await.unwrap();
                         tcp_stream
@@ -686,7 +685,7 @@ pub mod server {
                         }
                     };
                     let line = String::from_utf8_lossy(input).to_string();
-                    eprintln!("loop_handler 'main received: {line:?}");
+                    log::debug!("loop_handler 'main received: {line:?}");
                     let codec = CommandCodec::new();
                     let (remainder, cmd) = codec.decode(line.as_bytes()).unwrap();
                     assert_eq!(remainder, b"");
@@ -790,7 +789,7 @@ pub mod server {
                                             let trace = String::from_utf8_lossy(
                                                 initial_response.declassify(),
                                             );
-                                            eprintln!(
+                                            log::debug!(
                                                 "AUTHENTICATE ANONYMOUS with trace information \
                                                  {trace}"
                                             );
@@ -816,7 +815,7 @@ pub mod server {
                                 };
                             }
                             *idle_cmd_id = Some(id.inner().to_string());
-                            eprintln!("loop_handler is now idling");
+                            log::debug!("loop_handler is now idling");
                             responses.push(Response::CommandContinuationRequest(
                                 CommandContinuationRequest::basic(None, "now idling").unwrap(),
                             ));
@@ -979,7 +978,7 @@ pub mod server {
                                     .unbounded_send(ServerStateEvent::Expunge(s).into())
                                     .unwrap();
                                 let expunged = r.await.unwrap();
-                                eprintln!("CLOSE silently expunged following uids: {expunged:?}");
+                                log::debug!("CLOSE silently expunged following uids: {expunged:?}");
                                 our_untagged.insert(UntaggedEvent::Deletes(expunged));
                             }
 
@@ -1314,7 +1313,7 @@ pub mod server {
                 match event {
                     StreamEvent::Quit => {
                         if let Some(idle_cmd_id) = idle_cmd_id.take() {
-                            eprintln!("IDLE loop_handler received StreamEvent::Quit from 'main");
+                            log::debug!("IDLE loop_handler received StreamEvent::Quit from 'main");
                             tcp_stream
                                 .write_all(b"* BYE cruel world\r\n")
                                 .await
@@ -1325,7 +1324,7 @@ pub mod server {
                                 .await
                                 .unwrap();
                         } else {
-                            eprintln!("main loop_handler received StreamEvent::Quit");
+                            log::debug!("main loop_handler received StreamEvent::Quit");
                             tcp_stream
                                 .write_all(b"* BYE cruel world\r\n")
                                 .await
@@ -1503,7 +1502,7 @@ pub mod tests {
             let backend_event_queue = Arc::clone(&backend_event_queue);
 
             BackendEventConsumer::new(Arc::new(move |ah, be| {
-                eprintln!("BackendEventConsumer: ah {ah:?} be {be:?}");
+                log::debug!("BackendEventConsumer: ah {ah:?} be {be:?}");
                 backend_event_queue.lock().unwrap().push_back((ah, be));
             }))
         };
@@ -1595,9 +1594,9 @@ hello world 3.
                                 .into(),
                             )
                             .unwrap();
-                        eprintln!("waiting for IDLE..");
+                        log::debug!("waiting for IDLE..");
                         _ = w_r.await;
-                        eprintln!("done waiting for IDLE");
+                        log::debug!("done waiting for IDLE");
                         server_sender
                             .unbounded_send(ServerStateEvent::New(new_mail.clone()).into())
                             .unwrap();
@@ -1855,7 +1854,7 @@ hello world 3.
                     let backend_event_queue = Arc::clone(&backend_event_queue);
 
                     BackendEventConsumer::new(Arc::new(move |ah, be| {
-                        eprintln!("BackendEventConsumer: ah {ah:?} be {be:?}");
+                        log::debug!("BackendEventConsumer: ah {ah:?} be {be:?}");
                         backend_event_queue.lock().unwrap().push_back((ah, be));
                     }))
                 };
@@ -1940,7 +1939,7 @@ hello world 3.
                     let backend_event_queue = Arc::clone(&backend_event_queue);
 
                     BackendEventConsumer::new(Arc::new(move |ah, be| {
-                        eprintln!("BackendEventConsumer: ah {ah:?} be {be:?}");
+                        log::debug!("BackendEventConsumer: ah {ah:?} be {be:?}");
                         backend_event_queue.lock().unwrap().push_back((ah, be));
                     }))
                 };
@@ -2011,7 +2010,7 @@ hello world 3.
                     let backend_event_queue = Arc::clone(&backend_event_queue);
 
                     BackendEventConsumer::new(Arc::new(move |ah, be| {
-                        eprintln!("BackendEventConsumer: ah {ah:?} be {be:?}");
+                        log::debug!("BackendEventConsumer: ah {ah:?} be {be:?}");
                         backend_event_queue.lock().unwrap().push_back((ah, be));
                     }))
                 };
@@ -2140,7 +2139,7 @@ hello world 3.
                     let backend_event_queue = Arc::clone(&backend_event_queue);
 
                     BackendEventConsumer::new(Arc::new(move |ah, be| {
-                        eprintln!("BackendEventConsumer: ah {ah:?} be {be:?}");
+                        log::debug!("BackendEventConsumer: ah {ah:?} be {be:?}");
                         backend_event_queue.lock().unwrap().push_back((ah, be));
                     }))
                 };
@@ -2184,7 +2183,7 @@ hello world 3.
                     let backend_event_queue = Arc::clone(&backend_event_queue);
 
                     BackendEventConsumer::new(Arc::new(move |ah, be| {
-                        eprintln!("BackendEventConsumer: ah {ah:?} be {be:?}");
+                        log::debug!("BackendEventConsumer: ah {ah:?} be {be:?}");
                         backend_event_queue.lock().unwrap().push_back((ah, be));
                     }))
                 };
@@ -2222,7 +2221,7 @@ hello world 3.
                     let backend_event_queue = Arc::clone(&backend_event_queue);
 
                     BackendEventConsumer::new(Arc::new(move |ah, be| {
-                        eprintln!("BackendEventConsumer: ah {ah:?} be {be:?}");
+                        log::debug!("BackendEventConsumer: ah {ah:?} be {be:?}");
                         backend_event_queue.lock().unwrap().push_back((ah, be));
                     }))
                 };
@@ -2258,7 +2257,7 @@ hello world 3.
                     let backend_event_queue = Arc::clone(&backend_event_queue);
 
                     BackendEventConsumer::new(Arc::new(move |ah, be| {
-                        eprintln!("BackendEventConsumer: ah {ah:?} be {be:?}");
+                        log::debug!("BackendEventConsumer: ah {ah:?} be {be:?}");
                         backend_event_queue.lock().unwrap().push_back((ah, be));
                     }))
                 };
