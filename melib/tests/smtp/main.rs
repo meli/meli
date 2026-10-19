@@ -22,7 +22,6 @@
 
 // [ref:TODO]: add tests for SMTP server timeouts RFC5321 Section 4.5.3.2
 // [ref:TODO]: add tests for SMTP server extensions
-// [ref:TODO]: add tests for SMTP auth methods
 // [ref:TODO]: add tests for STARTTLS/TLS
 
 #![cfg(feature = "smtp")]
@@ -39,16 +38,23 @@ rusty_fork_test! {
     fn test_smtp_pipelining() {
         tests::run_smtp_pipelining();
     }
+
+    #[test]
+    fn test_smtp_auth_methods() {
+        tests::run_smtp_auth_methods();
+    }
 }
 
 pub mod server {
     use std::{
+        collections::VecDeque,
         net::{IpAddr, SocketAddr, TcpListener},
         sync::{Arc, Mutex},
     };
 
+    use base64::{engine::general_purpose::STANDARD as base64, Engine as _};
     use futures::{
-        channel::mpsc::UnboundedReceiver,
+        channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender},
         future::{self, Either},
         io::{AsyncReadExt as _, AsyncWriteExt as _},
         StreamExt as _,
@@ -64,6 +70,11 @@ pub mod server {
 
     #[derive(Debug)]
     pub enum ServerEvent {
+        Quit,
+    }
+
+    #[derive(Clone, Debug)]
+    enum StreamEvent {
         Quit,
     }
 
@@ -101,6 +112,9 @@ pub mod server {
         pub auth: SmtpAuth,
         pub security: SmtpSecurity,
         pub extensions: SmtpExtensionSupport,
+        pub logindisabled: bool,
+        pub plaindisabled: bool,
+        pub oauthbearerdisabled: bool,
     }
 
     impl ServerState {
@@ -140,6 +154,12 @@ pub mod server {
                 (self.extensions._8bitmime, "8BITMIME"),
                 (self.extensions.binarymime, "BINARYMIME"),
                 (self.extensions.smtputf8, "SMTPUTF8"),
+                (self.extensions.auth && !self.plaindisabled, "AUTH PLAIN"),
+                (self.extensions.auth && !self.logindisabled, "AUTH LOGIN"),
+                (
+                    self.extensions.auth && !self.oauthbearerdisabled,
+                    "AUTH OAUTHBEARER",
+                ),
             ] {
                 if support {
                     extensions.push(ext);
@@ -285,6 +305,9 @@ pub mod server {
                 auth,
                 security,
                 extensions,
+                logindisabled: true,
+                plaindisabled: false,
+                oauthbearerdisabled: true,
             }));
             Self {
                 tcp_listener,
@@ -297,6 +320,7 @@ pub mod server {
         async fn handle_connection(
             (mut tcp_stream, socket_addr): (Async<Connection>, SocketAddr),
             server_addr: SocketAddr,
+            mut stream_receiver: UnboundedReceiver<StreamEvent>,
             state: Arc<Mutex<ServerState>>,
         ) -> Result<()> {
             async fn read_line<'a>(
@@ -307,6 +331,9 @@ pub mod server {
             ) -> Result<Option<&'a [u8]>> {
                 if *start == 0 || !buf[*start..*end].contains_subsequence(b"\r\n") {
                     let read_bytes = tcp_stream.read(&mut buf[*end..]).await?;
+                    if read_bytes == 0 {
+                        return Err(Error::new("disconnected"));
+                    }
                     *end += read_bytes;
                     if !buf[*start..*end].contains_subsequence(b"\r\n") {
                         return Ok(None);
@@ -353,13 +380,223 @@ pub mod server {
                 .await
                 .unwrap();
             tcp_stream.flush().await.unwrap();
+            let mut auth = state.lock().unwrap().auth.clone();
             let mut domain = String::new();
+            let mut events: VecDeque<StreamEvent> = VecDeque::new();
             'main: loop {
+                if let Some(event) = events.pop_front() {
+                    match event {
+                        StreamEvent::Quit => break 'main,
+                    }
+                }
+                'auth_loop: loop {
+                    if matches!(auth, SmtpAuth::None) {
+                        break 'auth_loop;
+                    }
+                    let mut read_fut = Box::pin(read_line(
+                        &mut tcp_stream,
+                        &mut buf,
+                        &mut buf_start,
+                        &mut buf_end,
+                    ));
+                    let line = match future::select(&mut read_fut, stream_receiver.next()).await {
+                        Either::Left((line, _)) => {
+                            drop(read_fut);
+                            match line {
+                                Ok(Some(line)) => line,
+                                Ok(None) => continue 'auth_loop,
+                                Err(err) => {
+                                    log::warn!("Disconnecting client: {err}");
+
+                                    break 'main;
+                                }
+                            }
+                        }
+                        Either::Right((event, _)) => {
+                            drop(read_fut);
+                            events.push_back(event.unwrap());
+                            continue 'main;
+                        }
+                    };
+
+                    let input = String::from_utf8_lossy(line).to_string();
+                    log::debug!("'auth_loop received: {input:?}");
+                    let (cmd, rest) = input.split_once(' ').unwrap_or((&input, ""));
+                    match cmd {
+                        "QUIT\r\n" => {
+                            write_reply_code(&mut tcp_stream, ReplyCode::_221).await?;
+                            break 'main;
+                        }
+                        "NOOP\r\n" => {
+                            write_reply_code(&mut tcp_stream, ReplyCode::_250).await?;
+                        }
+                        "EHLO" => {
+                            domain = rest.trim().to_string();
+                            let (reply, reply_code) =
+                                state.lock().unwrap().ehlo(socket_addr.ip(), &domain);
+                            if reply.is_empty() {
+                                write_reply_code(&mut tcp_stream, reply_code).await?;
+                            } else {
+                                tcp_stream.write_all(reply.as_bytes()).await?;
+                                tcp_stream.flush().await?;
+                            }
+                        }
+                        "AUTH" => {
+                            if rest.starts_with("LOGIN\r\n") {
+                                // b"User Name"
+                                tcp_stream.write_all(b"334 VXNlciBOYW1lAA==\r\n").await?;
+                                tcp_stream.flush().await?;
+                                let username = 'username_loop: loop {
+                                    let mut read_fut = Box::pin(read_line(
+                                        &mut tcp_stream,
+                                        &mut buf,
+                                        &mut buf_start,
+                                        &mut buf_end,
+                                    ));
+                                    let line =
+                                        match future::select(&mut read_fut, stream_receiver.next())
+                                            .await
+                                        {
+                                            Either::Left((line, _)) => {
+                                                drop(read_fut);
+                                                line
+                                            }
+                                            Either::Right((event, _)) => {
+                                                drop(read_fut);
+                                                events.push_back(event.unwrap());
+                                                continue 'main;
+                                            }
+                                        };
+                                    match line {
+                                        Ok(Some(line)) => {
+                                            break 'username_loop String::from_utf8_lossy(
+                                                &base64
+                                                    .decode(
+                                                        line.strip_suffix(b"\r\n").unwrap_or(line),
+                                                    )
+                                                    .unwrap(),
+                                            )
+                                            .into_owned();
+                                        }
+                                        Ok(None) => continue 'username_loop,
+                                        Err(err) => {
+                                            log::warn!("Disconnecting client: {err}");
+
+                                            break 'main;
+                                        }
+                                    };
+                                };
+                                // b"Password"
+                                tcp_stream.write_all(b"334 UGFzc3dvcmQA\r\n").await?;
+                                tcp_stream.flush().await?;
+                                let password = 'password_loop: loop {
+                                    let mut read_fut = Box::pin(read_line(
+                                        &mut tcp_stream,
+                                        &mut buf,
+                                        &mut buf_start,
+                                        &mut buf_end,
+                                    ));
+                                    let line =
+                                        match future::select(&mut read_fut, stream_receiver.next())
+                                            .await
+                                        {
+                                            Either::Left((line, _)) => {
+                                                drop(read_fut);
+                                                line
+                                            }
+                                            Either::Right((event, _)) => {
+                                                drop(read_fut);
+                                                events.push_back(event.unwrap());
+                                                continue 'main;
+                                            }
+                                        };
+                                    match line {
+                                        Ok(Some(line)) => {
+                                            break 'password_loop String::from_utf8_lossy(
+                                                &base64
+                                                    .decode(
+                                                        line.strip_suffix(b"\r\n").unwrap_or(line),
+                                                    )
+                                                    .unwrap(),
+                                            )
+                                            .into_owned();
+                                        }
+                                        Ok(None) => continue 'password_loop,
+                                        Err(err) => {
+                                            log::warn!("Disconnecting client: {err}");
+
+                                            break 'main;
+                                        }
+                                    };
+                                };
+                                if (username.as_str(), password.as_str())
+                                    == ("username", "password")
+                                {
+                                    write_reply_code(&mut tcp_stream, ReplyCode::_235).await?;
+                                } else {
+                                    write_reply_code(&mut tcp_stream, ReplyCode::_535).await?;
+                                    continue 'auth_loop;
+                                }
+                            } else if let Some(username_password) = rest.strip_prefix("PLAIN ") {
+                                let username_password =
+                                    username_password.strip_suffix("\r\n").unwrap();
+                                if String::from_utf8_lossy(
+                                    &base64.decode(username_password).unwrap(),
+                                ) == "\0username\0password"
+                                {
+                                    write_reply_code(&mut tcp_stream, ReplyCode::_235).await?;
+                                } else {
+                                    write_reply_code(&mut tcp_stream, ReplyCode::_535).await?;
+                                    continue 'auth_loop;
+                                }
+                            } else if let Some(token) = rest.strip_prefix("OAUTHBEARER ") {
+                                let token = token.strip_suffix("\r\n").unwrap();
+                                if String::from_utf8_lossy(&base64.decode(token).unwrap())
+                                    == "password"
+                                {
+                                    write_reply_code(&mut tcp_stream, ReplyCode::_235).await?;
+                                } else {
+                                    write_reply_code(&mut tcp_stream, ReplyCode::_535).await?;
+                                    continue 'auth_loop;
+                                }
+                            } else {
+                                panic!("Unexpected auth mechanism: {cmd} {rest:?}");
+                            }
+                            auth = SmtpAuth::None;
+                            break 'auth_loop;
+                        }
+                        "MAIL" | "RCPT" | "DATA\r\n" => {
+                            write_reply_code(&mut tcp_stream, ReplyCode::_530).await?;
+                        }
+                        other => panic!("Unexpected cmd: {other} {rest:?}"),
+                    }
+                }
+
                 'command_loop: loop {
-                    let Some(line) =
-                        read_line(&mut tcp_stream, &mut buf, &mut buf_start, &mut buf_end).await?
-                    else {
-                        continue 'command_loop;
+                    let mut read_fut = Box::pin(read_line(
+                        &mut tcp_stream,
+                        &mut buf,
+                        &mut buf_start,
+                        &mut buf_end,
+                    ));
+                    let line = match future::select(&mut read_fut, stream_receiver.next()).await {
+                        Either::Left((line, _)) => {
+                            drop(read_fut);
+                            match line {
+                                Ok(Some(line)) => line,
+                                Ok(None) => continue 'command_loop,
+                                Err(err) => {
+                                    log::warn!("Disconnecting client: {err}");
+
+                                    break 'main;
+                                }
+                            }
+                        }
+                        Either::Right((event, _)) => {
+                            drop(read_fut);
+                            events.push_back(event.unwrap());
+                            continue 'main;
+                        }
                     };
                     let input = String::from_utf8_lossy(line).to_string();
                     log::debug!("'command_loop received: {input:?}");
@@ -458,6 +695,11 @@ pub mod server {
 
             let mut event_receiver = Box::pin(event_receiver.into_future());
             let mut accept = Box::pin(tcp_listener.accept());
+            struct StreamHandle {
+                join_handle: std::thread::JoinHandle<()>,
+                sender: UnboundedSender<StreamEvent>,
+            }
+            let mut streams: Vec<(usize, StreamHandle)> = Vec::new();
             loop {
                 match future::select(accept.as_mut(), event_receiver.as_mut()).await {
                     Either::Left((tcp_stream, _)) => {
@@ -465,12 +707,28 @@ pub mod server {
                         let (tcp_stream, socket_addr) = tcp_stream?;
                         let mut connection = Connection::new_tcp(tcp_stream.into_inner().unwrap());
                         connection.set_trace(true);
-                        Self::handle_connection(
+                        let (sender, stream_receiver) = unbounded();
+                        let fut = Self::handle_connection(
                             (Async::new(connection).unwrap(), socket_addr),
                             addr,
+                            stream_receiver,
                             state.clone(),
-                        )
-                        .await?;
+                        );
+                        let join_handle = std::thread::spawn(move || {
+                            futures::executor::block_on(async move {
+                                if let Err(err) = fut.await {
+                                    log::warn!("Failed connection: {err}");
+                                }
+                            });
+                        });
+                        let idx = streams.len();
+                        streams.push((
+                            idx,
+                            StreamHandle {
+                                sender,
+                                join_handle,
+                            },
+                        ));
                     }
                     Either::Right(((event, stream), _)) => {
                         *event_receiver = stream.into_future();
@@ -479,6 +737,18 @@ pub mod server {
                         };
                         match event {
                             ServerEvent::Quit => {
+                                log::debug!("waiting on {} stream handles", streams.len());
+                                for (i, handle) in &streams {
+                                    if handle.sender.unbounded_send(StreamEvent::Quit).is_err() {
+                                        log::warn!(
+                                            "Did not send event {event:?} to stream {i} because \
+                                             it disconnected"
+                                        );
+                                    }
+                                }
+                                for (_, handle) in streams {
+                                    handle.join_handle.join().unwrap();
+                                }
                                 return Ok(());
                             }
                         }
@@ -496,6 +766,7 @@ pub mod tests {
     use melib::{
         conf::Secret,
         email::Address,
+        error::ErrorKind,
         smtp::*,
         utils::logging::{LogLevel, Logger},
     };
@@ -728,6 +999,186 @@ hello world.
                 let stored = std::mem::take(&mut server_state.stored);
                 assert_eq!(stored.len(), 0);
                 server_state.clear();
+            }
+        });
+        server_event_sender
+            .unbounded_send(ServerEvent::Quit)
+            .unwrap();
+        _ = smtp_handle.join().unwrap();
+    }
+
+    pub fn run_smtp_auth_methods() {
+        let mut _logger = Logger::new_with(LogLevel::TRACE, true);
+        let (server_event_sender, server_event_receiver) = unbounded();
+        let server = SmtpServer::new(
+            server_event_receiver,
+            SmtpAuth::Auto {
+                username: Secret::Value("username".into()),
+                password: Secret::Value("password".into()),
+                require_auth: true,
+                auth_type: SmtpAuthType::default(),
+            },
+            SmtpSecurity::None,
+            SmtpExtensionSupport {
+                pipelining: false,
+                chunking: false,
+                _8bitmime: false,
+                prdr: false,
+                binarymime: false,
+                smtputf8: false,
+                auth: true,
+                dsn_notify: None,
+            },
+        );
+        let hostname = server.addr.ip().to_string();
+        let server_state = server.state.clone();
+
+        let smtp_server_conf = SmtpServerConf {
+            hostname: Secret::Value(hostname.clone()),
+            port: server.addr.port(),
+            envelope_from: "user@example.com".into(),
+            auth: SmtpAuth::None,
+            security: SmtpSecurity::None,
+            extensions: Default::default(),
+            trace: true,
+        };
+        let smtp_handle = thread::spawn(move || block_on(server.serve()));
+        let new_mail = r#"From: "some name" <some@example.com>
+To: "me" <myself@example.com>
+Cc:
+Subject: RE: your e-mail
+Message-ID: <h2g7f.z0gy2pgaen5m@example.com>
+Content-Type: text/plain
+
+hello world.
+"#;
+        block_on(async move {
+            // Test that auth is required
+            {
+                let mut connection = SmtpConnection::new_connection(smtp_server_conf.clone())
+                    .await
+                    .unwrap();
+                let auth_err = connection
+                    .mail_transaction(
+                        new_mail,
+                        /* tos */
+                        Some(&[
+                            Address::new(None::<&str>, "user2@example.com"),
+                            Address::new(None::<&str>, "postmaster@example.com"),
+                        ]),
+                    )
+                    .await
+                    .unwrap_err();
+                drop(connection);
+                assert!(
+                    auth_err
+                        .details
+                        .as_ref()
+                        .unwrap()
+                        .starts_with("SMTP 530 error"),
+                    "{auth_err:?}"
+                );
+                assert_eq!(auth_err.kind, ErrorKind::Authentication);
+            }
+            // Test regular auth
+            let smtp_server_conf = SmtpServerConf {
+                auth: SmtpAuth::Auto {
+                    username: Secret::Value("username".into()),
+                    password: Secret::Value("password".into()),
+                    require_auth: true,
+                    auth_type: SmtpAuthType::default(),
+                },
+                ..smtp_server_conf
+            };
+            {
+                let mut connection = SmtpConnection::new_connection(smtp_server_conf.clone())
+                    .await
+                    .unwrap();
+                connection
+                    .mail_transaction(
+                        new_mail,
+                        /* tos */
+                        Some(&[
+                            Address::new(None::<&str>, "user2@example.com"),
+                            Address::new(None::<&str>, "postmaster@example.com"),
+                        ]),
+                    )
+                    .await
+                    .unwrap();
+                connection.quit().await.unwrap();
+                let stored = std::mem::take(&mut server_state.lock().unwrap().stored);
+                assert_eq!(stored.len(), 2);
+                assert_eq!(stored[0].0, "user2@example.com");
+                assert_eq!(stored[1].0, "postmaster@example.com");
+            }
+            // Test regular auth (PLAIN)
+            server_state.lock().unwrap().logindisabled = false;
+            server_state.lock().unwrap().plaindisabled = true;
+            {
+                let mut connection = SmtpConnection::new_connection(smtp_server_conf.clone())
+                    .await
+                    .unwrap();
+                connection
+                    .mail_transaction(
+                        new_mail,
+                        /* tos */
+                        Some(&[
+                            Address::new(None::<&str>, "user2@example.com"),
+                            Address::new(None::<&str>, "postmaster@example.com"),
+                        ]),
+                    )
+                    .await
+                    .unwrap();
+                connection.quit().await.unwrap();
+                let stored = std::mem::take(&mut server_state.lock().unwrap().stored);
+                assert_eq!(stored.len(), 2);
+                assert_eq!(stored[0].0, "user2@example.com");
+                assert_eq!(stored[1].0, "postmaster@example.com");
+            }
+            // Test that no available auth fails
+            server_state.lock().unwrap().logindisabled = true;
+            {
+                let auth_err = SmtpConnection::new_connection(smtp_server_conf.clone())
+                    .await
+                    .unwrap_err();
+                assert_eq!(
+                    &auth_err.summary,
+                    &format!(
+                        "SMTP Server {hostname} doesn't advertise PLAIN/LOGIN Authentication \
+                         support"
+                    ),
+                );
+                assert_eq!(auth_err.kind, ErrorKind::Authentication);
+            }
+            // Test that OAUTHBEARER works
+            server_state.lock().unwrap().oauthbearerdisabled = false;
+            let smtp_server_conf = SmtpServerConf {
+                auth: SmtpAuth::OAuthBearer {
+                    token: Secret::Value("password".into()),
+                    require_auth: true,
+                },
+                ..smtp_server_conf
+            };
+            {
+                let mut connection = SmtpConnection::new_connection(smtp_server_conf.clone())
+                    .await
+                    .unwrap();
+                connection
+                    .mail_transaction(
+                        new_mail,
+                        /* tos */
+                        Some(&[
+                            Address::new(None::<&str>, "user2@example.com"),
+                            Address::new(None::<&str>, "postmaster@example.com"),
+                        ]),
+                    )
+                    .await
+                    .unwrap();
+                connection.quit().await.unwrap();
+                let stored = std::mem::take(&mut server_state.lock().unwrap().stored);
+                assert_eq!(stored.len(), 2);
+                assert_eq!(stored[0].0, "user2@example.com");
+                assert_eq!(stored[1].0, "postmaster@example.com");
             }
         });
         server_event_sender
