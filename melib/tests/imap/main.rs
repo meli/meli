@@ -664,13 +664,13 @@ pub mod server {
                 buf: &'a mut [u8],
                 start: &mut usize,
                 end: &mut usize,
-            ) -> Option<&'a [u8]> {
+            ) -> Result<Option<&'a [u8]>> {
                 // log::trace!(
                 //     "read_line: buf={:?} start = {start:?} end = {end:?}",
                 //     String::from_utf8_lossy(&buf[..*end])
                 // );
                 if *start == 0 || !buf[*start..*end].contains_subsequence(b"\r\n") {
-                    let read_bytes = tcp_stream.read(&mut buf[*end..]).await.unwrap();
+                    let read_bytes = tcp_stream.read(&mut buf[*end..]).await?;
                     *end += read_bytes;
                     // log::trace!(
                     //     "read_line: read_bytes = {read_bytes:?} buf = {:?}",
@@ -678,11 +678,11 @@ pub mod server {
                     // );
                     if !buf[*start..*end].contains_subsequence(b"\r\n") {
                         // log::trace!("read_line: returning None");
-                        return None;
+                        return Ok(None);
                     }
                     let Some(input) = buf[*start..*end].split_rn().next() else {
                         // log::trace!("read_line: returning None");
-                        return None;
+                        return Ok(None);
                     };
                     *start += input.len();
                     if *start == *end {
@@ -690,7 +690,7 @@ pub mod server {
                         *end = 0;
                     }
                     // log::trace!("read_line: returning {:?}", String::from_utf8_lossy(input));
-                    Some(input)
+                    Ok(Some(input))
                 } else {
                     let rest = &buf[*start..*end];
                     let input = rest.split_rn().next().unwrap();
@@ -700,7 +700,7 @@ pub mod server {
                         *end = 0;
                     }
                     // log::trace!("read_line: returning {:?}", String::from_utf8_lossy(input));
-                    Some(input)
+                    Ok(Some(input))
                 }
             }
             'outer: loop {
@@ -759,6 +759,13 @@ pub mod server {
                     let mut read_fut = Box::pin(read_line(tcp_stream, buf, buf_start, buf_end));
                     let input = match future::select(&mut read_fut, stream_receiver.next()).await {
                         Either::Left((value1, _)) => {
+                            let value1 = match value1 {
+                                Ok(v) => v,
+                                Err(err) => {
+                                    log::warn!("Client disconnected: {err}");
+                                    return true;
+                                }
+                            };
                             if value1.is_none() {
                                 continue 'outer;
                             }
@@ -871,6 +878,13 @@ pub mod server {
                     let mut read_fut = Box::pin(read_line(tcp_stream, buf, buf_start, buf_end));
                     let input = match future::select(&mut read_fut, stream_receiver.next()).await {
                         Either::Left((value1, _)) => {
+                            let value1 = match value1 {
+                                Ok(v) => v,
+                                Err(err) => {
+                                    log::warn!("Client disconnected: {err}");
+                                    return true;
+                                }
+                            };
                             if value1.is_none() {
                                 continue 'outer;
                             }
