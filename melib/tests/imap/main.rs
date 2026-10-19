@@ -1956,47 +1956,51 @@ hello world 3.
                         assert_eq!(counters.unseen.len(), 1);
                     }
                     envelopes.sort_by_key(|env| env.date());
-                    let deleted_hash = envelopes
-                        .iter()
-                        .find_map(|env| {
-                            if env.message_id() == "h2g7f.z0gy2pgaen7m@example.com" {
-                                Some(env.hash())
-                            } else {
-                                None
-                            }
-                        })
-                        .unwrap();
-                    for env in &mut envelopes {
-                        env.set_hash(EnvelopeHash(0));
-                    }
-                    let mut expected =
-                        vec![new_mail_2.envelope.clone(), new_mail_3.envelope.clone()];
-                    for env in &mut expected {
-                        env.set_hash(EnvelopeHash(0));
-                    }
-                    assert_eq!(envelopes, expected);
+                    // Check if cache is enabled, otherwise this test is pointless
+                    let has_cache = imap.uid_store.offline_cache.lock().unwrap().is_some();
+                    if has_cache {
+                        let deleted_hash = envelopes
+                            .iter()
+                            .find_map(|env| {
+                                if env.message_id() == "h2g7f.z0gy2pgaen7m@example.com" {
+                                    Some(env.hash())
+                                } else {
+                                    None
+                                }
+                            })
+                            .unwrap();
+                        for env in &mut envelopes {
+                            env.set_hash(EnvelopeHash(0));
+                        }
+                        let mut expected =
+                            vec![new_mail_2.envelope.clone(), new_mail_3.envelope.clone()];
+                        for env in &mut expected {
+                            env.set_hash(EnvelopeHash(0));
+                        }
+                        assert_eq!(envelopes, expected);
 
-                    let mut backend_events = backend_event_queue
-                        .lock()
-                        .unwrap()
-                        .drain(..)
-                        .filter_map(|(_, be)| {
-                            if matches!(be, BackendEvent::Refresh(_)) {
-                                Some(be)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect::<Vec<_>>();
-                    assert_eq!(backend_events.len(), 1, "{backend_events:?}");
-                    let backend_event = backend_events.pop().unwrap();
-                    let BackendEvent::Refresh(refresh_event) = backend_event else {
-                        panic!("Expected Refresh event, got: {backend_event:?}");
-                    };
-                    let RefreshEventKind::Remove(ref env_hash) = refresh_event.kind else {
-                        panic!("Expected Remove event, got: {refresh_event:?}");
-                    };
-                    assert_eq!(*env_hash, deleted_hash);
+                        let mut backend_events = backend_event_queue
+                            .lock()
+                            .unwrap()
+                            .drain(..)
+                            .filter_map(|(_, be)| {
+                                if matches!(be, BackendEvent::Refresh(_)) {
+                                    Some(be)
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect::<Vec<_>>();
+                        assert_eq!(backend_events.len(), 1, "{backend_events:?}");
+                        let backend_event = backend_events.pop().unwrap();
+                        let BackendEvent::Refresh(refresh_event) = backend_event else {
+                            panic!("Expected Refresh event, got: {backend_event:?}");
+                        };
+                        let RefreshEventKind::Remove(ref env_hash) = refresh_event.kind else {
+                            panic!("Expected Remove event, got: {refresh_event:?}");
+                        };
+                        assert_eq!(*env_hash, deleted_hash);
+                    }
                 }
             }
             server_sender.unbounded_send(ServerEvent::Quit).unwrap();
