@@ -2497,7 +2497,7 @@ subsection
 .El
 .Ss SmtpAuth
 .Bl -tag -width 36n
-.It Ic type Ar "none" | "auto" | "xoauth2"
+.It Ic type Ar "none" | "auto" | "xoauth2" | "oauthbearer"
 .El
 .Pp
 For type
@@ -2511,7 +2511,7 @@ For type
 require authentication in every case.
 .Pq Em true \" default value
 .El
-.sp
+.Pp
 For type
 .Qq xoauth2 Ns
 :
@@ -2520,6 +2520,20 @@ For type
 A string literal or a command to evaluate that returns an
 .Em XOAUTH2
 token.
+.It Ic require_auth Ar boolean
+.Pq Em optional
+require authentication in every case.
+.Pq Em true \" default value
+.El
+.Pp
+For type
+.Qq oauthbearer Ns
+:
+.Bl -tag -width 36n
+.It Ic token Ar Secret
+A string literal or a command to evaluate that returns an
+.Em OAUTHBEARER
+token (not base64 encoded).
 .It Ic require_auth Ar boolean
 .Pq Em optional
 require authentication in every case.

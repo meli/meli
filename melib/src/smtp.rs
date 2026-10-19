@@ -78,6 +78,7 @@
 
 use std::{borrow::Cow, convert::TryFrom};
 
+use base64::{engine::general_purpose::STANDARD as base64, Engine as _};
 use futures::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use native_tls::TlsConnector;
 use smallvec::SmallVec;
@@ -142,6 +143,12 @@ pub enum SmtpAuth {
         #[serde(default = "crate::conf::true_val")]
         require_auth: bool,
     },
+    #[serde(alias = "oauthbearer")]
+    OAuthBearer {
+        token: Secret,
+        #[serde(default = "crate::conf::true_val")]
+        require_auth: bool,
+    },
     // md5, sasl, etc
 }
 
@@ -156,7 +163,9 @@ impl SmtpAuth {
         use SmtpAuth::*;
         match self {
             None => false,
-            Auto { require_auth, .. } | XOAuth2 { require_auth, .. } => *require_auth,
+            Auto { require_auth, .. }
+            | XOAuth2 { require_auth, .. }
+            | OAuthBearer { require_auth, .. } => *require_auth,
         }
     }
 }
@@ -248,12 +257,13 @@ pub struct SmtpConnection {
     stream: AsyncWrapper<Connection>,
     read_buffer: String,
     server_conf: SmtpServerConf,
+    capabilities: Vec<String>,
 }
 
 impl SmtpConnection {
     /// Performs connection and if configured: TLS negotiation and SMTP AUTH
     pub async fn new_connection(mut server_conf: SmtpServerConf) -> Result<Self> {
-        let path = server_conf
+        let hostname = server_conf
             .hostname
             .value_with_timeout(std::time::Duration::new(4, 0))
             .await
@@ -275,7 +285,7 @@ impl SmtpConnection {
                 }
                 let connector = connector.build()?;
 
-                let addr = (path.as_str(), server_conf.port);
+                let addr = (hostname.as_str(), server_conf.port);
                 let mut socket = {
                     let conn = Connection::new_tcp(tcp_stream_connect(
                         addr,
@@ -337,31 +347,10 @@ impl SmtpConnection {
 
                 let mut ret = {
                     let socket = socket.into_inner()?.trace(false);
-                    let _path = path.clone();
+                    let path = hostname.clone();
 
                     socket.set_nonblocking(false)?;
-                    let conn = unblock(move || connector.connect(&_path, socket)).await?;
-                    /*
-                    if let Err(native_tls::HandshakeError::WouldBlock(midhandshake_stream)) =
-                        conn_result
-                    {
-                        let mut midhandshake_stream = Some(midhandshake_stream);
-                        loop {
-                            match midhandshake_stream.take().unwrap().handshake() {
-                                Ok(r) => {
-                                    conn_result = Ok(r);
-                                    break;
-                                }
-                                Err(native_tls::HandshakeError::WouldBlock(stream)) => {
-                                    midhandshake_stream = Some(stream);
-                                }
-                                p => {
-                                    p.chain_err_kind(ErrorKind::Network)?;
-                                }
-                            }
-                        }
-                    }
-                        */
+                    let conn = unblock(move || connector.connect(&path, socket)).await?;
                     AsyncWrapper::new({
                         Connection::new_tls(conn)
                             .trace(server_conf.trace)
@@ -382,7 +371,7 @@ impl SmtpConnection {
                 ret
             }
             SmtpSecurity::None => {
-                let addr = (path.as_str(), server_conf.port);
+                let addr = (hostname.as_str(), server_conf.port);
                 let mut ret = AsyncWrapper::new({
                     Connection::new_tcp(tcp_stream_connect(
                         addr,
@@ -416,48 +405,44 @@ impl SmtpConnection {
             stream,
             read_buffer: String::new(),
             server_conf: server_conf.clone(),
+            capabilities: Vec::new(),
         };
-        let no_auth_needed: bool;
+        let no_auth_needed: bool =
+            ret.server_conf.auth == SmtpAuth::None || !ret.server_conf.auth.require_auth();
+        let mut auth_plain_support = false;
+        let mut auth_login_support = false;
+        let mut auth_xoauth2_support = false;
+        let mut auth_oauthbearer_support = false;
         {
             let pre_auth_extensions_reply = ret
                 .read_lines(&mut res, Some((ReplyCode::_250, &[])))
                 .await?;
-            if ret.server_conf.auth != SmtpAuth::None
-                && ret.server_conf.auth.require_auth()
-                && !pre_auth_extensions_reply
-                    .lines
-                    .iter()
-                    .any(|l| l.starts_with("AUTH"))
+            for l in pre_auth_extensions_reply
+                .lines
+                .iter()
+                .filter(|l| l.starts_with("AUTH"))
             {
-                return Err(Error::new(format!(
-                    "SMTP Server doesn't advertise Authentication support. Server response was: \
-                     {pre_auth_extensions_reply:?}"
-                ))
-                .set_kind(ErrorKind::Authentication));
-            }
-            no_auth_needed =
-                ret.server_conf.auth == SmtpAuth::None || !ret.server_conf.auth.require_auth();
-            if no_auth_needed {
-                ret.set_extension_support(pre_auth_extensions_reply);
-            } else if let SmtpAuth::Auto {
-                ref mut auth_type, ..
-            } = ret.server_conf.auth
-            {
-                if let Some(l) = pre_auth_extensions_reply
-                    .lines
-                    .iter()
-                    .find(|l| l.starts_with("AUTH"))
-                {
-                    let l = l["AUTH ".len()..].trim();
-                    for _type in l.split_whitespace() {
-                        if _type == "PLAIN" {
-                            auth_type.plain = true;
-                        } else if _type == "LOGIN" {
-                            auth_type.login = true;
-                        }
+                let l = l["AUTH ".len()..].trim();
+                for _type in l.split_whitespace() {
+                    if _type == "PLAIN" {
+                        auth_plain_support = true;
+                    } else if _type == "LOGIN" {
+                        auth_login_support = true;
+                    } else if _type == "XOAUTH2" {
+                        auth_xoauth2_support = true;
+                    } else if _type == "OAUTHBEARER" {
+                        auth_oauthbearer_support = true;
                     }
                 }
             }
+            ret.set_extension_support(pre_auth_extensions_reply);
+        }
+        if let SmtpAuth::Auto {
+            ref mut auth_type, ..
+        } = ret.server_conf.auth
+        {
+            auth_type.plain = auth_plain_support;
+            auth_type.login = auth_login_support;
         }
         if !no_auth_needed {
             match &ret.server_conf.auth {
@@ -481,20 +466,18 @@ impl SmtpConnection {
                         ret.read_lines(&mut res, Some((ReplyCode::_334, &[])))
                             .await
                             .chain_err_kind(ErrorKind::Authentication)?;
-                        #[allow(deprecated)]
-                        let buf = base64::encode(&username);
+                        let buf = base64.encode(&username);
                         ret.stream.write_all(buf.as_bytes()).await?;
                         ret.stream.write_all(b"\r\n").await?;
                         ret.stream.flush().await?;
                         ret.read_lines(&mut res, Some((ReplyCode::_334, &[])))
                             .await
                             .chain_err_kind(ErrorKind::Authentication)?;
-                        #[allow(deprecated)]
-                        let buf = base64::encode(&password);
+                        let buf = base64.encode(&password);
                         ret.stream.write_all(buf.as_bytes()).await?;
                         ret.stream.write_all(b"\r\n").await?;
                         ret.stream.flush().await?;
-                    } else {
+                    } else if auth_type.plain {
                         // # RFC 4616 The PLAIN SASL Mechanism
                         // # https://www.ietf.org/rfc/rfc4616.txt
                         // message   = [authzid] UTF8NUL authcid UTF8NUL passwd
@@ -508,11 +491,20 @@ impl SmtpConnection {
                             buf.extend(username.as_bytes().to_vec());
                             buf.push(b'\0');
                             buf.extend(password.as_bytes());
-                            #[allow(deprecated)]
-                            base64::encode(buf)
+                            base64.encode(buf)
                         };
                         ret.send_command(&[b"AUTH PLAIN ", username_password.as_bytes()])
                             .await?;
+                    } else {
+                        return Err(Error::new(format!(
+                            "SMTP Server {hostname} doesn't advertise PLAIN/LOGIN Authentication \
+                             support"
+                        ))
+                        .set_details(format!(
+                            "Server reported these capabilities: {capabilities:?}",
+                            capabilities = ret.capabilities
+                        ))
+                        .set_kind(ErrorKind::Authentication));
                     }
                     ret.read_lines(&mut res, Some((ReplyCode::_235, &[])))
                         .await
@@ -520,12 +512,48 @@ impl SmtpConnection {
                     ret.send_command(&[b"EHLO meli-email.org"]).await?;
                 }
                 SmtpAuth::XOAuth2 { token, .. } => {
+                    if !auth_xoauth2_support {
+                        return Err(Error::new(format!(
+                            "SMTP Server {hostname} doesn't advertise XOAUTH2 Authentication \
+                             support"
+                        ))
+                        .set_details(format!(
+                            "Server reported these capabilities: {capabilities:?}",
+                            capabilities = ret.capabilities
+                        ))
+                        .set_kind(ErrorKind::Authentication));
+                    }
                     let password_token = token
                         .value_with_timeout(std::time::Duration::new(4, 0))
                         .await
                         .chain_err_summary(|| "SMTP XOAUTH2 token")?;
                     // https://developers.google.com/gmail/imap/xoauth2-protocol#smtp_protocol_exchange
                     ret.send_command(&[b"AUTH XOAUTH2 ", password_token.as_bytes()])
+                        .await?;
+                    ret.read_lines(&mut res, Some((ReplyCode::_235, &[])))
+                        .await
+                        .chain_err_kind(ErrorKind::Authentication)?;
+                    ret.send_command(&[b"EHLO meli-email.org"]).await?;
+                }
+                SmtpAuth::OAuthBearer { token, .. } => {
+                    if !auth_oauthbearer_support {
+                        return Err(Error::new(format!(
+                            "SMTP Server {hostname} doesn't advertise OAUTHBEARER Authentication \
+                             support"
+                        ))
+                        .set_details(format!(
+                            "Server reported these capabilities: {capabilities:?}",
+                            capabilities = ret.capabilities
+                        ))
+                        .set_kind(ErrorKind::Authentication));
+                    }
+                    let token = token
+                        .value_with_timeout(std::time::Duration::new(4, 0))
+                        .await
+                        .chain_err_summary(|| "SMTP OAUTHBEARER token")?;
+                    let token = base64.encode(token);
+                    // https://developers.google.com/gmail/imap/xoauth2-protocol#smtp_protocol_exchange
+                    ret.send_command(&[b"AUTH OAUTHBEARER ", token.as_bytes()])
                         .await?;
                     ret.read_lines(&mut res, Some((ReplyCode::_235, &[])))
                         .await
@@ -550,6 +578,13 @@ impl SmtpConnection {
 
     fn set_extension_support(&mut self, reply: Reply) {
         debug_assert_eq!(reply.code, ReplyCode::_250);
+        let len = reply.lines.len().saturating_sub(1);
+        self.capabilities = reply
+            .lines
+            .iter()
+            .take(len)
+            .map(|s| s.to_string())
+            .collect();
         self.server_conf.extensions.pipelining &= reply.lines.contains(&"PIPELINING");
         self.server_conf.extensions.chunking &= reply.lines.contains(&"CHUNKING");
         self.server_conf.extensions.prdr &= reply.lines.contains(&"PRDR");
@@ -1029,11 +1064,18 @@ pub struct Reply<'s> {
 impl<'s> From<Reply<'s>> for Result<ReplyCode> {
     fn from(val: Reply<'s>) -> Self {
         if val.code.is_err() {
-            Err(Error::new(val.lines.join("\n")).set_details(format!(
-                "SMTP {code} error: {msg}",
-                code = val.code.value(),
-                msg = val.code.as_str()
-            )))
+            let kind = match val.code {
+                ReplyCode::_500 => ErrorKind::Bug,
+                ReplyCode::_530 | ReplyCode::_535 => ErrorKind::Authentication,
+                _ => ErrorKind::None,
+            };
+            Err(Error::new(val.lines.join("\n"))
+                .set_details(format!(
+                    "SMTP {code} error: {msg}",
+                    code = val.code.value(),
+                    msg = val.code.as_str()
+                ))
+                .set_kind(kind))
         } else {
             Ok(val.code)
         }
