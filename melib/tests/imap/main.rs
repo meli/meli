@@ -68,9 +68,10 @@ pub mod server {
         encode::{Encoder as _, Fragment},
         imap_types, CommandCodec, ResponseCodec,
     };
+    use imap_types::IntoStatic as _;
     pub use imap_types::{
         auth::{AuthMechanism, AuthMechanismOther},
-        core::{Atom, LiteralMode, NString, Vec1},
+        core::{Atom, LiteralMode, NString, Tag, Vec1},
         fetch::MessageDataItem,
         response::{Capability, Code, CommandContinuationRequest, Data, Response, Status},
     };
@@ -543,9 +544,20 @@ pub mod server {
         Expunge(UID),
     }
 
+    #[derive(Debug)]
+    enum ImapServerStreamState {
+        Idle {
+            cmd_id: Tag<'static>,
+        },
+        AuthResponse {
+            cmd_id: Tag<'static>,
+            mechanism: AuthMechanism<'static>,
+        },
+    }
+
     struct ImapServerStream {
         tcp_stream: Async<Connection>,
-        idle_cmd_id: Option<String>,
+        cmd_state: Option<ImapServerStreamState>,
         state: Arc<Mutex<ServerState>>,
         stream_receiver: UnboundedReceiver<StreamEvent>,
         server_sender: UnboundedSender<ServerEvent>,
@@ -569,7 +581,7 @@ pub mod server {
         fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
             fmt.debug_struct("ImapServerStream")
                 .field("tcp_stream", &self.tcp_stream)
-                .field("idle_cmd_id", &self.idle_cmd_id)
+                .field("cmd_state", &self.cmd_state)
                 .field("state", &self.state)
                 .field("session_state", &self.session_state)
                 .finish_non_exhaustive()
@@ -595,7 +607,7 @@ pub mod server {
             };
             Self {
                 tcp_stream,
-                idle_cmd_id: None,
+                cmd_state: None,
                 state,
                 server_sender,
                 session_state: SessionState::Unauthenticated,
@@ -663,7 +675,7 @@ pub mod server {
                 }
                 let Self {
                     ref mut tcp_stream,
-                    ref mut idle_cmd_id,
+                    ref mut cmd_state,
                     ref state,
                     ref mut session_state,
                     ref config,
@@ -678,7 +690,7 @@ pub mod server {
                     ref mut our_untagged,
                     ref mut msn_map,
                 } = self;
-                if let Some(ref idle_cmd_id) = idle_cmd_id {
+                if cmd_state.is_some() {
                     {
                         let mut silence_exists = false;
                         while let Some(untagged) = untagged.pop_front() {
@@ -726,16 +738,92 @@ pub mod server {
                         }
                     };
                     let input = String::from_utf8_lossy(input).to_string();
-                    log::debug!("loop_handler 'idle received: {input:?}");
-                    if input == "DONE\r\n" {
-                        tcp_stream.write_all(idle_cmd_id.as_bytes()).await.unwrap();
-                        tcp_stream
-                            .write_all(b" OK IDLE terminated\r\n")
-                            .await
-                            .unwrap();
-                        self.idle_cmd_id.take();
-                        return false;
+                    let response = match self.cmd_state.take().unwrap() {
+                        ImapServerStreamState::Idle { cmd_id } => {
+                            log::debug!("idle handler received: {input:?}");
+                            let (rest, _) = imap_codec::IdleDoneCodec::default()
+                                .decode(input.as_bytes())
+                                .unwrap();
+                            assert!(rest.is_empty(), "{:?}", String::from_utf8_lossy(rest));
+                            Response::Status(
+                                Status::ok(Some(cmd_id), None, "IDLE terminated").unwrap(),
+                            )
+                        }
+                        ImapServerStreamState::AuthResponse { cmd_id, mechanism } => {
+                            log::debug!("waiting for auth response handler received: {input:?}");
+                            let (rest, data) = imap_codec::AuthenticateDataCodec::default()
+                                .decode(input.as_bytes())
+                                .unwrap();
+                            assert!(rest.is_empty(), "{:?}", String::from_utf8_lossy(rest));
+                            match data {
+                                imap_types::auth::AuthenticateData::Continue(secret) => {
+                                    match mechanism {
+                                        AuthMechanism::Plain => {
+                                            let password = secret.declassify();
+                                            assert_eq!(password.as_ref(), b"\0user\0password");
+                                        }
+                                        AuthMechanism::OAuthBearer => {
+                                            let password = secret.declassify();
+                                            #[rustfmt::skip]
+                                            let expected_response =
+                                                format!(
+                                                    "n,a=user,\x01host=127.0.0.1\x01port={port}\x01auth=Bearer password\x01\x01",
+                                                    port = config.port
+                                                );
+                                            assert_eq!(
+                                                password.as_ref(),
+                                                expected_response.as_bytes()
+                                            );
+                                        }
+                                        other @ AuthMechanism::Other(_)
+                                            if other.as_ref() == "ANONYMOUS" =>
+                                        {
+                                            // Got optional trace information.
+                                            let trace =
+                                                String::from_utf8_lossy(secret.declassify());
+                                            log::debug!(
+                                                "AUTHENTICATE ANONYMOUS with trace information \
+                                                 {trace}"
+                                            );
+                                        }
+                                        other => panic!("unimplemented auth method {other:?}"),
+                                    }
+                                    *session_state = SessionState::Authenticated;
+                                    Response::Status(
+                                        Status::ok(Some(cmd_id), None, "Welcome").unwrap(),
+                                    )
+                                }
+                                imap_types::auth::AuthenticateData::Cancel => {
+                                    log::debug!("Client cancelled auth {input:?}");
+                                    Response::Status(
+                                        Status::bad(Some(cmd_id), None, "AUTHENTICATE cancelled")
+                                            .unwrap(),
+                                    )
+                                }
+                            }
+                        }
+                    };
+                    for fragment in ResponseCodec::new().encode(&response) {
+                        match fragment {
+                            Fragment::Line { data } => {
+                                tcp_stream.write_all(&data).await.unwrap();
+                                tcp_stream.flush().await.unwrap();
+                            }
+                            Fragment::Literal { data, mode } => match mode {
+                                LiteralMode::Sync => {
+                                    // Wait for a continuation request.
+                                    panic!()
+                                }
+                                LiteralMode::NonSync => {
+                                    // We don't need to wait for a continuation request
+                                    // as the server will also not send it.
+                                    tcp_stream.write_all(&data).await.unwrap();
+                                    tcp_stream.flush().await.unwrap();
+                                }
+                            },
+                        }
                     }
+                    return false;
                 } else {
                     let mut read_fut = Box::pin(read_line(tcp_stream, buf, buf_start, buf_end));
                     let input = match future::select(&mut read_fut, stream_receiver.next()).await {
@@ -833,26 +921,91 @@ pub mod server {
                                     config.capabilities
                                 );
                                 match mechanism {
-                                    AuthMechanism::Plain => {
-                                        let initial_response = initial_response.expect("password");
-                                        let password = initial_response.declassify();
-                                        assert_eq!(password.as_ref(), b"\0user\0password");
-                                    }
-                                    AuthMechanism::OAuthBearer => {
-                                        let initial_response = initial_response.expect("password");
-                                        let password = initial_response.declassify();
-                                        #[rustfmt::skip]
+                                    AuthMechanism::Plain => match initial_response {
+                                        Some(initial_response) => {
+                                            assert!(
+                                                config
+                                                    .capabilities
+                                                    .as_ref()
+                                                    .contains(&Capability::SaslIr),
+                                                "{:?}",
+                                                config.capabilities
+                                            );
+                                            let password = initial_response.declassify();
+                                            assert_eq!(password.as_ref(), b"\0user\0password");
+                                            *session_state = SessionState::Authenticated;
+                                            responses.push(Response::Status(
+                                                Status::ok(Some(id), None, "Welcome").unwrap(),
+                                            ));
+                                        }
+                                        None => {
+                                            *cmd_state =
+                                                Some(ImapServerStreamState::AuthResponse {
+                                                    cmd_id: id.into_static(),
+                                                    mechanism: mechanism.into_static(),
+                                                });
+                                            responses.push(Response::CommandContinuationRequest(
+                                                CommandContinuationRequest::basic(
+                                                    None,
+                                                    "feed me data",
+                                                )
+                                                .unwrap(),
+                                            ));
+                                        }
+                                    },
+                                    AuthMechanism::OAuthBearer => match initial_response {
+                                        Some(initial_response) => {
+                                            assert!(
+                                                config
+                                                    .capabilities
+                                                    .as_ref()
+                                                    .contains(&Capability::SaslIr),
+                                                "{:?}",
+                                                config.capabilities
+                                            );
+                                            let password = initial_response.declassify();
+                                            #[rustfmt::skip]
                                         let expected_response =
                                             format!(
                                                 "n,a=user,\x01host=127.0.0.1\x01port={port}\x01auth=Bearer password\x01\x01",
                                                 port = config.port
                                             );
-                                        assert_eq!(password.as_ref(), expected_response.as_bytes());
-                                    }
+                                            assert_eq!(
+                                                password.as_ref(),
+                                                expected_response.as_bytes()
+                                            );
+                                            *session_state = SessionState::Authenticated;
+                                            responses.push(Response::Status(
+                                                Status::ok(Some(id), None, "Welcome").unwrap(),
+                                            ));
+                                        }
+                                        None => {
+                                            *cmd_state =
+                                                Some(ImapServerStreamState::AuthResponse {
+                                                    cmd_id: id.into_static(),
+                                                    mechanism: mechanism.into_static(),
+                                                });
+                                            responses.push(Response::CommandContinuationRequest(
+                                                CommandContinuationRequest::basic(
+                                                    None,
+                                                    "feed me data",
+                                                )
+                                                .unwrap(),
+                                            ));
+                                        }
+                                    },
                                     other @ AuthMechanism::Other(_)
                                         if other.as_ref() == "ANONYMOUS" =>
                                     {
                                         if let Some(initial_response) = initial_response {
+                                            assert!(
+                                                config
+                                                    .capabilities
+                                                    .as_ref()
+                                                    .contains(&Capability::SaslIr),
+                                                "{:?}",
+                                                config.capabilities
+                                            );
                                             // Got optional trace information.
                                             let trace = String::from_utf8_lossy(
                                                 initial_response.declassify(),
@@ -862,16 +1015,16 @@ pub mod server {
                                                  {trace}"
                                             );
                                         }
+                                        *session_state = SessionState::Authenticated;
+                                        responses.push(Response::Status(
+                                            Status::ok(Some(id), None, "Welcome").unwrap(),
+                                        ));
                                     }
                                     other => panic!("unimplemented auth method {other:?}"),
                                 }
-                                *session_state = SessionState::Authenticated;
                             } else {
                                 panic!();
                             }
-                            responses.push(Response::Status(
-                                Status::ok(Some(id), None, "Welcome").unwrap(),
-                            ));
                         }
                         CommandBody::Idle => {
                             while let Some(pos) =
@@ -882,7 +1035,9 @@ pub mod server {
                                     _ = notifier.send(());
                                 };
                             }
-                            *idle_cmd_id = Some(id.inner().to_string());
+                            *cmd_state = Some(ImapServerStreamState::Idle {
+                                cmd_id: id.into_static(),
+                            });
                             log::debug!("loop_handler is now idling");
                             responses.push(Response::CommandContinuationRequest(
                                 CommandContinuationRequest::basic(None, "now idling").unwrap(),
@@ -1352,14 +1507,13 @@ pub mod server {
                     }
                     return logout;
                 }
-                return false;
             }
         }
 
         async fn recv(&mut self) -> Option<bool> {
             let Self {
                 ref mut tcp_stream,
-                ref mut idle_cmd_id,
+                ref mut cmd_state,
                 ref mut events,
                 ref mut stream_receiver,
                 ref mut untagged,
@@ -1381,11 +1535,32 @@ pub mod server {
                 match event {
                     StreamEvent::Quit => {
                         // We ignore I/O errors because client might have already exited
-                        if let Some(idle_cmd_id) = idle_cmd_id.take() {
-                            log::debug!("IDLE loop_handler received StreamEvent::Quit from 'main");
-                            _ = tcp_stream.write_all(b"* BYE cruel world\r\n").await;
-                            _ = tcp_stream.write_all(idle_cmd_id.as_bytes()).await;
-                            _ = tcp_stream.write_all(b" OK IDLE terminated\r\n").await;
+                        if let Some(cmd_state) = cmd_state.take() {
+                            match cmd_state {
+                                ImapServerStreamState::Idle { cmd_id } => {
+                                    log::debug!(
+                                        "IDLE handler received StreamEvent::Quit from server \
+                                         thread"
+                                    );
+                                    _ = tcp_stream.write_all(b"* BYE cruel world\r\n").await;
+                                    _ = tcp_stream.write_all(cmd_id.inner().as_bytes()).await;
+                                    _ = tcp_stream.write_all(b" OK IDLE terminated\r\n").await;
+                                }
+                                ImapServerStreamState::AuthResponse {
+                                    cmd_id,
+                                    mechanism: _,
+                                } => {
+                                    log::debug!(
+                                        "Waiting for AuthResponse received StreamEvent::Quit from \
+                                         server thread"
+                                    );
+                                    _ = tcp_stream.write_all(b"* BYE cruel world\r\n").await;
+                                    _ = tcp_stream.write_all(cmd_id.inner().as_bytes()).await;
+                                    _ = tcp_stream
+                                        .write_all(b" OK AUTHENTICATE terminated\r\n")
+                                        .await;
+                                }
+                            }
                         } else {
                             log::debug!("main loop_handler received StreamEvent::Quit");
                             _ = tcp_stream.write_all(b"* BYE cruel world\r\n").await;
@@ -1408,7 +1583,9 @@ pub mod server {
                         }
                     }
                     StreamEvent::WaitForCommand(cmd, notifier) => {
-                        if cmd == "IDLE" && idle_cmd_id.is_some() {
+                        if cmd == "IDLE"
+                            && matches!(cmd_state, Some(ImapServerStreamState::Idle { .. }))
+                        {
                             if let Some(notifier) = notifier.lock().unwrap().take() {
                                 _ = notifier.send(());
                             };
