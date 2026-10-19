@@ -26,7 +26,6 @@
 // [ref:TODO]: add tests for STARTTLS/TLS
 
 #![cfg(feature = "smtp")]
-#![allow(clippy::print_stderr)]
 
 use rusty_fork::rusty_fork_test;
 
@@ -107,7 +106,7 @@ pub mod server {
 
         /// <https://www.rfc-editor.org/info/rfc5321/#section-4.1.1.1>
         fn ehlo(&mut self, ip: IpAddr, domain: &str) -> (String, ReplyCode) {
-            eprintln!("EHLOing ip {ip:?} domain {domain:?}");
+            log::debug!("EHLOing ip {ip:?} domain {domain:?}");
             // Syntax:
 
             // ehlo           = "EHLO" SP ( Domain / address-literal ) CRLF
@@ -158,14 +157,14 @@ pub mod server {
         }
 
         fn mail(&mut self, ip: IpAddr, domain: &str, from: &str) -> ReplyCode {
-            eprintln!("mail() ip {ip:?} domain {domain:?} from {from:?}");
+            log::debug!("mail() ip {ip:?} domain {domain:?} from {from:?}");
             if let Some((_, message)) = self
                 .messages
                 .iter_mut()
                 .rev()
                 .find(|((i, d), _)| (i, d.as_str()) == (&ip, domain))
             {
-                eprintln!("mail is {:?}", message);
+                log::debug!("mail is {:?}", message);
                 if matches!(message, Message::Helo) {
                     *message = Message::Mail {
                         from: from.to_string(),
@@ -177,14 +176,14 @@ pub mod server {
         }
 
         fn rcpt(&mut self, _to: &str) -> ReplyCode {
-            eprintln!("rcpt() to {_to:?}");
+            log::debug!("rcpt() to {_to:?}");
             if let Some((_, message)) = self.messages.last_mut() {
                 if let Some(pos) = self.reject_mailboxes.iter().position(|rej| rej == _to) {
                     self.reject_mailboxes.remove(pos);
                     return ReplyCode::_550;
                 }
 
-                eprintln!("rcpt mail is {:?}", message);
+                log::debug!("rcpt mail is {:?}", message);
                 if let Message::Mail { from } = message {
                     *message = Message::Rcpt {
                         from: from.clone(),
@@ -203,7 +202,7 @@ pub mod server {
 
         fn data_start(&mut self) -> ReplyCode {
             if let Some(((_, _), ref mut message)) = self.messages.last_mut() {
-                eprintln!("data_start mail is {:?}", message);
+                log::debug!("data_start mail is {:?}", message);
                 if let Message::Rcpt { from, to } = message {
                     *message = Message::DataStart {
                         from: from.to_string(),
@@ -238,19 +237,19 @@ pub mod server {
                 for to in to {
                     match Envelope::from_bytes(&buf, None) {
                         Ok(env) => {
-                            eprintln!("data_end env is {:?}", env);
-                            eprintln!("data_end env.other_headers is {:?}", env.other_headers());
+                            log::debug!("data_end env is {:?}", env);
+                            log::debug!("data_end env.other_headers is {:?}", env.other_headers());
                             self.stored.push((to.clone(), env));
                         }
                         Err(err) => {
-                            eprintln!("envelope parse error {err}");
+                            log::debug!("envelope parse error {err}");
                         }
                     }
                 }
                 self.messages.push(((ip, domain), Message::Helo));
                 return ReplyCode::_250;
             }
-            eprintln!("last self.messages item was not Message::Data: {last:?}");
+            log::debug!("last self.messages item was not Message::Data: {last:?}");
             ReplyCode::_451
         }
     }
@@ -330,7 +329,7 @@ pub mod server {
                 tcp_stream: &mut Async<TcpStream>,
                 reply_code: ReplyCode,
             ) -> Result<()> {
-                eprintln!("writing reply code {reply_code:?}");
+                log::debug!("writing reply code {reply_code:?}");
                 tcp_stream
                     .write_all(
                         format!("{} {}\r\n", reply_code.value(), reply_code.as_str()).as_bytes(),
@@ -357,7 +356,7 @@ pub mod server {
                         continue 'command_loop;
                     };
                     let input = String::from_utf8_lossy(line).to_string();
-                    eprintln!("'command_loop received: {input:?}");
+                    log::debug!("'command_loop received: {input:?}");
                     let (cmd, rest) = input.split_once(' ').unwrap_or((&input, ""));
                     match cmd {
                         "QUIT\r\n" => {
@@ -429,7 +428,7 @@ pub mod server {
                         continue 'data_loop;
                     }
                     let input = String::from_utf8_lossy(&data_buf[..(data_cursor + read_bytes)]);
-                    eprintln!("received DATA: {input:?}");
+                    log::debug!("received DATA: {input:?}");
                     state
                         .lock()
                         .unwrap()
