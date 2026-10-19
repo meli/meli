@@ -483,13 +483,17 @@ impl SmtpConnection {
                             .chain_err_kind(ErrorKind::Authentication)?;
                         #[allow(deprecated)]
                         let buf = base64::encode(&username);
-                        ret.send_command(&[buf.as_bytes()]).await?;
+                        ret.stream.write_all(buf.as_bytes()).await?;
+                        ret.stream.write_all(b"\r\n").await?;
+                        ret.stream.flush().await?;
                         ret.read_lines(&mut res, Some((ReplyCode::_334, &[])))
                             .await
                             .chain_err_kind(ErrorKind::Authentication)?;
                         #[allow(deprecated)]
                         let buf = base64::encode(&password);
-                        ret.send_command(&[buf.as_bytes()]).await?;
+                        ret.stream.write_all(buf.as_bytes()).await?;
+                        ret.stream.write_all(b"\r\n").await?;
+                        ret.stream.flush().await?;
                     } else {
                         // # RFC 4616 The PLAIN SASL Mechanism
                         // # https://www.ietf.org/rfc/rfc4616.txt
