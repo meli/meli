@@ -314,6 +314,9 @@ impl ImapConnection {
                             return Ok(None);
                         }
                     }
+                } else if (previous_exists, n) == (0, 0) {
+                    // Nothing to do.
+                    return Ok(None);
                 } else {
                     let sequence_set = if previous_exists == n || (previous_exists + 1) == n {
                         n.try_into()?
