@@ -256,6 +256,9 @@ pub mod server {
             capabilities: Vec1<Capability<'static>>,
             authenticated_capabilities: Vec1<Capability<'static>>,
         },
+        SendCapabilitiesOnAuth {
+            send_capabilities_on_auth: bool,
+        },
         Quit,
     }
 
@@ -300,6 +303,8 @@ pub mod server {
         pub hostname: String,
         pub port: u16,
         pub tls_acceptor: Option<native_tls::TlsAcceptor>,
+        pub greet_clients: bool,
+        pub send_capabilities_on_auth: bool,
     }
 
     pub struct ImapServer {
@@ -349,6 +354,8 @@ pub mod server {
                     hostname,
                     port,
                     tls_acceptor: None,
+                    greet_clients: true,
+                    send_capabilities_on_auth: false,
                 },
             }
         }
@@ -398,6 +405,7 @@ pub mod server {
                     'server_loop: loop {
                         while let Some(server_event) = queue.pop_front() {
                             let quit = matches!(server_event, ServerEvent::Quit);
+                            log::debug!("server got {server_event:?}");
                             let event = match server_event {
                                 ServerEvent::Quit => StreamEvent::Quit,
                                 ServerEvent::ChangeCapabilities {
@@ -406,6 +414,12 @@ pub mod server {
                                 } => {
                                     config.capabilities = capabilities;
                                     config.authenticated_capabilities = authenticated_capabilities;
+                                    StreamEvent::Quit
+                                }
+                                ServerEvent::SendCapabilitiesOnAuth {
+                                    send_capabilities_on_auth,
+                                } => {
+                                    config.send_capabilities_on_auth = send_capabilities_on_auth;
                                     StreamEvent::Quit
                                 }
                                 ServerEvent::State(other) => state.lock().unwrap().recv(other),
@@ -492,18 +506,29 @@ pub mod server {
                                                 config.clone(),
                                                 stream_receiver,
                                             );
-                                            let join_handle = std::thread::spawn(move || {
-                                                block_on(
-                                                    async move { while !stream.next().await {} },
-                                                );
-                                            });
-                                            streams.insert(
-                                                idx,
-                                                StreamHandle {
-                                                    sender,
-                                                    join_handle,
-                                                },
-                                            );
+                                            let greet = stream.greet().await;
+                                            match greet {
+                                                Ok(()) => {
+                                                    let join_handle =
+                                                        std::thread::spawn(move || {
+                                                            block_on(async move {
+                                                                while !stream.next().await {}
+                                                            });
+                                                        });
+                                                    streams.insert(
+                                                        idx,
+                                                        StreamHandle {
+                                                            sender,
+                                                            join_handle,
+                                                        },
+                                                    );
+                                                }
+                                                Err(err) => {
+                                                    log::warn!(
+                                                        "Could not greet client {idx}: {err}"
+                                                    );
+                                                }
+                                            }
                                         }
                                         Err(err) => {
                                             log::error!(
@@ -738,6 +763,7 @@ pub mod server {
                         }
                     };
                     let input = String::from_utf8_lossy(input).to_string();
+                    let mut responses = vec![];
                     let response = match self.cmd_state.take().unwrap() {
                         ImapServerStreamState::Idle { cmd_id } => {
                             log::debug!("idle handler received: {input:?}");
@@ -789,6 +815,11 @@ pub mod server {
                                         other => panic!("unimplemented auth method {other:?}"),
                                     }
                                     *session_state = SessionState::Authenticated;
+                                    if config.send_capabilities_on_auth {
+                                        responses.push(Response::Data(Data::Capability(
+                                            config.authenticated_capabilities.clone(),
+                                        )));
+                                    }
                                     Response::Status(
                                         Status::ok(Some(cmd_id), None, "Welcome").unwrap(),
                                     )
@@ -803,24 +834,27 @@ pub mod server {
                             }
                         }
                     };
-                    for fragment in ResponseCodec::new().encode(&response) {
-                        match fragment {
-                            Fragment::Line { data } => {
-                                tcp_stream.write_all(&data).await.unwrap();
-                                tcp_stream.flush().await.unwrap();
-                            }
-                            Fragment::Literal { data, mode } => match mode {
-                                LiteralMode::Sync => {
-                                    // Wait for a continuation request.
-                                    panic!()
-                                }
-                                LiteralMode::NonSync => {
-                                    // We don't need to wait for a continuation request
-                                    // as the server will also not send it.
+                    responses.push(response);
+                    for response in responses {
+                        for fragment in ResponseCodec::new().encode(&response) {
+                            match fragment {
+                                Fragment::Line { data } => {
                                     tcp_stream.write_all(&data).await.unwrap();
                                     tcp_stream.flush().await.unwrap();
                                 }
-                            },
+                                Fragment::Literal { data, mode } => match mode {
+                                    LiteralMode::Sync => {
+                                        // Wait for a continuation request.
+                                        panic!()
+                                    }
+                                    LiteralMode::NonSync => {
+                                        // We don't need to wait for a continuation request
+                                        // as the server will also not send it.
+                                        tcp_stream.write_all(&data).await.unwrap();
+                                        tcp_stream.flush().await.unwrap();
+                                    }
+                                },
+                            }
                         }
                     }
                     return false;
@@ -934,6 +968,11 @@ pub mod server {
                                             let password = initial_response.declassify();
                                             assert_eq!(password.as_ref(), b"\0user\0password");
                                             *session_state = SessionState::Authenticated;
+                                            if config.send_capabilities_on_auth {
+                                                responses.push(Response::Data(Data::Capability(
+                                                    config.authenticated_capabilities.clone(),
+                                                )));
+                                            }
                                             responses.push(Response::Status(
                                                 Status::ok(Some(id), None, "Welcome").unwrap(),
                                             ));
@@ -975,6 +1014,11 @@ pub mod server {
                                                 expected_response.as_bytes()
                                             );
                                             *session_state = SessionState::Authenticated;
+                                            if config.send_capabilities_on_auth {
+                                                responses.push(Response::Data(Data::Capability(
+                                                    config.authenticated_capabilities.clone(),
+                                                )));
+                                            }
                                             responses.push(Response::Status(
                                                 Status::ok(Some(id), None, "Welcome").unwrap(),
                                             ));
@@ -1016,6 +1060,11 @@ pub mod server {
                                             );
                                         }
                                         *session_state = SessionState::Authenticated;
+                                        if config.send_capabilities_on_auth {
+                                            responses.push(Response::Data(Data::Capability(
+                                                config.authenticated_capabilities.clone(),
+                                            )));
+                                        }
                                         responses.push(Response::Status(
                                             Status::ok(Some(id), None, "Welcome").unwrap(),
                                         ));
@@ -1508,6 +1557,38 @@ pub mod server {
                     return logout;
                 }
             }
+        }
+
+        async fn greet(&mut self) -> Result<()> {
+            use imap_codec::GreetingCodec;
+            use imap_types::response::Greeting;
+
+            if !self.config.greet_clients {
+                return Ok(());
+            }
+            for fragment in GreetingCodec::new()
+                .encode(&imap_types::response::Greeting::ok(None, "server ready").unwrap())
+            {
+                match fragment {
+                    Fragment::Line { data } => {
+                        self.tcp_stream.write_all(&data).await.unwrap();
+                        self.tcp_stream.flush().await.unwrap();
+                    }
+                    Fragment::Literal { data, mode } => match mode {
+                        LiteralMode::Sync => {
+                            // Wait for a continuation request.
+                            panic!()
+                        }
+                        LiteralMode::NonSync => {
+                            // We don't need to wait for a continuation request
+                            // as the server will also not send it.
+                            self.tcp_stream.write_all(&data).await.unwrap();
+                            self.tcp_stream.flush().await.unwrap();
+                        }
+                    },
+                }
+            }
+            Ok(())
         }
 
         async fn recv(&mut self) -> Option<bool> {
@@ -2342,178 +2423,191 @@ hello world 3.
             server_state: _,
             server_sender,
             mut account_conf,
-            mut imap_server,
+            imap_server,
         } = setup(vec![]);
-
-        imap_server.config.capabilities = vec![
-            Capability::Imap4Rev1,
-            Capability::Auth(AuthMechanism::OAuthBearer),
-            Capability::SaslIr,
-            Capability::Id,
-        ]
-        .try_into()
-        .unwrap();
-        imap_server.config.authenticated_capabilities = vec![
-            Capability::Imap4Rev1,
-            Capability::Id,
-            Capability::Idle,
-            Capability::Enable,
-        ]
-        .try_into()
-        .unwrap();
 
         let hostname = imap_server.config.hostname.clone();
 
         let fut = async move {
             let imap_server_handle = imap_server.spawn();
             let backend_event_queue = Arc::new(Mutex::new(VecDeque::with_capacity(16)));
-            // Try AUTH=OAUTHBEARER: it will fail because the connection is not TLS encrypted
-            {
-                account_conf
-                    .extra
-                    .insert("use_oauth2".into(), "true".into());
-                let backend_event_consumer = {
-                    let backend_event_queue = Arc::clone(&backend_event_queue);
+            for send_capabilities_on_auth in [true, false] {
+                server_sender
+                    .unbounded_send(ServerEvent::SendCapabilitiesOnAuth {
+                        send_capabilities_on_auth,
+                    })
+                    .unwrap();
+                server_sender
+                    .unbounded_send(ServerEvent::ChangeCapabilities {
+                        capabilities: vec![
+                            Capability::Imap4Rev1,
+                            Capability::Auth(AuthMechanism::OAuthBearer),
+                            Capability::SaslIr,
+                            Capability::Id,
+                        ]
+                        .try_into()
+                        .unwrap(),
+                        authenticated_capabilities: vec![
+                            Capability::Imap4Rev1,
+                            Capability::Id,
+                            Capability::Idle,
+                            Capability::Enable,
+                        ]
+                        .try_into()
+                        .unwrap(),
+                    })
+                    .unwrap();
+                // Try AUTH=OAUTHBEARER: it will fail because the connection is not TLS encrypted
+                {
+                    account_conf
+                        .extra
+                        .insert("use_oauth2".into(), "true".into());
+                    let backend_event_consumer = {
+                        let backend_event_queue = Arc::clone(&backend_event_queue);
 
-                    BackendEventConsumer::new(Arc::new(move |ah, be| {
-                        log::debug!("BackendEventConsumer: ah {ah:?} be {be:?}");
-                        backend_event_queue.lock().unwrap().push_back((ah, be));
-                    }))
-                };
-                let mut imap =
-                    ImapType::new(&account_conf, Default::default(), backend_event_consumer)
-                        .unwrap();
-                let tls_err = imap.is_online().unwrap().await.unwrap_err();
-                assert_eq!(
-                    &tls_err.summary,
-                    &format!(
-                        "Cannot authenticate to {hostname} with AUTH=OAUTHBEARER: it is not \
-                         encrypted with TLS which is required"
-                    )
-                );
-                assert_eq!(tls_err.kind, ErrorKind::Configuration);
-                account_conf.extra.shift_remove("use_oauth2");
-            }
-            // Try AUTH=PLAIN, it should succeed
-            server_sender
-                .unbounded_send(ServerEvent::ChangeCapabilities {
-                    capabilities: vec![
-                        Capability::Imap4Rev1,
-                        Capability::Auth(AuthMechanism::Plain),
-                        Capability::SaslIr,
-                        Capability::Id,
-                    ]
-                    .try_into()
-                    .unwrap(),
-                    authenticated_capabilities: vec![
-                        Capability::Imap4Rev1,
-                        Capability::Id,
-                        Capability::Idle,
-                        Capability::Enable,
-                    ]
-                    .try_into()
-                    .unwrap(),
-                })
-                .unwrap();
-            {
-                let backend_event_consumer = {
-                    let backend_event_queue = Arc::clone(&backend_event_queue);
+                        BackendEventConsumer::new(Arc::new(move |ah, be| {
+                            log::debug!("BackendEventConsumer: ah {ah:?} be {be:?}");
+                            backend_event_queue.lock().unwrap().push_back((ah, be));
+                        }))
+                    };
+                    let mut imap =
+                        ImapType::new(&account_conf, Default::default(), backend_event_consumer)
+                            .unwrap();
+                    let tls_err = imap.is_online().unwrap().await.unwrap_err();
+                    assert_eq!(
+                        &tls_err.summary,
+                        &format!(
+                            "Cannot authenticate to {hostname} with AUTH=OAUTHBEARER: it is not \
+                             encrypted with TLS which is required"
+                        )
+                    );
+                    assert_eq!(tls_err.kind, ErrorKind::Configuration);
+                    account_conf.extra.shift_remove("use_oauth2");
+                }
+                // Try AUTH=PLAIN, it should succeed
+                server_sender
+                    .unbounded_send(ServerEvent::ChangeCapabilities {
+                        capabilities: vec![
+                            Capability::Imap4Rev1,
+                            Capability::Auth(AuthMechanism::Plain),
+                            Capability::SaslIr,
+                            Capability::Id,
+                        ]
+                        .try_into()
+                        .unwrap(),
+                        authenticated_capabilities: vec![
+                            Capability::Imap4Rev1,
+                            Capability::Id,
+                            Capability::Idle,
+                            Capability::Enable,
+                        ]
+                        .try_into()
+                        .unwrap(),
+                    })
+                    .unwrap();
+                {
+                    let backend_event_consumer = {
+                        let backend_event_queue = Arc::clone(&backend_event_queue);
 
-                    BackendEventConsumer::new(Arc::new(move |ah, be| {
-                        log::debug!("BackendEventConsumer: ah {ah:?} be {be:?}");
-                        backend_event_queue.lock().unwrap().push_back((ah, be));
-                    }))
-                };
-                let mut imap =
-                    ImapType::new(&account_conf, Default::default(), backend_event_consumer)
-                        .unwrap();
-                imap.is_online().unwrap().await.unwrap();
-            }
-            // Try AUTH=ANONYMOUS, it should succeed
-            server_sender
-                .unbounded_send(ServerEvent::ChangeCapabilities {
-                    capabilities: vec![
-                        Capability::Imap4Rev1,
-                        Capability::Auth(AuthMechanism::from(Atom::try_from("ANONYMOUS").unwrap())),
-                        Capability::SaslIr,
-                        Capability::Id,
-                    ]
-                    .try_into()
-                    .unwrap(),
-                    authenticated_capabilities: vec![
-                        Capability::Imap4Rev1,
-                        Capability::Id,
-                        Capability::Idle,
-                        Capability::Enable,
-                    ]
-                    .try_into()
-                    .unwrap(),
-                })
-                .unwrap();
-            {
-                account_conf
-                    .extra
-                    .insert("use_auth_anonymous".into(), "true".into());
-                let backend_event_consumer = {
-                    let backend_event_queue = Arc::clone(&backend_event_queue);
+                        BackendEventConsumer::new(Arc::new(move |ah, be| {
+                            log::debug!("BackendEventConsumer: ah {ah:?} be {be:?}");
+                            backend_event_queue.lock().unwrap().push_back((ah, be));
+                        }))
+                    };
+                    let mut imap =
+                        ImapType::new(&account_conf, Default::default(), backend_event_consumer)
+                            .unwrap();
+                    imap.is_online().unwrap().await.unwrap();
+                }
+                // Try AUTH=ANONYMOUS, it should succeed
+                server_sender
+                    .unbounded_send(ServerEvent::ChangeCapabilities {
+                        capabilities: vec![
+                            Capability::Imap4Rev1,
+                            Capability::Auth(AuthMechanism::from(
+                                Atom::try_from("ANONYMOUS").unwrap(),
+                            )),
+                            Capability::SaslIr,
+                            Capability::Id,
+                        ]
+                        .try_into()
+                        .unwrap(),
+                        authenticated_capabilities: vec![
+                            Capability::Imap4Rev1,
+                            Capability::Id,
+                            Capability::Idle,
+                            Capability::Enable,
+                        ]
+                        .try_into()
+                        .unwrap(),
+                    })
+                    .unwrap();
+                {
+                    account_conf
+                        .extra
+                        .insert("use_auth_anonymous".into(), "true".into());
+                    let backend_event_consumer = {
+                        let backend_event_queue = Arc::clone(&backend_event_queue);
 
-                    BackendEventConsumer::new(Arc::new(move |ah, be| {
-                        log::debug!("BackendEventConsumer: ah {ah:?} be {be:?}");
-                        backend_event_queue.lock().unwrap().push_back((ah, be));
-                    }))
-                };
-                let mut imap =
-                    ImapType::new(&account_conf, Default::default(), backend_event_consumer)
-                        .unwrap();
-                imap.is_online().unwrap().await.unwrap();
-                account_conf.extra.shift_remove("use_auth_anonymous");
-            }
-            // Try authenticating without any AUTH capabilities and LOGINDISABLED, this should fail
-            server_sender
-                .unbounded_send(ServerEvent::ChangeCapabilities {
-                    capabilities: vec![
-                        Capability::Imap4Rev1,
-                        Capability::LoginDisabled,
-                        Capability::SaslIr,
-                        Capability::Id,
-                    ]
-                    .try_into()
-                    .unwrap(),
-                    authenticated_capabilities: vec![
-                        Capability::Imap4Rev1,
-                        Capability::Id,
-                        Capability::Idle,
-                        Capability::Enable,
-                    ]
-                    .try_into()
-                    .unwrap(),
-                })
-                .unwrap();
-            {
-                let backend_event_consumer = {
-                    let backend_event_queue = Arc::clone(&backend_event_queue);
+                        BackendEventConsumer::new(Arc::new(move |ah, be| {
+                            log::debug!("BackendEventConsumer: ah {ah:?} be {be:?}");
+                            backend_event_queue.lock().unwrap().push_back((ah, be));
+                        }))
+                    };
+                    let mut imap =
+                        ImapType::new(&account_conf, Default::default(), backend_event_consumer)
+                            .unwrap();
+                    imap.is_online().unwrap().await.unwrap();
+                    account_conf.extra.shift_remove("use_auth_anonymous");
+                }
+                // Try authenticating without any AUTH capabilities and LOGINDISABLED, this should fail
+                server_sender
+                    .unbounded_send(ServerEvent::ChangeCapabilities {
+                        capabilities: vec![
+                            Capability::Imap4Rev1,
+                            Capability::LoginDisabled,
+                            Capability::SaslIr,
+                            Capability::Id,
+                        ]
+                        .try_into()
+                        .unwrap(),
+                        authenticated_capabilities: vec![
+                            Capability::Imap4Rev1,
+                            Capability::Id,
+                            Capability::Idle,
+                            Capability::Enable,
+                        ]
+                        .try_into()
+                        .unwrap(),
+                    })
+                    .unwrap();
+                {
+                    let backend_event_consumer = {
+                        let backend_event_queue = Arc::clone(&backend_event_queue);
 
-                    BackendEventConsumer::new(Arc::new(move |ah, be| {
-                        log::debug!("BackendEventConsumer: ah {ah:?} be {be:?}");
-                        backend_event_queue.lock().unwrap().push_back((ah, be));
-                    }))
-                };
-                let mut imap =
-                    ImapType::new(&account_conf, Default::default(), backend_event_consumer)
-                        .unwrap();
-                let login_disabled_err = imap.is_online().unwrap().await.unwrap_err();
-                assert_eq!(
-                    &login_disabled_err.summary,
-                    &format!(
-                        "Could not connect to {hostname}: server does not accept the LOGIN command"
-                    )
-                );
-                assert_eq!(
-                    &login_disabled_err.details.as_deref().unwrap(),
-                    &"Server has the capability LOGINDISABLED set. Returned capabilities were: \
-                      IMAP4REV1 LOGINDISABLED SASL-IR ID"
-                );
-                assert_eq!(login_disabled_err.kind, ErrorKind::Configuration);
+                        BackendEventConsumer::new(Arc::new(move |ah, be| {
+                            log::debug!("BackendEventConsumer: ah {ah:?} be {be:?}");
+                            backend_event_queue.lock().unwrap().push_back((ah, be));
+                        }))
+                    };
+                    let mut imap =
+                        ImapType::new(&account_conf, Default::default(), backend_event_consumer)
+                            .unwrap();
+                    let login_disabled_err = imap.is_online().unwrap().await.unwrap_err();
+                    assert_eq!(
+                        &login_disabled_err.summary,
+                        &format!(
+                            "Could not connect to {hostname}: server does not accept the LOGIN \
+                             command"
+                        )
+                    );
+                    assert_eq!(
+                        &login_disabled_err.details.as_deref().unwrap(),
+                        &"Server has the capability LOGINDISABLED set. Returned capabilities \
+                          were: IMAP4REV1 LOGINDISABLED SASL-IR ID"
+                    );
+                    assert_eq!(login_disabled_err.kind, ErrorKind::Configuration);
+                }
             }
             server_sender.unbounded_send(ServerEvent::Quit).unwrap();
             imap_server_handle.join().unwrap();
