@@ -39,6 +39,11 @@ rusty_fork_test! {
     fn test_imap_auth_mechanisms() {
         tests::run_imap_auth_mechanisms();
     }
+
+    #[test]
+    fn test_imap_tls() {
+        tests::run_imap_tls();
+    }
 }
 
 pub mod server {
@@ -69,7 +74,9 @@ pub mod server {
         fetch::MessageDataItem,
         response::{Capability, Code, CommandContinuationRequest, Data, Response, Status},
     };
-    use melib::{backends::prelude::*, imap::*, parser::BytesExt as _, Mail};
+    use melib::{
+        backends::prelude::*, imap::*, parser::BytesExt as _, utils::connections::Connection, Mail,
+    };
     use smol::Async;
 
     #[derive(Debug)]
@@ -291,6 +298,7 @@ pub mod server {
         pub authenticated_capabilities: Vec1<Capability<'static>>,
         pub hostname: String,
         pub port: u16,
+        pub tls_acceptor: Option<native_tls::TlsAcceptor>,
     }
 
     pub struct ImapServer {
@@ -339,6 +347,7 @@ pub mod server {
                     authenticated_capabilities,
                     hostname,
                     port,
+                    tls_acceptor: None,
                 },
             }
         }
@@ -424,25 +433,84 @@ pub mod server {
                                         }
                                         .boxed(),
                                     );
-                                    let idx = streams.len();
-                                    let (sender, stream_receiver) = unbounded();
-                                    let mut stream = ImapServerStream::new(
-                                        tcp_stream,
-                                        state.clone(),
-                                        command_sender.clone(),
-                                        config.clone(),
-                                        stream_receiver,
-                                    );
-                                    let join_handle = std::thread::spawn(move || {
-                                        block_on(async move { while !stream.next().await {} });
-                                    });
-                                    streams.insert(
-                                        idx,
-                                        StreamHandle {
-                                            sender,
-                                            join_handle,
-                                        },
-                                    );
+                                    let tcp_stream =
+                                        Connection::new_tcp(tcp_stream.into_inner().unwrap());
+                                    let tcp_stream = if let Some(acceptor) = &config.tls_acceptor {
+                                        // Need to perform TLS handshake which might block.
+                                        let tcp_stream = match acceptor.accept(tcp_stream) {
+                                            Err(native_tls::HandshakeError::WouldBlock(
+                                                midhandshake_stream,
+                                            )) => {
+                                                let mut midhandshake_stream =
+                                                    Some(midhandshake_stream);
+                                                loop {
+                                                    match midhandshake_stream
+                                                        .take()
+                                                        .unwrap()
+                                                        .handshake()
+                                                    {
+                                                        Ok(r) => {
+                                                            break Ok(r);
+                                                        }
+                                                        Err(
+                                                            native_tls::HandshakeError::WouldBlock(
+                                                                stream,
+                                                            ),
+                                                        ) => {
+                                                            midhandshake_stream = Some(stream);
+                                                        }
+                                                        Err(err) => {
+                                                            break Err(Error::from(err).set_kind(ErrorKind::Network(
+                                                                        NetworkErrorKind::InvalidTLSConnection,
+                                                            )));
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            Err(err) => {
+                                                Err(Error::from(err).set_kind(ErrorKind::Network(
+                                                    NetworkErrorKind::InvalidTLSConnection,
+                                                )))
+                                            }
+                                            Ok(val) => Ok(val),
+                                        };
+                                        tcp_stream.map(|tcp_stream| {
+                                            Async::new(Connection::new_tls(tcp_stream)).unwrap()
+                                        })
+                                    } else {
+                                        Ok(Async::new(tcp_stream).unwrap())
+                                    };
+                                    match tcp_stream {
+                                        Ok(tcp_stream) => {
+                                            let idx = streams.len();
+                                            let (sender, stream_receiver) = unbounded();
+                                            let mut stream = ImapServerStream::new(
+                                                tcp_stream,
+                                                state.clone(),
+                                                command_sender.clone(),
+                                                config.clone(),
+                                                stream_receiver,
+                                            );
+                                            let join_handle = std::thread::spawn(move || {
+                                                block_on(
+                                                    async move { while !stream.next().await {} },
+                                                );
+                                            });
+                                            streams.insert(
+                                                idx,
+                                                StreamHandle {
+                                                    sender,
+                                                    join_handle,
+                                                },
+                                            );
+                                        }
+                                        Err(err) => {
+                                            log::error!(
+                                                "Could not perform TLS handshake with client: \
+                                                 {err}"
+                                            );
+                                        }
+                                    }
                                 }
                                 FutResult::Event(mut command_receiver, server_event) => {
                                     queue.push_back(server_event);
@@ -476,7 +544,7 @@ pub mod server {
     }
 
     struct ImapServerStream {
-        tcp_stream: Async<TcpStream>,
+        tcp_stream: Async<Connection>,
         idle_cmd_id: Option<String>,
         state: Arc<Mutex<ServerState>>,
         stream_receiver: UnboundedReceiver<StreamEvent>,
@@ -510,7 +578,7 @@ pub mod server {
 
     impl ImapServerStream {
         fn new(
-            tcp_stream: Async<TcpStream>,
+            tcp_stream: Async<Connection>,
             state: Arc<Mutex<ServerState>>,
             server_sender: UnboundedSender<ServerEvent>,
             config: ImapServerConfig,
@@ -546,7 +614,7 @@ pub mod server {
 
         async fn next(&mut self) -> bool {
             async fn read_line<'a>(
-                tcp_stream: &mut Async<TcpStream>,
+                tcp_stream: &mut Async<Connection>,
                 buf: &'a mut [u8],
                 start: &mut usize,
                 end: &mut usize,
@@ -1312,25 +1380,17 @@ pub mod server {
                 }
                 match event {
                     StreamEvent::Quit => {
+                        // We ignore I/O errors because client might have already exited
                         if let Some(idle_cmd_id) = idle_cmd_id.take() {
                             log::debug!("IDLE loop_handler received StreamEvent::Quit from 'main");
-                            tcp_stream
-                                .write_all(b"* BYE cruel world\r\n")
-                                .await
-                                .unwrap();
-                            tcp_stream.write_all(idle_cmd_id.as_bytes()).await.unwrap();
-                            tcp_stream
-                                .write_all(b" OK IDLE terminated\r\n")
-                                .await
-                                .unwrap();
+                            _ = tcp_stream.write_all(b"* BYE cruel world\r\n").await;
+                            _ = tcp_stream.write_all(idle_cmd_id.as_bytes()).await;
+                            _ = tcp_stream.write_all(b" OK IDLE terminated\r\n").await;
                         } else {
                             log::debug!("main loop_handler received StreamEvent::Quit");
-                            tcp_stream
-                                .write_all(b"* BYE cruel world\r\n")
-                                .await
-                                .unwrap();
+                            _ = tcp_stream.write_all(b"* BYE cruel world\r\n").await;
                         }
-                        tcp_stream.flush().await.unwrap();
+                        _ = tcp_stream.flush().await;
                         return Some(true);
                     }
                     StreamEvent::Untagged(UntaggedEvent::New(uid)) => {
@@ -2277,6 +2337,243 @@ hello world 3.
                       IMAP4REV1 LOGINDISABLED SASL-IR ID"
                 );
                 assert_eq!(login_disabled_err.kind, ErrorKind::Configuration);
+            }
+            server_sender.unbounded_send(ServerEvent::Quit).unwrap();
+            imap_server_handle.join().unwrap();
+        };
+        std::thread::spawn(move || {
+            block_on(fut);
+        })
+        .join()
+        .unwrap();
+    }
+
+    /// Test that TLS works
+    pub(crate) fn run_imap_tls() {
+        use native_tls::{Identity, TlsAcceptor};
+
+        // Generated with `openssl req -x509 -newkey rsa:4096 -keyout private.key -out
+        // certificate.pem  -nodes`
+        const PEM: &[u8] = br#"-----BEGIN CERTIFICATE-----
+MIIE+DCCAuACCQDfEGhBTDuNrjANBgkqhkiG9w0BAQsFADA+MQswCQYDVQQGEwJH
+UjEPMA0GA1UECAwGQXRoZW5zMQ8wDQYDVQQHDAZBdGhlbnMxDTALBgNVBAoMBG1l
+bGkwHhcNMjYxMDE5MDczMTI0WhcNMjYxMTE4MDczMTI0WjA+MQswCQYDVQQGEwJH
+UjEPMA0GA1UECAwGQXRoZW5zMQ8wDQYDVQQHDAZBdGhlbnMxDTALBgNVBAoMBG1l
+bGkwggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAwggIKAoICAQCt4VnZKJ7Hcpn8j6b+
+5fgQ/Mru841hhGHgdJF7il2pgvp5+3HjgAjeB5sbvgM8BDRW/9rU6rJ3XaCVIvkT
+B74APvtJ6L3pFGwX1BvQb4YiVTK950ZGC1S5lAtZhQzMFdpn8CUEHeVqW4JfAA3e
+Jdf/MSDg+End45JMg+2vP8+FVdgSL+OrPib0VyXizXh0DfVnXjd/upIfyE68bZHg
+3V4k6v1XsqSAlov3oubO4ZGD1bC7m99HMOPRtrCrWsuWnXvZ6zeNw0H+KPD2p0eY
+J86AgVrDnL2+bu+H8GJRhc+CEuu7IIu3iqzhpZWOCXlsZsMbL5u+YuUM5uD6vT6a
+BHwGp9CAeU0bH7OTME5A+3wtBJFXlF6Nmmib0VNeA0U6zw7AHFFjuCS400FxSWwF
+pVKayO9FpX7jlmblJ31T2+B7ph4KQkKS0ndxQdh1Rpp1axvU0Vf6IHyrVJ+Cu7Ji
+2qc+jftx4gd5MVq4NNmY5SxWKqPfo38Mu+jl4inl8rIM3OCF2RXLPOEQPJWoq7ho
+ET1+Mf8uXug6fOEUWm4Jz4IDzP5/uRC4yXfue4AUHUNFvUIGZfTKJgiOgQXJadN1
+sVoQdptaQtLKEKUIkS9zikIaPtRsFZ2MgrIjBlQjJ8VTmo4m6zBpi3b2fNbSdSz/
+UONt9nFNhbJqNAK/0NYCm24JEQIDAQABMA0GCSqGSIb3DQEBCwUAA4ICAQBpQtm/
+zgtIn6v1vbvHl1q8vVkYuRSHa52DLRkB/YheViCAgMw5wGobzKZofvr/n1TPXh7A
+KhbMJUe/TGJ1aJ10ludRpW/KOJpFT2qMExU8lX/KUuYl7oQORGz1aYbnvq5qhKgk
+Mu/Ka3gCpk89iWxpslHwzLYbxg9j4XcUp+Di/55e06+yskZCdCQ4OSIl1PZAJE5e
+PJjxZLy9BR097YA60arq2ZnYrn1Ek3O5iQxlsS02YrYVf3QoKz8bRbv1Jv8YERC8
+8jQF3MQEKQpk/8YHLi4p26uoku49t/RaNLye/wSmKKWxQCoQ3xB1tUCpKL6ydd+h
+eJIi72m5lkbDD3LwNlCXd8n/uqvqQ7PMCrMzPy9+wKLfzrW13tx1MnHDtS+D6N0a
+RLcliAbwWloXP8hrQbWUEAjkm2cTLxtADtsGAlDepZqyzQo+mVhrpUpDFdOC58hf
+AiDUHWxjCDPXGQT4GM+rmRB89N9FXzyi/+bSMbHg6d08KfnAlzBjeflhf4NFv3R8
+VfRG7Fb1xBRMFGrwfQogqgitSAoMyJCYU13k8m9RDyEtHVyLkf+G4vItYJhWPRop
+ZYGOwh6iiNLipbDplDiGHJazsWcd2iSiGGZsBRcQ+XR4kqXu+3IMWDdCitmSaA9v
+rB+srIfyq321mGBob5t9rOlcMJk7Gunv1Zjmhw==
+-----END CERTIFICATE-----
+"#;
+
+        const KEY: &[u8] = br#"-----BEGIN PRIVATE KEY-----
+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
+8nQi9oXfBbw4nVdP6YIq7jaJM7mQoF8=
+-----END PRIVATE KEY-----
+"#;
+
+        let ImapTest {
+            _logger,
+            _temp_dir,
+            server_state: _,
+            server_sender,
+            mut account_conf,
+            mut imap_server,
+        } = setup(vec![]);
+
+        let identity = Identity::from_pkcs8(PEM, KEY).unwrap();
+        imap_server.config.tls_acceptor = Some(TlsAcceptor::new(identity).unwrap());
+        let hostname = imap_server.config.hostname.clone();
+
+        account_conf.extra.insert("use_tls".into(), "true".into());
+        account_conf
+            .extra
+            .insert("danger_accept_invalid_certs".into(), "false".into());
+        let fut = async move {
+            let backend_event_queue = Arc::new(Mutex::new(VecDeque::with_capacity(16)));
+            let imap_server_handle = imap_server.spawn();
+            {
+                let backend_event_consumer = {
+                    let backend_event_queue = Arc::clone(&backend_event_queue);
+
+                    BackendEventConsumer::new(Arc::new(move |ah, be| {
+                        log::debug!("BackendEventConsumer: ah {ah:?} be {be:?}");
+                        backend_event_queue.lock().unwrap().push_back((ah, be));
+                    }))
+                };
+                let mut imap =
+                    ImapType::new(&account_conf, Default::default(), backend_event_consumer)
+                        .unwrap();
+                let tls_err = imap.is_online().unwrap().await.unwrap_err();
+                assert_eq!(
+                    &tls_err.summary,
+                    &format!("Could not initiate TLS negotiation to {hostname}.")
+                );
+                assert_eq!(
+                    tls_err.kind,
+                    ErrorKind::Network(NetworkErrorKind::InvalidTLSConnection)
+                );
+            }
+            account_conf
+                .extra
+                .insert("danger_accept_invalid_certs".into(), "true".into());
+            {
+                let backend_event_consumer = {
+                    let backend_event_queue = Arc::clone(&backend_event_queue);
+
+                    BackendEventConsumer::new(Arc::new(move |ah, be| {
+                        log::debug!("BackendEventConsumer: ah {ah:?} be {be:?}");
+                        backend_event_queue.lock().unwrap().push_back((ah, be));
+                    }))
+                };
+                let mut imap =
+                    ImapType::new(&account_conf, Default::default(), backend_event_consumer)
+                        .unwrap();
+                imap.is_online().unwrap().await.unwrap();
+            }
+            // Try AUTH=OAUTHBEARER, it should succeed with TLS
+            server_sender
+                .unbounded_send(ServerEvent::ChangeCapabilities {
+                    capabilities: vec![
+                        Capability::Imap4Rev1,
+                        Capability::Auth(AuthMechanism::OAuthBearer),
+                        Capability::SaslIr,
+                        Capability::Id,
+                    ]
+                    .try_into()
+                    .unwrap(),
+                    authenticated_capabilities: vec![
+                        Capability::Imap4Rev1,
+                        Capability::Id,
+                        Capability::Idle,
+                        Capability::Enable,
+                    ]
+                    .try_into()
+                    .unwrap(),
+                })
+                .unwrap();
+            {
+                account_conf
+                    .extra
+                    .insert("use_oauth2".into(), "true".into());
+                let backend_event_consumer = {
+                    let backend_event_queue = Arc::clone(&backend_event_queue);
+
+                    BackendEventConsumer::new(Arc::new(move |ah, be| {
+                        log::debug!("BackendEventConsumer: ah {ah:?} be {be:?}");
+                        backend_event_queue.lock().unwrap().push_back((ah, be));
+                    }))
+                };
+                let mut imap =
+                    ImapType::new(&account_conf, Default::default(), backend_event_consumer)
+                        .unwrap();
+                imap.is_online().unwrap().await.unwrap();
+                account_conf.extra.shift_remove("use_oauth2");
+            }
+            // Try AUTH=OAUTHBEARER with SASL-IR off
+            server_sender
+                .unbounded_send(ServerEvent::ChangeCapabilities {
+                    capabilities: vec![
+                        Capability::Imap4Rev1,
+                        Capability::Auth(AuthMechanism::OAuthBearer),
+                        Capability::Id,
+                    ]
+                    .try_into()
+                    .unwrap(),
+                    authenticated_capabilities: vec![
+                        Capability::Imap4Rev1,
+                        Capability::Id,
+                        Capability::Idle,
+                        Capability::Enable,
+                    ]
+                    .try_into()
+                    .unwrap(),
+                })
+                .unwrap();
+            {
+                account_conf
+                    .extra
+                    .insert("use_oauth2".into(), "true".into());
+                let backend_event_consumer = {
+                    let backend_event_queue = Arc::clone(&backend_event_queue);
+
+                    BackendEventConsumer::new(Arc::new(move |ah, be| {
+                        log::debug!("BackendEventConsumer: ah {ah:?} be {be:?}");
+                        backend_event_queue.lock().unwrap().push_back((ah, be));
+                    }))
+                };
+                let mut imap =
+                    ImapType::new(&account_conf, Default::default(), backend_event_consumer)
+                        .unwrap();
+                imap.is_online().unwrap().await.unwrap();
+                account_conf.extra.shift_remove("use_oauth2");
             }
             server_sender.unbounded_send(ServerEvent::Quit).unwrap();
             imap_server_handle.join().unwrap();
