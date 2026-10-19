@@ -43,7 +43,7 @@ rusty_fork_test! {
 
 pub mod server {
     use std::{
-        net::{IpAddr, SocketAddr, TcpListener, TcpStream},
+        net::{IpAddr, SocketAddr, TcpListener},
         sync::{Arc, Mutex},
     };
 
@@ -53,7 +53,13 @@ pub mod server {
         io::{AsyncReadExt as _, AsyncWriteExt as _},
         StreamExt as _,
     };
-    use melib::{backends::prelude::*, imap::ImapLineSplit as _, parser::BytesExt as _, smtp::*};
+    use melib::{
+        backends::prelude::*,
+        imap::ImapLineSplit as _,
+        parser::BytesExt as _,
+        smtp::{ReplyCode, SmtpAuth, SmtpExtensionSupport, SmtpSecurity},
+        utils::connections::Connection,
+    };
     use smol::Async;
 
     #[derive(Debug)]
@@ -289,12 +295,12 @@ pub mod server {
         }
 
         async fn handle_connection(
-            (mut tcp_stream, socket_addr): (Async<TcpStream>, SocketAddr),
+            (mut tcp_stream, socket_addr): (Async<Connection>, SocketAddr),
             server_addr: SocketAddr,
             state: Arc<Mutex<ServerState>>,
         ) -> Result<()> {
             async fn read_line<'a>(
-                tcp_stream: &mut Async<TcpStream>,
+                tcp_stream: &mut Async<Connection>,
                 buf: &'a mut [u8],
                 start: &mut usize,
                 end: &mut usize,
@@ -326,7 +332,7 @@ pub mod server {
                 }
             }
             async fn write_reply_code(
-                tcp_stream: &mut Async<TcpStream>,
+                tcp_stream: &mut Async<Connection>,
                 reply_code: ReplyCode,
             ) -> Result<()> {
                 log::debug!("writing reply code {reply_code:?}");
@@ -454,9 +460,17 @@ pub mod server {
             let mut accept = Box::pin(tcp_listener.accept());
             loop {
                 match future::select(accept.as_mut(), event_receiver.as_mut()).await {
-                    Either::Left((request, _)) => {
+                    Either::Left((tcp_stream, _)) => {
                         accept = Box::pin(tcp_listener.accept());
-                        Self::handle_connection(request?, addr, state.clone()).await?;
+                        let (tcp_stream, socket_addr) = tcp_stream?;
+                        let mut connection = Connection::new_tcp(tcp_stream.into_inner().unwrap());
+                        connection.set_trace(true);
+                        Self::handle_connection(
+                            (Async::new(connection).unwrap(), socket_addr),
+                            addr,
+                            state.clone(),
+                        )
+                        .await?;
                     }
                     Either::Right(((event, stream), _)) => {
                         *event_receiver = stream.into_future();
