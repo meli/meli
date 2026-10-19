@@ -170,6 +170,7 @@ pub struct ImapStream {
     pub protocol: ImapProtocol,
     pub current_mailbox: MailboxSelection,
     pub timeout: Option<Duration>,
+    pub preauthed: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -538,6 +539,7 @@ impl ImapStream {
             protocol: server_conf.protocol,
             current_mailbox: MailboxSelection::None,
             timeout: server_conf.timeout,
+            preauthed: false,
         };
         if matches!(server_conf.protocol, ImapProtocol::ManageSieve) {
             ret.read_response(&mut res).await?;
@@ -610,6 +612,31 @@ impl ImapStream {
                 Ok(v) => v,
             }
         };
+        if let Some(preauth_msg) = res
+            .split_rn()
+            .into_iter()
+            .find_map(|l| l.strip_prefix(b"* PREAUTH"))
+        {
+            ret.preauthed = true;
+            if send_state_changes {
+                let preauth_msg = String::from_utf8_lossy(preauth_msg);
+                let preauth_msg = preauth_msg.trim();
+                (uid_store.event_consumer)(
+                    uid_store.account_hash,
+                    BackendEvent::AccountStateChange {
+                        message: if preauth_msg.is_empty() {
+                            "Connection was automatically authenticated by server".into()
+                        } else {
+                            format!(
+                                "Connection was automatically authenticated by server: \
+                                 {preauth_msg}"
+                            )
+                            .into()
+                        },
+                    },
+                );
+            }
+        }
 
         if !capabilities
             .iter()
@@ -944,6 +971,7 @@ impl ImapConnection {
                                     protocol,
                                     current_mailbox,
                                     timeout,
+                                    preauthed,
                                 } = std::mem::replace(&mut self.stream, Err(Error::new("")))?;
                                 let stream = stream.into_inner()?;
                                 self.stream = Ok(ImapStream {
@@ -954,6 +982,7 @@ impl ImapConnection {
                                     protocol,
                                     current_mailbox,
                                     timeout,
+                                    preauthed,
                                 });
                             }
                             ImapResponse::No(code)
@@ -1336,6 +1365,9 @@ impl ImapConnection {
     }
 
     pub async fn authenticate(&mut self) -> Result<()> {
+        if self.stream.as_ref()?.preauthed {
+            return Ok(());
+        }
         let hostname = self
             .server_conf
             .hostname

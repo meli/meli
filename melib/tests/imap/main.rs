@@ -259,6 +259,9 @@ pub mod server {
         SendCapabilitiesOnAuth {
             send_capabilities_on_auth: bool,
         },
+        Preauth {
+            preauth: bool,
+        },
         Quit,
     }
 
@@ -305,6 +308,7 @@ pub mod server {
         pub tls_acceptor: Option<native_tls::TlsAcceptor>,
         pub greet_clients: bool,
         pub send_capabilities_on_auth: bool,
+        pub preauth: bool,
     }
 
     pub struct ImapServer {
@@ -356,6 +360,7 @@ pub mod server {
                     tls_acceptor: None,
                     greet_clients: true,
                     send_capabilities_on_auth: false,
+                    preauth: false,
                 },
             }
         }
@@ -420,6 +425,10 @@ pub mod server {
                                     send_capabilities_on_auth,
                                 } => {
                                     config.send_capabilities_on_auth = send_capabilities_on_auth;
+                                    StreamEvent::Quit
+                                }
+                                ServerEvent::Preauth { preauth } => {
+                                    config.preauth = preauth;
                                     StreamEvent::Quit
                                 }
                                 ServerEvent::State(other) => state.lock().unwrap().recv(other),
@@ -1563,6 +1572,30 @@ pub mod server {
             use imap_codec::GreetingCodec;
             use imap_types::response::Greeting;
 
+            if self.config.preauth {
+                for fragment in
+                    GreetingCodec::new().encode(&Greeting::preauth(None, "logged in").unwrap())
+                {
+                    match fragment {
+                        Fragment::Line { data } => {
+                            self.tcp_stream.write_all(&data).await.unwrap();
+                            self.tcp_stream.flush().await.unwrap();
+                        }
+                        Fragment::Literal { data, mode } => match mode {
+                            LiteralMode::Sync => {
+                                // Wait for a continuation request.
+                                panic!()
+                            }
+                            LiteralMode::NonSync => {
+                                // We don't need to wait for a continuation request
+                                // as the server will also not send it.
+                                self.tcp_stream.write_all(&data).await.unwrap();
+                                self.tcp_stream.flush().await.unwrap();
+                            }
+                        },
+                    }
+                }
+            }
             if !self.config.greet_clients {
                 return Ok(());
             }
@@ -2608,6 +2641,34 @@ hello world 3.
                     );
                     assert_eq!(login_disabled_err.kind, ErrorKind::Configuration);
                 }
+                // Try PREAUTH
+                server_sender
+                    .unbounded_send(ServerEvent::Preauth { preauth: true })
+                    .unwrap();
+                {
+                    let backend_event_consumer = {
+                        let backend_event_queue = Arc::clone(&backend_event_queue);
+
+                        BackendEventConsumer::new(Arc::new(move |ah, be| {
+                            log::debug!("BackendEventConsumer: ah {ah:?} be {be:?}");
+                            backend_event_queue.lock().unwrap().push_back((ah, be));
+                        }))
+                    };
+                    let mut account_conf = account_conf.clone();
+                    account_conf
+                        .extra
+                        .insert("server_username".into(), "invalid".into());
+                    account_conf
+                        .extra
+                        .insert("server_password".into(), "invalid".into());
+                    let mut imap =
+                        ImapType::new(&account_conf, Default::default(), backend_event_consumer)
+                            .unwrap();
+                    imap.is_online().unwrap().await.unwrap();
+                }
+                server_sender
+                    .unbounded_send(ServerEvent::Preauth { preauth: false })
+                    .unwrap();
             }
             server_sender.unbounded_send(ServerEvent::Quit).unwrap();
             imap_server_handle.join().unwrap();
