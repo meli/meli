@@ -25,11 +25,6 @@ path = "src/mboxparse.rs"
 name = "embedded"
 path = "src/embedded.rs"
 
-[[bin]]
-name = "managesieve-client"
-path = "src/managesieve.rs"
-required-features = ["melib/imap"]
-
 [dependencies]
 crossbeam = { version = "^0.8" }
 meli = { path = "../meli", version = "0.8" }

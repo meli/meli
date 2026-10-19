@@ -145,6 +145,11 @@ pub enum ToolOpt {
         #[structopt(value_name = "CONFIG_TOML_ACCOUNT_NAME")]
         account: String,
     },
+    /// Opens an interactive shell on a managesieve server.
+    ManagesieveShell {
+        #[structopt(value_name = "CONFIG_TOML_ACCOUNT_NAME")]
+        account: String,
+    },
     #[cfg(feature = "smtp")]
     SmtpShell {
         #[structopt(value_name = "CONFIG_TOML_ACCOUNT_NAME")]
