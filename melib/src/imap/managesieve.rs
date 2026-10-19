@@ -30,7 +30,6 @@ use crate::{
     email::parser::IResult,
     error::{Error, Result},
     get_conf_val,
-    imap::RequiredResponses,
     text::Truncate as _,
 };
 
@@ -121,22 +120,29 @@ impl ManageSieveConnection {
         })
     }
 
+    pub async fn connect(&mut self) -> Result<()> {
+        self.inner.connect().await
+    }
+
     pub async fn havespace(&self) -> Result<()> {
-        Ok(())
+        Err(Error::new("havespace is not implemented, patches welcome")
+            .set_kind(ErrorKind::NotImplemented))
     }
 
     pub async fn putscript(&mut self, script_name: &[u8], script: &[u8]) -> Result<()> {
         let mut ret = Vec::new();
         self.inner
-            .send_literal(format!("Putscript {{{len}+}}\r\n", len = script_name.len()).as_bytes())
+            .send_raw(format!("Putscript {{{len}+}}", len = script_name.len()).as_bytes())
             .await?;
         self.inner.send_literal(script_name).await?;
         self.inner
-            .send_literal(format!(" {{{len}+}}\r\n", len = script.len()).as_bytes())
+            .send_raw(format!(" {{{len}+}}", len = script.len()).as_bytes())
             .await?;
         self.inner.send_literal(script).await?;
         self.inner
-            .read_response(&mut ret, RequiredResponses::empty())
+            .stream
+            .as_mut()?
+            .read_lines(&mut ret, Some(b"OK"), false)
             .await?;
         let (_rest, response) = parser::response_oknobye(&ret)?;
         match response {
@@ -154,7 +160,9 @@ impl ManageSieveConnection {
         let mut ret = Vec::new();
         self.inner.send_command_raw(b"Listscripts").await?;
         self.inner
-            .read_response(&mut ret, RequiredResponses::empty())
+            .stream
+            .as_mut()?
+            .read_lines(&mut ret, Some(b"OK"), true)
             .await?;
         let (_rest, scripts) =
             parser::terminated(parser::listscripts, parser::tag_no_case(b"OK"))(&ret)?;
@@ -167,11 +175,13 @@ impl ManageSieveConnection {
     pub async fn checkscript(&mut self, script: &[u8]) -> Result<()> {
         let mut ret = Vec::new();
         self.inner
-            .send_literal(format!("Checkscript {{{len}+}}\r\n", len = script.len()).as_bytes())
+            .send_raw(format!("Checkscript {{{len}+}}", len = script.len()).as_bytes())
             .await?;
         self.inner.send_literal(script).await?;
         self.inner
-            .read_response(&mut ret, RequiredResponses::empty())
+            .stream
+            .as_mut()?
+            .read_lines(&mut ret, Some(b"OK"), true)
             .await?;
         let (_rest, response) = parser::response_oknobye(&ret)?;
         match response {
@@ -188,11 +198,13 @@ impl ManageSieveConnection {
     pub async fn setactive(&mut self, script_name: &[u8]) -> Result<()> {
         let mut ret = Vec::new();
         self.inner
-            .send_literal(format!("Setactive {{{len}+}}\r\n", len = script_name.len()).as_bytes())
+            .send_raw(format!("Setactive {{{len}+}}", len = script_name.len()).as_bytes())
             .await?;
         self.inner.send_literal(script_name).await?;
         self.inner
-            .read_response(&mut ret, RequiredResponses::empty())
+            .stream
+            .as_mut()?
+            .read_lines(&mut ret, Some(b"OK"), true)
             .await?;
         let (_rest, response) = parser::response_oknobye(&ret)?;
         match response {
@@ -209,37 +221,39 @@ impl ManageSieveConnection {
     pub async fn getscript(&mut self, script_name: &[u8]) -> Result<Vec<u8>> {
         let mut ret = Vec::new();
         self.inner
-            .send_literal(format!("Getscript {{{len}+}}\r\n", len = script_name.len()).as_bytes())
+            .send_raw(format!("Getscript {{{len}+}}", len = script_name.len()).as_bytes())
             .await?;
         self.inner.send_literal(script_name).await?;
         self.inner
-            .read_response(&mut ret, RequiredResponses::empty())
+            .stream
+            .as_mut()?
+            .read_lines(&mut ret, Some(b"OK"), true)
             .await?;
-        if let Ok((_, ManageSieveResponse::NoBye { code, message })) =
-            parser::response_oknobye(&ret)
-        {
-            return Err(format!(
-                "Could not set active script: {} {}",
+        let (_rest, response) = parser::getscript(&ret)?;
+        match response {
+            Ok(script) => Ok(script.to_vec()),
+            Err(
+                ManageSieveResponse::Ok { code, message }
+                | ManageSieveResponse::NoBye { code, message },
+            ) => Err(format!(
+                "Could not get script: {} {}",
                 code.map(String::from_utf8_lossy).unwrap_or_default(),
                 message.map(String::from_utf8_lossy).unwrap_or_default()
             )
-            .into());
+            .into()),
         }
-        let (_rest, script) =
-            parser::terminated(parser::getscript, parser::tag_no_case(b"OK"))(&ret)?;
-        Ok(script.to_vec())
     }
 
     pub async fn deletescript(&mut self, script_name: &[u8]) -> Result<()> {
         let mut ret = Vec::new();
         self.inner
-            .send_literal(
-                format!("Deletescript {{{len}+}}\r\n", len = script_name.len()).as_bytes(),
-            )
+            .send_raw(format!("Deletescript {{{len}+}}", len = script_name.len()).as_bytes())
             .await?;
         self.inner.send_literal(script_name).await?;
         self.inner
-            .read_response(&mut ret, RequiredResponses::empty())
+            .stream
+            .as_mut()?
+            .read_lines(&mut ret, Some(b"OK"), true)
             .await?;
         let (_rest, response) = parser::response_oknobye(&ret)?;
         match response {
@@ -254,7 +268,10 @@ impl ManageSieveConnection {
     }
 
     pub async fn renamescript(&self) -> Result<()> {
-        Ok(())
+        Err(
+            Error::new("renamescript is not implemented, patches welcome")
+                .set_kind(ErrorKind::NotImplemented),
+        )
     }
 }
 
@@ -302,7 +319,7 @@ pub mod parser {
         Ok(ret)
     }
 
-    pub fn sieve_name(input: &[u8]) -> IResult<&[u8], &[u8]> {
+    pub fn string_token(input: &[u8]) -> IResult<&[u8], &[u8]> {
         crate::imap::protocol_parser::string_token(input)
     }
 
@@ -313,12 +330,12 @@ pub mod parser {
             input,
             alt((
                 terminated(
-                    map(terminated(sieve_name, tag_no_case(b" ACTIVE")), |r| {
+                    map(terminated(string_token, tag_no_case(b" ACTIVE")), |r| {
                         (r, true)
                     }),
                     crlf,
                 ),
-                terminated(map(sieve_name, |r| (r, false)), crlf),
+                terminated(map(string_token, |r| (r, false)), crlf),
             )),
         );
 
@@ -330,8 +347,16 @@ pub mod parser {
 
     // response-getscript    = (sieve-script CRLF response-ok) /
     //                      response-nobye
-    pub fn getscript(input: &[u8]) -> IResult<&[u8], &[u8]> {
-        sieve_name(input)
+    pub fn getscript(
+        input: &[u8],
+    ) -> IResult<&[u8], std::result::Result<&[u8], ManageSieveResponse<'_>>> {
+        if let Ok((rest, resp @ ManageSieveResponse::NoBye { .. })) = response_oknobye(input) {
+            return Ok((rest, Err(resp)));
+        }
+        let (input, sieve_script) = string_token(input)?;
+        let (input, _) = crlf(input)?;
+        let (input, _) = response_oknobye(input)?;
+        Ok((input, Ok(sieve_script)))
     }
 
     pub fn response_oknobye(input: &[u8]) -> IResult<&[u8], ManageSieveResponse<'_>> {
@@ -346,7 +371,7 @@ pub mod parser {
                                 delimited(tag(b"("), is_not(")"), tag(b")")),
                             )),
                         ),
-                        opt(preceded(tag(b" "), sieve_name)),
+                        opt(preceded(tag(b" "), string_token)),
                     ),
                     crlf,
                 ),
@@ -362,7 +387,7 @@ pub mod parser {
                                 delimited(tag(b"("), is_not(")"), tag(b")")),
                             )),
                         ),
-                        opt(preceded(tag(b" "), sieve_name)),
+                        opt(preceded(tag(b" "), string_token)),
                     ),
                     crlf,
                 ),
