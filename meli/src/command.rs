@@ -386,6 +386,11 @@ define_commands!([
         parser: parser::view_manpage
     },
     {
+        desc: "read documentation",
+        tokens: &[Literal("help")],
+        parser: parser::help
+    },
+    {
         desc: "view and manage jobs",
         tokens: &[Literal("manage-jobs")],
         parser: parser::manage_jobs

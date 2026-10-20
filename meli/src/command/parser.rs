@@ -191,7 +191,13 @@ fn view(input: &str) -> IResult<&str, Result<Action, CommandError>> {
 }
 
 fn new_tab(input: &str) -> IResult<&str, Result<Action, CommandError>> {
-    alt((manage_mailboxes, manage_jobs, compose_action, view_manpage))(input)
+    alt((
+        manage_mailboxes,
+        manage_jobs,
+        compose_action,
+        view_manpage,
+        help,
+    ))(input)
 }
 
 pub fn parse_command(input: &str) -> Result<Action, CommandError> {
@@ -1245,6 +1251,27 @@ pub(super) fn view_manpage(input: &str) -> IResult<&str, Result<Action, CommandE
                 }),
             )),
         }
+    }
+    #[cfg(not(feature = "cli-docs"))]
+    {
+        Ok((
+            input,
+            Err(CommandError::Other {
+                inner: "this meli binary has not been compiled with the cli-docs feature".into(),
+            }),
+        ))
+    }
+}
+
+pub(super) fn help(input: &str) -> IResult<&str, Result<Action, CommandError>> {
+    let mut check = arg_init! { min_arg:0, max_arg: 0, view_manpage };
+    let (input, _) = tag("help")(input.trim())?;
+    arg_chk!(start check, input);
+    let (input, _) = eof(input)?;
+    arg_chk!(finish check, input);
+    #[cfg(feature = "cli-docs")]
+    {
+        Ok((input, Ok(Tab(Man(crate::manpages::ManPages::Guide)))))
     }
     #[cfg(not(feature = "cli-docs"))]
     {
