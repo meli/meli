@@ -60,7 +60,8 @@ pub struct ScrollRegion {
 pub struct CellBuffer {
     pub cols: usize,
     pub rows: usize,
-    pub buf: Vec<Cell>,
+    buf: Vec<Cell>,
+    dirty_bitmap: DirtyBitmap,
     pub default_cell: Cell,
     /// ASCII-only flag.
     pub ascii_drawing: bool,
@@ -110,6 +111,7 @@ impl CellBuffer {
             cols: 0,
             rows: 0,
             buf: vec![],
+            dirty_bitmap: DirtyBitmap::default(),
             default_cell: Cell::new_default(),
             growable: false,
             ascii_drawing: false,
@@ -138,6 +140,11 @@ impl CellBuffer {
             cols,
             rows,
             buf: vec![default_cell; cols * rows],
+            dirty_bitmap: {
+                let mut dirty_bitmap = DirtyBitmap::default();
+                dirty_bitmap.resize(cols, rows);
+                dirty_bitmap
+            },
             default_cell,
             growable: false,
             ascii_drawing: false,
@@ -223,6 +230,7 @@ impl CellBuffer {
         }
 
         self.buf = vec![self.default_cell; newlen];
+        self.dirty_bitmap.resize(newcols, newrows);
         self.cols = newcols;
         self.rows = newrows;
         true
@@ -247,6 +255,7 @@ impl CellBuffer {
         }
         self.cols = newcols;
         self.rows = newrows;
+        self.dirty_bitmap.resize(newcols, newrows);
         true
     }
 
@@ -255,17 +264,34 @@ impl CellBuffer {
     }
 
     pub fn empty(&mut self) {
+        self.dirty_bitmap.map.clear();
         self.buf.clear();
         self.cols = 0;
         self.rows = 0;
     }
 
+    pub fn set_dirty(&mut self, value: bool) {
+        if value {
+            self.dirty_bitmap.fill_ones();
+        }
+    }
+
     /// Clears `self`, using the given `Cell` as a blank.
     pub fn clear(&mut self, blank: Option<Cell>) {
         let blank = blank.unwrap_or(self.default_cell);
-        for cell in self.cellvec_mut().iter_mut() {
+        for cell in self.buf.iter_mut() {
             *cell = blank;
         }
+    }
+
+    /// Get a reference to the buffer's [`DirtyBitmap`].
+    pub fn dirty_bitmap(&self) -> &DirtyBitmap {
+        &self.dirty_bitmap
+    }
+
+    /// Get a mutable reference to the buffer's [`DirtyBitmap`].
+    pub fn dirty_bitmap_mut(&mut self) -> &mut DirtyBitmap {
+        &mut self.dirty_bitmap
     }
 
     pub fn pos_to_index(&self, x: usize, y: usize) -> Option<usize> {
@@ -281,7 +307,7 @@ impl CellBuffer {
     /// the index is out of bounds.
     pub fn get(&self, x: usize, y: usize) -> Option<&Cell> {
         match self.pos_to_index(x, y) {
-            Some(i) => self.cellvec().get(i),
+            Some(i) => self.buf.get(i),
             None => None,
         }
     }
@@ -290,21 +316,13 @@ impl CellBuffer {
     /// `None` if the index is out of bounds.
     pub fn get_mut(&mut self, x: usize, y: usize) -> Option<&mut Cell> {
         match self.pos_to_index(x, y) {
-            Some(i) => self.cellvec_mut().get_mut(i),
+            Some(i) => self.buf.get_mut(i),
             None => None,
         }
     }
 
     pub fn size(&self) -> (usize, usize) {
         (self.cols, self.rows)
-    }
-
-    pub fn cellvec(&self) -> &Vec<Cell> {
-        &self.buf
-    }
-
-    pub fn cellvec_mut(&mut self) -> &mut Vec<Cell> {
-        &mut self.buf
     }
 
     pub fn cols(&self) -> usize {
@@ -362,6 +380,7 @@ impl CellBuffer {
         for y in top..top + offset {
             for x in l..r {
                 self[(x, y)] = Cell::default();
+                self.dirty_bitmap.set(x, y);
             }
         }
         for y in top..=(scroll_region.bottom - offset) {
@@ -369,6 +388,8 @@ impl CellBuffer {
                 let temp = self[(x, y)];
                 self[(x, y)] = self[(x, y + offset)];
                 self[(x, y + offset)] = temp;
+                self.dirty_bitmap.set(x, y);
+                self.dirty_bitmap.set(x, y + offset);
             }
         }
     }
@@ -414,6 +435,7 @@ impl CellBuffer {
         for y in (scroll_region.bottom - offset + 1)..=scroll_region.bottom {
             for x in 0..self.size().0 {
                 self[(x, y)] = Cell::default();
+                self.dirty_bitmap.set(x, y);
             }
         }
 
@@ -422,6 +444,8 @@ impl CellBuffer {
                 let temp = self[(x, y)];
                 self[(x, y)] = self[(x, y - offset)];
                 self[(x, y - offset)] = temp;
+                self.dirty_bitmap.set(x, y);
+                self.dirty_bitmap.set(x, y - offset);
             }
         }
     }
@@ -664,6 +688,7 @@ impl CellBuffer {
                     tag_offset += 1;
                 }
                 self[(x, y)] = grid_src[(src_x, src_y)];
+                self.dirty_bitmap.set(x, y);
                 for t in &stack {
                     if let Some(fg) = t.fg {
                         self[(x, y)].set_fg(fg).set_keep_fg(true);
@@ -861,9 +886,11 @@ impl CellBuffer {
                     c = ' ';
                     for _ in 0..self.tab_width {
                         cell_mut!(x, y).set_ch(' ');
+                        self.dirty_bitmap.set(x, y);
                         x += 1;
                         if let Some(c) = self.get_mut(x, y) {
                             c.set_ch(' ');
+                            self.dirty_bitmap.set(x, y);
                         } else if let Some(_x) = line_break {
                             if !(y > get_y(bottom_right) || y > get_y(bounds)) {
                                 x = if upper_left == og_upper_left {
@@ -881,6 +908,7 @@ impl CellBuffer {
                     }
                 } else {
                     cell_mut!(x, y).set_ch(c);
+                    self.dirty_bitmap.set(x, y);
                 }
                 cell_mut!(x, y)
                     .set_fg(theme_attr.fg)
@@ -891,6 +919,7 @@ impl CellBuffer {
                     Some(0) | None => {
                         // Skip drawing zero width characters
                         self[(x, y)].empty = true;
+                        self.dirty_bitmap.set(x, y);
                     }
                     Some(2) => {
                         // Grapheme takes more than one column, so the next cell will be drawn
@@ -902,6 +931,7 @@ impl CellBuffer {
                                 .set_bg(theme_attr.bg)
                                 .set_attrs(theme_attr.attrs)
                                 .set_empty(true);
+                            self.dirty_bitmap.set(x, y);
                         }
                     }
                     _ => {}
@@ -2049,6 +2079,58 @@ pub enum WidgetWidth {
     Unset,
     Hold(usize),
     Set(usize),
+}
+
+#[derive(Clone, Default, Debug, Eq, PartialEq)]
+pub struct DirtyBitmap {
+    map: Vec<usize>,
+    width: usize,
+    height: usize,
+}
+
+impl DirtyBitmap {
+    #[inline(always)]
+    pub fn set(&mut self, x: usize, y: usize) {
+        let cell_position = (self.width * y) + x;
+        let word = cell_position / (usize::BITS as usize);
+        let bit = cell_position % (usize::BITS as usize);
+        self.map[word] |= 1 << bit;
+    }
+
+    #[inline(always)]
+    pub fn is_set(&self, x: usize, y: usize) -> bool {
+        let cell_position = (self.width * y) + x;
+        let word = cell_position / (usize::BITS as usize);
+        let bit = cell_position % (usize::BITS as usize);
+        self.map[word] & 1 << bit > 0
+    }
+
+    #[inline(always)]
+    pub fn fill_ones(&mut self) {
+        self.map.fill(usize::MAX);
+    }
+
+    #[inline(always)]
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+
+    #[inline(always)]
+    pub fn len(&self) -> usize {
+        self.map.len()
+    }
+
+    pub fn resize(&mut self, cols: usize, rows: usize) {
+        let new_size = ((cols / usize::BITS as usize) + 1) * rows;
+        if self.map.len() > new_size {
+            self.map.truncate(new_size);
+        } else {
+            self.map.resize(new_size, 0);
+        }
+        self.width = cols;
+        self.height = rows;
+        self.map.fill(0);
+    }
 }
 
 #[cfg(test)]

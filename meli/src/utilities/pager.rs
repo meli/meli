@@ -255,7 +255,7 @@ impl Pager {
             let mut dev_null = std::fs::File::open("/dev/null")?;
             let mut embedded = EmbeddedGrid::new();
             embedded.set_tab_width(tab_width);
-            embedded.set_terminal_size((80, 20));
+            embedded.set_terminal_size(80, 20);
 
             for b in stdout {
                 embedded.process_byte(&mut dev_null, b);

@@ -1080,10 +1080,15 @@ impl Component for Composer {
                     let mut guard = embedded_pty.lock().unwrap();
                     grid.clear_area(embedded_area, theme_default);
 
-                    grid.copy_area(guard.grid.buffer(), embedded_area, guard.grid.area());
-                    guard.set_terminal_size((embedded_area.width(), embedded_area.height()));
+                    for (y, (start, end)) in guard.grid.dirty_areas() {
+                        let area = guard.grid.area().nth_row(y).skip_cols(start).take_cols(end);
+                        let embedded_area =
+                            embedded_area.nth_row(y).skip_cols(start).take_cols(end);
+                        grid.copy_area(guard.grid.buffer(), embedded_area, area);
+                        context.dirty_areas.push_back(embedded_area);
+                    }
+                    guard.set_terminal_size(embedded_area.width(), embedded_area.height());
                     guard.grid.set_dirty(false);
-                    context.dirty_areas.push_back(embedded_area);
                     self.dirty = false;
                 } else {
                     let mut guard = embedded_pty.lock().unwrap();

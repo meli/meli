@@ -38,6 +38,8 @@
 //!
 //! To create a [`Terminal`], see [`create_pty`].
 
+// [ref:FIXME]: remove all `unsafe`
+
 use melib::text::wcwidth;
 use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
 
@@ -117,11 +119,13 @@ impl Terminal {
         }
     }
 
-    pub fn set_terminal_size(&mut self, new_val: (usize, usize)) {
-        self.grid.set_terminal_size(new_val);
+    pub fn set_terminal_size(&mut self, cols: usize, rows: usize) {
+        if !self.grid.set_terminal_size(cols, rows) {
+            return;
+        }
         let winsize = Winsize {
-            ws_row: <u16>::try_from(new_val.1).unwrap(),
-            ws_col: <u16>::try_from(new_val.0).unwrap(),
+            ws_row: <u16>::try_from(rows).unwrap_or(u16::MAX),
+            ws_col: <u16>::try_from(cols).unwrap_or(u16::MAX),
             ws_xpixel: 0,
             ws_ypixel: 0,
         };
@@ -275,11 +279,30 @@ impl EmbeddedGrid {
     #[inline]
     pub fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
+        self.buffer_mut().set_dirty(true);
     }
 
     #[inline]
     pub const fn is_dirty(&self) -> bool {
         self.dirty
+    }
+
+    pub fn dirty_areas(&mut self) -> SmallVec<[(usize, (usize, usize)); 2]> {
+        let mut retval = SmallVec::new();
+        let (cols, rows) = self.terminal_size;
+        let map = self.buffer().dirty_bitmap();
+        for y in 0..rows {
+            let mut segment = None;
+            for x in 0..cols {
+                if map.is_set(x, y) {
+                    segment.get_or_insert((x, x)).1 = x;
+                }
+            }
+            if let Some((start, end)) = segment {
+                retval.push((y, (start, end)));
+            }
+        }
+        retval
     }
 
     #[inline]
@@ -298,21 +321,23 @@ impl EmbeddedGrid {
         }
     }
 
-    pub fn set_terminal_size(&mut self, new_val: (usize, usize)) {
-        if new_val == self.terminal_size && self.initialized {
-            return;
+    pub fn set_terminal_size(&mut self, cols: usize, rows: usize) -> bool {
+        if (cols, rows) == self.terminal_size && self.initialized {
+            return false;
         }
-        if !self.alternate_screen.resize(new_val.0, new_val.1) {
-            return;
+        if !self.alternate_screen.resize(cols, rows) {
+            return false;
         }
-        _ = self.normal_screen.resize(new_val.0, new_val.1);
+        _ = self.normal_screen.resize(cols, rows);
         self.initialized = true;
         self.scroll_region.top = 0;
-        self.scroll_region.bottom = new_val.1.saturating_sub(1);
+        self.scroll_region.bottom = rows.saturating_sub(1);
 
-        self.terminal_size = new_val;
+        self.terminal_size = (cols, rows);
+
         self.cursor = (0, 0);
         self.wrap_next = false;
+        true
     }
 
     pub fn set_tab_width(&mut self, new_val: u8) {
@@ -432,6 +457,22 @@ impl EmbeddedGrid {
             }};
         }
 
+        macro_rules! set_dirty_cell {
+            () => {{
+                let (x, y) = *cursor;
+                screen.grid_mut().dirty_bitmap_mut().set(x, y);
+                *dirty = true;
+            }};
+            ($area:expr) => {{
+                for row in screen.grid().bounds_iter($area) {
+                    for (x, y) in row {
+                        screen.grid_mut().dirty_bitmap_mut().set(x, y);
+                    }
+                }
+                *dirty = true;
+            }};
+        }
+
         macro_rules! sgr {
             ($sgr:expr) => {{
                 let sgr: Sgr = $sgr;
@@ -547,7 +588,7 @@ impl EmbeddedGrid {
                         .set_bg(*bg_color)
                         .set_underline(*underline_color)
                         .set_attrs(*attrs);
-                    *dirty = true;
+                    set_dirty_cell!();
                 }
             }};
         }
@@ -574,10 +615,11 @@ impl EmbeddedGrid {
                     screen
                         .grid_mut()
                         .scroll_up(scroll_region, scroll_region.top, 1);
-                    *dirty = true;
                 } else {
                     cursor.1 += 1;
+                    set_dirty_cell!();
                 }
+                set_dirty_cell!();
                 *wrap_next = false;
                 *state = State::Normal;
             }
@@ -588,6 +630,7 @@ impl EmbeddedGrid {
                 for y in cursor.1..terminal_size.1 {
                     for x in cursor.0..terminal_size.0 {
                         screen.grid_mut()[(x, y)] = Cell::default();
+                        screen.grid_mut().dirty_bitmap_mut().set(x, y);
                     }
                 }
                 *dirty = true;
@@ -598,8 +641,9 @@ impl EmbeddedGrid {
                 //log::trace!("sending {}", EscCode::from((&(*state), byte)));
                 for x in cursor.0..terminal_size.0 {
                     screen.grid_mut()[(x, cursor.1)] = Cell::default();
+                    screen.grid_mut().dirty_bitmap_mut().set(x, cursor.1);
                 }
-                *dirty = true;
+                set_dirty_cell!();
                 *state = State::Normal;
             }
             (_, State::ExpectingControlChar) => {
@@ -628,7 +672,9 @@ impl EmbeddedGrid {
             /* Normal */
             (b'\r', State::Normal) => {
                 //log::trace!("carriage return x-> 0, cursor was: {:?}", cursor);
+                set_dirty_cell!();
                 cursor.0 = 0;
+                set_dirty_cell!();
                 *wrap_next = false;
                 //log::trace!("cursor became: {:?}", cursor);
             }
@@ -639,11 +685,12 @@ impl EmbeddedGrid {
                 if cursor.1 + 1 < terminal_size.1 || !is_alternate {
                     if cursor.1 == scroll_region.bottom && is_alternate {
                         screen.grid_mut().scroll_up(scroll_region, cursor.1, 1);
-                        *dirty = true;
                     } else {
                         increase_cursor_y!();
+                        set_dirty_cell!();
                     }
                 }
+                *dirty = true;
                 *wrap_next = false;
                 //log::trace!("cursor became: {:?}", cursor);
             }
@@ -654,7 +701,9 @@ impl EmbeddedGrid {
                 /* Backspace */
                 //log::trace!("backspace x-> x-1, cursor was: {:?}", cursor);
                 if cursor.0 > 0 {
+                    set_dirty_cell!();
                     cursor.0 -= 1;
+                    set_dirty_cell!();
                 }
                 //log::trace!("cursor became: {:?}", cursor);
             }
@@ -723,6 +772,7 @@ impl EmbeddedGrid {
 
                 *codepoints = CodepointBuf::None;
                 if *auto_wrap_mode && *wrap_next {
+                    set_dirty_cell!();
                     *wrap_next = false;
                     if cursor.1 == scroll_region.bottom {
                         screen
@@ -731,19 +781,24 @@ impl EmbeddedGrid {
                     } else {
                         cursor.1 += 1;
                     }
+                    set_dirty_cell!();
                     cursor.0 = 0;
+                    set_dirty_cell!();
                 }
 
                 if c == '\t' {
                     for _ in 0..*tab_width {
+                        set_dirty_cell!();
                         screen.grid_mut()[cursor_val!()]
                             .set_ch(' ')
                             .set_fg(*fg_color)
                             .set_bg(*bg_color)
                             .set_attrs(*attrs);
                         increase_cursor_x!();
+                        set_dirty_cell!();
                     }
                 } else {
+                    set_dirty_cell!();
                     screen.grid_mut()[cursor_val!()]
                         .set_ch(c)
                         .set_fg(*fg_color)
@@ -761,6 +816,7 @@ impl EmbeddedGrid {
                              * drawn over. Set it as empty to skip drawing it. */
                             for _ in 1..n {
                                 increase_cursor_x!();
+                                set_dirty_cell!();
                                 screen.grid_mut()[cursor_val!()]
                                     .set_empty(true)
                                     .set_fg(*fg_color)
@@ -771,13 +827,24 @@ impl EmbeddedGrid {
                         }
                     }
                 }
-                *dirty = true;
+                set_dirty_cell!();
                 increase_cursor_x!();
+                set_dirty_cell!();
             }
             (b'u', State::Csi) => {
                 /* restore cursor */
                 //log::trace!("restore cursor {}", EscCode::from((&(*state), byte)));
                 *show_cursor = true;
+                *prev_fg_color = Some(screen.grid()[cursor_val!()].fg());
+                *prev_bg_color = Some(screen.grid()[cursor_val!()].bg());
+                *prev_underline_color = Some(screen.grid()[cursor_val!()].underline());
+                *prev_attrs = Some(screen.grid()[cursor_val!()].attrs());
+                screen.grid_mut()[cursor_val!()]
+                    .set_fg(Color::Black)
+                    .set_bg(Color::White)
+                    .set_underline(Color::Default)
+                    .set_attrs(Attr::DEFAULT);
+                set_dirty_cell!();
                 *state = State::Normal;
             }
             (b'm', State::Csi) => {
@@ -791,13 +858,14 @@ impl EmbeddedGrid {
                     .set_fg(Color::Default)
                     .set_bg(Color::Default)
                     .set_attrs(Attr::DEFAULT);
-                *dirty = true;
+                set_dirty_cell!();
                 *state = State::Normal;
             }
             (b'C', State::Csi) => {
                 // ESC[C    CSI Cursor Forward one Time
                 //log::trace!("cursor forward one time, cursor was: {:?}", cursor);
                 cursor.0 = std::cmp::min(cursor.0 + 1, terminal_size.0.saturating_sub(1));
+                set_dirty_cell!();
                 *wrap_next = false;
                 //log::trace!("cursor became: {:?}", cursor);
                 *state = State::Normal;
@@ -819,19 +887,35 @@ impl EmbeddedGrid {
                     }
                     b"25" => {
                         *show_cursor = true;
-                        *prev_fg_color = Some(screen.grid_mut()[cursor_val!()].fg());
-                        *prev_bg_color = Some(screen.grid_mut()[cursor_val!()].bg());
-                        *prev_underline_color = Some(screen.grid_mut()[cursor_val!()].underline());
-                        *prev_attrs = Some(screen.grid_mut()[cursor_val!()].attrs());
+                        *prev_fg_color = Some(screen.grid()[cursor_val!()].fg());
+                        *prev_bg_color = Some(screen.grid()[cursor_val!()].bg());
+                        *prev_underline_color = Some(screen.grid()[cursor_val!()].underline());
+                        *prev_attrs = Some(screen.grid()[cursor_val!()].attrs());
                         screen.grid_mut()[cursor_val!()]
                             .set_fg(Color::Black)
                             .set_bg(Color::White)
                             .set_underline(Color::Default)
                             .set_attrs(Attr::DEFAULT);
-                        *dirty = true;
+                        set_dirty_cell!();
                     }
                     b"1047" | b"1049" => {
+                        set_dirty_cell!(screen.grid().area());
                         *screen_buffer = ScreenBuffer::Alternate;
+                    }
+                    b"1002" => {
+                        // Button-event tracking, ignore.
+                    }
+                    b"1004" => {
+                        // Set focus event mouse, ignore.
+                    }
+                    b"1005" => {
+                        // Set ext mode mouse, ignore.
+                    }
+                    b"1006" => {
+                        // Set sgr ext mode mouse, ignore.
+                    }
+                    b"2004" => {
+                        // Set bracketed pasting, ignore.
                     }
                     _ => {
                         log::trace!("unknown csi? {:?}", String::from_utf8_lossy(buf.as_slice()));
@@ -874,10 +958,26 @@ impl EmbeddedGrid {
                         } else {
                             screen.grid_mut()[cursor_val!()].set_attrs(*attrs);
                         }
-                        *dirty = true;
+                        set_dirty_cell!();
                     }
                     b"1047" | b"1049" => {
+                        set_dirty_cell!(screen.grid().area());
                         *screen_buffer = ScreenBuffer::Normal;
+                    }
+                    b"1002" => {
+                        // Button-event tracking, ignore.
+                    }
+                    b"1004" => {
+                        // Set focus event mouse, ignore.
+                    }
+                    b"1005" => {
+                        // Set ext mode mouse, ignore.
+                    }
+                    b"1006" => {
+                        // Set sgr ext mode mouse, ignore.
+                    }
+                    b"2004" => {
+                        // Set bracketed pasting, ignore.
                     }
                     _ => {
                         log::trace!(
@@ -900,14 +1000,12 @@ impl EmbeddedGrid {
                 /* Erase Below (default). */
 
                 let area = area!();
-                screen.grid_mut().clear_area(
-                    area.skip_rows(std::cmp::min(
-                        cursor.1 + 1 + scroll_region.top,
-                        terminal_size.1.saturating_sub(1),
-                    )),
-                    Default::default(),
-                );
-                *dirty = true;
+                let area = area.skip_rows(std::cmp::min(
+                    cursor.1 + 1 + scroll_region.top,
+                    terminal_size.1.saturating_sub(1),
+                ));
+                screen.grid_mut().clear_area(area, Default::default());
+                set_dirty_cell!(area);
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
             }
@@ -917,6 +1015,7 @@ impl EmbeddedGrid {
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
                 for x in cursor.0..terminal_size.0 {
                     screen.grid_mut()[(x, cursor.1)] = Cell::default();
+                    screen.grid_mut().dirty_bitmap_mut().set(x, cursor.1);
                 }
                 *dirty = true;
                 *state = State::Normal;
@@ -971,6 +1070,7 @@ impl EmbeddedGrid {
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
                 for x in cursor.0..terminal_size.0 {
                     screen.grid_mut()[(x, cursor.1)] = Cell::default();
+                    screen.grid_mut().dirty_bitmap_mut().set(x, cursor.1);
                 }
                 *dirty = true;
                 *state = State::Normal;
@@ -980,6 +1080,7 @@ impl EmbeddedGrid {
                 /* Erase to left (Default) */
                 for x in 0..=cursor.0 {
                     screen.grid_mut()[(x, cursor.1)] = Cell::default();
+                    screen.grid_mut().dirty_bitmap_mut().set(x, cursor.1);
                 }
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
                 *dirty = true;
@@ -991,16 +1092,15 @@ impl EmbeddedGrid {
                 for y in 0..terminal_size.1 {
                     for x in 0..terminal_size.0 {
                         screen.grid_mut()[(x, y)] = Cell::default();
+                        screen.grid_mut().dirty_bitmap_mut().set(x, y);
                     }
                 }
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
 
                 let area = area!();
-                screen.grid_mut().clear_area(
-                    area.take_cols(terminal_size.0).take_rows(terminal_size.1),
-                    Default::default(),
-                );
-                *dirty = true;
+                let area = area.take_cols(terminal_size.0).take_rows(terminal_size.1);
+                screen.grid_mut().clear_area(area, Default::default());
+                set_dirty_cell!(area);
                 *state = State::Normal;
             }
             (b'J', State::Csi1([ref buf])) if buf.as_ref() == b"0" => {
@@ -1008,15 +1108,13 @@ impl EmbeddedGrid {
                 /* Erase Below (default). */
 
                 let area = area!();
-                screen.grid_mut().clear_area(
-                    area.skip_rows(std::cmp::min(
-                        cursor.1 + 1 + scroll_region.top,
-                        terminal_size.1.saturating_sub(1),
-                    )),
-                    Default::default(),
-                );
+                let area = area.skip_rows(std::cmp::min(
+                    cursor.1 + 1 + scroll_region.top,
+                    terminal_size.1.saturating_sub(1),
+                ));
+                screen.grid_mut().clear_area(area, Default::default());
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
-                *dirty = true;
+                set_dirty_cell!(area);
                 *state = State::Normal;
             }
             (b'J', State::Csi1([ref buf])) if buf.as_ref() == b"1" => {
@@ -1024,12 +1122,10 @@ impl EmbeddedGrid {
                 /* Erase Above */
 
                 let area = area!();
-                screen.grid_mut().clear_area(
-                    area.take_rows(cursor.1.saturating_sub(1) + scroll_region.top),
-                    Default::default(),
-                );
+                let area = area.take_rows(cursor.1.saturating_sub(1) + scroll_region.top);
+                screen.grid_mut().clear_area(area, Default::default());
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
-                *dirty = true;
+                set_dirty_cell!(area);
                 *state = State::Normal;
             }
             (b'J', State::Csi1([ref buf])) if buf.as_ref() == b"2" => {
@@ -1039,14 +1135,18 @@ impl EmbeddedGrid {
                 let area = area!();
                 screen.grid_mut().clear_area(area, Default::default());
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
-                *dirty = true;
+                set_dirty_cell!(area);
                 *state = State::Normal;
             }
-            (b'X', State::Csi1([ref buf])) => {
+            (b'X', State::Csi1(_) | State::Csi) => {
                 /* Erase Ps Character(s) (default = 1) (ECH).. */
-                let ps = unsafe { std::str::from_utf8_unchecked(buf) }
-                    .parse::<usize>()
-                    .unwrap();
+                let ps = if let State::Csi1([ref buf]) = state {
+                    unsafe { std::str::from_utf8_unchecked(buf) }
+                        .parse::<usize>()
+                        .unwrap_or(1)
+                } else {
+                    1
+                };
 
                 let mut ctr = 0;
                 let (mut cur_x, mut cur_y) = cursor_val!();
@@ -1059,6 +1159,7 @@ impl EmbeddedGrid {
                         }
                     }
                     screen.grid_mut()[(cur_x, cur_y)] = Cell::default();
+                    screen.grid_mut().dirty_bitmap_mut().set(cur_x, cur_y);
                     cur_x += 1;
                     ctr += 1;
                 }
@@ -1130,10 +1231,15 @@ impl EmbeddedGrid {
                     for y in scroll_region.top..scroll_region.bottom {
                         for x in 0..terminal_size.1 {
                             screen.grid_mut()[(x, y)] = screen.grid()[(x, y + 1)];
+                            screen.grid_mut().dirty_bitmap_mut().set(x, y);
                         }
                     }
                     for x in 0..terminal_size.1 {
                         screen.grid_mut()[(x, scroll_region.bottom)] = Cell::default();
+                        screen
+                            .grid_mut()
+                            .dirty_bitmap_mut()
+                            .set(x, scroll_region.bottom);
                     }
                 } else if offset + cursor.1 < terminal_size.1 {
                     cursor.1 += offset;
@@ -1141,6 +1247,7 @@ impl EmbeddedGrid {
                 if scroll_region.top + cursor.1 >= terminal_size.1 {
                     cursor.1 = terminal_size.1.saturating_sub(1);
                 }
+                set_dirty_cell!();
                 *wrap_next = false;
                 //log::trace!("cursor became: {:?}", cursor);
                 *state = State::Normal;
@@ -1153,6 +1260,7 @@ impl EmbeddedGrid {
                 if cursor.0 >= offset {
                     cursor.0 -= offset;
                 }
+                set_dirty_cell!();
                 //log::trace!(
                 //   "ESC[ {} D cursor backwards cursor became: {:?}",
                 //    offset, cursor
@@ -1175,6 +1283,7 @@ impl EmbeddedGrid {
                     cursor.1 = terminal_size.1.saturating_sub(1);
                 }
                 cursor.0 = 0;
+                set_dirty_cell!();
                 *wrap_next = false;
                 //log::trace!("cursor became: {:?}", cursor);
                 *state = State::Normal;
@@ -1191,6 +1300,7 @@ impl EmbeddedGrid {
                 cursor.1 = cursor.1.saturating_sub(offset);
                 cursor.0 = 0;
                 *wrap_next = false;
+                set_dirty_cell!();
                 //log::trace!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
@@ -1214,6 +1324,7 @@ impl EmbeddedGrid {
                     //);
                 }
                 *wrap_next = false;
+                set_dirty_cell!();
                 //log::trace!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
@@ -1226,6 +1337,7 @@ impl EmbeddedGrid {
                 if cursor.0 + offset < terminal_size.0 {
                     cursor.0 += offset;
                 }
+                set_dirty_cell!();
                 //log::trace!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
@@ -1242,9 +1354,14 @@ impl EmbeddedGrid {
                 for i in 0..(terminal_size.0 - cursor.0 - offset) {
                     screen.grid_mut()[(cursor.0 + i, cursor.1)] =
                         screen.grid()[(cursor.0 + i + offset, cursor.1)];
+                    screen
+                        .grid_mut()
+                        .dirty_bitmap_mut()
+                        .set(cursor.0 + i, cursor.1);
                 }
                 for x in (terminal_size.0 - offset)..terminal_size.0 {
                     screen.grid_mut()[(x, cursor.1)].set_ch(' ');
+                    screen.grid_mut().dirty_bitmap_mut().set(x, cursor.1);
                 }
                 //log::trace!(
                 //    "Delete {} Character(s) with cursor at {:?}  ",
@@ -1271,6 +1388,7 @@ impl EmbeddedGrid {
                     cursor.1 = terminal_size.1.saturating_sub(1);
                 }
                 *wrap_next = false;
+                set_dirty_cell!();
                 //log::trace!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
@@ -1302,7 +1420,7 @@ impl EmbeddedGrid {
             {
                 *attrs &= !Attr::UNDERCURL;
                 screen.grid_mut()[cursor_val!()].set_attrs(*attrs);
-                *dirty = true;
+                set_dirty_cell!();
                 *state = State::Normal;
             }
             (b'm', State::Csi2([ref buf1, ref buf2]))
@@ -1320,7 +1438,7 @@ impl EmbeddedGrid {
                     *attrs |= Attr::UNDERCURL;
                 }
                 screen.grid_mut()[cursor_val!()].set_attrs(*attrs);
-                *dirty = true;
+                set_dirty_cell!();
                 *state = State::Normal;
             }
             (b'm', State::Csi2(ref buf)) => {
@@ -1347,7 +1465,7 @@ impl EmbeddedGrid {
                 // Window manipulation, skip it
                 *state = State::Normal;
             }
-            (b'H', State::Csi2(_)) | (b'H', State::Csi) => {
+            (b'H', State::Csi) => {
                 //Cursor Position [row;column] (default = [1,1]) (CUP).
                 let (orig_x, mut orig_y) = if let State::Csi2([ref y, ref x]) = state {
                     (
@@ -1370,8 +1488,72 @@ impl EmbeddedGrid {
                     (0, terminal_size.1.saturating_sub(1))
                 };
 
+                set_dirty_cell!();
                 cursor.0 = std::cmp::min(orig_x - 1, terminal_size.0.saturating_sub(1));
                 cursor.1 = std::cmp::max(min_y, std::cmp::min(max_y, orig_y - 1));
+                set_dirty_cell!();
+                *wrap_next = false;
+                *state = State::Normal;
+            }
+            (b'c', State::Csi) => {
+                // CSI Ps c  Send Device Attributes (Primary DA).
+                //             Ps = 0  or omitted
+                stdin.write_all(b"\x1b[?c").unwrap();
+                *state = State::Normal;
+            }
+            (b'c', State::Csi1(..)) => {
+                // CSI Ps c  Send Device Attributes (Primary DA).
+                stdin.write_all(b"\x1b[?c").unwrap();
+                *state = State::Normal;
+            }
+            (b'H', State::Csi1([ref y])) => {
+                //Cursor Position [row;1] (default = [1,1]) (CUP).
+                let (orig_x, mut orig_y) = (
+                    0,
+                    unsafe { std::str::from_utf8_unchecked(y) }
+                        .parse::<usize>()
+                        .unwrap_or(1)
+                        .saturating_sub(1),
+                );
+
+                let (min_y, max_y) = if *origin_mode {
+                    orig_y += scroll_region.top;
+                    (scroll_region.top, scroll_region.bottom)
+                } else {
+                    (0, terminal_size.1.saturating_sub(1))
+                };
+
+                set_dirty_cell!();
+                cursor.0 = std::cmp::min(orig_x, terminal_size.0.saturating_sub(1));
+                cursor.1 = std::cmp::max(min_y, std::cmp::min(max_y, orig_y));
+                set_dirty_cell!();
+                *wrap_next = false;
+                *state = State::Normal;
+            }
+            (b'H', State::Csi2([ref y, ref x])) => {
+                //Cursor Position [row;column] (default = [1,1]) (CUP).
+                let (orig_x, mut orig_y) = (
+                    unsafe { std::str::from_utf8_unchecked(x) }
+                        .parse::<usize>()
+                        .unwrap_or(1)
+                        .saturating_sub(1),
+                    unsafe { std::str::from_utf8_unchecked(y) }
+                        .parse::<usize>()
+                        .unwrap_or(1)
+                        .saturating_sub(1),
+                );
+
+                let (min_y, max_y) = if *origin_mode {
+                    orig_y += scroll_region.top;
+                    (scroll_region.top, scroll_region.bottom)
+                } else {
+                    (0, terminal_size.1.saturating_sub(1))
+                };
+
+                set_dirty_cell!();
+                cursor.0 = std::cmp::min(orig_x, terminal_size.0.saturating_sub(1));
+                cursor.1 = std::cmp::max(min_y, std::cmp::min(max_y, orig_y));
+                set_dirty_cell!();
                 *wrap_next = false;
 
                 //log::trace!("{}", EscCode::from((&(*state), byte)),);
@@ -1408,6 +1590,7 @@ impl EmbeddedGrid {
                     *cursor = (0, 0);
                     *wrap_next = false;
                 }
+                set_dirty_cell!();
                 //log::trace!("set scrolling region to {:?}", scroll_region);
                 *state = State::Normal;
             }
@@ -1433,7 +1616,7 @@ impl EmbeddedGrid {
                     Color::Default
                 };
                 screen.grid_mut()[cursor_val!()].set_fg(*fg_color);
-                *dirty = true;
+                set_dirty_cell!();
                 *state = State::Normal;
             }
             (b'm', State::Csi3([ref buf1, ref buf2, ref buf3]))
@@ -1449,7 +1632,7 @@ impl EmbeddedGrid {
                     Color::Default
                 };
                 screen.grid_mut()[cursor_val!()].set_bg(*bg_color);
-                *dirty = true;
+                set_dirty_cell!();
                 *state = State::Normal;
             }
             (b'm', State::Csi3([ref buf1, ref buf2, ref _buf3]))
@@ -1465,7 +1648,7 @@ impl EmbeddedGrid {
                 //    Color::Default
                 //};
                 //screen.grid_mut()[cursor_val!()].set_fg(*fg_color);
-                //*dirty = true;
+                //set_dirty_cell!();
                 *state = State::Normal;
             }
             (c, State::Csi3([_, _, ref mut buf])) if c.is_ascii_digit() => {
@@ -1537,7 +1720,7 @@ impl EmbeddedGrid {
                     _ => Color::Default,
                 };
                 screen.grid_mut()[cursor_val!()].set_fg(*fg_color);
-                *dirty = true;
+                set_dirty_cell!();
                 *state = State::Normal;
             }
             (
@@ -1556,7 +1739,7 @@ impl EmbeddedGrid {
                     _ => Color::Default,
                 };
                 screen.grid_mut()[cursor_val!()].set_bg(*bg_color);
-                *dirty = true;
+                set_dirty_cell!();
                 *state = State::Normal;
             }
             (
@@ -1576,7 +1759,7 @@ impl EmbeddedGrid {
                     _ => Color::Default,
                 };
                 screen.grid_mut()[cursor_val!()].set_underline(*underline_color);
-                *dirty = true;
+                set_dirty_cell!();
                 *state = State::Normal;
             }
             (
@@ -1595,7 +1778,7 @@ impl EmbeddedGrid {
                     _ => Color::Default,
                 };
                 screen.grid_mut()[cursor_val!()].set_fg(*fg_color);
-                *dirty = true;
+                set_dirty_cell!();
                 *state = State::Normal;
             }
             (
@@ -1614,7 +1797,7 @@ impl EmbeddedGrid {
                     _ => Color::Default,
                 };
                 screen.grid_mut()[cursor_val!()].set_bg(*bg_color);
-                *dirty = true;
+                set_dirty_cell!();
                 *state = State::Normal;
             }
             (
@@ -1634,7 +1817,7 @@ impl EmbeddedGrid {
                     _ => Color::Default,
                 };
                 screen.grid_mut()[cursor_val!()].set_underline(*underline_color);
-                *dirty = true;
+                set_dirty_cell!();
                 *state = State::Normal;
             }
             (b'q', State::Csi1([buf]))
@@ -1806,7 +1989,7 @@ impl EmbeddedGrid {
             }
             /* other stuff */
             (_, State::G0) => {
-                log::trace!("ignoring {}", EscCode::from((&(*state), byte)));
+                // log::trace!("ignoring {}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
             }
         }
