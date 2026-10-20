@@ -1134,7 +1134,9 @@ impl State {
                         None,
                         None,
                         crate::conf::theme_value(&self.context, "theme_default"),
-                    ),
+                    )
+                    .with_title(manpage.to_string())
+                    .with_show_scrollbar(true),
                 )))))),
                 Err(err) => self.context.replies.push_back(UIEvent::Notification {
                     title: None,

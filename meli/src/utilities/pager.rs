@@ -34,6 +34,7 @@ use crate::{
 /// scrolling etc.
 #[derive(Debug, Default)]
 pub struct Pager {
+    title: String,
     text: String,
     cursor: (usize, usize),
     reflow: Reflow,
@@ -65,6 +66,7 @@ pub struct Pager {
 impl Clone for Pager {
     fn clone(&self) -> Self {
         Self {
+            title: self.title.clone(),
             filter_job: None,
             text: self.text.clone(),
             cursor: self.cursor,
@@ -90,7 +92,15 @@ impl Clone for Pager {
 
 impl std::fmt::Display for Pager {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "pager")
+        write!(
+            f,
+            "{}",
+            if self.title.trim().is_empty() {
+                "pager"
+            } else {
+                &self.title
+            }
+        )
     }
 }
 
@@ -111,6 +121,16 @@ impl Pager {
         ret
     }
 
+    pub fn with_title(mut self, title: String) -> Self {
+        self.title = title;
+        self
+    }
+
+    pub fn with_show_scrollbar(mut self, new_val: bool) -> Self {
+        self.show_scrollbar = new_val;
+        self
+    }
+
     pub fn set_show_scrollbar(&mut self, new_val: bool) -> &mut Self {
         self.show_scrollbar = new_val;
         self
@@ -128,6 +148,11 @@ impl Pager {
 
     pub fn set_initialised(&mut self, new_val: bool) -> &mut Self {
         self.initialised = new_val;
+        self
+    }
+
+    pub fn set_title(&mut self, title: String) -> &mut Self {
+        self.title = title;
         self
     }
 
