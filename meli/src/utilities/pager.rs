@@ -965,6 +965,17 @@ impl Component for Pager {
                 return true;
             }
             UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["search"]) =>
+            {
+                context
+                    .replies
+                    .push_back(UIEvent::CmdInput(Key::Paste("search ".to_string())));
+                context
+                    .replies
+                    .push_back(UIEvent::ChangeMode(UIMode::Command));
+                return true;
+            }
+            UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::GENERAL]["next_search_result"])
                     && self.search.is_some() =>
             {

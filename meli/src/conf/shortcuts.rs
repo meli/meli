@@ -234,6 +234,7 @@ shortcut_key_values! { "general",
         info_message_next |> "Show next info message, if any." |> Key::Char('>'),
         info_message_previous |> "Show previous info message, if any." |> Key::Char('<'),
         focus_in_text_field |> "Focus on a text field." |> Key::Char('\n'),
+        search |> "Search within pager." |> Key::Char('/'),
         next_search_result |> "Scroll to next search result." |> Key::Char('n'),
         previous_search_result |> "Scroll to previous search result." |> Key::Char('N')
     }

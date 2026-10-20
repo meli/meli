@@ -1423,7 +1423,7 @@ impl Component for Tabbed {
             }
             UIEvent::Input(ref key)
                 if self.show_shortcuts
-                    && shortcut!(key == shortcuts[Shortcuts::LISTING]["search"]) =>
+                    && shortcut!(key == shortcuts[Shortcuts::GENERAL]["search"]) =>
             {
                 context
                     .replies
