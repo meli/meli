@@ -50,7 +50,10 @@ pub struct Opt {
     /// use specified configuration file
     #[structopt(short, long, parse(from_os_str))]
     pub config: Option<PathBuf>,
-
+    #[structopt(long)]
+    pub varlink: Option<String>,
+    #[structopt(long)]
+    pub varlink_replace: bool,
     #[structopt(subcommand)]
     pub subcommand: Option<SubCommand>,
 }

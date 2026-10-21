@@ -594,7 +594,7 @@ View envelope source in a pager: (toggles between raw and decoded source)
 Return to envelope_view if viewing raw source or attachment:
 .Shortcut r envelope_view return_to_normal_view
 .El
-.Sh COMPOSING
+.Sh COMPOSING: Sending e-mail
 To compose an e\-mail, you can either start with an empty draft by pressing
 .Shortcut m listing new_mail
 which opens a composer view in a new tab.
@@ -732,6 +732,54 @@ See
 for PGP configuration.
 .It Cm save\-draft
 saves a copy of the draft in the Draft folder
+.It Cm discard\-draft
+discards the draft and closes the tab without asking for confirmation
+.El
+.Ss Using meli as a mailto handler
+To use mailto links with
+.Nm
+you have these options:
+.Bl -tag -width 8n
+.It Issue a mailto command
+Enter
+.Cm mailto
+command in
+.Sy COMMAND
+mode.
+.It Use a wrapper script
+Launch a new
+.Nm
+instance with a script.
+In the
+.Sy meli
+repository under the
+.Pa contrib/
+directory you can find two example scripts that use
+.Xr expect 1
+to launch a new
+.Nm
+instance and type the
+.Cm mailto
+command automatically for you.
+.It Using a varlink socket for IPC
+By launching
+.Nm
+with the
+.Fl -varlink
+command-line flag, you will create a varlink server that can listen to requests via TCP or Unix socket.
+You can submit a
+.Cm mailto
+command and it will be handled by your already existing
+.Nm
+instance.
+Example:
+.Bd -literal
+varlinkctl call unix:/tmp/org.meli-email.meli org.meli-email.meli.Command '{"command":"mailto mailto:user@example.com"}'
+.Ed
+.Pp
+See
+.Xr meli 1
+for varlink IPC documentation.
 .El
 .\" [ref:TODO]: add contacts section
 .Sh THEMES

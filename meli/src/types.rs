@@ -44,7 +44,7 @@ use nix::{errno::Errno, unistd::Pid};
 
 use super::{
     command::Action,
-    jobs::{JobExecutor, JobId, TimerId},
+    jobs::{self, JobExecutor, JobId, TimerId},
     terminal::*,
 };
 use crate::components::{ComponentId, OverlayComponent, ScrollUpdate};
@@ -85,6 +85,7 @@ pub enum ThreadEvent {
     /// A thread has updated some of its information
     Pulse,
     JobFinished(JobId),
+    Ipc(jobs::JoinHandle<Result<()>>),
     /// Force app exit
     Quit,
 }

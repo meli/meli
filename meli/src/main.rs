@@ -54,6 +54,9 @@ fn run_app(mut opt: Opt) -> Result<()> {
     } else {
         None
     };
+    let varlink = opt.varlink.take();
+    let varlink_replace = opt.varlink_replace;
+
     if let Some(result) = opt.execute() {
         return result;
     }
@@ -102,6 +105,20 @@ fn run_app(mut opt: Opt) -> Result<()> {
         .enter_command_mode
         .clone();
     let quit_key: Key = state.context.settings.shortcuts.general.quit.clone();
+
+    let _varlink_server = if let Some(addr) = varlink {
+        let listener = crate::varlink::server::new_listener(&addr, varlink_replace)?;
+        log::trace!("varlink listening on {addr}");
+        let server =
+            crate::varlink::server::serve(listener, None, state.context.main_loop_handler.clone());
+        Some(state.context.main_loop_handler.job_executor.spawn(
+            "varlink-server".into(),
+            server,
+            crate::jobs::IsAsync::Async,
+        ))
+    } else {
+        None
+    };
 
     /* Keep track of the input mode. See UIMode for details */
     'main: loop {
@@ -218,13 +235,18 @@ fn run_app(mut opt: Opt) -> Result<()> {
                         ThreadEvent::JobFinished(id) => {
                             log::trace!("Job finished {}", id);
                             state.context.main_loop_handler.job_executor.set_job_finished(id);
-                            for account in state.context.accounts.values_mut() {
-                                if account.process_event(&id) {
-                                    break;
+                            if state.ipc_jobs.swap_remove(&id).is_none() {
+                                for account in state.context.accounts.values_mut() {
+                                    if account.process_event(&id) {
+                                        break;
+                                    }
                                 }
+                                state.rcv_event(UIEvent::StatusEvent(StatusEvent::JobFinished(id)));
                             }
-                            state.rcv_event(UIEvent::StatusEvent(StatusEvent::JobFinished(id)));
                         },
+                        ThreadEvent::Ipc(job) => {
+                            state.ipc_jobs.insert(job.job_id, job);
+                        }
                         ThreadEvent::Quit => {
                             drop(state);
                             break 'main;

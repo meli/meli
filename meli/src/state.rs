@@ -55,7 +55,7 @@ use smallvec::SmallVec;
 
 use super::*;
 use crate::{
-    jobs::JobExecutor,
+    jobs::{JobExecutor, JobId, JoinHandle},
     notifications::DisplayMessageBox,
     terminal::{get_events, Screen, Tty},
 };
@@ -374,6 +374,7 @@ pub struct State {
     child: Option<ForkedProcess>,
     pub mode: UIMode,
     overlay: IndexMap<ComponentId, Box<dyn OverlayComponent>>,
+    pub ipc_jobs: IndexMap<JobId, JoinHandle<Result<()>>>,
     components: IndexMap<ComponentId, Box<dyn Component>>,
     component_tree: IndexMap<ComponentId, ComponentPath>,
     pub context: Box<Context>,
@@ -579,6 +580,7 @@ impl State {
                 },
                 receiver,
             }),
+            ipc_jobs: IndexMap::default(),
         };
         if !s.context.settings.terminal.store_component_states() {
             for acc in s.context.accounts.values_mut() {

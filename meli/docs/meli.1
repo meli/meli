@@ -65,6 +65,10 @@ Show help message and exit.
 Show version and exit.
 .It Fl -config | c Ar path
 Start meli with given configuration file.
+.It Fl -varlink Ar varlink_addr
+Start a varlink server listener at given address.
+.It Fl -varlink-replace
+Replace existing varlink socket if it already exists and it's possible.
 .It Cm create-config Op Ar path
 Create configuration file in
 .Pa path
@@ -788,6 +792,37 @@ If no arguments are provided this is equivalent to the
 .Shortcut Ctrl-t general open_terminal
 shortcut.
 .El
+.Sh varlink IPC
+Pass a socket address with the
+.Fl -varlink
+command-line flag,
+.Pp
+Example values:
+.Bl -tag -compact -width 33n
+.It TCP socket
+.D1 tcp:127.0.0.1:12345
+.It UNIX socket
+.D1 unix:/run/org.meli-email.meli
+.It Unix abstract socket (Linux only)
+.D1 unix:@org.meli-email.meli
+.El
+.Pp
+Example usage with
+.Xr varlinkctl 1 Ns
+:
+.Bd -literal
+varlinkctl call unix:/tmp/org.meli-email.meli org.meli-email.meli.ServerVersion '{}'
+varlinkctl call unix:/tmp/org.meli-email.meli org.meli-email.meli.Command '{"command":"mailto mailto:user@example.com"}'
+varlinkctl call unix:/tmp/org.meli-email.meli org.meli-email.meli.Command '{"command":"refresh mynotmuchaccount INBOX"}'
+varlinkctl call unix:/tmp/org.meli-email.meli org.meli-email.meli.InputCharacter '{"character":"i"}'
+varlinkctl call unix:/tmp/org.meli-email.meli org.meli-email.meli.InputPaste '{"paste":"paste contents"}'
+varlinkctl call unix:/tmp/org.meli-email.meli org.meli-email.meli.InputKey '{"key":"Backspace"}'
+.Ed
+.Pp
+See the complete interface methods using the varlink client of your choice:
+.Bd -literal
+varlinkctl call unix:/tmp/org.meli-email.meli org.varlink.service.GetInterfaceDescription '{"interface":"org.meli-email.meli"}'
+.Ed
 .Sh EXIT STATUS
 .Nm
 exits with 0 on a successful run.

@@ -116,3 +116,5 @@ pub mod accounts;
 pub use self::accounts::Account;
 
 pub mod version_migrations;
+
+pub mod varlink;

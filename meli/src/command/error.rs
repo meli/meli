@@ -136,3 +136,9 @@ impl std::fmt::Display for CommandError {
 }
 
 impl std::error::Error for CommandError {}
+
+impl From<CommandError> for melib::Error {
+    fn from(err: CommandError) -> Self {
+        Self::new(err.to_string())
+    }
+}
