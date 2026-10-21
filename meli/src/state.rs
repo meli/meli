@@ -1500,6 +1500,7 @@ impl State {
                 }
                 // No owner, so set ourselves dirty.
                 self.screen.update_size();
+                self.render();
                 return;
             }
             _ => {}
