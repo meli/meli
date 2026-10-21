@@ -22,7 +22,7 @@
 #[cfg(target_os = "macos")]
 use std::os::fd::OwnedFd;
 use std::{
-    ffi::{CStr, CString, OsStr},
+    ffi::{CString, OsStr},
     mem::ManuallyDrop,
     os::{
         fd::AsFd as _,
@@ -77,13 +77,35 @@ ioctl_none_bad!(
 
 /// Create a new pseudoterminal (PTY) with given width, size and execute
 /// `command` in it.
-pub fn create_pty(width: usize, height: usize, command: &str) -> Result<Arc<Mutex<Terminal>>> {
-    let command_cstr = CString::new(command)
+pub fn create_pty(
+    width: usize,
+    height: usize,
+    command: Vec<String>,
+) -> Result<Arc<Mutex<Terminal>>> {
+    let Some(bin) = command.iter().map(String::as_str).next() else {
+        return Err(
+            Error::new("Cannot call create_pty() with empty command argument")
+                .set_kind(ErrorKind::ValueError),
+        );
+    };
+    let args = command.iter().skip(1).cloned().collect::<Vec<_>>();
+    let mut execv_args = vec![
+        "sh".to_owned(),
+        "-c".to_owned(),
+        format!("{} \"$@\"", bin),
+        bin.to_string(),
+    ];
+    execv_args.extend(args);
+    let execv_args = execv_args
+        .iter()
+        .map(String::as_str)
+        .map(CString::new)
+        .collect::<std::result::Result<Vec<_>, _>>()
         .chain_err_kind(ErrorKind::ValueError)
         .chain_err_summary(|| {
             format!(
-                "Could not convert command `{command}` into a C string; it should contain no NUL \
-                 bytes."
+                "Could not convert command `{command:?}` into a C string; it should contain no \
+                 NUL bytes."
             )
         })?;
 
@@ -152,7 +174,8 @@ pub fn create_pty(width: usize, height: usize, command: &str) -> Result<Arc<Mute
 
     let Some(shell_path) = shell_path else {
         return Err(Error::new(format!(
-            "Could not execute `{command}`: did not find the standard POSIX sh shell in PATH = {}",
+            "Could not execute `{command:?}`: did not find the standard POSIX sh shell in PATH = \
+             {}",
             String::from_utf8_lossy(&path_var)
         )));
     };
@@ -177,24 +200,23 @@ pub fn create_pty(width: usize, height: usize, command: &str) -> Result<Arc<Mute
             match unsafe { set_controlling_terminal(backend_fd.as_raw_fd()) } {
                 Ok(c) if c < 0 => {
                     log::error!(
-                        "Could not execute `{command}`: ioctl(fd, TIOCSCTTY, NULL) returned {c}",
+                        "Could not execute `{command:?}`: ioctl(fd, TIOCSCTTY, NULL) returned {c}",
                     );
                     std::process::exit(c);
                 }
                 Ok(_) => {}
                 Err(err) => {
                     log::error!(
-                        "Could not execute `{command}`: ioctl(fd, TIOCSCTTY, NULL) returned {err}",
+                        "Could not execute `{command:?}`: ioctl(fd, TIOCSCTTY, NULL) returned \
+                         {err}",
                     );
                     std::process::exit(-1);
                 }
             }
-            const SH: &CStr = c"sh";
-            const COMMAND_FLAG: &CStr = c"-c";
-            // nix::unistd::execv never fails, returns `Result<Infallible>` because it
+            // nix::unistd::execv never fails if the first argument exists, and we checked that
+            // earlier, returns `Result<Infallible>` because it
             // never returns.
-            nix::unistd::execv(&shell_path, &[SH, COMMAND_FLAG, &command_cstr])
-                .expect("Infallible");
+            nix::unistd::execv(&shell_path, &execv_args).expect("Infallible");
             // We are in a separate process, so doing exit(-1) here won't affect the parent
             // process.
             #[allow(unreachable_code)]
