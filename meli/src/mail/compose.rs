@@ -1006,6 +1006,138 @@ To: {}
             }
         }
     }
+
+    fn process_wait(
+        &mut self,
+        wait: &nix::Result<nix::sys::wait::WaitStatus>,
+        context: &mut Context,
+    ) -> bool {
+        match wait {
+            Err(Errno::ECHILD) => {
+                if let Some(EmbeddedPty {
+                    running: true,
+                    file,
+                    ..
+                }) = self.embedded_pty.take()
+                {
+                    self.update_from_file(&file, context);
+                }
+                self.mode = ViewMode::Edit;
+                self.set_dirty(true);
+                context
+                    .replies
+                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
+            }
+            Ok(WaitStatus::Exited(_, exit_code)) => {
+                let embedded_pty = self.embedded_pty.take().unwrap();
+                let mut stderr = vec![];
+                let stderr = std::io::Read::read_to_end(
+                    &mut std::io::BufReader::new(&mut embedded_pty.terminal.lock().unwrap().stderr),
+                    &mut stderr,
+                )
+                .map(|_| String::from_utf8_lossy(&stderr).into_owned());
+
+                if *exit_code != 0 {
+                    let body = match stderr {
+                        Ok(v) => format!("stderr: {v}").into(),
+                        Err(err) => format!("Could not read stderr pipe: {err}").into(),
+                    };
+                    context.replies.push_back(UIEvent::Notification {
+                        title: Some(
+                            format!("Subprocess has exited with exit code {exit_code}",).into(),
+                        ),
+                        source: None,
+                        body,
+                        kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
+                    });
+                } else if let EmbeddedPty {
+                    running: true,
+                    file,
+                    ..
+                } = embedded_pty
+                {
+                    self.update_from_file(&file, context);
+                }
+                self.mode = ViewMode::Edit;
+                self.set_dirty(true);
+                context
+                    .replies
+                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
+            }
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            Ok(WaitStatus::PtraceEvent(_, _, _)) | Ok(WaitStatus::PtraceSyscall(_)) => {
+                if let Some(EmbeddedPty {
+                    running: _,
+                    terminal,
+                    file,
+                }) = self.embedded_pty.take()
+                {
+                    self.embedded_pty = Some(EmbeddedPty {
+                        running: false,
+                        terminal,
+                        file,
+                    });
+                }
+                self.mode = ViewMode::Edit;
+                context
+                    .replies
+                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
+                self.set_dirty(true);
+                return true;
+            }
+            Ok(WaitStatus::Stopped(_, _)) => {
+                if let Some(EmbeddedPty {
+                    running: _,
+                    terminal,
+                    file,
+                }) = self.embedded_pty.take()
+                {
+                    self.embedded_pty = Some(EmbeddedPty {
+                        running: false,
+                        terminal,
+                        file,
+                    });
+                }
+                self.mode = ViewMode::Edit;
+                context
+                    .replies
+                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
+                self.set_dirty(true);
+                return true;
+            }
+            Ok(WaitStatus::Continued(_)) | Ok(WaitStatus::StillAlive) => {
+                self.set_dirty(true);
+                return true;
+            }
+            Ok(WaitStatus::Signaled(_, signal, _)) => {
+                context.replies.push_back(UIEvent::Notification {
+                    title: None,
+                    source: None,
+                    body: format!("Subprocess was killed by {signal} signal").into(),
+                    kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
+                });
+                self.embedded_pty = None;
+                self.mode = ViewMode::Edit;
+                context
+                    .replies
+                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
+            }
+            Err(err) => {
+                context.replies.push_back(UIEvent::Notification {
+                    title: Some("Embedded editor crashed.".into()),
+                    source: None,
+                    body: format!("Subprocess has exited with reason {err}").into(),
+                    kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
+                });
+                self.embedded_pty = None;
+                self.mode = ViewMode::Edit;
+                context
+                    .replies
+                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
+            }
+        }
+        false
+    }
 }
 
 impl Component for Composer {
@@ -1716,154 +1848,19 @@ impl Component for Composer {
                 if let Some(ref mut embedded) = self.embedded_pty {
                     let mut embedded_guard = embedded.lock().unwrap();
                     if embedded_guard.write_all(b).is_err() {
-                        match embedded_guard.is_active() {
-                            Err(Errno::ECHILD) => {
-                                drop(embedded_guard);
-                                if let Some(EmbeddedPty {
-                                    running: true,
-                                    file,
-                                    ..
-                                }) = self.embedded_pty.take()
-                                {
-                                    self.update_from_file(&file, context);
-                                }
-                                self.mode = ViewMode::Edit;
-                                self.set_dirty(true);
-                                context
-                                    .replies
-                                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
-                            }
-                            Ok(WaitStatus::Exited(_, exit_code)) => {
-                                drop(embedded_guard);
-                                let embedded_pty = self.embedded_pty.take().unwrap();
-                                let mut stderr = vec![];
-                                let stderr = std::io::Read::read_to_end(
-                                    &mut std::io::BufReader::new(
-                                        &mut embedded_pty.terminal.lock().unwrap().stderr,
-                                    ),
-                                    &mut stderr,
-                                )
-                                .map(|_| String::from_utf8_lossy(&stderr).into_owned());
-
-                                if exit_code != 0 {
-                                    let body = match stderr {
-                                        Ok(v) => format!("stderr: {v}").into(),
-                                        Err(err) => {
-                                            format!("Could not read stderr pipe: {err}").into()
-                                        }
-                                    };
-                                    context.replies.push_back(UIEvent::Notification {
-                                        title: Some(
-                                            format!(
-                                                "Subprocess has exited with exit code {exit_code}",
-                                            )
-                                            .into(),
-                                        ),
-                                        source: None,
-                                        body,
-                                        kind: Some(NotificationType::Error(
-                                            melib::error::ErrorKind::External,
-                                        )),
-                                    });
-                                } else if let EmbeddedPty {
-                                    running: true,
-                                    file,
-                                    ..
-                                } = embedded_pty
-                                {
-                                    self.update_from_file(&file, context);
-                                }
-                                self.mode = ViewMode::Edit;
-                                self.set_dirty(true);
-                                context
-                                    .replies
-                                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
-                            }
-                            #[cfg(any(target_os = "linux", target_os = "android"))]
-                            Ok(WaitStatus::PtraceEvent(_, _, _))
-                            | Ok(WaitStatus::PtraceSyscall(_)) => {
-                                drop(embedded_guard);
-                                if let Some(EmbeddedPty {
-                                    running: _,
-                                    terminal,
-                                    file,
-                                }) = self.embedded_pty.take()
-                                {
-                                    self.embedded_pty = Some(EmbeddedPty {
-                                        running: false,
-                                        terminal,
-                                        file,
-                                    });
-                                }
-                                self.mode = ViewMode::Edit;
-                                context
-                                    .replies
-                                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
-                                self.set_dirty(true);
-                                return true;
-                            }
-                            Ok(WaitStatus::Stopped(_, _)) => {
-                                drop(embedded_guard);
-                                if let Some(EmbeddedPty {
-                                    running: _,
-                                    terminal,
-                                    file,
-                                }) = self.embedded_pty.take()
-                                {
-                                    self.embedded_pty = Some(EmbeddedPty {
-                                        running: false,
-                                        terminal,
-                                        file,
-                                    });
-                                }
-                                self.mode = ViewMode::Edit;
-                                context
-                                    .replies
-                                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
-                                self.set_dirty(true);
-                                return true;
-                            }
-                            Ok(WaitStatus::Continued(_)) | Ok(WaitStatus::StillAlive) => {
-                                context
-                                    .replies
-                                    .push_back(UIEvent::EmbeddedInput((k.clone(), b.to_vec())));
-                                drop(embedded_guard);
-                                self.set_dirty(true);
-                                return true;
-                            }
-                            Ok(WaitStatus::Signaled(_, signal, _)) => {
-                                drop(embedded_guard);
-                                context.replies.push_back(UIEvent::Notification {
-                                    title: None,
-                                    source: None,
-                                    body: format!("Subprocess was killed by {signal} signal")
-                                        .into(),
-                                    kind: Some(NotificationType::Error(
-                                        melib::error::ErrorKind::External,
-                                    )),
-                                });
-                                self.embedded_pty = None;
-                                self.mode = ViewMode::Edit;
-                                context
-                                    .replies
-                                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
-                            }
-                            Err(err) => {
-                                context.replies.push_back(UIEvent::Notification {
-                                    title: Some("Embedded editor crashed.".into()),
-                                    source: None,
-                                    body: format!("Subprocess has exited with reason {err}").into(),
-                                    kind: Some(NotificationType::Error(
-                                        melib::error::ErrorKind::External,
-                                    )),
-                                });
-                                drop(embedded_guard);
-                                self.embedded_pty = None;
-                                self.mode = ViewMode::Edit;
-                                context
-                                    .replies
-                                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
-                            }
+                        let wait = embedded_guard.is_active();
+                        drop(embedded_guard);
+                        if matches!(
+                            wait,
+                            Ok(WaitStatus::Continued(_)) | Ok(WaitStatus::StillAlive)
+                        ) {
+                            context
+                                .replies
+                                .push_back(UIEvent::EmbeddedInput((k.clone(), b.to_vec())));
+                        }
+                        self.set_dirty(true);
+                        if self.process_wait(&wait, context) {
+                            return true;
                         }
                     }
                 }
@@ -2198,6 +2195,7 @@ impl Component for Composer {
                             context
                                 .replies
                                 .push_back(UIEvent::ChangeMode(UIMode::Embedded));
+                            let id = self.id();
                             context
                                 .replies
                                 .push_back(UIEvent::Fork(ForkedProcess::Embedded {
@@ -2210,6 +2208,13 @@ impl Component for Composer {
                                         .lock()
                                         .unwrap()
                                         .child_pid,
+                                    on_exit: OnExitNotifyFn(Box::new(move |wait_result| {
+                                        Some(UIEvent::IntraComm {
+                                            from: id,
+                                            to: id,
+                                            content: Box::new(wait_result),
+                                        })
+                                    })),
                                 }));
                             self.mode = ViewMode::EmbeddedPty;
                         }
@@ -2459,105 +2464,112 @@ impl Component for Composer {
                 to,
                 ref content,
             } if (from, to) == (self.id(), self.id()) => {
-                match content.downcast_ref::<ComposerMessage>().cloned() {
-                    None => {}
-                    Some(ComposerMessage::Editor(val)) => match val {
-                        Err(err) => {
-                            context.replies.push_back(UIEvent::Notification {
-                                title: Some(format!("Failed to execute editor: {err}").into()),
-                                source: None,
-                                body: err.to_string().into(),
-                                kind: Some(NotificationType::Error(
-                                    melib::error::ErrorKind::External,
-                                )),
-                            });
-                            self.set_dirty(true);
-                        }
-                        Ok(f) => {
-                            self.update_from_file(&f, context);
-                            self.set_dirty(true);
-                        }
-                    },
-                    Some(ComposerMessage::AddAttachment(val)) => match val {
-                        Err(err) => {
-                            context.replies.push_back(UIEvent::Notification {
-                                title: None,
-                                source: None,
-                                body: format!("could not execute pipe command: {err}").into(),
-                                kind: Some(NotificationType::Error(
-                                    melib::error::ErrorKind::External,
-                                )),
-                            });
-                            self.set_dirty(true);
-                        }
-                        Ok(f) => {
-                            let attachment =
-                                match melib::email::compose::attachment_from_file(&f.path()) {
-                                    Ok(a) => a,
-                                    Err(err) => {
-                                        context.replies.push_back(UIEvent::Notification {
-                                            title: Some("could not add attachment".into()),
-                                            source: None,
-                                            body: err.to_string().into(),
-                                            kind: Some(NotificationType::Error(
-                                                melib::error::ErrorKind::None,
-                                            )),
-                                        });
-                                        self.set_dirty(true);
-                                        return true;
-                                    }
-                                };
-                            self.draft.attachments_mut().push(attachment);
-                            self.has_changes = true;
-                            self.set_dirty(true);
-                        }
-                    },
-                    Some(ComposerMessage::FilePicker(output)) => match output {
-                        Err(err) => {
-                            context.replies.push_back(UIEvent::Notification {
-                                title: Some(format!("Failed to execute command: {err}").into()),
-                                source: None,
-                                body: err.to_string().into(),
-                                kind: Some(NotificationType::Error(
-                                    melib::error::ErrorKind::External,
-                                )),
-                            });
-                            self.set_dirty(true);
-                        }
-                        Ok(output) => {
-                            for path in output
-                                .stdout
-                                .split(|c| b"\0\t\n".contains(c))
-                                .filter(|p| !p.trim().is_empty())
-                            {
-                                match melib::email::compose::attachment_from_file(
-                                    &String::from_utf8_lossy(path).as_ref(),
-                                ) {
-                                    Ok(a) => {
-                                        self.draft.attachments_mut().push(a);
-                                        self.has_changes = true;
-                                    }
-                                    Err(err) => {
-                                        context.replies.push_back(UIEvent::Notification {
-                                            title: Some(
-                                                format!(
-                                                    "could not add attachment: {}",
-                                                    String::from_utf8_lossy(path)
-                                                )
-                                                .into(),
-                                            ),
-                                            source: None,
-                                            body: err.to_string().into(),
-                                            kind: Some(NotificationType::Error(
-                                                melib::error::ErrorKind::None,
-                                            )),
-                                        });
-                                    }
-                                };
+                if let Some(message) = content.downcast_ref().cloned() {
+                    match message {
+                        ComposerMessage::Editor(val) => match val {
+                            Err(err) => {
+                                context.replies.push_back(UIEvent::Notification {
+                                    title: Some(format!("Failed to execute editor: {err}").into()),
+                                    source: None,
+                                    body: err.to_string().into(),
+                                    kind: Some(NotificationType::Error(
+                                        melib::error::ErrorKind::External,
+                                    )),
+                                });
+                                self.set_dirty(true);
                             }
-                            self.set_dirty(true);
-                        }
-                    },
+                            Ok(f) => {
+                                self.update_from_file(&f, context);
+                                self.set_dirty(true);
+                            }
+                        },
+                        ComposerMessage::AddAttachment(val) => match val {
+                            Err(err) => {
+                                context.replies.push_back(UIEvent::Notification {
+                                    title: None,
+                                    source: None,
+                                    body: format!("could not execute pipe command: {err}").into(),
+                                    kind: Some(NotificationType::Error(
+                                        melib::error::ErrorKind::External,
+                                    )),
+                                });
+                                self.set_dirty(true);
+                            }
+                            Ok(f) => {
+                                let attachment =
+                                    match melib::email::compose::attachment_from_file(&f.path()) {
+                                        Ok(a) => a,
+                                        Err(err) => {
+                                            context.replies.push_back(UIEvent::Notification {
+                                                title: Some("could not add attachment".into()),
+                                                source: None,
+                                                body: err.to_string().into(),
+                                                kind: Some(NotificationType::Error(
+                                                    melib::error::ErrorKind::None,
+                                                )),
+                                            });
+                                            self.set_dirty(true);
+                                            return true;
+                                        }
+                                    };
+                                self.draft.attachments_mut().push(attachment);
+                                self.has_changes = true;
+                                self.set_dirty(true);
+                            }
+                        },
+                        ComposerMessage::FilePicker(output) => match output {
+                            Err(err) => {
+                                context.replies.push_back(UIEvent::Notification {
+                                    title: Some(format!("Failed to execute command: {err}").into()),
+                                    source: None,
+                                    body: err.to_string().into(),
+                                    kind: Some(NotificationType::Error(
+                                        melib::error::ErrorKind::External,
+                                    )),
+                                });
+                                self.set_dirty(true);
+                            }
+                            Ok(output) => {
+                                for path in output
+                                    .stdout
+                                    .split(|c| b"\0\t\n".contains(c))
+                                    .filter(|p| !p.trim().is_empty())
+                                {
+                                    match melib::email::compose::attachment_from_file(
+                                        &String::from_utf8_lossy(path).as_ref(),
+                                    ) {
+                                        Ok(a) => {
+                                            self.draft.attachments_mut().push(a);
+                                            self.has_changes = true;
+                                        }
+                                        Err(err) => {
+                                            context.replies.push_back(UIEvent::Notification {
+                                                title: Some(
+                                                    format!(
+                                                        "could not add attachment: {}",
+                                                        String::from_utf8_lossy(path)
+                                                    )
+                                                    .into(),
+                                                ),
+                                                source: None,
+                                                body: err.to_string().into(),
+                                                kind: Some(NotificationType::Error(
+                                                    melib::error::ErrorKind::None,
+                                                )),
+                                            });
+                                        }
+                                    };
+                                }
+                                self.set_dirty(true);
+                            }
+                        },
+                    }
+                }
+                if let Some(wait) = content.downcast_ref() {
+                    self.set_dirty(true);
+                    if self.process_wait(wait, context) {
+                        return true;
+                    }
                 }
                 return true;
             }

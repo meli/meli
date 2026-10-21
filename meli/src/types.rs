@@ -154,6 +154,7 @@ pub enum ForkedProcess {
         id: Cow<'static, str>,
         command: Option<Cow<'static, str>>,
         pid: Pid,
+        on_exit: OnExitNotifyFn,
     },
     Generic {
         id: Cow<'static, str>,
@@ -217,6 +218,7 @@ impl ForkedProcess {
                 ref id,
                 ref command,
                 ref pid,
+                on_exit: _,
             } => {
                 use nix::sys::signal::{kill, Signal};
                 match kill(*pid, Some(Signal::SIGTERM)) {
@@ -244,7 +246,7 @@ impl ForkedProcess {
     /// - `Ok(true)` if the child has exited.
     /// - `Ok(false)` if the child is still running.
     /// - an error value, otherwise.
-    pub fn try_wait(&mut self) -> Result<bool> {
+    pub fn try_wait(&mut self, event: &mut Option<UIEvent>) -> Result<bool> {
         match self {
             Self::Generic {
                 ref id,
@@ -281,9 +283,20 @@ impl ForkedProcess {
                 ref id,
                 ref command,
                 ref pid,
+                ref on_exit,
             } => {
                 use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
-                match waitpid(*pid, Some(WaitPidFlag::WNOHANG)) {
+
+                let result = waitpid(*pid, Some(WaitPidFlag::WNOHANG));
+                if !matches!(result, Err(Errno::EAGAIN))
+                    && matches!(
+                        result,
+                        Err(_) | Ok(WaitStatus::Exited(_, _)) | Ok(WaitStatus::Signaled(_, _, _))
+                    )
+                {
+                    *event = (on_exit.0)(result);
+                }
+                match result {
                     Err(Errno::ECHILD) => Ok(true),
                     Err(Errno::EAGAIN) => Ok(false),
                     Err(err) => Err(err).chain_err_details(|| {
@@ -497,6 +510,7 @@ declare_fn_newtype! {
     CallbackFn: Box<dyn FnOnce(&mut crate::Context) + Send + Sync + 'static>,
     ProcessResultFn: Box<dyn FnOnce(Result<std::process::Output>) -> Option<UIMessage> + Send + Sync + 'static>,
     SpawnInteractionFn: Box<dyn FnOnce(std::process::Child) -> Result<std::process::Child> + Send + Sync + 'static>,
+    OnExitNotifyFn: Box<dyn Fn(nix::Result<nix::sys::wait::WaitStatus>) -> Option<UIEvent> + Send + Sync + 'static>,
 }
 
 impl Default for SpawnInteractionFn {

@@ -408,7 +408,7 @@ impl Drop for State {
             .map(|(i, v)| (std::rc::Rc::new(i), v))
             .flat_map(|(i, v)| v.into_iter().map(move |v| (i.clone(), v)))
             .filter_map(|(id, mut child)| {
-                if let Err(err) = child.try_wait() {
+                if let Err(err) = child.try_wait(&mut None) {
                     Some((id, child, err))
                 } else {
                     None
@@ -1651,28 +1651,34 @@ impl State {
     /// - `Some(false)` if the child is still running.
     pub fn try_wait_on_main_child(&mut self) -> Option<bool> {
         let child = self.child.as_mut()?;
-        // // The check on whether the embedded process is alive is done on input, so
-        // // forward an input of '\0' to get the embedded terminal to notice its
-        // // child is dead.
-        // // [ref:TODO]: replace with a "PidExited" event or similar.
-        // self.rcv_event(UIEvent::EmbeddedInput((Key::Null, vec![0])));
-        match child.try_wait() {
+        let mut event = None;
+        let ret = match child.try_wait(&mut event) {
             Ok(false) => Some(false),
             ws @ Ok(true) | ws @ Err(_) => {
                 if let Err(err) = ws {
-                    log::error!("{}", err);
-                }
-                if matches!(child, ForkedProcess::Embedded { .. }) {
-                    // The check on whether the embedded process is alive is done on input, so
-                    // forward an input of '\0' to get the embedded terminal to notice its
-                    // child is dead.
-                    // [ref:TODO]: replace with a "PidExited" event or similar.
-                    self.rcv_event(UIEvent::EmbeddedInput((Key::Null, vec![0])));
+                    if event.is_none() {
+                        self.context.replies.push_back(UIEvent::Notification {
+                            title: Some("Could not wait on child process".into()),
+                            source: None,
+                            body: format!(
+                                "{id} pid {pid}: {err}",
+                                id = child.id(),
+                                pid = child.pid()
+                            )
+                            .into(),
+                            kind: Some(NotificationType::Error(err.kind)),
+                        });
+                    }
                 }
                 self.child = None;
                 Some(true)
             }
+        };
+        if let Some(event) = event {
+            self.context.replies.push_back(event);
         }
+
+        ret
     }
 
     /// Try waiting on `self.child` or `self.context`'s children.
@@ -1681,7 +1687,8 @@ impl State {
             for (id, children) in self.context.children.iter_mut() {
                 let mut i = 0;
                 while i < children.len() {
-                    match children[i].try_wait() {
+                    let mut event = None;
+                    match children[i].try_wait(&mut event) {
                         Ok(false) => {
                             i += 1;
                         }
@@ -1697,6 +1704,9 @@ impl State {
                             log::trace!("Child {}:{:?} has exited.", id, children[i]);
                             children.remove(i);
                         }
+                    }
+                    if let Some(event) = event {
+                        self.context.replies.push_back(event);
                     }
                 }
             }
