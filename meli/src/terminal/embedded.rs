@@ -24,9 +24,12 @@ use std::os::fd::OwnedFd;
 use std::{
     ffi::{CStr, CString, OsStr},
     mem::ManuallyDrop,
-    os::unix::{
-        ffi::OsStrExt as _,
-        io::{AsRawFd as _, FromRawFd as _, IntoRawFd as _},
+    os::{
+        fd::AsFd as _,
+        unix::{
+            ffi::OsStrExt as _,
+            io::{AsRawFd as _, FromRawFd as _, IntoRawFd as _},
+        },
     },
 };
 
@@ -47,7 +50,7 @@ pub mod terminal;
 use std::path::Path;
 use std::{
     convert::TryFrom as _,
-    io::{Read as _, Write as _},
+    io::{pipe, Read as _, Write as _},
     sync::{Arc, Mutex},
 };
 
@@ -154,6 +157,10 @@ pub fn create_pty(width: usize, height: usize, command: &str) -> Result<Arc<Mute
         )));
     };
 
+    // [ref:TODO]: stderr pipe can fill up and block the subprocess. Move it into a background job
+    // that waits on the pipe to read it as soon as anything is available.
+    let (stderr, stderr_writer) = pipe()?;
+
     let child_pid = match unsafe { nix::unistd::fork()? } {
         nix::unistd::ForkResult::Child => {
             #[cfg(not(target_os = "macos"))]
@@ -163,7 +170,8 @@ pub fn create_pty(width: usize, height: usize, command: &str) -> Result<Arc<Mute
             // assign stdin, stdout, stderr to the pty
             nix::unistd::dup2_stdin(&backend_fd).expect("could not dup2 STDIN");
             nix::unistd::dup2_stdout(&backend_fd).expect("could not dup2 STDOUT");
-            nix::unistd::dup2_stderr(&backend_fd).expect("could not dup2 STDERR");
+            nix::unistd::dup2_stderr(stderr_writer.as_fd()).expect("could not dup2 STDERR");
+            _ = stderr_writer.into_raw_fd();
             // Become session leader
             nix::unistd::setsid().expect("Forked terminal process could not become session leader");
             match unsafe { set_controlling_terminal(backend_fd.as_raw_fd()) } {
@@ -197,7 +205,7 @@ pub fn create_pty(width: usize, height: usize, command: &str) -> Result<Arc<Mute
 
     let stdin = unsafe { std::fs::File::from_raw_fd(frontend_fd.as_raw_fd()) };
     // We will let the spawned thread close frontend_fd
-    let mut embedded_pty = Terminal::new(ManuallyDrop::new(stdin), child_pid);
+    let mut embedded_pty = Terminal::new(ManuallyDrop::new(stdin), stderr, child_pid);
     embedded_pty.set_terminal_size(width, height);
     let pty = Arc::new(Mutex::new(embedded_pty));
     let pty_ = pty.clone();

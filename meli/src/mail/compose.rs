@@ -1735,24 +1735,41 @@ impl Component for Composer {
                             }
                             Ok(WaitStatus::Exited(_, exit_code)) => {
                                 drop(embedded_guard);
-                                let embedded_pty = self.embedded_pty.take();
+                                let embedded_pty = self.embedded_pty.take().unwrap();
+                                let mut stderr = vec![];
+                                let stderr = std::io::Read::read_to_end(
+                                    &mut std::io::BufReader::new(
+                                        &mut embedded_pty.terminal.lock().unwrap().stderr,
+                                    ),
+                                    &mut stderr,
+                                )
+                                .map(|_| String::from_utf8_lossy(&stderr).into_owned());
+
                                 if exit_code != 0 {
+                                    let body = match stderr {
+                                        Ok(v) => format!("stderr: {v}").into(),
+                                        Err(err) => {
+                                            format!("Could not read stderr pipe: {err}").into()
+                                        }
+                                    };
                                     context.replies.push_back(UIEvent::Notification {
-                                        title: None,
+                                        title: Some(
+                                            format!(
+                                                "Subprocess has exited with exit code {exit_code}",
+                                            )
+                                            .into(),
+                                        ),
                                         source: None,
-                                        body: format!(
-                                            "Subprocess has exited with exit code {exit_code}",
-                                        )
-                                        .into(),
+                                        body,
                                         kind: Some(NotificationType::Error(
                                             melib::error::ErrorKind::External,
                                         )),
                                     });
-                                } else if let Some(EmbeddedPty {
+                                } else if let EmbeddedPty {
                                     running: true,
                                     file,
                                     ..
-                                }) = embedded_pty
+                                } = embedded_pty
                                 {
                                     self.update_from_file(&file, context);
                                 }
@@ -2061,21 +2078,31 @@ impl Component for Composer {
                 if self.embedded_pty.is_some()
                     && self.embedded_pty.as_ref().unwrap().is_stopped() =>
             {
-                if let Some(EmbeddedPty {
+                let EmbeddedPty {
                     running: _,
                     terminal,
                     file,
-                }) = self.embedded_pty.take()
-                {
-                    let guard = terminal.lock().unwrap();
+                } = self.embedded_pty.take().unwrap();
+                let stderr = {
+                    let mut guard = terminal.lock().unwrap();
                     guard.wake_up();
                     guard.terminate();
-                    self.update_from_file(&file, context);
-                }
+                    let mut stderr = vec![];
+                    std::io::Read::read_to_end(
+                        &mut std::io::BufReader::new(&mut guard.stderr),
+                        &mut stderr,
+                    )
+                    .map(|_| String::from_utf8_lossy(&stderr).into_owned())
+                };
+                self.update_from_file(&file, context);
+                let body = match stderr {
+                    Ok(v) => format!("stderr: {v}").into(),
+                    Err(err) => format!("Could not read stderr pipe: {err}").into(),
+                };
                 context.replies.push_back(UIEvent::Notification {
-                    title: None,
+                    title: Some("Subprocess was killed by SIGTERM signal".into()),
                     source: None,
-                    body: "Subprocess was killed by SIGTERM signal".into(),
+                    body,
                     kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
                 });
                 self.mode = ViewMode::Edit;

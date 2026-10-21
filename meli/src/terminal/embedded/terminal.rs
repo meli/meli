@@ -40,6 +40,8 @@
 
 // [ref:FIXME]: remove all `unsafe`
 
+use std::{fs::File, io::PipeReader, mem::ManuallyDrop};
+
 use melib::text::wcwidth;
 use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
 
@@ -69,7 +71,8 @@ enum CodepointBuf {
 #[derive(Debug)]
 pub struct Terminal {
     pub grid: EmbeddedGrid,
-    stdin: std::mem::ManuallyDrop<std::fs::File>,
+    stdin: ManuallyDrop<File>,
+    pub stderr: PipeReader,
     /// Pid of the embedded process
     pub child_pid: nix::unistd::Pid,
 }
@@ -111,10 +114,11 @@ impl std::io::Write for Terminal {
 }
 
 impl Terminal {
-    pub fn new(stdin: std::mem::ManuallyDrop<std::fs::File>, child_pid: nix::unistd::Pid) -> Self {
+    pub fn new(stdin: ManuallyDrop<File>, stderr: PipeReader, child_pid: nix::unistd::Pid) -> Self {
         Self {
             grid: EmbeddedGrid::new(),
             stdin,
+            stderr,
             child_pid,
         }
     }
@@ -156,6 +160,7 @@ impl Terminal {
         let Self {
             ref mut grid,
             ref mut stdin,
+            stderr: _,
             child_pid: _,
         } = self;
         grid.process_byte(stdin, byte);
