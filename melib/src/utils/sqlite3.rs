@@ -191,7 +191,7 @@ impl DatabaseDescription {
 
                 Ok(Some(conn))
             };
-            inner_fn().unwrap();
+            inner_fn()?;
             match inner_fn() {
                 Ok(None) => continue,
                 Ok(Some(conn)) => return Ok(conn),
