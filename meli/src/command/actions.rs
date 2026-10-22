@@ -136,7 +136,7 @@ impl MailingListAction {
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum ViewAction {
-    Pipe(String, Vec<String>),
+    Pipe { command: String },
     Filter(Option<String>),
     SaveAttachment(usize, FileAction),
     PipeAttachment { index: usize, command: String },

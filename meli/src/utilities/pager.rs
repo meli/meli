@@ -863,44 +863,61 @@ impl Component for Pager {
             UIEvent::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
             }
-            UIEvent::Action(View(Pipe(ref bin, ref args))) => {
+            UIEvent::Action(View(Pipe { ref command })) => {
                 use std::{
                     io::Write as _,
                     process::{Command, Stdio},
                 };
-                let mut command_obj = match Command::new(bin)
-                    .args(args.as_slice())
-                    .stdin(Stdio::piped())
-                    .stdout(Stdio::piped())
-                    .spawn()
-                {
-                    Ok(o) => o,
-                    Err(err) => {
-                        context.replies.push_back(UIEvent::Notification {
-                            title: Some(format!("Could not pipe to {bin}").into()),
-                            source: None,
-                            body: err.to_string().into(),
-                            kind: Some(NotificationType::Error(err.kind().into())),
-                        });
-                        return true;
-                    }
-                };
-                let stdin = command_obj.stdin.as_mut().expect("failed to open stdin");
-                stdin
-                    .write_all(self.text.as_bytes())
-                    .expect("Failed to write to stdin");
+                let command = command.clone();
+                let bytes = self.text.clone().into_bytes();
+                context
+                    .replies
+                    .push_back(UIEvent::ProcessRequest(Box::new(ProcessRequest {
+                        owner: Some(self.id),
+                        command: {
+                            let mut cmd = Command::new("sh");
+                            cmd.args(["-c", &command])
+                                .stdin(Stdio::piped())
+                                .stdout(Stdio::inherit())
+                                .stderr(Stdio::inherit());
+                            cmd
+                        },
+                        spawn: Some(SpawnInteractionFn(Box::new({
+                            let command = command.clone();
+                            move |mut child| {
+                                let Some(mut stdin) = child.stdin.take() else {
+                                    let _ = child.wait();
+                                    return Err(Error::new(format!(
+                                        "Could not open standard input of {command}"
+                                    ))
+                                    .set_kind(ErrorKind::External));
+                                };
+                                stdin.write_all(&bytes).chain_err_summary(|| {
+                                    format!("Could not write to standard input of {command}")
+                                })?;
 
-                context.replies.push_back(UIEvent::Notification {
-                    title: None,
-                    source: None,
-                    body: format!(
-                        "Pager text piped to '{bin}{}{}'",
-                        if args.is_empty() { "" } else { " " },
-                        args.join(" ")
-                    )
-                    .into(),
-                    kind: Some(NotificationType::Info),
-                });
+                                Ok(child)
+                            }
+                        }))),
+                        result_cb: ProcessResultFn(Box::new(move |output| {
+                            if let Err(err) = output {
+                                Some(Box::new(UIEvent::Notification {
+                                    title: None,
+                                    source: None,
+                                    body: format!("{command} exited with error: {err}").into(),
+                                    kind: Some(NotificationType::Info),
+                                }))
+                            } else {
+                                Some(Box::new(UIEvent::Notification {
+                                    title: None,
+                                    source: None,
+                                    body: format!("Pager text piped to {command}",).into(),
+                                    kind: Some(NotificationType::Info),
+                                }))
+                            }
+                        })),
+                        temporary_files: vec![],
+                    })));
                 return true;
             }
             ev if matches!(ev, UIEvent::Action(View(Filter(None))))

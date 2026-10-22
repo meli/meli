@@ -31,7 +31,6 @@ use nom::{
     character::complete::{digit1, not_line_ending},
     combinator::{map, map_res},
     error::{Error as NomError, FromExternalError as _},
-    multi::separated_list1,
     sequence::{pair, preceded, separated_pair},
     IResult,
 };
@@ -660,40 +659,21 @@ pub(super) fn mailto(input: &str) -> IResult<&str, Result<Action, CommandError>>
     Ok((input, Ok(Compose(Mailto(val)))))
 }
 
-pub(super) fn pipe<'a>(input: &'a str) -> IResult<&'a str, Result<Action, CommandError>> {
-    alt((
-        |input: &'a str| -> IResult<&'a str, Result<Action, CommandError>> {
-            let mut check = arg_init! { min_arg:1, max_arg: { u8::MAX }, pipe};
-            let (input, _) = tag("pipe")(input.trim())?;
-            arg_chk!(start check, input);
-            let (input, _) = is_a(" ")(input)?;
-            arg_chk!(inc check, input);
-            let (input, bin) = quoted_argument(input)?;
-            let (input, _) = is_a(" ")(input)?;
-            arg_chk!(inc check, input);
-            let (input, args) = separated_list1(is_a(" "), quoted_argument)(input)?;
-            arg_chk!(finish check, input);
-            let (input, _) = eof(input)?;
-            Ok((
-                input,
-                Ok(View(Pipe(
-                    bin.to_string(),
-                    args.into_iter().map(String::from).collect::<Vec<String>>(),
-                ))),
-            ))
-        },
-        |input: &'a str| -> IResult<&'a str, Result<Action, CommandError>> {
-            let mut check = arg_init! { min_arg:1, max_arg: 1, pipe};
-            let (input, _) = tag("pipe")(input.trim())?;
-            arg_chk!(start check, input);
-            let (input, _) = is_a(" ")(input)?;
-            arg_chk!(inc check, input);
-            let (input, bin) = quoted_argument(input.trim())?;
-            arg_chk!(finish check, input);
-            let (input, _) = eof(input)?;
-            Ok((input, Ok(View(Pipe(bin.to_string(), Vec::new())))))
-        },
-    ))(input)
+pub(super) fn pipe(input: &str) -> IResult<&str, Result<Action, CommandError>> {
+    let mut check = arg_init! { min_arg:1, max_arg: { u8::MAX }, pipe};
+    let (input, _) = tag("pipe")(input.trim())?;
+    arg_chk!(start check, input);
+    let (input, _) = is_a(" ")(input)?;
+    arg_chk!(inc check, input);
+    let (input, command) = not_line_ending(input)?;
+    let (input, _) = eof(input)?;
+    arg_chk!(finish check, input);
+    Ok((
+        input,
+        Ok(View(Pipe {
+            command: command.to_string(),
+        })),
+    ))
 }
 
 pub(super) fn filter(input: &'_ str) -> IResult<&'_ str, Result<Action, CommandError>> {
