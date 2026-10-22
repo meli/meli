@@ -320,10 +320,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
 
     fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = ShortcutMaps::default();
-        map.insert(
-            Shortcuts::GENERAL,
-            context.settings.shortcuts.general.key_values(),
-        );
+        map.insert(Shortcuts::GENERAL, context.general_shortcuts(None));
         map
     }
 
@@ -507,10 +504,7 @@ impl Component for UIConfirmationDialog {
 
     fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = ShortcutMaps::default();
-        map.insert(
-            Shortcuts::GENERAL,
-            context.settings.shortcuts.general.key_values(),
-        );
+        map.insert(Shortcuts::GENERAL, context.general_shortcuts(None));
         map
     }
 
@@ -631,7 +625,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static 
     }
 
     fn initialize(&mut self, context: &Context) {
-        let shortcuts = context.settings.shortcuts.general.key_values();
+        let shortcuts = context.general_shortcuts(None);
         let navigate_help_string = format!(
             "Navigate options with {} to go down, {} to go up, select with {}, cancel with {}",
             shortcuts["scroll_down"],

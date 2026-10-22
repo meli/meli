@@ -114,12 +114,8 @@ impl MailViewState {
             Some(ViewSettings {
                 theme_default: crate::conf::theme_value(context, "theme_default"),
                 body_theme: crate::conf::theme_value(context, "mail.view.body"),
-                env_view_shortcuts: mailbox_settings!(
-                    context[&coordinates.0][&coordinates.1]
-                        .shortcuts
-                        .envelope_view
-                )
-                .key_values(),
+                env_view_shortcuts: context
+                    .envelope_view_shortcuts(Some((coordinates.0, Some(coordinates.1)))),
                 pager_filter: mailbox_settings!(
                     context[&coordinates.0][&coordinates.1].pager.filter
                 )

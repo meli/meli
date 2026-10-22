@@ -20,10 +20,13 @@
  */
 
 use indexmap::IndexMap;
-use melib::{Error, Result};
+use melib::{
+    backends::{AccountHash, MailboxHash},
+    Error, Result,
+};
 
 use super::DotAddressable;
-use crate::terminal::Key;
+use crate::{state::Context, terminal::Key};
 
 #[macro_export]
 macro_rules! shortcut {
@@ -52,6 +55,37 @@ pub struct Shortcuts {
     pub thread_view: ThreadViewShortcuts,
     #[serde(default)]
     pub pager: PagerShortcuts,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ShortcutsOverride {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub general: Option<GeneralShortcutsOverride>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub listing: Option<ListingShortcutsOverride>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub composing: Option<ComposingShortcutsOverride>,
+    #[serde(
+        default,
+        alias = "contact-list",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub contact_list: Option<ContactListShortcutsOverride>,
+    #[serde(
+        default,
+        alias = "envelope-view",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub envelope_view: Option<EnvelopeViewShortcutsOverride>,
+    #[serde(
+        default,
+        alias = "thread-view",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub thread_view: Option<ThreadViewShortcutsOverride>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pager: Option<PagerShortcutsOverride>,
 }
 
 impl Shortcuts {
@@ -101,7 +135,7 @@ macro_rules! shortcut_key_values {
     (
         $cname:expr,
         $(#[$outer:meta])*
-        pub struct $name:ident { $($fname:ident |> $fdesc:literal |> $default:expr),*$(,)? }) => {
+        pub struct $name:ident ($overridename:ident) { $($fname:ident |> $fdesc:literal |> $default:expr),*$(,)? }) => {
         $(#[$outer])*
         #[derive(Debug, Clone, Serialize, Deserialize)]
         #[serde(default)]
@@ -153,12 +187,23 @@ macro_rules! shortcut_key_values {
                 }
             }
         }
+
+        #[derive(Debug, Default, Serialize, Deserialize, Clone)]
+        #[serde(deny_unknown_fields)]
+        pub struct $overridename {
+            #[serde(default)]
+            pub commands: Vec<CommandShortcut>,
+            $(
+                #[serde(default, skip_serializing_if = "Option::is_none")]
+                pub $fname : Option<Key>
+            ),*
+        }
     }
 }
 
 shortcut_key_values! { "listing",
     /// Shortcut listing for a mail listing.
-    pub struct ListingShortcuts {
+    pub struct ListingShortcuts (ListingShortcutsOverride) {
         scroll_up |> "Scroll up list." |> Key::Char('k'),
         scroll_down |> "Scroll down list." |> Key::Char('j'),
         new_mail |> "Start new mail draft in new tab." |>  Key::Char('m'),
@@ -193,7 +238,7 @@ shortcut_key_values! { "listing",
 
 shortcut_key_values! { "contact-list",
     /// Shortcut listing for the contact list view
-    pub struct ContactListShortcuts {
+    pub struct ContactListShortcuts (ContactListShortcutsOverride) {
         create_contact |> "Create new contact." |> Key::Char('c'),
         edit_contact |> "Edit contact under cursor." |> Key::Char('e'),
         export_contact |> "Export contact under cursor to .vcf." |> Key::Char('E'),
@@ -205,7 +250,7 @@ shortcut_key_values! { "contact-list",
 
 shortcut_key_values! { "pager",
     /// Shortcut listing for the text pager
-    pub struct PagerShortcuts {
+    pub struct PagerShortcuts (PagerShortcutsOverride) {
         page_down |> "Go to next pager page." |>  Key::PageDown,
         page_up |> "Go to previous pager page." |>  Key::PageUp,
         scroll_down |> "Scroll down pager." |> Key::Char('j'),
@@ -215,7 +260,7 @@ shortcut_key_values! { "pager",
 }
 
 shortcut_key_values! { "general",
-    pub struct GeneralShortcuts {
+    pub struct GeneralShortcuts (GeneralShortcutsOverride) {
         toggle_help |> "Toggle help and shortcuts view." |> Key::Char('?'),
         enter_command_mode |> "Enter COMMAND mode." |> Key::Char(':'),
         open_terminal |> "Opens $SHELL in current directory." |> Key::Ctrl('t'),
@@ -241,7 +286,7 @@ shortcut_key_values! { "general",
 }
 
 shortcut_key_values! { "composing",
-    pub struct ComposingShortcuts {
+    pub struct ComposingShortcuts (ComposingShortcutsOverride) {
         edit |> "Edit." |> Key::Char('e'),
         send_mail |> "Deliver draft to mailer." |> Key::Char('s'),
         scroll_up |> "Change field focus." |> Key::Char('k'),
@@ -252,7 +297,7 @@ shortcut_key_values! { "composing",
 }
 
 shortcut_key_values! { "envelope-view",
-    pub struct EnvelopeViewShortcuts {
+    pub struct EnvelopeViewShortcuts (EnvelopeViewShortcutsOverride) {
         add_addresses_to_contacts |> "Select addresses from envelope to add to contacts." |> Key::Char('c'),
         edit |> "Open envelope in composer." |> Key::Char('e'),
         go_to_url |> "Go to url of given index." |> Key::Char('g'),
@@ -272,7 +317,7 @@ shortcut_key_values! { "envelope-view",
 }
 
 shortcut_key_values! { "thread-view",
-    pub struct ThreadViewShortcuts {
+    pub struct ThreadViewShortcuts (ThreadViewShortcutsOverride) {
         scroll_up |> "Scroll up list." |> Key::Char('k'),
         scroll_down |> "Scroll down list." |> Key::Char('j'),
         collapse_subtree |> "collapse thread branches." |> Key::Char('h'),
@@ -282,5 +327,622 @@ shortcut_key_values! { "thread-view",
         toggle_mailview |> "toggle mail view visibility." |> Key::Char('p'),
         toggle_threadview |> "toggle thread view visibility." |> Key::Char('t'),
         toggle_layout |> "Toggle between horizontal and vertical layout." |> Key::Char(' ')
+    }
+}
+
+macro_rules! get_commands {
+    ($(pub fn $fn:ident: $field:ident -> Vec<CommandShortcut>;)*) => {
+        $(pub fn $fn(
+            &self,
+            account_hash: Option<(AccountHash, Option<MailboxHash>)>,
+        ) -> Vec<CommandShortcut> {
+            let (account_override, mailbox_override): (
+                Option<&[CommandShortcut]>,
+                Option<&[CommandShortcut]>,
+            ) = account_hash
+                .and_then(|(a, m)| Some((self.accounts.get(&a)?, m)))
+                .map(|(a, m)| {
+                    let mailbox_override = m
+                        .and_then(|h| a.mailbox_entries.get(&h))
+                        .and_then(|m| m.conf.conf_override.shortcuts.$field.as_ref())
+                        .map(|m| m.commands.as_slice());
+                    (
+                        a.settings
+                            .conf_override
+                            .shortcuts
+                            .$field
+                            .as_ref()
+                            .map(|s| s.commands.as_slice()),
+                        mailbox_override,
+                    )
+                })
+                .unwrap_or((None, None));
+
+            let mut commands = self.settings.shortcuts.$field.commands.clone();
+
+            if let Some(account_override) = account_override {
+                for cmd in account_override {
+                    if let Some(pos) = commands.iter().position(|c| c.shortcut == cmd.shortcut) {
+                        commands[pos] = cmd.clone();
+                    }
+                }
+            }
+            if let Some(mailbox_override) = mailbox_override {
+                for cmd in mailbox_override {
+                    if let Some(pos) = commands.iter().position(|c| c.shortcut == cmd.shortcut) {
+                        commands[pos] = cmd.clone();
+                    }
+                }
+            }
+            commands
+        })*
+    };
+}
+
+impl Context {
+    pub fn general_shortcuts(
+        &self,
+        account_hash: Option<(AccountHash, Option<MailboxHash>)>,
+    ) -> IndexMap<&'static str, Key> {
+        // compile-time assert we don't forget to change any field here
+        const _: GeneralShortcuts = GeneralShortcuts {
+            commands: Vec::new(),
+            toggle_help: Key::Null,
+            enter_command_mode: Key::Null,
+            open_terminal: Key::Null,
+            quit: Key::Null,
+            go_to_tab: Key::Null,
+            next_tab: Key::Null,
+            scroll_right: Key::Null,
+            scroll_left: Key::Null,
+            scroll_up: Key::Null,
+            scroll_down: Key::Null,
+            next_page: Key::Null,
+            prev_page: Key::Null,
+            home_page: Key::Null,
+            end_page: Key::Null,
+            open_entry: Key::Null,
+            info_message_next: Key::Null,
+            info_message_previous: Key::Null,
+            focus_in_text_field: Key::Null,
+            search: Key::Null,
+            next_search_result: Key::Null,
+            previous_search_result: Key::Null,
+        };
+        let (account_override, mailbox_override): (
+            Option<&GeneralShortcutsOverride>,
+            Option<&GeneralShortcutsOverride>,
+        ) = account_hash
+            .and_then(|(a, m)| Some((self.accounts.get(&a)?, m)))
+            .map(|(a, m)| {
+                let mailbox_override = m
+                    .and_then(|h| a.mailbox_entries.get(&h))
+                    .and_then(|m| m.conf.conf_override.shortcuts.general.as_ref());
+                (
+                    a.settings.conf_override.shortcuts.general.as_ref(),
+                    mailbox_override,
+                )
+            })
+            .unwrap_or((None, None));
+
+        let mut general_shortcuts = self.settings.shortcuts.general.key_values();
+
+        macro_rules! check_override {
+            ($fname:ident) => {{
+                    if let Some(account_override) = account_override {
+                        if let Some(key) = &account_override.$fname {
+                            if key != general_shortcuts[stringify! { $fname }] {
+                                general_shortcuts[stringify! { $fname }] = key.clone();
+                            }
+                        }
+                    }
+                    if let Some(mailbox_override) = mailbox_override {
+                        if let Some(key) = &mailbox_override.$fname {
+                            if key != general_shortcuts[stringify! { $fname }] {
+                                general_shortcuts[stringify! { $fname }] = key.clone();
+                            }
+                        }
+                    }
+            }};
+            ($($fname:ident),*$(,)?) => {{
+                $(
+                    check_override!($fname);
+                )*
+            }};
+        }
+
+        check_override! {
+            toggle_help,
+            enter_command_mode,
+            open_terminal,
+            quit,
+            go_to_tab,
+            next_tab,
+            scroll_right,
+            scroll_left,
+            scroll_up,
+            scroll_down,
+            next_page,
+            prev_page,
+            home_page,
+            end_page,
+            open_entry,
+            info_message_next,
+            info_message_previous,
+            focus_in_text_field,
+            search,
+            next_search_result,
+            previous_search_result,
+        };
+
+        general_shortcuts
+    }
+
+    pub fn listing_shortcuts(
+        &self,
+        account_hash: Option<(AccountHash, Option<MailboxHash>)>,
+    ) -> IndexMap<&'static str, Key> {
+        // compile-time assert we don't forget to change any field here
+        const _: ListingShortcuts = ListingShortcuts {
+            commands: Vec::new(),
+            scroll_up: Key::Null,
+            scroll_down: Key::Null,
+            new_mail: Key::Null,
+            next_account: Key::Null,
+            next_mailbox: Key::Null,
+            next_page: Key::Null,
+            prev_account: Key::Null,
+            prev_mailbox: Key::Null,
+            open_mailbox: Key::Null,
+            toggle_mailbox_collapse: Key::Null,
+            prev_page: Key::Null,
+            search: Key::Null,
+            refresh: Key::Null,
+            set_seen: Key::Null,
+            send_to_trash: Key::Null,
+            union_modifier: Key::Null,
+            diff_modifier: Key::Null,
+            intersection_modifier: Key::Null,
+            select_entry: Key::Null,
+            select_motion: Key::Null,
+            increase_sidebar: Key::Null,
+            decrease_sidebar: Key::Null,
+            next_entry: Key::Null,
+            previous_entry: Key::Null,
+            toggle_menu_visibility: Key::Null,
+            focus_left: Key::Null,
+            focus_right: Key::Null,
+            exit_entry: Key::Null,
+            open_entry: Key::Null,
+        };
+        let (account_override, mailbox_override): (
+            Option<&ListingShortcutsOverride>,
+            Option<&ListingShortcutsOverride>,
+        ) = account_hash
+            .and_then(|(a, m)| Some((self.accounts.get(&a)?, m)))
+            .map(|(a, m)| {
+                let mailbox_override = m
+                    .and_then(|h| a.mailbox_entries.get(&h))
+                    .and_then(|m| m.conf.conf_override.shortcuts.listing.as_ref());
+                (
+                    a.settings.conf_override.shortcuts.listing.as_ref(),
+                    mailbox_override,
+                )
+            })
+            .unwrap_or((None, None));
+
+        let mut listing_shortcuts = self.settings.shortcuts.listing.key_values();
+
+        macro_rules! check_override {
+            ($($fname:ident),*$(,)?) => {{
+                $(
+                    if let Some(account_override) = account_override {
+                        if let Some(key) = &account_override.$fname {
+                            if key != listing_shortcuts[stringify! { $fname }] {
+                                listing_shortcuts[stringify! { $fname }] = key.clone();
+                            }
+                        }
+                    }
+                    if let Some(mailbox_override) = mailbox_override {
+                        if let Some(key) = &mailbox_override.$fname {
+                            if key != listing_shortcuts[stringify! { $fname }] {
+                                listing_shortcuts[stringify! { $fname }] = key.clone();
+                            }
+                        }
+                    }
+                )*
+            }};
+        }
+
+        check_override! {
+            scroll_up,
+            scroll_down,
+            new_mail,
+            next_account,
+            next_mailbox,
+            next_page,
+            prev_account,
+            prev_mailbox,
+            open_mailbox,
+            toggle_mailbox_collapse,
+            prev_page,
+            search,
+            refresh,
+            set_seen,
+            send_to_trash,
+            union_modifier,
+            diff_modifier,
+            intersection_modifier,
+            select_entry,
+            select_motion,
+            increase_sidebar,
+            decrease_sidebar,
+            next_entry,
+            previous_entry,
+            toggle_menu_visibility,
+            focus_left,
+            focus_right,
+            exit_entry,
+            open_entry,
+        };
+
+        listing_shortcuts
+    }
+
+    pub fn composing_shortcuts(
+        &self,
+        account_hash: Option<(AccountHash, Option<MailboxHash>)>,
+    ) -> IndexMap<&'static str, Key> {
+        // compile-time assert we don't forget to change any field here
+        const _: ComposingShortcuts = ComposingShortcuts {
+            commands: Vec::new(),
+            edit: Key::Null,
+            send_mail: Key::Null,
+            scroll_up: Key::Null,
+            scroll_down: Key::Null,
+            reset_date: Key::Null,
+            reset_body: Key::Null,
+        };
+        let (account_override, mailbox_override): (
+            Option<&ComposingShortcutsOverride>,
+            Option<&ComposingShortcutsOverride>,
+        ) = account_hash
+            .and_then(|(a, m)| Some((self.accounts.get(&a)?, m)))
+            .map(|(a, m)| {
+                let mailbox_override = m
+                    .and_then(|h| a.mailbox_entries.get(&h))
+                    .and_then(|m| m.conf.conf_override.shortcuts.composing.as_ref());
+                (
+                    a.settings.conf_override.shortcuts.composing.as_ref(),
+                    mailbox_override,
+                )
+            })
+            .unwrap_or((None, None));
+
+        let mut composing_shortcuts = self.settings.shortcuts.composing.key_values();
+
+        macro_rules! check_override {
+            ($($fname:ident),*$(,)?) => {{
+                $(
+                    if let Some(account_override) = account_override {
+                        if let Some(key) = &account_override.$fname {
+                            if key != composing_shortcuts[stringify! { $fname }] {
+                                composing_shortcuts[stringify! { $fname }] = key.clone();
+                            }
+                        }
+                    }
+                    if let Some(mailbox_override) = mailbox_override {
+                        if let Some(key) = &mailbox_override.$fname {
+                            if key != composing_shortcuts[stringify! { $fname }] {
+                                composing_shortcuts[stringify! { $fname }] = key.clone();
+                            }
+                        }
+                    }
+                )*
+            }};
+        }
+
+        check_override! {
+            edit,
+            send_mail,
+            scroll_up,
+            scroll_down,
+            reset_date,
+            reset_body,
+        };
+
+        composing_shortcuts
+    }
+
+    pub fn contact_list_shortcuts(
+        &self,
+        account_hash: Option<(AccountHash, Option<MailboxHash>)>,
+    ) -> IndexMap<&'static str, Key> {
+        // compile-time assert we don't forget to change any field here
+        const _: ContactListShortcuts = ContactListShortcuts {
+            commands: Vec::new(),
+            create_contact: Key::Null,
+            edit_contact: Key::Null,
+            export_contact: Key::Null,
+            import_contact: Key::Null,
+            delete_contact: Key::Null,
+            mail_contact: Key::Null,
+        };
+        let (account_override, mailbox_override): (
+            Option<&ContactListShortcutsOverride>,
+            Option<&ContactListShortcutsOverride>,
+        ) = account_hash
+            .and_then(|(a, m)| Some((self.accounts.get(&a)?, m)))
+            .map(|(a, m)| {
+                let mailbox_override = m
+                    .and_then(|h| a.mailbox_entries.get(&h))
+                    .and_then(|m| m.conf.conf_override.shortcuts.contact_list.as_ref());
+                (
+                    a.settings.conf_override.shortcuts.contact_list.as_ref(),
+                    mailbox_override,
+                )
+            })
+            .unwrap_or((None, None));
+
+        let mut contact_list_shortcuts = self.settings.shortcuts.contact_list.key_values();
+
+        macro_rules! check_override {
+            ($($fname:ident),*$(,)?) => {{
+                $(
+                    if let Some(account_override) = account_override {
+                        if let Some(key) = &account_override.$fname {
+                            if key != contact_list_shortcuts[stringify! { $fname }] {
+                                contact_list_shortcuts[stringify! { $fname }] = key.clone();
+                            }
+                        }
+                    }
+                    if let Some(mailbox_override) = mailbox_override {
+                        if let Some(key) = &mailbox_override.$fname {
+                            if key != contact_list_shortcuts[stringify! { $fname }] {
+                                contact_list_shortcuts[stringify! { $fname }] = key.clone();
+                            }
+                        }
+                    }
+                )*
+            }};
+        }
+
+        check_override! {
+            create_contact,
+            edit_contact,
+            export_contact,
+            import_contact,
+            delete_contact,
+            mail_contact,
+        };
+
+        contact_list_shortcuts
+    }
+
+    pub fn envelope_view_shortcuts(
+        &self,
+        account_hash: Option<(AccountHash, Option<MailboxHash>)>,
+    ) -> IndexMap<&'static str, Key> {
+        // compile-time assert we don't forget to change any field here
+        const _: EnvelopeViewShortcuts = EnvelopeViewShortcuts {
+            commands: Vec::new(),
+            add_addresses_to_contacts: Key::Null,
+            edit: Key::Null,
+            go_to_url: Key::Null,
+            open_attachment: Key::Null,
+            open_mailcap: Key::Null,
+            open_html: Key::Null,
+            reply: Key::Null,
+            reply_to_author: Key::Null,
+            reply_to_all: Key::Null,
+            forward: Key::Null,
+            return_to_normal_view: Key::Null,
+            toggle_expand_headers: Key::Null,
+            toggle_url_mode: Key::Null,
+            view_raw_source: Key::Null,
+            change_charset: Key::Null,
+        };
+        let (account_override, mailbox_override): (
+            Option<&EnvelopeViewShortcutsOverride>,
+            Option<&EnvelopeViewShortcutsOverride>,
+        ) = account_hash
+            .and_then(|(a, m)| Some((self.accounts.get(&a)?, m)))
+            .map(|(a, m)| {
+                let mailbox_override = m
+                    .and_then(|h| a.mailbox_entries.get(&h))
+                    .and_then(|m| m.conf.conf_override.shortcuts.envelope_view.as_ref());
+                (
+                    a.settings.conf_override.shortcuts.envelope_view.as_ref(),
+                    mailbox_override,
+                )
+            })
+            .unwrap_or((None, None));
+
+        let mut envelope_view_shortcuts = self.settings.shortcuts.envelope_view.key_values();
+
+        macro_rules! check_override {
+            ($($fname:ident),*$(,)?) => {{
+                $(
+                    if let Some(account_override) = account_override {
+                        if let Some(key) = &account_override.$fname {
+                            if key != envelope_view_shortcuts[stringify! { $fname }] {
+                                envelope_view_shortcuts[stringify! { $fname }] = key.clone();
+                            }
+                        }
+                    }
+                    if let Some(mailbox_override) = mailbox_override {
+                        if let Some(key) = &mailbox_override.$fname {
+                            if key != envelope_view_shortcuts[stringify! { $fname }] {
+                                envelope_view_shortcuts[stringify! { $fname }] = key.clone();
+                            }
+                        }
+                    }
+                )*
+            }};
+        }
+
+        check_override! {
+            add_addresses_to_contacts,
+            edit,
+            go_to_url,
+            open_attachment,
+            open_mailcap,
+            open_html,
+            reply,
+            reply_to_author,
+            reply_to_all,
+            forward,
+            return_to_normal_view,
+            toggle_expand_headers,
+            toggle_url_mode,
+            view_raw_source,
+            change_charset,
+        };
+
+        envelope_view_shortcuts
+    }
+
+    pub fn thread_view_shortcuts(
+        &self,
+        account_hash: Option<(AccountHash, Option<MailboxHash>)>,
+    ) -> IndexMap<&'static str, Key> {
+        // compile-time assert we don't forget to change any field here
+        const _: ThreadViewShortcuts = ThreadViewShortcuts {
+            commands: Vec::new(),
+            scroll_up: Key::Null,
+            scroll_down: Key::Null,
+            collapse_subtree: Key::Null,
+            next_page: Key::Null,
+            prev_page: Key::Null,
+            reverse_thread_order: Key::Null,
+            toggle_mailview: Key::Null,
+            toggle_threadview: Key::Null,
+            toggle_layout: Key::Null,
+        };
+        let (account_override, mailbox_override): (
+            Option<&ThreadViewShortcutsOverride>,
+            Option<&ThreadViewShortcutsOverride>,
+        ) = account_hash
+            .and_then(|(a, m)| Some((self.accounts.get(&a)?, m)))
+            .map(|(a, m)| {
+                let mailbox_override = m
+                    .and_then(|h| a.mailbox_entries.get(&h))
+                    .and_then(|m| m.conf.conf_override.shortcuts.thread_view.as_ref());
+                (
+                    a.settings.conf_override.shortcuts.thread_view.as_ref(),
+                    mailbox_override,
+                )
+            })
+            .unwrap_or((None, None));
+
+        let mut thread_view_shortcuts = self.settings.shortcuts.thread_view.key_values();
+
+        macro_rules! check_override {
+            ($($fname:ident),*$(,)?) => {{
+                $(
+                    if let Some(account_override) = account_override {
+                        if let Some(key) = &account_override.$fname {
+                            if key != thread_view_shortcuts[stringify! { $fname }] {
+                                thread_view_shortcuts[stringify! { $fname }] = key.clone();
+                            }
+                        }
+                    }
+                    if let Some(mailbox_override) = mailbox_override {
+                        if let Some(key) = &mailbox_override.$fname {
+                            if key != thread_view_shortcuts[stringify! { $fname }] {
+                                thread_view_shortcuts[stringify! { $fname }] = key.clone();
+                            }
+                        }
+                    }
+                )*
+            }};
+        }
+
+        check_override! {
+            scroll_up,
+            scroll_down,
+            collapse_subtree,
+            next_page,
+            prev_page,
+            reverse_thread_order,
+            toggle_mailview,
+            toggle_threadview,
+            toggle_layout,
+        };
+
+        thread_view_shortcuts
+    }
+
+    pub fn pager_shortcuts(
+        &self,
+        account_hash: Option<(AccountHash, Option<MailboxHash>)>,
+    ) -> IndexMap<&'static str, Key> {
+        // compile-time assert we don't forget to change any field here
+        const _: PagerShortcuts = PagerShortcuts {
+            commands: Vec::new(),
+            page_down: Key::Null,
+            page_up: Key::Null,
+            scroll_down: Key::Null,
+            scroll_up: Key::Null,
+            select_filter: Key::Null,
+        };
+        let (account_override, mailbox_override): (
+            Option<&PagerShortcutsOverride>,
+            Option<&PagerShortcutsOverride>,
+        ) = account_hash
+            .and_then(|(a, m)| Some((self.accounts.get(&a)?, m)))
+            .map(|(a, m)| {
+                let mailbox_override = m
+                    .and_then(|h| a.mailbox_entries.get(&h))
+                    .and_then(|m| m.conf.conf_override.shortcuts.pager.as_ref());
+                (
+                    a.settings.conf_override.shortcuts.pager.as_ref(),
+                    mailbox_override,
+                )
+            })
+            .unwrap_or((None, None));
+
+        let mut pager_shortcuts = self.settings.shortcuts.pager.key_values();
+
+        macro_rules! check_override {
+            ($($fname:ident),*$(,)?) => {{
+                $(
+                    if let Some(account_override) = account_override {
+                        if let Some(key) = &account_override.$fname {
+                            if key != pager_shortcuts[stringify! { $fname }] {
+                                pager_shortcuts[stringify! { $fname }] = key.clone();
+                            }
+                        }
+                    }
+                    if let Some(mailbox_override) = mailbox_override {
+                        if let Some(key) = &mailbox_override.$fname {
+                            if key != pager_shortcuts[stringify! { $fname }] {
+                                pager_shortcuts[stringify! { $fname }] = key.clone();
+                            }
+                        }
+                    }
+                )*
+            }};
+        }
+
+        check_override! {
+        page_down,
+        page_up,
+        scroll_down,
+        scroll_up,
+        select_filter,
+        };
+
+        pager_shortcuts
+    }
+
+    get_commands! {
+        pub fn general_commands: general -> Vec<CommandShortcut>;
+        pub fn listing_commands: listing -> Vec<CommandShortcut>;
+        pub fn composing_commands: composing -> Vec<CommandShortcut>;
+        pub fn envelope_view_commands: envelope_view -> Vec<CommandShortcut>;
+        pub fn contact_list_commands: contact_list -> Vec<CommandShortcut>;
+        pub fn thread_view_commands: thread_view -> Vec<CommandShortcut>;
+        pub fn pager_commands: pager -> Vec<CommandShortcut>;
     }
 }

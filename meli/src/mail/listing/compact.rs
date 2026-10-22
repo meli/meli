@@ -2026,9 +2026,10 @@ impl Component for CompactListing {
     fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = ShortcutMaps::default();
 
+        let (account_hash, mailbox_hash) = self.coordinates();
         map.insert(
             Shortcuts::LISTING,
-            context.settings.shortcuts.listing.key_values(),
+            context.listing_shortcuts(Some((account_hash, Some(mailbox_hash)))),
         );
 
         map

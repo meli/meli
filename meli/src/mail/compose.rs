@@ -707,8 +707,7 @@ To: {}
         let theme_default = crate::conf::theme_value(context, "theme_default");
         let highlight_attr = crate::conf::theme_value(context, "highlight");
         grid.clear_area(area, theme_default);
-        let our_map: ShortcutMap =
-            account_settings!(context[&self.account_hash].shortcuts.composing).key_values();
+        let our_map: ShortcutMap = context.composing_shortcuts(Some((self.account_hash, None)));
         let mut shortcuts: ShortcutMaps = Default::default();
         shortcuts.insert(Shortcuts::COMPOSING, our_map);
         let edit_shortcut = &shortcuts[Shortcuts::COMPOSING]["edit"];
@@ -1177,8 +1176,7 @@ impl Component for Composer {
         if self.dirty {
             grid.clear_area(area.skip_rows(1), theme_default);
             grid.clear_area(area.nth_row(0), highlight_attr);
-            let our_map: ShortcutMap =
-                account_settings!(context[&self.account_hash].shortcuts.composing).key_values();
+            let our_map: ShortcutMap = context.composing_shortcuts(Some((self.account_hash, None)));
             let mut shortcuts: ShortcutMaps = Default::default();
             shortcuts.insert(Shortcuts::COMPOSING, our_map);
             let scroll_down_shortcut = &shortcuts[Shortcuts::COMPOSING]["scroll_down"];
@@ -1232,8 +1230,7 @@ impl Component for Composer {
                     );
                     grid.change_colors(embedded_area, Color::Byte(8), theme_default.bg);
                     let our_map: ShortcutMap =
-                        account_settings!(context[&self.account_hash].shortcuts.composing)
-                            .key_values();
+                        context.composing_shortcuts(Some((self.account_hash, None)));
                     let mut shortcuts: ShortcutMaps = Default::default();
                     shortcuts.insert(Shortcuts::COMPOSING, our_map);
                     let stopped_message: String =
@@ -2702,9 +2699,10 @@ impl Component for Composer {
             Default::default()
         };
 
-        let our_map: ShortcutMap =
-            account_settings!(context[&self.account_hash].shortcuts.composing).key_values();
-        map.insert(Shortcuts::COMPOSING, our_map);
+        map.insert(
+            Shortcuts::COMPOSING,
+            context.composing_shortcuts(Some((self.account_hash, None))),
+        );
 
         map
     }

@@ -1486,10 +1486,7 @@ impl Component for Tabbed {
 
     fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = ShortcutMaps::default();
-        map.insert(
-            Shortcuts::GENERAL,
-            context.settings.shortcuts.general.key_values(),
-        );
+        map.insert(Shortcuts::GENERAL, context.general_shortcuts(None));
         map
     }
 

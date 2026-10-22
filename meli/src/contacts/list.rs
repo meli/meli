@@ -44,7 +44,6 @@ use melib::{
 };
 
 use crate::{
-    account_settings,
     components::prelude::*,
     contacts::{
         editor::ContactEditor,
@@ -692,15 +691,15 @@ impl Component for AddressBookList {
         };
         map.insert(
             Shortcuts::CONTACT_LIST,
-            account_settings!(context[&self.account_hash].shortcuts.contact_list).key_values(),
+            context.contact_list_shortcuts(Some((self.account_hash, None))),
         );
         map.insert(
             Shortcuts::LISTING,
-            account_settings!(context[&self.account_hash].shortcuts.listing).key_values(),
+            context.listing_shortcuts(Some((self.account_hash, None))),
         );
         map.insert(
             Shortcuts::GENERAL,
-            account_settings!(context[&self.account_hash].shortcuts.general).key_values(),
+            context.general_shortcuts(Some((self.account_hash, None))),
         );
 
         map
@@ -961,19 +960,19 @@ impl Component for AccountContacts {
             if !map.contains_key(Shortcuts::CONTACT_LIST) {
                 map.insert(
                     Shortcuts::CONTACT_LIST,
-                    context.settings.shortcuts.contact_list.key_values(),
+                    context.contact_list_shortcuts(Some((self.account_hash, None))),
                 );
             }
             if !map.contains_key(Shortcuts::LISTING) {
                 map.insert(
                     Shortcuts::LISTING,
-                    context.settings.shortcuts.listing.key_values(),
+                    context.listing_shortcuts(Some((self.account_hash, None))),
                 );
             }
             if !map.contains_key(Shortcuts::GENERAL) {
                 map.insert(
                     Shortcuts::GENERAL,
-                    context.settings.shortcuts.general.key_values(),
+                    context.general_shortcuts(Some((self.account_hash, None))),
                 );
             }
             map

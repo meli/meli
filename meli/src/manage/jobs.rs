@@ -607,10 +607,7 @@ impl Component for JobManager {
     fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = ShortcutMaps::default();
 
-        map.insert(
-            Shortcuts::GENERAL,
-            context.settings.shortcuts.general.key_values(),
-        );
+        map.insert(Shortcuts::GENERAL, context.general_shortcuts(None));
         map[Shortcuts::GENERAL].insert("sort by 1st column", Key::Char('1'));
         map[Shortcuts::GENERAL].insert("sort by 2nd column", Key::Char('2'));
         map[Shortcuts::GENERAL].insert("sort by 3rd column", Key::Char('3'));

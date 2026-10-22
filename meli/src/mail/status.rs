@@ -492,7 +492,7 @@ impl Component for AccountStatus {
         let mut ret: ShortcutMaps = ShortcutMaps::default();
         ret.insert(
             Shortcuts::GENERAL,
-            context.settings.shortcuts.general.key_values(),
+            context.general_shortcuts(Some((context.accounts[self.account_pos].hash, None))),
         );
         ret
     }

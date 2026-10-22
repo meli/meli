@@ -1810,10 +1810,13 @@ impl Component for Listing {
 
         let shortcuts = {
             let mut m = self.shortcuts(context);
-            m.insert(
-                Shortcuts::GENERAL,
-                context.settings.shortcuts.general.key_values(),
-            );
+            if !m.contains_key(Shortcuts::GENERAL) {
+                let (ah, mh) = self.component.coordinates();
+                m.insert(
+                    Shortcuts::GENERAL,
+                    context.general_shortcuts(Some((ah, Some(mh)))),
+                );
+            }
             m
         };
         if self.focus == ListingFocus::Mailbox {
@@ -2917,13 +2920,8 @@ impl Component for Listing {
                 return true;
             }
             UIEvent::Input(ref key)
-                if mailbox_settings!(context has [&account_hash][&mailbox_hash])
-                    && mailbox_settings!(
-                        context[&account_hash][&mailbox_hash]
-                            .shortcuts
-                            .listing
-                            .commands
-                    )
+                if context
+                    .listing_commands(Some((account_hash, Some(mailbox_hash))))
                     .iter()
                     .any(|cmd| {
                         if cmd.shortcut == *key {
@@ -2990,20 +2988,10 @@ impl Component for Listing {
         } else {
             self.component.shortcuts(context)
         });
-        let mut config_map = context.settings.shortcuts.listing.key_values();
+        let (account_hash, mailbox_hash) = self.component.coordinates();
+        let mut config_map = context.listing_shortcuts(Some((account_hash, Some(mailbox_hash))));
         if self.focus != ListingFocus::Menu {
             config_map.shift_remove("open_mailbox");
-        }
-        let (account_hash, mailbox_hash) = self.component.coordinates();
-        if mailbox_settings!(context has [&account_hash][&mailbox_hash]) {
-            for command in mailbox_settings!(
-                context[&account_hash][&mailbox_hash]
-                    .shortcuts
-                    .listing
-                    .commands
-            ) {
-                config_map.retain(|_, shortcut| shortcut != &command.shortcut);
-            }
         }
         map.insert(Shortcuts::LISTING, config_map);
 

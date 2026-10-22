@@ -30,7 +30,6 @@ fn main() {
         ("src/conf/pager.rs", "PagerSettings"),
         ("src/conf/listing.rs", "ListingSettings"),
         ("src/conf/notifications.rs", "NotificationsSettings"),
-        ("src/conf/shortcuts.rs", "Shortcuts"),
         ("src/conf/composing.rs", "ComposingSettings"),
         ("src/conf/tags.rs", "TagsSettings"),
         ("src/conf/pgp.rs", "PGPSettings"),

@@ -22,7 +22,7 @@
 
 use melib::error::{Error, Result};
 
-use crate::{account_settings, components::prelude::*, conf::themes::ThemeAttribute};
+use crate::{components::prelude::*, conf::themes::ThemeAttribute};
 
 pub trait AccountEntryTrait: Component + Sized {
     const DESCRIPTION: &str;
@@ -533,22 +533,21 @@ impl<E: AccountEntryTrait> Component for List<E> {
                 self.set_dirty(true);
             }
             UIEvent::Input(ref key)
-                if account_settings!(
-                    context[self.accounts[self.account_pos].account_hash()]
-                        .shortcuts
-                        .listing
-                )
-                .commands
-                .iter()
-                .any(|cmd| {
-                    if cmd.shortcut == *key {
-                        for cmd in &cmd.command {
-                            context.replies.push_back(UIEvent::Command(cmd.to_string()));
+                if context
+                    .listing_commands(Some((
+                        *self.accounts[self.account_pos].account_hash(),
+                        None,
+                    )))
+                    .iter()
+                    .any(|cmd| {
+                        if cmd.shortcut == *key {
+                            for cmd in &cmd.command {
+                                context.replies.push_back(UIEvent::Command(cmd.to_string()));
+                            }
+                            return true;
                         }
-                        return true;
-                    }
-                    false
-                }) =>
+                        false
+                    }) =>
             {
                 return true;
             }
@@ -571,13 +570,19 @@ impl<E: AccountEntryTrait> Component for List<E> {
         if !map.contains_key(Shortcuts::LISTING) {
             map.insert(
                 Shortcuts::LISTING,
-                context.settings.shortcuts.listing.key_values(),
+                context.listing_shortcuts(Some((
+                    *self.accounts[self.account_pos].account_hash(),
+                    None,
+                ))),
             );
         }
         if !map.contains_key(Shortcuts::GENERAL) {
             map.insert(
                 Shortcuts::GENERAL,
-                context.settings.shortcuts.general.key_values(),
+                context.general_shortcuts(Some((
+                    *self.accounts[self.account_pos].account_hash(),
+                    None,
+                ))),
             );
         }
 

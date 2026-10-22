@@ -75,9 +75,10 @@ impl EditAttachments {
     pub fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = self.buttons.shortcuts(context);
 
-        let our_map: ShortcutMap =
-            account_settings!(context[&self.account_hash].shortcuts.composing).key_values();
-        map.insert(Shortcuts::COMPOSING, our_map);
+        map.insert(
+            Shortcuts::COMPOSING,
+            context.composing_shortcuts(Some((self.account_hash, None))),
+        );
 
         map
     }

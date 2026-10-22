@@ -689,13 +689,8 @@ impl Component for MailView {
                 return true;
             }
             UIEvent::Input(ref key)
-                if mailbox_settings!(context has [&coordinates.0][&coordinates.1])
-                    && mailbox_settings!(
-                        context[&coordinates.0][&coordinates.1]
-                            .shortcuts
-                            .envelope_view
-                            .commands
-                    )
+                if context
+                    .envelope_view_commands(Some((coordinates.0, Some(coordinates.1))))
                     .iter()
                     .any(|cmd| {
                         if cmd.shortcut == *key {
@@ -740,22 +735,7 @@ impl Component for MailView {
     }
 
     fn shortcuts(&self, context: &Context) -> ShortcutMaps {
-        let mut map = self.state.shortcuts(context);
-        if let Some(envelope_view_map) = map.get_mut(Shortcuts::ENVELOPE_VIEW) {
-            if let Some((account_hash, mailbox_hash, _)) = self.coordinates {
-                if mailbox_settings!(context has [&account_hash][&mailbox_hash]) {
-                    for command in mailbox_settings!(
-                        context[&account_hash][&mailbox_hash]
-                            .shortcuts
-                            .envelope_view
-                            .commands
-                    ) {
-                        envelope_view_map.retain(|_, shortcut| shortcut != &command.shortcut);
-                    }
-                }
-            }
-        }
-        map
+        self.state.shortcuts(context)
     }
 
     fn id(&self) -> ComponentId {

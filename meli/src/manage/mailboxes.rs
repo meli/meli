@@ -772,7 +772,7 @@ impl Component for AccountMailboxManager {
 
         map.insert(
             Shortcuts::GENERAL,
-            context.settings.shortcuts.general.key_values(),
+            context.general_shortcuts(Some((self.account_hash, None))),
         );
 
         map

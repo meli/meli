@@ -1105,14 +1105,8 @@ impl Component for Pager {
 
     fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut ret: ShortcutMaps = Default::default();
-        ret.insert(
-            Shortcuts::PAGER,
-            context.settings.shortcuts.pager.key_values(),
-        );
-        ret.insert(
-            Shortcuts::GENERAL,
-            context.settings.shortcuts.general.key_values(),
-        );
+        ret.insert(Shortcuts::PAGER, context.pager_shortcuts(None));
+        ret.insert(Shortcuts::GENERAL, context.general_shortcuts(None));
         ret
     }
 
