@@ -20,6 +20,8 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
+use imap_types::sequence::ONE;
+
 use super::*;
 
 macro_rules! to_str (
@@ -33,12 +35,12 @@ fn test_imap_response() {
 
     assert_eq!(
         ImapResponse::try_from(&b"M13 OK [UIDNEXT 4392] Predicted next UID\r\n"[..]).unwrap(),
-        ImapResponse::Ok(ResponseCode::Uidnext(4392))
+        ImapResponse::Ok(ResponseCode::Uidnext(UID::new(4392).unwrap()))
     );
 
     assert_eq!(
         ImapResponse::try_from(&b"M14 OK [UIDVALIDITY 3857529045] UIDs valid\r\n"[..]).unwrap(),
-        ImapResponse::Ok(ResponseCode::Uidvalidity(3857529045))
+        ImapResponse::Ok(ResponseCode::Uidvalidity(UID::new(3857529045).unwrap()))
     );
 }
 
@@ -244,8 +246,8 @@ fn test_imap_untagged_responses() {
             .unwrap()
             .unwrap(),
         Fetch(Box::new(FetchResponse {
-            uid: Some(1103),
-            message_sequence_number: 1079,
+            uid: UID::new(1103),
+            message_sequence_number: UID::new(1079).unwrap(),
             modseq: Some(ModSequence(std::num::NonZeroU64::new(1365_u64).unwrap())),
             flags: Some((Flag::SEEN, vec![])),
             body: None,
@@ -262,7 +264,7 @@ fn test_imap_untagged_responses() {
             .unwrap(),
         Fetch(Box::new(FetchResponse {
             uid: None,
-            message_sequence_number: 1,
+            message_sequence_number: ONE,
             modseq: None,
             flags: Some((Flag::SEEN, vec![])),
             body: None,
@@ -292,8 +294,8 @@ fn test_imap_fetch_response() {
             (
                 &b""[..],
                 FetchResponse {
-                    uid: Some(7608),
-                    message_sequence_number: 198,
+                    uid: UID::new(7608),
+                    message_sequence_number: UID::new(198).unwrap(),
                     flags: Some((Flag::SEEN, vec![])),
                     modseq: None,
                     body: None,
@@ -327,8 +329,8 @@ fn test_imap_fetch_response() {
             (
                 &b""[..],
                 FetchResponse {
-                    uid: Some(7608),
-                    message_sequence_number: 198,
+                    uid: UID::new(7608),
+                    message_sequence_number: UID::new(198).unwrap(),
                     flags: Some((Flag::SEEN, vec![])),
                     modseq: None,
                     body: None,
@@ -349,8 +351,8 @@ fn test_imap_fetch_response() {
                 &b""[..],
                 vec![
                     FetchResponse {
-                        uid: Some(1505),
-                        message_sequence_number: 1429,
+                        uid: UID::new(1505),
+                        message_sequence_number: UID::new(1429).unwrap(),
                         modseq: None,
                         flags: Some((Flag::SEEN, vec![])),
                         body: None,
@@ -360,8 +362,8 @@ fn test_imap_fetch_response() {
                         raw_fetch_value: &b"* 1429 FETCH (UID 1505 FLAGS (\\Seen))\r\n"[..]
                     },
                     FetchResponse {
-                        uid: Some(1506),
-                        message_sequence_number: 1430,
+                        uid: UID::new(1506),
+                        message_sequence_number: UID::new(1430).unwrap(),
                         modseq: None,
                         flags: Some((Flag::SEEN, vec![])),
                         body: None,
@@ -371,8 +373,8 @@ fn test_imap_fetch_response() {
                         raw_fetch_value: &b"* 1430 FETCH (UID 1506 FLAGS (\\Seen))\r\n"[..]
                     },
                     FetchResponse {
-                        uid: Some(1507),
-                        message_sequence_number: 1431,
+                        uid: UID::new(1507),
+                        message_sequence_number: UID::new(1431).unwrap(),
                         modseq: None,
                         flags: Some((Flag::SEEN, vec![])),
                         body: None,
@@ -382,8 +384,8 @@ fn test_imap_fetch_response() {
                         raw_fetch_value: &b"* 1431 FETCH (UID 1507 FLAGS (\\Seen))\r\n"[..]
                     },
                     FetchResponse {
-                        uid: Some(1500),
-                        message_sequence_number: 1432,
+                        uid: UID::new(1500),
+                        message_sequence_number: UID::new(1432).unwrap(),
                         modseq: None,
                         flags: Some((Flag::SEEN, vec![])),
                         body: Some(&b"null"[..]),
@@ -407,11 +409,16 @@ fn test_imap_search() {
     assert_eq!(search_results(b"* SEARCH\r\n").map(|(_, v)| v), Ok(vec![]));
     assert_eq!(
         search_results(b"* SEARCH 1\r\n").map(|(_, v)| v),
-        Ok(vec![1])
+        Ok(vec![ONE])
     );
     assert_eq!(
         search_results(b"* SEARCH 1 2 3 4\r\n").map(|(_, v)| v),
-        Ok(vec![1, 2, 3, 4])
+        Ok(vec![
+            ONE,
+            UID::new(2).unwrap(),
+            UID::new(3).unwrap(),
+            UID::new(4).unwrap()
+        ])
     );
     assert_eq!(
         search_results_raw(b"* SEARCH 1 2 3 4\r\n").map(|(_, v)| v),
@@ -432,9 +439,8 @@ fn test_imap_select_response() {
                 Flag::REPLIED | Flag::SEEN | Flag::TRASHED | Flag::DRAFT | Flag::FLAGGED,
                 Vec::new()
             ),
-            first_unseen: 16,
-            uidvalidity: 1554422056,
-            uidnext: 50,
+            uidvalidity: Some(UID::new(1554422056).unwrap()),
+            uidnext: UID::new(50).unwrap(),
             permanentflags: (
                 Flag::REPLIED | Flag::SEEN | Flag::TRASHED | Flag::DRAFT | Flag::FLAGGED,
                 vec!["*".into()]
@@ -455,9 +461,8 @@ fn test_imap_select_response() {
                 Flag::REPLIED | Flag::SEEN | Flag::TRASHED | Flag::DRAFT | Flag::FLAGGED,
                 Vec::new()
             ),
-            first_unseen: 12,
-            uidvalidity: 3857529045,
-            uidnext: 4392,
+            uidvalidity: Some(UID::new(3857529045).unwrap()),
+            uidnext: UID::new(4392).unwrap(),
             permanentflags: (Flag::SEEN | Flag::TRASHED, vec!["*".into()]),
             can_create_flags: true,
             read_only: false,
@@ -477,9 +482,8 @@ fn test_imap_select_response() {
                 Flag::REPLIED | Flag::SEEN | Flag::TRASHED | Flag::DRAFT | Flag::FLAGGED,
                 Vec::new()
             ),
-            first_unseen: 12,
-            uidvalidity: 3857529045,
-            uidnext: 4392,
+            uidvalidity: Some(UID::new(3857529045).unwrap()),
+            uidnext: UID::new(4392).unwrap(),
             permanentflags: (Flag::SEEN | Flag::TRASHED, vec!["*".into()]),
             can_create_flags: true,
             read_only: false,

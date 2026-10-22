@@ -79,9 +79,9 @@ use crate::{
 };
 
 pub type ImapNum = u32;
-pub type UID = ImapNum;
+pub type UID = std::num::NonZeroU32;
 pub type UIDVALIDITY = UID;
-pub type MessageSequenceNumber = ImapNum;
+pub type MessageSequenceNumber = std::num::NonZeroU32;
 
 pub static SUPPORTED_CAPABILITIES: &[&str] = &[
     "AUTH=ANONYMOUS",
@@ -168,8 +168,9 @@ impl MessageSequenceNumberMap {
             .collect::<Vec<_>>();
         for msn in keys_to_remove {
             let (msn, entry) = self.0.remove_entry(&msn).expect("entry");
-            debug_assert!(msn > 1, "{msn} > 1");
-            self.0.insert(msn - 1, entry);
+            debug_assert!(msn.get() > 1, "{msn} > 1");
+            let new_msn = MessageSequenceNumber::new(msn.get() - 1).unwrap();
+            self.0.insert(new_msn, entry);
         }
         Some(uid)
     }
@@ -185,7 +186,9 @@ impl MessageSequenceNumberMap {
             return None;
         }
         debug_assert_eq!(
-            self.0.last_key_value().map(|(msn, _uid)| *msn as usize),
+            self.0
+                .last_key_value()
+                .map(|(msn, _uid)| msn.get() as usize),
             Some(self.0.len())
         );
         self.0.last_key_value().map(|(msn, _uid)| msn)
@@ -203,7 +206,7 @@ impl MessageSequenceNumberMap {
                 .iter()
                 .copied()
                 .enumerate()
-                .map(|(i, uid)| (i as u32 + 1, uid)),
+                .map(|(i, uid)| (MessageSequenceNumber::new(i as u32 + 1).unwrap(), uid)),
         );
         Ok(results)
     }
@@ -212,7 +215,7 @@ impl MessageSequenceNumberMap {
         if self.0.get(&msn) == Some(&uid) {
             return true;
         }
-        if self.0.len() + 1 != msn as usize {
+        if self.0.len() + 1 != msn.get() as usize {
             self.0.clear();
             return false;
         }
@@ -477,8 +480,8 @@ impl MailBackend for ImapType {
             connection: self.connection.clone(),
             mailbox_hash,
             uid_store: self.uid_store.clone(),
-            batch_size: 2_500,
-            cache_batch_size: 95_000,
+            batch_size: NonZeroU32::new(2_500).unwrap(),
+            cache_batch_size: NonZeroU32::new(95_000).unwrap(),
             response: Vec::with_capacity(8 * 1024),
         };
 
@@ -801,7 +804,7 @@ impl MailBackend for ImapType {
         flags: Vec<FlagOp>,
     ) -> ResultFuture<()> {
         let connection = self.connection.clone();
-        let uids: SmallVec<[UID; 64]> = {
+        let uids: Vec<UID> = {
             let hash_index_lck = self.uid_store.hash_index.lock().unwrap();
             env_hashes
                 .iter()
@@ -809,22 +812,8 @@ impl MailBackend for ImapType {
                 .collect()
         };
 
-        // Conversion from UID (u32) to UID (NonZeroU32).
-        // TODO: Directly use NonZeroU32 for UID everywhere?
-        let Ok(sequence_set) = ({
-            let mut tmp = Vec::new();
-
-            for uid in uids.iter() {
-                if let Ok(uid) = NonZeroU32::try_from(*uid) {
-                    tmp.push(uid);
-                } else {
-                    return Err(Error::new("Application error: UID was 0"));
-                }
-            }
-
-            SequenceSet::try_from(tmp)
-        }) else {
-            // `uids` is empty.
+        let Ok(sequence_set) = SequenceSet::try_from(uids) else {
+            // uids is empty
             return Ok(Box::pin(async move { Ok(()) }));
         };
 
@@ -1030,21 +1019,7 @@ impl MailBackend for ImapType {
                         .collect()
                 };
 
-                // Conversion from UID (u32) to UID (NonZeroU32).
-                // TODO: Directly use NonZeroU32 for UID everywhere?
-                let Ok(sequence_set) = ({
-                    let mut tmp = Vec::new();
-
-                    for uid in uids.iter() {
-                        if let Ok(uid) = NonZeroU32::try_from(*uid) {
-                            tmp.push(uid);
-                        } else {
-                            return Err(Error::new("Application error: UID was 0"));
-                        }
-                    }
-
-                    SequenceSet::try_from(tmp)
-                }) else {
+                let Ok(sequence_set) = SequenceSet::try_from(uids) else {
                     // `uids` is empty.
                     return Ok(());
                 };

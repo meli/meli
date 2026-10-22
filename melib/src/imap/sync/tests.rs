@@ -23,6 +23,8 @@
 #[cfg(feature = "sqlite3")]
 #[test]
 fn test_imap_sync_sqlite() {
+    use imap_types::sequence::ONE;
+
     use crate::{backends::IsSubscribedFn, imap::*};
 
     let tempdir = tempfile::tempdir().unwrap();
@@ -46,8 +48,8 @@ fn test_imap_sync_sqlite() {
 
     let mailbox_hash = MailboxHash::from(b"test".as_slice());
     let fetch = FetchResponse {
-        uid: Some(1),
-        message_sequence_number: 1,
+        uid: Some(ONE),
+        message_sequence_number: ONE,
         modseq: None,
         flags: None,
         body: None,
@@ -68,7 +70,20 @@ fn test_imap_sync_sqlite() {
     );
     assert_eq!(err.kind, ErrorKind::NotFound);
     value
-        .init_mailbox(mailbox_hash, &SelectResponse::default())
+        .init_mailbox(
+            mailbox_hash,
+            &SelectResponse {
+                exists: 1,
+                recent: 0,
+                flags: Default::default(),
+                uidvalidity: Some(ONE),
+                uidnext: ONE,
+                permanentflags: Default::default(),
+                can_create_flags: false,
+                read_only: false,
+                highestmodseq: None,
+            },
+        )
         .unwrap();
 
     value.insert_envelopes(mailbox_hash, fetches).unwrap();

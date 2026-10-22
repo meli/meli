@@ -285,6 +285,7 @@ impl std::fmt::Display for ResponseCode {
 }
 
 impl ResponseCode {
+    // [ref:FIXME]: return Result
     fn from(orig_val: &[u8]) -> Self {
         if !orig_val.starts_with(b"[") {
             let msg = orig_val.trim();
@@ -302,23 +303,27 @@ impl ResponseCode {
         } else if val.starts_with(b"TRYCREATE") {
             Self::Trycreate
         } else if val.starts_with(b"UIDNEXT") {
-            Self::Uidnext(
-                UID::from_str(&String::from_utf8_lossy(
-                    val.find(b"]")
-                        .map(|end| &val[b"UIDNEXT ".len()..end])
-                        .unwrap_or(b"0".as_slice()),
-                ))
-                .unwrap_or(0),
-            )
+            UID::from_str(&String::from_utf8_lossy(
+                val.find(b"]")
+                    .map(|end| &val[b"UIDNEXT ".len()..end])
+                    .unwrap_or(b"0".as_slice()),
+            ))
+            .map(Self::Uidnext)
+            .unwrap_or_else(|_| {
+                // Fallback
+                Self::Alert(String::from_utf8_lossy(orig_val.trim()).to_string())
+            })
         } else if val.starts_with(b"UIDVALIDITY") {
-            Self::Uidvalidity(
-                UIDVALIDITY::from_str(&String::from_utf8_lossy(
-                    val.find(b"]")
-                        .map(|end| &val[b"UIDVALIDITY ".len()..end])
-                        .unwrap_or(b"0".as_slice()),
-                ))
-                .unwrap_or(0),
-            )
+            UIDVALIDITY::from_str(&String::from_utf8_lossy(
+                val.find(b"]")
+                    .map(|end| &val[b"UIDVALIDITY ".len()..end])
+                    .unwrap_or(b"0".as_slice()),
+            ))
+            .map(Self::Uidvalidity)
+            .unwrap_or_else(|_| {
+                // Fallback
+                Self::Alert(String::from_utf8_lossy(orig_val.trim()).to_string())
+            })
         } else if val.starts_with(b"UNSEEN") {
             Self::Unseen(
                 u32::from_str(&String::from_utf8_lossy(
@@ -645,9 +650,26 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<'_, FetchResponse<'_>> {
         };
     }
 
+    let mut message_sequence_number: u32 = 0;
+    while input[i].is_ascii_digit() {
+        let b: u8 = input[i] - 0x30;
+        message_sequence_number *= 10;
+        message_sequence_number += b as u32;
+        i += 1;
+        bounds!();
+    }
+
+    let Some(message_sequence_number) = MessageSequenceNumber::new(message_sequence_number) else {
+        return Err(Error::new(format!(
+            "Unexpected input while parsing UID FETCH response. MessageSequenceNumber was zero: \
+             `{}`",
+            String::from_utf8_lossy(input).as_ref().trim_at_boundary(40)
+        )));
+    };
+
     let mut ret = FetchResponse {
         uid: None,
-        message_sequence_number: 0,
+        message_sequence_number,
         modseq: None,
         flags: None,
         body: None,
@@ -656,14 +678,6 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<'_, FetchResponse<'_>> {
         bodystructure: false,
         raw_fetch_value: &[],
     };
-
-    while input[i].is_ascii_digit() {
-        let b: u8 = input[i] - 0x30;
-        ret.message_sequence_number *= 10;
-        ret.message_sequence_number += b as MessageSequenceNumber;
-        i += 1;
-        bounds!();
-    }
 
     eat_whitespace!();
     should_start_with!(&input[i..], b"FETCH (");
@@ -1034,7 +1048,7 @@ pub fn untagged_responses(input: &[u8]) -> ImapParseResult<'_, Option<UntaggedRe
         {
             use UntaggedResponse::*;
             match _tag {
-                b"EXPUNGE" => Some(Expunge(num)),
+                b"EXPUNGE" => UID::new(num).map(Expunge),
                 b"EXISTS" => Some(Exists(num)),
                 b"RECENT" => Some(Recent(num)),
                 _ if _tag.starts_with(b"FETCH ") => {
@@ -1055,20 +1069,20 @@ pub fn untagged_responses(input: &[u8]) -> ImapParseResult<'_, Option<UntaggedRe
     ))
 }
 
-pub fn search_results<'a>(input: &'a [u8]) -> IResult<&'a [u8], Vec<ImapNum>> {
+pub fn search_results<'a>(input: &'a [u8]) -> IResult<&'a [u8], Vec<UID>> {
     alt((
-        |input: &'a [u8]| -> IResult<&'a [u8], Vec<ImapNum>> {
+        |input: &'a [u8]| -> IResult<&'a [u8], Vec<UID>> {
             let (input, _) = tag("* SEARCH ")(input)?;
             let (input, list) = separated_list1(
                 tag(b" "),
                 map_res(is_not(" \r\n"), |s: &[u8]| {
-                    ImapNum::from_str(unsafe { std::str::from_utf8_unchecked(s) })
+                    UID::from_str(unsafe { std::str::from_utf8_unchecked(s) })
                 }),
             )(input)?;
             let (input, _) = tag(CRLF)(input)?;
             Ok((input, list))
         },
-        |input: &'a [u8]| -> IResult<&'a [u8], Vec<ImapNum>> {
+        |input: &'a [u8]| -> IResult<&'a [u8], Vec<UID>> {
             let (input, _) = tag("* SEARCH\r\n")(input)?;
             Ok((input, vec![]))
         },
@@ -1090,13 +1104,12 @@ pub fn search_results_raw<'a>(input: &'a [u8]) -> IResult<&'a [u8], &'a [u8]> {
     ))(input)
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SelectResponse {
-    pub exists: ImapNum,
-    pub recent: ImapNum,
+    pub exists: u32,
+    pub recent: u32,
     pub flags: (Flag, Vec<String>),
-    pub first_unseen: MessageSequenceNumber,
-    pub uidvalidity: UIDVALIDITY,
+    pub uidvalidity: Option<UIDVALIDITY>,
     pub uidnext: UID,
     pub permanentflags: (Flag, Vec<String>),
     /// if `SELECT` returns `\*` we can set arbitrary flags permanently.
@@ -1130,57 +1143,72 @@ pub struct SelectResponse {
  */
 pub fn select_response(input: &[u8]) -> Result<SelectResponse> {
     if input.contains_subsequence(b"* OK") {
-        let mut ret = SelectResponse::default();
+        let mut exists = 0;
+        let mut recent = 0;
+        let mut _flags = Default::default();
+        let mut uidnext = imap_types::sequence::ONE;
+        let mut permanentflags = Default::default();
+        let mut can_create_flags = false;
+        let mut read_only = false;
+        let mut highestmodseq = None;
+
+        let mut uidvalidity = None;
+
         for l in input.split_rn() {
             if l.starts_with(UNTAGGED_PREFIX) && l.ends_with(b" EXISTS\r\n") {
-                ret.exists = ImapNum::from_str(&String::from_utf8_lossy(
+                exists = u32::from_str(&String::from_utf8_lossy(
                     &l[UNTAGGED_PREFIX.len()..l.len() - b" EXISTS\r\n".len()],
                 ))?;
             } else if l.starts_with(UNTAGGED_PREFIX) && l.ends_with(b" RECENT\r\n") {
-                ret.recent = ImapNum::from_str(&String::from_utf8_lossy(
+                recent = u32::from_str(&String::from_utf8_lossy(
                     &l[UNTAGGED_PREFIX.len()..l.len() - b" RECENT\r\n".len()],
                 ))?;
             } else if l.starts_with(b"* FLAGS (") {
-                ret.flags = flags(&l[b"* FLAGS (".len()..l.len() - b")".len()]).map(|(_, v)| v)?;
-            } else if l.starts_with(b"* OK [UNSEEN ") {
-                ret.first_unseen = MessageSequenceNumber::from_str(&String::from_utf8_lossy(
-                    &l[b"* OK [UNSEEN ".len()..l.find(b"]").unwrap()],
-                ))?;
+                _flags = flags(&l[b"* FLAGS (".len()..l.len() - b")".len()]).map(|(_, v)| v)?;
             } else if l.starts_with(b"* OK [UIDVALIDITY ") {
-                ret.uidvalidity = UIDVALIDITY::from_str(&String::from_utf8_lossy(
+                uidvalidity = Some(UIDVALIDITY::from_str(&String::from_utf8_lossy(
                     &l[b"* OK [UIDVALIDITY ".len()..l.find(b"]").unwrap()],
-                ))?;
+                ))?);
             } else if l.starts_with(b"* OK [UIDNEXT ") {
-                ret.uidnext = UID::from_str(&String::from_utf8_lossy(
+                uidnext = UID::from_str(&String::from_utf8_lossy(
                     &l[b"* OK [UIDNEXT ".len()..l.find(b"]").unwrap()],
                 ))?;
             } else if l.starts_with(b"* OK [PERMANENTFLAGS (") {
-                ret.permanentflags =
-                    flags(&l[b"* OK [PERMANENTFLAGS (".len()..l.find(b")").unwrap()])
-                        .map(|(_, v)| v)?;
-                ret.can_create_flags = l.contains_subsequence(b"\\*");
+                permanentflags = flags(&l[b"* OK [PERMANENTFLAGS (".len()..l.find(b")").unwrap()])
+                    .map(|(_, v)| v)?;
+                can_create_flags = l.contains_subsequence(b"\\*");
             } else if l.contains_subsequence(b"OK [READ-WRITE]" as &[u8]) {
-                ret.read_only = false;
+                read_only = false;
             } else if l.contains_subsequence(b"OK [READ-ONLY]") {
-                ret.read_only = true;
+                read_only = true;
             } else if l.starts_with(b"* OK [HIGHESTMODSEQ ") {
                 let res: IResult<&[u8], &[u8]> =
                     take_until(&b"]"[..])(&l[b"* OK [HIGHESTMODSEQ ".len()..]);
-                let (_, highestmodseq) = res?;
-                ret.highestmodseq = Some(
+                let (_, highestmodseqval) = res?;
+                highestmodseq = Some(
                     std::num::NonZeroU64::new(u64::from_str(&String::from_utf8_lossy(
-                        highestmodseq,
+                        highestmodseqval,
                     ))?)
                     .map(|u| Ok(ModSequence(u)))
                     .unwrap_or(Err(())),
                 );
             } else if l.starts_with(b"* OK [NOMODSEQ") {
-                ret.highestmodseq = Some(Err(()));
+                highestmodseq = Some(Err(()));
             } else if !l.is_empty() {
                 log::trace!("select response: {}", String::from_utf8_lossy(l));
             }
         }
-        Ok(ret)
+        Ok(SelectResponse {
+            exists,
+            recent,
+            flags: _flags,
+            uidvalidity,
+            uidnext,
+            permanentflags,
+            can_create_flags,
+            read_only,
+            highestmodseq,
+        })
     } else {
         let ret = String::from_utf8_lossy(input).to_string();
         log::error!("BAD/NO response in select: {ret}");
@@ -1811,7 +1839,7 @@ fn ctl(input: &[u8]) -> IResult<&[u8], u8> {
 
 pub fn generate_envelope_hash(mailbox_path: &str, uid: &UID) -> EnvelopeHash {
     let mut h = DefaultHasher::new();
-    h.write_usize(*uid as usize);
+    h.write_usize(uid.get() as usize);
     h.write(mailbox_path.as_bytes());
     EnvelopeHash(h.finish())
 }

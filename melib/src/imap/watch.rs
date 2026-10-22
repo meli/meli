@@ -119,13 +119,13 @@ pub fn idle(kit: ImapWatchKit) -> impl futures::stream::Stream<Item = Result<Bac
             .await?;
         {
             let mut mismatch = false;
-            {
+            if let Some(uidvalidity) = select_response.uidvalidity {
                 let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
 
                 if let Some(v) = uidvalidities.get(&mailbox_hash) {
-                    mismatch = *v != select_response.uidvalidity;
+                    mismatch = *v != uidvalidity;
                 }
-                uidvalidities.insert(mailbox_hash, select_response.uidvalidity);
+                uidvalidities.insert(mailbox_hash, uidvalidity);
             }
             if mismatch {
                 emitter
@@ -254,11 +254,11 @@ pub async fn examine_updates(
         let select_response = conn
             .examine_mailbox(mailbox_hash, &mut response, true)
             .await?;
-        {
+        if let Some(uidvalidity) = select_response.uidvalidity {
             let mut uidvalidities = conn.uid_store.uidvalidity.lock().unwrap();
 
             if let Some(v) = uidvalidities.get(&mailbox_hash) {
-                if *v != select_response.uidvalidity {
+                if *v != uidvalidity {
                     return Ok(Some(
                         RefreshEvent {
                             account_hash: conn.uid_store.account_hash,
@@ -269,7 +269,7 @@ pub async fn examine_updates(
                     ));
                 }
             } else {
-                uidvalidities.insert(mailbox_hash, select_response.uidvalidity);
+                uidvalidities.insert(mailbox_hash, uidvalidity);
             }
         }
 

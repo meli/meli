@@ -24,7 +24,6 @@ use imap_codec::imap_types::{
     fetch::{MacroOrMessageDataItemNames, MessageDataItemName},
     search::SearchKey,
     sequence::SequenceSet,
-    status::StatusDataItemName,
 };
 use indexmap::IndexSet;
 
@@ -76,7 +75,7 @@ impl ImapConnection {
         // 6. Return new envelopes
 
         // Step 1: Check UIDVALIDITY
-        let (Some(cached_uidvalidity), Some(lastseenuid)) = (
+        let (cached_uidvalidity, Some(lastseenuid)) = (
             self.uid_store
                 .uidvalidity
                 .lock()
@@ -96,7 +95,11 @@ impl ImapConnection {
         let select_response = self
             .select_mailbox(mailbox_hash, &mut response, true)
             .await?;
-        if select_response.uidvalidity != cached_uidvalidity {
+        let Some(select_response_uidvalidity) = select_response.uidvalidity else {
+            // Server does not support UIDVALIDITY, so there's no point in caching.
+            return Ok(None);
+        };
+        if Some(select_response_uidvalidity) != cached_uidvalidity {
             self.uid_store
                 .init_mailbox(mailbox_hash, &select_response)?;
             return Ok(None);
@@ -121,8 +124,12 @@ impl ImapConnection {
         // Step 2i. Create events
 
         let (required_responses, attributes) = crate::imap::email::common_attributes();
-        self.send_command(CommandBody::fetch(lastseenuid + 1.., attributes, true)?)
-            .await?;
+        self.send_command(CommandBody::fetch(
+            SequenceSet::from(lastseenuid.checked_add(1).unwrap()..),
+            attributes,
+            true,
+        )?)
+        .await?;
         self.read_response(&mut response, required_responses)
             .await?;
         let (_, mut v, _) = protocol_parser::fetch_responses(&response)?;
@@ -185,13 +192,8 @@ impl ImapConnection {
 
         // Step 2ii. NewFlags events
 
-        let sequence_set = if lastseenuid == 0 {
-            SequenceSet::from(..)
-        } else {
-            SequenceSet::try_from(..=lastseenuid)?
-        };
         self.send_command(CommandBody::Fetch {
-            sequence_set,
+            sequence_set: SequenceSet::from(..=lastseenuid),
             macro_or_item_names: MacroOrMessageDataItemNames::MessageDataItemNames(vec![
                 MessageDataItemName::Flags,
             ]),
@@ -358,7 +360,11 @@ impl ImapConnection {
         let select_response = self
             .select_mailbox(mailbox_hash, &mut response, true)
             .await?;
-        if select_response.uidvalidity != cached_uidvalidity {
+        let Some(select_response_uidvalidity) = select_response.uidvalidity else {
+            // Server does not support UIDVALIDITY, so there's no point in caching.
+            return Ok(None);
+        };
+        if Some(select_response_uidvalidity) != Some(cached_uidvalidity) {
             self.uid_store
                 .init_mailbox(mailbox_hash, &select_response)?;
             return Ok(None);
@@ -409,7 +415,7 @@ impl ImapConnection {
             // 2. tag1 UID FETCH <lastseenuid+1>:* <descriptors>
             let (required_responses, macro_or_item_names) = crate::imap::email::common_attributes();
             self.send_command(CommandBody::Fetch {
-                sequence_set: ((lastseenuid + 1)..).try_into()?,
+                sequence_set: (lastseenuid.checked_add(1).unwrap()..).into(),
                 macro_or_item_names,
                 uid: true,
                 modifiers: vec![FetchModifier::ChangedSince(cached_highestmodseq.into())],
@@ -480,10 +486,10 @@ impl ImapConnection {
             //    already have.
             // 3. tag2 UID FETCH 1:<lastseenuid> FLAGS
 
-            let sequence_set = if lastseenuid < 2 {
-                (1..).try_into()?
+            let sequence_set = if lastseenuid.get() < 2 {
+                (ONE..).into()
             } else {
-                (1..lastseenuid).try_into()?
+                (ONE..lastseenuid).try_into()?
             };
             self.send_command(CommandBody::Fetch {
                 sequence_set,
@@ -641,28 +647,22 @@ impl ImapConnection {
             _ = self.create_uid_msn_cache(mailbox_hash).await?;
         }
         let mut response = Vec::with_capacity(8 * 1024);
-        let (mailbox_path, counters, permissions) = {
+        let (counters, permissions) = {
             let f = &self.uid_store.mailboxes.lock().await[&mailbox_hash];
-            (
-                f.imap_path().to_string(),
-                f.counters.clone(),
-                f.permissions.clone(),
-            )
+            (f.counters.clone(), f.permissions.clone())
         };
 
         /* first SELECT the mailbox to get READ/WRITE permissions (because EXAMINE
          * only returns READ-ONLY for both cases) */
-        let mut select_response = self
+        let select_response = self
             .select_mailbox(mailbox_hash, &mut response, true)
             .await?;
         {
-            {
+            if let Some(uidvalidity) = select_response.uidvalidity {
                 let mut uidvalidities = self.uid_store.uidvalidity.lock().unwrap();
 
-                let v = uidvalidities
-                    .entry(mailbox_hash)
-                    .or_insert(select_response.uidvalidity);
-                *v = select_response.uidvalidity;
+                let v = uidvalidities.entry(mailbox_hash).or_insert(uidvalidity);
+                *v = uidvalidity;
             }
             {
                 if let Some(highestmodseq) = select_response.highestmodseq {
@@ -693,27 +693,6 @@ impl ImapConnection {
         /* reselecting the same mailbox with EXAMINE prevents expunging it */
         self.examine_mailbox(mailbox_hash, &mut response, true)
             .await?;
-        if select_response.uidnext == 0 {
-            /* UIDNEXT shouldn't be 0, since exists != 0 at this point */
-            self.send_command(CommandBody::status(
-                mailbox_path,
-                [StatusDataItemName::UidNext].as_slice(),
-            )?)
-            .await?;
-            self.read_response(&mut response, RequiredResponses::STATUS)
-                .await?;
-            let (_, status) = protocol_parser::status_response(response.as_slice())?;
-            if let Some(uidnext) = status.uidnext {
-                if uidnext == 0 {
-                    return Err(Error::new(
-                        "IMAP server error: zero UIDNEXT with nonzero exists.",
-                    ));
-                }
-                select_response.uidnext = uidnext;
-            } else {
-                return Err(Error::new("IMAP server did not reply with UIDNEXT"));
-            }
-        }
         Ok(select_response)
     }
 }

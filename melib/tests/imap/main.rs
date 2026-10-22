@@ -74,6 +74,7 @@ pub mod server {
         core::{Atom, LiteralMode, NString, Tag, Vec1},
         fetch::MessageDataItem,
         response::{Capability, Code, CommandContinuationRequest, Data, Response, Status},
+        sequence::ONE,
     };
     use melib::{
         backends::prelude::*, imap::*, parser::BytesExt as _, utils::connections::Connection, Mail,
@@ -112,7 +113,7 @@ pub mod server {
         pub fn insert(&mut self, new: Box<Mail>) -> UID {
             let uid = self.next_uid;
             self.envelopes.insert(uid, *new);
-            self.next_uid += 1;
+            self.next_uid = self.next_uid.checked_add(1).unwrap();
             uid
         }
 
@@ -634,7 +635,15 @@ pub mod server {
                 let mut msn_map = MessageSequenceNumberMap::default();
                 let state_lck = state.lock().unwrap();
                 for uid in state_lck.envelopes.keys() {
-                    let new_exists = msn_map.exists().copied().unwrap_or(0) + 1;
+                    let new_exists = MessageSequenceNumber::new(
+                        msn_map
+                            .exists()
+                            .copied()
+                            .map(MessageSequenceNumber::get)
+                            .unwrap_or(0)
+                            + 1,
+                    )
+                    .unwrap();
                     assert!(msn_map.insert(new_exists, *uid));
                 }
                 msn_map
@@ -916,16 +925,18 @@ pub mod server {
                                 Untagged::Expunge(uid) => {
                                     let msn = msn_map.get(&uid).copied().unwrap();
                                     assert_eq!(msn_map.expunge(&msn), Some(uid));
-                                    responses.push(Response::Data(Data::Expunge(
-                                        msn.try_into().unwrap(),
-                                    )));
+                                    responses.push(Response::Data(Data::Expunge(msn)));
                                     silence_exists = false;
                                 }
                                 Untagged::Exists => {
                                     if !silence_exists {
-                                        if let Some(exists) = msn_map.exists().copied() {
-                                            responses.push(Response::Data(Data::Exists(exists)));
-                                        }
+                                        responses.push(Response::Data(Data::Exists(
+                                            msn_map
+                                                .exists()
+                                                .copied()
+                                                .map(MessageSequenceNumber::get)
+                                                .unwrap_or(0),
+                                        )));
                                         silence_exists = true;
                                     }
                                 }
@@ -1224,17 +1235,12 @@ pub mod server {
                                 .unwrap(),
                             ));
                             responses.push(Response::Status(
-                                Status::ok(
-                                    None,
-                                    Some(Code::UidNext(uidnext.try_into().unwrap())),
-                                    "Next UID",
-                                )
-                                .unwrap(),
+                                Status::ok(None, Some(Code::UidNext(uidnext)), "Next UID").unwrap(),
                             ));
                             responses.push(Response::Status(
                                 Status::ok(
                                     None,
-                                    Some(Code::UidValidity(uidvalidity.try_into().unwrap())),
+                                    Some(Code::UidValidity(uidvalidity)),
                                     "UIDs valid",
                                 )
                                 .unwrap(),
@@ -1299,9 +1305,7 @@ pub mod server {
                                     for uid in &expunged {
                                         let msn = msn_map.get(uid).copied().unwrap();
                                         assert_eq!(msn_map.expunge(&msn), Some(*uid));
-                                        responses.push(Response::Data(Data::Expunge(
-                                            msn.try_into().unwrap(),
-                                        )));
+                                        responses.push(Response::Data(Data::Expunge(msn)));
                                     }
                                     our_untagged.insert(UntaggedEvent::Deletes(expunged));
                                 }
@@ -1330,8 +1334,8 @@ pub mod server {
                                     .lock()
                                     .unwrap()
                                     .envelopes
-                                    .iter()
-                                    .map(|(u, _)| (*u).try_into().unwrap())
+                                    .keys()
+                                    .cloned()
                                     .collect::<Vec<_>>();
                                 responses.push(Response::Data(Data::Search(uids, None)));
                                 responses.push(Response::Status(
@@ -1355,9 +1359,7 @@ pub mod server {
                                         .envelopes
                                         .iter()
                                         .filter(|(_, env)| !env.is_seen())
-                                        .map(|(uid, _)| {
-                                            (*msn_map.get(uid).unwrap()).try_into().unwrap()
-                                        })
+                                        .map(|(uid, _)| *msn_map.get(uid).unwrap())
                                         .collect::<Vec<_>>()
                                 };
                                 responses.push(Response::Data(Data::Search(msns, None)));
@@ -1375,10 +1377,8 @@ pub mod server {
                             let uidnext = state.lock().unwrap().next_uid;
                             responses.push(Response::Data(Data::Status {
                                 mailbox: imap_types::mailbox::Mailbox::Inbox,
-                                items: vec![imap_types::status::StatusDataItem::UidNext(
-                                    uidnext.try_into().unwrap(),
-                                )]
-                                .into(),
+                                items: vec![imap_types::status::StatusDataItem::UidNext(uidnext)]
+                                    .into(),
                             }));
                             responses.push(Response::Status(
                                 Status::ok(Some(id), None, "STATUS completed").unwrap(),
@@ -1412,7 +1412,7 @@ pub mod server {
                                     responses.push(Response::Data(Data::Fetch {
                                         seq: msn,
                                         items: vec![
-                                            MessageDataItem::Uid(uid.try_into().unwrap()),
+                                            MessageDataItem::Uid(uid),
                                             MessageDataItem::Flags(mail.as_flags()),
                                             MessageDataItem::Envelope(mail.as_envelope()),
                                             MessageDataItem::BodyStructure(mail.as_bodystructure()),
@@ -1440,24 +1440,25 @@ pub mod server {
                                     Status::bad(Some(id), None, "no mailbox is selected").unwrap(),
                                 ));
                             } else {
-                                let largest = state.lock().unwrap().next_uid.saturating_sub(1);
-                                'uid_fetch_flags: for uid in
-                                    sequence_set.iter(largest.try_into().unwrap())
-                                {
-                                    let Some(mail) =
-                                        state.lock().unwrap().envelopes.get(&(uid.get())).cloned()
-                                    else {
-                                        continue 'uid_fetch_flags;
-                                    };
-                                    responses.push(Response::Data(Data::Fetch {
-                                        seq: uid,
-                                        items: vec![
-                                            MessageDataItem::Uid(uid),
-                                            MessageDataItem::Flags(mail.as_flags()),
-                                        ]
-                                        .try_into()
-                                        .unwrap(),
-                                    }));
+                                let largest =
+                                    state.lock().unwrap().next_uid.get().saturating_sub(1);
+                                if let Some(largest) = UID::new(largest) {
+                                    'uid_fetch_flags: for uid in sequence_set.iter(largest) {
+                                        let Some(mail) =
+                                            state.lock().unwrap().envelopes.get(&uid).cloned()
+                                        else {
+                                            continue 'uid_fetch_flags;
+                                        };
+                                        responses.push(Response::Data(Data::Fetch {
+                                            seq: uid,
+                                            items: vec![
+                                                MessageDataItem::Uid(uid),
+                                                MessageDataItem::Flags(mail.as_flags()),
+                                            ]
+                                            .try_into()
+                                            .unwrap(),
+                                        }));
+                                    }
                                 }
                                 responses.push(Response::Status(
                                     Status::ok(Some(id), None, "FETCH flags completed").unwrap(),
@@ -1475,28 +1476,31 @@ pub mod server {
                                     Status::bad(Some(id), None, "no mailbox is selected").unwrap(),
                                 ));
                             } else {
-                                let largest = state.lock().unwrap().next_uid.saturating_sub(1);
-                                'uid_fetch: for uid in
-                                    sequence_set.iter(largest.try_into().unwrap())
-                                {
-                                    let Some(mail) =
-                                        state.lock().unwrap().envelopes.get(&(uid.get())).cloned()
-                                    else {
-                                        continue 'uid_fetch;
-                                    };
-                                    let references = mail.as_body_peek_references();
-                                    responses.push(Response::Data(Data::Fetch {
-                                        seq: uid,
-                                        items: vec![
-                                            MessageDataItem::Uid(uid),
-                                            MessageDataItem::Flags(mail.as_flags()),
-                                            MessageDataItem::Envelope(mail.as_envelope()),
-                                            MessageDataItem::BodyStructure(mail.as_bodystructure()),
-                                            references,
-                                        ]
-                                        .try_into()
-                                        .unwrap(),
-                                    }));
+                                let largest =
+                                    state.lock().unwrap().next_uid.get().saturating_sub(1);
+                                if let Some(largest) = UID::new(largest) {
+                                    'uid_fetch: for uid in sequence_set.iter(largest) {
+                                        let Some(mail) =
+                                            state.lock().unwrap().envelopes.get(&uid).cloned()
+                                        else {
+                                            continue 'uid_fetch;
+                                        };
+                                        let references = mail.as_body_peek_references();
+                                        responses.push(Response::Data(Data::Fetch {
+                                            seq: uid,
+                                            items: vec![
+                                                MessageDataItem::Uid(uid),
+                                                MessageDataItem::Flags(mail.as_flags()),
+                                                MessageDataItem::Envelope(mail.as_envelope()),
+                                                MessageDataItem::BodyStructure(
+                                                    mail.as_bodystructure(),
+                                                ),
+                                                references,
+                                            ]
+                                            .try_into()
+                                            .unwrap(),
+                                        }));
+                                    }
                                 }
                                 responses.push(Response::Status(
                                     Status::ok(Some(id), None, "UID FETCH completed").unwrap(),
@@ -1520,9 +1524,8 @@ pub mod server {
                                             for flag in &flags {
                                                 match flag {
                                                     imap_types::flag::Flag::Deleted => {
-                                                        if let Some(env) = state_lck
-                                                            .envelopes
-                                                            .get_mut(&(uid.get()))
+                                                        if let Some(env) =
+                                                            state_lck.envelopes.get_mut(&uid)
                                                         {
                                                             env.envelope
                                                                 .set_flag(Flag::TRASHED, true);
@@ -1685,7 +1688,15 @@ pub mod server {
                     }
                     StreamEvent::Untagged(UntaggedEvent::New(uid)) => {
                         assert_eq!(msn_map.get(&uid), None);
-                        let new_exists = msn_map.exists().copied().unwrap_or(0) + 1;
+                        let new_exists = MessageSequenceNumber::new(
+                            msn_map
+                                .exists()
+                                .copied()
+                                .map(MessageSequenceNumber::get)
+                                .unwrap_or(0)
+                                + 1,
+                        )
+                        .unwrap();
                         assert!(msn_map.insert(new_exists, uid));
                         untagged.push_back(Untagged::Exists);
                     }
@@ -1782,12 +1793,12 @@ pub mod tests {
         let envelopes = initial_envelopes
             .into_iter()
             .enumerate()
-            .map(|(i, env)| (i as u32 + 1, env))
+            .map(|(i, env)| ((i as u32 + 1).try_into().unwrap(), env))
             .collect();
         let server_state = Arc::new(Mutex::new(ServerState {
             envelopes,
-            next_uid,
-            uidvalidity: 1,
+            next_uid: next_uid.try_into().unwrap(),
+            uidvalidity: ONE,
         }));
 
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();

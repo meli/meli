@@ -204,16 +204,15 @@ impl ImapConnection {
                         .or_default()
                         .exists()
                         .cloned()
-                        .unwrap_or(0)
                 };
                 imap_log!(
                     trace,
                     self,
-                    "exists {} previous_exists {}",
+                    "exists {} previous_exists {:?}",
                     n,
                     previous_exists
                 );
-                let mut fetch_responses = if previous_exists > n {
+                let mut fetch_responses = if previous_exists.map(|v| v.get() > n).unwrap_or(false) {
                     // We missed EXPUNGE responses.
                     imap_log!(error, self, "We missed EXPUNGE responses.");
                     let uids = self.create_uid_msn_cache(mailbox_hash).await?;
@@ -280,12 +279,11 @@ impl ImapConnection {
                         .lock()
                         .unwrap()
                         .get(&mailbox_hash)
-                        .cloned()
-                        .unwrap_or(0);
-                    let sequence_set = if lastseenuid == 0 {
-                        SequenceSet::from(..)
+                        .cloned();
+                    let sequence_set = if let Some(lastseenuid) = lastseenuid {
+                        SequenceSet::from(lastseenuid..)
                     } else {
-                        SequenceSet::try_from(lastseenuid..)?
+                        SequenceSet::from(..)
                     };
                     let (required_responses, macro_or_item_names) =
                         crate::imap::email::common_attributes();
@@ -301,7 +299,7 @@ impl ImapConnection {
                     match super::protocol_parser::fetch_responses(&response) {
                         Ok((_, mut v, _)) => {
                             // Remove lastseenuid
-                            v.retain(|fr| fr.uid != Some(lastseenuid));
+                            v.retain(|fr| fr.uid != lastseenuid);
                             v
                         }
                         Err(err) => {
@@ -314,10 +312,11 @@ impl ImapConnection {
                             return Ok(None);
                         }
                     }
-                } else if (previous_exists, n) == (0, 0) {
+                } else if (previous_exists, n) == (None, 0) {
                     // Nothing to do.
                     return Ok(None);
                 } else {
+                    let previous_exists = previous_exists.map(|p| p.get()).unwrap_or(0);
                     let sequence_set = if previous_exists == n || (previous_exists + 1) == n {
                         n.try_into()?
                     } else {
@@ -588,10 +587,8 @@ impl ImapConnection {
                             mailbox_hash,
                             self.send_command(CommandBody::search(
                                 None,
-                                SearchKey::SequenceSet(SequenceSet::try_from(
-                                    message_sequence_number
-                                )?)
-                                .into(),
+                                SearchKey::SequenceSet(SequenceSet::from(message_sequence_number))
+                                    .into(),
                                 true
                             ))
                             .await,
