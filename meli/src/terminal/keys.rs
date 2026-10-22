@@ -186,7 +186,6 @@ impl<'de> Deserialize<'de> for Key {
                     "Enter" | "enter" => Ok(Key::Char('\n')),
                     "Tab" | "tab" => Ok(Key::Char('\t')),
                     "Esc" | "esc" => Ok(Key::Esc),
-                    s if s.len() == 1 => Ok(Key::Char(s.chars().next().unwrap())),
                     s if s.starts_with('F') && (s.len() == 2 || s.len() == 3) => {
                         use std::str::FromStr as _;
 
@@ -223,10 +222,19 @@ impl<'de> Deserialize<'de> for Key {
                             &s[2..]
                         )))
                     }
-                    _ => Err(de::Error::custom(format!(
-                        "Cannot derive shortcut from `{value}`. Please consult the manual for \
-                         valid key inputs."
-                    ))),
+                    s => {
+                        let mut chars = s.chars();
+                        if let Some(c) = chars.next() {
+                            if chars.next().is_none() {
+                                return Ok(Key::Char(c));
+                            }
+                        }
+
+                        Err(de::Error::custom(format!(
+                            "Cannot derive shortcut from `{value}`. Please consult the manual for \
+                             valid key inputs."
+                        )))
+                    }
                 }
             }
         }
