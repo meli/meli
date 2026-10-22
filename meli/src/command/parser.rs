@@ -1040,36 +1040,24 @@ pub(super) fn save_attachment<'a>(
     ))(input)
 }
 
-pub(super) fn pipe_attachment<'a>(
-    input: &'a str,
-) -> IResult<&'a str, Result<Action, CommandError>> {
+pub(super) fn pipe_attachment(input: &str) -> IResult<&str, Result<Action, CommandError>> {
     let mut check = arg_init! { min_arg:2, max_arg:{u8::MAX}, pipe_attachment};
     let (input, _) = tag("pipe-attachment")(input.trim())?;
     arg_chk!(start check, input);
     let (input, _) = is_a(" ")(input)?;
     arg_chk!(inc check, input);
-    let (input, idx) = usize_c(input)?;
+    let (input, index) = usize_c(input)?;
     let (input, _) = is_a(" ")(input)?;
     arg_chk!(inc check, input);
-    let (input, bin) = quoted_argument(input)?;
-    arg_chk!(inc check, input);
-    let (input, args) = alt((
-        |input: &'a str| -> IResult<&'a str, Vec<String>> {
-            let (input, _) = is_a(" ")(input)?;
-            let (input, args) = separated_list1(is_a(" "), quoted_argument)(input)?;
-            let (input, _) = eof(input)?;
-            Ok((
-                input,
-                args.into_iter().map(String::from).collect::<Vec<String>>(),
-            ))
-        },
-        |input: &'a str| -> IResult<&'a str, Vec<String>> {
-            let (input, _) = eof(input)?;
-            Ok((input, Vec::with_capacity(0)))
-        },
-    ))(input)?;
+    let (input, command) = not_line_ending(input)?;
     arg_chk!(finish check, input);
-    Ok((input, Ok(View(PipeAttachment(idx, bin.to_string(), args)))))
+    Ok((
+        input,
+        Ok(View(PipeAttachment {
+            index,
+            command: command.to_string(),
+        })),
+    ))
 }
 
 pub(super) fn export_mail(input: &str) -> IResult<&str, Result<Action, CommandError>> {

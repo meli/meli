@@ -1497,11 +1497,14 @@ impl Component for EnvelopeView {
                     })));
                 return true;
             }
-            UIEvent::Action(View(ViewAction::PipeAttachment(a_i, ref bin, ref args))) => {
-                let bytes = if let Some(u) = self.open_attachment(a_i, context) {
-                    u.decode(self.view_settings.charset.into())
-                } else if a_i == 0 {
+            UIEvent::Action(View(ViewAction::PipeAttachment {
+                index: a_i,
+                ref command,
+            })) => {
+                let bytes = if a_i == 0 {
                     self.mail.bytes.clone()
+                } else if let Some(u) = self.open_attachment(a_i, context) {
+                    u.decode(self.view_settings.charset.into())
                 } else {
                     context.replies.push_back(UIEvent::Notification {
                         title: None,
@@ -1512,15 +1515,14 @@ impl Component for EnvelopeView {
                     return true;
                 };
 
-                let bin = bin.clone();
-                let args = args.clone();
+                let command = command.clone();
                 context
                     .replies
                     .push_back(UIEvent::ProcessRequest(Box::new(ProcessRequest {
                         owner: Some(self.id),
                         command: {
-                            let mut cmd = Command::new(&bin);
-                            cmd.args(&args)
+                            let mut cmd = Command::new("sh");
+                            cmd.args(["-c", &command])
                                 .stdin(Stdio::piped())
                                 .stdout(Stdio::inherit())
                                 .stderr(Stdio::inherit());
@@ -1530,12 +1532,12 @@ impl Component for EnvelopeView {
                             let Some(mut stdin) = child.stdin.take() else {
                                 let _ = child.wait();
                                 return Err(Error::new(format!(
-                                    "Could not open standard input of {bin}"
+                                    "Could not open standard input of {command}"
                                 ))
                                 .set_kind(ErrorKind::External));
                             };
                             stdin.write_all(&bytes).chain_err_summary(|| {
-                                format!("Could not write to standard input of {bin}")
+                                format!("Could not write to standard input of {command}")
                             })?;
 
                             Ok(child)

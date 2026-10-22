@@ -140,6 +140,13 @@ fn test_command_parser_all() {
             "terminal git status | less",
             Action::Terminal(Some("git status | less".into())),
         ),
+        (
+            "pipe-attachment 0 git am -3",
+            Action::View(ViewAction::PipeAttachment {
+                index: 0,
+                command: "git am -3".to_string(),
+            }),
+        ),
     ] {
         assert_eq!(
             parse_command(cmd).unwrap_or_else(|err| panic!("{cmd} failed {err}")),
