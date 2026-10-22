@@ -27,7 +27,7 @@ use crate::{backends::*, error::Error};
 /// Fetch an article by `UID` as bytes.
 #[derive(Clone, Debug)]
 pub struct NntpOp {
-    uid: usize,
+    uid: UID,
     mailbox_hash: MailboxHash,
     connection: Arc<FutureMutex<NntpConnection>>,
     uid_store: Arc<UIDStore>,
@@ -35,7 +35,7 @@ pub struct NntpOp {
 
 impl NntpOp {
     pub fn new(
-        uid: usize,
+        uid: UID,
         mailbox_hash: MailboxHash,
         connection: Arc<FutureMutex<NntpConnection>>,
         uid_store: Arc<UIDStore>,

@@ -51,7 +51,7 @@ use crate::{
     email::{address::MessageID, Mail},
     parser::BytesExt as _,
 };
-pub type UID = usize;
+pub type UID = std::num::NonZeroU32;
 
 macro_rules! get_conf_val {
     ($s:ident[$var:literal]: $t:ty) => {

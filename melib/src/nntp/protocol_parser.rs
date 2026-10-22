@@ -25,7 +25,7 @@ use nom::{
 };
 
 use super::*;
-use crate::email::parser::IResult;
+use crate::email::parser::{IResult, ParsingError};
 
 pub struct NntpLineIterator<'a> {
     slice: &'a str,
@@ -95,7 +95,7 @@ pub fn over_article(input: &str) -> IResult<&str, (UID, Envelope)> {
     :bytes metadata item
     :lines metadata item
     */
-    let (input, num) = is_not("\t")(input)?;
+    let (input, num_string) = is_not("\t")(input)?;
     let (input, _) = tag("\t")(input)?;
     let (input, subject) = opt(is_not("\t"))(input)?;
     let (input, _) = tag("\t")(input)?;
@@ -112,12 +112,39 @@ pub fn over_article(input: &str) -> IResult<&str, (UID, Envelope)> {
     let (input, _lines) = opt(is_not("\t\r\n"))(input)?;
     let (input, _other_headers) = opt(is_not("\r\n"))(input)?;
     let (input, _) = tag("\r\n")(input)?;
+
+    let num = num_string.parse::<u32>().map_err(|err| {
+        nom::Err::Failure(ParsingError::<&str>::new(
+            num_string,
+            err.to_string().into(),
+        ))
+    })?;
+    if num > i32::MAX as u32 {
+        let err = ParsingError::<&str>::new(
+            num_string,
+            Cow::Borrowed(
+                "Article numbers MUST lie between 1 and 2,147,483,647, inclusive \
+                 (rfc3977#section-6)",
+            ),
+        );
+        return Err(nom::Err::Failure(err));
+    }
+    let Some(num) = std::num::NonZeroU32::new(num) else {
+        let err = ParsingError::<&str>::new(
+            num_string,
+            Cow::Borrowed(
+                "Article numbers MUST lie between 1 and 2,147,483,647, inclusive \
+                 (rfc3977#section-6)",
+            ),
+        );
+        return Err(nom::Err::Failure(err));
+    };
     Ok((
         input,
         ({
             let env_hash = {
                 let mut hasher = DefaultHasher::new();
-                hasher.write(num.as_bytes());
+                hasher.write(num_string.as_bytes());
                 hasher.write(message_id.unwrap_or_default().as_bytes());
                 EnvelopeHash(hasher.finish())
             };
@@ -150,7 +177,7 @@ pub fn over_article(input: &str) -> IResult<&str, (UID, Envelope)> {
             if let Some(message_id) = message_id {
                 env.set_message_id(message_id.as_bytes());
             }
-            (usize::from_str(num).unwrap(), env)
+            (num, env)
         }),
     ))
 }
