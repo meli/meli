@@ -1034,13 +1034,14 @@ impl ImapConnection {
                             ret.extend_from_slice(&response);
                             return r.into();
                         }
-                        ImapResponse::No(ref _response_code)
-                            if required_responses.intersects(RequiredResponses::NO) =>
+                        ImapResponse::Bad(ref _response_code)
+                        | ImapResponse::No(ref _response_code)
+                            if required_responses.intersects(RequiredResponses::NO_OR_BAD) =>
                         {
                             imap_log!(
                                 trace,
                                 self,
-                                "Received expected NO response: {:?} {:?}",
+                                "Received expected NO/BAD response: {:?} {:?}",
                                 _response_code,
                                 String::from_utf8_lossy(&response)
                             );
@@ -1335,7 +1336,7 @@ impl ImapConnection {
                         }
                     }
                     self.send_command(CommandBody::select(nonexistent)?).await?;
-                    self.read_response(&mut response, RequiredResponses::NO)
+                    self.read_response(&mut response, RequiredResponses::NO_OR_BAD)
                         .await?;
                 }
             }
@@ -1437,6 +1438,8 @@ impl ImapConnection {
                         ..
                     },
             } => {
+                let required_auth_responses =
+                    RequiredResponses::CAPABILITY | RequiredResponses::NO_OR_BAD;
                 let mut response = Vec::new();
                 let mut capabilities = self.uid_store.capabilities.lock().unwrap().clone();
                 let has_sasl_ir: bool = capabilities
@@ -1556,24 +1559,46 @@ impl ImapConnection {
                         self.wait_for_continuation_request().await?;
                         self.send_literal(base64.encode(&secret).as_bytes()).await?;
                     }
-                    // Server will respond with a base64 literal on failure, so read response
-                    // directly instead of parsing it as an IMAP response.
-                    self.stream
-                        .as_mut()?
-                        .read_lines(&mut response, None, false)
-                        .await?;
-                    let tag_start = format!("M{} OK", (self.stream.as_ref()?.cmd_id - 1));
+                    let tag_start = format!("M{} ", (self.stream.as_ref()?.cmd_id - 1));
+                    loop {
+                        let mut line_response = Vec::new();
+                        // Server will respond with a base64 literal on failure, so read response
+                        // directly instead of using read_response
+                        self.stream
+                            .as_mut()?
+                            .read_lines(&mut line_response, None, false)
+                            .await?;
+                        if line_response
+                            .split_rn()
+                            .into_iter()
+                            .any(|l| l.starts_with(tag_start.as_bytes()) || l.starts_with(b"+ "))
+                        {
+                            response.extend(line_response);
+                            // Final response line.
+                            break;
+                        }
+                        response.extend(line_response);
+                    }
+
+                    let tag_ok_start = format!("M{} OK", (self.stream.as_ref()?.cmd_id - 1));
                     if !response
                         .split_rn()
                         .into_iter()
-                        .any(|l| l.starts_with(tag_start.as_bytes()))
+                        .any(|l| l.starts_with(tag_ok_start.as_bytes()))
                     {
-                        let res = response.strip_prefix(b"+ ").unwrap_or(&response).trim_end();
-                        let failure_response = base64
-                            .decode(res)
-                            .ok()
-                            .map(|b| String::from_utf8_lossy(&b).into_owned())
-                            .unwrap_or_else(|| String::from_utf8_lossy(res).into_owned());
+                        let failure_response = if let Some(l) = response
+                            .split_rn()
+                            .into_iter()
+                            .find_map(|l| l.strip_prefix(b"+ "))
+                        {
+                            base64
+                                .decode(l)
+                                .ok()
+                                .map(|b| String::from_utf8_lossy(&b).into_owned())
+                                .unwrap_or_else(|| String::from_utf8_lossy(&response).into_owned())
+                        } else {
+                            String::from_utf8_lossy(&response).into_owned()
+                        };
                         // Cancel AUTHENTICATE
                         if is_xoauth2 {
                             self.send_literal(b"\r\n").await?;
@@ -1612,22 +1637,16 @@ impl ImapConnection {
                         Atom::try_from("ANONYMOUS").expect("atom"),
                     )))
                     .await?;
-                    self.stream
-                        .as_mut()?
-                        .read_lines(&mut response, None, false)
+                    self.read_response(&mut response, required_auth_responses)
                         .await?;
-                    let tag_start = format!("M{} OK", (self.stream.as_ref()?.cmd_id - 1));
-                    if !response
-                        .split_rn()
-                        .into_iter()
-                        .any(|l| l.starts_with(tag_start.as_bytes()))
-                    {
-                        let failure_response = String::from_utf8_lossy(&response);
-                        return Err(Error::new(format!(
-                            "Cannot authenticate to {hostname} with AUTH=ANONYMOUS",
-                        ))
-                        .set_details(format!("Server_replied with {failure_response}"))
-                        .set_kind(ErrorKind::Authentication));
+                    if let Ok(imap_response) = ImapResponse::try_from(response.as_slice()) {
+                        if let Err(err) = imap_response.into() {
+                            return Err(Error::new(format!(
+                                "Cannot authenticate to {hostname} with AUTH=ANONYMOUS",
+                            ))
+                            .set_details(format!("Server replied with {err}"))
+                            .set_kind(ErrorKind::Authentication));
+                        }
                     }
                 } else if capabilities
                     .iter()
@@ -1665,22 +1684,16 @@ impl ImapConnection {
                         self.send_literal(base64.encode(credentials).as_bytes())
                             .await?;
                     }
-                    self.stream
-                        .as_mut()?
-                        .read_lines(&mut response, None, false)
+                    self.read_response(&mut response, required_auth_responses)
                         .await?;
-                    let tag_start = format!("M{} OK", (self.stream.as_ref()?.cmd_id - 1));
-                    if !response
-                        .split_rn()
-                        .into_iter()
-                        .any(|l| l.starts_with(tag_start.as_bytes()))
-                    {
-                        let failure_response = String::from_utf8_lossy(&response);
-                        return Err(Error::new(format!(
-                            "Cannot authenticate to {hostname} with AUTH=PLAIN",
-                        ))
-                        .set_details(format!("Server_replied with {failure_response}"))
-                        .set_kind(ErrorKind::Authentication));
+                    if let Ok(imap_response) = ImapResponse::try_from(response.as_slice()) {
+                        if let Err(err) = imap_response.into() {
+                            return Err(Error::new(format!(
+                                "Cannot authenticate to {hostname} with AUTH=PLAIN",
+                            ))
+                            .set_details(format!("Server replied with {err}"))
+                            .set_kind(ErrorKind::Authentication));
+                        }
                     }
                 } else {
                     // Fallback to LOGIN
@@ -1731,22 +1744,16 @@ impl ImapConnection {
                         password: Secret::new(password),
                     })
                     .await?;
-                    self.stream
-                        .as_mut()?
-                        .read_lines(&mut response, None, false)
+                    self.read_response(&mut response, required_auth_responses)
                         .await?;
-                    let tag_start = format!("M{} OK", (self.stream.as_ref()?.cmd_id - 1));
-                    if !response
-                        .split_rn()
-                        .into_iter()
-                        .any(|l| l.starts_with(tag_start.as_bytes()))
-                    {
-                        let failure_response = String::from_utf8_lossy(&response);
-                        return Err(Error::new(format!(
-                            "Cannot authenticate to {hostname} with LOGIN",
-                        ))
-                        .set_details(format!("Server_replied with {failure_response}"))
-                        .set_kind(ErrorKind::Authentication));
+                    if let Ok(imap_response) = ImapResponse::try_from(response.as_slice()) {
+                        if let Err(err) = imap_response.into() {
+                            return Err(Error::new(format!(
+                                "Cannot authenticate to {hostname} with LOGIN",
+                            ))
+                            .set_details(format!("Server replied with {err}"))
+                            .set_kind(ErrorKind::Authentication));
+                        }
                     }
                 }
                 let mut new_capabilities = IndexSet::new();

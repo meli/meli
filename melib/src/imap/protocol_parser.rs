@@ -55,8 +55,8 @@ const UNTAGGED_PREFIX: &[u8] = b"* ";
 bitflags! {
     #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct RequiredResponses: u32 {
-        /// Require a **tagged** `NO` response.
-        const NO                  = 0;
+        /// Require a **tagged** `NO` or `BAD` response.
+        const NO_OR_BAD                  = 0;
         /// Require an *untagged* `CAPABILITY` response.
         const CAPABILITY          = 1 << 1;
         /// Require an *untagged* `BYE` response.
@@ -121,8 +121,8 @@ bitflags! {
 
 impl RequiredResponses {
     pub fn check(&self, line: &[u8]) -> bool {
-        if *self == Self::NO {
-            return matches!(line.splitn(2, |b| *b == b' ').nth(1), Some(l) if l.starts_with(b"NO "));
+        if *self == Self::NO_OR_BAD {
+            return matches!(line.splitn(2, |b| *b == b' ').nth(1), Some(l) if l.starts_with(b"NO ") || l.starts_with(b"BAD "));
         }
         let Some(stripped) = line.strip_prefix(UNTAGGED_PREFIX) else {
             return false;
@@ -411,10 +411,12 @@ impl From<ImapResponse> for Result<()> {
             ImapResponse::Ok(_) | ImapResponse::Preauth(_) | ImapResponse::Bye(_) => Ok(()),
             ImapResponse::No(ResponseCode::Alert(msg))
             | ImapResponse::Bad(ResponseCode::Alert(msg)) => Err(Error::new(msg)),
-            ImapResponse::No(err) => Err(Error::new(format!("{err:?}")))
-                .chain_err_summary(|| "IMAP NO Response.".to_string()),
-            ImapResponse::Bad(err) => Err(Error::new(format!("{err:?}")))
-                .chain_err_summary(|| "IMAP BAD Response.".to_string()),
+            ImapResponse::No(err) => {
+                Err(Error::new(format!("{err:?}"))).chain_err_summary(|| "IMAP NO Response")
+            }
+            ImapResponse::Bad(err) => {
+                Err(Error::new(format!("{err:?}"))).chain_err_summary(|| "IMAP BAD Response")
+            }
         }
     }
 }

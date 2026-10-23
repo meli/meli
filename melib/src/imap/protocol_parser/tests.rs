@@ -46,7 +46,7 @@ fn test_imap_response() {
 
 #[test]
 fn test_imap_required_responses() {
-    assert!(RequiredResponses::NO.check(b"M12 NO [CANNOT] Invalid something\r\n"));
+    assert!(RequiredResponses::NO_OR_BAD.check(b"M12 NO [CANNOT] Invalid something\r\n"));
     {
         let mut ret = Vec::new();
         let required_responses = RequiredResponses::FETCH_UID | RequiredResponses::FETCH_FLAGS;
