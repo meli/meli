@@ -303,6 +303,7 @@ impl BytesExt for [u8] {
         while let Some(idx) = ret[offset..].find(from) {
             offset += idx;
             ret.splice(offset..(offset + from.len()), to.iter().cloned());
+            offset += to.len();
         }
         ret
     }
