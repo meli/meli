@@ -95,20 +95,18 @@ CREATE TABLE IF NOT EXISTS article (
             uid: UID,
         ) -> Result<Flag> {
             self.connection.execute(
-                "INSERT OR IGNORE INTO article(hash,mailbox_hash,uid,flags) VALUES(?1,?2,?3,0);",
+                "INSERT INTO article(hash,mailbox_hash,uid) VALUES(?1,?2,?3) ON \
+                 CONFLICT(mailbox_hash, uid) DO UPDATE SET hash =  ?1",
                 sqlite3::params![&envelope_hash, &mailbox_hash, &uid],
             )?;
-            let mut stmt = self.connection.prepare(
-                "SELECT flags FROM article WHERE hash = ?1 AND mailbox_hash = ?2 AND uid = ?3;",
-            )?;
+            let mut stmt = self
+                .connection
+                .prepare("SELECT flags FROM article WHERE mailbox_hash = ?1 AND uid = ?2;")?;
             Ok(Flag::from_bits({
-                stmt.query_row(
-                    sqlite3::params![&envelope_hash, &mailbox_hash, &uid],
-                    |row| {
-                        let flag: u8 = row.get(0)?;
-                        Ok(flag)
-                    },
-                )?
+                stmt.query_row(sqlite3::params![&mailbox_hash, &uid], |row| {
+                    let flag: u8 = row.get(0)?;
+                    Ok(flag)
+                })?
             })
             .unwrap_or_default())
         }
