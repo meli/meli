@@ -22,6 +22,8 @@ on:
       - 'meli/Cargo.toml'
       - 'Cargo.toml'
       - 'Cargo.lock'
+  schedule:
+      - cron: '0 2 * * SUN'
 
 jobs:
   test:

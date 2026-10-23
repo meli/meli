@@ -21,6 +21,8 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.cargo/config.toml'
+  schedule:
+      - cron: '0 2 * * SUN'
 
 jobs:
   manifest_lint:
