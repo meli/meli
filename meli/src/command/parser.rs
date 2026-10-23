@@ -752,7 +752,7 @@ pub(super) fn add_attachment<'a>(input: &'a str) -> IResult<&'a str, Result<Acti
             Ok((
                 input,
                 Ok(Tab(ComposerAction(ComposerTabAction::AddAttachment(
-                    FileAction::Path(path.to_string()),
+                    FileAction::Path(path.to_string().into()),
                 )))),
             ))
         },
@@ -979,7 +979,7 @@ pub(super) fn save_attachment<'a>(
                 input,
                 Ok(View(SaveAttachment(
                     idx,
-                    FileAction::Path(path.to_string()),
+                    FileAction::Path(path.to_string().into()),
                 ))),
             ))
         },
@@ -1049,7 +1049,7 @@ pub(super) fn export_mail(input: &str) -> IResult<&str, Result<Action, CommandEr
     let (input, path) = quoted_argument(input.trim())?;
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
-    Ok((input, Ok(View(ExportMail(path.to_string())))))
+    Ok((input, Ok(View(ExportMail(path.to_string().into())))))
 }
 
 pub(super) fn export_thread(input: &str) -> IResult<&str, Result<Action, CommandError>> {
@@ -1061,7 +1061,7 @@ pub(super) fn export_thread(input: &str) -> IResult<&str, Result<Action, Command
     let (input, path) = quoted_argument(input.trim())?;
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
-    Ok((input, Ok(View(ExportThread(path.to_string())))))
+    Ok((input, Ok(View(ExportThread(path.to_string().into())))))
 }
 
 pub(super) fn add_addresses_to_contacts(

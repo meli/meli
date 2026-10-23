@@ -1032,11 +1032,10 @@ pub trait MailListingTrait: ListingTrait {
                         .iter()
                         .map(|&env_hash| account.envelope_bytes_by_hash(env_hash))
                         .collect::<Result<Vec<_>>>();
-                    let mut path = path.to_path_buf();
+                    let mut path = path.expand_tilde().into_owned();
                     if path.is_relative() {
                         path = context.current_dir().join(&path);
                     }
-                    path = path.expand();
                     let account = &mut context.accounts[&account_hash];
                     let format = (*format).unwrap_or_default();
                     let collection = account.collection.clone();
@@ -2007,7 +2006,10 @@ impl Component for Listing {
                             return true;
                         }
                         Action::Listing(ListingAction::Import(file_path, mailbox_path)) => {
-                            let file_path = file_path.expand();
+                            let mut file_path = file_path.expand_tilde().into_owned();
+                            if file_path.is_relative() {
+                                file_path = context.current_dir().join(&file_path);
+                            }
                             let account = &mut context.accounts[self.cursor_pos.account];
                             if let Err(err) = account
                                 .mailbox_by_path(mailbox_path)

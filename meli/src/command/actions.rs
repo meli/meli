@@ -83,7 +83,7 @@ pub enum ListingAction {
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum FileAction {
-    Path(String),
+    Path(PathBuf),
     FilePicker(Option<String>),
 }
 
@@ -140,8 +140,8 @@ pub enum ViewAction {
     Filter(Option<String>),
     SaveAttachment(usize, FileAction),
     PipeAttachment { index: usize, command: String },
-    ExportMail(String),
-    ExportThread(String),
+    ExportMail(PathBuf),
+    ExportThread(PathBuf),
     ExportThreadMbox(Option<MboxFormat>, PathBuf),
     AddAddressesToContacts,
 }

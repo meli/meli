@@ -1150,7 +1150,7 @@ impl Component for ThreadView {
             }
             UIEvent::Action(View(ViewAction::ExportThreadMbox(ref format, ref path))) => {
                 // Save entire thread as eml files in a directory path
-                let mut path = std::path::Path::new(path).to_path_buf().expand();
+                let mut path = path.expand_tilde().into_owned();
                 if path.is_relative() {
                     path = context.current_dir().join(&path);
                 }

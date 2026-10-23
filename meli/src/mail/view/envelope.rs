@@ -529,9 +529,7 @@ impl EnvelopeView {
         &self.body_text
     }
 
-    fn save_attachment(&self, a_i: usize, path: &str, context: &mut Context) {
-        let mut path = std::path::Path::new(path).to_path_buf().expand();
-
+    fn save_attachment(&self, a_i: usize, mut path: PathBuf, context: &mut Context) {
         if let Some(u) = self.open_attachment(a_i, context) {
             if path.is_dir() {
                 if let Some(mut filename) = u.filename() {
@@ -1410,15 +1408,15 @@ impl Component for EnvelopeView {
             }
             UIEvent::Action(View(ViewAction::ExportMail(ref path))) => {
                 // Save entire message as eml
-                let mut path = std::path::Path::new(path).to_path_buf().expand();
+                let mut path = path.expand_tilde().into_owned();
+                if path.is_relative() {
+                    path = context.current_dir().join(&path);
+                }
 
                 if path.is_dir() {
                     let mut filename = self.mail.message_id().to_string().into();
                     crate::sanitize_filename(&mut filename);
                     path.push(format!("{filename}.eml",));
-                }
-                if path.is_relative() {
-                    path = context.current_dir().join(&path);
                 }
                 match save_attachment(&path, &self.mail.bytes) {
                     Err(err) => {
@@ -1446,6 +1444,10 @@ impl Component for EnvelopeView {
                 return true;
             }
             UIEvent::Action(View(ViewAction::SaveAttachment(a_i, FileAction::Path(ref path)))) => {
+                let mut path = path.expand_tilde().into_owned();
+                if path.is_relative() {
+                    path = context.current_dir().join(&path);
+                }
                 self.save_attachment(a_i, path, context);
                 return true;
             }
@@ -1867,9 +1869,14 @@ impl Component for EnvelopeView {
                                     )),
                                 });
                             } else {
-                                let path = String::from_utf8_lossy(paths[0]);
+                                let path =
+                                    PathBuf::from(String::from_utf8_lossy(paths[0]).as_ref());
+                                let mut path = path.expand_tilde().into_owned();
+                                if path.is_relative() {
+                                    path = context.current_dir().join(&path);
+                                }
                                 log::trace!("saving to {path:?}");
-                                self.save_attachment(a_i, &path, context);
+                                self.save_attachment(a_i, path, context);
                             }
                         }
                     },
