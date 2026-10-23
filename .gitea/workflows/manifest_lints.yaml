@@ -46,7 +46,8 @@ jobs:
           apt-get install -y mandoc
       - name: Cache rustup
         id: cache-rustup
-        uses: actions/cache@v6
+        if: forgejo.ref != 'refs/heads/master'
+        uses: actions/cache/restore@v6
         with:
           path: |
             ~/.rustup/
@@ -59,6 +60,7 @@ jobs:
           key: manifest_lints-workflow-${{ matrix.build }}-rustup
       - id: rustup-setup
         name: Install Rustup and toolchains
+        if: steps.cache-rustup.outputs.cache-hit != 'true'
         shell: bash
         run: |
           if ! command -v rustup &>/dev/null; then
@@ -98,3 +100,17 @@ jobs:
         if: success() || failure()
         run: |
           make -f ./.gitea/Makefile.manifest-lint check-debian-changelog
+      - name: Save rustup cache
+        id: save-cache-rustup
+        uses: actions/cache/save@v6
+        if: forgejo.ref == 'refs/heads/master'
+        with:
+          path: |
+            ~/.rustup/
+            ~/.cargo/env
+            ~/.cargo/config.toml
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: manifest_lints-workflow-${{ matrix.build }}-rustup

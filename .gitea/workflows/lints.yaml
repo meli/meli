@@ -51,7 +51,8 @@ jobs:
           printf "Rust MSRV is %s\n" $(grep -m1 rust-version meli/Cargo.toml | head -n1 | cut -d'"' -f 2 | head -n1)
       - name: Cache rustup
         id: cache-rustup
-        uses: actions/cache@v6
+        if: forgejo.ref != 'refs/heads/master'
+        uses: actions/cache/restore@v6
         with:
           path: |
             ~/.rustup/
@@ -99,6 +100,7 @@ jobs:
           cargo install --version 0.18.4 --target "${{ matrix.target }}" cargo-msrv
       - name: Restore build artifacts cache in target dir
         id: cache-deps
+        if: forgejo.ref != 'refs/heads/master'
         uses: actions/cache/restore@v6
         with:
           path: target/
@@ -111,6 +113,7 @@ jobs:
       - name: Save build artifacts in target dir
         id: save-cache-deps
         uses: actions/cache/save@v6
+        if: forgejo.ref == 'refs/heads/master'
         with:
           path: target/
           key: workflow-${{ matrix.build }}-cargo-${{ hashFiles('**/Cargo.lock') }}
@@ -119,6 +122,20 @@ jobs:
         run: |
           source "${HOME}/.cargo/env"
           make -f ./.gitea/Makefile.lint cargo-msrv
+      - name: Save rustup
+        id: save-rustup-cache-deps
+        uses: actions/cache/save@v6
+        if: forgejo.ref == 'refs/heads/master'
+        with:
+          path: |
+            ~/.rustup/
+            ~/.cargo/env
+            ~/.cargo/config.toml
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: lints-workflow-${{ matrix.build }}-rustup
       - name: rustfmt
         if: success() || failure()
         run: |
