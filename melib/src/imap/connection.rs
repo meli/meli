@@ -374,6 +374,7 @@ pub struct ImapConnection {
     pub sync_policy: SyncPolicy,
     pub uid_store: Arc<UIDStore>,
     pub msn_index: HashMap<MailboxHash, super::MessageSequenceNumberMap>,
+    pub forward_untagged_responses: Option<Vec<BackendEvent>>,
     pub send_state_changes: bool,
 }
 
@@ -842,6 +843,7 @@ impl ImapConnection {
             uid_store,
             msn_index: Default::default(),
             send_state_changes,
+            forward_untagged_responses: None,
         }
     }
 
@@ -1080,7 +1082,13 @@ impl ImapConnection {
                             super::protocol_parser::untagged_responses(l).map(|(_, v, _)| v)
                         {
                             if let Some(ev) = self.process_untagged(untagged_response).await? {
-                                self.add_backend_event(ev);
+                                if let Some(forward_untagged_responses) =
+                                    &mut self.forward_untagged_responses
+                                {
+                                    forward_untagged_responses.push(ev);
+                                } else {
+                                    self.add_backend_event(ev);
+                                }
                             }
                         } else {
                             ret.extend_from_slice(l);

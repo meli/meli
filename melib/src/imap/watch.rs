@@ -205,6 +205,7 @@ pub fn idle(kit: ImapWatchKit) -> impl futures::stream::Stream<Item = Result<Bac
                     .conn
                     .read_response(&mut response, RequiredResponses::UNTAGGED)
                     .await?;
+                blockn.conn.forward_untagged_responses = Some(vec![]);
                 for l in lines.split_rn().chain(response.split_rn()) {
                     log::trace!("process_untagged {:?}", String::from_utf8_lossy(l));
                     if l.starts_with(b"+ ")
@@ -221,6 +222,11 @@ pub fn idle(kit: ImapWatchKit) -> impl futures::stream::Stream<Item = Result<Bac
                         if let Some(ev) = blockn.conn.process_untagged(untagged_response).await? {
                             events.push(ev);
                         }
+                    }
+                }
+                if let Some(untagged_responses) = blockn.conn.forward_untagged_responses.take() {
+                    for ev in untagged_responses {
+                        events.push(ev);
                     }
                 }
                 blockn.conn.send_command(CommandBody::Idle).await?;
