@@ -300,11 +300,13 @@ impl EmbeddedGrid {
             let mut segment = None;
             for x in 0..cols {
                 if map.is_set(x, y) {
-                    segment.get_or_insert((x, x)).1 = x;
+                    segment.get_or_insert((x, 0)).1 += 1;
+                } else if let Some((start, width)) = segment.take() {
+                    retval.push((y, (start, width)));
                 }
             }
-            if let Some((start, end)) = segment {
-                retval.push((y, (start, end)));
+            if let Some((start, width)) = segment {
+                retval.push((y, (start, width)));
             }
         }
         retval
