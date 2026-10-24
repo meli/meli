@@ -42,7 +42,7 @@ jobs:
         name: install OS dependencies
         run: |
           apt-get update
-          apt-get install -y mandoc debhelper quilt build-essential
+          apt-get install -y mandoc debhelper quilt build-essential libdbus-1-dev pkg-config libssl-dev clang nettle-dev capnproto libsqlite3-dev
       - id: rustup-setup
         name: Install rustup and toolchains
         shell: bash
