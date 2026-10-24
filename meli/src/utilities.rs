@@ -901,97 +901,6 @@ impl Component for Tabbed {
             {
                 children_maps.move_index(i, children_maps.len().saturating_sub(1));
             }
-            if (children_maps == self.help_view.curr_views) && must_redraw_shortcuts {
-                let dialog_area = area.align_inside(
-                    // add box perimeter padding
-                    {
-                        let (w, h) = self.help_view.content.area().size();
-                        (w + 1, h + 1)
-                    },
-                    // horizontal
-                    Alignment::Center,
-                    // vertical
-                    Alignment::Center,
-                );
-                context.dirty_areas.push_back(dialog_area);
-                grid.clear_area(dialog_area, self.theme_default);
-                let inner_area = create_box(grid, dialog_area);
-                let (x, y) = grid.write_string(
-                    "shortcuts",
-                    &(self.theme_default | Attr::BOLD),
-                    inner_area.skip_cols(2),
-                    None,
-                    None,
-                );
-                grid.write_string(
-                    &format!(
-                        "Press {} to close",
-                        children_maps[Shortcuts::GENERAL]["toggle_help"]
-                    ),
-                    &(self.theme_default | Attr::ITALICS),
-                    inner_area.skip(4 + x, y),
-                    None,
-                    None,
-                );
-                let inner_area = inner_area.skip_rows(y + 1).skip_rows_from_end(1);
-                let (width, height) = self.help_view.content.grid().size();
-                let (cols, rows) = inner_area.size();
-
-                grid.copy_area(
-                    self.help_view.content.grid(),
-                    inner_area,
-                    self.help_view
-                        .content
-                        .area()
-                        .skip(
-                            std::cmp::min(
-                                (width - 1).saturating_sub(cols),
-                                self.help_view.cursor.0,
-                            ),
-                            std::cmp::min(
-                                (height - 1).saturating_sub(rows),
-                                self.help_view.cursor.1,
-                            ),
-                        )
-                        .take_rows(rows),
-                );
-                if height.wrapping_div(rows + 1) > 0 || width.wrapping_div(cols + 1) > 0 {
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
-                            ScrollUpdate::Update {
-                                id: self.id,
-                                context: ScrollContext {
-                                    shown_lines: std::cmp::min(
-                                        (height).saturating_sub(rows + 1),
-                                        self.help_view.cursor.1,
-                                    ) + rows,
-                                    total_lines: height,
-                                    has_more_lines: false,
-                                },
-                            },
-                        )));
-                    ScrollBar::default().set_show_arrows(true).draw(
-                        grid,
-                        inner_area.nth_col(inner_area.width().saturating_sub(1)),
-                        context,
-                        /* position */
-                        std::cmp::min((height).saturating_sub(rows + 1), self.help_view.cursor.1),
-                        /* visible_rows */
-                        rows,
-                        /* length */
-                        height,
-                    );
-                } else {
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
-                            ScrollUpdate::End(self.id),
-                        )));
-                }
-                self.dirty = false;
-                return;
-            }
             let mut max_length = 6;
             let mut max_width =
                 "Press XXXX to close, use COMMAND \"search\" to find shortcuts".len() + 3;
@@ -1030,6 +939,10 @@ impl Component for Tabbed {
             }
             self.help_view.content.grid_mut().set_growable(true);
             let help_area = self.help_view.content.area();
+            self.help_view
+                .content
+                .grid_mut()
+                .clear_area(help_area, self.theme_default);
             self.help_view.content.grid_mut().write_string(
                 "use COMMAND \"search\" to find shortcuts",
                 &self.theme_default,
@@ -1078,7 +991,7 @@ impl Component for Tabbed {
                 // add box perimeter padding
                 {
                     let (w, h) = self.help_view.content.area().size();
-                    (w + 1, h + 1)
+                    (w + 2, h + 5)
                 },
                 // horizontal
                 Alignment::Center,
@@ -1091,21 +1004,20 @@ impl Component for Tabbed {
             let (x, y) = grid.write_string(
                 "shortcuts",
                 &(self.theme_default | Attr::BOLD),
-                inner_area.skip_cols(2),
+                dialog_area.skip_cols(2),
                 None,
                 None,
             );
             grid.write_string(
                 &format!(
-                    "Press {} to close",
+                    "Press {} to close\n",
                     self.help_view.curr_views[Shortcuts::GENERAL]["toggle_help"]
                 ),
                 &(self.theme_default | Attr::ITALICS),
-                inner_area.skip(4 + x, y),
+                dialog_area.skip(4 + x, y),
                 None,
                 None,
             );
-            let inner_area = inner_area.skip_rows(y + 1).skip_rows_from_end(1);
             let (width, height) = self.help_view.content.area().size();
             let (cols, rows) = inner_area.size();
             if let Some(ref mut search) = self.help_view.search {
@@ -1182,7 +1094,7 @@ impl Component for Tabbed {
             }
 
             /* In this case we will be scrolling, so show the user how to do it */
-            if height.wrapping_div(rows + 1) > 0 || width.wrapping_div(cols + 1) > 0 {
+            if (height > rows) || (width > cols) {
                 let help_area = self.help_view.content.area();
                 self.help_view.content.grid_mut().write_string(
                     &format!(
@@ -1211,7 +1123,7 @@ impl Component for Tabbed {
                     )
                     .take_rows(std::cmp::min(rows, height - 1)),
             );
-            if height.wrapping_div(rows + 1) > 0 || width.wrapping_div(cols + 1) > 0 {
+            if (height > rows) || (width > cols) {
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
