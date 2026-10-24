@@ -191,9 +191,9 @@ impl TextField {
 
         grid.change_theme(
             area.skip_cols(pos).take_cols(1),
-            *self
-                .highlight
-                .get_or_insert_with(|| crate::conf::theme_value(context, "highlight")),
+            *self.highlight.get_or_insert_with(|| {
+                crate::conf::theme_value(context, "widgets.form.highlighted")
+            }),
         );
         if let Some((autocomplete_fn, autocomplete)) = self.autocomplete.as_mut() {
             let entries = autocomplete_fn(context, self.inner.as_str());
@@ -1434,7 +1434,7 @@ impl<
 
             grid.clear_area(area, theme_default);
             let label_attrs = crate::conf::theme_value(context, "widgets.form.label");
-            let mut highlighted = crate::conf::theme_value(context, "highlight");
+            let mut highlighted = crate::conf::theme_value(context, "widgets.form.highlighted");
             if !context.settings.terminal.use_color() {
                 highlighted.attrs |= Attr::REVERSE;
             }
@@ -1807,7 +1807,7 @@ where
             for (i, k) in self.buttons.keys().enumerate() {
                 let cur_len = k.len();
                 let theme_attr = if i == self.cursor && self.focus {
-                    crate::conf::theme_value(context, "highlight")
+                    crate::conf::theme_value(context, "widgets.form.highlighted")
                 } else {
                     theme_default
                 };
