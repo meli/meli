@@ -32,15 +32,15 @@ use crate::components::prelude::*;
 /// // Mock `Component::draw` impl
 /// fn draw(grid: &mut CellBuffer, area: Area, context: &mut Context) {
 ///     let position = 0;
-///     let visible_rows = area.height();
-///     let scrollbar_area = area.nth_col(area.width());
+///     let visible_entries = area.height();
+///     let scrollbar_area = area.nth_col(area.width().saturating_sub(1));
 ///     let total_rows = 100;
 ///     ScrollBar::default().set_show_arrows(true).draw(
 ///         grid,
 ///         scrollbar_area,
 ///         context,
 ///         position,
-///         visible_rows,
+///         visible_entries,
 ///         total_rows,
 ///     );
 /// }
@@ -57,6 +57,22 @@ impl ScrollBar {
         self
     }
 
+    #[inline]
+    /// Returns `(offset, length)`
+    fn calculate(
+        pos: usize,
+        visible_entries: usize,
+        total_entries: usize,
+        show_arrows: bool,
+        available_length: usize,
+    ) -> (usize, usize) {
+        let ratio: f64 = (available_length.saturating_sub(usize::from(show_arrows) * (2)) as f64)
+            / (total_entries as f64);
+        let length = (1.max((ratio * (visible_entries as f64)) as usize)).min(available_length);
+        let offset = (available_length - length).min((ratio * (pos as f64)).ceil() as usize);
+        (offset, length)
+    }
+
     /// Draw `self` vertically.
     pub fn draw(
         &self,
@@ -64,10 +80,10 @@ impl ScrollBar {
         area: Area,
         context: &Context,
         pos: usize,
-        visible_rows: usize,
+        visible_entries: usize,
         length: usize,
     ) {
-        if length == 0 {
+        if length == 0 || visible_entries >= length {
             return;
         }
         let height = area.height();
@@ -77,11 +93,10 @@ impl ScrollBar {
         let theme_default = crate::conf::theme_value(context, "theme_default");
         grid.clear_area(area, theme_default);
 
-        let visible_rows = std::cmp::min(visible_rows, length);
+        let visible_entries = visible_entries.min(length);
         let ascii_drawing = grid.ascii_drawing;
-        let ratio: f64 = (height as f64) / (length as f64);
-        let scrollbar_height = (1.max((ratio * (visible_rows as f64)) as usize)).min(height);
-        let scrollbar_offset = (height - scrollbar_height).min((ratio * (pos as f64)) as usize);
+        let (scrollbar_offset, scrollbar_height) =
+            Self::calculate(pos, visible_entries, length, self.show_arrows, height);
         let mut area2 = area;
 
         if self.show_arrows {
@@ -107,7 +122,7 @@ impl ScrollBar {
             area2 = area2.skip_rows(1);
         }
         if self.show_arrows {
-            grid[area2.bottom_right()]
+            grid[area.bottom_right()]
                 .set_ch(if ascii_drawing { 'v' } else { '▄' })
                 .set_fg(crate::conf::theme_value(context, "widgets.options.highlighted").bg)
                 .set_bg(crate::conf::theme_value(context, "theme_default").bg);
@@ -121,10 +136,10 @@ impl ScrollBar {
         area: Area,
         context: &Context,
         pos: usize,
-        visible_cols: usize,
+        visible_entries: usize,
         length: usize,
     ) {
-        if length == 0 {
+        if length == 0 || visible_entries >= length {
             return;
         }
         let width = area.width();
@@ -134,16 +149,20 @@ impl ScrollBar {
         let theme_default = crate::conf::theme_value(context, "theme_default");
         grid.clear_area(area, theme_default);
 
-        let visible_cols = std::cmp::min(visible_cols, length);
+        let visible_entries = visible_entries.min(length);
         let ascii_drawing = grid.ascii_drawing;
-        let ratio: f64 = (width as f64) / (length as f64);
-        let scrollbar_width = std::cmp::min((ratio * (visible_cols as f64)) as usize, 1);
-        let scrollbar_offset = (ratio * (pos as f64)) as usize;
+
+        let arrow_start = if ascii_drawing { '<' } else { '▌' };
+        let body = if ascii_drawing { '#' } else { '█' };
+        let arrow_end = if ascii_drawing { '>' } else { '▐' };
+
+        let (scrollbar_offset, scrollbar_width) =
+            Self::calculate(pos, visible_entries, length, self.show_arrows, width);
         let mut area2 = area;
 
         if self.show_arrows {
             grid[area2.upper_left()]
-                .set_ch(if ascii_drawing { '<' } else { '▐' })
+                .set_ch(arrow_start)
                 .set_fg(crate::conf::theme_value(context, "widgets.options.highlighted").bg);
             area2 = area2.skip_cols(1);
         }
@@ -154,7 +173,7 @@ impl ScrollBar {
                 break;
             }
             grid[area2.upper_left()]
-                .set_ch(if ascii_drawing { '#' } else { '█' })
+                .set_ch(body)
                 .set_fg(crate::conf::theme_value(context, "widgets.options.highlighted").bg)
                 .set_attrs(if !context.settings.terminal.use_color() {
                     theme_default.attrs | Attr::REVERSE
@@ -164,8 +183,8 @@ impl ScrollBar {
             area2 = area2.skip_cols(1);
         }
         if self.show_arrows {
-            grid[area2.bottom_right()]
-                .set_ch(if ascii_drawing { '>' } else { '▌' })
+            grid[area.bottom_right()]
+                .set_ch(arrow_end)
                 .set_fg(crate::conf::theme_value(context, "widgets.options.highlighted").bg)
                 .set_bg(crate::conf::theme_value(context, "theme_default").bg);
         }

@@ -22,14 +22,24 @@
 
 use rusty_fork::rusty_fork_test;
 
+use crate::{
+    terminal::{Screen, Virtual},
+    utilities::widgets::ScrollBar,
+};
+
 rusty_fork_test! {
-#[test]
+    #[test]
     fn test_utilities_text_input_field() {
-        run_utilities_text_input_field()
+        utilities_text_input_field()
+    }
+
+    #[test]
+    fn test_utilities_scrollbar() {
+        utilities_scrollbar()
     }
 }
 
-fn run_utilities_text_input_field() {
+fn utilities_text_input_field() {
     use super::TextField;
     use crate::{melib::text::TextProcessing as _, Component as _, Key, UIEvent};
 
@@ -183,4 +193,269 @@ fn run_utilities_text_input_field() {
     assert_eq!(field.byte_cursor(), EMOJIGRAM_END - 9);
     assert_eq!(field.as_str(), EMOJIGRAM);
     _ = tmpdir.close();
+}
+
+fn utilities_scrollbar() {
+    macro_rules! assert_eq_grid {
+        ($i:expr, $left:expr, $right:expr) => {{
+            let i = $i;
+            let left = $left;
+            let right = $right;
+            assert_eq!(&left, &right, "i = {i}\nleft:\n{left}\nright:\n{right}");
+        }};
+    }
+
+    struct TestCase {
+        // cols, rows
+        area_size: (usize, usize),
+        show_arrows: bool,
+        ascii_drawing: bool,
+        position: usize,
+        visible_rows: usize,
+        total_rows: usize,
+        expected: &'static str,
+    }
+
+    let tmpdir = tempfile::TempDir::new().unwrap();
+    let context = crate::state::Context::new_mock(&tmpdir);
+    let mut screen = Screen::<Virtual>::new(Default::default());
+    let theme_default = crate::conf::theme_value(&context, "theme_default");
+
+    const TEST_CASES: &[TestCase] = &[
+        TestCase {
+            area_size: (3, 20),
+            show_arrows: true,
+            ascii_drawing: false,
+            position: 0,
+            visible_rows: 20,
+            total_rows: 20,
+            expected: "   \n   \n   \n   \n   \n   \n   \n   \n   \n   \n   \n   \n   \n   \n   \
+                       \n   \n   \n   \n   \n   \n",
+        },
+        TestCase {
+            area_size: (3, 20),
+            show_arrows: true,
+            ascii_drawing: false,
+            position: 0,
+            visible_rows: 20,
+            total_rows: 21,
+            expected: "  ▀\n  █\n  █\n  █\n  █\n  █\n  █\n  █\n  █\n  █\n  █\n  █\n  █\n  █\n  \
+                       █\n  █\n  █\n  █\n   \n  ▄\n",
+        },
+        TestCase {
+            area_size: (3, 20),
+            show_arrows: true,
+            ascii_drawing: false,
+            position: 0,
+            visible_rows: 20,
+            total_rows: 20 * 5,
+            expected: "  ▀\n  █\n  █\n  █\n   \n   \n   \n   \n   \n   \n   \n   \n   \n   \n   \
+                       \n   \n   \n   \n   \n  ▄\n",
+        },
+        TestCase {
+            area_size: (3, 4),
+            show_arrows: true,
+            ascii_drawing: false,
+            position: 0,
+            visible_rows: 20,
+            total_rows: 20 * 5,
+            expected: "  ▀\n  █\n   \n  ▄\n",
+        },
+        TestCase {
+            area_size: (3, 4),
+            show_arrows: true,
+            ascii_drawing: true,
+            position: 0,
+            visible_rows: 20,
+            total_rows: 20 * 5,
+            expected: "  ^\n  #\n   \n  v\n",
+        },
+        TestCase {
+            area_size: (3, 4),
+            show_arrows: false,
+            ascii_drawing: false,
+            position: 0,
+            visible_rows: 20,
+            total_rows: 20 * 5,
+            expected: "  █\n   \n   \n   \n",
+        },
+        TestCase {
+            area_size: (3, 4),
+            show_arrows: false,
+            ascii_drawing: false,
+            position: 10,
+            visible_rows: 20,
+            total_rows: 20 * 2,
+            expected: "   \n  █\n  █\n   \n",
+        },
+        TestCase {
+            area_size: (3, 4),
+            show_arrows: false,
+            ascii_drawing: false,
+            position: 20,
+            visible_rows: 20,
+            total_rows: 20 * 2,
+            expected: "   \n   \n  █\n  █\n",
+        },
+        TestCase {
+            area_size: (3, 4),
+            show_arrows: false,
+            ascii_drawing: false,
+            position: 20 * 2,
+            visible_rows: 20,
+            total_rows: 20 * 2,
+            expected: "   \n   \n  █\n  █\n",
+        },
+        TestCase {
+            area_size: (3, 4),
+            show_arrows: false,
+            ascii_drawing: false,
+            position: 0,
+            visible_rows: 20,
+            total_rows: 20,
+            expected: "   \n   \n   \n   \n",
+        },
+        TestCase {
+            area_size: (3, 4),
+            show_arrows: false,
+            ascii_drawing: false,
+            position: 0,
+            visible_rows: 20,
+            total_rows: 21,
+            expected: "  █\n  █\n  █\n   \n",
+        },
+        TestCase {
+            area_size: (3, 4),
+            show_arrows: false,
+            ascii_drawing: true,
+            position: 0,
+            visible_rows: 20,
+            total_rows: 21,
+            expected: "  #\n  #\n  #\n   \n",
+        },
+    ];
+
+    for (
+        i,
+        &TestCase {
+            area_size: (cols, rows),
+            ascii_drawing,
+            show_arrows,
+            position,
+            visible_rows,
+            total_rows,
+            expected,
+        },
+    ) in TEST_CASES.iter().enumerate()
+    {
+        assert!(screen.resize(cols, rows));
+        let area = screen.area();
+        screen.grid_mut().ascii_drawing = ascii_drawing;
+        screen.grid_mut().clear_area(area, theme_default);
+        ScrollBar::default().set_show_arrows(show_arrows).draw(
+            screen.grid_mut(),
+            area.nth_col(area.width().saturating_sub(1)),
+            &context,
+            position,
+            visible_rows,
+            total_rows,
+        );
+        // eprintln!(
+        //     "i = {i}\n{boundary}\n{output}\n{boundary}",
+        //     boundary = i.to_string().repeat(20),
+        //     output = screen.grid().to_string()
+        // );
+        assert_eq_grid!(i, expected, screen.grid().to_string());
+    }
+
+    const HORZ_TEST_CASES: &[TestCase] = &[
+        TestCase {
+            area_size: (20, 1),
+            show_arrows: true,
+            ascii_drawing: false,
+            position: 0,
+            visible_rows: 20,
+            total_rows: 20,
+            expected: "                    \n",
+        },
+        TestCase {
+            area_size: (20, 1),
+            show_arrows: true,
+            ascii_drawing: false,
+            position: 0,
+            visible_rows: 20,
+            total_rows: 21,
+            expected: "▌█████████████████ ▐\n",
+        },
+        TestCase {
+            area_size: (20, 1),
+            show_arrows: true,
+            ascii_drawing: false,
+            position: 0,
+            visible_rows: 20,
+            total_rows: 20 * 3,
+            expected: "▌██████            ▐\n",
+        },
+        TestCase {
+            area_size: (20, 1),
+            show_arrows: true,
+            ascii_drawing: false,
+            position: 10,
+            visible_rows: 20,
+            total_rows: 20 * 3,
+            expected: "▌   ██████         ▐\n",
+        },
+        TestCase {
+            area_size: (20, 1),
+            show_arrows: true,
+            ascii_drawing: true,
+            position: 10,
+            visible_rows: 20,
+            total_rows: 20 * 3,
+            expected: "<   ######         >\n",
+        },
+        TestCase {
+            area_size: (20, 1),
+            show_arrows: false,
+            ascii_drawing: true,
+            position: 10,
+            visible_rows: 20,
+            total_rows: 20 * 3,
+            expected: "    ######          \n",
+        },
+    ];
+    for (
+        i,
+        &TestCase {
+            area_size: (cols, rows),
+            ascii_drawing,
+            show_arrows,
+            position,
+            visible_rows,
+            total_rows,
+            expected,
+        },
+    ) in HORZ_TEST_CASES.iter().enumerate()
+    {
+        assert!(screen.resize(cols, rows));
+        let area = screen.area();
+        screen.grid_mut().ascii_drawing = ascii_drawing;
+        screen.grid_mut().clear_area(area, theme_default);
+        ScrollBar::default()
+            .set_show_arrows(show_arrows)
+            .draw_horizontal(
+                screen.grid_mut(),
+                area.nth_row(area.height().saturating_sub(1)),
+                &context,
+                position,
+                visible_rows,
+                total_rows,
+            );
+        // eprintln!(
+        //     "i = {i}\n{boundary}\n{output}\n{boundary}",
+        //     boundary = i.to_string().repeat(20),
+        //     output = screen.grid().to_string()
+        // );
+        assert_eq_grid!(i, expected, screen.grid().to_string());
+    }
 }
