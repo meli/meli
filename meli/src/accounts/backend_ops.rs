@@ -35,10 +35,11 @@ impl Account {
             mailbox_hash,
             flags.clone(),
         )?;
-        let handle =
-            self.main_loop_handler
-                .job_executor
-                .spawn("set-flags".into(), fut, self.is_async());
+        let handle = self.main_loop_handler.job_executor.spawn(
+            format!("{name}:set-flags", name = self.name).into(),
+            fut,
+            self.is_async(),
+        );
         let job_id = handle.job_id;
         self.insert_job(
             job_id,
@@ -68,7 +69,7 @@ impl Account {
                 Ok(())
             };
             let handle = self.main_loop_handler.job_executor.spawn(
-                "sqlite3::update_env".into(),
+                format!("{name}:sqlite3::update_env", name = self.name).into(),
                 fut,
                 crate::sqlite3::AccountCache::is_async(),
             );
@@ -91,7 +92,7 @@ impl Account {
             let fut =
                 async move { crate::sqlite3::AccountCache::rename(name, old_hash, new_hash).await };
             let handle = self.main_loop_handler.job_executor.spawn(
-                "sqlite3::rename".into(),
+                format!("{name}:sqlite3::sqlite3::rename", name = self.name).into(),
                 fut,
                 crate::sqlite3::AccountCache::is_async(),
             );

@@ -59,7 +59,7 @@ impl Account {
     ) {
         let account_name = &self.name;
         let handle = self.main_loop_handler.job_executor.spawn(
-            format!("initialize {account_name} {name} {format} contacts").into(),
+            format!("{account_name}: initialize {name} {format} contacts").into(),
             fut,
             is_async,
         );
@@ -267,7 +267,8 @@ impl Account {
             Ok(v) => {
                 let handle = self.main_loop_handler.job_executor.spawn(
                     format!(
-                        "fetch {name} {format} address books",
+                        "{account_name}:fetch {name} {format} address books",
+                        account_name = self.name,
                         name = backend_id.name,
                         format = backend_id.format
                     )
@@ -320,7 +321,8 @@ impl Account {
             Ok(v) => {
                 let handle = self.main_loop_handler.job_executor.spawn(
                     format!(
-                        "fetch {name} {format} address book",
+                        "{account_name}:fetch {name} {format} address book",
+                        account_name = self.name,
                         name = backend_id.name,
                         format = backend_id.format
                     )
@@ -644,9 +646,10 @@ impl Account {
         let backend = self.contact_backends[&*backend_id].as_ref();
         let mut backend = backend.lock().unwrap();
         let card_id = card.id();
+        let job_name = format!("{name}:contact::create {card}", name = self.name).into();
         let fut = backend.add(&book, card)?;
         let handle = self.main_loop_handler.job_executor.spawn(
-            "create contact".into(),
+            job_name,
             async move {
                 match fut.await {
                     ok @ Ok(_) => {
@@ -692,7 +695,7 @@ impl Account {
         let card_id = card.id();
         let fut = backend.edit(&book, card)?;
         let handle = self.main_loop_handler.job_executor.spawn(
-            "edit contact".into(),
+            format!("{name}:contact::edit", name = self.name).into(),
             async move {
                 match fut.await {
                     ok @ Ok(_) => {
@@ -736,9 +739,10 @@ impl Account {
         let backend = self.contact_backends[&*backend_id].as_ref();
         let mut backend = backend.lock().unwrap();
         let card_id = card.id();
+        let job_name = format!("{name}:contact::delete {card}", name = self.name).into();
         let fut = backend.delete(&book, card)?;
         let handle = self.main_loop_handler.job_executor.spawn(
-            "delete contact".into(),
+            job_name,
             async move {
                 match fut.await {
                     ok @ Ok(_) => {

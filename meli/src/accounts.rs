@@ -197,7 +197,7 @@ impl Account {
         if let Ok(mailboxes_job) = backend.mailboxes() {
             if let Ok(online_job) = backend.is_online() {
                 let handle = main_loop_handler.job_executor.spawn(
-                    "list-mailboxes".into(),
+                    format!("{name}:list-mailboxes").into(),
                     online_job.then(|_| mailboxes_job),
                     if backend.capabilities().is_async {
                         IsAsync::Async
@@ -432,7 +432,12 @@ impl Account {
                     entry.status = MailboxStatus::Parsing(0, total);
                     if let Ok(mailbox_job) = self.backend.lock().unwrap().fetch(*h) {
                         let handle = self.main_loop_handler.job_executor.spawn(
-                            "fetch-mailbox".into(),
+                            format!(
+                                "{name}:fetch-mailbox {mbox}",
+                                name = self.name,
+                                mbox = entry.path
+                            )
+                            .into(),
                             mailbox_job.into_future(),
                             self.is_async(),
                         );
@@ -547,7 +552,7 @@ impl Account {
                 #[cfg(feature = "sqlite3")]
                 if self.settings.conf.search_backend == SearchBackend::Sqlite3 {
                     let handle = self.main_loop_handler.job_executor.spawn(
-                        "sqlite3::insert".into(),
+                        format!("{name}:sqlite3::insert", name = self.name).into(),
                         crate::sqlite3::AccountCache::insert(
                             self.name.clone(),
                             (*envelope).clone(),
@@ -642,7 +647,7 @@ impl Account {
                 #[cfg(feature = "sqlite3")]
                 if self.settings.conf.search_backend == SearchBackend::Sqlite3 {
                     let handle = self.main_loop_handler.job_executor.spawn(
-                        "sqlite3::remove-envelope".into(),
+                        format!("{name}:sqlite3::remove-envelope", name = self.name).into(),
                         crate::sqlite3::AccountCache::remove(self.name.clone(), env_hash),
                         crate::sqlite3::AccountCache::is_async(),
                     );
@@ -731,6 +736,9 @@ impl Account {
     }
 
     pub fn refresh(&mut self, mailbox_hash: MailboxHash) -> Result<()> {
+        if !self.mailbox_entries.contains_key(&mailbox_hash) {
+            return Err(Error::new("Mailbox not found.").set_kind(ErrorKind::NotFound));
+        }
         if let Some(ref refresh_command) = self.settings.conf().refresh_command {
             let child = std::process::Command::new("sh")
                 .args(["-c", refresh_command])
@@ -750,7 +758,12 @@ impl Account {
         let refresh_job = self.backend.lock().unwrap().refresh(mailbox_hash);
         if let Ok(refresh_job) = refresh_job {
             let handle = self.main_loop_handler.job_executor.spawn(
-                "refresh".into(),
+                format!(
+                    "{name}:refresh {mbox}",
+                    name = self.name,
+                    mbox = self.mailbox_entries[&mailbox_hash].path
+                )
+                .into(),
                 refresh_job,
                 self.is_async(),
             );
@@ -782,7 +795,7 @@ impl Account {
                         fut.into_future().await
                     };
                     let handle = self.main_loop_handler.job_executor.spawn(
-                        "watch".into(),
+                        format!("{name}:watch", name = self.name).into(),
                         fut,
                         self.is_async(),
                     );
@@ -876,7 +889,12 @@ impl Account {
                     match mailbox_job {
                         Ok(mailbox_job) => {
                             let handle = self.main_loop_handler.job_executor.spawn(
-                                "fetch-mailbox".into(),
+                                format!(
+                                    "{name}:fetch-mailbox {mbox}",
+                                    name = self.name,
+                                    mbox = self.mailbox_entries[&mailbox_hash].path
+                                )
+                                .into(),
                                 mailbox_job.into_future(),
                                 self.is_async(),
                             );
@@ -962,10 +980,11 @@ impl Account {
             .unwrap()
             .save(bytes.to_vec(), mailbox_hash, flags)?;
 
-        let handle =
-            self.main_loop_handler
-                .job_executor
-                .spawn("save-envelope".into(), job, self.is_async());
+        let handle = self.main_loop_handler.job_executor.spawn(
+            format!("{name}:save-envelope", name = self.name).into(),
+            job,
+            self.is_async(),
+        );
         self.insert_job(
             handle.job_id,
             JobRequest::SaveMessage {
@@ -1030,7 +1049,7 @@ impl Account {
             #[cfg(feature = "smtp")]
             SendMail::Smtp(conf) => {
                 let handle = self.main_loop_handler.job_executor.spawn(
-                    "smtp".into(),
+                    format!("{name}:smtp", name = self.name).into(),
                     async move {
                         let mut smtp_connection =
                             melib::smtp::SmtpConnection::new_connection(conf).await?;
@@ -1055,7 +1074,7 @@ impl Account {
                         .submit(message.into_bytes(), None)?;
 
                     let handle = self.main_loop_handler.job_executor.spawn(
-                        "server-submission".into(),
+                        format!("{name}:server-submission", name = self.name).into(),
                         job,
                         self.is_async(),
                     );
@@ -1202,7 +1221,7 @@ impl Account {
             if let Ok(online_fut) = online_fut {
                 let handle = match wait {
                     Some(wait) => self.main_loop_handler.job_executor.spawn(
-                        "is-online".into(),
+                        format!("{name}:is-online", name = self.name).into(),
                         async move {
                             sleep(wait).await;
                             online_fut.await
@@ -1210,7 +1229,7 @@ impl Account {
                         self.is_async(),
                     ),
                     None => self.main_loop_handler.job_executor.spawn(
-                        "is_online".into(),
+                        format!("{name}:is-online", name = self.name).into(),
                         online_fut,
                         self.is_async(),
                     ),
@@ -1432,8 +1451,17 @@ impl Account {
                             return true;
                         }
                         Ok(Some((Some(Ok(payload)), rest))) => {
+                            if !self.mailbox_entries.contains_key(&mailbox_hash) {
+                                // Mailbox was deleted
+                                return true;
+                            }
                             let handle = self.main_loop_handler.job_executor.spawn(
-                                "fetch-mailbox-continued".into(),
+                                format!(
+                                    "{name}:fetch-mailbox-continued {mbox}",
+                                    name = self.name,
+                                    mbox = self.mailbox_entries[&mailbox_hash].path
+                                )
+                                .into(),
                                 rest.into_future(),
                                 self.is_async(),
                             );
@@ -1505,7 +1533,7 @@ impl Account {
                     let online_job = self.backend.lock().unwrap().is_online();
                     if let Ok(online_job) = online_job {
                         let handle = self.main_loop_handler.job_executor.spawn(
-                            "is-online".into(),
+                            format!("{name}:is-online", name = self.name).into(),
                             online_job,
                             self.is_async(),
                         );
@@ -1705,7 +1733,7 @@ impl Account {
                         }
                         Ok(Some((Some(ev), rest))) => {
                             let handle = self.main_loop_handler.job_executor.spawn(
-                                "watch".into(),
+                                format!("{name}:watch", name = self.name).into(),
                                 rest.into_future(),
                                 self.is_async(),
                             );
