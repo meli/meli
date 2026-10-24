@@ -129,8 +129,8 @@ test: test-docs
 
 .PHONY: test-docs
 test-docs:
-	@echo RUSTFLAGS=\"'${RUSTFLAGS}'\" ${CARGO_BIN} test ${CARGO_ARGS} ${CARGO_COLOR}--target-dir=\""${CARGO_TARGET_DIR}"\" ${FEATURES} --all --doc
-	@RUSTFLAGS='${RUSTFLAGS}' ${CARGO_BIN} test ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" ${FEATURES} --all --doc
+	@echo RUSTFLAGS=\"'${RUSTFLAGS}'\" ${CARGO_BIN} test -j1 ${CARGO_ARGS} ${CARGO_COLOR}--target-dir=\""${CARGO_TARGET_DIR}"\" ${FEATURES} --all --doc -- --test-threads=8
+	@RUSTFLAGS='${RUSTFLAGS}' ${CARGO_BIN} test -j1  ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" ${FEATURES} --all --doc -- --test-threads=8
 
 .PHONY: test-feature-permutations
 test-feature-permutations:
