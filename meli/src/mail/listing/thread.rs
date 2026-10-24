@@ -525,7 +525,11 @@ impl ListingTrait for ThreadListing {
                 }
                 context.dirty_areas.push_back(new_area);
             }
-            if *account_settings!(context[&self.cursor_pos.0].listing.relative_list_indices) {
+            if *mailbox_settings!(
+                context[&self.cursor_pos.0][&self.cursor_pos.1]
+                    .listing
+                    .relative_list_indices
+            ) {
                 self.draw_relative_numbers(grid, area, top_idx);
                 context.dirty_areas.push_back(area);
             }
@@ -550,7 +554,11 @@ impl ListingTrait for ThreadListing {
         // copy table columns
         self.data_columns
             .draw(grid, top_idx, self.cursor_pos.2, grid.bounds_iter(area));
-        if *account_settings!(context[&self.cursor_pos.0].listing.relative_list_indices) {
+        if *mailbox_settings!(
+            context[&self.cursor_pos.0][&self.cursor_pos.1]
+                .listing
+                .relative_list_indices
+        ) {
             self.draw_relative_numbers(grid, area, top_idx);
         }
         // apply each row colors separately
@@ -989,7 +997,11 @@ impl ThreadListing {
             {
                 let mut area_col_0 = columns[0].area().nth_row(idx);
                 columns[0].grid_mut().clear_area(area_col_0, row_attr);
-                if !*account_settings!(context[&self.cursor_pos.0].listing.relative_list_indices) {
+                if !*mailbox_settings!(
+                    context[&self.cursor_pos.0][&self.cursor_pos.1]
+                        .listing
+                        .relative_list_indices
+                ) {
                     area_col_0 = area_col_0.skip_cols(columns[0].grid_mut().write_string(
                         itoa_buffer.format(idx),
                         &row_attr,
