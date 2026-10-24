@@ -542,12 +542,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static 
             .iter_mut()
             .map(|(_id, ref mut title)| std::mem::take(title))
             .collect::<Vec<String>>();
-        let mut identifiers: Vec<(T, bool)> =
-            entries.into_iter().map(|(id, _)| (id, false)).collect();
-        if single_only {
-            /* set default option */
-            identifiers[0].1 = true;
-        }
+        let identifiers: Vec<(T, bool)> = entries.into_iter().map(|(id, _)| (id, false)).collect();
 
         let theme_default = crate::conf::theme_value(context, "theme_default");
         let highlighted_attrs = crate::conf::theme_value(context, "widgets.options.highlighted");
