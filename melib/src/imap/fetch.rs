@@ -428,7 +428,7 @@ impl FetchState {
         let mut uid_store = conn.uid_store.clone();
         if let Err(err) = uid_store
             .update_mailbox(mailbox_hash, &select_response)
-            .chain_err_summary(|| format!("Could not update cache for mailbox {mailbox_hash}."))
+            .chain_err_summary(|| format!("Could not load cache for mailbox {mailbox_hash}."))
         {
             (uid_store.event_consumer)(uid_store.account_hash, err.into());
         }

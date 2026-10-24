@@ -158,16 +158,16 @@ impl ImapCache for Sqlite3Cache {
         let env_lastseenuid: Option<UID> = {
             let mut stmt = tx.prepare("SELECT MAX(uid) FROM envelopes WHERE mailbox_hash = ?1;")?;
 
-            let ret: Option<UID> =
-                stmt.query_row(sqlite3::params![mailbox_hash], |row| row.get(0))?;
+            let ret = stmt.query_row(sqlite3::params![mailbox_hash], |row| row.get(0))?;
             drop(stmt);
             ret
         };
         let mut lastseenuid = {
             let mut stmt = tx.prepare("SELECT max_uid FROM mailbox WHERE mailbox_hash = ?1;")?;
 
-            let ret: Option<UID> =
-                stmt.query_row(sqlite3::params![mailbox_hash], |row| row.get(0))?;
+            let ret = stmt.query_row(sqlite3::params![mailbox_hash], |row| {
+                row.get(0).map(|i: Option<u32>| i.and_then(UID::new))
+            })?;
             drop(stmt);
             ret
         };
@@ -206,7 +206,12 @@ impl ImapCache for Sqlite3Cache {
         )?;
 
         let mut ret = stmt.query_map(sqlite3::params![mailbox_hash], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            Ok((
+                row.get(0)?,
+                row.get(1).map(|i: Option<u32>| i.and_then(UID::new))?,
+                row.get(2)?,
+                row.get(3)?,
+            ))
         })?;
         if let Some(v) = ret.next() {
             let (uidvalidity, mut lastseenuid, flags, highestmodseq): (
