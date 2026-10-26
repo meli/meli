@@ -309,6 +309,16 @@ define_commands!([
         parser: parser::reindex
     },
     {
+        desc: "refresh ACCOUNT, request a manual refresh for this account's Inbox",
+        tokens: &[Literal("refresh"), AccountName],
+        parser: parser::refresh
+    },
+    {
+        desc: "refresh ACCOUNT MAILBOX_PATH, request a manual refresh for a specific mailbox",
+        tokens: &[Literal("refresh"), AccountName, MailboxPath],
+        parser: parser::refresh
+    },
+    {
         desc: "opens envelope view in new tab",
         tokens: &[Literal("open-in-tab")],
         parser: parser::open_in_new_tab

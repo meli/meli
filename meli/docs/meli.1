@@ -751,6 +751,15 @@ Reloads configuration but only if account configuration is unchanged.
 Useful if you want to reload some settings without restarting
 .Nm Ns
 \&.
+.It Cm print Ar SETTING
+Prints a setting by TOML path.
+Example:
+.D1 print pager.html_open
+.It Cm print Ar ACCOUNT_NAME Ar SETTING
+Prints a specific account setting by TOML path.
+.It Cm refresh Ar ACCOUNT_NAME Ar MAILBOX_PATH
+Request a manual refresh.
+If mailbox path is not given, it defaults to the Inbox.
 .It Cm manage\-jobs
 Inspect background jobs.
 .It Cm manage\-mailboxes

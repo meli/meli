@@ -1072,6 +1072,50 @@ impl State {
                     kind: Some(NotificationType::Error(ErrorKind::None)),
                 });
             }
+            Action::AccountAction(ref account_name, AccountAction::Refresh { ref mailbox }) => {
+                let account_index = if let Some(a) = self
+                    .context
+                    .accounts
+                    .iter()
+                    .position(|(_, acc)| acc.name() == account_name)
+                {
+                    a
+                } else {
+                    self.context.replies.push_back(UIEvent::Notification {
+                        title: None,
+                        source: None,
+                        body: format!("Account {account_name} was not found.").into(),
+                        kind: Some(NotificationType::Error(ErrorKind::None)),
+                    });
+                    return;
+                };
+
+                let result = if let Some(mailbox) = mailbox.as_ref() {
+                    self.context.accounts[account_index]
+                        .mailbox_by_path(mailbox)
+                        .and_then(|h| self.context.accounts[account_index].refresh(h))
+                } else if let Some(h) = self.context.accounts[account_index]
+                    .special_use_mailbox(melib::SpecialUsageMailbox::Inbox)
+                {
+                    self.context.accounts[account_index].refresh(h)
+                } else if let Some(h) = self.context.accounts[account_index]
+                    .mailbox_entries
+                    .first()
+                    .map(|(h, _)| *h)
+                {
+                    self.context.accounts[account_index].refresh(h)
+                } else {
+                    Ok(())
+                };
+                if let Err(err) = result {
+                    self.context.replies.push_back(UIEvent::Notification {
+                        title: Some("Could not refresh.".into()),
+                        source: None,
+                        body: err.to_string().into(),
+                        kind: Some(NotificationType::Error(err.kind)),
+                    });
+                }
+            }
             AccountAction(ref account_name, PrintAccountSetting(ref setting)) => {
                 let path = setting.split('.').collect::<SmallVec<[&str; 16]>>();
                 if let Some(pos) = self

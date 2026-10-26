@@ -173,7 +173,7 @@ fn compose_action(input: &str) -> IResult<&str, Result<Action, CommandError>> {
 }
 
 fn account_action(input: &str) -> IResult<&str, Result<Action, CommandError>> {
-    alt((reindex, print_account_setting))(input)
+    alt((refresh, reindex, print_account_setting))(input)
 }
 
 fn view(input: &str) -> IResult<&str, Result<Action, CommandError>> {
@@ -948,6 +948,34 @@ pub(super) fn reindex(input: &str) -> IResult<&str, Result<Action, CommandError>
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
     Ok((input, Ok(AccountAction(account.to_string(), ReIndex))))
+}
+
+pub(super) fn refresh(input: &str) -> IResult<&str, Result<Action, CommandError>> {
+    let mut check = arg_init! { min_arg:1, max_arg: 3, refresh};
+    let (input, _) = tag("refresh")(input.trim())?;
+    arg_chk!(start check, input);
+    let (input, _) = is_a(" ")(input)?;
+    arg_chk!(inc check, input);
+    let (input, account) = quoted_argument(input)?;
+    let mut mailbox = None;
+    let (input, ()) =
+        if let Ok((input, _)) = is_a::<&'_ str, &'_ str, nom::error::Error<&str>>(" ")(input) {
+            arg_chk!(inc check, input);
+            let (input, mbox) = quoted_argument(input)?;
+            mailbox = Some(mbox.to_string());
+            (input, ())
+        } else {
+            (input, ())
+        };
+    arg_chk!(finish check, input);
+    let (input, _) = eof(input)?;
+    Ok((
+        input,
+        Ok(Action::AccountAction(
+            account.to_string(),
+            AccountAction::Refresh { mailbox },
+        )),
+    ))
 }
 
 pub(super) fn open_in_new_tab(input: &str) -> IResult<&str, Result<Action, CommandError>> {

@@ -25,7 +25,8 @@ use melib::{email::MessageID, Flag};
 use crate::{
     command::{
         actions::{
-            Action, FlagAction, ListingAction, MailingListAction, TabAction, TagAction, ViewAction,
+            AccountAction, Action, FlagAction, ListingAction, MailingListAction, TabAction,
+            TagAction, ViewAction,
         },
         completions::CompletionsGenerator,
         parse_command,
@@ -146,6 +147,22 @@ fn test_command_parser_all() {
                 index: 0,
                 command: "git am -3".to_string(),
             }),
+        ),
+        (
+            "refresh accname",
+            Action::AccountAction(
+                "accname".to_string(),
+                AccountAction::Refresh { mailbox: None },
+            ),
+        ),
+        (
+            "refresh accname INBOX",
+            Action::AccountAction(
+                "accname".to_string(),
+                AccountAction::Refresh {
+                    mailbox: Some("INBOX".to_string()),
+                },
+            ),
         ),
     ] {
         assert_eq!(
