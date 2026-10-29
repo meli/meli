@@ -1576,6 +1576,7 @@ impl Component for ThreadListing {
         match *event {
             UIEvent::ConfigReload { old_settings: _ } => {
                 self.color_cache = ColorCache::new(context, IndexStyle::Threaded);
+                self.refresh_mailbox(context, true);
                 self.set_dirty(true);
             }
             UIEvent::Input(ref k)
