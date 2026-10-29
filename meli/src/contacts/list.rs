@@ -410,8 +410,13 @@ impl Component for AddressBookList {
         match event {
             UIEvent::ChangeMode(UIMode::Normal)
             | UIEvent::Resize
-            | UIEvent::ConfigReload { old_settings: _ }
             | UIEvent::VisibilityChange(_) => {
+                self.set_dirty(true);
+                return false;
+            }
+            UIEvent::ConfigReload { old_settings: _ } => {
+                self.theme_default = crate::conf::theme_value(context, "theme_default");
+                self.highlight_theme = crate::conf::theme_value(context, "highlight");
                 self.set_dirty(true);
                 return false;
             }
