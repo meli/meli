@@ -3202,9 +3202,13 @@ impl Listing {
         };
         if min_width > width || height < total_height || self.dirty {
             let _ = self.menu.resize(min_width, total_height);
+            let menu_area = self.menu.area();
+            self.menu
+                .grid_mut()
+                .change_theme(menu_area, crate::conf::theme_value(context, "mail.sidebar"));
             let mut y = 0;
             for a in 0..self.accounts.len() {
-                let menu_area = self.menu.area().skip_rows(y);
+                let menu_area = menu_area.skip_rows(y);
                 y += self.print_account(menu_area, a, context);
                 y += 3;
             }
