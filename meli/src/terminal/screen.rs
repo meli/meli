@@ -45,6 +45,7 @@ pub type StateStdout = termion::screen::AlternateScreen<
 
 type DrawHorizontalSegmentFn =
     fn(&mut CellBuffer, &mut StateStdout, std::ops::Range<usize>, usize) -> ();
+type TerminalSizeFn = fn() -> Option<(u16, u16)>;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
@@ -87,6 +88,7 @@ pub struct Tty {
     mouse: bool,
     dec_mode_2026: bool,
     draw_horizontal_segment_fn: DrawHorizontalSegmentFn,
+    terminal_size_fn: TerminalSizeFn,
 }
 
 impl Tty {
@@ -98,6 +100,11 @@ impl Tty {
     #[inline]
     pub fn draw_fn(&self) -> DrawHorizontalSegmentFn {
         self.draw_horizontal_segment_fn
+    }
+
+    #[inline]
+    pub fn terminal_size_fn(&self) -> TerminalSizeFn {
+        self.terminal_size_fn
     }
 
     #[inline]
@@ -142,6 +149,17 @@ impl Tty {
     ) -> &mut Self {
         self.draw_horizontal_segment_fn = draw_horizontal_segment_fn;
         self
+    }
+
+    #[inline]
+    pub fn set_terminal_size_fn(&mut self, terminal_size_fn: TerminalSizeFn) -> &mut Self {
+        self.terminal_size_fn = terminal_size_fn;
+        self
+    }
+
+    #[cfg(unix)]
+    fn terminal_size() -> Option<(u16, u16)> {
+        termion::terminal_size().ok()
     }
 }
 
@@ -286,6 +304,8 @@ impl Screen<Tty> {
                 color_scheme: None,
                 dec_mode_2026: false,
                 draw_horizontal_segment_fn: Self::draw_horizontal_segment,
+                #[cfg(unix)]
+                terminal_size_fn: Tty::terminal_size,
             },
             theme_default,
         )
@@ -349,7 +369,7 @@ impl Screen<Tty> {
     /// On `SIGWNICH` the `State` redraws itself according to the new
     /// terminal size.
     pub fn update_size(&mut self) {
-        let termsize = termion::terminal_size().ok();
+        let termsize = (self.display.terminal_size_fn)();
         let termcols = termsize.map(|(w, _)| w);
         let termrows = termsize.map(|(_, h)| h);
         if termcols.unwrap_or(72) as usize != self.cols
