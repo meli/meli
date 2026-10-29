@@ -35,8 +35,9 @@
 "mail.sidebar_index" = { fg = "Grey46", bg = "theme_default", attrs = "theme_default" }
 "mail.sidebar_unread_count" = { fg = "Grey46", bg = "theme_default", attrs = "theme_default" }
 "mail.view.body" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
-"mail.view.headers" = { fg = "DodgerBlue1", bg = "theme_default", attrs = "theme_default" }
+"mail.view.headers" = { fg = "#1135a1", bg = "theme_default", attrs = "theme_default" }
 "status.bar" = { fg = "White", bg = "#A21500", attrs = "theme_default" }
+"status.notification" = { fg = "status.bar", bg = "status.bar", attrs = "theme_default" }
 "tab.bar" = { fg = "theme_default", bg = "#332300", attrs = "theme_default" }
 "tab.unfocused" = { fg = "theme_default", bg = "#A26F00", attrs = "theme_default" }
 "tab.focused" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
