@@ -149,13 +149,13 @@ impl_method_type! { InputPasteType, "org.meli-email.meli.InputPaste" }
 impl_method_type! { GetInfoType, "org.varlink.service.GetInfo" }
 impl_method_type! { GetInterfaceDescriptionType, "org.varlink.service.GetInterfaceDescription" }
 
-#[derive(serde::Serialize, serde::Deserialize, Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(serde_derive::Serialize, serde_derive::Deserialize, Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Modifier {
     Alt,
     Ctrl,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(serde_derive::Serialize, serde_derive::Deserialize, Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Key {
     Backspace,
     Left,
@@ -216,14 +216,14 @@ impl From<Key> for crate::terminal::Key {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Eq, PartialEq, Clone)]
+#[derive(serde_derive::Serialize, serde_derive::Deserialize, Debug, Eq, PartialEq, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct VarlinkError {
     pub error: String,
     pub parameters: serde_json::Value,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Eq, PartialEq, Clone)]
+#[derive(serde_derive::Serialize, serde_derive::Deserialize, Debug, Eq, PartialEq, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct VersionIdentifier {
     pub major: u8,
@@ -233,7 +233,7 @@ pub struct VersionIdentifier {
     pub pre: Option<String>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Eq, PartialEq, Clone)]
+#[derive(serde_derive::Serialize, serde_derive::Deserialize, Debug, Eq, PartialEq, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct CommandRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -241,7 +241,7 @@ pub struct CommandRequest {
     pub command: String,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Eq, PartialEq, Clone)]
+#[derive(serde_derive::Serialize, serde_derive::Deserialize, Debug, Eq, PartialEq, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct InputKeyRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -249,7 +249,7 @@ pub struct InputKeyRequest {
     pub key: Key,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Eq, PartialEq, Clone)]
+#[derive(serde_derive::Serialize, serde_derive::Deserialize, Debug, Eq, PartialEq, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct InputCharacterRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -259,7 +259,7 @@ pub struct InputCharacterRequest {
     pub modifier: Option<Modifier>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Eq, PartialEq, Clone)]
+#[derive(serde_derive::Serialize, serde_derive::Deserialize, Debug, Eq, PartialEq, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct InputPasteRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -267,7 +267,7 @@ pub struct InputPasteRequest {
     pub paste: String,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Eq, PartialEq, Clone)]
+#[derive(serde_derive::Serialize, serde_derive::Deserialize, Debug, Eq, PartialEq, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct GetInfoResponse {
     pub vendor: String,
@@ -277,13 +277,13 @@ pub struct GetInfoResponse {
     pub interfaces: Vec<String>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Eq, PartialEq, Clone)]
+#[derive(serde_derive::Serialize, serde_derive::Deserialize, Debug, Eq, PartialEq, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct GetInterfaceDescriptionRequest {
     pub interface: String,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Eq, PartialEq, Clone)]
+#[derive(serde_derive::Serialize, serde_derive::Deserialize, Debug, Eq, PartialEq, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct MethodRequest {
     pub method: String,

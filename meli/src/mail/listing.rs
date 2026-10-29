@@ -3077,7 +3077,7 @@ impl Component for Listing {
     }
 }
 
-#[derive(Default, serde::Deserialize, serde::Serialize)]
+#[derive(Default, serde_derive::Deserialize, serde_derive::Serialize)]
 struct ListingComponentState {
     collapsed: BTreeSet<MailboxHash>,
 }

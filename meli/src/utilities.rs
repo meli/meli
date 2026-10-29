@@ -762,7 +762,7 @@ pub struct Tabbed {
     id: ComponentId,
 }
 
-#[derive(Default, serde::Deserialize, serde::Serialize)]
+#[derive(Default, serde_derive::Deserialize, serde_derive::Serialize)]
 struct TabbedComponentState {
     cursor_pos: usize,
 }
