@@ -391,7 +391,7 @@ define_commands!([
                 &[Literal("man"), Alternatives(crate::manpages::POSSIBLE_VALUES)]
             }
             #[cfg(not(feature = "cli-docs"))]
-            { &[] }
+            { &[Literal("man")] }
         },
         parser: parser::view_manpage
     },
