@@ -1358,9 +1358,21 @@ impl Default for Themes {
                 attrs: Attr::BOLD,
             }
         );
-        add!("mail.sidebar_unread_count" from "mail.sidebar", dark = { fg: Color::Byte(243) });
-        add!("mail.sidebar_index" from "mail.sidebar", dark = { fg: Color::Byte(243) });
-        add!("mail.sidebar_highlighted" from "mail.sidebar", dark = { fg: Color::Byte(233), bg: Color::Byte(15) });
+        add!(
+            "mail.sidebar_unread_count" from "mail.sidebar",
+            dark = { fg: Color::Byte(243) },
+            light = { fg: Color::Byte(243) },
+        );
+        add!(
+            "mail.sidebar_index" from "mail.sidebar",
+            dark = { fg: Color::Byte(243) },
+            light = { fg: Color::Byte(243) },
+        );
+        add!(
+            "mail.sidebar_highlighted" from "mail.sidebar",
+            dark = { fg: Color::Byte(233), bg: Color::Byte(15) },
+            light = { fg: Color::GREY7, bg: Color::GREY93 }
+        );
         add!(
             "mail.sidebar_highlighted_unread_count" from "mail.sidebar_highlighted",
             light = {
@@ -1388,7 +1400,11 @@ impl Default for Themes {
             dark = {
                 fg: Color::Byte(15),
                 bg: Color::Byte(233),
-            }
+            },
+            light = {
+                fg: "theme_default",
+                bg: Color::GREY82,
+            },
         );
         add!(
             "mail.sidebar_highlighted_account_name" from "mail.sidebar_highlighted",
