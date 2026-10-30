@@ -1314,7 +1314,7 @@ impl Default for Themes {
         add!("text.highlight", dark = { fg: Color::Blue, bg: "theme_default", attrs: Attr::REVERSE }, light = { fg: Color::Blue, bg: "theme_default", attrs: Attr::REVERSE });
 
         /* rest */
-        add!("highlight", dark = { fg: "theme_default.bg", bg: "theme_default.fg", attrs: Attr::BOLD }, light = { fg: Color::Byte(240), bg: Color::Byte(237), attrs: Attr::BOLD });
+        add!("highlight", dark = { fg: "theme_default.bg", bg: "theme_default.fg", attrs: Attr::BOLD }, light = { fg: Color::Byte(240), bg: Color::GREY82, attrs: Attr::BOLD });
 
         add!("status.bar", dark = { fg: Color::Byte(123), bg: Color::Byte(26) }, light = { fg: Color::Byte(123), bg: Color::Byte(26) });
         add!("status.command_bar", dark = { fg: Color::Byte(219), bg: Color::Byte(88) }, light = { fg: Color::Byte(219), bg: Color::Byte(88) });
