@@ -426,7 +426,6 @@ impl Component for AddressBookList {
                 ref backend_id,
                 ref book,
                 ContactBackendStatusChangeKind::Modification(card_id)
-                | ContactBackendStatusChangeKind::Creation(card_id)
                 | ContactBackendStatusChangeKind::Deletion(card_id),
             ) if account_hash == &self.account_hash
                 && backend_id == &self.backend_id.0
@@ -436,6 +435,19 @@ impl Component for AddressBookList {
                     self.initialized = false;
                     self.set_dirty(true);
                 }
+                return false;
+            }
+            UIEvent::ContactBackendStatusChange(
+                ref account_hash,
+                ref backend_id,
+                ref book,
+                ContactBackendStatusChangeKind::Creation(_),
+            ) if account_hash == &self.account_hash
+                && backend_id == &self.backend_id.0
+                && book == &self.backend_id.1 =>
+            {
+                self.initialized = false;
+                self.set_dirty(true);
                 return false;
             }
             _ => {}
