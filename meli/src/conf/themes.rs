@@ -1079,6 +1079,28 @@ impl Themes {
                 }
             }))
             .chain(theme.iter().filter_map(|(key, a)| {
+                if let ThemeValue::Link(ref r, _) = a.underline {
+                    if !hash_set.contains(&r.as_ref()) {
+                        Some((Some(key), "underline link", "invalid key", r.as_ref()))
+                    } else {
+                        None
+                    }
+                } else if let ThemeValue::Alias(ref ident) = a.underline {
+                    if !theme.color_aliases.contains_key(ident.as_ref()) {
+                        Some((
+                            Some(key),
+                            "underline alias",
+                            "nonexistent color alias",
+                            ident,
+                        ))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }))
+            .chain(theme.iter().filter_map(|(key, a)| {
                 if let ThemeValue::Link(ref r, _) = a.attrs {
                     if !hash_set.contains(&r.as_ref()) {
                         Some((Some(key), "attrs link", "invalid key", r.as_ref()))
