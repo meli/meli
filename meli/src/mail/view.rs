@@ -21,6 +21,7 @@
 
 use std::{collections::HashSet, convert::TryFrom as _, io::Write as _};
 
+use futures::channel::oneshot;
 use indexmap::IndexSet;
 use melib::{
     contacts::Card, email::attachment_types::ContentType, list_management, parser::BytesExt as _,
@@ -431,14 +432,29 @@ impl Component for MailView {
             (Some(ref s), _, UIEvent::FinishedUIDialog(id, results)) if *id == s.id() => {
                 if let Some(results) = results.downcast_ref::<Vec<Card>>() {
                     let account = &mut context.accounts[&coordinates.0];
-                    {
-                        if let Some((_, book)) = account.contacts.books.get_index_mut(0) {
-                            for contact in results.iter() {
-                                book.add_card(contact.clone());
-                            }
+                    let book_id = if let Some((book_id, _)) = account.contacts.books.get_index(0) {
+                        Some(book_id.clone())
+                    } else {
+                        None
+                    };
+                    let mut jobs: Vec<Result<(JobId, oneshot::Receiver<Result<()>>)>> = vec![];
+                    if let Some(book_id) = book_id {
+                        for contact in results.iter() {
+                            jobs.push(account.add_card(book_id.clone(), contact.clone()));
                         }
                     }
                     self.contact_selector = None;
+                    match jobs.into_iter().collect::<Result<Vec<_>>>() {
+                        Ok(_) => {}
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::Notification {
+                                title: None,
+                                source: None,
+                                body: err.to_string().into(),
+                                kind: Some(NotificationType::Error(err.kind)),
+                            });
+                        }
+                    }
                 }
                 self.set_dirty(true);
                 return true;
