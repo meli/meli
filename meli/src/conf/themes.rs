@@ -1243,6 +1243,34 @@ impl Themes {
                 );
             }
         } else {
+            if !theme.attr_aliases.is_empty() {
+                _ = write!(ret, "attr_aliases = {{");
+                let mut first = true;
+                for (alias, val) in &theme.attr_aliases {
+                    _ = write!(
+                        ret,
+                        "{comma}\"{alias}\" = {}",
+                        toml::Value::try_from(val).expect("Could not serialize Attribute"),
+                        comma = if first { "" } else { ", " },
+                    );
+                    first = false;
+                }
+                _ = writeln!(ret, "}}");
+            }
+            if !theme.color_aliases.is_empty() {
+                _ = write!(ret, "color_aliases = {{");
+                let mut first = true;
+                for (alias, val) in &theme.color_aliases {
+                    _ = write!(
+                        ret,
+                        "{comma}\"{alias}\" = {}",
+                        toml::Value::try_from(val).expect("Could not serialize Color"),
+                        comma = if first { "" } else { ", " },
+                    );
+                    first = false;
+                }
+                _ = writeln!(ret, "}}");
+            }
             for k in theme.keys() {
                 let _ = writeln!(
                     ret,
