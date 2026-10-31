@@ -425,16 +425,14 @@ impl Component for AddressBookList {
                 ref account_hash,
                 ref backend_id,
                 ref book,
-                ContactBackendStatusChangeKind::Modification(card_id)
-                | ContactBackendStatusChangeKind::Deletion(card_id),
+                ContactBackendStatusChangeKind::Modification(_)
+                | ContactBackendStatusChangeKind::Deletion(_),
             ) if account_hash == &self.account_hash
                 && backend_id == &self.backend_id.0
                 && book == &self.backend_id.1 =>
             {
-                if self.id_positions.contains(card_id) {
-                    self.initialized = false;
-                    self.set_dirty(true);
-                }
+                self.initialized = false;
+                self.set_dirty(true);
                 return false;
             }
             UIEvent::ContactBackendStatusChange(
@@ -499,9 +497,15 @@ impl Component for AddressBookList {
                     return true;
                 }
 
-                let card = context.accounts[&self.account_hash].contacts.books[&self.backend_id]
-                    [&self.id_positions[self.cursor_pos]]
-                    .clone();
+                let Some(card) = context.accounts[&self.account_hash].contacts.books
+                    [&self.backend_id]
+                    .get(&self.id_positions[self.cursor_pos])
+                    .cloned()
+                else {
+                    self.initialized = false;
+                    self.set_dirty(true);
+                    return true;
+                };
                 self.editor = Some(Box::new(ContactEditor::edit_card(
                     self.account_hash,
                     self.backend_id.clone(),
@@ -522,9 +526,15 @@ impl Component for AddressBookList {
                 if self.id_positions.is_empty() {
                     return true;
                 }
-                let card = context.accounts[&self.account_hash].contacts.books[&self.backend_id]
-                    [&self.id_positions[self.cursor_pos]]
-                    .clone();
+                let Some(card) = context.accounts[&self.account_hash].contacts.books
+                    [&self.backend_id]
+                    .get(&self.id_positions[self.cursor_pos])
+                    .cloned()
+                else {
+                    self.initialized = false;
+                    self.set_dirty(true);
+                    return true;
+                };
                 context.replies.push_back(UIEvent::GlobalUIDialog {
                     value: Box::new(ContactExportDialog::new(card, context)),
                     parent: None,
@@ -548,8 +558,14 @@ impl Component for AddressBookList {
                 if self.id_positions.is_empty() {
                     return true;
                 }
-                let card = &context.accounts[&self.account_hash].contacts.books[&self.backend_id]
-                    [&self.id_positions[self.cursor_pos]];
+                let Some(card) = context.accounts[&self.account_hash].contacts.books
+                    [&self.backend_id]
+                    .get(&self.id_positions[self.cursor_pos])
+                else {
+                    self.initialized = false;
+                    self.set_dirty(true);
+                    return true;
+                };
                 let mut draft: Draft = Draft::default();
                 *draft
                     .headers_mut()
@@ -571,9 +587,15 @@ impl Component for AddressBookList {
                 if self.id_positions.is_empty() {
                     return true;
                 }
-                let card = context.accounts[&self.account_hash].contacts.books[&self.backend_id]
-                    [&self.id_positions[self.cursor_pos]]
-                    .clone();
+                let Some(card) = context.accounts[&self.account_hash].contacts.books
+                    [&self.backend_id]
+                    .get(&self.id_positions[self.cursor_pos])
+                    .cloned()
+                else {
+                    self.initialized = false;
+                    self.set_dirty(true);
+                    return true;
+                };
                 let question = format!("Delete this contact? {card}");
                 let on_confirm_cb = Box::new({
                     let account_hash = self.account_hash;
