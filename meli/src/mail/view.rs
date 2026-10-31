@@ -283,8 +283,17 @@ impl MailView {
                 continue;
             }
             seen.insert(addr.clone());
-            let new_contact: Card = Card::from(addr);
-            entries.push((new_contact, addr.to_string()));
+            let mut card: Card = Card::from(addr);
+            card.created = melib::contacts::jscontact::json_types::UTCDateTime::now();
+            card.updated = card.created;
+            if *mailbox_settings!(
+                context[&coordinates.0][&coordinates.1]
+                    .composing
+                    .insert_user_agent
+            ) {
+                card.prod_id = format!("meli/{}", crate::version_migrations::LATEST.as_str());
+            }
+            entries.push((card, addr.to_string()));
         }
         drop(envelope);
         self.contact_selector = Some(Box::new(Selector::new(
