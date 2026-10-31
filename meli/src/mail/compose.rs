@@ -1753,9 +1753,11 @@ impl Component for Composer {
 
         match *event {
             UIEvent::ConfigReload { old_settings: _ } => {
+                self.form.process_event(event, context);
                 self.set_dirty(true);
             }
             UIEvent::Resize => {
+                self.form.process_event(event, context);
                 self.set_dirty(true);
             }
             UIEvent::Input(Key::Char('\n'))

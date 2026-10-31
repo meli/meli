@@ -308,12 +308,18 @@ impl Component for TextField {
         );
     }
 
-    fn process_event(&mut self, event: &mut UIEvent, _: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if self.read_only {
             return false;
         }
 
         match *event {
+            UIEvent::ConfigReload { old_settings: _ } => {
+                self.invalid_attr = Some(crate::conf::theme_value(context, "text.error"));
+                self.read_only_attr =
+                    Some(crate::conf::theme_value(context, "widgets.form.read_only"));
+                self.theme_attr = Some(crate::conf::theme_value(context, "widgets.form.field"));
+            }
             UIEvent::InsertInput(Key::Char('\t')) => {
                 if let Some(suggestion) = self
                     .autocomplete
@@ -601,6 +607,10 @@ impl Component for DictField {
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        if matches!(event, UIEvent::ConfigReload { old_settings: _ }) {
+            self.values.process_event(event, context);
+        }
+
         if let Some(rename_entry) = &mut self.rename_entry {
             let processed = rename_entry.process_event(event, context);
             if processed {
@@ -1506,6 +1516,13 @@ impl<
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        if matches!(event, UIEvent::ConfigReload { old_settings: _ }) {
+            for f in self.fields.values_mut() {
+                f.process_event(event, context);
+            }
+            self.buttons.process_event(event, context);
+        }
+
         match self.focus {
             FormFocus::Buttons => {
                 if !self.hide_buttons && self.buttons.process_event(event, context) {
