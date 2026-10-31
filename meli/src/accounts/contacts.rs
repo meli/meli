@@ -962,7 +962,7 @@ impl ContactBackend for DefaultContacts {
         {
             Ok(())
         } else {
-            Err(Error::new("").set_kind(ErrorKind::NotSupported))
+            Err(Error::new("").set_kind(ErrorKind::NotFound))
         };
 
         Ok(Box::pin(async move { ret }))
