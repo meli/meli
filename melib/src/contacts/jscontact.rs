@@ -205,6 +205,11 @@ impl From<&Address> for JSContact<JSContactVersion1> {
             std::marker::PhantomData::<fn() -> JSContactVersion1>,
         );
 
+        ret.uid = json_types::Uid::Uuid(uuid::Uuid::new_v5(
+            &uuid::Uuid::NAMESPACE_OID,
+            addr.get_email().as_bytes(),
+        ));
+
         if let Some(display_name) = addr.get_display_name() {
             ret.name = display_name.to_string().into();
         }
