@@ -333,7 +333,7 @@ impl ContactBackend for JmapContacts {
                 ))
                 .set_kind(ErrorKind::ValueError));
             };
-            let uid = card.0.uid;
+            let uid = card.0.uid.clone();
             let mut obj: ContactCardObject = card.into();
             obj.address_book_ids.insert(book.id.clone(), true);
             let mut req = Request::new_with_using(client.request_no.clone(), USING);
@@ -342,7 +342,7 @@ impl ContactBackend for JmapContacts {
                 Query::new()
                     .account_id(account_id.clone())
                     .filter(Some(Filter::Condition(
-                        ContactCardFilterCondition::new().uid(uid.hyphenated().to_string()),
+                        ContactCardFilterCondition::new().uid(uid.to_string()),
                     )))
                     .position(0)
                     .limit(None),
@@ -478,7 +478,7 @@ impl ContactBackend for JmapContacts {
                 Query::new()
                     .account_id(account_id.clone())
                     .filter(Some(Filter::Condition(
-                        ContactCardFilterCondition::new().uid(uid.hyphenated().to_string()),
+                        ContactCardFilterCondition::new().uid(uid.to_string()),
                     )))
                     .position(0)
                     .limit(None),

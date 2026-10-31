@@ -30,7 +30,6 @@
 use std::{convert::TryInto, path::PathBuf};
 
 use indexmap::IndexMap;
-use uuid::Uuid;
 
 use crate::{
     backends::prelude::ResultFuture,
@@ -247,8 +246,8 @@ impl<V: VCardVersion> TryInto<Card> for VCard<V> {
     /// 10.17487/RFC9555, May 2024, <https://www.rfc-editor.org/info/rfc9555/>.`
     fn try_into(mut self) -> Result<Card> {
         let mut card = Card::new();
-        card.uid = if let Some(val) = self.0.get("UID") {
-            Uuid::try_parse(&val.value)?
+        card.uid = if let Some(val) = self.0.swap_remove("UID") {
+            val.value.into()
         } else {
             let mut value = String::new();
             if let Some(val) = self.0.get("FN") {
@@ -260,7 +259,7 @@ impl<V: VCardVersion> TryInto<Card> for VCard<V> {
             if let Some(val) = self.0.get("EMAIL") {
                 value.push_str(&val.value);
             }
-            Uuid::new_v5(&Uuid::NAMESPACE_OID, value.as_bytes())
+            value.into()
         };
         if let Some(val) = self.0.swap_remove("FN") {
             card.name = val.value.into();

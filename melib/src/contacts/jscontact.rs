@@ -76,7 +76,7 @@ impl JSContact<JSContactVersion1> {
     pub fn new() -> Self {
         Self(
             json_types::Card {
-                uid: uuid::Uuid::new_v4(),
+                uid: json_types::Uid::Uuid(uuid::Uuid::new_v4()),
                 ..json_types::Card::default()
             },
             std::marker::PhantomData::<fn() -> JSContactVersion1>,
@@ -86,7 +86,7 @@ impl JSContact<JSContactVersion1> {
     /// Generate a [`CardId`] out of the [`json_types::Card::uid`] UUID field.
     #[inline(always)]
     pub fn id(&self) -> CardId {
-        self.0.uid.into()
+        self.0.uid.as_uuid().into()
     }
 }
 
@@ -179,7 +179,7 @@ impl<V: JSContactVersion> JSContact<V> {
         use crate::utils::vobject::{vcard::VcardBuilder, write_component};
 
         let mut builder = VcardBuilder::new()
-            .with_uid(self.uid.as_urn().to_string())
+            .with_uid(self.uid.as_uuid().as_urn().to_string())
             .with_version("4.0".to_string());
         if let Some(email) = self.email() {
             builder = builder.with_email(email.to_owned());
@@ -429,13 +429,84 @@ pub mod json_types {
         }
     }
 
-    #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+    #[derive(Clone, Eq, Debug, PartialEq)]
+    pub enum Uid {
+        Uuid(uuid::Uuid),
+        FreeText {
+            value: String,
+            generated_uuid: uuid::Uuid,
+        },
+    }
+
+    impl std::fmt::Display for Uid {
+        fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+            std::fmt::Display::fmt(&self.as_uuid(), fmt)
+        }
+    }
+
+    impl Uid {
+        pub fn new(value: String) -> Self {
+            if let Ok(uuid) = uuid::Uuid::try_parse(&value) {
+                Self::Uuid(uuid)
+            } else {
+                let generated_uuid =
+                    uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, value.as_bytes());
+                Self::FreeText {
+                    value,
+                    generated_uuid,
+                }
+            }
+        }
+
+        pub fn as_uuid(&self) -> uuid::Uuid {
+            match self {
+                Self::Uuid(val) => *val,
+                Self::FreeText { generated_uuid, .. } => *generated_uuid,
+            }
+        }
+    }
+
+    impl From<String> for Uid {
+        fn from(value: String) -> Self {
+            Self::new(value)
+        }
+    }
+
+    impl Default for Uid {
+        fn default() -> Self {
+            Self::Uuid(uuid::Uuid::nil())
+        }
+    }
+
+    impl serde::Serialize for Uid {
+        fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            match self {
+                Self::Uuid(v) => v.serialize(serializer),
+                Self::FreeText { value, .. } => value.serialize(serializer),
+            }
+        }
+    }
+
+    impl<'de> serde::Deserialize<'de> for Uid {
+        fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            let value = String::deserialize(deserializer)?;
+            Ok(Self::new(value))
+        }
+    }
+
+    #[derive(Clone, Default, Deserialize, Eq, PartialEq, Serialize)]
     #[serde(rename_all = "camelCase")]
     pub struct Card {
         #[serde(rename = "@type")]
         pub __type: CardType,
         pub version: CardVersion,
-        pub uid: uuid::Uuid,
+        pub uid: Uid,
         #[serde(default, skip_serializing_if = "UTCDateTime::is_none")]
         pub created: UTCDateTime,
         #[serde(default, skip_serializing_if = "UTCDateTime::is_none")]
@@ -497,6 +568,103 @@ pub mod json_types {
         pub personal_info: IndexMap<String, PersonalInfo>,
         #[serde(default, flatten, skip_serializing_if = "IndexMap::is_empty")]
         pub extra: IndexMap<String, serde_json::Value>,
+    }
+
+    impl std::fmt::Debug for Card {
+        fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+            let mut d = fmt.debug_struct("Card");
+            d.field("__type", &self.__type)
+                .field("version", &self.version)
+                .field("uid", &self.uid);
+            if !self.created.is_none() {
+                d.field("created", &self.created);
+            }
+            if !self.updated.is_none() {
+                d.field("updated", &self.updated);
+            }
+            if !self.language.is_empty() {
+                d.field("language", &self.language);
+            }
+            if !self.kind.is_individual() {
+                d.field("kind", &self.kind);
+            }
+            if !self.name.is_empty() {
+                d.field("name", &self.name);
+            }
+            if !self.nicknames.is_empty() {
+                d.field("nicknames", &self.nicknames);
+            }
+            if !self.organizations.is_empty() {
+                d.field("organizations", &self.organizations);
+            }
+            if !self.speak_to_as.is_empty() {
+                d.field("speak_to_as", &self.speak_to_as);
+            }
+            if !self.titles.is_empty() {
+                d.field("titles", &self.titles);
+            }
+            if !self.members.is_empty() {
+                d.field("members", &self.members);
+            }
+            if !self.prod_id.is_empty() {
+                d.field("prod_id", &self.prod_id);
+            }
+            if !self.related_to.is_empty() {
+                d.field("related_to", &self.related_to);
+            }
+            if !self.emails.is_empty() {
+                d.field("emails", &self.emails);
+            }
+            if !self.addresses.is_empty() {
+                d.field("addresses", &self.addresses);
+            }
+            if !self.online_services.is_empty() {
+                d.field("online_services", &self.online_services);
+            }
+            if !self.phones.is_empty() {
+                d.field("phones", &self.phones);
+            }
+            if !self.preferred_languages.is_empty() {
+                d.field("preferred_languages", &self.preferred_languages);
+            }
+            if !self.calendars.is_empty() {
+                d.field("calendars", &self.calendars);
+            }
+            if !self.scheduling_addresses.is_empty() {
+                d.field("scheduling_addresses", &self.scheduling_addresses);
+            }
+            if !self.crypto_keys.is_empty() {
+                d.field("crypto_keys", &self.crypto_keys);
+            }
+            if !self.directories.is_empty() {
+                d.field("directories", &self.directories);
+            }
+            if !self.links.is_empty() {
+                d.field("links", &self.links);
+            }
+            if !self.media.is_empty() {
+                d.field("media", &self.media);
+            }
+            if !self.localizations.is_empty() {
+                d.field("localizations", &self.localizations);
+            }
+            if !self.anniversaries.is_empty() {
+                d.field("anniversaries", &self.anniversaries);
+            }
+            if !self.keywords.is_empty() {
+                d.field("keywords", &self.keywords);
+            }
+            if !self.notes.is_empty() {
+                d.field("notes", &self.notes);
+            }
+            if !self.personal_info.is_empty() {
+                d.field("personal_info", &self.personal_info);
+            }
+            if !self.extra.is_empty() {
+                d.field("extra", &self.extra);
+            }
+            d.finish()
+        }
     }
 
     #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -1001,7 +1169,9 @@ pub mod json_types {
             Card {
                 __type: CardType,
                 version: CardVersion::_1_0,
-                uid: uuid::Uuid::try_parse("22B2C7DF-9120-4969-8460-05956FE6B065").unwrap(),
+                uid: Uid::Uuid(
+                    uuid::Uuid::try_parse("22B2C7DF-9120-4969-8460-05956FE6B065").unwrap()
+                ),
                 kind: CardKind::Individual,
                 name: Name {
                     __type: None,

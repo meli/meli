@@ -308,8 +308,7 @@ impl ContactEditor {
             ViewMode::Edit { create: true }
         };
         let theme_default: ThemeAttribute = crate::conf::theme_value(context, "theme_default");
-        let mut card = Card::default();
-        card.uid = uuid::Uuid::new_v4();
+        let mut card = Card::new();
         card.created = UTCDateTime::now();
         card.updated = card.created;
         if *account_settings!(context[&account_hash].composing.insert_user_agent) {
@@ -800,7 +799,7 @@ impl Component for ContactEditor {
                         Some(FormButtonAction::Accept) => {
                             let json = self.as_json();
                             let mut card: Card = serde_json::from_value(json).expect("deserialize");
-                            card.uid = self.card.uid;
+                            card.uid = self.card.uid.clone();
                             let res = if create {
                                 context.accounts[&self.account_hash]
                                     .add_card(self.book_id.clone(), card)
@@ -866,7 +865,7 @@ impl Component for ContactEditor {
                                 let json = self.as_json();
                                 let mut card: Card =
                                     serde_json::from_value(json).expect("deserialize");
-                                card.uid = self.card.uid;
+                                card.uid = self.card.uid.clone();
                                 card
                             } else {
                                 self.card.clone()

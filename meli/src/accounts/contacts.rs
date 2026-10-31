@@ -955,7 +955,11 @@ impl ContactBackend for DefaultContacts {
         if address_book.0.as_ref() != Self::DEFAULT_ADDRESS_BOOK {
             return Err(Error::new("").set_kind(ErrorKind::ValueError));
         }
-        let ret = if self.cards.shift_remove(&(CardId::from(card.uid))).is_some() {
+        let ret = if self
+            .cards
+            .shift_remove(&(CardId::from(card.uid.as_uuid())))
+            .is_some()
+        {
             Ok(())
         } else {
             Err(Error::new("").set_kind(ErrorKind::NotSupported))

@@ -26,7 +26,7 @@ use crate::conf::preprocessing::get_included_configs;
 use crate::version_migrations::*;
 
 use melib::{
-    contacts::{CardId, JSContactV1},
+    contacts::{jscontact::json_types::Uid, CardId, JSContactV1},
     UnixTimestamp,
 };
 use toml_edit::DocumentMut;
@@ -82,7 +82,11 @@ struct Card {
 impl From<JSContactV1> for Card {
     fn from(val: JSContactV1) -> Self {
         Self {
-            id: val.uid.into(),
+            id: if let Uid::FreeText { value, .. } = &val.uid {
+                value.clone()
+            } else {
+                val.uid.to_string()
+            },
             name: val.name().unwrap_or_default().into_owned(),
             email: val.email().unwrap_or_default().to_owned(),
             url: val.url().unwrap_or_default().to_owned(),
@@ -108,7 +112,6 @@ impl From<Card> for JSContactV1 {
     fn from(card: Card) -> Self {
         use json_types::UTCDateTime;
         use melib::contacts::jscontact::*;
-        use uuid::Uuid;
 
         let Card {
             id,
@@ -132,11 +135,7 @@ impl From<Card> for JSContactV1 {
             std::marker::PhantomData::<fn() -> JSContactVersion1>,
         );
         ret.0.updated = UTCDateTime(last_edited);
-        ret.0.uid = if let Ok(uid) = Uuid::try_parse(&id) {
-            uid
-        } else {
-            Uuid::new_v5(&Uuid::NAMESPACE_OID, id.as_bytes())
-        };
+        ret.0.uid = id.into();
         let need_fullname = title.is_empty()
             && additionalname.is_empty()
             && name_prefix.is_empty()
@@ -884,7 +883,15 @@ impl JSContactsConversion {
             };
             let cards: IndexMap<String, Card> = previous
                 .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
+                .map(|(k, v)| {
+                    let k = if let Uid::FreeText { value, .. } = &v.uid {
+                        value.clone()
+                    } else {
+                        k.into()
+                    };
+
+                    (k, v.into())
+                })
                 .collect();
             serde_json::to_string(&cards)?
         } else {
@@ -1593,8 +1600,7 @@ contacts = { notmuch_address_book_query = { type = "NotmuchAddress", value = "no
         let _logger = Logger::new_with(LogLevel::TRACE, true);
         let tempdir = tempfile::tempdir().unwrap();
         const PREVIOUS: &str = r#"{"16178106601568626693":{"id":"16178106601568626693","title":"","name":"User 2","additionalname":"","name_prefix":"","name_suffix":"","birthday":null,"email":"user2@example.com","url":"","key":"","color":0,"last_edited":1740521725,"extra_properties":{},"external_resource":false}}"#;
-        const REVERT: &str = "{\"3ec00657-bcc5-59ec-aeb1-de6615987560\":{\"id\":\"3ec00657-bcc5-59ec-aeb1-de6615987560\",\"title\":\"\",\"name\":\"User 2\",\"additionalname\":\"\",\"name_prefix\":\"\",\"name_suffix\":\"\",\"birthday\":null,\"email\":\"user2@example.com\",\"url\":\"\",\"key\":\"\",\"color\":0,\"last_edited\":1740521725,\"extra_properties\":{},\"external_resource\":false}}";
-        const NEW: &str = "{\"3ec00657-bcc5-59ec-aeb1-de6615987560\":{\"@type\":\"Card\",\"version\":\"1.0\",\"uid\":\"3ec00657-bcc5-59ec-aeb1-de6615987560\",\"updated\":\"2025-02-25T22:15:25Z\",\"name\":{\"full\":\"User 2\"},\"emails\":{\"main\":{\"address\":\"user2@example.com\"}}}}";
+        const NEW: &str = "{\"3ec00657-bcc5-59ec-aeb1-de6615987560\":{\"@type\":\"Card\",\"version\":\"1.0\",\"uid\":\"16178106601568626693\",\"updated\":\"2025-02-25T22:15:25Z\",\"name\":{\"full\":\"User 2\"},\"emails\":{\"main\":{\"address\":\"user2@example.com\"}}}}";
         let prev = tempdir.path().join("contacts_prev");
         let new = tempdir.path().join("contacts_new");
         std::fs::write(&prev, PREVIOUS).unwrap();
@@ -1607,7 +1613,7 @@ contacts = { notmuch_address_book_query = { type = "NotmuchAddress", value = "no
         // revert
         assert_eq!(
             &JSContactsConversion::convert_contacts(NEW, true).unwrap(),
-            REVERT
+            PREVIOUS
         );
         // roundtrip
         assert_eq!(
