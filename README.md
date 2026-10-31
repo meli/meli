@@ -57,7 +57,7 @@ Try an [old, outdated but online and interactive web demo](https://meli-email.or
 
   ![Alpine Linux Edge package](https://repology.org/badge/version-for-repo/alpine_edge/meli.svg)
   ```sh
-  apk install meli
+  apk add meli
   ```
 - NetBSD with pkgsrc <https://pkgsrc.se/mail/meli>
 
