@@ -167,6 +167,14 @@ impl<const N: usize> DataColumns<N> {
             segment_tree: Box::new(init_array(SegmentTree::default)),
         }
     }
+
+    pub fn reset_theme(&mut self, theme_default: ThemeAttribute) {
+        self.cursor_config = TableCursorConfig::new(theme_default);
+        self.theme_config = TableThemeConfig::new(theme_default);
+        for col in self.columns.iter_mut() {
+            col.grid_mut().default_cell = theme_default.into();
+        }
+    }
 }
 
 impl<const N: usize> DataColumns<N> {

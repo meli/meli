@@ -1681,6 +1681,8 @@ impl Component for PlainListing {
         match *event {
             UIEvent::ConfigReload { old_settings: _ } => {
                 self.color_cache = ColorCache::new(context, IndexStyle::Plain);
+                self.data_columns
+                    .reset_theme(self.color_cache.theme_default);
 
                 self.refresh_mailbox(context, true);
                 self.set_dirty(true);

@@ -490,7 +490,9 @@ impl Component for AccountMailboxManager {
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if let UIEvent::ConfigReload { old_settings: _ } = event {
-            self.theme_default = crate::conf::theme_value(context, "theme_default");
+            let theme_default = crate::conf::theme_value(context, "theme_default");
+            self.theme_default = theme_default;
+            self.data_columns.reset_theme(theme_default);
             self.initialized = false;
             self.set_dirty(true);
         }
