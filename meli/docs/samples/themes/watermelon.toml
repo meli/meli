@@ -2,6 +2,7 @@
 color_aliases = { "JewelGreen" = "#157241", "PinkLace" = "#FFD5FD", "TorchRed" = "#F50431", "ChelseaCucumber" = "#6CA94A", "ScreaminGreen" = "#8FFF52", "SunsetOrange" = "#f74b41", "Melon" = "#fdbcb4", "BlueStone" = "#005F5F", "HotPink" = "#FF74D7" }
 "theme_default" = { fg = "$TorchRed", bg = "$PinkLace", attrs = "Default" }
 "widgets.list.header" = { fg = "$PinkLace", bg = "$TorchRed", attrs = "Bold" }
+"widgets.form.highlighted" = { fg = "theme_default", bg = "DeepPink2", underline = "theme_default", attrs = "theme_default" }
 "mail.listing.attachment_flag" = { fg = "LightSlateGrey", bg = "theme_default", attrs = "theme_default" }
 "mail.listing.tag_default" = { bg = "$Melon", attrs = "Bold" }
 "mail.listing.compact.even" = { fg = "White", bg = "$ChelseaCucumber", attrs = "Bold" }
