@@ -34,7 +34,7 @@ sqlite3 = ["sqlite3-static"]
 sqlite3-static = ["rusqlite", "rusqlite/bundled-full"]
 tls = ["native-tls"]
 tls-static = ["tls", "native-tls/vendored"]
-webdav = ["http", "dep:quick-xml", "dep:http", "dep:url"]
+webdav = ["http", "dep:quick-xml", "dep:http"]
 
 [dependencies]
 async-fn-stream = { version = "0.3" }
@@ -72,7 +72,7 @@ smol = { workspace = true }
 socket2 = { version = "0.6", features = [] }
 sqz = { version = "0.1.0", optional = true, default-features = false, features = ["crypto-nettle"] }
 unicode-segmentation = { version = "1.2.1", default-features = false }
-url = { version = "2.5", optional = true }
+url = { version = "2.5" }
 uuid = { workspace = true }
 xdg = { version = "2.1.0" }
 
