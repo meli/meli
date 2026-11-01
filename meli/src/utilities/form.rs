@@ -1720,8 +1720,8 @@ impl<
                                     .push_back(UIEvent::ChangeMode(UIMode::Insert));
                                 self.set_dirty(true);
                             }
-                            return true;
                         }
+                        return true;
                     }
                     _ => {}
                 }
