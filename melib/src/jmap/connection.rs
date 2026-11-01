@@ -414,7 +414,7 @@ impl JmapClient {
                                 ..Identity::default()
                             }
                         );
-                        indexmap! {
+                        indexmap::indexmap! {
                             id.clone().into() => Identity {
                                 id,
                                 name: address.get_display_name().unwrap_or_default().into(),

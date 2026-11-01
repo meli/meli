@@ -106,8 +106,6 @@ extern crate data_encoding;
 extern crate bitflags;
 #[cfg(feature = "sqlite3")]
 pub extern crate rusqlite;
-#[macro_use]
-extern crate indexmap;
 
 #[derive(Clone, Copy, Debug)]
 #[repr(transparent)]

@@ -267,7 +267,7 @@ fn test_jmap_identity_methods() {
                 let id: Id<Identity> = main_identity.into();
                 let address = crate::email::Address::try_from(main_identity)
                     .unwrap_or_else(|_| crate::email::Address::new(None::<&str>, main_identity));
-                indexmap! {
+                indexmap::indexmap! {
                     id.clone().into() => Identity {
                         id,
                         name: address.get_display_name().unwrap_or_default().to_string(),
@@ -343,14 +343,14 @@ fn test_jmap_argument_serde() {
     let import_call: EmailImport =
         EmailImport::new()
             .account_id(account_id.into())
-            .emails(indexmap! {
+            .emails(indexmap::indexmap! {
                 creation_id =>
                     EmailImportObject::new()
                     .blob_id(blob_id.clone())
-                    .keywords(indexmap! {
+                    .keywords(indexmap::indexmap! {
                         "$draft".to_string() => true,
                     })
-                .mailbox_ids(indexmap! {
+                .mailbox_ids(indexmap::indexmap! {
                     draft_mailbox_id.clone() => true,
                 }),
             });
@@ -360,7 +360,7 @@ fn test_jmap_argument_serde() {
     let subm_set_call: EmailSubmissionSet = EmailSubmissionSet::new(
                 Set::<EmailSubmissionObject>::new(None)
                     .account_id(account_id.into())
-                    .create(Some(indexmap! {
+                    .create(Some(indexmap::indexmap! {
                         Argument::from(Id::from("k1490")) => EmailSubmissionObject::new(
                             /* account_id: */ account_id.into(),
                             /* identity_id: */ account_id.into(),
@@ -371,7 +371,7 @@ fn test_jmap_argument_serde() {
                     })),
             )
             .on_success_update_email(Some(
-                indexmap! {
+                indexmap::indexmap! {
                     "#k1490".into() => json!({
                         format!("mailboxIds/{draft_mailbox_id}"): null,
                         format!("mailboxIds/{sent_mailbox_id}"): true,
@@ -694,7 +694,7 @@ fn test_jmap_server_set_method_and_response() {
             .account_id(account_id.into())
             .create(Some({
                 let id: Id<mailbox::MailboxObject> = path.into();
-                indexmap! {
+                indexmap::indexmap! {
                     id.clone().into() => mailbox::MailboxObject {
                         id,
                         name: path.to_string(),
@@ -744,7 +744,7 @@ fn test_jmap_server_set_method_and_response() {
             .account_id(account_id.into())
             .if_in_state(Some("78542".to_string().into()))
             .update(Some({
-                indexmap! {
+                indexmap::indexmap! {
                     id.clone().into() => json! {{
                         "name" : "Maybe important mail"
                     }}
@@ -789,13 +789,13 @@ fn test_jmap_server_set_method_and_response() {
         old_state: Some("78542".to_string().into()),
         new_state: "78549".to_string().into(),
         created: None,
-        updated: Some(indexmap! {
+        updated: Some(indexmap::indexmap! {
             id => None
         }),
         destroyed: None,
         not_created: None,
         not_updated: None,
-        not_destroyed: Some(indexmap! {
+        not_destroyed: Some(indexmap::indexmap! {
             destroy_id => SetError::Forbidden(None)
         }),
     };

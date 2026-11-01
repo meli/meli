@@ -1186,7 +1186,7 @@ pub mod json_types {
                     default_separator: None,
                     ..Name::default()
                 },
-                emails: indexmap! {
+                emails: indexmap::indexmap! {
                     "main".to_string() => EmailAddress {
                         __type: None,
                         address: "user@example.com".to_string(),

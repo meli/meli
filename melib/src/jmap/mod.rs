@@ -649,10 +649,10 @@ impl MailBackend for JmapType {
 
             let import_call: email::EmailImport = email::EmailImport::new()
                 .account_id(mail_account_id.clone())
-                .emails(indexmap! {
+                .emails(indexmap::indexmap! {
                     creation_id.clone() => email::EmailImportObject::new()
                     .blob_id(upload_response.blob_id)
-                    .mailbox_ids(indexmap! {
+                    .mailbox_ids(indexmap::indexmap! {
                         mailbox_id => true
                     })
                 });
@@ -852,8 +852,8 @@ impl MailBackend for JmapType {
                 Set::<mailbox::MailboxObject>::new(mailbox_state)
                     .account_id(mail_account_id)
                     .update(Some({
-                        indexmap! {
-                            mailbox_id.clone().into() => serde_json::json!{indexmap! {
+                        indexmap::indexmap! {
+                            mailbox_id.clone().into() => serde_json::json!{indexmap::indexmap! {
                                 "name" => new_path.clone()
                             }}
                         }
@@ -896,7 +896,7 @@ impl MailBackend for JmapType {
                     .account_id(mail_account_id)
                     .create(Some({
                         let id: Id<mailbox::MailboxObject> = path.as_str().into();
-                        indexmap! {
+                        indexmap::indexmap! {
                             id.clone().into() => mailbox::MailboxObject {
                                 id,
                                 name: path.clone(),
@@ -1039,8 +1039,8 @@ impl MailBackend for JmapType {
                 Set::<mailbox::MailboxObject>::new(mailbox_state)
                     .account_id(mail_account_id)
                     .update(Some({
-                        indexmap! {
-                            mailbox_id.clone().into() => serde_json::json!{indexmap! {
+                        indexmap::indexmap! {
+                            mailbox_id.clone().into() => serde_json::json!{indexmap::indexmap! {
                                 "isSubscribed" => val
                             }}
                         }
@@ -1530,14 +1530,14 @@ impl MailBackend for JmapType {
                 let creation_id: Id<email::EmailObject> = "newid".into();
                 let import_call: email::EmailImport = email::EmailImport::new()
                     .account_id(mail_account_id.clone())
-                    .emails(indexmap! {
+                    .emails(indexmap::indexmap! {
                         creation_id => email::EmailImportObject::new()
                             .blob_id(upload_response.blob_id)
-                            .keywords(indexmap! {
+                            .keywords(indexmap::indexmap! {
                                 "$draft".to_string() => true,
                                 "$seen".to_string() => true,
                             })
-                            .mailbox_ids(indexmap! {
+                            .mailbox_ids(indexmap::indexmap! {
                                 draft_mailbox_id.clone() => true,
                             }),
                     });
@@ -1573,7 +1573,7 @@ impl MailBackend for JmapType {
                 let subm_set_call = submission::EmailSubmissionSet::new(
                     Set::<submission::EmailSubmissionObject>::new(None)
                         .account_id(mail_account_id.clone())
-                        .create(Some(indexmap! {
+                        .create(Some(indexmap::indexmap! {
                             Argument::from(Id::from("k1490")) => submission::EmailSubmissionObject::new(
                                 /* account_id: */ mail_account_id,
                                 /* identity_id: */ identity_id,
@@ -1583,7 +1583,7 @@ impl MailBackend for JmapType {
                                 )
                         })),
                 )
-                .on_success_update_email(Some(indexmap! {
+                .on_success_update_email(Some(indexmap::indexmap! {
                     "#k1490".into() => json!({
                         format!("mailboxIds/{draft_mailbox_id}"): null,
                         format!("mailboxIds/{sent_mailbox_id}"): true,
