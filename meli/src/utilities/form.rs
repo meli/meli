@@ -64,8 +64,10 @@ pub type ValidateFn = Arc<dyn Fn(&str) -> bool + Send + Sync>;
 pub struct TextField {
     inner: UText,
     read_only: bool,
+    focused: bool,
     autocomplete: Option<(Arc<AutoCompleteFn>, Box<AutoComplete>)>,
     validate_fn: Option<ValidateFn>,
+    is_hyperlink: bool,
     theme_attr: Option<ThemeAttribute>,
     read_only_attr: Option<ThemeAttribute>,
     highlight: Option<ThemeAttribute>,
@@ -85,6 +87,8 @@ impl std::fmt::Debug for TextField {
             .field("id", &self.id)
             .field("inner", &self.inner)
             .field("read_only", &self.read_only)
+            .field("focused", &self.focused)
+            .field("is_hyperlink", &self.is_hyperlink)
             .field("has validate_fn", &self.validate_fn.is_some())
             .field("has AutoComplete", &self.autocomplete.is_some())
             .finish_non_exhaustive()
@@ -96,7 +100,9 @@ impl Default for TextField {
         Self {
             inner: UText::new(String::with_capacity(256)),
             read_only: false,
+            focused: false,
             autocomplete: None,
+            is_hyperlink: false,
             validate_fn: None,
             theme_attr: None,
             read_only_attr: None,
@@ -119,6 +125,14 @@ impl TextField {
     #[inline]
     pub fn with_read_only(self, read_only: bool) -> Self {
         Self { read_only, ..self }
+    }
+
+    #[inline]
+    pub fn with_is_hyperlink(self, is_hyperlink: bool) -> Self {
+        Self {
+            is_hyperlink,
+            ..self
+        }
     }
 
     /// Text content as a string slice.
@@ -207,6 +221,12 @@ impl TextField {
         self.validate_fn = validate_fn;
         self
     }
+
+    #[inline]
+    pub fn set_is_hyperlink(&mut self, is_hyperlink: bool) -> &mut Self {
+        self.is_hyperlink = is_hyperlink;
+        self
+    }
 }
 
 impl Component for TextField {
@@ -214,6 +234,8 @@ impl Component for TextField {
         let Self {
             inner,
             read_only,
+            focused,
+            is_hyperlink,
             validate_fn,
             theme_attr,
             read_only_attr,
@@ -272,19 +294,37 @@ impl Component for TextField {
          *              skip offset
          */
         let str = inner.as_str();
-        grid.write_string(
-            if width > 0 && width < inner.grapheme_pos() {
-                str.trim_left_at_boundary(
-                    width * inner.grapheme_pos().wrapping_div(width).saturating_sub(1)
-                        + inner.grapheme_pos().wrapping_rem(width),
-                )
-            } else {
-                str
-            },
-            if let Some(ref validate_fn) = validate_fn {
-                if !validate_fn(str) {
-                    &*invalid_attr
-                        .get_or_insert_with(|| crate::conf::theme_value(context, "text.error"))
+        let col_width = grid
+            .write_string(
+                if *focused {
+                    if width > 0 && width < inner.grapheme_pos() {
+                        str.trim_left_at_boundary(
+                            width * inner.grapheme_pos().wrapping_div(width).saturating_sub(1)
+                                + inner.grapheme_pos().wrapping_rem(width),
+                        )
+                    } else {
+                        str
+                    }
+                } else {
+                    if width > 0 && width < inner.grapheme_len() {
+                        str.trim_at_boundary(width)
+                    } else {
+                        str
+                    }
+                },
+                if let Some(ref validate_fn) = validate_fn {
+                    if !validate_fn(str) {
+                        &*invalid_attr
+                            .get_or_insert_with(|| crate::conf::theme_value(context, "text.error"))
+                    } else if *read_only {
+                        &*read_only_attr.get_or_insert_with(|| {
+                            crate::conf::theme_value(context, "widgets.form.read_only")
+                        })
+                    } else {
+                        &*theme_attr.get_or_insert_with(|| {
+                            crate::conf::theme_value(context, "widgets.form.field")
+                        })
+                    }
                 } else if *read_only {
                     &*read_only_attr.get_or_insert_with(|| {
                         crate::conf::theme_value(context, "widgets.form.read_only")
@@ -293,19 +333,20 @@ impl Component for TextField {
                     &*theme_attr.get_or_insert_with(|| {
                         crate::conf::theme_value(context, "widgets.form.field")
                     })
-                }
-            } else if *read_only {
-                &*read_only_attr.get_or_insert_with(|| {
-                    crate::conf::theme_value(context, "widgets.form.read_only")
-                })
-            } else {
-                &*theme_attr
-                    .get_or_insert_with(|| crate::conf::theme_value(context, "widgets.form.field"))
-            },
-            area,
-            None,
-            None,
-        );
+                },
+                area,
+                None,
+                None,
+            )
+            .0;
+        if *is_hyperlink {
+            let uri = grid.insert_uri(str);
+            grid.set_uri(
+                uri,
+                area.upper_left(),
+                area.skip_cols(col_width).upper_left(),
+            );
+        }
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
@@ -1044,7 +1085,8 @@ impl FormWidgetField for Field {
 
     fn set_focused(&mut self, focused: bool) {
         match self {
-            Self::Text(_) | Self::Choice(_) => {}
+            Self::Text(t) => t.set_focused(focused),
+            Self::Choice(_) => {}
             Self::Dict(d) => {
                 if let Some(rename_entry) = &mut d.rename_entry {
                     rename_entry.set_focused(focused);
@@ -1097,7 +1139,9 @@ impl FormWidgetField for TextField {
         self.read_only
     }
 
-    fn set_focused(&mut self, _: bool) {}
+    fn set_focused(&mut self, focused: bool) {
+        self.focused = focused;
+    }
 
     fn height(&self) -> usize {
         1
@@ -1258,6 +1302,20 @@ impl<
 
     pub fn set_focused(&mut self, focused: bool) {
         self.focused = focused;
+        if focused {
+            let focused_field = if self.focus == FormFocus::Fields {
+                Some(self.cursor)
+            } else {
+                None
+            };
+            for (i, val) in self.fields.values_mut().enumerate() {
+                val.set_focused(Some(i) == focused_field);
+            }
+        } else {
+            for val in self.fields.values_mut() {
+                val.set_focused(false);
+            }
+        }
         self.dirty = true;
     }
 

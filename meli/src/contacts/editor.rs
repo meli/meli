@@ -541,13 +541,17 @@ impl ContactEditor {
                     .map(|(k, v)| {
                         (
                             k.to_owned(),
-                            Field::Text(TextField::new(UText::new(v.uri.clone()), None)),
+                            Field::Text(
+                                TextField::new(UText::new(v.uri.clone()), None)
+                                    .with_is_hyperlink(true),
+                            ),
                         )
                     })
                     .collect(),
             ),
-            (Box::new(|| Field::Text(TextField::new(UText::new(String::new()), None)))
-                as Box<dyn Fn() -> Field + Send + Sync>)
+            (Box::new(|| {
+                Field::Text(TextField::new(UText::new(String::new()), None).with_is_hyperlink(true))
+            }) as Box<dyn Fn() -> Field + Send + Sync>)
                 .into(),
         );
         self.form.push_dict(
@@ -559,13 +563,17 @@ impl ContactEditor {
                     .map(|(k, v)| {
                         (
                             k.to_owned(),
-                            Field::Text(TextField::new(UText::new(v.address.clone()), None)),
+                            Field::Text(
+                                TextField::new(UText::new(v.address.clone()), None)
+                                    .with_is_hyperlink(true),
+                            ),
                         )
                     })
                     .collect(),
             ),
-            (Box::new(|| Field::Text(TextField::new(UText::new(String::new()), None)))
-                as Box<dyn Fn() -> Field + Send + Sync>)
+            (Box::new(|| {
+                Field::Text(TextField::new(UText::new(String::new()), None).with_is_hyperlink(true))
+            }) as Box<dyn Fn() -> Field + Send + Sync>)
                 .into(),
         );
         self.form
@@ -597,13 +605,17 @@ impl ContactEditor {
                     .map(|(k, v)| {
                         (
                             k.to_owned(),
-                            Field::Text(TextField::new(UText::new(v.resource.uri.clone()), None)),
+                            Field::Text(
+                                TextField::new(UText::new(v.resource.uri.clone()), None)
+                                    .with_is_hyperlink(true),
+                            ),
                         )
                     })
                     .collect(),
             ),
-            (Box::new(|| Field::Text(TextField::new(UText::new(String::new()), None)))
-                as Box<dyn Fn() -> Field + Send + Sync>)
+            (Box::new(|| {
+                Field::Text(TextField::new(UText::new(String::new()), None).with_is_hyperlink(true))
+            }) as Box<dyn Fn() -> Field + Send + Sync>)
                 .into(),
         );
         self.form.push_dict(
