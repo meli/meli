@@ -131,7 +131,10 @@ impl AccountSettings {
     pub fn extra_identity_addresses(&self) -> Vec<Address> {
         self.extra_identities
             .iter()
-            .map(|i| Address::new(None::<&str>, i.clone()))
+            .map(|i| {
+                Address::try_from(i.as_str())
+                    .unwrap_or_else(|_| Address::new(None::<&str>, i.clone()))
+            })
             .collect()
     }
 
