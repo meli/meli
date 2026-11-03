@@ -55,7 +55,7 @@ pub(super) fn from_complete_fn(_: AccountHash) -> AutoCompleteFn {
     Box::new(move |c, _term| {
         c.accounts
             .values()
-            .map(|acc| {
+            .flat_map(|acc| {
                 let addr = acc.settings.account.main_identity_address();
                 let desc = match account_settings!(c[&acc.hash()].send_mail) {
                     crate::conf::composing::SendMail::ShellCommand(ref cmd) => {
@@ -81,7 +81,13 @@ pub(super) fn from_complete_fn(_: AccountHash) -> AutoCompleteFn {
                     }
                 };
 
-                (addr.to_string(), desc)
+                std::iter::once((addr.to_string(), desc.clone())).chain(
+                    acc.settings
+                        .account
+                        .extra_identity_addresses()
+                        .into_iter()
+                        .map(move |addr| (addr.to_string(), desc.clone())),
+                )
             })
             .map(AutoCompleteEntry::from)
             .collect::<Vec<AutoCompleteEntry>>()
