@@ -2974,10 +2974,18 @@ fn attribution_string(
 
 #[cfg(test)]
 mod tests {
+    use rusty_fork::rusty_fork_test;
+
     use super::*;
 
-    #[test]
-    fn test_compose_reply_subject_prefix() {
+    rusty_fork_test! {
+        #[test]
+        fn test_compose_reply_subject_prefix() {
+            run_compose_reply_subject_prefix();
+        }
+    }
+
+    fn run_compose_reply_subject_prefix() {
         let raw_mail = r#"From: "some name" <some@example.com>
 To: "me" <myself@example.com>
 Cc:
