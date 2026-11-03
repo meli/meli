@@ -378,17 +378,6 @@ impl Composer {
             envelope.message_id().display_brackets().to_string(),
         );
 
-        if let Some(reply_to) = envelope.other_headers().get(HeaderName::TO) {
-            let to: &str = reply_to;
-            let extra_identities = &account.settings.account.extra_identities;
-            if let Some(extra) = extra_identities
-                .iter()
-                .find(|extra| to.contains(extra.as_str()))
-            {
-                ret.draft.set_header(HeaderName::FROM, extra.into());
-            }
-        }
-
         let ours = context.accounts[&account_hash]
             .settings
             .account()
@@ -397,6 +386,28 @@ impl Composer {
             .settings
             .account()
             .extra_identity_addresses();
+
+        for hdr in [HeaderName::TO, HeaderName::CC, HeaderName::BCC] {
+            if let Some(reply_to) = envelope.other_headers().get(hdr) {
+                match Address::list_try_from(reply_to).ok() {
+                    Some(to) => {
+                        if let Some(extra) = extra_ours.iter().find(|extra| to.contains(extra)) {
+                            ret.draft.set_header(HeaderName::FROM, extra.to_string());
+                        }
+                    }
+                    None => {
+                        let to: &str = reply_to;
+                        let extra_identities = &account.settings.account.extra_identities;
+                        if let Some(extra) = extra_identities
+                            .iter()
+                            .find(|extra| to.contains(extra.as_str()))
+                        {
+                            ret.draft.set_header(HeaderName::FROM, extra.into());
+                        }
+                    }
+                }
+            }
+        }
 
         // Check if we're replying to an e-mail we authored. In that case, we will reply
         // to the receivers of that e-mail.
@@ -2980,7 +2991,8 @@ hello world.
         let envelope =
             Envelope::from_bytes(raw_mail.as_bytes(), None).expect("Could not parse mail");
         let tempdir = tempfile::tempdir().unwrap();
-        let context = Context::new_mock(&tempdir);
+        let mut context = Context::new_mock(&tempdir);
+        context.accounts[0].settings.account.identity = "myself@example.com".to_owned();
         let account_hash = context.accounts[0].hash();
         let mailbox_hash = MailboxHash::default();
         let envelope_hash = envelope.hash();
@@ -3003,13 +3015,20 @@ hello world.
         );
         assert_eq!(
             &composer.draft.headers()[HeaderName::TO],
-            r#"some name <some@example.com>"#
+            "some name <some@example.com>"
         );
+        assert_eq!(&composer.draft.headers()[HeaderName::FROM], "");
+
+        context.accounts[0].settings.account.extra_identities = vec![
+            "myotherself@example.com".to_string(),
+            "My Second Self <thirdself@example.com>".to_string(),
+        ];
+
         let raw_mail = r#"From: "some name" <some@example.com>
-To: "me" <myself@example.com>
+To: "other me" <myotherself@example.com>
 Cc:
 Subject: your e-mail
-Message-ID: <h2g7f.z0gy2pgaen5m@example.com>
+Message-ID: <h2g7f.z0gy2pgaen6m@example.com>
 Content-Type: text/plain
 
 hello world.
@@ -3035,8 +3054,41 @@ hello world.
             "Re: your e-mail"
         );
         assert_eq!(
-            &composer.draft.headers()[HeaderName::TO],
-            r#"some name <some@example.com>"#
+            &composer.draft.headers()[HeaderName::FROM],
+            "myotherself@example.com"
+        );
+        let raw_mail = r#"From: "some name" <some@example.com>
+To: thirdself@example.com
+Cc:
+Subject: your e-mail
+Message-ID: <h2g7f.z0gy2pgaen7m@example.com>
+Content-Type: text/plain
+
+hello world.
+"#;
+        let envelope =
+            Envelope::from_bytes(raw_mail.as_bytes(), None).expect("Could not parse mail");
+        let envelope_hash = envelope.hash();
+        context.accounts[0]
+            .collection
+            .insert(envelope, mailbox_hash);
+        let composer = Composer::reply_to(
+            (account_hash, mailbox_hash),
+            &context.accounts[0]
+                .collection
+                .get_env(envelope_hash)
+                .unwrap(),
+            String::new(),
+            &context,
+            false,
+        );
+        assert_eq!(
+            &composer.draft.headers()[HeaderName::SUBJECT],
+            "Re: your e-mail"
+        );
+        assert_eq!(
+            &composer.draft.headers()[HeaderName::FROM],
+            "My Second Self <thirdself@example.com>"
         );
     }
 }
