@@ -72,6 +72,23 @@ $ cargo install meli # ensure .cargo/bin is in your PATH
 
 Exporting `EDITOR` and `PAGER` might be useful.
 
+## Building on Mac OS
+
+The default meli build configuration requires `nettle` v3 and `capnp` at build time. The easiest way to get these is to install them using homebrew:
+
+```console
+$ brew install capnp
+$ brew install nettle@3
+```
+
+And then tell `make` or `cargo` where nettle v3 is installed using the PKG_CONFIG_PATH environment variable:
+
+```console
+$ PKG_CONFIG_PATH="$(brew --prefix nettle@3)/lib/pkgconfig:$PKG_CONFIG_PATH" make
+```
+
+`make` and `cargo` otherwise behave the same way on Mac OS as they do on other systems.
+
 ## Development
 
 Development builds can be built and/or run with
