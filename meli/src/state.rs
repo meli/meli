@@ -469,7 +469,7 @@ impl State {
             Settings::new()?
         });
 
-        let (cols, rows) = termion::terminal_size().chain_err_summary(|| {
+        let (cols, rows) = Tty::terminal_size().chain_err_summary(|| {
             "Could not determine terminal size. Are you running this on a tty? If yes, do you need \
              permissions for tty ioctls?"
         })?;

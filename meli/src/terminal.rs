@@ -192,33 +192,6 @@ impl<
     }
 }
 
-/// Create an OSC-introduced sequence.
-macro_rules! osc {
-    ($( $l:expr ),*) => { concat!("\x1b]", $( $l ),*) };
-}
-
-/// Derive an OSC sequence struct.
-macro_rules! derive_osc_sequence {
-    ($(#[$outer:meta])*
-    ($name:ident, $value:expr)) => {
-        $(#[$outer])*
-        #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-        pub struct $name;
-
-        impl std::fmt::Display for $name {
-            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                write!(f, osc!($value))
-            }
-        }
-
-        impl AsRef<str> for $name {
-            fn as_ref(&self) -> &'static str {
-                osc!($value)
-            }
-        }
-    };
-}
-
 pub trait EscapeSequenceParse: Sized {
     fn parse(bytes: &str) -> Option<Self>;
 }
@@ -235,12 +208,12 @@ pub trait EscapeSequenceQuery: Sized {
     }
 }
 
-impl EscapeSequenceQuery for QueryBackground {
+impl EscapeSequenceQuery for osc::QueryBackground {
     type Reply = Color;
     const PREFIX: &'static str = "\x1b]11;";
 }
 
-impl EscapeSequenceQuery for QueryForeground {
+impl EscapeSequenceQuery for osc::QueryForeground {
     type Reply = Color;
     const PREFIX: &'static str = "\x1b]10;";
 }
@@ -349,125 +322,235 @@ fn parse_channel_scaled(input: &str) -> Option<u16> {
 // const FG_RESPONSE_PREFIX: &[u8] = b"\x1b]10;";
 // const QUERY_BG: &[u8] = b"\x1b]11;?";
 // const BG_RESPONSE_PREFIX: &[u8] = b"\x1b]11;";
-derive_osc_sequence!(
-    /// Query background color.
-    (QueryBackground, "11;?\x1b\\")
-);
 
-derive_osc_sequence!(
-    /// Query foreground color.
-    (QueryForeground, "10;?\x1b\\")
-);
-
-// Some macros taken from termion:
-/// Create a CSI-introduced sequence.
-macro_rules! csi {
-    ($( $l:expr ),*) => { concat!("\x1b[", $( $l ),*) };
+pub mod osc {
+    /// Create an OSC-introduced sequence.
+    macro_rules! osc {
+    ($( $l:expr ),*) => { concat!("\x1b]", $( $l ),*) };
 }
 
-/// Derive a CSI sequence struct.
-macro_rules! derive_csi_sequence {
+    /// Derive an OSC sequence struct.
+    macro_rules! derive_osc_sequence {
     ($(#[$outer:meta])*
     ($name:ident, $value:expr)) => {
         $(#[$outer])*
-        #[derive(Copy, Clone)]
+        #[derive(Copy, Clone, Eq, PartialEq, Debug)]
         pub struct $name;
 
         impl std::fmt::Display for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                write!(f, csi!($value))
+                write!(f, osc!($value))
             }
         }
 
         impl AsRef<str> for $name {
             fn as_ref(&self) -> &'static str {
-                csi!($value)
+                osc!($value)
             }
         }
     };
 }
 
-derive_csi_sequence!(
-    ///Ps = 1 0 0 2  ⇒  Don't use Cell Motion Mouse Tracking, xterm
-    (DisableMouse, "?1002l")
-);
+    derive_osc_sequence!(
+        /// Query background color.
+        (QueryBackground, "11;?\x1b\\")
+    );
 
-derive_csi_sequence!(
-    ///Ps = 1 0 0 2  ⇒  Use Cell Motion Mouse Tracking, xterm
-    (EnableMouse, "?1002h")
-);
+    derive_osc_sequence!(
+        /// Query foreground color.
+        (QueryForeground, "10;?\x1b\\")
+    );
+}
 
-derive_csi_sequence!(
-    ///Ps = 1 0 0 6  Enable SGR Mouse Mode, xterm.
-    (EnableSGRMouse, "?1006h")
-);
+pub mod csi {
+    // Some macros taken from termion:
+    /// Create a CSI-introduced sequence.
+    macro_rules! csi {
+        ($( $l:expr ),*) => { concat!("\x1b[", $( $l ),*) };
+    }
 
-derive_csi_sequence!(
-    ///Ps = 1 0 0 6  Disable SGR Mouse Mode, xterm.
-    (DisableSGRMouse, "?1006l")
-);
+    /// Derive a CSI sequence struct.
+    macro_rules! derive_csi_sequence {
+        ($(#[$outer:meta])*
+         ($name:ident, $value:expr)) => {
+            $(#[$outer])*
+                #[derive(Copy, Clone)]
+                pub struct $name;
 
-derive_csi_sequence!(
-    ///Ps = 1 0 0 7  Enable Alternate Scroll Mode, xterm.
-    (EnableAlternateScrollMode, "?1007h")
-);
+            impl std::fmt::Display for $name {
+                fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                    write!(f, csi!($value))
+                }
+            }
 
-derive_csi_sequence!(
-    ///Ps = 1 0 0 7  Disable Alternate Scroll Mode, xterm.
-    (DisableAlternateScrollMode, "?1007l")
-);
+            impl AsRef<str> for $name {
+                fn as_ref(&self) -> &'static str {
+                    csi!($value)
+                }
+            }
+        };
+    }
 
-derive_csi_sequence!(
-    /// Save `?7` Wraparound Mode (DECAWM)
-    (SaveWraparoundMode, "?7s")
-);
+    derive_csi_sequence!((ToMainScreen, "?1049l"));
 
-derive_csi_sequence!(
-    /// Restore `?7` Wraparound Mode (DECAWM)
-    (RestoreWraparoundMode, "?7r")
-);
+    derive_csi_sequence!((ToAlternateScreen, "?1049h"));
 
-derive_csi_sequence!(
-    /// Disable `?7` Wraparound Mode (DECAWM)
-    (DisableWraparoundMode, "?7l")
-);
+    derive_csi_sequence!(
+        /// `CSI Ps ; Ps ; Ps t`, where `Ps = 2 2 ; 0` Save xterm icon and window title on stack.
+        (SaveWindowTitleIconToStack, "22;0t")
+    );
 
-derive_csi_sequence!(
-    #[doc = "`CSI Ps ; Ps ; Ps t`, where `Ps = 2 2 ; 0`  -> Save xterm icon and window title on \
-             stack."]
-    (SaveWindowTitleIconToStack, "22;0t")
-);
+    derive_csi_sequence!(
+        /// Restore window title and icon from terminal's title stack. `CSI Ps ; Ps ; Ps t`, where `Ps = 2 3 ; 0`.
+        (RestoreWindowTitleIconFromStack, "23;0t")
+    );
 
-derive_csi_sequence!(
-    #[doc = "Restore window title and icon from terminal's title stack. `CSI Ps ; Ps ; Ps t`, \
-             where `Ps = 2 3 ; 0`  -> Restore xterm icon and window title from stack."]
-    (RestoreWindowTitleIconFromStack, "23;0t")
-);
+    derive_csi_sequence!((BracketPasteStart, "200~"));
+    derive_csi_sequence!((BracketPasteEnd, "201~"));
+    pub mod cursor {
+        use std::num::NonZeroU16;
 
-derive_csi_sequence!(
-    #[doc = "Empty struct with a Display implementation that returns the byte sequence to start [Bracketed Paste Mode](http://www.xfree86.org/current/ctlseqs.html#Bracketed%20Paste%20Mode)"]
-    (BracketModeStart, "?2004h")
-);
+        #[derive(Copy, Clone, PartialEq, Eq)]
+        pub struct Goto(pub NonZeroU16, pub NonZeroU16);
 
-derive_csi_sequence!(
-    #[doc = "Empty struct with a Display implementation that returns the byte sequence to end [Bracketed Paste Mode](http://www.xfree86.org/current/ctlseqs.html#Bracketed%20Paste%20Mode)"]
-    (BracketModeEnd, "?2004l")
-);
+        impl Goto {
+            pub const UPPER_LEFT: Self =
+                Self(NonZeroU16::new(1).unwrap(), NonZeroU16::new(1).unwrap());
 
-derive_csi_sequence!(
-    #[doc = "Query Synchronized Output support. `CSI ? 2026 $ p`"]
-    (QuerySynchronizedOutputSupport, "?2026$p")
-);
+            #[inline]
+            pub const fn new(x: usize, y: usize) -> Self {
+                Self(
+                    NonZeroU16::new(x as u16 + 1).unwrap(),
+                    NonZeroU16::new(y as u16 + 1).unwrap(),
+                )
+            }
+        }
 
-derive_csi_sequence!(
-    #[doc = "`BSU` (begin synchronized update, `CSI ? 2026 h`)"]
-    (BeginSynchronizedUpdate, "?2026h")
-);
+        impl std::fmt::Display for Goto {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(f, "\x1b[{x};{y}H", x = self.1, y = self.0)
+            }
+        }
 
-derive_csi_sequence!(
-    #[doc = "`ESU` (end synchronized update, `CSI ? 2026 l`)"]
-    (EndSynchronizedUpdate, "?2026l")
-);
+        derive_csi_sequence!(
+            /// Hide cursor
+            (Hide, "?25l")
+        );
+
+        derive_csi_sequence!(
+            /// Show cursor
+            (Show, "?25h")
+        );
+
+        derive_csi_sequence!(
+            /// Restore cursor
+            (Restore, "u")
+        );
+
+        derive_csi_sequence!(
+            /// Save cursor
+            (Save, "s")
+        );
+    }
+
+    pub mod clear {
+        derive_csi_sequence!(
+            /// Clear the entire screen
+            (All, "2J")
+        );
+        derive_csi_sequence!(
+            /// Clear everything after the cursor
+            (AfterCursor, "J")
+        );
+        derive_csi_sequence!(
+            /// Clear everything before the cursor
+            (BeforeCursor, "1J")
+        );
+        derive_csi_sequence!(
+            /// Clear the current line
+            (CurrentLine, "2K")
+        );
+        derive_csi_sequence!(
+            /// Clear from cursor to newline
+            (UntilNewline, "K")
+        );
+    }
+
+    pub mod mouse {
+        derive_csi_sequence!(
+            /// `Ps = 1 0 0 2` Don't use Cell Motion Mouse Tracking, xterm
+            (Disable, "?1002l")
+        );
+
+        derive_csi_sequence!(
+            /// `Ps = 1 0 0 2` Use Cell Motion Mouse Tracking, xterm
+            (Enable, "?1002h")
+        );
+
+        derive_csi_sequence!(
+            /// `Ps = 1 0 0 6` Enable SGR Mouse Mode, xterm.
+            (EnableSGR, "?1006h")
+        );
+
+        derive_csi_sequence!(
+            /// `Ps = 1 0 0 6` Disable SGR Mouse Mode, xterm.
+            (DisableSGR, "?1006l")
+        );
+    }
+
+    pub mod mode {
+
+        derive_csi_sequence!(
+            /// `Ps = 1 0 0 7` Enable Alternate Scroll Mode, xterm.
+            (EnableAlternateScroll, "?1007h")
+        );
+
+        derive_csi_sequence!(
+            /// `Ps = 1 0 0 7` Disable Alternate Scroll Mode, xterm.
+            (DisableAlternateScroll, "?1007l")
+        );
+
+        derive_csi_sequence!(
+            /// Save `?7` Wraparound Mode (DECAWM)
+            (SaveWraparound, "?7s")
+        );
+
+        derive_csi_sequence!(
+            /// Restore `?7` Wraparound Mode (DECAWM)
+            (RestoreWraparound, "?7r")
+        );
+
+        derive_csi_sequence!(
+            /// Disable `?7` Wraparound Mode (DECAWM)
+            (DisableWraparound, "?7l")
+        );
+
+        derive_csi_sequence!(
+            /// Start [Bracketed Paste Mode](http://www.xfree86.org/current/ctlseqs.html#Bracketed%20Paste%20Mode)
+            (BracketModeStart, "?2004h")
+        );
+
+        derive_csi_sequence!(
+            /// End [Bracketed Paste Mode](http://www.xfree86.org/current/ctlseqs.html#Bracketed%20Paste%20Mode)
+            (BracketModeEnd, "?2004l")
+        );
+
+        derive_csi_sequence!(
+            /// Query Synchronized Output support. `CSI ? 2026 $ p`
+            (QuerySynchronizedOutputSupport, "?2026$p")
+        );
+
+        derive_csi_sequence!(
+            /// `BSU` (begin synchronized update, `CSI ? 2026 h`
+            (BeginSynchronizedUpdate, "?2026h")
+        );
+
+        derive_csi_sequence!(
+            /// `ESU` (end synchronized update, `CSI ? 2026 l`
+            (EndSynchronizedUpdate, "?2026l")
+        );
+    }
+}
 
 pub struct Ask<'m> {
     message: Cow<'m, str>,

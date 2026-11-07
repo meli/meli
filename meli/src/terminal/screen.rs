@@ -22,30 +22,21 @@
 //! Terminal grid cells, keys, colors, etc.
 use std::io::{BufWriter, Write};
 
-use termion::{clear, cursor, raw::IntoRawMode as _, screen::AlternateScreen};
-
 use crate::{
     conf::themes::ThemeAttribute,
     terminal::{
         cells::{Cell, CellBuffer},
         color::{Color, ColorContrast},
-        Alignment, BeginSynchronizedUpdate, BracketModeEnd, BracketModeStart,
-        DisableAlternateScrollMode, DisableMouse, DisableSGRMouse, DisableWraparoundMode,
-        EnableAlternateScrollMode, EnableMouse, EnableSGRMouse, EndSynchronizedUpdate, Pos,
-        QueryBackground, QueryForeground, QuerySynchronizedOutputSupport,
-        RestoreWindowTitleIconFromStack, RestoreWraparoundMode, SaveWindowTitleIconToStack,
-        SaveWraparoundMode,
+        csi, osc, Alignment, Hyperlink, Pos,
     },
     Attr, Context,
 };
 
-pub type StateStdout = termion::screen::AlternateScreen<
-    termion::raw::RawTerminal<BufWriter<Box<dyn Write + 'static>>>,
->;
+pub type StateStdout = BufWriter<Box<dyn Write + 'static>>;
 
 type DrawHorizontalSegmentFn =
     fn(&mut CellBuffer, &mut StateStdout, std::ops::Range<usize>, usize) -> ();
-type TerminalSizeFn = fn() -> Option<(u16, u16)>;
+type TerminalSizeFn = fn() -> melib::Result<(u16, u16)>;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
@@ -83,6 +74,7 @@ pub struct Virtual;
 
 pub struct Tty {
     stdout: Option<StateStdout>,
+    restore_fn: Option<Box<dyn FnOnce()>>,
     /// Foreground and Background color.
     color_scheme: Option<(ColorContrast, Color, Color)>,
     mouse: bool,
@@ -121,19 +113,19 @@ impl Tty {
             stdout,
             "{enable_mouse}{enable_sgr_mouse}{enable_alt_scroll}",
             enable_mouse = if mouse {
-                EnableMouse.as_ref()
+                csi::mouse::Enable.as_ref()
             } else {
-                DisableMouse.as_ref()
+                csi::mouse::Disable.as_ref()
             },
             enable_sgr_mouse = if mouse {
-                EnableSGRMouse.as_ref()
+                csi::mouse::EnableSGR.as_ref()
             } else {
-                DisableSGRMouse.as_ref()
+                csi::mouse::DisableSGR.as_ref()
             },
             enable_alt_scroll = if mouse {
-                EnableAlternateScrollMode.as_ref()
+                csi::mode::EnableAlternateScroll.as_ref()
             } else {
-                DisableAlternateScrollMode.as_ref()
+                csi::mode::DisableAlternateScroll.as_ref()
             },
         )
         .expect("Could not write to stdout");
@@ -158,8 +150,22 @@ impl Tty {
     }
 
     #[cfg(unix)]
-    fn terminal_size() -> Option<(u16, u16)> {
-        termion::terminal_size().ok()
+    pub fn terminal_size() -> melib::Result<(u16, u16)> {
+        use libc::{c_ushort, ioctl, STDOUT_FILENO, TIOCGWINSZ};
+
+        #[repr(C)]
+        struct TerminalSize {
+            row: c_ushort,
+            col: c_ushort,
+            x: c_ushort,
+            y: c_ushort,
+        }
+        let mut size: TerminalSize = unsafe { std::mem::zeroed() };
+        let ret = unsafe { ioctl(STDOUT_FILENO, TIOCGWINSZ, &raw mut size) };
+        if ret == -1 {
+            return Err(std::io::Error::last_os_error().into());
+        }
+        Ok((size.col as u16, size.row as u16))
     }
 }
 
@@ -300,6 +306,7 @@ impl Screen<Tty> {
         Self::init(
             Tty {
                 stdout: None,
+                restore_fn: None,
                 mouse: false,
                 color_scheme: None,
                 dec_mode_2026: false,
@@ -350,7 +357,8 @@ impl Screen<Tty> {
         let Some(stdout) = self.display.stdout.as_mut() else {
             return;
         };
-        write!(stdout, "{}", BeginSynchronizedUpdate.as_ref()).expect("Could not write to stdout");
+        write!(stdout, "{}", csi::mode::BeginSynchronizedUpdate.as_ref())
+            .expect("Could not write to stdout");
         _ = stdout.flush();
     }
 
@@ -362,14 +370,15 @@ impl Screen<Tty> {
         let Some(stdout) = self.display.stdout.as_mut() else {
             return;
         };
-        write!(stdout, "{}", EndSynchronizedUpdate.as_ref()).expect("Could not write to stdout");
+        write!(stdout, "{}", csi::mode::EndSynchronizedUpdate.as_ref())
+            .expect("Could not write to stdout");
         _ = stdout.flush();
     }
 
     /// On `SIGWNICH` the `State` redraws itself according to the new
     /// terminal size.
     pub fn update_size(&mut self) {
-        let termsize = (self.display.terminal_size_fn)();
+        let termsize = (self.display.terminal_size_fn)().ok();
         let termcols = termsize.map(|(w, _)| w);
         let termrows = termsize.map(|(_, h)| h);
         if termcols.unwrap_or(72) as usize != self.cols
@@ -406,15 +415,23 @@ impl Screen<Tty> {
         write!(
             stdout,
             "{restore_wraparound}{}{}{}{}{disable_sgr_mouse}{disable_mouse}{disable_alt_scroll}",
-            termion::screen::ToMainScreen,
-            cursor::Show,
-            RestoreWindowTitleIconFromStack,
-            BracketModeEnd,
-            restore_wraparound = RestoreWraparoundMode,
-            disable_sgr_mouse = if mouse { DisableSGRMouse.as_ref() } else { "" },
-            disable_mouse = if mouse { DisableMouse.as_ref() } else { "" },
+            csi::ToMainScreen,
+            csi::cursor::Show,
+            csi::RestoreWindowTitleIconFromStack,
+            csi::mode::BracketModeEnd,
+            restore_wraparound = csi::mode::RestoreWraparound,
+            disable_sgr_mouse = if mouse {
+                csi::mouse::DisableSGR.as_ref()
+            } else {
+                ""
+            },
+            disable_mouse = if mouse {
+                csi::mouse::Disable.as_ref()
+            } else {
+                ""
+            },
             disable_alt_scroll = if mouse {
-                DisableAlternateScrollMode.as_ref()
+                csi::mode::DisableAlternateScroll.as_ref()
             } else {
                 ""
             },
@@ -422,49 +439,66 @@ impl Screen<Tty> {
         .unwrap();
         self.flush();
         self.display.stdout = None;
+        if let Some(restore_fn) = self.display.restore_fn.take() {
+            restore_fn();
+        }
     }
 
     pub fn switch_to_alternate_screen(&mut self, context: &crate::Context) {
-        let mut stdout = BufWriter::with_capacity(
-            240 * 80,
-            Box::new(std::io::stdout()) as Box<dyn std::io::Write>,
-        );
+        let mut stdout = std::io::stdout();
 
         write!(
             &mut stdout,
             "{save_title_to_stack}{}{}{}{save_wraparound}{disable_wraparound}{window_title}{}{}{enable_mouse}{enable_sgr_mouse}{enable_alt_scroll}",
-            termion::screen::ToAlternateScreen,
-            cursor::Hide,
-            clear::All,
-            cursor::Goto(1, 1),
-            BracketModeStart,
-            save_wraparound = SaveWraparoundMode,
-            disable_wraparound = DisableWraparoundMode,
-            save_title_to_stack = SaveWindowTitleIconToStack,
+            csi::ToAlternateScreen,
+            csi::cursor::Hide,
+            csi::clear::All,
+            csi::cursor::Goto::UPPER_LEFT,
+            csi::mode::BracketModeStart,
+            save_wraparound = csi::mode::SaveWraparound,
+            disable_wraparound = csi::mode::DisableWraparound,
+            save_title_to_stack = csi::SaveWindowTitleIconToStack,
             window_title = if let Some(ref title) = context.settings.terminal.window_title {
                 format!("\x1b]2;{title}\x07")
             } else {
                 String::new()
             },
             enable_mouse = if self.display.mouse {
-                EnableMouse.as_ref()
+                csi::mouse::Enable.as_ref()
             } else {
                 ""
             },
             enable_sgr_mouse = if self.display.mouse {
-                EnableSGRMouse.as_ref()
+                csi::mouse::EnableSGR.as_ref()
             } else {
                 ""
             },
             enable_alt_scroll = if self.display.mouse {
-                EnableAlternateScrollMode.as_ref()
+                csi::mode::EnableAlternateScroll.as_ref()
             } else {
                 ""
             },
         )
         .unwrap();
 
-        self.display.stdout = Some(AlternateScreen::from(stdout.into_raw_mode().unwrap()));
+        let prev_termios = nix::sys::termios::tcgetattr(&stdout).unwrap();
+        let mut new_termios = prev_termios.clone();
+        nix::sys::termios::cfmakeraw(&mut new_termios);
+        nix::sys::termios::tcsetattr(&stdout, nix::sys::termios::SetArg::TCSANOW, &new_termios)
+            .unwrap();
+
+        self.display.stdout = Some(BufWriter::with_capacity(
+            240 * 80,
+            Box::new(stdout) as Box<dyn std::io::Write>,
+        ));
+        self.display.restore_fn = Some(Box::new(move || {
+            nix::sys::termios::tcsetattr(
+                std::io::stdout(),
+                nix::sys::termios::SetArg::TCSANOW,
+                &prev_termios,
+            )
+            .unwrap();
+        }));
         self.flush();
     }
 
@@ -482,12 +516,7 @@ impl Screen<Tty> {
         xs: std::ops::Range<usize>,
         y: usize,
     ) {
-        write!(
-            stdout,
-            "{}",
-            cursor::Goto(xs.start as u16 + 1, (y + 1) as u16)
-        )
-        .unwrap();
+        write!(stdout, "{}", csi::cursor::Goto::new(xs.start, y)).unwrap();
         let mut current_fg = Color::Default;
         let mut current_bg = Color::Default;
         let mut current_underline = Color::Default;
@@ -500,15 +529,15 @@ impl Screen<Tty> {
             if draw_hyperlinks {
                 if let Some((uri, end)) = grid.hyperlinks_associations.get(&(x, y)) {
                     if current_uri.take().is_some() {
-                        crate::terminal::Hyperlink::<str, str, str>::write_end(stdout).unwrap();
+                        Hyperlink::<str, str, str>::write_end(stdout).unwrap();
                     }
-                    crate::terminal::Hyperlink::with_id(uri, "", &*grid.hyperlinks_table[uri])
+                    Hyperlink::with_id(uri, "", &*grid.hyperlinks_table[uri])
                         .write_start(stdout)
                         .unwrap();
                     current_uri = Some(end);
                 } else if current_uri == Some(&(x, y)) {
                     current_uri = None;
-                    crate::terminal::Hyperlink::<str, str, str>::write_end(stdout).unwrap();
+                    Hyperlink::<str, str, str>::write_end(stdout).unwrap();
                 }
             }
             if c.attrs() != current_attrs {
@@ -535,7 +564,7 @@ impl Screen<Tty> {
             }
         }
         if current_uri.take().is_some() {
-            crate::terminal::Hyperlink::<str, str, str>::write_end(stdout).unwrap();
+            Hyperlink::<str, str, str>::write_end(stdout).unwrap();
         }
     }
 
@@ -545,12 +574,7 @@ impl Screen<Tty> {
         xs: std::ops::Range<usize>,
         y: usize,
     ) {
-        write!(
-            stdout,
-            "{}",
-            cursor::Goto(xs.start as u16 + 1, (y + 1) as u16)
-        )
-        .unwrap();
+        write!(stdout, "{}", csi::cursor::Goto::new(xs.start, y)).unwrap();
         let mut current_attrs = Attr::DEFAULT;
         write!(stdout, "\x1B[m").unwrap();
         for x in xs {
@@ -588,10 +612,14 @@ impl Screen<Tty> {
         let Some(stdout) = self.display.stdout.as_mut() else {
             return;
         };
-        write!(stdout, "{}", QueryBackground.as_ref()).expect("Could not write to stdout");
-        write!(stdout, "{}", QueryForeground.as_ref()).expect("Could not write to stdout");
-        write!(stdout, "{}", QuerySynchronizedOutputSupport.as_ref())
-            .expect("Could not write to stdout");
+        write!(stdout, "{}", osc::QueryBackground.as_ref()).expect("Could not write to stdout");
+        write!(stdout, "{}", osc::QueryForeground.as_ref()).expect("Could not write to stdout");
+        write!(
+            stdout,
+            "{}",
+            csi::mode::QuerySynchronizedOutputSupport.as_ref()
+        )
+        .expect("Could not write to stdout");
         _ = stdout.flush();
     }
 }

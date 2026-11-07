@@ -46,7 +46,6 @@ extern crate linkify;
 pub extern crate bitflags;
 pub extern crate serde_json;
 pub extern crate smallvec;
-pub extern crate termion;
 
 pub use structopt::StructOpt;
 

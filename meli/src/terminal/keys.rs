@@ -45,6 +45,8 @@ pub enum Key {
     Delete,
     /// Insert key.
     Insert,
+    /// Shift + Tab, or Backtab key.
+    Backtab,
     /// Function keys.
     ///
     /// Only function keys 1 through 12 are supported.
@@ -110,6 +112,7 @@ impl std::fmt::Display for Key {
             Self::F(n) => write!(f, "F{n}"),
             Self::Char(' ') => write!(f, "Space"),
             Self::Char('\t') => write!(f, "Tab"),
+            Self::Backtab => write!(f, "Backtab"),
             Self::Char('\n') => write!(f, "Enter"),
             Self::Char(c) => write!(f, "{c}"),
             Self::Alt(c) => write!(f, "M-{c}"),
@@ -263,6 +266,7 @@ impl Serialize for Key {
             Self::Esc => serializer.serialize_str("Esc"),
             Self::Char('\n') => serializer.serialize_str("Enter"),
             Self::Char('\t') => serializer.serialize_str("Tab"),
+            Self::Backtab => serializer.serialize_str("Backtab"),
             Self::Char(c) => serializer.serialize_char(*c),
             Self::F(n) => serializer.serialize_str(&format!("F{n}")),
             Self::Alt(c) => serializer.serialize_str(&format!("M-{c}")),
