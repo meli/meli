@@ -25,6 +25,7 @@ use std::{
     convert::TryFrom as _,
     fmt::Write as _,
     future::Future,
+    num::Saturating,
     pin::Pin,
     str::FromStr as _,
     sync::Arc,
@@ -163,7 +164,7 @@ impl Default for ImapExtensionUse {
 
 #[derive(Debug)]
 pub struct ImapStream {
-    pub cmd_id: usize,
+    pub cmd_id: Saturating<usize>,
     pub last_cmd: String,
     pub id: Cow<'static, str>,
     pub stream: AsyncWrapper<Connection>,
@@ -202,11 +203,6 @@ impl MailboxSelection {
             _ => &Self::None,
         }
     }
-}
-
-#[inline]
-async fn try_await(cl: impl Future<Output = Result<()>> + Send) -> Result<()> {
-    cl.await
 }
 
 const POOL_LIMIT: usize = 5;
@@ -533,7 +529,7 @@ impl ImapStream {
         }
         let mut res = Vec::with_capacity(8 * 1024);
         let mut ret = Self {
-            cmd_id: 1,
+            cmd_id: Saturating(1),
             last_cmd: String::with_capacity(128),
             id,
             stream,
@@ -654,7 +650,7 @@ impl ImapStream {
 
     pub async fn read_response(&mut self, ret: &mut Vec<u8>) -> Result<()> {
         let id = match self.protocol {
-            ImapProtocol::IMAP { .. } => format!("M{} ", self.cmd_id - 1).into_bytes(),
+            ImapProtocol::IMAP { .. } => format!("M{} ", self.cmd_id.0 - 1).into_bytes(),
             ImapProtocol::ManageSieve => Vec::new(),
         };
         self.read_lines(ret, Some(&id), true).await?;
@@ -720,7 +716,7 @@ impl ImapStream {
         Ok(())
     }
 
-    pub async fn send_command(&mut self, body: CommandBody<'_>) -> Result<()> {
+    pub async fn send_command(&mut self, body: CommandBody<'_>) -> Result<usize> {
         timeout(self.timeout, async {
             let command = {
                 let tag = Tag::unvalidated(format!("M{}", self.cmd_id));
@@ -758,52 +754,50 @@ impl ImapStream {
                 }
                 ImapProtocol::ManageSieve => {}
             }
+            let ret = self.cmd_id.0;
             self.cmd_id += 1;
 
-            Ok(())
+            Ok(ret)
         })
         .await?
     }
 
-    pub async fn send_command_raw(&mut self, command: &[u8]) -> Result<()> {
-        _ = timeout(
-            self.timeout,
-            try_await(async move {
-                let command = command.trim();
-                match self.protocol {
-                    ImapProtocol::IMAP { .. } => {
-                        self.stream.write_all(b"M").await?;
-                        self.stream
-                            .write_all(self.cmd_id.to_string().as_bytes())
-                            .await?;
-                        self.stream.write_all(b" ").await?;
-                    }
-                    ImapProtocol::ManageSieve => {}
+    pub async fn send_command_raw(&mut self, command: &[u8]) -> Result<usize> {
+        timeout(self.timeout, async move {
+            let command = command.trim();
+            match self.protocol {
+                ImapProtocol::IMAP { .. } => {
+                    self.stream.write_all(b"M").await?;
+                    self.stream
+                        .write_all(self.cmd_id.to_string().as_bytes())
+                        .await?;
+                    self.stream.write_all(b" ").await?;
                 }
+                ImapProtocol::ManageSieve => {}
+            }
 
-                self.stream.write_all(command).await?;
-                self.stream.write_all(b"\r\n").await?;
-                self.stream.flush().await?;
-                match self.protocol {
-                    ImapProtocol::IMAP { .. } => {
-                        self.last_cmd.clear();
-                        if !command.starts_with(b"LOGIN") {
-                            let command = String::from_utf8_lossy(command);
-                            imap_log!(trace, self, "sent: M{} {}", self.cmd_id, command);
-                            _ = write!(&mut self.last_cmd, "M{} {command}", self.cmd_id);
-                        } else {
-                            imap_log!(trace, self, "sent: M{} LOGIN ..", self.cmd_id);
-                            _ = write!(&mut self.last_cmd, "M{} LOGIN ..", self.cmd_id);
-                        }
+            self.stream.write_all(command).await?;
+            self.stream.write_all(b"\r\n").await?;
+            self.stream.flush().await?;
+            match self.protocol {
+                ImapProtocol::IMAP { .. } => {
+                    self.last_cmd.clear();
+                    if !command.starts_with(b"LOGIN") {
+                        let command = String::from_utf8_lossy(command);
+                        imap_log!(trace, self, "sent: M{} {}", self.cmd_id, command);
+                        _ = write!(&mut self.last_cmd, "M{} {command}", self.cmd_id);
+                    } else {
+                        imap_log!(trace, self, "sent: M{} LOGIN ..", self.cmd_id);
+                        _ = write!(&mut self.last_cmd, "M{} LOGIN ..", self.cmd_id);
                     }
-                    ImapProtocol::ManageSieve => {}
                 }
-                self.cmd_id += 1;
-                Ok(())
-            }),
-        )
-        .await?;
-        Ok(())
+                ImapProtocol::ManageSieve => {}
+            }
+            let ret = self.cmd_id.0;
+            self.cmd_id += 1;
+            Ok(ret)
+        })
+        .await?
     }
 
     pub async fn send_literal(&mut self, data: &[u8]) -> Result<()> {
@@ -864,11 +858,11 @@ impl ImapConnection {
             }
             if self.stream.is_ok() {
                 let mut ret = Vec::new();
-                if let Err(_err) = try_await(async {
+                if let Err(_err) = async {
                     self.send_command(CommandBody::Noop).await?;
                     self.read_response(&mut ret, RequiredResponses::empty())
                         .await
-                })
+                }
                 .await
                 {
                     imap_log!(
@@ -1131,39 +1125,40 @@ impl ImapConnection {
         Ok(())
     }
 
-    pub async fn send_command(&mut self, command: CommandBody<'_>) -> Result<()> {
-        if let Err(err) =
-            try_await(async { self.stream.as_mut()?.send_command(command).await }).await
-        {
-            self.stream = Err(err.clone());
-            if err.kind.is_network() {
-                self.connect().await?;
+    pub async fn send_command(&mut self, command: CommandBody<'_>) -> Result<usize> {
+        match self.stream.as_mut()?.send_command(command).await {
+            Err(err) => {
+                self.stream = Err(err.clone());
+                if err.kind.is_network() {
+                    self.connect().await?;
+                }
+                Err(err)
             }
-            Err(err)
-        } else {
-            *self.uid_store.is_online.lock().unwrap() = (SystemTime::now(), Ok(()));
-            Ok(())
+            Ok(cmd_id) => {
+                *self.uid_store.is_online.lock().unwrap() = (SystemTime::now(), Ok(()));
+                Ok(cmd_id)
+            }
         }
     }
 
-    pub async fn send_command_raw(&mut self, command: &[u8]) -> Result<()> {
-        if let Err(err) =
-            try_await(async { self.stream.as_mut()?.send_command_raw(command).await }).await
-        {
-            self.stream = Err(err.clone());
-            if err.kind.is_network() {
-                self.connect().await?;
+    pub async fn send_command_raw(&mut self, command: &[u8]) -> Result<usize> {
+        match self.stream.as_mut()?.send_command_raw(command).await {
+            Err(err) => {
+                self.stream = Err(err.clone());
+                if err.kind.is_network() {
+                    self.connect().await?;
+                }
+                Err(err)
             }
-            Err(err)
-        } else {
-            *self.uid_store.is_online.lock().unwrap() = (SystemTime::now(), Ok(()));
-            Ok(())
+            Ok(cmd_id) => {
+                *self.uid_store.is_online.lock().unwrap() = (SystemTime::now(), Ok(()));
+                Ok(cmd_id)
+            }
         }
     }
 
     pub async fn send_literal(&mut self, data: &[u8]) -> Result<()> {
-        if let Err(err) = try_await(async { self.stream.as_mut()?.send_literal(data).await }).await
-        {
+        if let Err(err) = self.stream.as_mut()?.send_literal(data).await {
             self.stream = Err(err.clone());
             if err.kind.is_network() {
                 self.connect().await?;
@@ -1175,7 +1170,7 @@ impl ImapConnection {
     }
 
     pub async fn send_raw(&mut self, raw: &[u8]) -> Result<()> {
-        if let Err(err) = try_await(async { self.stream.as_mut()?.send_raw(raw).await }).await {
+        if let Err(err) = self.stream.as_mut()?.send_raw(raw).await {
             self.stream = Err(err.clone());
             if err.kind.is_network() {
                 self.connect().await?;
@@ -1550,16 +1545,18 @@ impl ImapConnection {
                         );
                         (AuthMechanism::OAuthBearer, auth_string.into_bytes())
                     };
-                    if has_sasl_ir {
+                    let cmd_id = if has_sasl_ir {
                         self.send_command(CommandBody::authenticate_with_ir(mechanism, &secret))
-                            .await?;
+                            .await?
                     } else {
-                        self.send_command(CommandBody::authenticate(mechanism))
+                        let cmd_id = self
+                            .send_command(CommandBody::authenticate(mechanism))
                             .await?;
                         self.wait_for_continuation_request().await?;
                         self.send_literal(base64.encode(&secret).as_bytes()).await?;
-                    }
-                    let tag_start = format!("M{} ", (self.stream.as_ref()?.cmd_id - 1));
+                        cmd_id
+                    };
+                    let tag_start = format!("M{cmd_id} ");
                     loop {
                         let mut line_response = Vec::new();
                         // Server will respond with a base64 literal on failure, so read response
@@ -1580,7 +1577,7 @@ impl ImapConnection {
                         response.extend(line_response);
                     }
 
-                    let tag_ok_start = format!("M{} OK", (self.stream.as_ref()?.cmd_id - 1));
+                    let tag_ok_start = format!("M{cmd_id} OK");
                     if !response
                         .split_rn()
                         .into_iter()
