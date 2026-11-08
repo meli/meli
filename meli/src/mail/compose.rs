@@ -2241,14 +2241,10 @@ impl Component for Composer {
                         }
                         Err(err) => {
                             context.replies.push_back(UIEvent::Notification {
-                                title: Some(
-                                    format!("Failed to create pseudoterminal: {err}").into(),
-                                ),
+                                title: Some("Failed to create pseudoterminal".into()),
                                 source: None,
+                                kind: Some(NotificationType::Error(err.kind)),
                                 body: err.to_string().into(),
-                                kind: Some(NotificationType::Error(
-                                    melib::error::ErrorKind::External,
-                                )),
                             });
                         }
                     }
