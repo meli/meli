@@ -1386,25 +1386,17 @@ impl State {
                 return;
             }
             UIEvent::BackendEvent(_, BackendEvent::RefreshBatch(events)) => {
-                let Some(first) = events.first() else {
-                    return;
-                };
-                let account_hash = first.account_hash;
-                let mailbox_hash = first.mailbox_hash;
-                let Some(events) = events
-                    .into_iter()
-                    .map(|ev| {
-                        if (ev.account_hash, ev.mailbox_hash) != (account_hash, mailbox_hash) {
-                            None
-                        } else {
-                            Some(ev.kind)
-                        }
-                    })
-                    .collect::<Option<Vec<RefreshEventKind>>>()
-                else {
-                    return;
-                };
-                self.refresh_event(account_hash, mailbox_hash, events);
+                let mut events_map: IndexMap<(AccountHash, MailboxHash), Vec<RefreshEventKind>> =
+                    IndexMap::new();
+                for ev in events {
+                    events_map
+                        .entry((ev.account_hash, ev.mailbox_hash))
+                        .or_default()
+                        .push(ev.kind);
+                }
+                for ((account_hash, mailbox_hash), events) in events_map {
+                    self.refresh_event(account_hash, mailbox_hash, events);
+                }
                 return;
             }
             UIEvent::ChangeMode(m) => {
