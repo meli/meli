@@ -31,6 +31,7 @@ pub struct Comparator<OBJ: Object> {
     pub property: Cow<'static, str>,
     pub is_ascending: bool,
     // [ref:TODO] implement collations
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub collation: Option<Cow<'static, str>>,
     #[serde(flatten, default, skip_serializing_if = "IndexMap::is_empty")]
     pub additional_properties: IndexMap<Cow<'static, str>, Cow<'static, str>>,

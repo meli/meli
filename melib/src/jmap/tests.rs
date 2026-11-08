@@ -60,11 +60,11 @@ fn test_jmap_query() {
         .as_str()
     );
     serde_json::from_str::<EmailQuery>(
-        r#"{"accountId":"A13824","calculateTotal":false,"collapseThreads":false,"filter":{"inMailbox":"872f54fd-0367-422b-89a0-1c76efec1653"},"limit":256,"position":0,"sort":[{"collation":null,"isAscending":false,"property":"receivedAt"}]}"#).unwrap();
+        r#"{"accountId":"A13824","calculateTotal":false,"collapseThreads":false,"filter":{"inMailbox":"872f54fd-0367-422b-89a0-1c76efec1653"},"limit":256,"position":0,"sort":[{"isAscending":false,"property":"receivedAt"}]}"#).unwrap();
     assert_eq!(
         serde_json::to_string(
             &serde_json::from_str::<EmailQuery>(
-        r#"{"accountId":"A13824","calculateTotal":false,"collapseThreads":false,"filter":{"inMailbox":"872f54fd-0367-422b-89a0-1c76efec1653"},"limit":256,"position":0,"sort":[{"collation":null,"isAscending":false,"property":"receivedAt"}]}"#).unwrap()).unwrap().as_str(),
+        r#"{"accountId":"A13824","calculateTotal":false,"collapseThreads":false,"filter":{"inMailbox":"872f54fd-0367-422b-89a0-1c76efec1653"},"limit":256,"position":0,"sort":[{"isAscending":false,"property":"receivedAt"}]}"#).unwrap()).unwrap().as_str(),
         serde_json::to_string(&EmailQuery {
             query_call: Query {
                 account_id: "A13824".into(),
@@ -120,7 +120,7 @@ fn test_jmap_query() {
     req.add_call(&email_call);
 
     assert_eq!(
-        r#"{"using":["urn:ietf:params:jmap:core","urn:ietf:params:jmap:mail","urn:ietf:params:jmap:submission"],"methodCalls":[["Email/query",{"accountId":"account_id","calculateTotal":false,"collapseThreads":false,"filter":{"conditions":[{"inMailbox":"mailbox_id"},{"conditions":[{"subject":"wah"},{"conditions":[{"from":"Manos"},{"conditions":[{"subject":"foo"},{"subject":"bar"}],"operator":"OR"}],"operator":"AND"}],"operator":"OR"}],"operator":"AND"},"position":0,"sort":[{"collation":null,"isAscending":false,"property":"receivedAt"}]},"m0"]]}"#,
+        r#"{"using":["urn:ietf:params:jmap:core","urn:ietf:params:jmap:mail","urn:ietf:params:jmap:submission"],"methodCalls":[["Email/query",{"accountId":"account_id","calculateTotal":false,"collapseThreads":false,"filter":{"conditions":[{"inMailbox":"mailbox_id"},{"conditions":[{"subject":"wah"},{"conditions":[{"from":"Manos"},{"conditions":[{"subject":"foo"},{"subject":"bar"}],"operator":"OR"}],"operator":"AND"}],"operator":"OR"}],"operator":"AND"},"position":0,"sort":[{"isAscending":false,"property":"receivedAt"}]},"m0"]]}"#,
         serde_json::to_string(&req).unwrap().as_str()
     );
     assert_eq!(request_no.load(Ordering::SeqCst), 1);
