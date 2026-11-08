@@ -996,6 +996,20 @@ impl EmbeddedGrid {
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
             }
+            (b'$', State::CsiQ(ref mut buf)) => {
+                let buf = std::mem::take(buf);
+                *state = State::DECRQMDEC(buf);
+            }
+            (b'p', State::DECRQMDEC(ref mut buf)) => {
+                // https://vt100.net/docs/vt510-rm/DECRPM.html
+                // CSI ? Pd ; Ps $ y
+                let buf = std::mem::take(buf);
+                stdin.write_all(b"\x1b[?").unwrap();
+                stdin.write_all(&buf).unwrap();
+                stdin.write_all(b";0$y").unwrap();
+                stdin.flush().unwrap();
+                *state = State::Normal;
+            }
             /* END OF CSI ? stuff */
             (c, State::Csi) if c.is_ascii_digit() => {
                 let mut buf1 = SmallVec::new();
@@ -1843,6 +1857,20 @@ impl EmbeddedGrid {
                 */
                 *state = State::Normal;
             }
+            (b'$', State::Csi1([ref mut buf])) => {
+                let buf = std::mem::take(buf);
+                *state = State::DECRQMANSI(buf);
+            }
+            (b'p', State::DECRQMANSI(ref mut buf)) => {
+                // https://vt100.net/docs/vt510-rm/DECRPM.html
+                // CSI Pa ; Ps $ y
+                let buf = std::mem::take(buf);
+                stdin.write_all(b"\x1b[").unwrap();
+                stdin.write_all(&buf).unwrap();
+                stdin.write_all(b";0$y").unwrap();
+                stdin.flush().unwrap();
+                *state = State::Normal;
+            }
             (b'2', State::Csi58) => {
                 *state = State::Csi58_2;
             }
@@ -1964,6 +1992,35 @@ impl EmbeddedGrid {
             (other, State::CsiLarge(ref mut bufs)) => {
                 bufs.last_mut().unwrap().push(other);
             }
+            (b'\x07', State::Osc2([ref mut code, ref mut value])) => {
+                if code.as_slice() == b"11" && value.as_slice() == b"?" {
+                    // background query
+                } else if code.as_slice() == b"10" && value.as_slice() == b"?" {
+                    // foreground query
+                }
+                *state = State::Normal;
+            }
+            (b'\x1b', State::Osc2([ref mut code, ref mut value])) => {
+                let code = std::mem::take(code);
+                let value = std::mem::take(value);
+                *state = State::Osc2WaitingForSt([code, value]);
+            }
+            (b'\\', State::Osc2WaitingForSt([ref mut code, ref mut value])) => {
+                if code.as_slice() == b"11" && value.as_slice() == b"?" {
+                    // background query
+                } else if code.as_slice() == b"10" && value.as_slice() == b"?" {
+                    // foreground query
+                }
+                *state = State::Normal;
+            }
+            (other, State::Osc2([_, ref mut value])) => {
+                value.push(other);
+            }
+            (c @ b'>', State::Csi) => {
+                let mut buf1 = SmallVec::new();
+                buf1.push(c);
+                *state = State::Csi1([buf1]);
+            }
             (
                 _,
                 State::Csi
@@ -1974,7 +2031,9 @@ impl EmbeddedGrid {
                 | State::Csi5(_)
                 | State::Csi6(_)
                 | State::Osc1(_)
-                | State::Osc2(_)
+                | State::Osc2WaitingForSt(_)
+                | State::DECRQMDEC(_)
+                | State::DECRQMANSI(_)
                 | State::CsiQ(_)
                 | State::Csi58
                 | State::Csi58_2

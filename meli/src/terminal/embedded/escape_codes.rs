@@ -31,6 +31,7 @@ pub enum State {
     G0,                           // Designate G0 Character Set
     Osc1([SmallVec<[u8; 8]>; 1]), //ESC ] Operating System Command (OSC  is 0x9d).
     Osc2([SmallVec<[u8; 8]>; 2]),
+    Osc2WaitingForSt([SmallVec<[u8; 8]>; 2]),
     Csi, // ESC [ Control Sequence Introducer (CSI  is 0x9b).
     Csi1([SmallVec<[u8; 8]>; 1]),
     Csi2([SmallVec<[u8; 8]>; 2]),
@@ -60,6 +61,8 @@ pub enum State {
         ps: SmallVec<[u8; 8]>,
     },
     CsiQ(SmallVec<[u8; 8]>),
+    DECRQMANSI(SmallVec<[u8; 8]>),
+    DECRQMDEC(SmallVec<[u8; 8]>),
 }
 
 /// Used for debugging escape codes.
@@ -93,7 +96,8 @@ impl std::fmt::Display for EscCode<'_> {
             EscCode(Osc1([ref buf]), ref c) => {
                 write!(f, "ESC]{}{}\t\tOSC", unsafestr!(buf), *c as char)
             }
-            EscCode(Osc2([ref buf1, ref buf2]), c) => write!(
+            EscCode(Osc2([ref buf1, ref buf2]), c)
+            | EscCode(Osc2WaitingForSt([ref buf1, ref buf2]), c) => write!(
                 f,
                 "ESC]{};{}{}\t\tOSC [UNKNOWN]",
                 unsafestr!(buf1),
