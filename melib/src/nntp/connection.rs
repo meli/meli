@@ -65,10 +65,6 @@ impl MailboxSelection {
     }
 }
 
-async fn try_await(cl: impl Future<Output = Result<()>> + Send) -> Result<()> {
-    cl.await
-}
-
 #[derive(Debug)]
 pub struct NntpConnection {
     pub stream: Result<NntpStream>,
@@ -377,53 +373,35 @@ impl NntpStream {
     }
 
     pub async fn send_command(&mut self, command: &[u8]) -> Result<()> {
-        if let Err(err) = try_await(async move {
-            let command = command.trim();
-            self.stream.write_all(command).await?;
-            self.stream.write_all(b"\r\n").await?;
-            self.stream.flush().await?;
-            Ok(())
-        })
-        .await
-        {
-            log::debug!("stream send_command err {err:?}");
-            Err(err)
-        } else {
-            Ok(())
-        }
+        let command = command.trim();
+        self.stream.write_all(command).await?;
+        self.stream.write_all(b"\r\n").await?;
+        self.stream.flush().await?;
+        Ok(())
     }
 
     pub async fn send_multiline_data_block(&mut self, data: &[u8]) -> Result<()> {
-        if let Err(err) = try_await(async move {
-            let mut ptr = 0;
-            while let Some(pos) = data[ptr..].find("\n") {
-                let l = &data[ptr..ptr + pos].trim_end();
-                if l.starts_with(b".") {
-                    self.stream.write_all(b".").await?;
-                }
-                self.stream.write_all(l).await?;
-                self.stream.write_all(b"\r\n").await?;
-                ptr += pos + 1;
+        let mut ptr = 0;
+        while let Some(pos) = data[ptr..].find("\n") {
+            let l = &data[ptr..ptr + pos].trim_end();
+            if l.starts_with(b".") {
+                self.stream.write_all(b".").await?;
             }
-            let l = &data[ptr..].trim_end();
-            if !l.is_empty() {
-                if l.starts_with(b".") {
-                    self.stream.write_all(b".").await?;
-                }
-                self.stream.write_all(l).await?;
-                self.stream.write_all(b"\r\n").await?;
-            }
-            self.stream.write_all(b".\r\n").await?;
-            self.stream.flush().await?;
-            Ok(())
-        })
-        .await
-        {
-            log::debug!("stream send_multiline_data_block err {err:?}");
-            Err(err)
-        } else {
-            Ok(())
+            self.stream.write_all(l).await?;
+            self.stream.write_all(b"\r\n").await?;
+            ptr += pos + 1;
         }
+        let l = &data[ptr..].trim_end();
+        if !l.is_empty() {
+            if l.starts_with(b".") {
+                self.stream.write_all(b".").await?;
+            }
+            self.stream.write_all(l).await?;
+            self.stream.write_all(b"\r\n").await?;
+        }
+        self.stream.write_all(b".\r\n").await?;
+        self.stream.flush().await?;
+        Ok(())
     }
 }
 
@@ -503,9 +481,7 @@ impl NntpConnection {
                 self.uid_store.account_name
             );
         }
-        if let Err(err) =
-            try_await(async { self.stream.as_mut()?.send_command(command).await }).await
-        {
+        if let Err(err) = self.stream.as_mut()?.send_command(command).await {
             self.stream = Err(err.clone());
             log::debug!("NNTP send command error {:?} {err}", err.kind);
             if err.kind.is_network() {
