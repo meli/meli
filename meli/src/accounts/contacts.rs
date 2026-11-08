@@ -237,6 +237,9 @@ impl Account {
         ) else {
             return Ok(());
         };
+        if book.is_empty() {
+            return Ok(());
+        }
         let data_dir = xdg::BaseDirectories::with_profile("meli", self.name.as_ref())?;
         let (data, data_new) = (
             data_dir.place_data_file("contacts")?,
