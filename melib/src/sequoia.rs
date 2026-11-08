@@ -167,29 +167,51 @@ impl crate::email::pgp::PGPBackend for Context {
 
     fn verify(&mut self, signature: &[u8], text: &[u8]) -> ResultFuture<SignaturesMetadata> {
         let mut stream = vec![];
-        self.sq
-            .verify()
-            .stream(&mut stream)
-            .detached_signature(text, signature, std::io::empty())
-            .inspect_err(|_| {
-                log::trace!("Could not verify detached signature, event stream was: {stream:?}");
-            })?;
+        let result = self.sq.verify().stream(&mut stream).detached_signature(
+            text,
+            signature,
+            std::io::empty(),
+        );
+        let result = match result {
+            Err(err) => {
+                log::trace!(
+                    "Could not verify detached signature: {err}. event stream was: {stream:?}"
+                );
+                if let Ok(sigs) = stream.try_into() {
+                    Ok(sigs)
+                } else {
+                    Err(err.into())
+                }
+            }
+            Ok(_) => stream.try_into(),
+        };
 
-        Ok(Box::pin(async move { stream.try_into() }))
+        Ok(Box::pin(async move { result }))
     }
 
     fn verify_cleartext(&mut self, text: &[u8]) -> ResultFuture<SignaturesMetadata> {
         let mut stream = vec![];
-        self.sq
+        let result = self
+            .sq
             .verify()
             .stream(&mut stream)
-            .cleartext_signature(text, std::io::empty())
-            .inspect_err(|_| {
-                log::trace!("Could not verify cleartext signature, event stream was: {stream:?}");
-            })?;
+            .cleartext_signature(text, std::io::empty());
+        let result = match result {
+            Err(err) => {
+                log::trace!(
+                    "Could not verify cleartext signature: {err}. event stream was: {stream:?}"
+                );
+                if let Ok(sigs) = stream.try_into() {
+                    Ok(sigs)
+                } else {
+                    Err(err.into())
+                }
+            }
+            Ok(_) => stream.try_into(),
+        };
 
         Ok(Box::pin(async move {
-            let mut retval: SignaturesMetadata = stream.try_into()?;
+            let mut retval: SignaturesMetadata = result?;
             for sig in &mut retval.signatures {
                 sig.cleartext = true;
             }
@@ -474,17 +496,37 @@ impl TryFrom<sqz::verify::output::MessageStructure> for SignaturesMetadata {
                             .unwrap_or(Validity::Unknown),
                     },
                     sqz::verify::output::SignatureStatus::MissingKey(
-                        sqz::verify::output::signature_status::MissingKey { .. },
-                    ) => Signature {
-                        cert: Recipient {
-                            keyid: String::new(),
-                            status: Ok(()),
-                        },
-                        cleartext: false,
-                        validity_reason: None,
-                        summary: Summary::RED | Summary::KEY_MISSING,
-                        validity: Validity::Unknown,
-                    },
+                        sqz::verify::output::signature_status::MissingKey { sig, .. },
+                    ) => {
+                        if let Some(keyid) =
+                            sig.issuer_fingerprints().next().map(|fpr| fpr.to_string())
+                        {
+                            Signature {
+                                cert: Recipient {
+                                    status: Err(Error::new(format!("BAD signature from {keyid}"))
+                                        .set_details("No public key")
+                                        .set_kind(ErrorKind::None)),
+                                    keyid,
+                                },
+                                cleartext: false,
+                                validity_reason: None,
+                                summary: Summary::RED | Summary::KEY_MISSING,
+                                validity: Validity::Unknown,
+                            }
+                        } else {
+                            Signature {
+                                cert: Recipient {
+                                    keyid: String::new(),
+                                    status: Err(Error::new("BAD signature")
+                                        .set_details("Invalid signature")),
+                                },
+                                cleartext: false,
+                                validity_reason: None,
+                                summary: Summary::RED,
+                                validity: Validity::Unknown,
+                            }
+                        }
+                    }
                     other => return Err(crate::error::Error::new(format!("{other:?}"))),
                 });
             }
