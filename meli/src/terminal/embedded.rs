@@ -22,7 +22,7 @@
 #[cfg(target_os = "macos")]
 use std::os::fd::OwnedFd;
 use std::{
-    ffi::{CString, OsStr},
+    ffi::{CString, OsStr, OsString},
     mem::ManuallyDrop,
     os::{
         fd::AsFd as _,
@@ -51,6 +51,7 @@ use std::path::Path;
 use std::{
     convert::TryFrom as _,
     io::{pipe, Read as _, Write as _},
+    process::{Command, Stdio},
     sync::{Arc, Mutex},
 };
 
@@ -146,38 +147,106 @@ pub fn create_pty(
         let ends = nix::pty::openpty(Some(&winsize), None)?;
         (ends.master, ends.slave)
     };
-
-    let mut shell_path = None;
-
-    // Find posix sh location, because POSIX shell is not always at /bin/sh
-    let path_var = std::process::Command::new("getconf")
-        .args(["PATH"])
-        .output()?
-        .stdout;
-    for mut p in std::env::split_paths(&OsStr::from_bytes(&path_var[..])) {
-        p.push("sh");
-        if matches!(p.try_exists(), Ok(true)) {
-            shell_path = Some(
-                CString::new(p.as_os_str().as_bytes())
-                    .chain_err_kind(ErrorKind::ValueError)
-                    .chain_err_summary(|| {
-                        format!(
-                            "Could not convert shell path `{}` into a C string; it should contain \
-                             no NUL bytes.",
-                            p.display()
-                        )
-                    })?,
-            );
-            break;
+    let mut searched = String::new();
+    let shell_path = Command::new("command")
+        .args(["-v", "sh"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .stdin(Stdio::null())
+        .output()
+        .ok()
+        .and_then(|output| {
+            use melib::parser::BytesExt as _;
+            if output.status.success() {
+                Some(Ok(CString::new(output.stdout.as_slice().trim_end()).ok()?))
+            } else {
+                None
+            }
+        })
+        .or_else(|| {
+            searched = "Searched with:\n- `command -v sh`".to_string();
+            let system_path_var = Command::new("getconf")
+                .args(["PATH"])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .stdin(Stdio::null())
+                .output()
+                .map_err(|err| err.to_string())
+                .and_then(|output| {
+                    use melib::parser::BytesExt as _;
+                    if output.status.success() {
+                        Ok(OsStr::from_bytes(output.stdout.as_slice().trim_end()).to_os_string())
+                    } else {
+                        Err(format!("getconf PATH exited with {output:?}"))
+                    }
+                });
+            let user_path_var: Option<OsString> = match std::env::var_os("PATH") {
+                Some(v) => {
+                    searched = format!(
+                        "{searched}\n- User PATH {}",
+                        String::from_utf8_lossy(v.as_bytes())
+                    );
+                    Some(v)
+                }
+                None => {
+                    searched = format!("{searched}\n- Could not find PATH in process environment");
+                    None
+                }
+            };
+            let system_path_var = match system_path_var {
+                Ok(system_path_var) => {
+                    searched = format!(
+                        "{searched}\n- System PATH {}",
+                        String::from_utf8_lossy(system_path_var.as_bytes())
+                    );
+                    Some(system_path_var)
+                }
+                Err(err) => {
+                    searched = format!(
+                        "{searched}\n- Could not get system PATH with `getconf PATH`: {err}"
+                    );
+                    None
+                }
+            };
+            // Find posix sh location, because POSIX shell is not always at /bin/sh
+            for mut p in user_path_var
+                .as_ref()
+                .into_iter()
+                .flat_map(std::env::split_paths)
+                .chain(
+                    system_path_var
+                        .as_ref()
+                        .into_iter()
+                        .flat_map(std::env::split_paths),
+                )
+            {
+                p.push("sh");
+                if matches!(p.try_exists(), Ok(true)) {
+                    return Some(
+                        CString::new(p.as_os_str().as_bytes())
+                            .chain_err_kind(ErrorKind::ValueError)
+                            .chain_err_summary(|| {
+                                format!(
+                                    "Could not convert shell path `{}` into a C string; it should \
+                                     contain no NUL bytes.",
+                                    p.display()
+                                )
+                            }),
+                    );
+                }
+            }
+            None
+        });
+    let shell_path = match shell_path {
+        Some(Ok(shell_path)) => shell_path,
+        Some(Err(err)) => return Err(err),
+        None => {
+            return Err(Error::new(format!(
+                "Could not execute `{command:?}`: could not find the standard POSIX sh shell in \
+                 PATH"
+            ))
+            .set_details(searched));
         }
-    }
-
-    let Some(shell_path) = shell_path else {
-        return Err(Error::new(format!(
-            "Could not execute `{command:?}`: did not find the standard POSIX sh shell in PATH = \
-             {}",
-            String::from_utf8_lossy(&path_var)
-        )));
     };
 
     // [ref:TODO]: stderr pipe can fill up and block the subprocess. Move it into a background job
