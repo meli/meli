@@ -249,8 +249,8 @@ pub fn create_pty(
         }
     };
 
-    // [ref:TODO]: stderr pipe can fill up and block the subprocess. Move it into a background job
-    // that waits on the pipe to read it as soon as anything is available.
+    // stderr pipe can fill up and block the subprocess. It should be moved into a worker with
+    // `smol::Unblock`
     let (stderr, stderr_writer) = pipe()?;
 
     let child_pid = match unsafe { nix::unistd::fork()? } {

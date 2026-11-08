@@ -72,7 +72,7 @@ enum CodepointBuf {
 pub struct Terminal {
     pub grid: EmbeddedGrid,
     stdin: ManuallyDrop<File>,
-    pub stderr: PipeReader,
+    pub stderr: Option<PipeReader>,
     /// Pid of the embedded process
     pub child_pid: nix::unistd::Pid,
 }
@@ -118,7 +118,7 @@ impl Terminal {
         Self {
             grid: EmbeddedGrid::new(),
             stdin,
-            stderr,
+            stderr: Some(stderr),
             child_pid,
         }
     }

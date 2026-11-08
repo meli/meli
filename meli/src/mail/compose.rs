@@ -77,9 +77,68 @@ struct EmbeddedPty {
     running: bool,
     terminal: Arc<Mutex<Terminal>>,
     file: File,
+    stderr: Arc<Mutex<Vec<u8>>>,
+    #[expect(unused)]
+    stderr_handle: JoinHandle<Result<()>>,
+    pid: nix::unistd::Pid,
 }
 
 impl EmbeddedPty {
+    fn new(
+        (width, height): (usize, usize),
+        editor: &str,
+        file: File,
+        context: &Context,
+    ) -> Result<Self> {
+        let command = vec![
+            "sh".into(),
+            "-c".into(),
+            format!("{editor} \"$@\""),
+            editor.to_string(),
+            file.path().display().to_string(),
+        ];
+        let terminal = crate::terminal::embedded::create_pty(width, height, command)?;
+        let (stderr_reader, pid) = {
+            let mut terminal = terminal.lock().unwrap();
+            (terminal.stderr.take(), terminal.child_pid)
+        };
+        let stderr = Arc::new(Mutex::new(vec![]));
+        let stderr_handle = context.main_loop_handler.job_executor.spawn(
+            editor.to_string().into(),
+            {
+                let stderr = Arc::clone(&stderr);
+                async move {
+                    use smol::{io::AsyncReadExt as _, Unblock};
+
+                    let Some(reader) = stderr_reader else {
+                        return Ok(());
+                    };
+
+                    let mut reader = Unblock::new(reader);
+                    let mut contents = vec![0; 8 * 1024];
+                    loop {
+                        let n = reader.read(&mut contents).await?;
+                        if n == 0 {
+                            break;
+                        }
+                        stderr.lock().unwrap().extend(&contents[..n]);
+                    }
+
+                    Ok(())
+                }
+            },
+            IsAsync::Async,
+        );
+        Ok(Self {
+            running: true,
+            terminal,
+            file,
+            pid,
+            stderr,
+            stderr_handle,
+        })
+    }
+
     #[inline]
     fn is_stopped(&self) -> bool {
         !self.running
@@ -87,24 +146,16 @@ impl EmbeddedPty {
 
     #[inline]
     fn is_dirty(&self) -> bool {
-        std::ops::Deref::deref(self)
+        self.terminal
             .try_lock()
             .ok()
             .is_none_or(|e| e.grid.is_dirty())
     }
-}
 
-impl std::ops::Deref for EmbeddedPty {
-    type Target = Arc<Mutex<Terminal>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.terminal
-    }
-}
-
-impl std::ops::DerefMut for EmbeddedPty {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.terminal
+    fn terminate(&self) {
+        let guard = self.terminal.lock().unwrap();
+        guard.wake_up();
+        guard.terminate();
     }
 }
 
@@ -1039,18 +1090,19 @@ To: {}
                     .push_back(UIEvent::ChangeMode(UIMode::Normal));
             }
             Ok(WaitStatus::Exited(_, exit_code)) => {
-                let embedded_pty = self.embedded_pty.take().unwrap();
-                let mut stderr = vec![];
-                let stderr = std::io::Read::read_to_end(
-                    &mut std::io::BufReader::new(&mut embedded_pty.terminal.lock().unwrap().stderr),
-                    &mut stderr,
-                )
-                .map(|_| String::from_utf8_lossy(&stderr).into_owned());
-
+                let embedded_pty = self.embedded_pty.take();
                 if *exit_code != 0 {
+                    let stderr = embedded_pty.as_ref().map(|embedded_pty| {
+                        embedded_pty
+                            .stderr
+                            .lock()
+                            .map(|stderr| String::from_utf8_lossy(&stderr).into_owned())
+                    });
+
                     let body = match stderr {
-                        Ok(v) => format!("stderr: {v}").into(),
-                        Err(err) => format!("Could not read stderr pipe: {err}").into(),
+                        Some(Ok(v)) => format!("stderr: {v}").into(),
+                        Some(Err(err)) => format!("Could not read stderr pipe: {err}").into(),
+                        None => String::new().into(),
                     };
                     context.replies.push_back(UIEvent::Notification {
                         title: Some(
@@ -1060,13 +1112,9 @@ To: {}
                         body,
                         kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
                     });
-                } else if let EmbeddedPty {
-                    running: true,
-                    file,
-                    ..
-                } = embedded_pty
-                {
-                    self.update_from_file(&file, context);
+                }
+                if let Some(embedded_pty) = embedded_pty {
+                    self.update_from_file(&embedded_pty.file, context);
                 }
                 self.mode = ViewMode::Edit;
                 self.set_dirty(true);
@@ -1076,16 +1124,10 @@ To: {}
             }
             #[cfg(any(target_os = "linux", target_os = "android"))]
             Ok(WaitStatus::PtraceEvent(_, _, _)) | Ok(WaitStatus::PtraceSyscall(_)) => {
-                if let Some(EmbeddedPty {
-                    running: _,
-                    terminal,
-                    file,
-                }) = self.embedded_pty.take()
-                {
+                if let Some(embedded_pty) = self.embedded_pty.take() {
                     self.embedded_pty = Some(EmbeddedPty {
                         running: false,
-                        terminal,
-                        file,
+                        ..embedded_pty
                     });
                 }
                 self.mode = ViewMode::Edit;
@@ -1096,16 +1138,10 @@ To: {}
                 return true;
             }
             Ok(WaitStatus::Stopped(_, _)) => {
-                if let Some(EmbeddedPty {
-                    running: _,
-                    terminal,
-                    file,
-                }) = self.embedded_pty.take()
-                {
+                if let Some(embedded_pty) = self.embedded_pty.take() {
                     self.embedded_pty = Some(EmbeddedPty {
                         running: false,
-                        terminal,
-                        file,
+                        ..embedded_pty
                     });
                 }
                 self.mode = ViewMode::Edit;
@@ -1120,26 +1156,60 @@ To: {}
                 return true;
             }
             Ok(WaitStatus::Signaled(_, signal, _)) => {
-                context.replies.push_back(UIEvent::Notification {
-                    title: None,
-                    source: None,
-                    body: format!("Subprocess was killed by {signal} signal").into(),
-                    kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
-                });
-                self.embedded_pty = None;
+                let embedded_pty = self.embedded_pty.take();
+                {
+                    let stderr = embedded_pty.as_ref().map(|embedded_pty| {
+                        embedded_pty
+                            .stderr
+                            .lock()
+                            .map(|stderr| String::from_utf8_lossy(&stderr).into_owned())
+                    });
+
+                    let body = match stderr {
+                        Some(Ok(v)) => format!("stderr: {v}").into(),
+                        Some(Err(err)) => format!("Could not read stderr pipe: {err}").into(),
+                        None => String::new().into(),
+                    };
+                    context.replies.push_back(UIEvent::Notification {
+                        title: Some(format!("Subprocess was killed by {signal} signal").into()),
+                        source: None,
+                        body,
+                        kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
+                    });
+                }
+                if let Some(embedded_pty) = embedded_pty {
+                    self.update_from_file(&embedded_pty.file, context);
+                }
                 self.mode = ViewMode::Edit;
                 context
                     .replies
                     .push_back(UIEvent::ChangeMode(UIMode::Normal));
             }
             Err(err) => {
-                context.replies.push_back(UIEvent::Notification {
-                    title: Some("Embedded editor crashed.".into()),
-                    source: None,
-                    body: format!("Subprocess has exited with reason {err}").into(),
-                    kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
-                });
-                self.embedded_pty = None;
+                let embedded_pty = self.embedded_pty.take();
+                {
+                    let stderr = embedded_pty.as_ref().map(|embedded_pty| {
+                        embedded_pty
+                            .stderr
+                            .lock()
+                            .map(|stderr| String::from_utf8_lossy(&stderr).into_owned())
+                    });
+
+                    let body = if let Some(Ok(v)) = stderr {
+                        format!("Subprocess has exited. stderr: {v}").into()
+                    } else {
+                        "Subprocess has exited".into()
+                    };
+                    context.replies.push_back(UIEvent::Notification {
+                        title: Some("Embedded editor crashed.".into()),
+                        source: Some(Error::from(*err)),
+                        body,
+                        kind: Some(NotificationType::Error(ErrorKind::External)),
+                    });
+                }
+                if let Some(embedded_pty) = embedded_pty {
+                    self.update_from_file(&embedded_pty.file, context);
+                }
                 self.mode = ViewMode::Edit;
                 context
                     .replies
@@ -1218,7 +1288,7 @@ impl Component for Composer {
             let embedded_area = area;
             if embedded_pty.is_dirty() {
                 if embedded_pty.running {
-                    let mut guard = embedded_pty.lock().unwrap();
+                    let mut guard = embedded_pty.terminal.lock().unwrap();
                     grid.clear_area(embedded_area, theme_default);
 
                     for (y, (start, width)) in guard.grid.dirty_areas() {
@@ -1237,7 +1307,7 @@ impl Component for Composer {
                     guard.grid.set_dirty(false);
                     self.dirty = false;
                 } else {
-                    let mut guard = embedded_pty.lock().unwrap();
+                    let mut guard = embedded_pty.terminal.lock().unwrap();
 
                     grid.copy_area(
                         guard.grid.buffer(),
@@ -1841,17 +1911,11 @@ impl Component for Composer {
                 return true;
             }
             UIEvent::EmbeddedInput((Key::Ctrl('z'), _)) => {
-                self.embedded_pty.as_ref().unwrap().lock().unwrap().stop();
-                if let Some(EmbeddedPty {
-                    running: _,
-                    terminal,
-                    file,
-                }) = self.embedded_pty.take()
-                {
+                if let Some(embedded_pty) = self.embedded_pty.take() {
+                    embedded_pty.terminal.lock().unwrap().stop();
                     self.embedded_pty = Some(EmbeddedPty {
                         running: false,
-                        terminal,
-                        file,
+                        ..embedded_pty
                     });
                 }
                 context
@@ -1861,7 +1925,7 @@ impl Component for Composer {
             }
             UIEvent::EmbeddedInput((ref k, ref b)) => {
                 if let Some(ref mut embedded) = self.embedded_pty {
-                    let mut embedded_guard = embedded.lock().unwrap();
+                    let mut embedded_guard = embedded.terminal.lock().unwrap();
                     if embedded_guard.write_all(b).is_err() {
                         let wait = embedded_guard.is_active();
                         drop(embedded_guard);
@@ -2066,17 +2130,11 @@ impl Component for Composer {
                 if self.embedded_pty.is_some()
                     && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit"]) =>
             {
-                if let Some(EmbeddedPty {
-                    running: _,
-                    terminal,
-                    file,
-                }) = self.embedded_pty.take()
-                {
-                    terminal.lock().unwrap().wake_up();
+                if let Some(embedded_pty) = self.embedded_pty.take() {
+                    embedded_pty.terminal.lock().unwrap().wake_up();
                     self.embedded_pty = Some(EmbeddedPty {
                         running: true,
-                        terminal,
-                        file,
+                        ..embedded_pty
                     });
                 }
                 self.mode = ViewMode::EmbeddedPty;
@@ -2090,38 +2148,13 @@ impl Component for Composer {
                 if self.embedded_pty.is_some()
                     && self.embedded_pty.as_ref().unwrap().is_stopped() =>
             {
-                let EmbeddedPty {
-                    running: _,
-                    terminal,
-                    file,
-                } = self.embedded_pty.take().unwrap();
-                let stderr = {
-                    let mut guard = terminal.lock().unwrap();
-                    guard.wake_up();
-                    guard.terminate();
-                    let mut stderr = vec![];
-                    std::io::Read::read_to_end(
-                        &mut std::io::BufReader::new(&mut guard.stderr),
-                        &mut stderr,
-                    )
-                    .map(|_| String::from_utf8_lossy(&stderr).into_owned())
-                };
-                self.update_from_file(&file, context);
-                let body = match stderr {
-                    Ok(v) => format!("stderr: {v}").into(),
-                    Err(err) => format!("Could not read stderr pipe: {err}").into(),
-                };
+                self.embedded_pty.as_ref().unwrap().terminate();
                 context.replies.push_back(UIEvent::Notification {
-                    title: Some("Subprocess was killed by SIGTERM signal".into()),
+                    title: None,
                     source: None,
-                    body,
-                    kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
+                    body: "Subprocess was killed by SIGTERM signal".into(),
+                    kind: Some(NotificationType::Info),
                 });
-                self.mode = ViewMode::Edit;
-                context
-                    .replies
-                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
-                self.set_dirty(true);
                 return true;
             }
             UIEvent::Input(ref key)
@@ -2194,24 +2227,10 @@ impl Component for Composer {
                 };
 
                 if *account_settings!(context[&self.account_hash].composing.embedded_pty) {
-                    let command = vec![
-                        "sh".into(),
-                        "-c".into(),
-                        format!("{} \"$@\"", editor),
-                        editor.clone(),
-                        f.path().display().to_string(),
-                    ];
-                    match crate::terminal::embedded::create_pty(
-                        self.embedded_dimensions.0,
-                        self.embedded_dimensions.1,
-                        command,
-                    ) {
-                        Ok(terminal) => {
-                            self.embedded_pty = Some(EmbeddedPty {
-                                running: true,
-                                terminal,
-                                file: f,
-                            });
+                    match EmbeddedPty::new(self.embedded_dimensions, &editor, f, context) {
+                        Ok(embedded_pty) => {
+                            let pid = embedded_pty.pid;
+                            self.embedded_pty = Some(embedded_pty);
                             self.set_dirty(true);
                             context
                                 .replies
@@ -2222,13 +2241,7 @@ impl Component for Composer {
                                 .push_back(UIEvent::Fork(ForkedProcess::Embedded {
                                     id: "editor".into(),
                                     command: Some(editor.into()),
-                                    pid: self
-                                        .embedded_pty
-                                        .as_ref()
-                                        .unwrap()
-                                        .lock()
-                                        .unwrap()
-                                        .child_pid,
+                                    pid,
                                     on_exit: OnExitNotifyFn(Box::new(move |wait_result| {
                                         Some(UIEvent::IntraComm {
                                             from: id,
@@ -2654,7 +2667,7 @@ impl Component for Composer {
             ViewMode::Edit => {}
             ViewMode::EmbeddedPty => {
                 if let Some(pty) = self.embedded_pty.as_ref() {
-                    if let Ok(mut guard) = pty.try_lock() {
+                    if let Ok(mut guard) = pty.terminal.try_lock() {
                         guard.grid.set_dirty(value);
                     }
                 }
