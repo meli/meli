@@ -58,7 +58,7 @@ impl DatabaseDescription {
     /// Returns whether the computed database path for this description exist.
     pub fn exists(&self) -> Result<bool> {
         let path = self.db_path()?;
-        Ok(path.exists())
+        Ok(path.try_exists()?)
     }
 
     /// Returns the computed database path for this description.
@@ -133,7 +133,7 @@ impl DatabaseDescription {
     pub fn open_or_create_db(&self) -> Result<Connection> {
         let mut second_try: bool = false;
         let db_path = self.db_path()?;
-        let set_mode = !db_path.exists();
+        let set_mode = !matches!(db_path.try_exists(), Ok(true));
         if set_mode {
             log::info!("Creating {} database in {}", self.name, db_path.display());
         }
@@ -209,7 +209,7 @@ impl DatabaseDescription {
     /// Reset database to a clean slate.
     pub fn reset_db(&self) -> Result<()> {
         let db_path = self.db_path()?;
-        if !db_path.exists() {
+        if !matches!(db_path.try_exists(), Ok(true)) {
             return Ok(());
         }
         log::info!("Resetting {} database in {}", self.name, db_path.display());

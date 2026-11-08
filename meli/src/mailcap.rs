@@ -268,7 +268,7 @@ impl MailcapEntry<'static> {
             find_usr_local_etc_mailcap,
         ] {
             if let Some(mailcap_path) = find_fn() {
-                if mailcap_path.exists() {
+                if matches!(mailcap_path.try_exists(), Ok(true)) {
                     file_candidates.push(mailcap_path);
                 }
             }

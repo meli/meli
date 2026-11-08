@@ -358,7 +358,7 @@ impl AccountCache {
             ..DB.clone()
         };
         let db_path = db_desc.db_path()?;
-        if !db_path.exists() {
+        if !db_path.try_exists().chain_err_related_path(&db_path)? {
             return Err(Error::new(format!(
                 "Database hasn't been initialised. Run `reindex {acc_name}` command"
             )));
@@ -395,7 +395,7 @@ impl AccountCache {
             ..DB.clone()
         };
         let db_path = db_desc.db_path()?;
-        if !db_path.exists() {
+        if !db_path.try_exists().chain_err_related_path(&db_path)? {
             return Err(Error::new(format!(
                 "Database hasn't been initialised. Run `reindex {acc_name}` command"
             )));
@@ -622,7 +622,7 @@ impl AccountCache {
             ..DB.clone()
         };
         let db_path = db_desc.db_path()?;
-        if !db_path.exists() {
+        if !matches!(db_path.try_exists(), Ok(true)) {
             return Ok(None);
         }
         Ok(Some(db_path))

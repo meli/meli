@@ -197,7 +197,7 @@ impl Account {
             .map_err(Error::from)
             .and_then(|data_dir| data_dir.place_data_file("contacts").map_err(Into::into))
         {
-            if data.exists() {
+            if matches!(data.try_exists(), Ok(true)) {
                 fn read_contacts(file: &Path) -> Result<IndexMap<CardId, Card>> {
                     let reader = std::io::BufReader::new(
                         std::fs::File::open(file).chain_err_related_path(file)?,

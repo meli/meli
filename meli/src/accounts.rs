@@ -238,7 +238,7 @@ impl Account {
                 Ok(path) => path,
             };
             if let Some(db_path) = db_path {
-                if !db_path.exists() {
+                if !matches!(db_path.try_exists(), Ok(true)) {
                     log::info!(
                         "An sqlite3 search database for account `{}` seems to be missing, a new \
                          one will be created.",

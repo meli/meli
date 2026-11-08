@@ -156,7 +156,7 @@ pub fn create_pty(
         .stdout;
     for mut p in std::env::split_paths(&OsStr::from_bytes(&path_var[..])) {
         p.push("sh");
-        if p.exists() {
+        if matches!(p.try_exists(), Ok(true)) {
             shell_path = Some(
                 CString::new(p.as_os_str().as_bytes())
                     .chain_err_kind(ErrorKind::ValueError)

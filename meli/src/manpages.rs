@@ -108,7 +108,7 @@ impl ManPages {
         fn path_valid(p: &Path, tries: &mut Vec<PathBuf>) -> bool {
             tries.push(p.into());
             let p = p.expand();
-            p.exists()
+            matches!(p.try_exists(), Ok(true))
                 && p.is_dir()
                 && fs::metadata(p)
                     .ok()
