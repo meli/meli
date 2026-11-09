@@ -32,6 +32,8 @@ pub enum State {
     Osc1([SmallVec<[u8; 8]>; 1]), //ESC ] Operating System Command (OSC  is 0x9d).
     Osc2([SmallVec<[u8; 8]>; 2]),
     Osc2WaitingForSt([SmallVec<[u8; 8]>; 2]),
+    Osc3([SmallVec<[u8; 8]>; 3]),
+    Osc3WaitingForSt([SmallVec<[u8; 8]>; 3]),
     Csi, // ESC [ Control Sequence Introducer (CSI  is 0x9b).
     Csi1([SmallVec<[u8; 8]>; 1]),
     Csi2([SmallVec<[u8; 8]>; 2]),

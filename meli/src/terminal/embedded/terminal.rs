@@ -207,6 +207,7 @@ pub struct EmbeddedGrid {
     prev_bg_color: Option<Color>,
     prev_underline_color: Option<Color>,
     prev_attrs: Option<Attr>,
+    hyperlink: Option<u64>,
 
     cursor_key_mode: bool, // (DECCKM)
     show_cursor: bool,
@@ -253,6 +254,7 @@ impl EmbeddedGrid {
             prev_bg_color: None,
             prev_underline_color: None,
             prev_attrs: None,
+            hyperlink: None,
             show_cursor: true,
             auto_wrap_mode: true,
             wrap_next: false,
@@ -379,6 +381,7 @@ impl EmbeddedGrid {
             ref mut prev_bg_color,
             ref mut prev_underline_color,
             ref mut prev_attrs,
+            ref mut hyperlink,
             ref mut codepoints,
             ref mut show_cursor,
             ref mut auto_wrap_mode,
@@ -468,12 +471,14 @@ impl EmbeddedGrid {
             () => {{
                 let (x, y) = *cursor;
                 screen.grid_mut().dirty_bitmap_mut().set(x, y);
+                screen.grid_mut()[(x, y)].set_hyperlink(*hyperlink);
                 *dirty = true;
             }};
             ($area:expr) => {{
                 for row in screen.grid().bounds_iter($area) {
                     for (x, y) in row {
                         screen.grid_mut().dirty_bitmap_mut().set(x, y);
+                        screen.grid_mut()[(x, y)].set_hyperlink(*hyperlink);
                     }
                 }
                 *dirty = true;
@@ -599,6 +604,50 @@ impl EmbeddedGrid {
                 }
             }};
         }
+        macro_rules! osc {
+            ($osc1:expr, $osc2:expr) => {{
+                let code = $osc1.as_slice();
+                let value = $osc2.as_slice();
+                if code == b"11" && value == b"?" {
+                    // background query
+                } else if code == b"10" && value == b"?" {
+                    // foreground query
+                }
+                log::trace!(
+                    "osc code ={} value = {}",
+                    &String::from_utf8_lossy(code),
+                    String::from_utf8_lossy(value)
+                );
+            }};
+            ($osc1:expr, $osc2:expr, $osc3:expr) => {{
+                let code = $osc1.as_slice();
+                let value1 = $osc2.as_slice();
+                let value2 = $osc3.as_slice();
+                if code == b"8" {
+                    if !value2.is_empty() {
+                        let params = String::from_utf8_lossy(value1);
+                        let uri = String::from_utf8_lossy(value2);
+                        let uri = if let Some(id) =
+                            params.split(":").find_map(|p| p.strip_prefix("id="))
+                        {
+                            screen.grid_mut().insert_uri_with_id(&uri, id)
+                        } else {
+                            screen.grid_mut().insert_uri(&uri)
+                        };
+                        *hyperlink = Some(uri);
+                    } else {
+                        *hyperlink = None;
+                    }
+                } else {
+                    log::trace!(
+                        "osc code ={} value1 = {} value2 = {}",
+                        &String::from_utf8_lossy(code),
+                        String::from_utf8_lossy(value1),
+                        String::from_utf8_lossy(value2),
+                    );
+                }
+            }};
+        }
 
         let mut state = &mut self.state;
         match (byte, &mut state) {
@@ -675,6 +724,11 @@ impl EmbeddedGrid {
             }
             (c, State::Osc2([_, ref mut buf])) if c.is_ascii_digit() || c == b'?' => {
                 buf.push(c);
+            }
+            (b';', State::Osc2([ref mut buf1, ref mut buf2])) => {
+                let buf1 = std::mem::take(buf1);
+                let buf2 = std::mem::take(buf2);
+                *state = State::Osc3([buf1, buf2, SmallVec::new()]);
             }
             /* Normal */
             (b'\r', State::Normal) => {
@@ -1993,11 +2047,11 @@ impl EmbeddedGrid {
                 bufs.last_mut().unwrap().push(other);
             }
             (b'\x07', State::Osc2([ref mut code, ref mut value])) => {
-                if code.as_slice() == b"11" && value.as_slice() == b"?" {
-                    // background query
-                } else if code.as_slice() == b"10" && value.as_slice() == b"?" {
-                    // foreground query
-                }
+                osc!(code, value);
+                *state = State::Normal;
+            }
+            (b'\x07', State::Osc3([ref mut code, ref mut value1, ref mut value2])) => {
+                osc!(code, value1, value2);
                 *state = State::Normal;
             }
             (b'\x1b', State::Osc2([ref mut code, ref mut value])) => {
@@ -2006,14 +2060,23 @@ impl EmbeddedGrid {
                 *state = State::Osc2WaitingForSt([code, value]);
             }
             (b'\\', State::Osc2WaitingForSt([ref mut code, ref mut value])) => {
-                if code.as_slice() == b"11" && value.as_slice() == b"?" {
-                    // background query
-                } else if code.as_slice() == b"10" && value.as_slice() == b"?" {
-                    // foreground query
-                }
+                osc!(code, value);
+                *state = State::Normal;
+            }
+            (b'\x1b', State::Osc3([ref mut code, ref mut value1, ref mut value2])) => {
+                let code = std::mem::take(code);
+                let value1 = std::mem::take(value1);
+                let value2 = std::mem::take(value2);
+                *state = State::Osc3WaitingForSt([code, value1, value2]);
+            }
+            (b'\\', State::Osc3WaitingForSt([ref mut code, ref mut value1, ref mut value2])) => {
+                osc!(code, value1, value2);
                 *state = State::Normal;
             }
             (other, State::Osc2([_, ref mut value])) => {
+                value.push(other);
+            }
+            (other, State::Osc3([_, _, ref mut value])) => {
                 value.push(other);
             }
             (c @ b'>', State::Csi) => {
@@ -2032,6 +2095,7 @@ impl EmbeddedGrid {
                 | State::Csi6(_)
                 | State::Osc1(_)
                 | State::Osc2WaitingForSt(_)
+                | State::Osc3WaitingForSt(_)
                 | State::DECRQMDEC(_)
                 | State::DECRQMANSI(_)
                 | State::CsiQ(_)

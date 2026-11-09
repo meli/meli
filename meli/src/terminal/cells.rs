@@ -561,6 +561,19 @@ impl CellBuffer {
         hash
     }
 
+    pub fn insert_uri_with_id(&mut self, uri: &str, id: &str) -> u64 {
+        use std::{
+            collections::hash_map::DefaultHasher,
+            hash::{Hash as _, Hasher as _},
+        };
+
+        let mut hasher = DefaultHasher::new();
+        id.hash(&mut hasher);
+        let hash = hasher.finish();
+        self.hyperlinks_table.insert(hash, uri.into());
+        hash
+    }
+
     pub fn set_uri(&mut self, uri: u64, area: Area) {
         for row in self.bounds_iter(area) {
             for c in row {
