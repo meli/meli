@@ -1435,13 +1435,10 @@ impl Component for Listing {
         let mid = area.width().saturating_sub(right_component_width);
         if self.dirty && mid != 0 {
             let divider_area = area.nth_col(mid);
+            grid.clear_area(divider_area, self.sidebar_divider_theme);
             for row in grid.bounds_iter(divider_area) {
                 for c in row {
-                    grid[c]
-                        .set_ch(self.sidebar_divider)
-                        .set_fg(self.sidebar_divider_theme.fg)
-                        .set_bg(self.sidebar_divider_theme.bg)
-                        .set_attrs(self.sidebar_divider_theme.attrs);
+                    grid[c].set_ch(self.sidebar_divider);
                 }
             }
             context.dirty_areas.push_back(divider_area);
@@ -1471,13 +1468,10 @@ impl Component for Listing {
                             if view_area != area {
                                 let divider_area =
                                     area.nth_col(area.width() - view_area.width() - 1);
+                                grid.clear_area(divider_area, self.mail_view_divider_theme);
                                 for row in grid.bounds_iter(divider_area) {
                                     for c in row {
-                                        grid[c]
-                                            .set_ch(self.mail_view_divider)
-                                            .set_fg(self.mail_view_divider_theme.fg)
-                                            .set_bg(self.mail_view_divider_theme.bg)
-                                            .set_attrs(self.mail_view_divider_theme.attrs);
+                                        grid[c].set_ch(self.mail_view_divider);
                                     }
                                 }
                                 context.dirty_areas.push_back(divider_area);
@@ -1512,13 +1506,10 @@ impl Component for Listing {
                             if view_area != area {
                                 let divider_area =
                                     area.nth_col(area.width() - view_area.width() - 1);
+                                grid.clear_area(divider_area, self.mail_view_divider_theme);
                                 for row in grid.bounds_iter(divider_area) {
                                     for c in row {
-                                        grid[c]
-                                            .set_ch(self.mail_view_divider)
-                                            .set_fg(self.mail_view_divider_theme.fg)
-                                            .set_bg(self.mail_view_divider_theme.bg)
-                                            .set_attrs(self.mail_view_divider_theme.attrs);
+                                        grid[c].set_ch(self.mail_view_divider);
                                     }
                                 }
                                 context.dirty_areas.push_back(divider_area);
