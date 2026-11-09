@@ -1293,21 +1293,25 @@ impl EmbeddedGrid {
                 }
                 *state = State::Normal;
             }
-            (b'n', State::Csi1(_)) => {
-                // Ps = 6  ⇒  Report Cursor Position (CPR) [row;column].
-                // Result is CSI r ; c R
-                //log::trace!("report cursor position");
-                //log::trace!("got {}", EscCode::from((&(*state), byte)));
-                stdin.write_all(b"\x1b[").unwrap();
-                stdin
-                    .write_all((cursor.1 + 1).to_string().as_bytes())
-                    .unwrap();
-                stdin.write_all(b";").unwrap();
-                stdin
-                    .write_all((cursor.0 + 1).to_string().as_bytes())
-                    .unwrap();
-                stdin.write_all(b"R").unwrap();
-                stdin.flush().unwrap();
+            (b'n', State::Csi1([buf])) => {
+                if buf.as_slice() == b"6" {
+                    // Ps = 6  ⇒  Report Cursor Position (CPR) [row;column].
+                    // Result is CSI r ; c R
+                    stdin.write_all(b"\x1b[").unwrap();
+                    stdin
+                        .write_all((cursor.1 + 1).to_string().as_bytes())
+                        .unwrap();
+                    stdin.write_all(b";").unwrap();
+                    stdin
+                        .write_all((cursor.0 + 1).to_string().as_bytes())
+                        .unwrap();
+                    stdin.write_all(b"R").unwrap();
+                    stdin.flush().unwrap();
+                } else if buf.as_slice() == b"5" {
+                    // operating status
+                    stdin.write_all(b"\x1b[0n").unwrap();
+                    stdin.flush().unwrap();
+                }
                 *state = State::Normal;
             }
             (b'A', State::Csi1([buf])) => {
