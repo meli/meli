@@ -78,6 +78,12 @@ impl From<RgbColor> for Color {
     }
 }
 
+impl RgbColor {
+    pub const fn as_x11_colorspec(&'_ self) -> impl std::fmt::Display + '_ {
+        X11ColorSpecDisplay(self)
+    }
+}
+
 impl Color {
     pub const BRIGHT_BLACK: Self = Self::Byte(8);
     pub const BRIGHT_RED: Self = Self::Byte(9);
@@ -2184,5 +2190,15 @@ impl std::fmt::Display for ColorDisplay<'_> {
                 Color::Byte(b) => write!(fmt, "\x1B[58;5;{b}m"),
             },
         }
+    }
+}
+
+struct X11ColorSpecDisplay<'a>(&'a RgbColor);
+
+impl std::fmt::Display for X11ColorSpecDisplay<'_> {
+    #[inline]
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let RgbColor { r, g, b } = self.0;
+        write!(fmt, "rgb:{r:04x}/{g:04x}/{b:04x}")
     }
 }

@@ -100,6 +100,7 @@ impl EmbeddedPty {
         let terminal = crate::terminal::embedded::create_pty(width, height, command)?;
         let (stderr_reader, pid) = {
             let mut terminal = terminal.lock().unwrap();
+            terminal.grid.color_scheme = context.color_scheme();
             (terminal.stderr.take(), terminal.child_pid)
         };
         let stderr = Arc::new(Mutex::new(vec![]));

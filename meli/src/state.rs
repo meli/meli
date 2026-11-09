@@ -146,6 +146,8 @@ pub struct Context {
     /// buffer on the bottom right, this field is only accessible through
     /// special [`Context`] methods.
     cmd_buf: Option<usize>,
+    /// Foreground and Background color, as reported by the terminal.
+    color_scheme: Option<(ColorContrast, RgbColor, RgbColor)>,
     /// Children processes
     pub children: IndexMap<Cow<'static, str>, Vec<ForkedProcess>>,
     pub temp_files: Vec<File>,
@@ -284,6 +286,7 @@ impl Context {
             current_dir: std::env::current_dir().unwrap().expand(),
             children: IndexMap::default(),
             cmd_buf: None,
+            color_scheme: None,
 
             input_thread: InputHandler {
                 pipe: input_thread_pipe,
@@ -362,6 +365,10 @@ impl Context {
 
     pub fn current_dir(&self) -> &Path {
         &self.current_dir
+    }
+
+    pub fn color_scheme(&self) -> Option<(ColorContrast, RgbColor, RgbColor)> {
+        self.color_scheme
     }
 }
 
@@ -567,6 +574,7 @@ impl State {
                 current_dir: std::env::current_dir()?.expand(),
                 children: IndexMap::default(),
                 cmd_buf: None,
+                color_scheme: None,
                 input_thread: InputHandler {
                     pipe: input_thread_pipe,
                     rx: input_thread.1,

@@ -48,7 +48,7 @@ use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
 use super::*;
 use crate::terminal::{
     cells::*,
-    color::{Color, RgbColor},
+    color::{Color, ColorContrast, RgbColor},
     embedded::escape_codes::{Blink, EscCode, Intensity, Sgr, SgrIter, State, Underline},
     Area, Screen, Virtual,
 };
@@ -191,6 +191,8 @@ impl Terminal {
 #[derive(Clone, Debug)]
 pub struct EmbeddedGrid {
     cursor: (usize, usize),
+    /// Foreground and Background color.
+    pub color_scheme: Option<(ColorContrast, RgbColor, RgbColor)>,
     /// `[top;bottom]`
     scroll_region: ScrollRegion,
     pub alternate_screen: Box<Screen<Virtual>>,
@@ -243,6 +245,7 @@ impl EmbeddedGrid {
                 left: 0,
                 ..Default::default()
             },
+            color_scheme: None,
             terminal_size: (0, 0),
             initialized: false,
             alternate_screen: Box::new(Screen::<Virtual>::new(Default::default())),
@@ -370,6 +373,7 @@ impl EmbeddedGrid {
     pub fn process_byte(&mut self, stdin: &mut std::fs::File, byte: u8) {
         let Self {
             ref mut cursor,
+            ref color_scheme,
             ref mut scroll_region,
             ref mut terminal_size,
             ref mut alternate_screen,
@@ -609,10 +613,34 @@ impl EmbeddedGrid {
             ($osc1:expr, $osc2:expr) => {{
                 let code = $osc1.as_slice();
                 let value = $osc2.as_slice();
+                // 10	Foreground color
+                // 11	Background color
+                // 12	Cursor color
+                // 13	Pointer foreground color
+                // 14	Pointer background color
+                // 15	Tektronix foreground color
+                // 16	Tektronix background color
+                // 17	Highlight background color
+                // 18	Tektronix cursor color
+                // 19	Highlight foreground color
                 if code == b"11" && value == b"?" {
                     // background query
+                    if let Some((_, _, bg)) = *color_scheme {
+                        stdin.write_all(b"\x1b]").unwrap();
+                        stdin.write_all(&code).unwrap();
+                        stdin.write_all(b";").unwrap();
+                        write!(stdin, "{}", bg.as_x11_colorspec()).unwrap();
+                        stdin.flush().unwrap();
+                    }
                 } else if code == b"10" && value == b"?" {
                     // foreground query
+                    if let Some((_, fg, _)) = *color_scheme {
+                        stdin.write_all(b"\x1b]").unwrap();
+                        stdin.write_all(&code).unwrap();
+                        stdin.write_all(b";").unwrap();
+                        write!(stdin, "{}", fg.as_x11_colorspec()).unwrap();
+                        stdin.flush().unwrap();
+                    }
                 }
                 log::trace!(
                     "osc code ={} value = {}",
