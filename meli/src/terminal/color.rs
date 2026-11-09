@@ -119,55 +119,16 @@ impl Color {
         }
     }
 
-    pub fn write_fg(self, stdout: &mut crate::StateStdout) -> std::io::Result<()> {
-        use std::io::Write as _;
-        match self {
-            Self::Default => write!(stdout, "\x1B[39m"),
-            Self::Rgb(RgbColor { r, g, b }) => write!(stdout, "\x1B[38;2;{r};{g};{b}m"),
-            Self::Black => write!(stdout, "\x1B[38;5;0m"),
-            Self::Red => write!(stdout, "\x1B[38;5;1m"),
-            Self::Green => write!(stdout, "\x1B[38;5;2m"),
-            Self::Yellow => write!(stdout, "\x1B[38;5;3m"),
-            Self::Blue => write!(stdout, "\x1B[38;5;4m"),
-            Self::Magenta => write!(stdout, "\x1B[38;5;5m"),
-            Self::Cyan => write!(stdout, "\x1B[38;5;6m"),
-            Self::White => write!(stdout, "\x1B[38;5;7m"),
-            Self::Byte(b) => write!(stdout, "\x1B[38;5;{b}m"),
-        }
+    pub const fn as_fg(&'_ self) -> impl std::fmt::Display + '_ {
+        ColorDisplay(self, ColorDisplayChoice::Fg)
     }
 
-    pub fn write_bg(self, stdout: &mut crate::StateStdout) -> std::io::Result<()> {
-        use std::io::Write as _;
-        match self {
-            Self::Default => write!(stdout, "\x1B[49m"),
-            Self::Rgb(RgbColor { r, g, b }) => write!(stdout, "\x1B[48;2;{r};{g};{b}m"),
-            Self::Black => write!(stdout, "\x1B[48;5;0m"),
-            Self::Red => write!(stdout, "\x1B[48;5;1m"),
-            Self::Green => write!(stdout, "\x1B[48;5;2m"),
-            Self::Yellow => write!(stdout, "\x1B[48;5;3m"),
-            Self::Blue => write!(stdout, "\x1B[48;5;4m"),
-            Self::Magenta => write!(stdout, "\x1B[48;5;5m"),
-            Self::Cyan => write!(stdout, "\x1B[48;5;6m"),
-            Self::White => write!(stdout, "\x1B[48;5;7m"),
-            Self::Byte(b) => write!(stdout, "\x1B[48;5;{b}m"),
-        }
+    pub const fn as_bg(&'_ self) -> impl std::fmt::Display + '_ {
+        ColorDisplay(self, ColorDisplayChoice::Bg)
     }
 
-    pub fn write_underline(self, stdout: &mut crate::StateStdout) -> std::io::Result<()> {
-        use std::io::Write as _;
-        match self {
-            Self::Default => write!(stdout, "\x1B[59m"),
-            Self::Rgb(RgbColor { r, g, b }) => write!(stdout, "\x1B[58;2;{r};{g};{b}m"),
-            Self::Black => write!(stdout, "\x1B[58;5;0m"),
-            Self::Red => write!(stdout, "\x1B[58;5;1m"),
-            Self::Green => write!(stdout, "\x1B[58;5;2m"),
-            Self::Yellow => write!(stdout, "\x1B[58;5;3m"),
-            Self::Blue => write!(stdout, "\x1B[58;5;4m"),
-            Self::Magenta => write!(stdout, "\x1B[58;5;5m"),
-            Self::Cyan => write!(stdout, "\x1B[58;5;6m"),
-            Self::White => write!(stdout, "\x1B[58;5;7m"),
-            Self::Byte(b) => write!(stdout, "\x1B[58;5;{b}m"),
-        }
+    pub const fn as_underline(&'_ self) -> impl std::fmt::Display + '_ {
+        ColorDisplay(self, ColorDisplayChoice::Underline)
     }
 
     pub fn from_string_de<'de, D>(s: String) -> std::result::Result<Self, D::Error>
@@ -2168,5 +2129,60 @@ fn luminance_to_perceived_lightness(luminance: f64) -> u8 {
         (luminance * (24389. / 27.)) as u8
     } else {
         luminance.cbrt().mul_add(116., -16.) as u8
+    }
+}
+
+enum ColorDisplayChoice {
+    Fg,
+    Bg,
+    Underline,
+}
+
+struct ColorDisplay<'a>(&'a Color, ColorDisplayChoice);
+
+impl std::fmt::Display for ColorDisplay<'_> {
+    #[inline]
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self.1 {
+            ColorDisplayChoice::Fg => match self.0 {
+                Color::Default => write!(fmt, "\x1B[39m"),
+                Color::Rgb(RgbColor { r, g, b }) => write!(fmt, "\x1B[38;2;{r};{g};{b}m"),
+                Color::Black => write!(fmt, "\x1B[38;5;0m"),
+                Color::Red => write!(fmt, "\x1B[38;5;1m"),
+                Color::Green => write!(fmt, "\x1B[38;5;2m"),
+                Color::Yellow => write!(fmt, "\x1B[38;5;3m"),
+                Color::Blue => write!(fmt, "\x1B[38;5;4m"),
+                Color::Magenta => write!(fmt, "\x1B[38;5;5m"),
+                Color::Cyan => write!(fmt, "\x1B[38;5;6m"),
+                Color::White => write!(fmt, "\x1B[38;5;7m"),
+                Color::Byte(b) => write!(fmt, "\x1B[38;5;{b}m"),
+            },
+            ColorDisplayChoice::Bg => match self.0 {
+                Color::Default => write!(fmt, "\x1B[49m"),
+                Color::Rgb(RgbColor { r, g, b }) => write!(fmt, "\x1B[48;2;{r};{g};{b}m"),
+                Color::Black => write!(fmt, "\x1B[48;5;0m"),
+                Color::Red => write!(fmt, "\x1B[48;5;1m"),
+                Color::Green => write!(fmt, "\x1B[48;5;2m"),
+                Color::Yellow => write!(fmt, "\x1B[48;5;3m"),
+                Color::Blue => write!(fmt, "\x1B[48;5;4m"),
+                Color::Magenta => write!(fmt, "\x1B[48;5;5m"),
+                Color::Cyan => write!(fmt, "\x1B[48;5;6m"),
+                Color::White => write!(fmt, "\x1B[48;5;7m"),
+                Color::Byte(b) => write!(fmt, "\x1B[48;5;{b}m"),
+            },
+            ColorDisplayChoice::Underline => match self.0 {
+                Color::Default => write!(fmt, "\x1B[59m"),
+                Color::Rgb(RgbColor { r, g, b }) => write!(fmt, "\x1B[58;2;{r};{g};{b}m"),
+                Color::Black => write!(fmt, "\x1B[58;5;0m"),
+                Color::Red => write!(fmt, "\x1B[58;5;1m"),
+                Color::Green => write!(fmt, "\x1B[58;5;2m"),
+                Color::Yellow => write!(fmt, "\x1B[58;5;3m"),
+                Color::Blue => write!(fmt, "\x1B[58;5;4m"),
+                Color::Magenta => write!(fmt, "\x1B[58;5;5m"),
+                Color::Cyan => write!(fmt, "\x1B[58;5;6m"),
+                Color::White => write!(fmt, "\x1B[58;5;7m"),
+                Color::Byte(b) => write!(fmt, "\x1B[58;5;{b}m"),
+            },
+        }
     }
 }

@@ -544,15 +544,15 @@ impl Screen<Tty> {
                 current_attrs = c.attrs();
             }
             if c.bg() != current_bg {
-                c.bg().write_bg(stdout).unwrap();
+                write!(stdout, "{}", c.bg().as_bg()).unwrap();
                 current_bg = c.bg();
             }
             if c.fg() != current_fg {
-                c.fg().write_fg(stdout).unwrap();
+                write!(stdout, "{}", c.fg().as_fg()).unwrap();
                 current_fg = c.fg();
             }
             if c.underline() != current_underline {
-                c.underline().write_underline(stdout).unwrap();
+                write!(stdout, "{}", c.underline().as_underline()).unwrap();
                 current_underline = c.underline();
             }
             if !c.empty() {
