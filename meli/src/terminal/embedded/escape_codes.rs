@@ -21,7 +21,7 @@
 
 use smallvec::SmallVec;
 
-use crate::terminal::Color;
+use crate::terminal::{Color, RgbColor};
 
 #[derive(Clone, Debug, Default)]
 pub enum State {
@@ -486,7 +486,7 @@ impl<'a> Iterator for SgrIter<'a> {
                         let r = next_u8!();
                         let g = next_u8!();
                         let b = next_u8!();
-                        Color::Rgb(r, g, b)
+                        Color::Rgb(RgbColor { r, g, b })
                     }
                     b"5" => Color::Byte(next_u8!()),
                     b"6" => {
@@ -494,7 +494,7 @@ impl<'a> Iterator for SgrIter<'a> {
                         let g = next_u8!();
                         let b = next_u8!();
                         let _alpha = next_u8!();
-                        Color::Rgb(r, g, b)
+                        Color::Rgb(RgbColor { r, g, b })
                     }
                     _ => {
                         return self.next();

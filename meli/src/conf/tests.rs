@@ -30,7 +30,7 @@ use std::{
 
 use crate::{
     conf::{themes::*, FileSettings},
-    terminal::Color,
+    terminal::{Color, RgbColor},
 };
 
 pub struct ConfigFile {
@@ -237,7 +237,11 @@ color_aliases= { "Jebediah" = "#b4da55" }
             &ColorField::Fg,
             &Cow::from("mail.listing.tag_default")
         ),
-        Color::Rgb(180, 218, 85)
+        Color::Rgb(RgbColor {
+            r: 180,
+            g: 218,
+            b: 85
+        })
     );
     /* MUST FAIL: Misspell color alias $Jebediah as $Jebedia */
     const TEST_INVALID_ALIAS_STR: &str = r##"[dark]

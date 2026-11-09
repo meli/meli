@@ -197,7 +197,7 @@ pub mod unix {
                                         log::trace!("EscapeSequence unknown");
                                     }
                                     if let (Some(fg), Some(bg)) = palette {
-                                        log::trace!("compute_scheme_contrast(fg {fg:?}, bg {bg:?}) = {:?}", Color::compute_scheme_contrast(fg, bg));
+                                        log::trace!("compute_scheme_contrast(fg {fg:?}, bg {bg:?}) = {:?}", Color::compute_scheme_contrast(fg.into(), bg.into()));
                                         palette.0.take();
                                         palette.1.take();
                                         state_tx.send(TerminalEvent::ColorScheme { fg, bg }.into()).unwrap();

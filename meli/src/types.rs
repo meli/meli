@@ -45,7 +45,7 @@ use nix::{errno::Errno, unistd::Pid};
 use super::{
     command::Action,
     jobs::{self, JobExecutor, JobId, TimerId},
-    terminal::*,
+    terminal::{RgbColor, *},
 };
 use crate::components::{ComponentId, OverlayComponent, ScrollUpdate};
 
@@ -139,8 +139,8 @@ impl From<TerminalEvent> for ThreadEvent {
 #[derive(Debug)]
 pub enum TerminalEvent {
     ColorScheme {
-        fg: Color,
-        bg: Color,
+        fg: RgbColor,
+        bg: RgbColor,
     },
     DECModeReport {
         mode: u16,

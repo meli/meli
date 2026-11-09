@@ -1568,7 +1568,7 @@ impl State {
             TerminalEvent::ColorScheme { fg, bg } => {
                 if self.context.settings.terminal.theme.as_str() == crate::conf::themes::AUTO {
                     let old_settings = self.context.settings.clone();
-                    let contrast = Color::compute_scheme_contrast(fg, bg);
+                    let contrast = Color::compute_scheme_contrast(fg.into(), bg.into());
                     match contrast {
                         ColorContrast::Dark => {
                             log::debug!("changing default theme to dark");

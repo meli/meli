@@ -59,10 +59,23 @@ pub enum Color {
     Cyan,
     White,
     Byte(u8),
-    Rgb(u8, u8, u8),
+    Rgb(RgbColor),
     /// Terminal default.
     #[default]
     Default,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub struct RgbColor {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+}
+
+impl From<RgbColor> for Color {
+    fn from(rgb: RgbColor) -> Self {
+        Self::Rgb(rgb)
+    }
 }
 
 impl Color {
@@ -87,7 +100,7 @@ impl Color {
             Self::Cyan => 0x06,
             Self::White => 0x07,
             Self::Byte(b) => b,
-            Self::Rgb(_, _, _) => return None,
+            Self::Rgb(_) => return None,
             Self::Default => 0x00,
         })
     }
@@ -110,7 +123,7 @@ impl Color {
         use std::io::Write as _;
         match self {
             Self::Default => write!(stdout, "\x1B[39m"),
-            Self::Rgb(r, g, b) => write!(stdout, "\x1B[38;2;{r};{g};{b}m"),
+            Self::Rgb(RgbColor { r, g, b }) => write!(stdout, "\x1B[38;2;{r};{g};{b}m"),
             Self::Black => write!(stdout, "\x1B[38;5;0m"),
             Self::Red => write!(stdout, "\x1B[38;5;1m"),
             Self::Green => write!(stdout, "\x1B[38;5;2m"),
@@ -127,7 +140,7 @@ impl Color {
         use std::io::Write as _;
         match self {
             Self::Default => write!(stdout, "\x1B[49m"),
-            Self::Rgb(r, g, b) => write!(stdout, "\x1B[48;2;{r};{g};{b}m"),
+            Self::Rgb(RgbColor { r, g, b }) => write!(stdout, "\x1B[48;2;{r};{g};{b}m"),
             Self::Black => write!(stdout, "\x1B[48;5;0m"),
             Self::Red => write!(stdout, "\x1B[48;5;1m"),
             Self::Green => write!(stdout, "\x1B[48;5;2m"),
@@ -144,7 +157,7 @@ impl Color {
         use std::io::Write as _;
         match self {
             Self::Default => write!(stdout, "\x1B[59m"),
-            Self::Rgb(r, g, b) => write!(stdout, "\x1B[58;2;{r};{g};{b}m"),
+            Self::Rgb(RgbColor { r, g, b }) => write!(stdout, "\x1B[58;2;{r};{g};{b}m"),
             Self::Black => write!(stdout, "\x1B[58;5;0m"),
             Self::Red => write!(stdout, "\x1B[58;5;1m"),
             Self::Green => write!(stdout, "\x1B[58;5;2m"),
@@ -425,14 +438,14 @@ impl Color {
                     b.is_ascii_digit() || (b'a'..=b'f').contains(&b) || (b'A'..=b'F').contains(&b)
                 }) =>
             {
-                return Ok(Self::Rgb(
-                    u8::from_str_radix(&s[1..3], 16)
+                return Ok(Self::Rgb(RgbColor {
+                    r: u8::from_str_radix(&s[1..3], 16)
                         .map_err(|_| de::Error::custom("invalid `color` value"))?,
-                    u8::from_str_radix(&s[3..5], 16)
+                    g: u8::from_str_radix(&s[3..5], 16)
                         .map_err(|_| de::Error::custom("invalid `color` value"))?,
-                    u8::from_str_radix(&s[5..7], 16)
+                    b: u8::from_str_radix(&s[5..7], 16)
                         .map_err(|_| de::Error::custom("invalid `color` value"))?,
-                ))
+                }))
             }
             s if s.starts_with('#')
                 && s.len() == 4
@@ -440,14 +453,17 @@ impl Color {
                     b.is_ascii_digit() || (b'a'..=b'f').contains(&b) || (b'A'..=b'F').contains(&b)
                 }) =>
             {
-                return Ok(Self::Rgb(
-                    17 * u8::from_str_radix(&s[1..2], 16)
-                        .map_err(|_| de::Error::custom("invalid `color` value"))?,
-                    17 * u8::from_str_radix(&s[2..3], 16)
-                        .map_err(|_| de::Error::custom("invalid `color` value"))?,
-                    17 * u8::from_str_radix(&s[3..4], 16)
-                        .map_err(|_| de::Error::custom("invalid `color` value"))?,
-                ))
+                return Ok(Self::Rgb(RgbColor {
+                    r: 17
+                        * u8::from_str_radix(&s[1..2], 16)
+                            .map_err(|_| de::Error::custom("invalid `color` value"))?,
+                    g: 17
+                        * u8::from_str_radix(&s[2..3], 16)
+                            .map_err(|_| de::Error::custom("invalid `color` value"))?,
+                    b: 17
+                        * u8::from_str_radix(&s[3..4], 16)
+                            .map_err(|_| de::Error::custom("invalid `color` value"))?,
+                }))
             }
             _ => s
                 .parse::<u8>()
@@ -505,9 +521,9 @@ fn test_color_de() {
             );
         };
     }
-    test_color!("#Ff6600", ok Color::Rgb(255, 102, 0));
-    test_color!("#2E3440", ok Color::Rgb(46, 52, 64));
-    test_color!("#f60", ok Color::Rgb(255, 102, 0));
+    test_color!("#Ff6600", ok Color::Rgb(RgbColor { r: 255, g: 102, b: 0}));
+    test_color!("#2E3440", ok Color::Rgb(RgbColor { r: 46, g: 52, b: 64 }));
+    test_color!("#f60", ok Color::Rgb(RgbColor { r: 255, g: 102, b: 0 }));
     test_color!("#gb0", err "invalid `color` value");
     test_color!("Olive", ok Color::Byte(3));
     test_color!("Oafahifdave", err "invalid `color` value", "^^^^^^^");
@@ -775,7 +791,9 @@ impl Serialize for Color {
             Self::Byte(253) => serializer.serialize_str("Grey85"),
             Self::Byte(254) => serializer.serialize_str("Grey89"),
             Self::Byte(255) => serializer.serialize_str("Grey93"),
-            Self::Rgb(r, g, b) => serializer.serialize_str(&format!("#{r:02x}{g:02x}{b:02x}")),
+            Self::Rgb(RgbColor { r, g, b }) => {
+                serializer.serialize_str(&format!("#{r:02x}{g:02x}{b:02x}"))
+            }
             Self::Default => serializer.serialize_str("Default"),
         }
     }
@@ -2116,7 +2134,7 @@ impl Color {
                     }
                 }
             }
-            Self::Rgb(r, g, b) => (*r, *g, *b),
+            Self::Rgb(RgbColor { r, g, b }) => (*r, *g, *b),
             Self::Default => (0, 0, 0),
         }
     }

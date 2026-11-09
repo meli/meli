@@ -48,8 +48,9 @@ use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
 use super::*;
 use crate::terminal::{
     cells::*,
+    color::{Color, RgbColor},
     embedded::escape_codes::{Blink, EscCode, Intensity, Sgr, SgrIter, State, Underline},
-    Area, Color, Screen, Virtual,
+    Area, Screen, Virtual,
 };
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -1791,7 +1792,7 @@ impl EmbeddedGrid {
                     unsafe { std::str::from_utf8_unchecked(g_buf) }.parse::<u8>(),
                     unsafe { std::str::from_utf8_unchecked(b_buf) }.parse::<u8>(),
                 ) {
-                    (Ok(r), Ok(g), Ok(b)) => Color::Rgb(r, g, b),
+                    (Ok(r), Ok(g), Ok(b)) => Color::Rgb(RgbColor { r, g, b }),
                     _ => Color::Default,
                 };
                 screen.grid_mut()[cursor_val!()].set_fg(*fg_color);
@@ -1810,7 +1811,7 @@ impl EmbeddedGrid {
                     unsafe { std::str::from_utf8_unchecked(g_buf) }.parse::<u8>(),
                     unsafe { std::str::from_utf8_unchecked(b_buf) }.parse::<u8>(),
                 ) {
-                    (Ok(r), Ok(g), Ok(b)) => Color::Rgb(r, g, b),
+                    (Ok(r), Ok(g), Ok(b)) => Color::Rgb(RgbColor { r, g, b }),
                     _ => Color::Default,
                 };
                 screen.grid_mut()[cursor_val!()].set_bg(*bg_color);
@@ -1830,7 +1831,7 @@ impl EmbeddedGrid {
                     unsafe { std::str::from_utf8_unchecked(g_buf) }.parse::<u8>(),
                     unsafe { std::str::from_utf8_unchecked(b_buf) }.parse::<u8>(),
                 ) {
-                    (Ok(r), Ok(g), Ok(b)) => Color::Rgb(r, g, b),
+                    (Ok(r), Ok(g), Ok(b)) => Color::Rgb(RgbColor { r, g, b }),
                     _ => Color::Default,
                 };
                 screen.grid_mut()[cursor_val!()].set_underline(*underline_color);
@@ -1849,7 +1850,7 @@ impl EmbeddedGrid {
                     unsafe { std::str::from_utf8_unchecked(g_buf) }.parse::<u8>(),
                     unsafe { std::str::from_utf8_unchecked(b_buf) }.parse::<u8>(),
                 ) {
-                    (Ok(r), Ok(g), Ok(b)) => Color::Rgb(r, g, b),
+                    (Ok(r), Ok(g), Ok(b)) => Color::Rgb(RgbColor { r, g, b }),
                     _ => Color::Default,
                 };
                 screen.grid_mut()[cursor_val!()].set_fg(*fg_color);
@@ -1868,7 +1869,7 @@ impl EmbeddedGrid {
                     unsafe { std::str::from_utf8_unchecked(g_buf) }.parse::<u8>(),
                     unsafe { std::str::from_utf8_unchecked(b_buf) }.parse::<u8>(),
                 ) {
-                    (Ok(r), Ok(g), Ok(b)) => Color::Rgb(r, g, b),
+                    (Ok(r), Ok(g), Ok(b)) => Color::Rgb(RgbColor { r, g, b }),
                     _ => Color::Default,
                 };
                 screen.grid_mut()[cursor_val!()].set_bg(*bg_color);
@@ -1888,7 +1889,7 @@ impl EmbeddedGrid {
                     unsafe { std::str::from_utf8_unchecked(g_buf) }.parse::<u8>(),
                     unsafe { std::str::from_utf8_unchecked(b_buf) }.parse::<u8>(),
                 ) {
-                    (Ok(r), Ok(g), Ok(b)) => Color::Rgb(r, g, b),
+                    (Ok(r), Ok(g), Ok(b)) => Color::Rgb(RgbColor { r, g, b }),
                     _ => Color::Default,
                 };
                 screen.grid_mut()[cursor_val!()].set_underline(*underline_color);

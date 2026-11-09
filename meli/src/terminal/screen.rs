@@ -26,7 +26,7 @@ use crate::{
     conf::themes::ThemeAttribute,
     terminal::{
         cells::{Cell, CellBuffer},
-        color::{Color, ColorContrast},
+        color::{Color, ColorContrast, RgbColor},
         csi, osc, Alignment, Hyperlink, Pos,
     },
     Attr, Context,
@@ -76,7 +76,7 @@ pub struct Tty {
     stdout: Option<StateStdout>,
     restore_fn: Option<Box<dyn FnOnce()>>,
     /// Foreground and Background color.
-    color_scheme: Option<(ColorContrast, Color, Color)>,
+    color_scheme: Option<(ColorContrast, RgbColor, RgbColor)>,
     mouse: bool,
     dec_mode_2026: bool,
     draw_horizontal_segment_fn: DrawHorizontalSegmentFn,
@@ -599,11 +599,14 @@ impl Screen<Tty> {
         self.display.dec_mode_2026
     }
 
-    pub const fn set_color_scheme(&mut self, color_scheme: Option<(ColorContrast, Color, Color)>) {
+    pub const fn set_color_scheme(
+        &mut self,
+        color_scheme: Option<(ColorContrast, RgbColor, RgbColor)>,
+    ) {
         self.display.color_scheme = color_scheme;
     }
 
-    pub const fn color_scheme(&self) -> Option<(ColorContrast, Color, Color)> {
+    pub const fn color_scheme(&self) -> Option<(ColorContrast, RgbColor, RgbColor)> {
         self.display.color_scheme
     }
 

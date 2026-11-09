@@ -209,16 +209,16 @@ pub trait EscapeSequenceQuery: Sized {
 }
 
 impl EscapeSequenceQuery for osc::QueryBackground {
-    type Reply = Color;
+    type Reply = RgbColor;
     const PREFIX: &'static str = "\x1b]11;";
 }
 
 impl EscapeSequenceQuery for osc::QueryForeground {
-    type Reply = Color;
+    type Reply = RgbColor;
     const PREFIX: &'static str = "\x1b]10;";
 }
 
-impl EscapeSequenceParse for Color {
+impl EscapeSequenceParse for RgbColor {
     fn parse(mut bytes: &str) -> Option<Self> {
         // OSC Escape sequence.
         // Terminal background report:
@@ -273,13 +273,17 @@ impl EscapeSequenceParse for Color {
 /// > Note that *h* indicates the value scaled in 4 bits,
 /// > *hh* the value scaled in 8 bits, *hhh* the value scaled in 12 bits,
 /// > and *hhhh* the value scaled in 16 bits, respectively.
-fn parse_rgb(input: &str) -> Option<Color> {
+fn parse_rgb(input: &str) -> Option<RgbColor> {
     let mut parts = input.split('/');
     let r = parse_channel_scaled(parts.next()?)?;
     let g = parse_channel_scaled(parts.next()?)?;
     let b = parse_channel_scaled(parts.next()?)?;
     if parts.next().is_none() {
-        Some(Color::Rgb(r as u8, g as u8, b as u8))
+        Some(RgbColor {
+            r: r as u8,
+            g: g as u8,
+            b: b as u8,
+        })
     } else {
         None
     }
@@ -294,14 +298,18 @@ fn parse_rgb(input: &str) -> Option<Color> {
 /// could have a completely different perceived lightness value.
 ///
 /// Test with `urxvt -depth 32 -fg grey90 -bg rgba:0000/0000/4444/cccc`
-fn parse_rgba(input: &str) -> Option<Color> {
+fn parse_rgba(input: &str) -> Option<RgbColor> {
     let mut parts = input.split('/');
     let r = parse_channel_scaled(parts.next()?)?;
     let g = parse_channel_scaled(parts.next()?)?;
     let b = parse_channel_scaled(parts.next()?)?;
     let _a = parse_channel_scaled(parts.next()?)?;
     if parts.next().is_none() {
-        Some(Color::Rgb(r as u8, g as u8, b as u8))
+        Some(RgbColor {
+            r: r as u8,
+            g: g as u8,
+            b: b as u8,
+        })
     } else {
         None
     }
