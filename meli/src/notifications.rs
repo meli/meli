@@ -541,13 +541,13 @@ impl Component for DisplayMessageBox {
             }
 
             let mut info_message = String::new();
-            if self.messages.len() > 1 && self.pos + 1 == self.len() {
+            if self.messages.len() > 1 && self.pos != 0 {
                 info_message = format!(
                     "Prev: {}",
                     context.settings.shortcuts.general.info_message_previous
                 )
             }
-            if self.messages.len() > 1 && self.pos != self.len() {
+            if self.messages.len() > 1 && self.pos + 1 < self.len() {
                 if !info_message.is_empty() {
                     info_message.push(' ');
                 }
