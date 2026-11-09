@@ -460,15 +460,14 @@ impl Pager {
                         // 2. or 3.
                         {
                             let skip_x = link.start.saturating_sub(l.start);
-                            let start = area2.skip_cols(skip_x).upper_left();
-                            let end = if link.end > l.end {
-                                area2.skip_cols(skip_x + l.content.len()).upper_left()
+                            let area = area2.skip_cols(skip_x).nth_row(0);
+                            let area = if link.end > l.end {
+                                area.take_cols(l.content.len())
                             } else {
-                                let skip_x = skip_x + link.value.len();
-                                area2.skip_cols(skip_x).upper_left()
+                                area.take_cols(link.value.len())
                             };
                             let uri = grid.insert_uri(&link.value);
-                            grid.set_uri(uri, start, end);
+                            grid.set_uri(uri, area);
                         }
                         if link.end < l.end {
                             // In this case, there is more than one link in this line, so continue
@@ -486,10 +485,9 @@ impl Pager {
                     if (link.start..link.end).contains(&l.start)
                         && (link.start..link.end).contains(&l.end)
                     {
-                        let start = area2.upper_left();
-                        let end = area2.skip_cols(l.content.len()).upper_left();
+                        let area = area2.nth_row(0).take_cols(l.content.len());
                         let uri = grid.insert_uri(&link.value);
-                        grid.set_uri(uri, start, end);
+                        grid.set_uri(uri, area);
                     }
                     break;
                 }

@@ -176,11 +176,9 @@ impl AddressBookList {
                     .write_string(email, &self.theme_default, area, None, None)
                     .0;
                 let uri = self.data_columns.columns[1].grid_mut().insert_uri(email);
-                self.data_columns.columns[1].grid_mut().set_uri(
-                    uri,
-                    area.upper_left(),
-                    area.skip_cols(col_width).upper_left(),
-                );
+                self.data_columns.columns[1]
+                    .grid_mut()
+                    .set_uri(uri, area.take_cols(col_width));
             }
 
             if let Some(url) = c.url() {
@@ -190,11 +188,9 @@ impl AddressBookList {
                     .write_string(url, &self.theme_default, area, None, None)
                     .0;
                 let uri = self.data_columns.columns[2].grid_mut().insert_uri(url);
-                self.data_columns.columns[2].grid_mut().set_uri(
-                    uri,
-                    area.upper_left(),
-                    area.skip_cols(col_width).upper_left(),
-                );
+                self.data_columns.columns[2]
+                    .grid_mut()
+                    .set_uri(uri, area.take_cols(col_width));
             }
         }
     }

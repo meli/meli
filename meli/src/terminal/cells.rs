@@ -77,7 +77,6 @@ pub struct CellBuffer {
     tag_table: BTreeMap<u64, FormatTag>,
     tag_associations: SmallVec<[(u64, (usize, usize)); 128]>,
     pub hyperlinks_table: BTreeMap<u64, Box<str>>,
-    pub hyperlinks_associations: BTreeMap<Pos, (u64, Pos)>,
     pub(super) area: Area,
 }
 
@@ -96,7 +95,6 @@ impl std::fmt::Debug for CellBuffer {
             .field("tag_table", &self.tag_table)
             .field("tag_associations", &self.tag_associations)
             .field("hyperlinks_table", &self.hyperlinks_table)
-            .field("hyperlinks_associations", &self.hyperlinks_associations)
             .field("area", &self.area)
             .field("generation", &self.area.generation())
             .finish()
@@ -122,7 +120,6 @@ impl CellBuffer {
             tag_table: Default::default(),
             tag_associations: SmallVec::new(),
             hyperlinks_table: Default::default(),
-            hyperlinks_associations: Default::default(),
             area,
         }
     }
@@ -155,7 +152,6 @@ impl CellBuffer {
             tag_table: Default::default(),
             tag_associations: SmallVec::new(),
             hyperlinks_table: Default::default(),
-            hyperlinks_associations: Default::default(),
             area,
         }
     }
@@ -565,9 +561,11 @@ impl CellBuffer {
         hash
     }
 
-    pub fn set_uri(&mut self, uri: u64, start: Pos, end: Pos) {
-        if start != end {
-            self.hyperlinks_associations.insert(start, (uri, end));
+    pub fn set_uri(&mut self, uri: u64, area: Area) {
+        for row in self.bounds_iter(area) {
+            for c in row {
+                self[c].hyperlink = Some(uri);
+            }
         }
     }
 
@@ -581,7 +579,6 @@ impl CellBuffer {
     pub fn clear_area(&mut self, area: Area, attributes: ThemeAttribute) {
         for row in self.bounds_iter(area) {
             for c in row {
-                self.hyperlinks_associations.remove(&c);
                 self[c] = Cell::default();
                 self[c]
                     .set_fg(attributes.fg)
@@ -643,25 +640,8 @@ impl CellBuffer {
         let mut src_x = get_x(src.upper_left());
         let mut src_y = get_y(src.upper_left());
 
-        {
-            // Calculate x, y offsets for hyperlinks from `grid_src` and insert them to
-            // `self`.
-            let diff_x = get_x(dest.upper_left()) as isize - get_x(src.upper_left()) as isize;
-            let diff_y = get_y(dest.upper_left()) as isize - get_y(src.upper_left()) as isize;
-            self.hyperlinks_table
-                .extend(grid_src.hyperlinks_table.clone());
-            for (start, (uri, end)) in &grid_src.hyperlinks_associations {
-                let new_start = (
-                    (get_x(*start) as isize + diff_x) as usize,
-                    (get_y(*start) as isize + diff_y) as usize,
-                );
-                let new_end = (
-                    (get_x(*end) as isize + diff_x) as usize,
-                    (get_y(*end) as isize + diff_y) as usize,
-                );
-                self.set_uri(*uri, new_start, new_end);
-            }
-        }
+        self.hyperlinks_table
+            .extend(grid_src.hyperlinks_table.clone());
 
         let (cols, rows) = grid_src.size();
         if src_x >= cols || src_y >= rows {
@@ -1012,6 +992,7 @@ pub struct Cell {
     keep_fg: bool,
     keep_bg: bool,
     keep_attrs: bool,
+    hyperlink: Option<u64>,
 }
 
 impl Cell {
@@ -1042,6 +1023,7 @@ impl Cell {
             keep_fg: false,
             keep_bg: false,
             keep_attrs: false,
+            hyperlink: None,
         }
     }
 
@@ -1058,6 +1040,7 @@ impl Cell {
             keep_fg: false,
             keep_bg: false,
             keep_attrs: false,
+            hyperlink: None,
         }
     }
 
@@ -1273,6 +1256,14 @@ impl Cell {
     pub fn set_keep_attrs(&mut self, new_val: bool) -> &mut Self {
         self.keep_attrs = new_val;
         self
+    }
+
+    pub const fn hyperlink(&self) -> Option<u64> {
+        self.hyperlink
+    }
+
+    pub const fn set_hyperlink(&mut self, hyperlink: Option<u64>) {
+        self.hyperlink = hyperlink;
     }
 }
 

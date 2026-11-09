@@ -341,11 +341,7 @@ impl Component for TextField {
             .0;
         if *is_hyperlink {
             let uri = grid.insert_uri(str);
-            grid.set_uri(
-                uri,
-                area.upper_left(),
-                area.skip_cols(col_width).upper_left(),
-            );
+            grid.set_uri(uri, area.nth_row(0).take_cols(col_width));
         }
     }
 
