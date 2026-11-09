@@ -38,8 +38,6 @@
 //!
 //! To create a [`Terminal`], see [`create_pty`].
 
-// [ref:FIXME]: remove all `unsafe`
-
 use std::{fs::File, io::PipeReader, mem::ManuallyDrop};
 
 use melib::text::wcwidth;
@@ -135,6 +133,8 @@ impl Terminal {
             ws_ypixel: 0,
         };
         let frontend_fd = self.stdin.as_raw_fd();
+        // SAFETY: frontend_fd is a valid pty file descriptor, and winsize is a correctly
+        // initialized Winsize value
         let _ = unsafe { set_window_size(frontend_fd, &raw const winsize) };
         let _ = nix::sys::signal::kill(self.child_pid, nix::sys::signal::SIGWINCH);
     }
@@ -678,6 +678,36 @@ impl EmbeddedGrid {
             }};
         }
 
+        macro_rules! parse_rgb {
+            ($r_buf:expr, $g_buf:expr, $b_buf:expr) => {{
+                let r_buf = &$r_buf;
+                let g_buf = &$g_buf;
+                let b_buf = &$b_buf;
+
+                std::str::from_utf8(r_buf)
+                    .ok()
+                    .and_then(|r| r.parse::<u8>().ok())
+                    .and_then(|r| {
+                        Some((
+                            r,
+                            std::str::from_utf8(g_buf)
+                                .ok()
+                                .and_then(|g| g.parse::<u8>().ok())?,
+                        ))
+                    })
+                    .and_then(|(r, g)| {
+                        Some((
+                            r,
+                            g,
+                            std::str::from_utf8(b_buf)
+                                .ok()
+                                .and_then(|b| b.parse::<u8>().ok())?,
+                        ))
+                    })
+                    .map(|(r, g, b)| Color::Rgb(RgbColor { r, g, b }))
+            }};
+        }
+
         let mut state = &mut self.state;
         match (byte, &mut state) {
             (b'\x1b', State::Normal) => {
@@ -816,30 +846,25 @@ impl EmbeddedGrid {
                             *codepoints = CodepointBuf::FourCodepoints(c, None, None);
                             return;
                         }
-                        CodepointBuf::TwoCodepoints(b) => {
-                            //log::trace!("two byte char = ");
-                            unsafe { std::str::from_utf8_unchecked(&[*b, c]) }
-                                .chars()
-                                .next()
-                                .unwrap()
-                        }
+                        CodepointBuf::TwoCodepoints(b) => std::str::from_utf8(&[*b, c])
+                            .ok()
+                            .and_then(|c| c.chars().next())
+                            .unwrap_or(' '),
                         CodepointBuf::ThreeCodepoints(b, Some(b1)) => {
-                            //log::trace!("three byte char = ",);
-                            unsafe { std::str::from_utf8_unchecked(&[*b, *b1, c]) }
-                                .chars()
-                                .next()
-                                .unwrap()
+                            std::str::from_utf8(&[*b, *b1, c])
+                                .ok()
+                                .and_then(|c| c.chars().next())
+                                .unwrap_or(' ')
                         }
                         CodepointBuf::ThreeCodepoints(_, ref mut b @ None) => {
                             *b = Some(c);
                             return;
                         }
                         CodepointBuf::FourCodepoints(b, Some(b1), Some(b2)) => {
-                            //log::trace!("four byte char = ",);
-                            unsafe { std::str::from_utf8_unchecked(&[*b, *b1, *b2, c]) }
-                                .chars()
-                                .next()
-                                .unwrap()
+                            std::str::from_utf8(&[*b, *b1, *b2, c])
+                                .ok()
+                                .and_then(|c| c.chars().next())
+                                .unwrap_or(' ')
                         }
                         CodepointBuf::FourCodepoints(_, ref mut b1 @ None, None) => {
                             *b1 = Some(c);
@@ -1127,9 +1152,10 @@ impl EmbeddedGrid {
             (b'L', State::Csi) | (b'L', State::Csi1(_)) => {
                 /* Insert n blank lines (default 1) */
                 let n = if let State::Csi1([ref buf1]) = state {
-                    unsafe { std::str::from_utf8_unchecked(buf1) }
-                        .parse::<usize>()
-                        .unwrap()
+                    std::str::from_utf8(buf1)
+                        .ok()
+                        .and_then(|n| n.parse::<usize>().ok())
+                        .unwrap_or(0)
                 } else {
                     1
                 };
@@ -1143,9 +1169,10 @@ impl EmbeddedGrid {
             (b'M', State::Csi) | (b'M', State::Csi1(_)) => {
                 /* Delete n lines (default 1) */
                 let n = if let State::Csi1([ref buf1]) = state {
-                    unsafe { std::str::from_utf8_unchecked(buf1) }
-                        .parse::<usize>()
-                        .unwrap()
+                    std::str::from_utf8(buf1)
+                        .ok()
+                        .and_then(|n| n.parse::<usize>().ok())
+                        .unwrap_or(0)
                 } else {
                     1
                 };
@@ -1245,9 +1272,10 @@ impl EmbeddedGrid {
             (b'X', State::Csi1(_) | State::Csi) => {
                 /* Erase Ps Character(s) (default = 1) (ECH).. */
                 let ps = if let State::Csi1([ref buf]) = state {
-                    unsafe { std::str::from_utf8_unchecked(buf) }
-                        .parse::<usize>()
-                        .unwrap_or(1)
+                    std::str::from_utf8(buf)
+                        .ok()
+                        .and_then(|n| n.parse::<usize>().ok())
+                        .unwrap_or(0)
                 } else {
                     1
                 };
@@ -1316,9 +1344,10 @@ impl EmbeddedGrid {
             }
             (b'A', State::Csi1([buf])) => {
                 // Move cursor up n lines
-                let offset = unsafe { std::str::from_utf8_unchecked(buf) }
-                    .parse::<usize>()
-                    .unwrap();
+                let offset = std::str::from_utf8(buf)
+                    .ok()
+                    .and_then(|n| n.parse::<usize>().ok())
+                    .unwrap_or(0);
                 //log::trace!("cursor up {} times, cursor was: {:?}", offset, cursor);
                 if cursor.1 >= offset {
                     cursor.1 -= offset;
@@ -1330,9 +1359,10 @@ impl EmbeddedGrid {
             }
             (b'B', State::Csi1([buf])) => {
                 // ESC[{buf}B   CSI Cursor Down {buf} Times
-                let offset = unsafe { std::str::from_utf8_unchecked(buf) }
-                    .parse::<usize>()
-                    .unwrap();
+                let offset = std::str::from_utf8(buf)
+                    .ok()
+                    .and_then(|n| n.parse::<usize>().ok())
+                    .unwrap_or(0);
                 //log::trace!("cursor down {} times, cursor was: {:?}", offset, cursor);
                 if cursor.1 == scroll_region.bottom {
                     /* scroll down */
@@ -1362,9 +1392,10 @@ impl EmbeddedGrid {
             }
             (b'D', State::Csi1([buf])) => {
                 // ESC[{buf}D   CSI Cursor Backward {buf} Times
-                let offset = unsafe { std::str::from_utf8_unchecked(buf) }
-                    .parse::<usize>()
-                    .unwrap();
+                let offset = std::str::from_utf8(buf)
+                    .ok()
+                    .and_then(|n| n.parse::<usize>().ok())
+                    .unwrap_or(0);
                 if cursor.0 >= offset {
                     cursor.0 -= offset;
                 }
@@ -1377,9 +1408,10 @@ impl EmbeddedGrid {
             }
             (b'E', State::Csi1([buf])) => {
                 // ESC[{buf}E   CSI Cursor Next Line {buf} Times
-                let offset = unsafe { std::str::from_utf8_unchecked(buf) }
-                    .parse::<usize>()
-                    .unwrap();
+                let offset = std::str::from_utf8(buf)
+                    .ok()
+                    .and_then(|n| n.parse::<usize>().ok())
+                    .unwrap_or(0);
                 //log::trace!(
                 //    "cursor next line {} times, cursor was: {:?}",
                 //    offset, cursor
@@ -1398,9 +1430,10 @@ impl EmbeddedGrid {
             }
             (b'F', State::Csi1([buf])) => {
                 // ESC[{buf}F   CSI Cursor Previous Line {buf} Times
-                let offset = unsafe { std::str::from_utf8_unchecked(buf) }
-                    .parse::<usize>()
-                    .unwrap();
+                let offset = std::str::from_utf8(buf)
+                    .ok()
+                    .and_then(|n| n.parse::<usize>().ok())
+                    .unwrap_or(0);
                 //log::trace!(
                 //    "cursor previous line {} times, cursor was: {:?}",
                 //    offset, cursor
@@ -1415,32 +1448,27 @@ impl EmbeddedGrid {
             (b'G', State::Csi1(_)) | (b'G', State::Csi) => {
                 // ESC[{buf}G   Cursor Character Absolute  [column={buf}] (default = [row,1])
                 let new_col = if let State::Csi1([buf]) = state {
-                    unsafe { std::str::from_utf8_unchecked(buf) }
-                        .parse::<usize>()
-                        .unwrap()
+                    std::str::from_utf8(buf)
+                        .ok()
+                        .and_then(|n| n.parse::<usize>().ok())
                 } else {
-                    1
+                    Some(1)
                 };
-                //log::trace!("cursor absolute {}, cursor was: {:?}", new_col, cursor);
-                if new_col < terminal_size.0 {
-                    cursor.0 = new_col.saturating_sub(1);
-                } else {
-                    //log::trace!(
-                    //    "error: new_cal = {} > terminal.size.0 =
-                    // {}\nterminal_size = {:?}",
-                    //    new_col, terminal_size.0, terminal_size
-                    //);
+                if let Some(new_col) = new_col {
+                    if new_col < terminal_size.0 {
+                        cursor.0 = new_col.saturating_sub(1);
+                    }
                 }
                 *wrap_next = false;
                 set_dirty_cell!();
-                //log::trace!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
             (b'C', State::Csi1([buf])) => {
                 // ESC[{buf}C   CSI Cursor Forward {buf} Times
-                let offset = unsafe { std::str::from_utf8_unchecked(buf) }
-                    .parse::<usize>()
-                    .unwrap();
+                let offset = std::str::from_utf8(buf)
+                    .ok()
+                    .and_then(|n| n.parse::<usize>().ok())
+                    .unwrap_or(0);
                 //log::trace!("cursor forward {} times, cursor was: {:?}", offset, cursor);
                 if cursor.0 + offset < terminal_size.0 {
                     cursor.0 += offset;
@@ -1452,48 +1480,44 @@ impl EmbeddedGrid {
             (b'P', State::Csi1(_)) | (b'P', State::Csi) => {
                 // ESC[{buf}P   CSI Delete {buf} characters, default = 1
                 let offset = if let State::Csi1([buf]) = state {
-                    unsafe { std::str::from_utf8_unchecked(buf) }
-                        .parse::<usize>()
-                        .unwrap()
+                    std::str::from_utf8(buf)
+                        .ok()
+                        .and_then(|n| n.parse::<usize>().ok())
                 } else {
-                    1
+                    Some(1)
                 };
 
-                for i in 0..(terminal_size.0 - cursor.0 - offset) {
-                    screen.grid_mut()[(cursor.0 + i, cursor.1)] =
-                        screen.grid()[(cursor.0 + i + offset, cursor.1)];
-                    screen
-                        .grid_mut()
-                        .dirty_bitmap_mut()
-                        .set(cursor.0 + i, cursor.1);
+                if let Some(offset) = offset {
+                    for i in 0..(terminal_size.0 - cursor.0 - offset) {
+                        screen.grid_mut()[(cursor.0 + i, cursor.1)] =
+                            screen.grid()[(cursor.0 + i + offset, cursor.1)];
+                        screen
+                            .grid_mut()
+                            .dirty_bitmap_mut()
+                            .set(cursor.0 + i, cursor.1);
+                    }
+                    for x in (terminal_size.0 - offset)..terminal_size.0 {
+                        screen.grid_mut()[(x, cursor.1)].set_ch(' ');
+                        screen.grid_mut().dirty_bitmap_mut().set(x, cursor.1);
+                    }
                 }
-                for x in (terminal_size.0 - offset)..terminal_size.0 {
-                    screen.grid_mut()[(x, cursor.1)].set_ch(' ');
-                    screen.grid_mut().dirty_bitmap_mut().set(x, cursor.1);
-                }
-                //log::trace!(
-                //    "Delete {} Character(s) with cursor at {:?}  ",
-                //    offset, cursor
-                //);
                 *dirty = true;
                 *state = State::Normal;
             }
             (b'd', State::Csi1(_)) | (b'd', State::Csi) => {
                 /* CSI Pm d Line Position Absolute [row] (default = [1,column]) (VPA). */
                 let row = if let State::Csi1([buf]) = state {
-                    unsafe { std::str::from_utf8_unchecked(buf) }
-                        .parse::<usize>()
-                        .unwrap()
+                    std::str::from_utf8(buf)
+                        .ok()
+                        .and_then(|n| n.parse::<usize>().ok())
                 } else {
-                    1
+                    Some(1)
                 };
-                //log::trace!(
-                //    "Line position absolute row {} with cursor at {:?}",
-                //    row, cursor
-                //);
-                cursor.1 = row.saturating_sub(1);
-                if scroll_region.top + cursor.1 >= terminal_size.1 {
-                    cursor.1 = terminal_size.1.saturating_sub(1);
+                if let Some(row) = row {
+                    cursor.1 = row.saturating_sub(1);
+                    if scroll_region.top + cursor.1 >= terminal_size.1 {
+                        cursor.1 = terminal_size.1.saturating_sub(1);
+                    }
                 }
                 *wrap_next = false;
                 set_dirty_cell!();
@@ -1575,18 +1599,7 @@ impl EmbeddedGrid {
             }
             (b'H', State::Csi) => {
                 //Cursor Position [row;column] (default = [1,1]) (CUP).
-                let (orig_x, mut orig_y) = if let State::Csi2([ref y, ref x]) = state {
-                    (
-                        unsafe { std::str::from_utf8_unchecked(x) }
-                            .parse::<usize>()
-                            .unwrap_or(1),
-                        unsafe { std::str::from_utf8_unchecked(y) }
-                            .parse::<usize>()
-                            .unwrap_or(1),
-                    )
-                } else {
-                    (1, 1)
-                };
+                let (orig_x, mut orig_y) = (1, 1);
 
                 let (min_y, max_y) = if *origin_mode {
                     //log::trace!(*origin_mode);
@@ -1616,52 +1629,55 @@ impl EmbeddedGrid {
             }
             (b'H', State::Csi1([ref y])) => {
                 //Cursor Position [row;1] (default = [1,1]) (CUP).
-                let (orig_x, mut orig_y) = (
-                    0,
-                    unsafe { std::str::from_utf8_unchecked(y) }
-                        .parse::<usize>()
-                        .unwrap_or(1)
-                        .saturating_sub(1),
-                );
+                let orig = std::str::from_utf8(y)
+                    .ok()
+                    .and_then(|n| n.parse::<usize>().ok())
+                    .map(|y| (0, y.saturating_sub(1)));
 
-                let (min_y, max_y) = if *origin_mode {
-                    orig_y += scroll_region.top;
-                    (scroll_region.top, scroll_region.bottom)
-                } else {
-                    (0, terminal_size.1.saturating_sub(1))
-                };
+                if let Some((orig_x, mut orig_y)) = orig {
+                    let (min_y, max_y) = if *origin_mode {
+                        orig_y += scroll_region.top;
+                        (scroll_region.top, scroll_region.bottom)
+                    } else {
+                        (0, terminal_size.1.saturating_sub(1))
+                    };
 
-                set_dirty_cell!();
-                cursor.0 = std::cmp::min(orig_x, terminal_size.0.saturating_sub(1));
-                cursor.1 = std::cmp::max(min_y, std::cmp::min(max_y, orig_y));
-                set_dirty_cell!();
+                    set_dirty_cell!();
+                    cursor.0 = std::cmp::min(orig_x, terminal_size.0.saturating_sub(1));
+                    cursor.1 = std::cmp::max(min_y, std::cmp::min(max_y, orig_y));
+                    set_dirty_cell!();
+                }
                 *wrap_next = false;
                 *state = State::Normal;
             }
             (b'H', State::Csi2([ref y, ref x])) => {
                 //Cursor Position [row;column] (default = [1,1]) (CUP).
-                let (orig_x, mut orig_y) = (
-                    unsafe { std::str::from_utf8_unchecked(x) }
-                        .parse::<usize>()
-                        .unwrap_or(1)
-                        .saturating_sub(1),
-                    unsafe { std::str::from_utf8_unchecked(y) }
-                        .parse::<usize>()
-                        .unwrap_or(1)
-                        .saturating_sub(1),
-                );
+                let orig = std::str::from_utf8(x)
+                    .ok()
+                    .and_then(|n| n.parse::<usize>().ok())
+                    .and_then(|x| {
+                        Some((
+                            x.saturating_sub(1),
+                            std::str::from_utf8(y)
+                                .ok()
+                                .and_then(|n| n.parse::<usize>().ok())?
+                                .saturating_sub(1),
+                        ))
+                    });
 
-                let (min_y, max_y) = if *origin_mode {
-                    orig_y += scroll_region.top;
-                    (scroll_region.top, scroll_region.bottom)
-                } else {
-                    (0, terminal_size.1.saturating_sub(1))
-                };
+                if let Some((orig_x, mut orig_y)) = orig {
+                    let (min_y, max_y) = if *origin_mode {
+                        orig_y += scroll_region.top;
+                        (scroll_region.top, scroll_region.bottom)
+                    } else {
+                        (0, terminal_size.1.saturating_sub(1))
+                    };
 
-                set_dirty_cell!();
-                cursor.0 = std::cmp::min(orig_x, terminal_size.0.saturating_sub(1));
-                cursor.1 = std::cmp::max(min_y, std::cmp::min(max_y, orig_y));
-                set_dirty_cell!();
+                    set_dirty_cell!();
+                    cursor.0 = std::cmp::min(orig_x, terminal_size.0.saturating_sub(1));
+                    cursor.1 = std::cmp::max(min_y, std::cmp::min(max_y, orig_y));
+                    set_dirty_cell!();
+                }
                 *wrap_next = false;
 
                 //log::trace!("{}", EscCode::from((&(*state), byte)),);
@@ -1679,26 +1695,29 @@ impl EmbeddedGrid {
             (b'r', State::Csi2(_)) | (b'r', State::Csi) => {
                 /* CSI Ps ; Ps r Set Scrolling Region [top;bottom] (default = full size of
                  * window) (DECSTBM). */
-                let (top, bottom) = if let State::Csi2([ref top, ref bottom]) = state {
-                    (
-                        unsafe { std::str::from_utf8_unchecked(top) }
-                            .parse::<usize>()
-                            .unwrap_or(1),
-                        unsafe { std::str::from_utf8_unchecked(bottom) }
-                            .parse::<usize>()
-                            .unwrap_or(1),
-                    )
+                let region = if let State::Csi2([ref top, ref bottom]) = state {
+                    std::str::from_utf8(top)
+                        .ok()
+                        .and_then(|n| n.parse::<usize>().ok())
+                        .and_then(|top| {
+                            Some((
+                                top,
+                                std::str::from_utf8(bottom).ok()?.parse::<usize>().ok()?,
+                            ))
+                        })
                 } else {
-                    (1, terminal_size.1)
+                    Some((1, terminal_size.1))
                 };
 
-                if bottom > top {
-                    scroll_region.top = top - 1;
-                    scroll_region.bottom = bottom - 1;
-                    *cursor = (0, 0);
-                    *wrap_next = false;
+                if let Some((top, bottom)) = region {
+                    if bottom > top {
+                        scroll_region.top = top - 1;
+                        scroll_region.bottom = bottom - 1;
+                        *cursor = (0, 0);
+                        *wrap_next = false;
+                    }
+                    set_dirty_cell!();
                 }
-                set_dirty_cell!();
                 //log::trace!("set scrolling region to {:?}", scroll_region);
                 *state = State::Normal;
             }
@@ -1715,8 +1734,9 @@ impl EmbeddedGrid {
                 if buf1.as_ref() == b"38" && buf2.as_ref() == b"5" =>
             {
                 /* Set character attributes | foreground color */
-                *fg_color = if let Ok(byte) =
-                    unsafe { std::str::from_utf8_unchecked(buf3) }.parse::<u8>()
+                *fg_color = if let Some(byte) = std::str::from_utf8(buf3)
+                    .ok()
+                    .and_then(|n| n.parse::<u8>().ok())
                 {
                     //log::trace!("parsed buf as {}", byte);
                     Color::Byte(byte)
@@ -1731,8 +1751,9 @@ impl EmbeddedGrid {
                 if buf1.as_ref() == b"48" && buf2.as_ref() == b"5" =>
             {
                 /* Set character attributes | background color */
-                *bg_color = if let Ok(byte) =
-                    unsafe { std::str::from_utf8_unchecked(buf3) }.parse::<u8>()
+                *bg_color = if let Some(byte) = std::str::from_utf8(buf3)
+                    .ok()
+                    .and_then(|n| n.parse::<u8>().ok())
                 {
                     //log::trace!("parsed buf as {}", byte);
                     Color::Byte(byte)
@@ -1743,20 +1764,21 @@ impl EmbeddedGrid {
                 set_dirty_cell!();
                 *state = State::Normal;
             }
-            (b'm', State::Csi3([ref buf1, ref buf2, ref _buf3]))
+            (b'm', State::Csi3([ref buf1, ref buf2, ref buf3]))
                 if buf1.as_ref() == b"58" && buf2.as_ref() == b"5" =>
             {
-                /* Set underline color */
-                //*fg_color = if let Ok(byte) =
-                //    unsafe { std::str::from_utf8_unchecked(buf3) }.parse::<u8>()
-                //{
-                //    //log::trace!("parsed buf as {}", byte);
-                //    Color::Byte(byte)
-                //} else {
-                //    Color::Default
-                //};
-                //screen.grid_mut()[cursor_val!()].set_fg(*fg_color);
-                //set_dirty_cell!();
+                // Set underline color
+                *prev_underline_color = Some(screen.grid_mut()[cursor_val!()].underline());
+                *underline_color = if let Some(byte) = std::str::from_utf8(buf3)
+                    .ok()
+                    .and_then(|n| n.parse::<u8>().ok())
+                {
+                    Color::Byte(byte)
+                } else {
+                    Color::Default
+                };
+                screen.grid_mut()[cursor_val!()].set_underline(*underline_color);
+                set_dirty_cell!();
                 *state = State::Normal;
             }
             (c, State::Csi3([_, _, ref mut buf])) if c.is_ascii_digit() => {
@@ -1819,14 +1841,7 @@ impl EmbeddedGrid {
                 ),
             ) if buf1.as_ref() == b"38" && buf2.as_ref() == b"2" => {
                 /* Set true foreground color */
-                *fg_color = match (
-                    unsafe { std::str::from_utf8_unchecked(r_buf) }.parse::<u8>(),
-                    unsafe { std::str::from_utf8_unchecked(g_buf) }.parse::<u8>(),
-                    unsafe { std::str::from_utf8_unchecked(b_buf) }.parse::<u8>(),
-                ) {
-                    (Ok(r), Ok(g), Ok(b)) => Color::Rgb(RgbColor { r, g, b }),
-                    _ => Color::Default,
-                };
+                *fg_color = parse_rgb!(r_buf, g_buf, b_buf).unwrap_or(Color::Default);
                 screen.grid_mut()[cursor_val!()].set_fg(*fg_color);
                 set_dirty_cell!();
                 *state = State::Normal;
@@ -1838,14 +1853,7 @@ impl EmbeddedGrid {
                 ),
             ) if buf1.as_ref() == b"48" && buf2.as_ref() == b"2" => {
                 /* Set true background color */
-                *bg_color = match (
-                    unsafe { std::str::from_utf8_unchecked(r_buf) }.parse::<u8>(),
-                    unsafe { std::str::from_utf8_unchecked(g_buf) }.parse::<u8>(),
-                    unsafe { std::str::from_utf8_unchecked(b_buf) }.parse::<u8>(),
-                ) {
-                    (Ok(r), Ok(g), Ok(b)) => Color::Rgb(RgbColor { r, g, b }),
-                    _ => Color::Default,
-                };
+                *bg_color = parse_rgb!(r_buf, g_buf, b_buf).unwrap_or(Color::Default);
                 screen.grid_mut()[cursor_val!()].set_bg(*bg_color);
                 set_dirty_cell!();
                 *state = State::Normal;
@@ -1858,14 +1866,7 @@ impl EmbeddedGrid {
             ) if buf1.as_ref() == b"58" && buf2.as_ref() == b"2" => {
                 /* Set underline color */
                 *prev_underline_color = Some(screen.grid_mut()[cursor_val!()].underline());
-                *underline_color = match (
-                    unsafe { std::str::from_utf8_unchecked(r_buf) }.parse::<u8>(),
-                    unsafe { std::str::from_utf8_unchecked(g_buf) }.parse::<u8>(),
-                    unsafe { std::str::from_utf8_unchecked(b_buf) }.parse::<u8>(),
-                ) {
-                    (Ok(r), Ok(g), Ok(b)) => Color::Rgb(RgbColor { r, g, b }),
-                    _ => Color::Default,
-                };
+                *underline_color = parse_rgb!(r_buf, g_buf, b_buf).unwrap_or(Color::Default);
                 screen.grid_mut()[cursor_val!()].set_underline(*underline_color);
                 set_dirty_cell!();
                 *state = State::Normal;
@@ -1877,14 +1878,7 @@ impl EmbeddedGrid {
                 ),
             ) if buf1.as_ref() == b"38" && buf2.as_ref() == b"2" => {
                 /* Set true foreground color */
-                *fg_color = match (
-                    unsafe { std::str::from_utf8_unchecked(r_buf) }.parse::<u8>(),
-                    unsafe { std::str::from_utf8_unchecked(g_buf) }.parse::<u8>(),
-                    unsafe { std::str::from_utf8_unchecked(b_buf) }.parse::<u8>(),
-                ) {
-                    (Ok(r), Ok(g), Ok(b)) => Color::Rgb(RgbColor { r, g, b }),
-                    _ => Color::Default,
-                };
+                *fg_color = parse_rgb!(r_buf, g_buf, b_buf).unwrap_or(Color::Default);
                 screen.grid_mut()[cursor_val!()].set_fg(*fg_color);
                 set_dirty_cell!();
                 *state = State::Normal;
@@ -1896,14 +1890,7 @@ impl EmbeddedGrid {
                 ),
             ) if buf1.as_ref() == b"48" && buf2.as_ref() == b"2" => {
                 /* Set true background color */
-                *bg_color = match (
-                    unsafe { std::str::from_utf8_unchecked(r_buf) }.parse::<u8>(),
-                    unsafe { std::str::from_utf8_unchecked(g_buf) }.parse::<u8>(),
-                    unsafe { std::str::from_utf8_unchecked(b_buf) }.parse::<u8>(),
-                ) {
-                    (Ok(r), Ok(g), Ok(b)) => Color::Rgb(RgbColor { r, g, b }),
-                    _ => Color::Default,
-                };
+                *bg_color = parse_rgb!(r_buf, g_buf, b_buf).unwrap_or(Color::Default);
                 screen.grid_mut()[cursor_val!()].set_bg(*bg_color);
                 set_dirty_cell!();
                 *state = State::Normal;
@@ -1916,14 +1903,7 @@ impl EmbeddedGrid {
             ) if buf1.as_ref() == b"58" && buf2.as_ref() == b"2" => {
                 /* Set underline color */
                 *prev_underline_color = Some(screen.grid_mut()[cursor_val!()].underline());
-                *underline_color = match (
-                    unsafe { std::str::from_utf8_unchecked(r_buf) }.parse::<u8>(),
-                    unsafe { std::str::from_utf8_unchecked(g_buf) }.parse::<u8>(),
-                    unsafe { std::str::from_utf8_unchecked(b_buf) }.parse::<u8>(),
-                ) {
-                    (Ok(r), Ok(g), Ok(b)) => Color::Rgb(RgbColor { r, g, b }),
-                    _ => Color::Default,
-                };
+                *underline_color = parse_rgb!(r_buf, g_buf, b_buf).unwrap_or(Color::Default);
                 screen.grid_mut()[cursor_val!()].set_underline(*underline_color);
                 set_dirty_cell!();
                 *state = State::Normal;
