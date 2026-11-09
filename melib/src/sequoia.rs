@@ -467,6 +467,28 @@ impl TryFrom<sqz::verify::output::MessageStructure> for SignaturesMetadata {
     fn try_from(
         ms: sqz::verify::output::MessageStructure,
     ) -> std::result::Result<Self, Self::Error> {
+        use sqz::verify::output::{signature_status, SignatureStatus};
+
+        fn process_sig<F: Fn(String) -> Signature>(
+            sig: openpgp::packet::Signature,
+            and_then_fn: F,
+        ) -> Signature {
+            if let Some(keyid) = sig.issuer_fingerprints().next().map(|fpr| fpr.to_string()) {
+                and_then_fn(keyid)
+            } else {
+                Signature {
+                    cert: Recipient {
+                        keyid: String::new(),
+                        status: Err(Error::new("BAD signature")
+                            .set_details("Invalid signature: no issuer key fingerprint included")),
+                    },
+                    cleartext: false,
+                    validity_reason: None,
+                    summary: Summary::RED,
+                    validity: Validity::Unknown,
+                }
+            }
+        }
         let mut signatures = vec![];
         for layer in ms.layers {
             let sqz::verify::output::MessageLayer::Signature(layer) = layer else {
@@ -475,11 +497,12 @@ impl TryFrom<sqz::verify::output::MessageStructure> for SignaturesMetadata {
             let sigs = layer.sigs;
             for sig in sigs {
                 signatures.push(match sig.status {
-                    sqz::verify::output::SignatureStatus::Verified(
-                        sqz::verify::output::signature_status::Verified {
-                            cert: _, key, wot, ..
-                        },
-                    ) => Signature {
+                    SignatureStatus::Verified(signature_status::Verified {
+                        cert: _,
+                        key,
+                        wot,
+                        ..
+                    }) => Signature {
                         cert: Recipient {
                             keyid: key.to_string(),
                             status: Ok(()),
@@ -495,37 +518,104 @@ impl TryFrom<sqz::verify::output::MessageStructure> for SignaturesMetadata {
                             })
                             .unwrap_or(Validity::Unknown),
                     },
-                    sqz::verify::output::SignatureStatus::MissingKey(
-                        sqz::verify::output::signature_status::MissingKey { sig, .. },
-                    ) => {
-                        if let Some(keyid) =
-                            sig.issuer_fingerprints().next().map(|fpr| fpr.to_string())
-                        {
-                            Signature {
-                                cert: Recipient {
-                                    status: Err(Error::new(format!("BAD signature from {keyid}"))
-                                        .set_details("No public key")
-                                        .set_kind(ErrorKind::None)),
-                                    keyid,
-                                },
-                                cleartext: false,
-                                validity_reason: None,
-                                summary: Summary::RED | Summary::KEY_MISSING,
-                                validity: Validity::Unknown,
-                            }
-                        } else {
-                            Signature {
-                                cert: Recipient {
-                                    keyid: String::new(),
-                                    status: Err(Error::new("BAD signature")
-                                        .set_details("Invalid signature")),
-                                },
-                                cleartext: false,
-                                validity_reason: None,
-                                summary: Summary::RED,
-                                validity: Validity::Unknown,
-                            }
-                        }
+                    SignatureStatus::MissingKey(signature_status::MissingKey { sig, .. }) => {
+                        process_sig(sig, |keyid| Signature {
+                            cert: Recipient {
+                                status: Err(Error::new(format!("BAD signature from {keyid}"))
+                                    .set_details("No public key")
+                                    .set_kind(ErrorKind::None)),
+                                keyid,
+                            },
+                            cleartext: false,
+                            validity_reason: None,
+                            summary: Summary::RED | Summary::KEY_MISSING,
+                            validity: Validity::Unknown,
+                        })
+                    }
+                    SignatureStatus::GoodChecksum(signature_status::GoodChecksum {
+                        sig, ..
+                    }) => process_sig(sig, |keyid| Signature {
+                        cert: Recipient {
+                            status: Err(Error::new(format!("BAD signature from {keyid}"))
+                                .set_details("Key not trusted")
+                                .set_kind(ErrorKind::None)),
+                            keyid,
+                        },
+                        cleartext: false,
+                        validity_reason: None,
+                        summary: Summary::GREEN,
+                        validity: Validity::Unknown,
+                    }),
+                    SignatureStatus::UnboundKey(signature_status::UnboundKey {
+                        sig,
+                        error,
+                        ..
+                    }) => process_sig(sig, |keyid| Signature {
+                        cert: Recipient {
+                            status: Err(Error::new(format!("BAD signature from {keyid}"))
+                                .set_details(format!("Unbound key: {error})"))
+                                .set_kind(ErrorKind::None)),
+                            keyid,
+                        },
+                        cleartext: false,
+                        validity_reason: None,
+                        summary: Summary::RED,
+                        validity: Validity::Unknown,
+                    }),
+                    SignatureStatus::BadKey(signature_status::BadKey { sig, error, .. }) => {
+                        process_sig(sig, |keyid| Signature {
+                            cert: Recipient {
+                                status: Err(Error::new(format!("BAD signature from {keyid}"))
+                                    .set_details(format!("Bad key: {error}"))
+                                    .set_kind(ErrorKind::None)),
+                                keyid,
+                            },
+                            cleartext: false,
+                            validity_reason: None,
+                            summary: Summary::RED,
+                            validity: Validity::Unknown,
+                        })
+                    }
+                    SignatureStatus::BadSignature(signature_status::BadSignature {
+                        sig,
+                        error,
+                        ..
+                    }) => process_sig(sig, |keyid| Signature {
+                        cert: Recipient {
+                            status: Err(Error::new(format!("BAD signature from {keyid}"))
+                                .set_details(format!("Bad signature: {error}"))
+                                .set_kind(ErrorKind::None)),
+                            keyid,
+                        },
+                        cleartext: false,
+                        validity_reason: None,
+                        summary: Summary::RED,
+                        validity: Validity::Unknown,
+                    }),
+                    SignatureStatus::MalformedSignature(signature_status::MalformedSignature {
+                        sig,
+                        error,
+                        ..
+                    }) => process_sig(sig, |keyid| Signature {
+                        cert: Recipient {
+                            status: Err(Error::new(format!("BAD signature from {keyid}"))
+                                .set_details(format!("Malformed signature: {error}"))
+                                .set_kind(ErrorKind::None)),
+                            keyid,
+                        },
+                        cleartext: false,
+                        validity_reason: None,
+                        summary: Summary::RED,
+                        validity: Validity::Unknown,
+                    }),
+                    SignatureStatus::UnknownSignature(signature_status::UnknownSignature {
+                        sig,
+                        ..
+                    }) => {
+                        return Err(crate::error::Error::new(format!("{}", sig.error())));
+                    }
+                    SignatureStatus::Unknown(signature_status::Unknown { error, .. }) => {
+                        return Err(crate::error::Error::new(format!("{error}")));
                     }
                     other => return Err(crate::error::Error::new(format!("{other:?}"))),
                 });
