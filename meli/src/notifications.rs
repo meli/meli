@@ -355,6 +355,8 @@ pub struct DisplayMessageBox {
     pub pos: usize,
     /// The last [`Area`] this widget used to be drawn.
     cached_area: Area,
+    truncated: bool,
+    expanded: bool,
     /// Identifier of component.
     id: ComponentId,
 }
@@ -369,6 +371,8 @@ impl DisplayMessageBox {
             active: false,
             dirty: false,
             initialised: false,
+            truncated: false,
+            expanded: false,
             cached_area: sc.area().into_empty(),
             id: ComponentId::default(),
         }
@@ -392,6 +396,8 @@ impl DisplayMessageBox {
         self.active = false;
         self.set_dirty(true);
         self.initialised = false;
+        self.truncated = false;
+        self.expanded = false;
         self.expiration_start = None;
     }
 
@@ -421,6 +427,8 @@ impl DisplayMessageBox {
         if context.settings.notifications.enable.ui_enabled() {
             self.active = true;
             self.initialised = false;
+            self.truncated = false;
+            self.expanded = false;
             self.set_dirty(true);
             self.expiration_start = None;
         }
@@ -432,6 +440,8 @@ impl DisplayMessageBox {
         self.expiration_start = Some(datetime::now());
         self.active = true;
         self.initialised = false;
+        self.truncated = false;
+        self.expanded = false;
         self.set_dirty(true);
         self.pos = self.pos.saturating_sub(1);
     }
@@ -442,6 +452,8 @@ impl DisplayMessageBox {
         self.expiration_start = Some(datetime::now());
         self.active = true;
         self.initialised = false;
+        self.truncated = false;
+        self.expanded = false;
         self.set_dirty(true);
         self.pos = self.len().saturating_sub(1).min(self.pos + 1);
     }
@@ -464,7 +476,11 @@ impl Component for DisplayMessageBox {
             let noto_colors = crate::conf::theme_value(context, "status.notification");
             use crate::melib::text::{Reflow, TextProcessing as _};
 
-            let box_width = area.width() / 3;
+            let box_width = if self.expanded {
+                area.width()
+            } else {
+                area.width() / 3
+            };
             if box_width < 10 {
                 self.set_dirty(false);
                 return;
@@ -473,7 +489,7 @@ impl Component for DisplayMessageBox {
             let msg_lines = msg.split_lines_reflow(Reflow::All, Some(box_width));
             let width = msg_lines
                 .iter()
-                .map(|line| line.grapheme_len() + 4)
+                .map(|line| (line.grapheme_len() + 4).min(box_width))
                 .max()
                 .unwrap_or(0);
 
@@ -482,11 +498,13 @@ impl Component for DisplayMessageBox {
                 return;
             }
 
-            self.cached_area = area.place_inside(
-                (width, area.height().min(msg_lines.len() + 4)),
-                false,
-                false,
-            );
+            let height = if self.expanded {
+                area.height().saturating_sub(2)
+            } else {
+                area.height().min(msg_lines.len() + 4)
+            };
+
+            self.cached_area = area.place_inside((width, height), false, false);
             for row in grid.bounds_iter(self.cached_area) {
                 for c in row {
                     grid[c]
@@ -507,6 +525,19 @@ impl Component for DisplayMessageBox {
                     Some(0),
                 );
                 lines_no += 1 + y;
+                if box_displ_area.skip_rows(lines_no).is_empty() {
+                    lines_no = box_displ_area.height().saturating_sub(1);
+                    grid.clear_area(box_displ_area.skip_rows(lines_no), noto_colors);
+                    grid.write_string(
+                        "[..]",
+                        &noto_colors,
+                        box_displ_area.skip_rows(lines_no),
+                        None,
+                        Some(0),
+                    );
+                    self.truncated = true;
+                    break;
+                }
             }
 
             let mut info_message = String::new();
@@ -524,6 +555,15 @@ impl Component for DisplayMessageBox {
                     "{info_message}Next: {}",
                     context.settings.shortcuts.general.info_message_next
                 )
+            }
+            if self.truncated {
+                if !info_message.is_empty() {
+                    info_message.push(' ');
+                }
+                info_message = format!(
+                    "{info_message}Expand: {}",
+                    context.settings.shortcuts.general.open_entry
+                );
             }
             grid.write_string(
                 &info_message,
@@ -572,6 +612,15 @@ impl Component for DisplayMessageBox {
             {
                 self.show_next();
                 return true;
+            }
+            UIEvent::Input(ref key) if *key == context.settings.shortcuts.general.open_entry => {
+                if self.active && self.truncated {
+                    self.initialised = false;
+                    self.expanded = !self.expanded;
+                    self.set_dirty(true);
+                    self.expiration_start = Some(datetime::now());
+                    return true;
+                }
             }
             _ => {}
         }
