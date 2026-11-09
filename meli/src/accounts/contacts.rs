@@ -394,21 +394,25 @@ impl Account {
                         self.main_loop_handler
                             .job_executor
                             .set_job_success(job_id, false);
-                        self.main_loop_handler
-                            .send(ThreadEvent::UIEvent(UIEvent::Notification {
-                                title: Some(
-                                    format!(
-                                        "{account}: {name} {format} contact initialization failed",
-                                        account = self.name,
-                                        name = backend_id.name,
-                                        format = backend_id.format,
-                                    )
-                                    .into(),
-                                ),
-                                source: None,
-                                body: err.to_string().into(),
-                                kind: Some(NotificationType::Error(err.kind)),
-                            }));
+                        if !matches!(err.kind, ErrorKind::NotSupported | ErrorKind::NotFound) {
+                            self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                UIEvent::Notification {
+                                    title: Some(
+                                        format!(
+                                            "{account}: {name} {format} contact initialization \
+                                             failed",
+                                            account = self.name,
+                                            name = backend_id.name,
+                                            format = backend_id.format,
+                                        )
+                                        .into(),
+                                    ),
+                                    source: None,
+                                    body: err.to_string().into(),
+                                    kind: Some(NotificationType::Error(err.kind)),
+                                },
+                            ));
+                        }
                     }
                     Ok(Some(Ok(backend))) => {
                         self.add_contact_backend(backend_id, backend);
