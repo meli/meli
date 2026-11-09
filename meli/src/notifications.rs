@@ -498,47 +498,55 @@ impl Component for DisplayMessageBox {
             }
             let box_displ_area = create_box(grid, self.cached_area);
             let mut lines_no = 0;
-            for (idx, line) in msg_lines
-                .into_iter()
-                .chain(Some(String::new()))
-                .chain(Some(datetime::timestamp_to_string(*timestamp, None, false)))
-                .enumerate()
-            {
+            for line in msg_lines {
                 let (_, y) = grid.write_string(
                     &line,
                     &noto_colors,
-                    box_displ_area.skip_rows(idx),
+                    box_displ_area.skip_rows(lines_no),
                     None,
                     Some(0),
                 );
                 lines_no += 1 + y;
             }
 
-            if self.messages.len() > 1 {
-                grid.write_string(
-                    &if self.pos == 0 {
-                        format!(
-                            "Next: {}",
-                            context.settings.shortcuts.general.info_message_next
-                        )
-                    } else if self.pos + 1 == self.len() {
-                        format!(
-                            "Prev: {}",
-                            context.settings.shortcuts.general.info_message_previous
-                        )
-                    } else {
-                        format!(
-                            "Prev: {} Next: {}",
-                            context.settings.shortcuts.general.info_message_previous,
-                            context.settings.shortcuts.general.info_message_next
-                        )
-                    },
-                    &noto_colors,
-                    box_displ_area.skip_rows(lines_no),
-                    None,
-                    Some(0),
-                );
+            let mut info_message = String::new();
+            if self.messages.len() > 1 && self.pos + 1 == self.len() {
+                info_message = format!(
+                    "Prev: {}",
+                    context.settings.shortcuts.general.info_message_previous
+                )
             }
+            if self.messages.len() > 1 && self.pos != self.len() {
+                if !info_message.is_empty() {
+                    info_message.push(' ');
+                }
+                info_message = format!(
+                    "{info_message}Next: {}",
+                    context.settings.shortcuts.general.info_message_next
+                )
+            }
+            grid.write_string(
+                &info_message,
+                &noto_colors,
+                self.cached_area
+                    .skip_rows(self.cached_area.height().saturating_sub(1))
+                    .skip_cols(2),
+                None,
+                Some(0),
+            );
+            grid.write_string(
+                &datetime::timestamp_to_string(*timestamp, None, false),
+                &noto_colors,
+                self.cached_area
+                    .skip_rows(self.cached_area.height().saturating_sub(1))
+                    .skip_cols(
+                        self.cached_area
+                            .width()
+                            .saturating_sub("Xxx, 00 MMM YYYY HH:MM".len() + 2),
+                    ),
+                None,
+                Some(0),
+            );
             self.initialised = true;
             context.dirty_areas.push_back(self.cached_area);
         } else {
@@ -547,7 +555,26 @@ impl Component for DisplayMessageBox {
         self.set_dirty(false);
     }
 
-    fn process_event(&mut self, _event: &mut UIEvent, _context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        match event {
+            UIEvent::Input(ref key)
+                if *key == context.settings.shortcuts.general.info_message_previous =>
+            {
+                self.show_previous();
+                return true;
+            }
+            UIEvent::Input(Key::Esc) if self.active => {
+                self.deactivate();
+                return true;
+            }
+            UIEvent::Input(ref key)
+                if *key == context.settings.shortcuts.general.info_message_next =>
+            {
+                self.show_next();
+                return true;
+            }
+            _ => {}
+        }
         false
     }
 

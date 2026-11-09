@@ -1412,24 +1412,6 @@ impl State {
                 return;
             }
             UIEvent::Input(ref key)
-                if *key
-                    == self
-                        .context
-                        .settings
-                        .shortcuts
-                        .general
-                        .info_message_previous =>
-            {
-                self.message_box.show_previous();
-                return;
-            }
-            UIEvent::Input(ref key)
-                if *key == self.context.settings.shortcuts.general.info_message_next =>
-            {
-                self.message_box.show_next();
-                return;
-            }
-            UIEvent::Input(ref key)
                 if *key == self.context.settings.shortcuts.general.open_terminal =>
             {
                 return self.exec_command(Action::Terminal(None));
@@ -1550,15 +1532,18 @@ impl State {
             ref mut components,
             ref mut context,
             ref mut overlay,
+            ref mut message_box,
             ..
         } = self;
 
         // inform each component
-        let mut handled = false;
-        for c in overlay.values_mut().map(|o| o as &mut dyn Component) {
-            if c.process_event(&mut event, context) || matches!(event, UIEvent::Input(_)) {
-                handled = true;
-                break;
+        let mut handled = message_box.process_event(&mut event, context);
+        if !handled {
+            for c in overlay.values_mut().map(|o| o as &mut dyn Component) {
+                if c.process_event(&mut event, context) || matches!(event, UIEvent::Input(_)) {
+                    handled = true;
+                    break;
+                }
             }
         }
 
