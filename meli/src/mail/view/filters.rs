@@ -154,7 +154,7 @@ impl std::fmt::Debug for ViewFilterContent {
 }
 
 pub struct ViewFilter {
-    pub filter_invocation: String,
+    pub filter_invocation: Option<String>,
     pub content_type: ContentType,
     pub headers: Vec<(HeaderName, String)>,
     pub notice: Option<Cow<'static, str>>,
@@ -185,7 +185,11 @@ impl std::fmt::Debug for ViewFilter {
 
 impl std::fmt::Display for ViewFilter {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(fmt, "{}", self.filter_invocation.trim_at_boundary(5))
+        if let Some(f) = self.filter_invocation.as_deref() {
+            write!(fmt, "{f}")
+        } else {
+            write!(fmt, "{}", self.content_type)
+        }
     }
 }
 
@@ -322,7 +326,7 @@ impl ViewFilter {
             IsAsync::Blocking,
         );
         let mut retval = Self {
-            filter_invocation: filter_invocation.to_string(),
+            filter_invocation: Some(filter_invocation.to_string()),
             content_type: att.content_type.clone(),
             size: att.size(),
             notice: None,
@@ -375,7 +379,7 @@ impl ViewFilter {
                 let bytes = att.decode(view_settings.charset.into());
                 if let Ok(text) = String::from_utf8(bytes) {
                     return Ok(Self {
-                        filter_invocation: String::new(),
+                        filter_invocation: None,
                         content_type: att.content_type.clone(),
                         size: att.size(),
                         notice: None,
@@ -405,7 +409,7 @@ impl ViewFilter {
         {
             if parts.is_empty() {
                 return Ok(Self {
-                    filter_invocation: String::new(),
+                    filter_invocation: None,
                     content_type: att.content_type.clone(),
                     size: att.size(),
                     notice: None,
@@ -464,7 +468,7 @@ impl ViewFilter {
         } = att.content_type
         {
             return Ok(Self {
-                filter_invocation: String::new(),
+                filter_invocation: None,
                 content_type: att.content_type.clone(),
                 size: att.size(),
                 notice: None,
@@ -499,7 +503,7 @@ impl ViewFilter {
             }
         ) {
             return Ok(Self {
-                filter_invocation: String::new(),
+                filter_invocation: None,
                 content_type: att.content_type.clone(),
                 size: att.size(),
                 notice: None,
@@ -576,7 +580,7 @@ impl ViewFilter {
                         IsAsync::Blocking,
                     );
                     let mut retval = Self {
-                        filter_invocation: "pgp::verify".into(),
+                        filter_invocation: Some("pgp::verify".into()),
                         content_type: att.content_type.clone(),
                         size: att.size(),
                         notice: None,
@@ -641,7 +645,7 @@ impl ViewFilter {
                         IsAsync::Blocking,
                     );
                     let mut retval = Self {
-                        filter_invocation: "pgp::decrypt".into(),
+                        filter_invocation: Some("pgp::decrypt".into()),
                         content_type: att.content_type.clone(),
                         size: att.size(),
                         notice: None,
@@ -710,7 +714,7 @@ impl ViewFilter {
                     IsAsync::Blocking,
                 );
                 let mut retval = Self {
-                    filter_invocation: "pgp::decrypt".into(),
+                    filter_invocation: Some("pgp::decrypt".into()),
                     content_type: att.content_type.clone(),
                     size: att.size(),
                     notice: None,
@@ -756,7 +760,7 @@ impl ViewFilter {
                 ))
             }) {
                 return Ok(Self {
-                    filter_invocation: String::new(),
+                    filter_invocation: None,
                     content_type: att.content_type.clone(),
                     notice: None,
                     size: att.size(),
@@ -776,7 +780,7 @@ impl ViewFilter {
             }
             let filtered = String::from_utf8_lossy(unfiltered.as_slice()).into();
             return Ok(Self {
-                filter_invocation: String::new(),
+                filter_invocation: None,
                 content_type: att.content_type.clone(),
                 size: att.size(),
                 notice: None,
@@ -809,7 +813,7 @@ impl ViewFilter {
             )
         };
         Ok(Self {
-            filter_invocation: String::new(),
+            filter_invocation: None,
             content_type: att.content_type.clone(),
             size: att.size(),
             notice,
@@ -839,7 +843,7 @@ impl ViewFilter {
             cursor
         };
         Self {
-            filter_invocation: String::new(),
+            filter_invocation: None,
             content_type: att.content_type.clone(),
             size: att.size(),
             notice: None,
@@ -975,7 +979,13 @@ impl ViewFilter {
                 self.body_text = ViewFilterContent::Error {
                     inner: Error::new("Job was cancelled.").set_source(Some(Box::new(err))),
                 };
-                self.notice = Some(format!("{} cancelled", self.filter_invocation).into());
+                self.notice = Some(
+                    format!(
+                        "{} cancelled",
+                        self.filter_invocation.as_deref().unwrap_or("task")
+                    )
+                    .into(),
+                );
             }
             Ok(None) => {
                 self.event_handler = None;
@@ -985,7 +995,13 @@ impl ViewFilter {
                         "Unknown error. Maybe some process panicked in the background?",
                     ),
                 };
-                self.notice = Some(format!("{} failed", self.filter_invocation).into());
+                self.notice = Some(
+                    format!(
+                        "{} failed",
+                        self.filter_invocation.as_deref().unwrap_or("task")
+                    )
+                    .into(),
+                );
             }
             Ok(Some(Ok(output))) => {
                 let FilterOutput {
@@ -1012,7 +1028,11 @@ impl ViewFilter {
                     Err(err) => {
                         self.body_text = ViewFilterContent::Error { inner: err };
                         self.notice = Some(
-                            format!("decoding result of {} failed", self.filter_invocation).into(),
+                            format!(
+                                "decoding result of {} failed",
+                                self.filter_invocation.as_deref().unwrap_or("task")
+                            )
+                            .into(),
                         );
                     }
                 }
@@ -1021,7 +1041,13 @@ impl ViewFilter {
                 self.event_handler = None;
                 self.body_text = ViewFilterContent::Error { inner: error };
                 self.unfiltered = bytes;
-                self.notice = Some(format!("{} failed", self.filter_invocation).into());
+                self.notice = Some(
+                    format!(
+                        "{} failed",
+                        self.filter_invocation.as_deref().unwrap_or("task")
+                    )
+                    .into(),
+                );
             }
         }
     }

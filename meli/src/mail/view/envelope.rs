@@ -702,7 +702,7 @@ impl Component for EnvelopeView {
                             text.push_str(&format!(
                                 "[-- #{idx} {content_type} {size} --]{sep}",
                                 size = melib::BytesDisplay(*size),
-                                sep = if notice.is_some() || !filter_invocation.is_empty() {
+                                sep = if notice.is_some() || !filter_invocation.is_none() {
                                     " "
                                 } else {
                                     ""
@@ -715,11 +715,9 @@ impl Component for EnvelopeView {
                                 .as_ref()
                                 .map(|s| s.to_string())
                                 .or_else(|| {
-                                    if filter_invocation.is_empty() {
-                                        None
-                                    } else {
-                                        Some(format!("Text filtered by `{filter_invocation}`"))
-                                    }
+                                    filter_invocation.as_deref().map(|filter_invocation| {
+                                        format!("Text filtered by `{filter_invocation}`")
+                                    })
                                 })
                                 .unwrap_or_default(),
                         );
