@@ -686,8 +686,9 @@ impl State {
     /// On `SIGWINCH` the `State` redraws itself according to the new terminal
     /// size.
     pub fn update_size(&mut self) {
-        self.screen.update_size();
-        self.rcv_event(UIEvent::Resize);
+        if self.screen.update_size() {
+            self.rcv_event(UIEvent::Resize);
+        }
         self.message_box.set_dirty(true);
         self.message_box.initialised = false;
 
@@ -873,7 +874,9 @@ impl State {
 
     /// Draw the entire screen from scratch.
     pub fn render(&mut self) {
-        self.screen.update_size();
+        if self.screen.update_size() {
+            self.rcv_event(UIEvent::Resize);
+        }
         self.context.dirty_areas.push_back(self.screen.area());
 
         self.redraw();
@@ -1527,7 +1530,6 @@ impl State {
                     }
                 }
                 // No owner, so set ourselves dirty.
-                self.screen.update_size();
                 self.render();
                 return;
             }

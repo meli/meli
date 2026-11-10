@@ -377,7 +377,9 @@ impl Screen<Tty> {
 
     /// On `SIGWNICH` the `State` redraws itself according to the new
     /// terminal size.
-    pub fn update_size(&mut self) {
+    ///
+    /// Returns `true` if `generation` was changed
+    pub fn update_size(&mut self) -> bool {
         let termsize = (self.display.terminal_size_fn)().ok();
         let termcols = termsize.map(|(w, _)| w);
         let termrows = termsize.map(|(_, h)| h);
@@ -397,7 +399,7 @@ impl Screen<Tty> {
         if (cols, rows) == (self.grid.cols, self.grid.rows)
             && (cols, rows) == (self.overlay_grid.cols, self.overlay_grid.rows)
         {
-            return;
+            return false;
         }
         if self.grid.resize(cols, rows, None) && self.overlay_grid.resize(cols, rows, None) {
             self.generation = self.generation.next();
@@ -405,9 +407,11 @@ impl Screen<Tty> {
             self.rows = rows;
             self.grid.area = self.area();
             self.overlay_grid.area = self.area();
+            return true;
         } else {
             log::warn!("Terminal size too big: ({} cols, {} rows)", cols, rows);
         }
+        false
     }
 
     /// Switch back to the terminal's main screen (The command line the user
