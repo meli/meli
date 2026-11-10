@@ -803,11 +803,20 @@ impl ViewFilter {
                 Some("Attachment".into())
             };
             (notice, ViewFilterContent::empty())
+        } else if let ContentType::Text { kind, .. } = &att.content_type {
+            (
+                None,
+                ViewFilterContent::Filtered {
+                    inner: att.text(kind.clone()),
+                    metadata: None,
+                },
+            )
         } else {
             (
                 None,
                 ViewFilterContent::Filtered {
-                    inner: att.text(Text::Plain),
+                    inner: String::from_utf8_lossy(&att.decode(view_settings.charset.into()))
+                        .into(),
                     metadata: None,
                 },
             )
