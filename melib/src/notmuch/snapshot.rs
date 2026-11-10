@@ -68,6 +68,7 @@ impl Snapshot {
         self.message_id_index
             .insert(env_hash, message.msg_id_cstr().into());
         let (flags, tags) = TagIterator::new(message).collect_flags_and_tags();
+        env.set_has_attachments(tags.iter().any(|t| t == "attachment"));
         {
             let mut tag_index_lck = self.tag_index.write().unwrap();
             for tag in tags {

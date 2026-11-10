@@ -149,6 +149,7 @@ impl<'m> Message<'m> {
             .insert(env_hash, self.msg_id_cstr().into());
         let mut tag_lock = tag_index.write().unwrap();
         let (flags, tags) = TagIterator::new(&self).collect_flags_and_tags();
+        env.set_has_attachments(tags.iter().any(|t| t == "attachment"));
         for tag in tags {
             let num = TagHash::from_bytes(tag.as_bytes());
             tag_lock.entry(num).or_insert(tag);
