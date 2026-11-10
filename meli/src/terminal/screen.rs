@@ -394,6 +394,11 @@ impl Screen<Tty> {
         }
         let cols = termcols.unwrap_or(72) as usize;
         let rows = termrows.unwrap_or(120) as usize;
+        if (cols, rows) == (self.grid.cols, self.grid.rows)
+            && (cols, rows) == (self.overlay_grid.cols, self.overlay_grid.rows)
+        {
+            return;
+        }
         if self.grid.resize(cols, rows, None) && self.overlay_grid.resize(cols, rows, None) {
             self.generation = self.generation.next();
             self.cols = cols;
