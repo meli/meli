@@ -77,6 +77,7 @@ pub struct Tty {
     restore_fn: Option<Box<dyn FnOnce()>>,
     /// Foreground and Background color.
     color_scheme: Option<(ColorContrast, RgbColor, RgbColor)>,
+    cursor_color: Option<RgbColor>,
     mouse: bool,
     dec_mode_2026: bool,
     draw_horizontal_segment_fn: DrawHorizontalSegmentFn,
@@ -309,6 +310,7 @@ impl Screen<Tty> {
                 restore_fn: None,
                 mouse: false,
                 color_scheme: None,
+                cursor_color: None,
                 dec_mode_2026: false,
                 draw_horizontal_segment_fn: Self::draw_horizontal_segment,
                 #[cfg(unix)]
@@ -574,6 +576,39 @@ impl Screen<Tty> {
         if current_uri.take().is_some() {
             Hyperlink::<str, str, str>::write_end(stdout).unwrap();
         }
+        if grid.cursor.dirty {
+            grid.cursor.dirty = false;
+            write!(
+                stdout,
+                "{}",
+                csi::cursor::Goto::new(grid.cursor.x, grid.cursor.y)
+            )
+            .unwrap();
+            write!(
+                stdout,
+                "{}",
+                if grid.cursor.show {
+                    csi::cursor::Show.as_ref()
+                } else {
+                    csi::cursor::Hide.as_ref()
+                }
+            )
+            .unwrap();
+            write!(stdout, "{}", csi::cursor::style(&grid.cursor.style)).unwrap();
+            write!(
+                stdout,
+                "{}",
+                osc::cursor::ChangeColor(grid.cursor.color.as_ref())
+            )
+            .unwrap();
+        } else if grid.cursor.show {
+            write!(
+                stdout,
+                "{}",
+                csi::cursor::Goto::new(grid.cursor.x, grid.cursor.y)
+            )
+            .unwrap();
+        }
     }
 
     pub fn draw_horizontal_segment_no_color(
@@ -619,12 +654,21 @@ impl Screen<Tty> {
         self.display.color_scheme
     }
 
+    pub const fn set_cursor_color(&mut self, cursor: Option<RgbColor>) {
+        self.display.cursor_color = cursor;
+    }
+
+    pub const fn cursor_color(&self) -> Option<RgbColor> {
+        self.display.cursor_color
+    }
+
     pub fn do_tty_queries(&mut self) {
         let Some(stdout) = self.display.stdout.as_mut() else {
             return;
         };
         write!(stdout, "{}", osc::QueryBackground.as_ref()).expect("Could not write to stdout");
         write!(stdout, "{}", osc::QueryForeground.as_ref()).expect("Could not write to stdout");
+        write!(stdout, "{}", osc::QueryCursorColor.as_ref()).expect("Could not write to stdout");
         write!(
             stdout,
             "{}",

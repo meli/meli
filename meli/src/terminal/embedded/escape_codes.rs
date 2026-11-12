@@ -375,12 +375,16 @@ pub enum Sgr {
     /// Set vertical alignment described by [`VerticalAlign`].
     VerticalAlign(VerticalAlign),
 
+    /// Reset the foreground color.
+    ForegroundReset,
     /// Set the foreground color.
     Foreground(Color),
-
+    /// Reset the background color.
+    BackgroundReset,
     /// Set the background color.
     Background(Color),
-
+    /// Reset the underline color.
+    UnderlineColorReset,
     /// Set the underline color.
     ///
     /// This uses the SGR 58 underline-color extension.
@@ -439,7 +443,7 @@ impl<'a> Iterator for SgrIter<'a> {
             b"75" => Sgr::VerticalAlign(VerticalAlign::BaseLine),
             b"73" => Sgr::VerticalAlign(VerticalAlign::SuperScript),
             b"74" => Sgr::VerticalAlign(VerticalAlign::SubScript),
-            b"39" => Sgr::Foreground(Color::Default),
+            b"39" => Sgr::ForegroundReset,
             b"30" => Sgr::Foreground(Color::Black),
             b"31" => Sgr::Foreground(Color::Red),
             b"32" => Sgr::Foreground(Color::Green),
@@ -456,7 +460,7 @@ impl<'a> Iterator for SgrIter<'a> {
             b"95" => Sgr::Foreground(Color::BRIGHT_MAGENTA),
             b"96" => Sgr::Foreground(Color::BRIGHT_CYAN),
             b"97" => Sgr::Foreground(Color::BRIGHT_WHITE),
-            b"49" => Sgr::Background(Color::Default),
+            b"49" => Sgr::BackgroundReset,
             b"40" => Sgr::Background(Color::Black),
             b"41" => Sgr::Background(Color::Red),
             b"42" => Sgr::Background(Color::Green),
@@ -473,7 +477,7 @@ impl<'a> Iterator for SgrIter<'a> {
             b"105" => Sgr::Background(Color::BRIGHT_MAGENTA),
             b"106" => Sgr::Background(Color::BRIGHT_CYAN),
             b"107" => Sgr::Background(Color::BRIGHT_WHITE),
-            b"59" => Sgr::UnderlineColor(Color::Default),
+            b"59" => Sgr::UnderlineColorReset,
             k @ b"38" | k @ b"48" | k @ b"58" => {
                 macro_rules! next_u8 {
                     () => {{

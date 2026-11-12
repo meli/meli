@@ -100,7 +100,7 @@ pub mod unix {
 
     use crate::{
         terminal::{
-            color::Color,
+            color::RgbColor,
             input::{ANSIDECModeSetting, DECRPMReport, InputCommand},
             keys::{Key, MouseButton, MouseEvent},
             osc, EscapeSequenceQuery as _,
@@ -187,17 +187,20 @@ pub mod unix {
                                     esc_seq_buf = std::mem::take(buf);
                                     input_mode = InputMode::Normal;
                                     log::trace!("EscapeSequence is {esc_seq_buf:?} == {:?}", String::from_utf8_lossy(&esc_seq_buf));
-                                    if let Some(bg) = osc::QueryBackground::parse(&String::from_utf8_lossy(&esc_seq_buf)) {
+                                    if let Some(bg) = osc::QueryBackground::parse(&esc_seq_buf) {
                                         log::trace!("EscapeSequence parsed bg {bg:?}");
                                         palette.1 = Some(bg);
-                                    } else if let Some(fg) = osc::QueryForeground::parse(&String::from_utf8_lossy(&esc_seq_buf)) {
+                                    } else if let Some(fg) = osc::QueryForeground::parse(&esc_seq_buf) {
                                         log::trace!("EscapeSequence parsed fg {fg:?}");
                                         palette.0 = Some(fg);
+                                    } else if let Some(cursor) = osc::QueryCursorColor::parse(&esc_seq_buf) {
+                                        log::trace!("EscapeSequence parsed cursor color {cursor:?}");
+                                        state_tx.send(TerminalEvent::CursorColor { cursor }.into()).unwrap();
                                     } else {
                                         log::trace!("EscapeSequence unknown");
                                     }
                                     if let (Some(fg), Some(bg)) = palette {
-                                        log::trace!("compute_scheme_contrast(fg {fg:?}, bg {bg:?}) = {:?}", Color::compute_scheme_contrast(fg.into(), bg.into()));
+                                        log::trace!("compute_scheme_contrast(fg {fg:?}, bg {bg:?}) = {:?}", RgbColor::compute_scheme_contrast(fg, bg));
                                         palette.0.take();
                                         palette.1.take();
                                         state_tx.send(TerminalEvent::ColorScheme { fg, bg }.into()).unwrap();
@@ -313,7 +316,7 @@ pub mod unix {
                             esc_seq_buf = std::mem::take(buf);
                             input_mode = InputMode::Normal;
                             log::trace!("EscapeSequence is {esc_seq_buf:?} == {:?}", String::from_utf8_lossy(&esc_seq_buf));
-                            log::trace!("EscapeSequence parsed {:?}", osc::QueryBackground::parse(&String::from_utf8_lossy(&esc_seq_buf)));
+                            log::trace!("EscapeSequence parsed {:?}", osc::QueryBackground::parse(&esc_seq_buf));
                         }
 
                     }

@@ -47,6 +47,19 @@ pub use self::{
     text_editing::*,
 };
 
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
+#[repr(u8)]
+pub enum CursorStyle {
+    #[default]
+    TerminalDefault = 0,
+    BlinkingBlock,
+    SteadyBlock,
+    BlinkingUnderline,
+    SteadyUnderline,
+    BlinkingBar,
+    SteadyBar,
+}
+
 /// A type alias for a `(x, y)` position on screen.
 pub type Pos = (usize, usize);
 
@@ -193,14 +206,14 @@ impl<
 }
 
 pub trait EscapeSequenceParse: Sized {
-    fn parse(bytes: &str) -> Option<Self>;
+    fn parse(bytes: &[u8]) -> Option<Self>;
 }
 
 pub trait EscapeSequenceQuery: Sized {
     type Reply: EscapeSequenceParse;
-    const PREFIX: &'static str;
+    const PREFIX: &'static [u8];
 
-    fn parse(bytes: &str) -> Option<Self::Reply> {
+    fn parse(bytes: &[u8]) -> Option<Self::Reply> {
         if !bytes.starts_with(Self::PREFIX) {
             return None;
         }
@@ -210,48 +223,46 @@ pub trait EscapeSequenceQuery: Sized {
 
 impl EscapeSequenceQuery for osc::QueryBackground {
     type Reply = RgbColor;
-    const PREFIX: &'static str = "\x1b]11;";
+    const PREFIX: &'static [u8] = b"\x1b]11;";
 }
 
 impl EscapeSequenceQuery for osc::QueryForeground {
     type Reply = RgbColor;
-    const PREFIX: &'static str = "\x1b]10;";
+    const PREFIX: &'static [u8] = b"\x1b]10;";
+}
+
+impl EscapeSequenceQuery for osc::QueryCursorColor {
+    type Reply = RgbColor;
+    const PREFIX: &'static [u8] = b"\x1b]12;";
 }
 
 impl EscapeSequenceParse for RgbColor {
-    fn parse(mut bytes: &str) -> Option<Self> {
+    fn parse(mut bytes: &[u8]) -> Option<Self> {
         // OSC Escape sequence.
-        // Terminal background report:
-        log::trace!("osc10/11 background query: {:?}", bytes,);
+        // Terminal background report/set
 
-        // meli::terminal::keys: EscapeSequence is [27, 93, 49, 49, 59, 114, 103, 98,
-        // 58, 49, 99, 49, 99, 47, 49, 98, 49, 98, 47, 49, 57, 49, 57] ==
-        // "\u{1b}]11;rgb:1c1c/1b1b/1919" meli::terminal: osc11 background
-        // query: [114, 103, 98, 58, 49, 99, 49, 99, 47, 49, 98, 49, 98, 47, 49, 57, 49,
-        // 57] == "rgb:1c1c/1b1b/1919" meli::terminal::keys: EscapeSequence
-        // parsed None
-        if bytes.starts_with("rgba:") {
-            bytes = &bytes["rgba:".len()..];
+        if bytes.starts_with(b"rgba:") {
+            bytes = &bytes[b"rgba:".len()..];
             // Formats:
             // rgba:RRRR/GGGG/BBBB/AAAA
-            if bytes.len() == "RRRR/GGGG/BBBB/AAAA".len() {
+            if bytes.len() == b"RRRR/GGGG/BBBB/AAAA".len() {
                 return parse_rgba(bytes);
             }
 
             return None;
-        } else if bytes.starts_with("rgb:") {
-            bytes = &bytes["rgb:".len()..];
+        } else if bytes.starts_with(b"rgb:") {
+            bytes = &bytes[b"rgb:".len()..];
             // Formats:
             // rgb:R/G/B
             // rgb:RR/GG/BB
             // rgb:RRRR/GGGG/BBBB
-            if bytes.len() == "R/G/B".len() {
+            if bytes.len() == b"R/G/B".len() {
                 return parse_rgb(bytes);
             }
-            if bytes.len() == "RR/GG/BB".len() {
+            if bytes.len() == b"RR/GG/BB".len() {
                 return parse_rgb(bytes);
             }
-            if bytes.len() == "RRRR/GGGG/BBBB".len() {
+            if bytes.len() == b"RRRR/GGGG/BBBB".len() {
                 return parse_rgb(bytes);
             }
 
@@ -273,8 +284,8 @@ impl EscapeSequenceParse for RgbColor {
 /// > Note that *h* indicates the value scaled in 4 bits,
 /// > *hh* the value scaled in 8 bits, *hhh* the value scaled in 12 bits,
 /// > and *hhhh* the value scaled in 16 bits, respectively.
-fn parse_rgb(input: &str) -> Option<RgbColor> {
-    let mut parts = input.split('/');
+fn parse_rgb(input: &[u8]) -> Option<RgbColor> {
+    let mut parts = input.split(|b| *b == b'/');
     let r = parse_channel_scaled(parts.next()?)?;
     let g = parse_channel_scaled(parts.next()?)?;
     let b = parse_channel_scaled(parts.next()?)?;
@@ -298,8 +309,8 @@ fn parse_rgb(input: &str) -> Option<RgbColor> {
 /// could have a completely different perceived lightness value.
 ///
 /// Test with `urxvt -depth 32 -fg grey90 -bg rgba:0000/0000/4444/cccc`
-fn parse_rgba(input: &str) -> Option<RgbColor> {
-    let mut parts = input.split('/');
+fn parse_rgba(input: &[u8]) -> Option<RgbColor> {
+    let mut parts = input.split(|b| *b == b'/');
     let r = parse_channel_scaled(parts.next()?)?;
     let g = parse_channel_scaled(parts.next()?)?;
     let b = parse_channel_scaled(parts.next()?)?;
@@ -315,11 +326,11 @@ fn parse_rgba(input: &str) -> Option<RgbColor> {
     }
 }
 
-fn parse_channel_scaled(input: &str) -> Option<u16> {
+fn parse_channel_scaled(input: &[u8]) -> Option<u16> {
     let len = input.len();
     if (1..=4).contains(&len) {
         let max = u32::pow(16, len as u32) - 1;
-        let value = u32::from_str_radix(input, 16).ok()?;
+        let value = u32::from_str_radix(str::from_utf8(input).ok()?, 16).ok()?;
         Some((u16::MAX as u32 * value / max) as u16)
     } else {
         None
@@ -368,6 +379,39 @@ pub mod osc {
         /// Query foreground color.
         (QueryForeground, "10;?\x1b\\")
     );
+
+    derive_osc_sequence!(
+        /// Query cursor color.
+        (QueryCursorColor, "12;?\x1b\\")
+    );
+
+    pub mod cursor {
+        use crate::terminal::color::RgbColor;
+
+        /// Change cursor color.
+        #[derive(Copy, Clone, Eq, PartialEq, Debug)]
+        pub struct ChangeColor<'a>(pub Option<&'a RgbColor>);
+
+        impl std::fmt::Display for ChangeColor<'_> {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                if let Some(color) = self.0 {
+                    write!(
+                        f,
+                        "{osc}12;{colorspec}\x1b\\",
+                        osc = osc!(),
+                        colorspec = color.as_x11_colorspec()
+                    )
+                } else {
+                    write!(f, "{}", ResetColor)
+                }
+            }
+        }
+
+        derive_osc_sequence!(
+            /// Reset cursor color
+            (ResetColor, "112\x1b\\")
+        );
+    }
 }
 
 pub mod csi {
@@ -418,25 +462,32 @@ pub mod csi {
     pub mod cursor {
         use std::num::NonZeroU16;
 
+        use crate::terminal::CursorStyle;
+
         #[derive(Copy, Clone, PartialEq, Eq)]
-        pub struct Goto(pub NonZeroU16, pub NonZeroU16);
+        pub struct Goto {
+            pub row: NonZeroU16,
+            pub col: NonZeroU16,
+        }
 
         impl Goto {
-            pub const UPPER_LEFT: Self =
-                Self(NonZeroU16::new(1).unwrap(), NonZeroU16::new(1).unwrap());
+            pub const UPPER_LEFT: Self = Self {
+                row: NonZeroU16::new(1).unwrap(),
+                col: NonZeroU16::new(1).unwrap(),
+            };
 
             #[inline]
             pub const fn new(x: usize, y: usize) -> Self {
-                Self(
-                    NonZeroU16::new(x as u16 + 1).unwrap(),
-                    NonZeroU16::new(y as u16 + 1).unwrap(),
-                )
+                Self {
+                    col: NonZeroU16::new(x as u16 + 1).unwrap(),
+                    row: NonZeroU16::new(y as u16 + 1).unwrap(),
+                }
             }
         }
 
         impl std::fmt::Display for Goto {
             fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                write!(f, "\x1b[{x};{y}H", x = self.1, y = self.0)
+                write!(f, "\x1b[{row};{col}H", row = self.row, col = self.col)
             }
         }
 
@@ -459,6 +510,18 @@ pub mod csi {
             /// Save cursor
             (Save, "s")
         );
+
+        pub fn style(cs: &CursorStyle) -> &'static str {
+            match cs {
+                CursorStyle::TerminalDefault => csi!("0 q"),
+                CursorStyle::BlinkingBlock => csi!("1 q"),
+                CursorStyle::SteadyBlock => csi!("2 q"),
+                CursorStyle::BlinkingUnderline => csi!("3 q"),
+                CursorStyle::SteadyUnderline => csi!("4 q"),
+                CursorStyle::BlinkingBar => csi!("5 q"),
+                CursorStyle::SteadyBar => csi!("6 q"),
+            }
+        }
     }
 
     pub mod clear {

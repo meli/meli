@@ -138,6 +138,9 @@ impl From<TerminalEvent> for ThreadEvent {
 
 #[derive(Debug)]
 pub enum TerminalEvent {
+    CursorColor {
+        cursor: RgbColor,
+    },
     ColorScheme {
         fg: RgbColor,
         bg: RgbColor,

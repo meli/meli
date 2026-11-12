@@ -148,6 +148,8 @@ pub struct Context {
     cmd_buf: Option<usize>,
     /// Foreground and Background color, as reported by the terminal.
     color_scheme: Option<(ColorContrast, RgbColor, RgbColor)>,
+    /// cursor color, as reported by the terminal.
+    cursor_color: Option<RgbColor>,
     /// Children processes
     pub children: IndexMap<Cow<'static, str>, Vec<ForkedProcess>>,
     pub temp_files: Vec<File>,
@@ -287,7 +289,7 @@ impl Context {
             children: IndexMap::default(),
             cmd_buf: None,
             color_scheme: None,
-
+            cursor_color: None,
             input_thread: InputHandler {
                 pipe: input_thread_pipe,
                 rx: input_thread.1,
@@ -369,6 +371,10 @@ impl Context {
 
     pub fn color_scheme(&self) -> Option<(ColorContrast, RgbColor, RgbColor)> {
         self.color_scheme
+    }
+
+    pub fn cursor_color(&self) -> Option<RgbColor> {
+        self.cursor_color
     }
 }
 
@@ -575,6 +581,7 @@ impl State {
                 children: IndexMap::default(),
                 cmd_buf: None,
                 color_scheme: None,
+                cursor_color: None,
                 input_thread: InputHandler {
                     pipe: input_thread_pipe,
                     rx: input_thread.1,
@@ -1411,6 +1418,11 @@ impl State {
                 return;
             }
             UIEvent::ChangeMode(m) => {
+                if matches!(m, UIMode::Normal) {
+                    self.screen.grid_mut().cursor = Default::default();
+                    self.screen.overlay_grid_mut().cursor = Default::default();
+                }
+
                 self.context
                     .main_loop_handler
                     .sender
@@ -1578,7 +1590,7 @@ impl State {
             TerminalEvent::ColorScheme { fg, bg } => {
                 if self.context.settings.terminal.theme.as_str() == crate::conf::themes::AUTO {
                     let old_settings = self.context.settings.clone();
-                    let contrast = Color::compute_scheme_contrast(fg.into(), bg.into());
+                    let contrast = RgbColor::compute_scheme_contrast(fg, bg);
                     match contrast {
                         ColorContrast::Dark => {
                             log::debug!("changing default theme to dark");
@@ -1592,11 +1604,16 @@ impl State {
                         }
                     }
                     self.screen.set_color_scheme(Some((contrast, fg, bg)));
+                    self.context.color_scheme = Some((contrast, fg, bg));
                     self.context
                         .replies
                         .push_back(UIEvent::ConfigReload { old_settings });
                     self.context.replies.push_back(UIEvent::Resize);
                 }
+            }
+            TerminalEvent::CursorColor { cursor } => {
+                self.screen.set_cursor_color(Some(cursor));
+                self.context.cursor_color = Some(cursor);
             }
             TerminalEvent::DECModeReport { mode, state } => {
                 if mode == 2026 {

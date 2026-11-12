@@ -32,8 +32,15 @@ use melib::text::{search::KMP, wcwidth, TextPresentation as _};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use smallvec::SmallVec;
 
-use super::{Area, Color, Pos, ScreenGeneration};
-use crate::{conf::themes::ThemeAttribute, state::Context};
+use crate::{
+    conf::themes::ThemeAttribute,
+    state::Context,
+    terminal::{
+        color::{Color, RgbColor},
+        screen::ScreenGeneration,
+        Area, CursorStyle, Pos,
+    },
+};
 
 /// In a scroll region up and down cursor movements shift the region vertically.
 /// The new lines are empty.
@@ -48,6 +55,29 @@ pub struct ScrollRegion {
     pub right: usize,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Cursor {
+    pub y: usize,
+    pub x: usize,
+    pub style: CursorStyle,
+    pub color: Option<RgbColor>,
+    pub show: bool,
+    pub dirty: bool,
+}
+
+impl Default for Cursor {
+    fn default() -> Self {
+        Self {
+            y: 0,
+            x: 0,
+            style: CursorStyle::default(),
+            color: None,
+            show: false,
+            dirty: true,
+        }
+    }
+}
+
 /// An array of `Cell`s that represents a terminal display.
 ///
 /// A `CellBuffer` is a two-dimensional array of `Cell`s, each pair of indices
@@ -60,6 +90,7 @@ pub struct ScrollRegion {
 pub struct CellBuffer {
     pub cols: usize,
     pub rows: usize,
+    pub cursor: Cursor,
     buf: Vec<Cell>,
     dirty_bitmap: DirtyBitmap,
     pub default_cell: Cell,
@@ -85,6 +116,7 @@ impl std::fmt::Debug for CellBuffer {
         fmt.debug_struct(melib::identify!(CellBuffer))
             .field("cols", &self.cols)
             .field("rows", &self.rows)
+            .field("cursor", &self.cursor)
             .field("buf cells", &self.buf.len())
             .field("default_cell", &self.default_cell)
             .field("ascii_drawing", &self.ascii_drawing)
@@ -108,6 +140,7 @@ impl CellBuffer {
         Self {
             cols: 0,
             rows: 0,
+            cursor: Cursor::default(),
             buf: vec![],
             dirty_bitmap: DirtyBitmap::default(),
             default_cell: Cell::new_default(),
@@ -136,6 +169,7 @@ impl CellBuffer {
         Self {
             cols,
             rows,
+            cursor: Cursor::default(),
             buf: vec![default_cell; cols * rows],
             dirty_bitmap: {
                 let mut dirty_bitmap = DirtyBitmap::default();

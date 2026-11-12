@@ -100,7 +100,10 @@ impl EmbeddedPty {
         let terminal = crate::terminal::embedded::create_pty(width, height, command)?;
         let (stderr_reader, pid) = {
             let mut terminal = terminal.lock().unwrap();
-            terminal.grid.color_scheme = context.color_scheme();
+            terminal
+                .grid
+                .set_color_scheme(context.color_scheme())
+                .set_cursor_color(context.cursor_color());
             (terminal.stderr.take(), terminal.child_pid)
         };
         let stderr = Arc::new(Mutex::new(vec![]));
@@ -1304,6 +1307,9 @@ impl Component for Composer {
                         grid.copy_area(guard.grid.buffer(), embedded_area, area);
                         context.dirty_areas.push_back(embedded_area);
                     }
+                    grid.cursor = guard.grid.buffer().cursor.clone();
+                    grid.cursor.x += embedded_area.offset().0;
+                    grid.cursor.y += embedded_area.offset().1;
                     guard.set_terminal_size(embedded_area.width(), embedded_area.height());
                     guard.grid.set_dirty(false);
                     self.dirty = false;

@@ -82,6 +82,52 @@ impl RgbColor {
     pub const fn as_x11_colorspec(&'_ self) -> impl std::fmt::Display + '_ {
         X11ColorSpecDisplay(self)
     }
+
+    pub fn compute_scheme_contrast(fg: Self, bg: Self) -> ColorContrast {
+        const PERCEPTUAL_MIDDLE_GRAY: u8 = 50;
+        let fg = fg.perceived_lightness();
+        let bg = bg.perceived_lightness();
+        if bg < fg {
+            ColorContrast::Dark
+        } else if bg > fg || bg > PERCEPTUAL_MIDDLE_GRAY {
+            ColorContrast::Light
+        } else {
+            ColorContrast::Dark
+        }
+    }
+
+    /// The perceived lightness of the color
+    /// as a value between `0` (black) and `100` (white)
+    /// where `50` is the perceptual "middle grey".
+    ///
+    /// ```
+    /// use meli::terminal::RgbColor;
+    /// let color = RgbColor { r: 0, g: 0, b: 0 };
+    /// let is_dark = color.perceived_lightness() <= 50;
+    /// ```
+    pub fn perceived_lightness(&self) -> u8 {
+        Self::luminance_to_perceived_lightness(self.luminance())
+    }
+
+    fn luminance(&self) -> f64 {
+        let Self { r, g, b } = *self;
+        let r = f64::from(r) / f64::from(u8::MAX);
+        let g = f64::from(g) / f64::from(u8::MAX);
+        let b = f64::from(b) / f64::from(u8::MAX);
+        0.0722f64.mul_add(
+            srgb_to_lin(b),
+            0.2126f64.mul_add(srgb_to_lin(r), 0.7152 * srgb_to_lin(g)),
+        )
+    }
+
+    // Perceptual lightness (L*)
+    fn luminance_to_perceived_lightness(luminance: f64) -> u8 {
+        if luminance < 216. / 24389. {
+            (luminance * (24389. / 27.)) as u8
+        } else {
+            luminance.cbrt().mul_add(116., -16.) as u8
+        }
+    }
 }
 
 impl Color {
@@ -1037,34 +1083,8 @@ pub enum ColorContrast {
 }
 
 impl Color {
-    pub fn compute_scheme_contrast(fg: Self, bg: Self) -> ColorContrast {
-        const PERCEPTUAL_MIDDLE_GRAY: u8 = 50;
-        let fg = fg.perceived_lightness();
-        let bg = bg.perceived_lightness();
-        if bg < fg {
-            ColorContrast::Dark
-        } else if bg > fg || bg > PERCEPTUAL_MIDDLE_GRAY {
-            ColorContrast::Light
-        } else {
-            ColorContrast::Dark
-        }
-    }
-
-    /// The perceived lightness of the color
-    /// as a value between `0` (black) and `100` (white)
-    /// where `50` is the perceptual "middle grey".
-    ///
-    /// ```
-    /// # use meli::terminal::Color;
-    /// # let color = Color::default();
-    /// let is_dark = color.perceived_lightness() <= 50;
-    /// ```
-    pub fn perceived_lightness(&self) -> u8 {
-        luminance_to_perceived_lightness(luminance(self))
-    }
-
-    pub fn into_rgb(&self) -> (u8, u8, u8) {
-        match self {
+    pub fn into_rgb(&self) -> Option<RgbColor> {
+        let (r, g, b) = match self {
             Self::Black => (0, 0, 0),
             Self::Red => (255, 0, 0),
             Self::Green => (0, 255, 0),
@@ -2102,8 +2122,9 @@ impl Color {
                 }
             }
             Self::Rgb(RgbColor { r, g, b }) => (*r, *g, *b),
-            Self::Default => (0, 0, 0),
-        }
+            Self::Default => return None,
+        };
+        Some(RgbColor { r, g, b })
     }
 }
 
@@ -2115,26 +2136,6 @@ fn srgb_to_lin(channel: f64) -> f64 {
         channel / 12.92
     } else {
         ((channel + 0.055) / 1.055).powf(2.4)
-    }
-}
-
-fn luminance(color: &Color) -> f64 {
-    let (r, g, b) = color.into_rgb();
-    let r = f64::from(r) / f64::from(u8::MAX);
-    let g = f64::from(g) / f64::from(u8::MAX);
-    let b = f64::from(b) / f64::from(u8::MAX);
-    0.0722f64.mul_add(
-        srgb_to_lin(b),
-        0.2126f64.mul_add(srgb_to_lin(r), 0.7152 * srgb_to_lin(g)),
-    )
-}
-
-// Perceptual lightness (L*)
-fn luminance_to_perceived_lightness(luminance: f64) -> u8 {
-    if luminance < 216. / 24389. {
-        (luminance * (24389. / 27.)) as u8
-    } else {
-        luminance.cbrt().mul_add(116., -16.) as u8
     }
 }
 
