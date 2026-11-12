@@ -1521,6 +1521,7 @@ impl Account {
                                     || matches!(self.is_online, IsOnline::Uninit)
                                 {
                                     self.watch(None);
+                                    self.init_account_contacts();
                                 }
                                 self.is_online = IsOnline::True;
                                 return true;

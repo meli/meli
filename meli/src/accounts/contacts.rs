@@ -64,15 +64,30 @@ impl Account {
             is_async,
         );
         let job_id = handle.job_id;
+        let backend_id = Arc::new(ContactBackendID {
+            name: name.into(),
+            format: format.into(),
+        });
+        if self.contacts.backends.contains(&backend_id) {
+            for ((backend_id, book), _) in self
+                .contacts
+                .books
+                .iter()
+                .filter(|((b, _), _)| *b == backend_id)
+            {
+                self.main_loop_handler.send(ThreadEvent::UIEvent(
+                    UIEvent::ContactBackendStatusChange(
+                        self.hash,
+                        backend_id.clone(),
+                        book.clone(),
+                        ContactBackendStatusChangeKind::Offline,
+                    ),
+                ));
+            }
+        }
         self.active_jobs.insert(
             job_id,
-            JobRequest::Contacts(ContactJobRequest::Initialize {
-                backend_id: Arc::new(ContactBackendID {
-                    name: name.into(),
-                    format: format.into(),
-                }),
-                handle,
-            }),
+            JobRequest::Contacts(ContactJobRequest::Initialize { backend_id, handle }),
         );
         self.active_job_instants
             .insert(std::time::Instant::now(), job_id);
@@ -186,6 +201,40 @@ impl Account {
                         },
                         IsAsync::Async,
                     );
+                }
+            }
+        }
+    }
+
+    /// Initialize the contact backend of the account mail backend (e.g. JMAP contacts).
+    pub fn init_account_contacts(&mut self) {
+        let mut backend = self.backend.lock().unwrap();
+        let format = self.settings.account().format.clone();
+        match backend.contact_backend() {
+            Ok(contacts_job) => {
+                drop(backend);
+                self.init_contact_backend(
+                    "meli".to_string(),
+                    format,
+                    contacts_job,
+                    self.is_async(),
+                );
+            }
+            Err(err) => {
+                if !matches!(err.kind, ErrorKind::NotImplemented) {
+                    self.main_loop_handler
+                        .send(ThreadEvent::UIEvent(UIEvent::Notification {
+                            title: Some(
+                                format!(
+                                    "{}: Could not request mail backend's contact backend",
+                                    self.name
+                                )
+                                .into(),
+                            ),
+                            body: err.to_string().into(),
+                            kind: Some(NotificationType::Error(err.kind)),
+                            source: Some(err),
+                        }));
                 }
             }
         }

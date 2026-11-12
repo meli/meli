@@ -368,6 +368,7 @@ pub enum ContactBackendStatusChangeKind {
     Creation(melib::contacts::CardId),
     Deletion(melib::contacts::CardId),
     NewBook,
+    Offline,
 }
 
 #[derive(Debug)]

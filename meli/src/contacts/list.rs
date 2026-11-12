@@ -66,6 +66,7 @@ pub struct AddressBookList {
     id_positions: Vec<CardId>,
     data_columns: DataColumns<3>,
     initialized: bool,
+    offline: bool,
     movement: Option<PageMovement>,
     theme_default: ThemeAttribute,
     highlight_theme: ThemeAttribute,
@@ -94,6 +95,7 @@ impl AddressBookList {
             id_positions: book.cards.keys().cloned().collect(),
             data_columns,
             initialized: false,
+            offline: false,
             movement: None,
             theme_default,
             highlight_theme,
@@ -105,8 +107,10 @@ impl AddressBookList {
     fn initialize(&mut self, context: &Context) {
         self.data_columns.clear();
         let account = &context.accounts[&self.account_hash];
-        let contacts: &AddressBook = &account.contacts.books[&self.backend_id];
-        if contacts.cards.is_empty() {
+        let book: &AddressBook = &account.contacts.books[&self.backend_id];
+
+        self.read_only = book.read_only;
+        if book.cards.is_empty() {
             let message = "Address book is empty.".to_string();
             if self.data_columns.columns[0].resize_with_context(message.len(), 1, context) {
                 let area = self.data_columns.columns[0].area();
@@ -122,13 +126,13 @@ impl AddressBookList {
         }
 
         self.id_positions.clear();
-        if self.id_positions.capacity() < contacts.len() {
-            self.id_positions.reserve(contacts.len());
+        if self.id_positions.capacity() < book.len() {
+            self.id_positions.reserve(book.len());
         }
         self.dirty = true;
         let mut min_width = ("Name".len(), "E-mail".len(), 0);
 
-        for c in contacts.values() {
+        for c in book.values() {
             // name
             let name = c.name().unwrap_or_default().grapheme_len();
             if name > 0 {
@@ -147,13 +151,13 @@ impl AddressBookList {
         }
 
         // name column
-        _ = self.data_columns.columns[0].resize_with_context(min_width.0, contacts.len(), context);
+        _ = self.data_columns.columns[0].resize_with_context(min_width.0, book.len(), context);
         // email column
-        _ = self.data_columns.columns[1].resize_with_context(min_width.1, contacts.len(), context);
+        _ = self.data_columns.columns[1].resize_with_context(min_width.1, book.len(), context);
         // url column
-        _ = self.data_columns.columns[2].resize_with_context(min_width.2, contacts.len(), context);
+        _ = self.data_columns.columns[2].resize_with_context(min_width.2, book.len(), context);
 
-        let mut book_values = contacts.values().collect::<Vec<&Card>>();
+        let mut book_values = book.values().collect::<Vec<&Card>>();
         book_values.sort_unstable_by_key(|c| c.name());
         for (idx, c) in book_values.iter().enumerate() {
             self.id_positions.push(c.id());
@@ -193,6 +197,12 @@ impl AddressBookList {
                     .set_uri(uri, area.take_cols(col_width));
             }
         }
+        self.cursor_pos = self
+            .cursor_pos
+            .min(self.id_positions.len().saturating_sub(1));
+        self.new_cursor_pos = self
+            .new_cursor_pos
+            .min(self.id_positions.len().saturating_sub(1));
     }
 
     fn highlight_line(&self, grid: &mut CellBuffer, area: Area, idx: usize) {
@@ -206,6 +216,15 @@ impl AddressBookList {
             theme.attrs |= Attr::REVERSE;
         }
         grid.change_theme(area, theme);
+    }
+
+    fn set_offline(&mut self, offline: bool) {
+        self.initialized = false;
+        self.set_dirty(true);
+        if let Some(ref mut editor) = self.editor {
+            editor.set_offline(offline);
+        }
+        self.offline = offline;
     }
 }
 
@@ -240,10 +259,11 @@ impl Component for AddressBookList {
         grid.clear_area(header_area, self.theme_default);
         grid.write_string(
             &format!(
-                "{name} [{backend} {format}]",
+                "{name} [{backend} {format}]{offline}",
                 name = self.backend_id.1,
                 backend = self.backend_id.0.name,
-                format = self.backend_id.0.format
+                format = self.backend_id.0.format,
+                offline = if self.offline { " [OFFLINE]" } else { "" },
             ),
             &self.theme_default,
             info_area,
@@ -449,6 +469,17 @@ impl Component for AddressBookList {
                 self.initialized = false;
                 self.set_dirty(true);
                 return false;
+            }
+            UIEvent::ContactBackendStatusChange(
+                ref account_hash,
+                ref backend_id,
+                ref book,
+                ContactBackendStatusChangeKind::Offline,
+            ) if account_hash == &self.account_hash
+                && backend_id == &self.backend_id.0
+                && book == &self.backend_id.1 =>
+            {
+                self.set_offline(true);
             }
             _ => {}
         }
@@ -928,17 +959,34 @@ impl Component for AccountContacts {
                     .books
                     .get(&(backend_id.clone(), book.clone()))
                 {
-                    self.books.insert(
-                        (backend_id.clone(), book.clone()),
-                        Box::new(AddressBookList::new(
+                    if let Some(book) = self.books.get_mut(&(backend_id.clone(), book.clone())) {
+                        book.initialized = false;
+                        book.set_dirty(true);
+                        book.set_offline(false);
+                    } else {
+                        self.books.insert(
                             (backend_id.clone(), book.clone()),
-                            b,
-                            self.account_hash,
-                            context,
-                        )),
-                    );
+                            Box::new(AddressBookList::new(
+                                (backend_id.clone(), book.clone()),
+                                b,
+                                self.account_hash,
+                                context,
+                            )),
+                        );
+                    }
                     self.set_dirty(true);
                 }
+            }
+            UIEvent::ContactBackendStatusChange(
+                ref account_hash,
+                ref backend_id,
+                ref book,
+                ContactBackendStatusChangeKind::Offline,
+            ) if account_hash == self.account_hash() => {
+                if let Some(book) = self.books.get_mut(&(backend_id.clone(), book.clone())) {
+                    book.process_event(event, context);
+                }
+                self.set_dirty(true);
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::LISTING]["next_mailbox"]) =>

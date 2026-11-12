@@ -287,6 +287,7 @@ pub struct ContactEditor {
     dirty: bool,
     has_changes: bool,
     initialized: bool,
+    offline: bool,
 }
 
 impl std::fmt::Display for ContactEditor {
@@ -326,6 +327,7 @@ impl ContactEditor {
             dirty: true,
             has_changes: false,
             initialized: false,
+            offline: false,
         }
     }
 
@@ -354,6 +356,7 @@ impl ContactEditor {
             dirty: true,
             has_changes: false,
             initialized: false,
+            offline: false,
         }
     }
 
@@ -749,6 +752,11 @@ impl ContactEditor {
 
         serde_json::Value::Object(retval)
     }
+
+    pub fn set_offline(&mut self, offline: bool) {
+        self.offline = offline;
+        self.set_dirty(true);
+    }
 }
 
 impl Component for ContactEditor {
@@ -808,6 +816,14 @@ impl Component for ContactEditor {
                 if self.form.process_event(event, context) {
                     match self.form.buttons_result() {
                         None => {}
+                        Some(FormButtonAction::Accept) if self.offline => {
+                            context.replies.push_back(UIEvent::Notification {
+                                title: None,
+                                source: None,
+                                body: "Address book is offline".into(),
+                                kind: Some(NotificationType::Info),
+                            });
+                        }
                         Some(FormButtonAction::Accept) => {
                             let json = self.as_json();
                             let mut card: Card = serde_json::from_value(json).expect("deserialize");
