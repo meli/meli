@@ -1506,10 +1506,6 @@ impl Account {
                     }
                 }
                 JobRequest::IsOnline { ref mut handle, .. } => {
-                    if matches!(self.is_online, IsOnline::Err { ref value, ..} if !value.is_recoverable())
-                    {
-                        return true;
-                    }
                     is_canceled! { handle };
                     if let Ok(Some(is_online)) = handle.chan.try_recv() {
                         self.main_loop_handler.send(ThreadEvent::UIEvent(
@@ -1530,6 +1526,10 @@ impl Account {
                                 self.is_online.set_err(value);
                             }
                         }
+                    }
+                    if matches!(self.is_online, IsOnline::Err { ref value, ..} if !value.is_recoverable())
+                    {
+                        return true;
                     }
                     let online_job = self.backend.lock().unwrap().is_online();
                     if let Ok(online_job) = online_job {
