@@ -124,7 +124,7 @@ pub fn query_default_app<T: AsRef<str>>(query: T) -> Result<String> {
             || k.starts_with("XDG_CURRENT_DESKTOP")
             || k == "HOME"
         {
-            xdg_vars.insert(k.to_string(), v.to_string());
+            xdg_vars.insert(k, v);
         }
     }
 
@@ -269,7 +269,7 @@ pub fn desktop_file_to_command(
                 p.pop(); // Remove {desktop} from path.
                 if p.is_dir() {
                     for entry in fs::read_dir(&p)? {
-                        let mut p = entry?.path().to_owned();
+                        let mut p = entry?.path();
                         p.push(desktop_name);
                         if p.exists() {
                             file_path = Some(p);

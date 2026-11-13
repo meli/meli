@@ -2686,7 +2686,7 @@ pub mod address {
                             )));
                         }
 
-                        match f(i1.clone()) {
+                        match f(i1) {
                             Err(nom::Err::Error(_)) => return Ok((i, res)),
                             Err(e) => return Err(e),
                             Ok((i2, o)) => {

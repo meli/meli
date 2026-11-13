@@ -482,7 +482,7 @@ impl NotmuchDb {
                         path: k.to_string(),
                         children: vec![],
                         parent: None,
-                        query_str: query_str.to_string(),
+                        query_str,
                         save_to,
                         usage: Arc::new(RwLock::new(usage)),
                         counters: Default::default(),

@@ -480,7 +480,7 @@ pub mod server {
                             };
                             let response: ChangesResponse<email::EmailObject> = ChangesResponse {
                                 account_id: changes.account_id,
-                                old_state: changes.since_state.clone(),
+                                old_state: changes.since_state,
                                 new_state: self.email_state.clone(),
                                 has_more_changes: false,
                                 created: created.into_iter().collect(),
@@ -821,7 +821,7 @@ pub mod server {
                             let old_state = self.email_state.clone();
                             let mut new_state = self.email_state.clone();
                             for mail in emails {
-                                let blob_id = mail.1.blob_id.clone();
+                                let blob_id = mail.1.blob_id;
                                 let blob = &self.uploaded_blobs[&blob_id];
                                 let size = blob.len();
                                 new_state = self.insert_email(Box::new(

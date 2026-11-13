@@ -1291,16 +1291,10 @@ impl Component for ThreadView {
                 );
                 true
             }
-            _ => {
-                if self
-                    .entries
-                    .iter_mut()
-                    .any(|entry| entry.mailview.process_event(event, context))
-                {
-                    return true;
-                }
-                false
-            }
+            _ => self
+                .entries
+                .iter_mut()
+                .any(|entry| entry.mailview.process_event(event, context)),
         }
     }
 

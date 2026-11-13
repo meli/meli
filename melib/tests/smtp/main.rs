@@ -265,7 +265,7 @@ pub mod server {
                         Ok(env) => {
                             log::debug!("data_end env is {:?}", env);
                             log::debug!("data_end env.other_headers is {:?}", env.other_headers());
-                            self.stored.push((to.clone(), env));
+                            self.stored.push((to, env));
                         }
                         Err(err) => {
                             log::debug!("envelope parse error {err}");

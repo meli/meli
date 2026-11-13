@@ -276,7 +276,7 @@ impl<'s> Parser<'s> {
         while self.consume_only_char(';') {
             match self.consume_param() {
                 Ok((name, value)) => {
-                    rv.insert(name.to_owned(), value.to_owned());
+                    rv.insert(name, value);
                 }
                 Err(_) => break,
             }

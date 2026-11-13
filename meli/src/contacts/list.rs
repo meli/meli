@@ -375,8 +375,8 @@ impl Component for AddressBookList {
 
         let header_attrs = crate::conf::theme_value(context, "widgets.list.header");
         let mut x = 0;
-        for i in 0..self.data_columns.columns.len() {
-            if self.data_columns.widths[i] == 0 {
+        for (i, w) in self.data_columns.widths.iter().enumerate() {
+            if *w == 0 {
                 continue;
             }
             grid.write_string(
@@ -387,14 +387,12 @@ impl Component for AddressBookList {
                     _ => "",
                 },
                 &header_attrs,
-                header_area
-                    .skip_cols(x)
-                    .take_cols(x + (self.data_columns.widths[i])),
+                header_area.skip_cols(x).take_cols(x + (*w)),
                 None,
                 None,
             );
 
-            x += self.data_columns.widths[i] + 2; // + SEPARATOR
+            x += *w + 2; // + SEPARATOR
             if x > header_area.width() {
                 break;
             }

@@ -270,12 +270,12 @@ impl<const N: usize> DataColumns<N> {
             self.x_offset = self.width_accum.saturating_sub(total_area.width());
         }
         let mut x_offset = self.x_offset;
-        for col in 0..N {
+        for (col, w) in self.widths.iter().enumerate() {
             start_col = col;
-            if x_offset == 0 || self.widths[col] > x_offset {
+            if x_offset == 0 || *w > x_offset {
                 break;
             }
-            x_offset -= self.widths[col];
+            x_offset -= *w;
             x_offset = x_offset.saturating_sub(1);
         }
 

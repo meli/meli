@@ -505,7 +505,7 @@ impl FileSettings {
             let mut s = melib::AccountSettings {
                 name: name.to_string(),
                 root_mailbox,
-                format: format.clone(),
+                format,
                 identity,
                 extra_identities,
                 read_only,
@@ -611,7 +611,7 @@ impl FileSettings {
             let mut s = melib::AccountSettings {
                 name: name.to_string(),
                 root_mailbox,
-                format: format.clone(),
+                format,
                 identity,
                 extra_identities,
                 read_only,
