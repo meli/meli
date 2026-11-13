@@ -1386,7 +1386,9 @@ pub enum LexTokenError<'a> {
         raw: &'a str,
         unescaped: Cow<'a, str>,
     },
-    Invalid,
+    Invalid {
+        raw: &'a str,
+    },
 }
 
 impl<'a> LexTokenError<'a> {
@@ -1588,7 +1590,9 @@ pub(super) fn lex<'a>(
                 unescaped.push(char);
             } else {
                 if char == '"' {
-                    return Err(LexTokenError::Invalid);
+                    return Err(LexTokenError::Invalid {
+                        raw: &input[start..],
+                    });
                 }
                 if char == '\\' {
                     escaped = true;
@@ -1640,7 +1644,9 @@ pub(super) fn lex<'a>(
             return escaped_lex(input);
         }
         if char == '"' {
-            return Err(LexTokenError::Invalid);
+            return Err(LexTokenError::Invalid {
+                raw: &input[start..],
+            });
         }
         if char == ' ' {
             return Ok((

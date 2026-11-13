@@ -47,7 +47,7 @@ use melib::utils::shellexpand::ShellExpandTrait as _;
 use crate::{
     command::{
         parser::{LexToken, LexTokenError, Lexer},
-        Token, TokenStream, COMMAND_COMPLETION,
+        Token, COMMAND_COMPLETION,
     },
     utilities::autocomplete::AutoCompleteEntry,
 };
@@ -119,7 +119,7 @@ impl CompletionsGenerator {
         for (desc, token_stream, _) in COMMAND_COMPLETION.iter() {
             let mut lexer = Lexer::new(input);
             let matcher = Matcher {
-                token_stream,
+                token_stream: token_stream.tokens.iter(),
                 mailboxes: &self.mailboxes,
                 acc_match: None,
                 pos: 0,
@@ -845,7 +845,7 @@ struct MatcherMetadata<'a, 'b, 'c> {
 
 #[derive(Debug)]
 struct Matcher<'a, 'b, 'c> {
-    token_stream: &'a TokenStream,
+    token_stream: std::slice::Iter<'a, Token>,
     pos: usize,
     mailboxes: &'b IndexMap<String, IndexSet<String>>,
     acc_match: Option<&'b str>,
@@ -861,18 +861,19 @@ impl<'a, 'b, 'c> Iterator for Matcher<'a, 'b, 'c> {
     >;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let Some(token) = self.token_stream.tokens.get(self.pos) else {
+        let Some(token) = self.token_stream.next() else {
             if self.lex_iter.next().is_some() {
                 return Some(Err(MatchError::Invalid));
             }
             return None;
         };
+        self.pos += 1;
 
         let mut next_err = None;
         let lexeme = loop {
             let Some(lexeme) = self.lex_iter.next() else {
+                while self.token_stream.next().is_some() {}
                 if let Some(next_err) = next_err {
-                    self.pos = self.token_stream.tokens.len();
                     return Some(Err(MatchError::Next {
                         next_token: next_err,
                         data: MatcherMetadata {
@@ -882,7 +883,6 @@ impl<'a, 'b, 'c> Iterator for Matcher<'a, 'b, 'c> {
                     }));
                 }
                 if self.pos > 0 {
-                    self.pos = self.token_stream.tokens.len();
                     return Some(Err(MatchError::WhitespaceAndNext {
                         next_token: token,
                         data: MatcherMetadata {
@@ -891,7 +891,6 @@ impl<'a, 'b, 'c> Iterator for Matcher<'a, 'b, 'c> {
                         },
                     }));
                 }
-                self.pos = self.token_stream.tokens.len();
                 return None;
             };
             if matches!(lexeme, Ok(LexToken::Whitespace { .. })) {
@@ -906,9 +905,27 @@ impl<'a, 'b, 'c> Iterator for Matcher<'a, 'b, 'c> {
                 if let Some(val) = lex_err.value() {
                     val
                 } else if matches!(token, Token::RestOfStringValue) {
-                    return None;
+                    while self.token_stream.next().is_some() {}
+                    return Some(Ok((
+                        match lexeme {
+                            Ok(l) => l,
+                            Err(
+                                LexTokenError::EscapeStart { raw, unescaped }
+                                | LexTokenError::QuoteStart { raw, unescaped },
+                            ) => LexToken::Literal { raw, unescaped },
+                            Err(LexTokenError::Invalid { raw }) => LexToken::Literal {
+                                raw,
+                                unescaped: raw.into(),
+                            },
+                        },
+                        token,
+                        MatcherMetadata {
+                            previous_match: None,
+                            acc_match: self.acc_match,
+                        },
+                    )));
                 } else {
-                    self.pos = self.token_stream.tokens.len();
+                    while self.token_stream.next().is_some() {}
                     return Some(Err(MatchError::Invalid));
                 }
             }
@@ -916,7 +933,7 @@ impl<'a, 'b, 'c> Iterator for Matcher<'a, 'b, 'c> {
         match token {
             Token::Literal(lit) => {
                 if *lit != lexeme_value {
-                    self.pos = self.token_stream.tokens.len();
+                    while self.token_stream.next().is_some() {}
                     let no_more_lexemes = self.lex_iter.next().is_none();
                     if lit.starts_with(lexeme_value) && no_more_lexemes {
                         return Some(Err(MatchError::Incomplete {
@@ -935,7 +952,7 @@ impl<'a, 'b, 'c> Iterator for Matcher<'a, 'b, 'c> {
             Token::NewFilepath | Token::Filepath => {}
             Token::Alternatives(lits) => {
                 if lits.iter().all(|lit| *lit != lexeme_value) {
-                    self.pos = self.token_stream.tokens.len();
+                    while self.token_stream.next().is_some() {}
                     let no_more_lexemes = self.lex_iter.next().is_none();
                     if lits.iter().any(|lit| lit.starts_with(lexeme_value)) && no_more_lexemes {
                         return Some(Err(MatchError::Incomplete {
@@ -953,7 +970,7 @@ impl<'a, 'b, 'c> Iterator for Matcher<'a, 'b, 'c> {
             }
             Token::AccountName => {
                 let Some(acc_match) = self.mailboxes.keys().find(|acc| *acc == lexeme_value) else {
-                    self.pos = self.token_stream.tokens.len();
+                    while self.token_stream.next().is_some() {}
                     let no_more_lexemes = self.lex_iter.next().is_none();
                     if self
                         .mailboxes
@@ -978,7 +995,7 @@ impl<'a, 'b, 'c> Iterator for Matcher<'a, 'b, 'c> {
             Token::MailboxPath => {
                 if let Some(acc) = self.acc_match {
                     if self.mailboxes[acc].iter().all(|mbox| *mbox != lexeme_value) {
-                        self.pos = self.token_stream.tokens.len();
+                        while self.token_stream.next().is_some() {}
                         let no_more_lexemes = self.lex_iter.next().is_none();
                         if self.mailboxes[acc]
                             .iter()
@@ -1001,7 +1018,27 @@ impl<'a, 'b, 'c> Iterator for Matcher<'a, 'b, 'c> {
             }
             Token::NewMailboxPath => {}
             Token::QuotedStringValue => {}
-            Token::RestOfStringValue => {}
+            Token::RestOfStringValue => {
+                while self.token_stream.next().is_some() {}
+                return Some(Ok((
+                    match lexeme {
+                        Ok(l) => l,
+                        Err(
+                            LexTokenError::EscapeStart { raw, unescaped }
+                            | LexTokenError::QuoteStart { raw, unescaped },
+                        ) => LexToken::Literal { raw, unescaped },
+                        Err(LexTokenError::Invalid { raw }) => LexToken::Literal {
+                            raw,
+                            unescaped: raw.into(),
+                        },
+                    },
+                    token,
+                    MatcherMetadata {
+                        previous_match: None,
+                        acc_match: self.acc_match,
+                    },
+                )));
+            }
             Token::AttachmentIndexValue => {}
             Token::MailboxIndexValue => {}
             Token::IndexValue => {}
@@ -1009,7 +1046,7 @@ impl<'a, 'b, 'c> Iterator for Matcher<'a, 'b, 'c> {
         self.pos += 1;
         match lexeme {
             Err(lex_err) => {
-                self.pos = self.token_stream.tokens.len();
+                while self.token_stream.next().is_some() {}
                 if self.lex_iter.next().is_none() {
                     Some(Err(MatchError::Incomplete {
                         lexeme: Err(lex_err),

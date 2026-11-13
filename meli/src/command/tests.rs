@@ -812,6 +812,16 @@ fn test_command_completions_generate() {
         gen.generate("create-mailbox foobar INBOX/Archives/foo"),
         vec![]
     );
+    // Assert that `RestOfStringValue` does not generate completions
+    for cmd in [
+        "getenv",
+        "setenv ",
+        "setenv VISUAL=\"",
+        "setenv VISUAL=\"hx",
+        "setenv VISUAL=\"hx\"",
+    ] {
+        assert_eq!(gen.generate(cmd), vec![]);
+    }
     _ = tempdir.close();
 }
 
