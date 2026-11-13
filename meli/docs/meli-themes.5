@@ -82,6 +82,92 @@ Two themes are included by default,
 and
 .Ql dark Ns
 \&.
+.Sh THEME FIELDS
+Valid fields for a theme are:
+.Bl -dash -compact
+.It
+Any theme key, case-sensitive
+.It
+.Ic color_aliases
+.It
+.Ic attr_aliases
+.It
+.Ic text_format_regexps
+.El
+.Sh THEME KEY FIELDS
+A theme key field specifies foreground color, background color, underline color and attributes.
+If any of those is not specified, it defaults to linking to
+.Ic theme_default Ns
+\&.
+Fields and values are:
+.Bl -tag -width 9n
+.It fg
+Color or color alias
+.It bg
+Color or color alias
+.It underline
+Color or color alias
+.It attrs
+Attributes or attribute alias
+.El
+.sp
+Example in TOML format:
+.Bd -literal
+"mail.view.body" = { fg = "HotPink3", bg = "LightSalmon1" }
+.Ed
+.Sh color_aliases FIELD
+The
+.Ic color_aliases
+field is a map of alias names to color values.
+To use an alias name as a value elsewhere, prepend \&"\&$\&" to its name.
+.sp
+Example in TOML format:
+.Bd -literal
+color_aliases = { "Teal" = "#008080", "Blue" = "#00007c", "White" = "#f7f7f7", "Beige" = "#bababa" }
+.Ed
+Then we can use the value
+.Li \&$Teal
+etc as a color value.
+.Sh attr_aliases FIELD
+The
+.Ic attr_aliases
+field is a map of alias names to attribute values.
+.sp
+Example in TOML format:
+.Bd -literal
+attr_aliases = { "Extra" = "Bold | Blink", "Shy" = "Dim | Italics" }
+.Ed
+Then we can use the value
+.Li \&$Extra
+etc as an attribute value.
+.Sh text_format_regexps FIELD
+The
+.Ic text_format_regexps
+field is a map of keys to text formatter values.
+Each text formatter value is a map of regular expressions in PCRE2 format to formatting options.
+A text formatter allows you to format specific matching words.
+The supported text formatter keys are:
+.Bl -dash -compact
+.It
+"pager.envelope.body"
+.It
+"listing.from"
+.It
+"listing.subject"
+.El
+.sp
+The formatting option map are like theme key fields, with the additional
+.Ic priority
+field (unsigned 8-bit integer, higher value is higher priority)
+that allows making some regular expressions more specific than others.
+Example in TOML format:
+.Bd -literal
+[terminal.themes.mytheme.text_format_regexps."listing.subject"]
+# Format the "[...]" part of an e-mail subject, low priority
+"^\\[[^\\]]*\\]" = { fg = "White", bg = "$Blue", priority = 0}
+# Higher priority, matches "[ANNOUNNCEMENT]" literal exactly
+"^\\[ANNOUNNCEMENT\\]" = { attrs = "Bold", fg = "White", bg = "$Blue", priority = 1}
+.Ed
 .Sh EXAMPLES
 Specific settings from already defined themes can be overwritten:
 .Bd -literal
@@ -141,6 +227,7 @@ Case-sensitive.
 "Hidden"
 .It
 Any combo of the above separated by a bitwise XOR "\&|" eg "Dim | Italics"
+Additionally, you can use attribute aliases, or links to other theme keys.
 .El
 .Sh VALID COLOR VALUES
 Color values are of type String with the following valid contents:
@@ -156,6 +243,17 @@ Three character shorthand is also valid, e.g. #09c → #0099cc (Case-insensitive
 .Xr xterm 1
 name but with some modifications (for a full table see COLOR NAMES addendum) (Case-sensitive)
 .El
+Additionally, you can use color aliases, or links to other theme keys.
+A link is the name of another theme key, in which case the same field type gets inherited:
+.Bd -literal
+# Linked value keys can be whatever key:
+"mail.listing.compact.even_unseen" = { bg = "mail.sidebar_highlighted_account" }
+.Ed
+Or it can specify a different field:
+.Bd -literal
+# Linked color value keys can optionally refer to another field:
+"mail.listing.compact.odd_unseen" = { bg = "mail.sidebar_highlighted_account.fg" }
+.Ed
 .Sh NO COLOR
 To completely disable
 .Em ANSI

@@ -529,10 +529,9 @@ impl Pager {
                         .take(area3.height() + 1)
                     {
                         let i = i + area3.upper_left().1;
-                        for (start, end) in text_formatter.regexp.find_iter(&l.content) {
-                            let start = start + area3.upper_left().0;
-                            let end = end + area3.upper_left().0;
-                            grid.set_tag(t, (start, i), (end, i));
+                        for (start, length) in text_formatter.regexp.find_iter(&l.content) {
+                            let area = area3.nth_row(i).skip_cols(start).take_cols(length);
+                            grid.set_tag(t, area);
                         }
                     }
                 }

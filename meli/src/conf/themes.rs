@@ -720,7 +720,8 @@ mod regexp {
                 .get(t)
                 .unwrap_or(&context.settings.terminal.themes.dark),
         };
-        theme.text_format_regexps[&Cow::from(key)]
+        let mut retval: SmallVec<[TextFormatter<'ctx>; 64]> = theme.text_format_regexps
+            [&Cow::from(key)]
             .iter()
             .map(|v| TextFormatter {
                 regexp: &v.regexp,
@@ -827,7 +828,10 @@ mod regexp {
                     priority: v.priority,
                 },
             })
-            .collect()
+            .collect();
+        retval.sort_by_key(|f| std::cmp::Reverse(f.tag.priority));
+
+        retval
     }
 }
 

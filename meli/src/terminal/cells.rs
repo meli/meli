@@ -106,7 +106,6 @@ pub struct CellBuffer {
     /// If printing to this buffer and we run out of space, expand it.
     growable: bool,
     tag_table: BTreeMap<u64, FormatTag>,
-    tag_associations: SmallVec<[(u64, (usize, usize)); 128]>,
     pub hyperlinks_table: BTreeMap<u64, Box<str>>,
     pub(super) area: Area,
 }
@@ -125,7 +124,6 @@ impl std::fmt::Debug for CellBuffer {
             .field("tab_width", &self.tab_width)
             .field("growable", &self.growable)
             .field("tag_table", &self.tag_table)
-            .field("tag_associations", &self.tag_associations)
             .field("hyperlinks_table", &self.hyperlinks_table)
             .field("area", &self.area)
             .field("generation", &self.area.generation())
@@ -151,7 +149,6 @@ impl CellBuffer {
             use_color: false,
             tab_width: 4,
             tag_table: Default::default(),
-            tag_associations: SmallVec::new(),
             hyperlinks_table: Default::default(),
             area,
         }
@@ -184,7 +181,6 @@ impl CellBuffer {
             use_color: true,
             tab_width: 4,
             tag_table: Default::default(),
-            tag_associations: SmallVec::new(),
             hyperlinks_table: Default::default(),
             area,
         }
@@ -536,19 +532,6 @@ impl CellBuffer {
         }
     }
 
-    pub fn tag_associations(&self) -> SmallVec<[(usize, u64, bool); 128]> {
-        let mut ret: SmallVec<[(usize, u64, bool); 128]> = self.tag_associations.iter().fold(
-            SmallVec::new(),
-            |mut acc, (tag_hash, (start, end))| {
-                acc.push((*start, *tag_hash, true));
-                acc.push((*end, *tag_hash, false));
-                acc
-            },
-        );
-        ret.sort_by_key(|el| el.0);
-        ret
-    }
-
     pub fn tag_table(&self) -> &BTreeMap<u64, FormatTag> {
         &self.tag_table
     }
@@ -570,15 +553,11 @@ impl CellBuffer {
         hash
     }
 
-    pub fn set_tag(&mut self, tag: u64, start: (usize, usize), end: (usize, usize)) {
-        let start = self
-            .pos_to_index(start.0, start.1)
-            .unwrap_or_else(|| self.buf.len().saturating_sub(1));
-        let end = self
-            .pos_to_index(end.0, end.1)
-            .unwrap_or_else(|| self.buf.len().saturating_sub(1));
-        if start != end {
-            self.tag_associations.push((tag, (start, end)));
+    pub fn set_tag(&mut self, tag: u64, area: Area) {
+        for row in self.bounds_iter(area) {
+            for c in row {
+                self[c].tag = Some(tag);
+            }
         }
     }
 
@@ -696,32 +675,25 @@ impl CellBuffer {
             return dest.upper_left();
         }
 
-        let tag_associations = grid_src.tag_associations();
-        let start_idx = grid_src.pos_to_index(src_x, src_y).unwrap();
-        let mut tag_offset: usize = tag_associations
-            .binary_search_by(|probe| probe.0.cmp(&start_idx))
-            .unwrap_or_else(|i| i);
-        let mut stack: std::collections::BTreeSet<&FormatTag> =
-            std::collections::BTreeSet::default();
         for y in get_y(dest.upper_left())..=get_y(dest.bottom_right()) {
             'for_x: for x in get_x(dest.upper_left())..=get_x(dest.bottom_right()) {
-                let idx = grid_src.pos_to_index(src_x, src_y).unwrap();
-                while tag_offset < tag_associations.len() && tag_associations[tag_offset].0 <= idx {
-                    if tag_associations[tag_offset].2 {
-                        stack.insert(&grid_src.tag_table()[&tag_associations[tag_offset].1]);
-                    } else {
-                        stack.remove(&grid_src.tag_table()[&tag_associations[tag_offset].1]);
-                    }
-                    tag_offset += 1;
-                }
                 self[(x, y)] = grid_src[(src_x, src_y)];
                 self.dirty_bitmap.set(x, y);
-                for t in &stack {
+                if let Some(t) = self[(x, y)]
+                    .tag
+                    .take()
+                    .and_then(|t| grid_src.tag_table.get(&t))
+                {
                     if let Some(fg) = t.fg {
                         self[(x, y)].set_fg(fg).set_keep_fg(true);
                     }
                     if let Some(bg) = t.bg {
                         self[(x, y)].set_bg(bg).set_keep_bg(true);
+                    }
+                    if let Some(underline) = t.underline {
+                        self[(x, y)]
+                            .set_underline(underline)
+                            .set_keep_underline(true);
                     }
                     if let Some(attrs) = t.attrs {
                         self[(x, y)].theme_attr.attrs |= attrs;
@@ -1038,8 +1010,10 @@ pub struct Cell {
     theme_attr: ThemeAttribute,
     keep_fg: bool,
     keep_bg: bool,
+    keep_underline: bool,
     keep_attrs: bool,
     hyperlink: Option<u64>,
+    tag: Option<u64>,
 }
 
 impl Cell {
@@ -1069,8 +1043,10 @@ impl Cell {
             empty: false,
             keep_fg: false,
             keep_bg: false,
+            keep_underline: false,
             keep_attrs: false,
             hyperlink: None,
+            tag: None,
         }
     }
 
@@ -1086,8 +1062,10 @@ impl Cell {
             empty: false,
             keep_fg: false,
             keep_bg: false,
+            keep_underline: false,
             keep_attrs: false,
             hyperlink: None,
+            tag: None,
         }
     }
 
@@ -1167,6 +1145,7 @@ impl Cell {
         self.ch = newch;
         self.keep_fg = false;
         self.keep_bg = false;
+        self.keep_underline = false;
         self.keep_attrs = false;
         self
     }
@@ -1252,7 +1231,7 @@ impl Cell {
 
     /// Sets the `Cell`'s underline `Color` to the given `Color`.
     pub const fn set_underline(&mut self, new: Color) -> &mut Self {
-        if !self.keep_fg {
+        if !self.keep_underline {
             self.theme_attr.underline = new;
         }
         self
@@ -1297,6 +1276,13 @@ impl Cell {
         self
     }
 
+    /// Sets `keep_underline` field. If true, the decoration color will not be altered
+    /// if attempted so until the character content of the cell is changed.
+    pub fn set_keep_underline(&mut self, new_val: bool) -> &mut Self {
+        self.keep_underline = new_val;
+        self
+    }
+
     /// Sets `keep_attrs` field. If true, the text attributes will not be
     /// altered if attempted so until the character content of the cell is
     /// changed.
@@ -1311,6 +1297,14 @@ impl Cell {
 
     pub const fn set_hyperlink(&mut self, hyperlink: Option<u64>) {
         self.hyperlink = hyperlink;
+    }
+
+    pub const fn tag(&self) -> Option<u64> {
+        self.tag
+    }
+
+    pub const fn set_tag(&mut self, tag: Option<u64>) {
+        self.tag = tag;
     }
 }
 
@@ -2025,7 +2019,7 @@ pub mod boundaries {
 }
 
 impl KMP for CellBuffer {
-    fn kmp_search(&self, pattern: &str) -> smallvec::SmallVec<[usize; 256]> {
+    fn kmp_search(&self, pattern: &str) -> SmallVec<[usize; 256]> {
         let (mut w, prev_ind) =
             pattern
                 .char_indices()
@@ -2038,7 +2032,7 @@ impl KMP for CellBuffer {
         let t = Self::kmp_table(&w);
         let mut j = 0; // (the position of the current character in text)
         let mut k = 0; // (the position of the current character in pattern)
-        let mut ret = smallvec::SmallVec::new();
+        let mut ret = SmallVec::new();
 
         while j < self.buf.len() && k < w.len() as i32 {
             if self.buf[j].ch() == '\n' {

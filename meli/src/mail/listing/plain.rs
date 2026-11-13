@@ -936,12 +936,12 @@ impl PlainListing {
                         crate::conf::themes::text_format_regexps(context, "listing.from")
                     {
                         let t = columns[2].grid_mut().insert_tag(text_formatter.tag);
-                        for (start, end) in text_formatter.regexp.find_iter(strings.from.as_str()) {
-                            columns[2].grid_mut().set_tag(
-                                t,
-                                (start + skip_cols, idx),
-                                (end + skip_cols, idx),
-                            );
+                        for (start, length) in
+                            text_formatter.regexp.find_iter(strings.from.as_str())
+                        {
+                            columns[2]
+                                .grid_mut()
+                                .set_tag(t, area_col_2.skip_cols(start).take_cols(length));
                         }
                     }
                 }
@@ -1008,10 +1008,15 @@ impl PlainListing {
                         crate::conf::themes::text_format_regexps(context, "listing.subject")
                     {
                         let t = columns[4].grid_mut().insert_tag(text_formatter.tag);
-                        for (start, end) in
+                        for (start, length) in
                             text_formatter.regexp.find_iter(strings.subject.as_str())
                         {
-                            columns[4].grid_mut().set_tag(t, (start, idx), (end, idx));
+                            let area = columns[4]
+                                .area()
+                                .nth_row(idx)
+                                .skip_cols(start)
+                                .take_cols(length);
+                            columns[4].grid_mut().set_tag(t, area);
                         }
                     }
                 }
@@ -1193,8 +1198,14 @@ impl PlainListing {
                     crate::conf::themes::text_format_regexps(context, "listing.subject")
                 {
                     let t = columns[4].grid_mut().insert_tag(text_formatter.tag);
-                    for (start, end) in text_formatter.regexp.find_iter(strings.subject.as_str()) {
-                        columns[4].grid_mut().set_tag(t, (start, idx), (end, idx));
+                    for (start, length) in text_formatter.regexp.find_iter(strings.subject.as_str())
+                    {
+                        let area = columns[4]
+                            .area()
+                            .nth_row(idx)
+                            .skip_cols(start)
+                            .take_cols(length);
+                        columns[4].grid_mut().set_tag(t, area);
                     }
                 }
             }

@@ -202,8 +202,8 @@ impl Iterator for FindIter<'_, '_> {
         {
             self.char_offset += 1;
         }
-        let end = self.char_offset + 1;
+        let length = self.char_offset - start + 1;
 
-        Some((start, end))
+        Some((start, length))
     }
 }
