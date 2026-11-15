@@ -55,6 +55,19 @@ pub struct ScrollRegion {
     pub right: usize,
 }
 
+impl From<Area> for ScrollRegion {
+    fn from(area: Area) -> Self {
+        let upper_left = area.upper_left();
+        let bottom_right = area.bottom_right();
+        Self {
+            top: upper_left.1,
+            bottom: bottom_right.1,
+            left: upper_left.0,
+            right: bottom_right.0,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Cursor {
     pub y: usize,
