@@ -28,7 +28,8 @@ use crate::components::prelude::*;
 /// # Example
 ///
 /// ```rust,no_run
-/// # use meli::{Area, Component, CellBuffer, Context, utilities::ScrollBar};
+/// use meli::{components::prelude::*, utilities::ScrollBar};
+///
 /// // Mock `Component::draw` impl
 /// fn draw(grid: &mut CellBuffer, area: Area, context: &mut Context) {
 ///     let position = 0;
@@ -208,7 +209,12 @@ impl ScrollBar {
 /// ```rust,no_run
 /// use std::collections::HashSet;
 ///
-/// use meli::{jobs::JobId, utilities::ProgressSpinner, Component, Context, StatusEvent, UIEvent};
+/// use meli::{
+///     components::prelude::*,
+///     jobs::JobId,
+///     types::{StatusEvent, UIEvent},
+///     utilities::ProgressSpinner,
+/// };
 ///
 /// struct JobMonitoringWidget {
 ///     progress_spinner: ProgressSpinner,

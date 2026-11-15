@@ -21,7 +21,12 @@
 
 #![allow(clippy::type_complexity)]
 
-use std::{convert::TryFrom, str::FromStr as _};
+use std::{
+    borrow::Cow,
+    convert::TryFrom,
+    hash::{DefaultHasher, Hasher as _},
+    str::FromStr as _,
+};
 
 pub mod id_ext;
 #[cfg(test)]
@@ -36,15 +41,22 @@ use nom::{
     multi::{length_data, many0, many1, separated_list1},
     sequence::{delimited, preceded},
 };
+use smallvec::SmallVec;
 
-use super::*;
 use crate::{
+    backends::{BackendMailbox as _, SpecialUsageMailbox},
     email::{
         address::Address,
+        headers::HeaderName,
         parser::{
             generic::{byte_in_range, byte_in_slice},
             BytesExt as _, IResult,
         },
+        Envelope, EnvelopeHash, Flag,
+    },
+    error::{Error, Result, ResultIntoError as _},
+    imap::{
+        ImapMailbox, ImapNum, MailboxHash, MessageSequenceNumber, ModSequence, UID, UIDVALIDITY,
     },
     text::Truncate as _,
     utils::parsec::CRLF,
@@ -1737,7 +1749,7 @@ pub fn status_response(input: &[u8]) -> IResult<&[u8], StatusResponse> {
 //           ; is considered to be INBOX and not an astring.
 //           ; Refer to section 5.1 for further
 //           ; semantic details of mailbox names.
-pub fn mailbox_token(input: &'_ [u8]) -> IResult<&'_ [u8], std::borrow::Cow<'_, str>> {
+pub fn mailbox_token(input: &'_ [u8]) -> IResult<&'_ [u8], Cow<'_, str>> {
     let (input, astring) = astring_token(input)?;
     if astring.eq_ignore_ascii_case(b"INBOX") {
         return Ok((input, "INBOX".into()));

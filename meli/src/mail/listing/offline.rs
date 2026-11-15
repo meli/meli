@@ -19,10 +19,21 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::borrow::Cow;
+use std::{borrow::Cow, collections::HashMap};
 
-use super::*;
-use crate::components::PageMovement;
+use melib::{
+    backends::{AccountHash, MailboxHash},
+    email::EnvelopeHash,
+    error::Result,
+    thread::ThreadHash,
+};
+use smallvec::SmallVec;
+
+use crate::{
+    components::prelude::*,
+    mail::listing::{Focus, ListingTrait, MailListingTrait, Modifier},
+    types::{UIEvent, UIMode},
+};
 
 #[derive(Debug)]
 pub struct OfflineListing {

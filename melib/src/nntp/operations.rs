@@ -21,8 +21,11 @@
 
 use std::sync::Arc;
 
-use super::*;
-use crate::{backends::*, error::Error};
+use crate::{
+    backends::prelude::*,
+    error::{Error, Result},
+    nntp::{NntpConnection, UIDStore, UID},
+};
 
 /// Fetch an article by `UID` as bytes.
 #[derive(Clone, Debug)]

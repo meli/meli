@@ -22,7 +22,7 @@
 
 use std::borrow::Cow;
 
-use crate::{contacts::CardId, email::Address};
+use crate::{contacts::CardId, email::address::Address};
 
 pub type JSContactV1 = JSContact<JSContactVersion1>;
 

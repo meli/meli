@@ -23,28 +23,13 @@
 
 use std::{future::Future, pin::Pin};
 
-use indexmap::IndexMap;
-use melib::{
-    backends::{AccountHash, Mailbox, MailboxHash},
-    email::{attachment_types::*, attachments::*},
-    text::{TextProcessing as _, Truncate as _},
-    thread::ThreadNodeHash,
-};
-use uuid::Uuid;
-
-use super::*;
+use melib::{email::attachments::*, error::Result};
 
 pub type AttachmentBoxFuture = Pin<Box<dyn Future<Output = Result<AttachmentBuilder>> + Send>>;
 pub type AttachmentFilterBox = Box<dyn FnOnce(AttachmentBuilder) -> AttachmentBoxFuture + Send>;
 
-pub mod listing;
-pub use crate::listing::*;
-pub mod view;
-pub use crate::view::*;
 pub mod compose;
-pub use self::compose::*;
-
+pub mod listing;
 pub mod pgp;
-
 pub mod status;
-pub use self::status::*;
+pub mod view;

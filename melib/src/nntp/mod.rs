@@ -27,8 +27,7 @@
 //! Command](https://datatracker.ietf.org/doc/html/rfc6048).
 
 use std::{
-    collections::{hash_map::DefaultHasher, BTreeSet, HashMap, HashSet},
-    hash::Hasher as _,
+    collections::{BTreeSet, HashMap, HashSet},
     str::FromStr as _,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -48,8 +47,7 @@ pub use connection::*;
 
 use crate::{
     backends::prelude::*,
-    email::{address::MessageID, Mail},
-    parser::BytesExt as _,
+    email::{address::MessageID, parser::BytesExt as _, Mail},
 };
 pub type UID = std::num::NonZeroU32;
 

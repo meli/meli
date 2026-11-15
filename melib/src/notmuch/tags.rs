@@ -19,10 +19,12 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::ptr::NonNull;
+use std::{ffi::CStr, ptr::NonNull};
 
-use super::*;
-use crate::notmuch::ffi::notmuch_tags_t;
+use crate::{
+    email::Flag,
+    notmuch::{ffi::notmuch_tags_t, message::Message},
+};
 
 pub struct TagIterator<'m> {
     pub tags: Option<NonNull<notmuch_tags_t>>,

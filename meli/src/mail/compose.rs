@@ -31,22 +31,44 @@ use std::{
 
 use indexmap::IndexSet;
 use melib::{
-    email::attachment_types::{ContentType, MultipartType},
-    list_management,
-    parser::BytesExt as _,
-    pgp::Key as PGPKey,
-    Address, Draft, HeaderName, SpecialUsageMailbox, SubjectPrefix as _, UnixTimestamp,
+    backends::SpecialUsageMailbox,
+    conf::ActionFlag,
+    email::{
+        address::Address,
+        attachment_types::{
+            ContentDisposition, ContentDispositionKind, ContentTransferEncoding, ContentType,
+            MultipartType, Text,
+        },
+        attachments::{Attachment, AttachmentBuilder},
+        compose::Draft,
+        headers::HeaderName,
+        list_management,
+        parser::BytesExt as _,
+        pgp::Key as PGPKey,
+        Envelope, EnvelopeHash, Flag,
+    },
+    error::{Error, ErrorKind, Result, ResultIntoError as _},
+    text::Truncate as _,
+    thread::SubjectPrefix,
+    UnixTimestamp,
 };
-use nix::sys::wait::WaitStatus;
+use nix::{errno::Errno, sys::wait::WaitStatus};
 
-use super::*;
 use crate::{
+    account_settings,
     accounts::JobRequest,
-    command::actions::{ComposerTabAction, FileAction},
+    components::prelude::*,
     jobs::{IsAsync, JoinHandle},
-    terminal::embedded::Terminal,
-    types::File,
-    utilities::form::{FormButtonAction, FormWidget, TextField},
+    mail::AttachmentFilterBox,
+    terminal::{cells::boundaries::create_box, embedded::Terminal, Color},
+    types::{
+        CallbackFn, File, ForkedProcess, NotificationType, OnExitNotifyFn, ProcessRequest,
+        ProcessResultFn, ThreadEvent, UIEvent, UIMode,
+    },
+    utilities::{
+        form::{FormButtonAction, FormWidget, TextField},
+        Pager, UIConfirmationDialog,
+    },
 };
 
 pub mod pgp;
@@ -395,7 +417,7 @@ impl Composer {
             .unwrap_or_default();
             let subject_stripped = subject.as_ref().strip_prefixes_from_list(
                 if prefix_list.is_empty() {
-                    <&str>::USUAL_PREFIXES
+                    <&str as SubjectPrefix>::USUAL_PREFIXES
                 } else {
                     &prefix_list
                 },
@@ -955,7 +977,7 @@ To: {}
                     body:
                         format!("{err}\nThe invalid text has been set as the body of your draft",)
                             .into(),
-                    kind: Some(NotificationType::Error(melib::error::ErrorKind::None)),
+                    kind: Some(NotificationType::Error(ErrorKind::None)),
                 });
                 self.has_changes = true;
             }
@@ -1072,11 +1094,7 @@ To: {}
         }
     }
 
-    fn process_wait(
-        &mut self,
-        wait: &nix::Result<nix::sys::wait::WaitStatus>,
-        context: &mut Context,
-    ) -> bool {
+    fn process_wait(&mut self, wait: &nix::Result<WaitStatus>, context: &mut Context) -> bool {
         match wait {
             Err(Errno::ECHILD) => {
                 if let Some(EmbeddedPty {
@@ -1114,7 +1132,7 @@ To: {}
                         ),
                         source: None,
                         body,
-                        kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
+                        kind: Some(NotificationType::Error(ErrorKind::External)),
                     });
                 }
                 if let Some(embedded_pty) = embedded_pty {
@@ -1178,7 +1196,7 @@ To: {}
                         title: Some(format!("Subprocess was killed by {signal} signal").into()),
                         source: None,
                         body,
-                        kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
+                        kind: Some(NotificationType::Error(ErrorKind::External)),
                     });
                 }
                 if let Some(embedded_pty) = embedded_pty {
@@ -1722,7 +1740,9 @@ impl Component for Composer {
                 if let Some(key) = result.downcast_mut::<char>() {
                     match key {
                         'x' => {
-                            context.replies.push_back(UIEvent::Action(Tab(Kill(*u))));
+                            context
+                                .replies
+                                .push_back(UIEvent::Action(Action::Tab(TabAction::Kill(*u))));
                             return true;
                         }
                         'n' => {}
@@ -1734,7 +1754,9 @@ impl Component for Composer {
                                 (Flag::SEEN | Flag::DRAFT, vec![]),
                                 self.account_hash,
                             );
-                            context.replies.push_back(UIEvent::Action(Tab(Kill(*u))));
+                            context
+                                .replies
+                                .push_back(UIEvent::Action(Action::Tab(TabAction::Kill(*u))));
                             return true;
                         }
                         _ => {}
@@ -1759,7 +1781,7 @@ impl Component for Composer {
                         'c' => {
                             context
                                 .replies
-                                .push_back(UIEvent::Action(Tab(Kill(self.id))));
+                                .push_back(UIEvent::Action(Action::Tab(TabAction::Kill(self.id))));
                             self.set_dirty(true);
                             return true;
                         }
@@ -1802,7 +1824,7 @@ impl Component for Composer {
                     Ok(None) | Ok(Some(Ok(()))) => {
                         context
                             .replies
-                            .push_back(UIEvent::Action(Tab(Kill(self.id))));
+                            .push_back(UIEvent::Action(Action::Tab(TabAction::Kill(self.id))));
                     }
                 }
                 return false;
@@ -1971,7 +1993,7 @@ impl Component for Composer {
                             title: Some("Could not list keys.".into()),
                             source: None,
                             body: err.to_string().into(),
-                            kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
+                            kind: Some(NotificationType::Error(ErrorKind::External)),
                         });
                     }
                 }
@@ -2018,7 +2040,7 @@ impl Component for Composer {
                             title: Some("Could not list keys.".into()),
                             source: None,
                             body: err.to_string().into(),
-                            kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
+                            kind: Some(NotificationType::Error(ErrorKind::External)),
                         });
                     }
                 }
@@ -2183,7 +2205,7 @@ impl Component for Composer {
                                        value with setenv or set composing.editor_command setting \
                                        in your configuration."
                                     .into(),
-                                kind: Some(NotificationType::Error(melib::error::ErrorKind::None)),
+                                kind: Some(NotificationType::Error(ErrorKind::None)),
                             });
                             self.set_dirty(true);
                             return true;
@@ -2297,14 +2319,14 @@ impl Component for Composer {
                     })));
                 return true;
             }
-            UIEvent::Action(Action::Tab(ComposerAction(ref a))) => match a {
+            UIEvent::Action(Action::Tab(TabAction::ComposerAction(ref a))) => match a {
                 ComposerTabAction::AddAttachmentPipe(ref command) => {
                     if command.is_empty() {
                         context.replies.push_back(UIEvent::Notification {
                             title: None,
                             source: None,
                             body: format!("pipe command value is invalid: {command}").into(),
-                            kind: Some(NotificationType::Error(melib::error::ErrorKind::None)),
+                            kind: Some(NotificationType::Error(ErrorKind::None)),
                         });
                         return false;
                     }
@@ -2318,7 +2340,7 @@ impl Component for Composer {
                                 title: Some("could not create temporary file".into()),
                                 source: None,
                                 body: err.to_string().into(),
-                                kind: Some(NotificationType::Error(melib::error::ErrorKind::None)),
+                                kind: Some(NotificationType::Error(ErrorKind::None)),
                             });
                             return true;
                         }
@@ -2365,7 +2387,7 @@ impl Component for Composer {
                                 title: Some("could not add attachment".into()),
                                 source: None,
                                 body: err.to_string().into(),
-                                kind: Some(NotificationType::Error(melib::error::ErrorKind::None)),
+                                kind: Some(NotificationType::Error(ErrorKind::None)),
                             });
                             self.set_dirty(true);
                             return true;
@@ -2392,7 +2414,7 @@ impl Component for Composer {
                                    [terminal.file_picker_command] as a fallback. Try re-executing \
                                    the command with a file picker command appended."
                                 .into(),
-                            kind: Some(NotificationType::Error(melib::error::ErrorKind::None)),
+                            kind: Some(NotificationType::Error(ErrorKind::None)),
                         });
                         self.set_dirty(true);
                         return true;
@@ -2452,7 +2474,7 @@ impl Component for Composer {
                 ComposerTabAction::DiscardDraft => {
                     context
                         .replies
-                        .push_back(UIEvent::Action(Tab(Kill(self.id))));
+                        .push_back(UIEvent::Action(Action::Tab(TabAction::Kill(self.id))));
                     self.set_dirty(true);
                     return true;
                 }
@@ -2509,9 +2531,7 @@ impl Component for Composer {
                                     title: Some(format!("Failed to execute editor: {err}").into()),
                                     source: None,
                                     body: err.to_string().into(),
-                                    kind: Some(NotificationType::Error(
-                                        melib::error::ErrorKind::External,
-                                    )),
+                                    kind: Some(NotificationType::Error(ErrorKind::External)),
                                 });
                                 self.set_dirty(true);
                             }
@@ -2526,9 +2546,7 @@ impl Component for Composer {
                                     title: None,
                                     source: None,
                                     body: format!("could not execute pipe command: {err}").into(),
-                                    kind: Some(NotificationType::Error(
-                                        melib::error::ErrorKind::External,
-                                    )),
+                                    kind: Some(NotificationType::Error(ErrorKind::External)),
                                 });
                                 self.set_dirty(true);
                             }
@@ -2542,7 +2560,7 @@ impl Component for Composer {
                                                 source: None,
                                                 body: err.to_string().into(),
                                                 kind: Some(NotificationType::Error(
-                                                    melib::error::ErrorKind::None,
+                                                    ErrorKind::None,
                                                 )),
                                             });
                                             self.set_dirty(true);
@@ -2560,9 +2578,7 @@ impl Component for Composer {
                                     title: Some(format!("Failed to execute command: {err}").into()),
                                     source: None,
                                     body: err.to_string().into(),
-                                    kind: Some(NotificationType::Error(
-                                        melib::error::ErrorKind::External,
-                                    )),
+                                    kind: Some(NotificationType::Error(ErrorKind::External)),
                                 });
                                 self.set_dirty(true);
                             }
@@ -2591,7 +2607,7 @@ impl Component for Composer {
                                                 source: None,
                                                 body: err.to_string().into(),
                                                 kind: Some(NotificationType::Error(
-                                                    melib::error::ErrorKind::None,
+                                                    ErrorKind::None,
                                                 )),
                                             });
                                         }
@@ -2695,7 +2711,9 @@ impl Component for Composer {
         }
 
         if !self.has_changes {
-            context.replies.push_back(UIEvent::Action(Tab(Kill(uuid))));
+            context
+                .replies
+                .push_back(UIEvent::Action(Action::Tab(TabAction::Kill(uuid))));
             return;
         }
 
@@ -2853,10 +2871,10 @@ pub fn send_draft_async(
             pgp_state.encrypt_for_self.then_some(()).map_or_else(
                 || Ok(None),
                 |()| {
-                    draft.headers().get(HeaderName::FROM).map_or_else(
-                        || Ok(None),
-                        |s| Some(melib::Address::try_from(s)).transpose(),
-                    )
+                    draft
+                        .headers()
+                        .get(HeaderName::FROM)
+                        .map_or_else(|| Ok(None), |s| Some(Address::try_from(s)).transpose())
                 },
             )?,
             (pgp_state.sign_mail.unwrap_or(ActionFlag::False).is_true()

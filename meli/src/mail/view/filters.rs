@@ -29,31 +29,32 @@ use std::{
 type ProcessEventFn = fn(&mut ViewFilter, &mut UIEvent, &mut Context) -> bool;
 
 use melib::{
-    attachment_types::{ContentType, MultipartType, Text},
-    email::headers::HeaderName,
-    error::*,
-    parser::BytesExt as _,
+    email::{
+        attachment_types::{ContentType, MultipartType, Text},
+        attachments::{Attachment, AttachmentBuilder},
+        headers::HeaderName,
+        parser::BytesExt as _,
+    },
+    error::{Error, ErrorKind, Result, ResultIntoError as _, WrapResultIntoError as _},
     text::Truncate as _,
     utils::{percent_encoding, xdg::query_default_app},
-    Attachment, AttachmentBuilder, Result,
 };
 use smallvec::SmallVec;
 
 use crate::{
     components::*,
-    desktop_exec_to_command,
     jobs::{IsAsync, JobId, JoinHandle},
-    mail::view::ViewSettings,
-    terminal::{Area, CellBuffer},
+    mail::view::{utils::desktop_exec_to_command, ViewSettings},
+    state::Context,
+    terminal::{cells::CellBuffer, Area},
     try_recv_timeout,
-    types::{ForkedProcess, NotificationType},
-    Context, ErrorKind, File, StatusEvent, UIEvent,
+    types::{File, ForkedProcess, NotificationType, StatusEvent, UIEvent},
 };
 
 #[derive(Clone, Debug)]
 pub enum FilterOutputMetadata {
-    Signature(Result<melib::pgp::SignaturesMetadata>),
-    Decrypted(melib::pgp::SignaturesMetadata),
+    Signature(Result<melib::email::pgp::SignaturesMetadata>),
+    Decrypted(melib::email::pgp::SignaturesMetadata),
 }
 
 pub struct FilterOutput {
@@ -747,18 +748,20 @@ impl ViewFilter {
         }
         if matches!(att.content_type, ContentType::MessageRfc822) {
             let unfiltered = att.decode(view_settings.charset.into());
-            if let Ok((env, vf)) = melib::Envelope::from_bytes(&unfiltered, None).and_then(|env| {
-                let root_attachment = env.body_bytes(unfiltered.as_slice());
-                Ok((
-                    env,
-                    Self::new_attachment(
-                        &root_attachment,
-                        SmallVec::new(),
-                        view_settings,
-                        context,
-                    )?,
-                ))
-            }) {
+            if let Ok((env, vf)) =
+                melib::email::Envelope::from_bytes(&unfiltered, None).and_then(|env| {
+                    let root_attachment = env.body_bytes(unfiltered.as_slice());
+                    Ok((
+                        env,
+                        Self::new_attachment(
+                            &root_attachment,
+                            SmallVec::new(),
+                            view_settings,
+                            context,
+                        )?,
+                    ))
+                })
+            {
                 return Ok(Self {
                     filter_invocation: None,
                     content_type: att.content_type.clone(),

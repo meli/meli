@@ -26,9 +26,13 @@
 
 use std::convert::TryFrom;
 
-use super::*;
 use crate::{
-    email::headers::HeaderMap,
+    email::{
+        address::Address,
+        compose::Draft,
+        headers::{HeaderMap, HeaderName},
+        parser,
+    },
     error::Error,
     utils::percent_encoding::{AsciiSet, CONTROLS},
 };
@@ -142,7 +146,7 @@ impl TryFrom<&[u8]> for Mailto {
     type Error = Error;
 
     fn try_from(value: &[u8]) -> std::result::Result<Self, Self::Error> {
-        super::parser::generic::mailto(value)
+        parser::generic::mailto(value)
             .map(|(_, v)| v)
             .map_err(|err| {
                 let err = Error::from(err);
@@ -158,7 +162,7 @@ impl TryFrom<&str> for Mailto {
     type Error = Error;
 
     fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
-        super::parser::generic::mailto(value.as_bytes())
+        parser::generic::mailto(value.as_bytes())
             .map(|(_, v)| v)
             .map_err(|err| {
                 let err = Error::from(err);

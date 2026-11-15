@@ -1022,7 +1022,13 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
-    /// use meli::{conf::themes::ThemeAttribute, Attr, Cell, Color};
+    /// use meli::{
+    ///     conf::themes::ThemeAttribute,
+    ///     terminal::{
+    ///         cells::{Attr, Cell},
+    ///         Color,
+    ///     },
+    /// };
     ///
     /// let cell = Cell::new(
     ///     'x',
@@ -1074,7 +1080,10 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
-    /// use meli::{Attr, Cell, Color};
+    /// use meli::terminal::{
+    ///     cells::{Attr, Cell},
+    ///     Color,
+    /// };
     ///
     /// let mut cell = Cell::with_char('x');
     /// assert_eq!(cell.ch(), 'x');
@@ -1094,7 +1103,13 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
-    /// use meli::{conf::themes::ThemeAttribute, Attr, Cell, Color};
+    /// use meli::{
+    ///     conf::themes::ThemeAttribute,
+    ///     terminal::{
+    ///         cells::{Attr, Cell},
+    ///         Color,
+    ///     },
+    /// };
     ///
     /// let mut cell = Cell::with_style(ThemeAttribute {
     ///     bg: Color::Red,
@@ -1119,7 +1134,7 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
-    /// use meli::Cell;
+    /// use meli::terminal::cells::Cell;
     ///
     /// let mut cell = Cell::with_char('x');
     /// assert_eq!(cell.ch(), 'x');
@@ -1133,7 +1148,7 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
-    /// use meli::Cell;
+    /// use meli::terminal::cells::Cell;
     ///
     /// let mut cell = Cell::with_char('x');
     /// assert_eq!(cell.ch(), 'x');
@@ -1155,7 +1170,13 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
-    /// use meli::{conf::themes::ThemeAttribute, Attr, Cell, Color};
+    /// use meli::{
+    ///     conf::themes::ThemeAttribute,
+    ///     terminal::{
+    ///         cells::{Attr, Cell},
+    ///         Color,
+    ///     },
+    /// };
     ///
     /// let mut cell = Cell::with_style(ThemeAttribute {
     ///     fg: Color::Blue,
@@ -1172,7 +1193,7 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
-    /// use meli::{Cell, Color};
+    /// use meli::terminal::{cells::Cell, Color};
     ///
     /// let mut cell = Cell::default();
     /// assert_eq!(cell.fg(), Color::Default);
@@ -1192,7 +1213,13 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
-    /// use meli::{conf::themes::ThemeAttribute, Attr, Cell, Color};
+    /// use meli::{
+    ///     conf::themes::ThemeAttribute,
+    ///     terminal::{
+    ///         cells::{Attr, Cell},
+    ///         Color,
+    ///     },
+    /// };
     ///
     /// let mut cell = Cell::with_style(ThemeAttribute {
     ///     bg: Color::Green,
@@ -1209,7 +1236,7 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
-    /// use meli::{Cell, Color};
+    /// use meli::terminal::{cells::Cell, Color};
     ///
     /// let mut cell = Cell::default();
     /// assert_eq!(cell.bg(), Color::Default);
@@ -1314,7 +1341,7 @@ impl Default for Cell {
     /// # Examples
     ///
     /// ```no_run
-    /// use meli::{Cell, Color};
+    /// use meli::terminal::{cells::Cell, Color};
     ///
     /// let mut cell = Cell::default();
     /// assert_eq!(cell.ch(), ' ');
@@ -1345,7 +1372,7 @@ bitflags::bitflags! {
     /// # Examples
     ///
     /// ```no_run
-    /// use meli::Attr;
+    /// use meli::terminal::cells::Attr;
     ///
     /// // Default attribute.
     /// let def = Attr::DEFAULT;
@@ -1508,7 +1535,11 @@ impl Attr {
         }
     }
 
-    pub fn write(self, prev: Self, stdout: &mut crate::StateStdout) -> std::io::Result<()> {
+    pub fn write(
+        self,
+        prev: Self,
+        stdout: &mut crate::terminal::StateStdout,
+    ) -> std::io::Result<()> {
         use std::io::Write as _;
         match (self.intersects(Self::BOLD), prev.intersects(Self::BOLD)) {
             (true, true) | (false, false) => Ok(()),
@@ -1733,7 +1764,6 @@ impl RowIterator {
     }
 }
 
-pub use boundaries::create_box;
 pub mod boundaries {
     use super::*;
     pub const HORZ_BOUNDARY: char = '─';
@@ -2328,6 +2358,8 @@ of the house!’ (Which was very likely true.)";
 
     #[test]
     fn test_create_box() {
+        use crate::terminal::cells::boundaries::create_box;
+
         macro_rules! assert_eq_grid {
             ($left:expr, $right:expr) => {{
                 let left = $left;
@@ -2340,9 +2372,9 @@ of the house!’ (Which was very likely true.)";
         assert!(screen.resize(40, 20));
         screen.grid_mut().ascii_drawing = false;
         let area = screen.area();
-        let _ = super::create_box(screen.grid_mut(), area);
+        let _ = create_box(screen.grid_mut(), area);
         let inner = area.place_inside((30, 10), false, false);
-        let box_inner_area = super::create_box(screen.grid_mut(), inner);
+        let box_inner_area = create_box(screen.grid_mut(), inner);
         assert_eq_grid!(
             r#"
 ┌──────────────────────────────────────┐
@@ -2375,7 +2407,7 @@ of the house!’ (Which was very likely true.)";
             "{box_inner_area:?}"
         );
         let inner = area.place_inside((15, 10), false, true);
-        let _box_inner_area = super::create_box(screen.grid_mut(), inner);
+        let _box_inner_area = create_box(screen.grid_mut(), inner);
         assert_eq_grid!(
             r#"
 ┌──────────────────────────────────────┐
@@ -2402,7 +2434,7 @@ of the house!’ (Which was very likely true.)";
             .trim_start(),
             screen.grid().to_string()
         );
-        let _box_inner_area = super::create_box(screen.grid_mut(), area.take(5, 5));
+        let _box_inner_area = create_box(screen.grid_mut(), area.take(5, 5));
         assert_eq_grid!(
             r#"
 ┌───┬──────────────────────────────────┐
@@ -2432,9 +2464,9 @@ of the house!’ (Which was very likely true.)";
         screen.grid_mut().clear(None);
         let area = screen.area();
         screen.grid_mut().set_ascii_drawing(true);
-        let _ = super::create_box(screen.grid_mut(), area);
+        let _ = create_box(screen.grid_mut(), area);
         let inner = area.place_inside((30, 10), false, false);
-        _ = super::create_box(screen.grid_mut(), inner);
+        _ = create_box(screen.grid_mut(), inner);
         assert_eq_grid!(
             r#"
 +--------------------------------------+

@@ -19,11 +19,25 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{borrow::Cow, cell::Cell, marker::PhantomData, ptr::NonNull};
+use std::{
+    borrow::Cow,
+    cell::Cell,
+    collections::{BTreeMap, HashMap},
+    ffi::{CStr, CString, OsStr},
+    marker::PhantomData,
+    os::unix::ffi::OsStrExt as _,
+    ptr::NonNull,
+    sync::{Arc, RwLock},
+};
 
-use super::*;
 use crate::{
-    notmuch::ffi::{NOTMUCH_STATUS_READ_ONLY_DATABASE, NOTMUCH_STATUS_UNBALANCED_FREEZE_THAW},
+    backends::TagHash,
+    email::{Envelope, EnvelopeHash, Flag},
+    error::{Error, Result},
+    notmuch::{
+        ffi::{self, NOTMUCH_STATUS_READ_ONLY_DATABASE, NOTMUCH_STATUS_UNBALANCED_FREEZE_THAW},
+        DbConnection, NotmuchLibrary, Query, TagIterator,
+    },
     thread::{ThreadHash, ThreadNode, ThreadNodeHash},
 };
 

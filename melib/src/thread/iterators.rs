@@ -23,7 +23,7 @@ use std::collections::HashMap;
 
 use smallvec::SmallVec;
 
-use super::{ThreadNode, ThreadNodeHash};
+use crate::thread::{ThreadNode, ThreadNodeHash};
 
 /// [`ThreadsIterator`] returns messages according to the sorted order.
 ///

@@ -23,7 +23,7 @@
 
 use std::borrow::Cow;
 
-use melib::{email::MessageID, SortField, SortOrder};
+use melib::{email::address::MessageID, SortField, SortOrder};
 use nom::{
     self,
     branch::alt,
@@ -35,10 +35,12 @@ use nom::{
     IResult,
 };
 
-use super::*;
-use crate::{
-    actions::FileAction,
-    command::{argcheck::*, error::*},
+use crate::command::{
+    actions::{
+        AccountAction, Action, ComposeAction, ComposerTabAction, FileAction, FlagAction,
+        ListingAction, MailboxOperation, MailingListAction, TabAction, TagAction, ViewAction,
+    },
+    error::CommandError,
 };
 
 const FLAG_SUGGESTIONS: &[&str] = &[
@@ -227,7 +229,7 @@ pub fn parse_command(input: &str) -> Result<Action, CommandError> {
 }
 
 pub(super) fn flag(input: &str) -> IResult<&str, Result<Action, CommandError>> {
-    use melib::Flag;
+    use melib::email::Flag;
 
     fn parse_flag(s: &str) -> Option<Flag> {
         match s {
@@ -279,7 +281,7 @@ pub(super) fn flag(input: &str) -> IResult<&str, Result<Action, CommandError>> {
             ));
         }
     };
-    Ok((input, Ok(Listing(Flag(flag_action)))))
+    Ok((input, Ok(Action::Listing(ListingAction::Flag(flag_action)))))
 }
 
 pub(super) fn set(input: &str) -> IResult<&str, Result<Action, CommandError>> {
@@ -290,10 +292,18 @@ pub(super) fn set(input: &str) -> IResult<&str, Result<Action, CommandError>> {
         let (input, _) = is_a(" ")(input)?;
         arg_chk!(inc check, input);
         let (input, ret) = alt((
-            map(tag("threaded"), |_| Ok(Listing(SetThreaded))),
-            map(tag("plain"), |_| Ok(Listing(SetPlain))),
-            map(tag("compact"), |_| Ok(Listing(SetCompact))),
-            map(tag("conversations"), |_| Ok(Listing(SetConversations))),
+            map(tag("threaded"), |_| {
+                Ok(Action::Listing(ListingAction::SetThreaded))
+            }),
+            map(tag("plain"), |_| {
+                Ok(Action::Listing(ListingAction::SetPlain))
+            }),
+            map(tag("compact"), |_| {
+                Ok(Action::Listing(ListingAction::SetCompact))
+            }),
+            map(tag("conversations"), |_| {
+                Ok(Action::Listing(ListingAction::SetConversations))
+            }),
         ))(input)?;
         arg_chk!(finish check, input);
         let (input, _) = eof(input)?;
@@ -307,8 +317,8 @@ pub(super) fn set(input: &str) -> IResult<&str, Result<Action, CommandError>> {
         arg_chk!(inc check, input);
         let (input, ret) = command_err!(nom
                                    alt((
-                                           map(tag!{}("seen"), |_| Listing(SetSeen)),
-                                           map(tag!{}("unseen"), |_| Listing(SetUnseen)
+                                           map(tag!{}("seen"), |_| Action::Listing(ListingAction::SetSeen)),
+                                           map(tag!{}("unseen"), |_| Action::Listing(ListingAction::SetUnseen)
                                    )))(input),
                                    input,
                                    input.trim().to_string(),
@@ -325,7 +335,9 @@ pub(super) fn set(input: &str) -> IResult<&str, Result<Action, CommandError>> {
 
 pub(super) fn delete_message(input: &'_ str) -> IResult<&'_ str, Result<Action, CommandError>> {
     let mut check = arg_init! { min_arg:0, max_arg: 0, delete_message};
-    let (input, ret) = map(preceded(tag("delete"), eof), |_| Listing(Delete))(input)?;
+    let (input, ret) = map(preceded(tag("delete"), eof), |_| {
+        Action::Listing(ListingAction::Delete)
+    })(input)?;
     arg_chk!(start check, input);
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
@@ -348,7 +360,7 @@ pub(super) fn copymove<'a>(input: &'a str) -> IResult<&'a str, Result<Action, Co
             let (input, _) = eof(input)?;
             Ok((
                 input,
-                Ok(Listing(CopyToOtherAccount(
+                Ok(Action::Listing(ListingAction::CopyToOtherAccount(
                     account.to_string(),
                     path.to_string(),
                 ))),
@@ -363,7 +375,10 @@ pub(super) fn copymove<'a>(input: &'a str) -> IResult<&'a str, Result<Action, Co
             let (input, path) = quoted_argument(input)?;
             arg_chk!(finish check, input);
             let (input, _) = eof(input)?;
-            Ok((input, Ok(Listing(CopyTo(path.to_string())))))
+            Ok((
+                input,
+                Ok(Action::Listing(ListingAction::CopyTo(path.to_string()))),
+            ))
         },
         |input: &'a str| -> IResult<&'a str, Result<Action, CommandError>> {
             let mut check = arg_init! { min_arg:1, max_arg: 2, moveto};
@@ -379,7 +394,7 @@ pub(super) fn copymove<'a>(input: &'a str) -> IResult<&'a str, Result<Action, Co
             let (input, _) = eof(input)?;
             Ok((
                 input,
-                Ok(Listing(MoveToOtherAccount(
+                Ok(Action::Listing(ListingAction::MoveToOtherAccount(
                     account.to_string(),
                     path.to_string(),
                 ))),
@@ -394,7 +409,10 @@ pub(super) fn copymove<'a>(input: &'a str) -> IResult<&'a str, Result<Action, Co
             let (input, path) = quoted_argument(input)?;
             arg_chk!(finish check, input);
             let (input, _) = eof(input)?;
-            Ok((input, Ok(Listing(MoveTo(path.to_string())))))
+            Ok((
+                input,
+                Ok(Action::Listing(ListingAction::MoveTo(path.to_string()))),
+            ))
         },
     ))(input)
 }
@@ -405,7 +423,7 @@ pub(super) fn close(input: &str) -> IResult<&str, Result<Action, CommandError>> 
     arg_chk!(start check, input);
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
-    Ok((input, Ok(Tab(Close))))
+    Ok((input, Ok(Action::Tab(TabAction::Close))))
 }
 
 pub(super) fn goto(input: &str) -> IResult<&str, Result<Action, CommandError>> {
@@ -433,7 +451,7 @@ pub(super) fn subsort(input: &str) -> IResult<&str, Result<Action, CommandError>
     let (input, p) = pair(sortfield, sortorder)(input)?;
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
-    Ok((input, Ok(SubSort(p.0, p.1))))
+    Ok((input, Ok(Action::SubSort(p.0, p.1))))
 }
 
 pub(super) fn sort(input: &str) -> IResult<&str, Result<Action, CommandError>> {
@@ -445,7 +463,7 @@ pub(super) fn sort(input: &str) -> IResult<&str, Result<Action, CommandError>> {
     let (input, p) = separated_pair(sortfield, tag(" "), sortorder)(input)?;
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
-    Ok((input, Ok(Sort(p.0, p.1))))
+    Ok((input, Ok(Action::Sort(p.0, p.1))))
 }
 
 pub(super) fn sort_column(input: &str) -> IResult<&str, Result<Action, CommandError>> {
@@ -463,7 +481,7 @@ pub(super) fn sort_column(input: &str) -> IResult<&str, Result<Action, CommandEr
     };
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
-    Ok((input, Ok(SortColumn(i, order))))
+    Ok((input, Ok(Action::SortColumn(i, order))))
 }
 
 pub(super) fn search(input: &str) -> IResult<&str, Result<Action, CommandError>> {
@@ -482,7 +500,7 @@ pub(super) fn search(input: &str) -> IResult<&str, Result<Action, CommandError>>
     let (input, _) = eof(input)?;
     Ok((
         input,
-        Ok(Listing(Search {
+        Ok(Action::Listing(ListingAction::Search {
             term: String::from(string),
             raw_search,
         })),
@@ -502,7 +520,7 @@ pub(super) fn select(input: &str) -> IResult<&str, Result<Action, CommandError>>
             arg_chk!(start check, input);
             arg_chk!(finish check, input);
             let (input, _) = eof(input)?;
-            Ok((input, Ok(Listing(ListingAction::ClearSelection))))
+            Ok((input, Ok(Action::Listing(ListingAction::ClearSelection))))
         }
         Some(inner(input))
     }
@@ -525,7 +543,7 @@ pub(super) fn select(input: &str) -> IResult<&str, Result<Action, CommandError>>
     let (input, _) = eof(input)?;
     Ok((
         input,
-        Ok(Listing(Select {
+        Ok(Action::Listing(ListingAction::Select {
             term: String::from(string),
             raw_search,
         })),
@@ -543,7 +561,7 @@ pub(super) fn export_mbox(input: &str) -> IResult<&str, Result<Action, CommandEr
     let (input, _) = eof(input)?;
     Ok((
         input,
-        Ok(Listing(ExportMbox(
+        Ok(Action::Listing(ListingAction::ExportMbox(
             Some(melib::mbox::MboxFormat::MboxCl2),
             path.to_string().into(),
         ))),
@@ -561,7 +579,7 @@ pub(super) fn export_thread_mbox(input: &str) -> IResult<&str, Result<Action, Co
     let (input, _) = eof(input)?;
     Ok((
         input,
-        Ok(View(ExportThreadMbox(
+        Ok(Action::View(ViewAction::ExportThreadMbox(
             Some(melib::mbox::MboxFormat::MboxCl2),
             path.to_string().into(),
         ))),
@@ -572,14 +590,24 @@ pub(super) fn mailinglist(input: &str) -> IResult<&str, Result<Action, CommandEr
     let mut check = arg_init! { min_arg:0, max_arg: 0, mailinglist};
     arg_chk!(start check, input);
     let (input, ret) = alt((
-        map(tag("list-help"), |_| MailingListAction(ListHelp)),
-        map(tag("list-unsubscribe"), |_| {
-            MailingListAction(ListUnsubscribe)
+        map(tag("list-help"), |_| {
+            Action::MailingListAction(MailingListAction::ListHelp)
         }),
-        map(tag("list-subscribe"), |_| MailingListAction(ListSubscribe)),
-        map(tag("list-post"), |_| MailingListAction(ListPost)),
-        map(tag("list-owner"), |_| MailingListAction(ListOwner)),
-        map(tag("list-archive"), |_| MailingListAction(ListArchive)),
+        map(tag("list-unsubscribe"), |_| {
+            Action::MailingListAction(MailingListAction::ListUnsubscribe)
+        }),
+        map(tag("list-subscribe"), |_| {
+            Action::MailingListAction(MailingListAction::ListSubscribe)
+        }),
+        map(tag("list-post"), |_| {
+            Action::MailingListAction(MailingListAction::ListPost)
+        }),
+        map(tag("list-owner"), |_| {
+            Action::MailingListAction(MailingListAction::ListOwner)
+        }),
+        map(tag("list-archive"), |_| {
+            Action::MailingListAction(MailingListAction::ListArchive)
+        }),
     ))(input.trim())?;
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
@@ -597,7 +625,7 @@ pub(super) fn setenv(input: &str) -> IResult<&str, Result<Action, CommandError>>
     let (input, val) = not_line_ending(input)?;
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
-    Ok((input, Ok(SetEnv(key.to_string(), val.to_string()))))
+    Ok((input, Ok(Action::SetEnv(key.to_string(), val.to_string()))))
 }
 
 pub(super) fn printenv(input: &str) -> IResult<&str, Result<Action, CommandError>> {
@@ -609,7 +637,7 @@ pub(super) fn printenv(input: &str) -> IResult<&str, Result<Action, CommandError
     let (input, key) = not_line_ending(input.trim())?;
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
-    Ok((input, Ok(PrintEnv(key.to_string()))))
+    Ok((input, Ok(Action::PrintEnv(key.to_string()))))
 }
 
 pub(super) fn currentdir(input: &str) -> IResult<&str, Result<Action, CommandError>> {
@@ -618,7 +646,7 @@ pub(super) fn currentdir(input: &str) -> IResult<&str, Result<Action, CommandErr
     arg_chk!(start check, input);
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
-    Ok((input, Ok(CurrentDirectory)))
+    Ok((input, Ok(Action::CurrentDirectory)))
 }
 
 pub(super) fn change_currentdir(input: &str) -> IResult<&str, Result<Action, CommandError>> {
@@ -630,7 +658,7 @@ pub(super) fn change_currentdir(input: &str) -> IResult<&str, Result<Action, Com
     let (input, d) = not_line_ending(input.trim())?;
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
-    Ok((input, Ok(ChangeCurrentDirectory(d.into()))))
+    Ok((input, Ok(Action::ChangeCurrentDirectory(d.into()))))
 }
 
 pub(super) fn mailto(input: &str) -> IResult<&str, Result<Action, CommandError>> {
@@ -656,7 +684,7 @@ pub(super) fn mailto(input: &str) -> IResult<&str, Result<Action, CommandError>>
             err,
         ))
     })?;
-    Ok((input, Ok(Compose(Mailto(val)))))
+    Ok((input, Ok(Action::Compose(ComposeAction::Mailto(val)))))
 }
 
 pub(super) fn pipe(input: &str) -> IResult<&str, Result<Action, CommandError>> {
@@ -670,7 +698,7 @@ pub(super) fn pipe(input: &str) -> IResult<&str, Result<Action, CommandError>> {
     arg_chk!(finish check, input);
     Ok((
         input,
-        Ok(View(Pipe {
+        Ok(Action::View(ViewAction::Pipe {
             command: command.to_string(),
         })),
     ))
@@ -682,13 +710,16 @@ pub(super) fn filter(input: &'_ str) -> IResult<&'_ str, Result<Action, CommandE
     arg_chk!(start check, input);
     if let Ok((input, _)) = eof(input) {
         arg_chk!(finish check, input);
-        return Ok((input, Ok(View(Filter(None)))));
+        return Ok((input, Ok(Action::View(ViewAction::Filter(None)))));
     }
     let (input, _) = is_a(" ")(input)?;
     arg_chk!(inc check, input);
     let (input, cmd) = not_line_ending(input)?;
     arg_chk!(finish check, input);
-    Ok((input, Ok(View(Filter(Some(cmd.to_string()))))))
+    Ok((
+        input,
+        Ok(Action::View(ViewAction::Filter(Some(cmd.to_string())))),
+    ))
 }
 
 pub(super) fn terminal<'a>(input: &'a str) -> IResult<&'a str, Result<Action, CommandError>> {
@@ -707,7 +738,7 @@ pub(super) fn terminal<'a>(input: &'a str) -> IResult<&'a str, Result<Action, Co
             } else {
                 Some(string.to_owned())
             };
-            Ok((input, Ok(Terminal(val))))
+            Ok((input, Ok(Action::Terminal(val))))
         },
         |input: &'a str| -> IResult<&'a str, Result<Action, CommandError>> {
             let mut check = arg_init! { min_arg:0, max_arg: 0, terminal};
@@ -715,7 +746,7 @@ pub(super) fn terminal<'a>(input: &'a str) -> IResult<&'a str, Result<Action, Co
             arg_chk!(start check, input);
             arg_chk!(finish check, input);
             let (input, _) = eof(input)?;
-            Ok((input, Ok(Terminal(None))))
+            Ok((input, Ok(Action::Terminal(None))))
         },
     ))(input)
 }
@@ -735,9 +766,9 @@ pub(super) fn add_attachment<'a>(input: &'a str) -> IResult<&'a str, Result<Acti
             let (input, _) = eof(input)?;
             Ok((
                 input,
-                Ok(Tab(ComposerAction(ComposerTabAction::AddAttachmentPipe(
-                    cmd.to_string(),
-                )))),
+                Ok(Action::Tab(TabAction::ComposerAction(
+                    ComposerTabAction::AddAttachmentPipe(cmd.to_string()),
+                ))),
             ))
         },
         |input: &'a str| -> IResult<&'a str, Result<Action, CommandError>> {
@@ -751,9 +782,9 @@ pub(super) fn add_attachment<'a>(input: &'a str) -> IResult<&'a str, Result<Acti
             let (input, _) = eof(input)?;
             Ok((
                 input,
-                Ok(Tab(ComposerAction(ComposerTabAction::AddAttachment(
-                    FileAction::Path(path.to_string().into()),
-                )))),
+                Ok(Action::Tab(TabAction::ComposerAction(
+                    ComposerTabAction::AddAttachment(FileAction::Path(path.to_string().into())),
+                ))),
             ))
         },
         alt((
@@ -770,9 +801,11 @@ pub(super) fn add_attachment<'a>(input: &'a str) -> IResult<&'a str, Result<Acti
                 let (input, _) = eof(input)?;
                 Ok((
                     input,
-                    Ok(Tab(ComposerAction(ComposerTabAction::AddAttachment(
-                        FileAction::FilePicker(Some(shell.to_string())),
-                    )))),
+                    Ok(Action::Tab(TabAction::ComposerAction(
+                        ComposerTabAction::AddAttachment(FileAction::FilePicker(Some(
+                            shell.to_string(),
+                        ))),
+                    ))),
                 ))
             },
             |input: &'a str| -> IResult<&'a str, Result<Action, CommandError>> {
@@ -783,9 +816,9 @@ pub(super) fn add_attachment<'a>(input: &'a str) -> IResult<&'a str, Result<Acti
                 let (input, _) = eof(input)?;
                 Ok((
                     input,
-                    Ok(Tab(ComposerAction(ComposerTabAction::AddAttachment(
-                        FileAction::FilePicker(None),
-                    )))),
+                    Ok(Action::Tab(TabAction::ComposerAction(
+                        ComposerTabAction::AddAttachment(FileAction::FilePicker(None)),
+                    ))),
                 ))
             },
         )),
@@ -803,9 +836,9 @@ pub(super) fn remove_attachment(input: &str) -> IResult<&str, Result<Action, Com
     let (input, _) = eof(input)?;
     Ok((
         input,
-        Ok(Tab(ComposerAction(ComposerTabAction::RemoveAttachment(
-            idx,
-        )))),
+        Ok(Action::Tab(TabAction::ComposerAction(
+            ComposerTabAction::RemoveAttachment(idx),
+        ))),
     ))
 }
 
@@ -815,7 +848,12 @@ pub(super) fn save_draft(input: &str) -> IResult<&str, Result<Action, CommandErr
     arg_chk!(start check, input);
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
-    Ok((input, Ok(Tab(ComposerAction(ComposerTabAction::SaveDraft)))))
+    Ok((
+        input,
+        Ok(Action::Tab(TabAction::ComposerAction(
+            ComposerTabAction::SaveDraft,
+        ))),
+    ))
 }
 
 pub(super) fn discard_draft(input: &str) -> IResult<&str, Result<Action, CommandError>> {
@@ -826,7 +864,9 @@ pub(super) fn discard_draft(input: &str) -> IResult<&str, Result<Action, Command
     let (input, _) = eof(input)?;
     Ok((
         input,
-        Ok(Tab(ComposerAction(ComposerTabAction::DiscardDraft))),
+        Ok(Action::Tab(TabAction::ComposerAction(
+            ComposerTabAction::DiscardDraft,
+        ))),
     ))
 }
 
@@ -844,7 +884,7 @@ pub(super) fn create_mailbox(input: &str) -> IResult<&str, Result<Action, Comman
     let (input, _) = eof(input)?;
     Ok((
         input,
-        Ok(Mailbox(
+        Ok(Action::Mailbox(
             account.to_string(),
             MailboxOperation::Create(path.to_string()),
         )),
@@ -865,7 +905,7 @@ pub(super) fn sub_mailbox(input: &str) -> IResult<&str, Result<Action, CommandEr
     let (input, _) = eof(input)?;
     Ok((
         input,
-        Ok(Mailbox(
+        Ok(Action::Mailbox(
             account.to_string(),
             MailboxOperation::Subscribe(path.to_string()),
         )),
@@ -886,7 +926,7 @@ pub(super) fn unsub_mailbox(input: &str) -> IResult<&str, Result<Action, Command
     let (input, _) = eof(input)?;
     Ok((
         input,
-        Ok(Mailbox(
+        Ok(Action::Mailbox(
             account.to_string(),
             MailboxOperation::Unsubscribe(path.to_string()),
         )),
@@ -910,7 +950,7 @@ pub(super) fn rename_mailbox(input: &str) -> IResult<&str, Result<Action, Comman
     let (input, _) = eof(input)?;
     Ok((
         input,
-        Ok(Mailbox(
+        Ok(Action::Mailbox(
             account.to_string(),
             MailboxOperation::Rename(src.to_string(), dest.to_string()),
         )),
@@ -931,7 +971,7 @@ pub(super) fn delete_mailbox(input: &str) -> IResult<&str, Result<Action, Comman
     let (input, _) = eof(input)?;
     Ok((
         input,
-        Ok(Mailbox(
+        Ok(Action::Mailbox(
             account.to_string(),
             MailboxOperation::Delete(path.to_string()),
         )),
@@ -947,7 +987,13 @@ pub(super) fn reindex(input: &str) -> IResult<&str, Result<Action, CommandError>
     let (input, account) = quoted_argument(input)?;
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
-    Ok((input, Ok(AccountAction(account.to_string(), ReIndex))))
+    Ok((
+        input,
+        Ok(Action::AccountAction(
+            account.to_string(),
+            AccountAction::ReIndex,
+        )),
+    ))
 }
 
 pub(super) fn refresh(input: &str) -> IResult<&str, Result<Action, CommandError>> {
@@ -984,7 +1030,7 @@ pub(super) fn open_in_new_tab(input: &str) -> IResult<&str, Result<Action, Comma
     arg_chk!(start check, input);
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
-    Ok((input, Ok(Listing(OpenInNewTab))))
+    Ok((input, Ok(Action::Listing(ListingAction::OpenInNewTab))))
 }
 
 pub(super) fn save_attachment<'a>(
@@ -1005,7 +1051,7 @@ pub(super) fn save_attachment<'a>(
             let (input, _) = eof(input)?;
             Ok((
                 input,
-                Ok(View(SaveAttachment(
+                Ok(Action::View(ViewAction::SaveAttachment(
                     idx,
                     FileAction::Path(path.to_string().into()),
                 ))),
@@ -1025,7 +1071,7 @@ pub(super) fn save_attachment<'a>(
             let (input, _) = eof(input)?;
             Ok((
                 input,
-                Ok(View(SaveAttachment(
+                Ok(Action::View(ViewAction::SaveAttachment(
                     idx,
                     FileAction::FilePicker(Some(shell.to_string())),
                 ))),
@@ -1042,7 +1088,10 @@ pub(super) fn save_attachment<'a>(
             let (input, _) = eof(input)?;
             Ok((
                 input,
-                Ok(View(SaveAttachment(idx, FileAction::FilePicker(None)))),
+                Ok(Action::View(ViewAction::SaveAttachment(
+                    idx,
+                    FileAction::FilePicker(None),
+                ))),
             ))
         },
     ))(input)
@@ -1061,7 +1110,7 @@ pub(super) fn pipe_attachment(input: &str) -> IResult<&str, Result<Action, Comma
     arg_chk!(finish check, input);
     Ok((
         input,
-        Ok(View(PipeAttachment {
+        Ok(Action::View(ViewAction::PipeAttachment {
             index,
             command: command.to_string(),
         })),
@@ -1077,7 +1126,12 @@ pub(super) fn export_mail(input: &str) -> IResult<&str, Result<Action, CommandEr
     let (input, path) = quoted_argument(input.trim())?;
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
-    Ok((input, Ok(View(ExportMail(path.to_string().into())))))
+    Ok((
+        input,
+        Ok(Action::View(ViewAction::ExportMail(
+            path.to_string().into(),
+        ))),
+    ))
 }
 
 pub(super) fn export_thread(input: &str) -> IResult<&str, Result<Action, CommandError>> {
@@ -1089,7 +1143,12 @@ pub(super) fn export_thread(input: &str) -> IResult<&str, Result<Action, Command
     let (input, path) = quoted_argument(input.trim())?;
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
-    Ok((input, Ok(View(ExportThread(path.to_string().into())))))
+    Ok((
+        input,
+        Ok(Action::View(ViewAction::ExportThread(
+            path.to_string().into(),
+        ))),
+    ))
 }
 
 pub(super) fn add_addresses_to_contacts(
@@ -1100,7 +1159,7 @@ pub(super) fn add_addresses_to_contacts(
     arg_chk!(start check, input);
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
-    Ok((input, Ok(View(AddAddressesToContacts))))
+    Ok((input, Ok(Action::View(ViewAction::AddAddressesToContacts))))
 }
 
 pub(super) fn _tag<'a>(input: &'a str) -> IResult<&'a str, Result<Action, CommandError>> {
@@ -1116,7 +1175,12 @@ pub(super) fn _tag<'a>(input: &'a str) -> IResult<&'a str, Result<Action, Comman
                 let (input, tag) = quoted_argument(input.trim())?;
                 arg_chk!(finish check, input);
                 let (input, _) = eof(input)?;
-                Ok((input, Ok(Listing(Tag(TagAction::Add(tag.to_string()))))))
+                Ok((
+                    input,
+                    Ok(Action::Listing(ListingAction::Tag(TagAction::Add(
+                        tag.to_string(),
+                    )))),
+                ))
             },
             |input: &'a str| -> IResult<&'a str, Result<Action, CommandError>> {
                 let mut check = arg_init! { min_arg:2, max_arg: 2, tag};
@@ -1127,7 +1191,12 @@ pub(super) fn _tag<'a>(input: &'a str) -> IResult<&'a str, Result<Action, Comman
                 let (input, tag) = quoted_argument(input.trim())?;
                 arg_chk!(finish check, input);
                 let (input, _) = eof(input)?;
-                Ok((input, Ok(Listing(Tag(TagAction::Remove(tag.to_string()))))))
+                Ok((
+                    input,
+                    Ok(Action::Listing(ListingAction::Tag(TagAction::Remove(
+                        tag.to_string(),
+                    )))),
+                ))
             },
         )),
     )(input.trim())
@@ -1147,9 +1216,9 @@ pub(super) fn print_account_setting(input: &str) -> IResult<&str, Result<Action,
     let (input, _) = eof(input)?;
     Ok((
         input,
-        Ok(AccountAction(
+        Ok(Action::AccountAction(
             account.to_string(),
-            PrintAccountSetting(setting.to_string()),
+            AccountAction::PrintAccountSetting(setting.to_string()),
         )),
     ))
 }
@@ -1163,7 +1232,7 @@ pub(super) fn print_setting(input: &str) -> IResult<&str, Result<Action, Command
     let (input, setting) = quoted_argument(input)?;
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
-    Ok((input, Ok(PrintSetting(setting.to_string()))))
+    Ok((input, Ok(Action::PrintSetting(setting.to_string()))))
 }
 
 pub(super) fn toggle(input: &str) -> IResult<&str, Result<Action, CommandError>> {
@@ -1173,17 +1242,23 @@ pub(super) fn toggle(input: &str) -> IResult<&str, Result<Action, CommandError>>
     let (mut input, _) = is_a(" ")(input)?;
     arg_chk!(inc check, input);
     let mut retval = if tag!()("thread_snooze")(input).is_ok() {
-        Some(Listing(ToggleThreadSnooze))
+        Some(Action::Listing(ListingAction::ToggleThreadSnooze))
     } else {
         None
     };
     for (tok, action) in [
-        ("thread_snooze", Listing(ToggleThreadSnooze)),
-        ("mouse", ToggleMouse),
-        ("sign", Tab(ComposerAction(ComposerTabAction::ToggleSign))),
+        (
+            "thread_snooze",
+            Action::Listing(ListingAction::ToggleThreadSnooze),
+        ),
+        ("mouse", Action::ToggleMouse),
+        (
+            "sign",
+            Action::Tab(TabAction::ComposerAction(ComposerTabAction::ToggleSign)),
+        ),
         (
             "encrypt",
-            Tab(ComposerAction(ComposerTabAction::ToggleEncrypt)),
+            Action::Tab(TabAction::ComposerAction(ComposerTabAction::ToggleEncrypt)),
         ),
     ] {
         if let Ok((inner_input, _)) = tag!()(tok)(input.trim()) {
@@ -1213,7 +1288,7 @@ pub(super) fn manage_mailboxes(input: &str) -> IResult<&str, Result<Action, Comm
     arg_chk!(start check, input);
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
-    Ok((input, Ok(Tab(ManageMailboxes))))
+    Ok((input, Ok(Action::Tab(TabAction::ManageMailboxes))))
 }
 
 pub(super) fn manage_jobs(input: &str) -> IResult<&str, Result<Action, CommandError>> {
@@ -1222,7 +1297,7 @@ pub(super) fn manage_jobs(input: &str) -> IResult<&str, Result<Action, CommandEr
     arg_chk!(start check, input);
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
-    Ok((input, Ok(Tab(ManageJobs))))
+    Ok((input, Ok(Action::Tab(TabAction::ManageJobs))))
 }
 
 pub(super) fn view_manpage(input: &str) -> IResult<&str, Result<Action, CommandError>> {
@@ -1238,7 +1313,7 @@ pub(super) fn view_manpage(input: &str) -> IResult<&str, Result<Action, CommandE
     #[cfg(feature = "cli-docs")]
     {
         match crate::manpages::parse_manpage(manpage) {
-            Ok(m) => Ok((input, Ok(Tab(Man(m))))),
+            Ok(m) => Ok((input, Ok(Action::Tab(TabAction::Man(m))))),
             Err(err) => Ok((
                 input,
                 Err(CommandError::BadValue {
@@ -1267,7 +1342,12 @@ pub(super) fn help(input: &str) -> IResult<&str, Result<Action, CommandError>> {
     arg_chk!(finish check, input);
     #[cfg(feature = "cli-docs")]
     {
-        Ok((input, Ok(Tab(Man(crate::manpages::ManPages::Guide)))))
+        Ok((
+            input,
+            Ok(Action::Tab(TabAction::Man(
+                crate::manpages::ManPages::Guide,
+            ))),
+        ))
     }
     #[cfg(not(feature = "cli-docs"))]
     {
@@ -1286,7 +1366,7 @@ pub(super) fn quit(input: &str) -> IResult<&str, Result<Action, CommandError>> {
     arg_chk!(start check, input);
     arg_chk!(finish check, input);
     let (input, _) = eof(input.trim())?;
-    Ok((input, Ok(Quit)))
+    Ok((input, Ok(Action::Quit)))
 }
 
 pub(super) fn reload_config(input: &str) -> IResult<&str, Result<Action, CommandError>> {
@@ -1295,7 +1375,7 @@ pub(super) fn reload_config(input: &str) -> IResult<&str, Result<Action, Command
     arg_chk!(start check, input);
     arg_chk!(finish check, input);
     let (input, _) = eof(input.trim())?;
-    Ok((input, Ok(ReloadConfiguration)))
+    Ok((input, Ok(Action::ReloadConfiguration)))
 }
 
 pub(super) fn import(input: &str) -> IResult<&str, Result<Action, CommandError>> {
@@ -1312,7 +1392,7 @@ pub(super) fn import(input: &str) -> IResult<&str, Result<Action, CommandError>>
     arg_chk!(finish check, input);
     Ok((
         input,
-        Ok(Listing(Import(
+        Ok(Action::Listing(ListingAction::Import(
             file.to_string().into(),
             mailbox_path.to_string(),
         ))),
@@ -1352,7 +1432,7 @@ pub(super) fn public_inbox_import(input: &str) -> IResult<&str, Result<Action, C
     };
     Ok((
         input,
-        Ok(Listing(PublicInboxImport {
+        Ok(Action::Listing(ListingAction::PublicInboxImport {
             thread,
             account: account.to_string(),
             mailbox_path: mailbox_path.to_string(),

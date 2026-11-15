@@ -291,7 +291,7 @@ color_aliases= { "Jebediah" = "$JebediahJr", "JebediahJr" = "mail.listing.tag_de
 fn test_conf_theme_key_values() {
     use std::{collections::VecDeque, path::PathBuf};
 
-    use melib::ResultIntoError as _;
+    use melib::error::ResultIntoError as _;
 
     let mut queue: VecDeque<PathBuf> = VecDeque::new();
     queue.push_back("src/".into());
@@ -393,7 +393,7 @@ interval_ms = 51"#
 
 #[test]
 fn test_conf_tag_rename() {
-    use melib::TagHash;
+    use melib::backends::TagHash;
 
     use crate::conf::tags::TagName;
 

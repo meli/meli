@@ -22,15 +22,19 @@
 use std::{borrow::Cow, fmt::Write as _};
 
 use melib::{
-    attachment_types::Charset, conf::ActionFlag, email::headers::HeaderName, error::*,
-    pgp::SignaturesMetadata, Attachment, Result,
+    conf::ActionFlag,
+    email::{
+        address::MessageID, attachment_types::Charset, attachments::Attachment,
+        headers::HeaderName, pgp::SignaturesMetadata, Envelope,
+    },
+    error::{Error, Result},
 };
 
 use crate::{
+    components::ShortcutMap,
     conf::{pgp::PGPBackendChoice, shortcuts::EnvelopeViewShortcuts, themes::ThemeAttribute},
     jobs::{JobId, JoinHandle},
     types::{Link, LinkKind},
-    ShortcutMap,
 };
 
 #[derive(Clone, Debug)]
@@ -139,10 +143,7 @@ impl ViewSettings {
         }
     }
 
-    pub fn header_iter<'a, 'b>(
-        &'a self,
-        env: &'b melib::Envelope,
-    ) -> ViewSettingsHeaderIterator<'a, 'b> {
+    pub fn header_iter<'a, 'b>(&'a self, env: &'b Envelope) -> ViewSettingsHeaderIterator<'a, 'b> {
         ViewSettingsHeaderIterator {
             index: 0,
             settings: self,
@@ -154,7 +155,7 @@ impl ViewSettings {
 pub struct ViewSettingsHeaderIterator<'a, 'b> {
     index: usize,
     settings: &'a ViewSettings,
-    env: &'b melib::Envelope,
+    env: &'b Envelope,
 }
 
 impl<'a, 'b> Iterator for ViewSettingsHeaderIterator<'a, 'b> {
@@ -172,7 +173,7 @@ impl<'a, 'b> Iterator for ViewSettingsHeaderIterator<'a, 'b> {
             HeaderName::REFERENCES,
         ];
         fn get_header<'env>(
-            envelope: &'env melib::Envelope,
+            envelope: &'env Envelope,
             view_settings: &ViewSettings,
             hdr: &HeaderName,
         ) -> Option<Cow<'env, str>> {
@@ -197,11 +198,11 @@ impl<'a, 'b> Iterator for ViewSettingsHeaderIterator<'a, 'b> {
                 }
                 &HeaderName::IN_REPLY_TO => {
                     let val = envelope.in_reply_to()?;
-                    melib::MessageID::display_slice(val.refs(), Some(" ")).into()
+                    MessageID::display_slice(val.refs(), Some(" ")).into()
                 }
                 &HeaderName::REFERENCES => {
                     _ = envelope.in_reply_to()?;
-                    melib::MessageID::display_slice(envelope.references(), Some(" ")).into()
+                    MessageID::display_slice(envelope.references(), Some(" ")).into()
                 }
                 other
                     if envelope.other_headers().contains_key(other)
@@ -250,7 +251,7 @@ impl ViewOptions {
     pub fn convert(
         &self,
         links: &mut Vec<Link<'static>>,
-        attachment: &melib::Attachment,
+        attachment: &Attachment,
         text: &str,
     ) -> String {
         let mut text = if self.contains(Self::SOURCE) {

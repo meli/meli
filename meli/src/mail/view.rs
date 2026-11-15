@@ -19,34 +19,44 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{collections::HashSet, convert::TryFrom as _, io::Write as _};
+use std::collections::HashSet;
 
 use futures::channel::oneshot;
 use indexmap::IndexSet;
 use melib::{
-    contacts::Card, email::attachment_types::ContentType, list_management, parser::BytesExt as _,
-    FlagOp, HeaderName,
+    backends::FlagOp,
+    contacts::Card,
+    email::{list_management, EnvelopeHash, Flag},
+    error::{Error, ErrorKind, Result},
+    utils::logging::LogLevel,
 };
-use smallvec::SmallVec;
 
-use super::*;
-use crate::{accounts::JobRequest, conf::themes::ThemeAttribute, jobs::JobId};
-
-mod utils;
-pub use utils::*;
+use crate::{
+    accounts::JobRequest,
+    components::prelude::*,
+    conf::themes::ThemeAttribute,
+    jobs::JobId,
+    mail::compose::Composer,
+    mailbox_settings,
+    state::MainLoopHandler,
+    try_recv_timeout,
+    types::{CallbackFn, NotificationType, UIEvent},
+    utilities::Selector,
+};
 
 mod thread;
-pub use thread::*;
 mod types;
+mod utils;
+
+pub use thread::*;
 pub use types::*;
-pub mod state;
-use state::*;
+pub use utils::*;
 
 pub mod envelope;
-pub use envelope::EnvelopeView;
-
 pub mod filters;
-pub use filters::*;
+pub mod state;
+
+use state::*;
 
 #[cfg(test)]
 mod tests;
@@ -229,7 +239,7 @@ impl MailView {
 
         context
             .replies
-            .push_back(UIEvent::Action(Tab(New(Some(composer)))));
+            .push_back(UIEvent::Action(Action::Tab(TabAction::New(Some(composer)))));
     }
 
     pub fn update(
@@ -631,9 +641,11 @@ impl Component for MailView {
                                             Composer::edit(account_hash, &env, &bytes, context)
                                         }) {
                                         Ok(composer) => {
-                                            context.replies.push_back(UIEvent::Action(Tab(New(
-                                                Some(Box::new(composer)),
-                                            ))));
+                                            context.replies.push_back(UIEvent::Action(
+                                                Action::Tab(TabAction::New(Some(Box::new(
+                                                    composer,
+                                                )))),
+                                            ));
                                         }
                                         Err(err) => {
                                             let err_string = format!(
@@ -664,7 +676,7 @@ impl Component for MailView {
                 );
                 return true;
             }
-            UIEvent::Action(View(ViewAction::AddAddressesToContacts)) => {
+            UIEvent::Action(Action::View(ViewAction::AddAddressesToContacts)) => {
                 self.start_contact_selector(context);
                 return true;
             }
@@ -692,7 +704,7 @@ impl Component for MailView {
             UIEvent::EnvelopeRename(old_hash, new_hash) if coordinates.2 == old_hash => {
                 self.coordinates.as_mut().unwrap().2 = new_hash;
             }
-            UIEvent::Action(MailingListAction(ref e)) => {
+            UIEvent::Action(Action::MailingListAction(ref e)) => {
                 let available_actions = {
                     let account = &context.accounts[&coordinates.0];
                     let Some(envelope) = account.collection.get_env(coordinates.2) else {
@@ -705,12 +717,14 @@ impl Component for MailView {
                 handle_mailing_list_action(e, available_actions, coordinates, context);
                 return true;
             }
-            UIEvent::Action(Listing(OpenInNewTab)) => {
+            UIEvent::Action(Action::Listing(ListingAction::OpenInNewTab)) => {
                 let mut new_tab = Self::new(self.coordinates, true, context);
                 new_tab.set_dirty(true);
                 context
                     .replies
-                    .push_back(UIEvent::Action(Tab(New(Some(Box::new(new_tab))))));
+                    .push_back(UIEvent::Action(Action::Tab(TabAction::New(Some(
+                        Box::new(new_tab),
+                    )))));
                 return true;
             }
             UIEvent::Input(ref key)
@@ -771,7 +785,7 @@ impl Component for MailView {
         if self.id == id {
             context
                 .replies
-                .push_back(UIEvent::Action(Tab(Kill(self.id))));
+                .push_back(UIEvent::Action(Action::Tab(TabAction::Kill(self.id))));
         }
     }
 }

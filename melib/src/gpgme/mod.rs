@@ -951,7 +951,7 @@ fn gpgme_error_try(lib: &libloading::Library, error_code: gpgme_error_t) -> Resu
 }
 
 use futures::future::BoxFuture;
-type ResultFuture<T> = crate::Result<BoxFuture<'static, crate::Result<T>>>;
+type ResultFuture<T> = Result<BoxFuture<'static, Result<T>>>;
 
 impl Hash for Context {
     fn hash<H: Hasher>(&self, state: &mut H) {

@@ -22,11 +22,12 @@
 use indexmap::IndexMap;
 use melib::{
     backends::{AccountHash, MailboxHash},
-    Error, Result,
+    error::{Error, Result},
 };
 
-use super::DotAddressable;
-use crate::{state::Context, terminal::Key};
+use crate::{
+    conf::data_types::dotaddressable::DotAddressable, state::Context, terminal::keys::Key,
+};
 
 #[macro_export]
 macro_rules! shortcut {

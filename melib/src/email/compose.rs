@@ -21,21 +21,22 @@
 
 //! Compose a [`Draft`], with `MIME` and attachment support.
 use std::{
+    borrow::Cow,
     convert::TryFrom as _,
     ffi::OsStr,
+    ops::Deref as _,
     path::{Path, PathBuf},
     str::FromStr,
 };
 
-use data_encoding::BASE64_MIME;
-
-use super::*;
 use crate::{
     email::{
         attachment_types::{ContentTransferEncoding, ContentType, MultipartType, Text},
         attachments::AttachmentBuilder,
+        headers::{HeaderMap, HeaderName, InvalidHeaderName},
+        parser, Envelope, EnvelopeHash,
     },
-    error::{ErrorKind, ResultIntoError as _},
+    error::{Error, ErrorKind, Result, ResultIntoError as _},
     utils::{datetime, shellexpand::ShellExpandTrait as _, xdg::query_mime_info},
 };
 
@@ -43,8 +44,6 @@ pub mod mime;
 pub mod random;
 #[cfg(test)]
 mod tests;
-
-use super::parser;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Draft {
@@ -160,7 +159,7 @@ impl Draft {
     }
 
     pub fn update(&mut self, value: &str) -> Result<bool> {
-        let mut value: std::borrow::Cow<'_, str> = value.into();
+        let mut value: Cow<'_, str> = value.into();
         if let Some((pre, post)) = self.wrap_header_preamble.as_ref() {
             let mut s = value.as_ref();
             s = s.strip_prefix(pre).unwrap_or(s);

@@ -20,7 +20,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
-use melib::{email::MessageID, Flag};
+use melib::email::{address::MessageID, Flag};
 
 use crate::{
     command::{
@@ -29,9 +29,8 @@ use crate::{
             TagAction, ViewAction,
         },
         completions::CompletionsGenerator,
-        parse_command,
-        parser::{self, lex, LexToken, LexTokenError},
-        CommandError,
+        error::CommandError,
+        parser::{self, lex, parse_command, LexToken, LexTokenError},
     },
     utilities::autocomplete::AutoCompleteEntry,
 };

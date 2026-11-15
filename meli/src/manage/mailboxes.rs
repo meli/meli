@@ -24,6 +24,7 @@ use melib::error::Result;
 
 use crate::{
     components::prelude::*,
+    types::NotificationType,
     utilities::listings::{AccountEntryTrait, List},
 };
 
@@ -503,7 +504,7 @@ impl Component for AccountMailboxManager {
                     self.mode = ViewMode::List;
                     if let Some(actions) = result.downcast_ref::<Vec<MailboxAction>>() {
                         if actions.len() == 1 {
-                            use crate::actions::MailboxOperation;
+                            use crate::command::actions::MailboxOperation;
                             match actions[0] {
                                 MailboxAction::Move | MailboxAction::Rename => {
                                     context.replies.push_back(UIEvent::CmdInput(Key::Paste(
@@ -548,9 +549,7 @@ impl Component for AccountMailboxManager {
                                             title: None,
                                             source: None,
                                             body: err.to_string().into(),
-                                            kind: Some(crate::types::NotificationType::Error(
-                                                err.kind,
-                                            )),
+                                            kind: Some(NotificationType::Error(err.kind)),
                                         });
                                     }
                                 }
@@ -567,9 +566,7 @@ impl Component for AccountMailboxManager {
                                             title: None,
                                             source: None,
                                             body: err.to_string().into(),
-                                            kind: Some(crate::types::NotificationType::Error(
-                                                err.kind,
-                                            )),
+                                            kind: Some(NotificationType::Error(err.kind)),
                                         });
                                     }
                                 }
@@ -764,9 +761,7 @@ impl Component for AccountMailboxManager {
         debug_assert!(uuid == self.id);
         context
             .replies
-            .push_back(UIEvent::Action(crate::command::Action::Tab(
-                crate::command::TabAction::Kill(uuid),
-            )));
+            .push_back(UIEvent::Action(Action::Tab(TabAction::Kill(uuid))));
     }
 
     fn shortcuts(&self, context: &Context) -> ShortcutMaps {

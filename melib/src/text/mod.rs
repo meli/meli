@@ -21,15 +21,17 @@
 
 use unicode_segmentation::UnicodeSegmentation;
 
+mod types;
+
 pub mod grapheme_clusters;
 pub mod line_break;
 pub mod search;
 pub mod tables;
-pub mod types;
-pub use types::Reflow;
 pub mod wcwidth;
+
 pub use grapheme_clusters::*;
 pub use line_break::*;
+pub use types::{LineBreakClass, Reflow};
 pub use wcwidth::*;
 
 pub trait Truncate {

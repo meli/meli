@@ -27,10 +27,11 @@ pub use inner::*;
 #[cfg(feature = "sqlite3")]
 mod inner {
     use crate::{
-        email::Flag,
+        backends::MailboxHash,
+        email::{EnvelopeHash, Flag},
+        error::Result,
         nntp::UID,
         utils::sqlite3::{self, Connection, DatabaseDescription},
-        EnvelopeHash, MailboxHash, Result,
     };
 
     pub const DB_DESCRIPTION: DatabaseDescription = DatabaseDescription {
@@ -115,7 +116,12 @@ CREATE TABLE IF NOT EXISTS article (
 
 #[cfg(not(feature = "sqlite3"))]
 mod inner {
-    use crate::{email::Flag, nntp::UID, EnvelopeHash, Error, ErrorKind, MailboxHash, Result};
+    use crate::{
+        backends::MailboxHash,
+        email::{EnvelopeHash, Flag},
+        error::{Error, ErrorKind, Result},
+        nntp::UID,
+    };
 
     #[derive(Debug)]
     pub struct Store;

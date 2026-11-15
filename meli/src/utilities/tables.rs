@@ -22,11 +22,13 @@
 //! UI components to display tabular lists.
 use std::mem::MaybeUninit;
 
-use super::*;
 use crate::{
     conf::themes::ThemeAttribute,
-    segment_tree::SegmentTree,
-    terminal::{Screen, Virtual},
+    terminal::{
+        cells::{BoundsIterator, CellBuffer},
+        Screen, Virtual,
+    },
+    types::segment_tree::SegmentTree,
 };
 
 #[derive(Clone, Copy, Debug, Default)]

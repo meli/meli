@@ -34,9 +34,9 @@
 //! ## Description
 //!
 //! A crate that performs mail client operations such as
-//! - Hold an [`Envelope`] with methods convenient for mail client use. (see
+//! - Hold an [`Envelope`](email::Envelope) with methods convenient for mail client use. (see
 //!   module [`email`])
-//! - Abstract through mail storages through the [`MailBackend`] trait, and
+//! - Abstract through mail storages through the [`MailBackend`](backends::MailBackend) trait, and
 //!   handle read/writes/updates through it. (see module [`backends`])
 //! - Decode attachments (see module [`email::attachments`])
 //! - Create new mail (see [`email::Draft`](email::compose::Draft))
@@ -59,22 +59,17 @@ pub use utils::{
 #[deprecated(since = "0.8.14", note = "StderrLogger was renamed to just Logger")]
 pub use Logger as StderrLogger;
 
-pub mod contacts;
-pub use contacts::*;
-pub mod backends;
-pub use backends::*;
 mod collection;
-pub mod sieve;
 pub use collection::*;
+
+pub mod backends;
 pub mod conf;
-pub use conf::*;
+pub mod contacts;
 pub mod email;
-pub use email::*;
 pub mod error;
-pub use error::*;
-pub mod thread;
-pub use thread::*;
 pub mod search;
+pub mod sieve;
+pub mod thread;
 
 #[macro_use]
 pub mod utils;

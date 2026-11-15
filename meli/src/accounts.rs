@@ -48,8 +48,8 @@ use crate::command::actions::AccountAction;
 use crate::{
     conf::{data_types::SearchBackend, AccountConf, FileMailboxConf},
     jobs::{IsAsync, JobId, JoinHandle},
-    types::{ForkedProcess, NotificationType, UIEvent},
-    MainLoopHandler, StatusEvent, ThreadEvent,
+    state::MainLoopHandler,
+    types::{ForkedProcess, NotificationType, StatusEvent, ThreadEvent, UIEvent},
 };
 
 mod backend_ops;

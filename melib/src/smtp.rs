@@ -31,9 +31,8 @@
 //!# Example
 //!
 //! ```no_run
-//! extern crate melib;
+//! use melib::{conf::Secret, email::address::Address, error::Result, smtp::*};
 //!
-//! use melib::{conf::Secret, email::Address, smtp::*, Result};
 //! let conf = SmtpServerConf {
 //!     hostname: Secret::Value("smtp.example.com".into()),
 //!     port: 587,
@@ -86,7 +85,7 @@ use smol::{unblock, Async as AsyncWrapper};
 
 use crate::{
     conf::Secret,
-    email::{Address, Envelope},
+    email::{address::Address, Envelope},
     error::{Error, ErrorKind, Result, ResultIntoError as _},
     utils::connections::{std_net::connect as tcp_stream_connect, Connection},
 };

@@ -21,9 +21,14 @@
 
 //! Settings for terminal display and behaviour
 
-use melib::{Error, Result, ToggleFlag};
+use melib::{
+    conf::ToggleFlag,
+    error::{Error, Result},
+};
 
-use super::{deserializers::non_empty_opt_string, DotAddressable, Themes};
+use crate::conf::{
+    data_types::dotaddressable::DotAddressable, deserializers::non_empty_opt_string, themes::Themes,
+};
 
 /// Settings for terminal display
 #[derive(Clone, Debug, Deserialize, Serialize)]

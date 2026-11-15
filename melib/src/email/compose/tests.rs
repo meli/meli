@@ -21,6 +21,7 @@
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
 use super::*;
+use crate::email::parser::BytesExt as _;
 
 const GREEK_FOOBAR: &str = "αδφαφσαφασ";
 

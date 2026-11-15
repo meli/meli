@@ -24,7 +24,7 @@ use std::{cmp::Ordering, collections::VecDeque, iter::Peekable, str::FromStr as 
 use unicode_segmentation::UnicodeSegmentation;
 use LineBreakClass::*;
 
-use super::{
+use crate::text::{
     grapheme_clusters::TextProcessing as _,
     tables::LINE_BREAK_RULES,
     types::{LineBreakClass, Reflow},

@@ -23,7 +23,7 @@
 #[cfg(feature = "maildir")]
 #[test]
 fn test_maildir_config() {
-    use melib::maildir::Configuration;
+    use melib::{conf::AccountSettings, maildir::Configuration};
     use regex::Regex;
     use tempfile::TempDir;
 
@@ -34,7 +34,7 @@ fn test_maildir_config() {
         ..Configuration::default()
     };
 
-    let mut s: melib::AccountSettings = toml::from_str(&format!(
+    let mut s: AccountSettings = toml::from_str(&format!(
         r#"
 name = "foo"
 root_mailbox = "{}"
@@ -47,7 +47,7 @@ subscribed_mailboxes = []
     .unwrap();
 
     melib::maildir::MaildirType::validate_config(&mut s).unwrap();
-    let mut s: melib::AccountSettings = toml::from_str(&format!(
+    let mut s: AccountSettings = toml::from_str(&format!(
         r#"
 name = "foo"
 root_mailbox = "{}"
@@ -69,7 +69,7 @@ rename_regex = ',U=\d\d*'
     );
 
     melib::maildir::MaildirType::validate_config(&mut s).unwrap();
-    let mut s: melib::AccountSettings = toml::from_str(&format!(
+    let mut s: AccountSettings = toml::from_str(&format!(
         r#"
 name = "foo"
 root_mailbox = "{}"
@@ -91,7 +91,7 @@ rename_regex = ",U=\\d\\d*"
     );
 
     melib::maildir::MaildirType::validate_config(&mut s).unwrap();
-    let mut s: melib::AccountSettings = toml::from_str(&format!(
+    let mut s: AccountSettings = toml::from_str(&format!(
         r#"
 name = "foo"
 root_mailbox = "{}"
@@ -120,6 +120,7 @@ rename_regex = ',U=\d\d*'
 #[test]
 fn test_notmuch_config() {
     use melib::{
+        conf::AccountSettings,
         error::{Error, ErrorKind},
         notmuch::NotmuchDb,
     };
@@ -130,7 +131,7 @@ fn test_notmuch_config() {
     let root_mailbox = tmp_dir.path().join("root_mailbox");
     let account_name = "foo";
 
-    let mut s: melib::AccountSettings = toml::from_str(&format!(
+    let mut s: AccountSettings = toml::from_str(&format!(
         r#"
 name = "{account_name}"
 root_mailbox = "{}"
@@ -185,7 +186,7 @@ identity = "foo@example.com"
     );
 
     // Check for missing "query" settings.
-    let mut s: melib::AccountSettings = toml::from_str(&format!(
+    let mut s: AccountSettings = toml::from_str(&format!(
         r#"
 name = "{account_name}"
 root_mailbox = "{}"
@@ -209,7 +210,7 @@ mailboxes = {{ "INBOX" = {{}}, "Drafts" = {{ query="tag:draft" }}}}
     );
 
     // Check for invalid "parent" setting.
-    let mut s: melib::AccountSettings = toml::from_str(&format!(
+    let mut s: AccountSettings = toml::from_str(&format!(
         r#"
 name = "{account_name}"
 root_mailbox = "{}"
@@ -232,7 +233,7 @@ mailboxes = {{ "INBOX" = {{ query="tag:inbox", parent = "doesnotexist" }}, "Draf
     );
 
     // Check for "parent" cycle
-    let mut s: melib::AccountSettings = toml::from_str(&format!(
+    let mut s: AccountSettings = toml::from_str(&format!(
         r#"
 name = "{account_name}"
 root_mailbox = "{}"
@@ -250,7 +251,7 @@ mailboxes = {{ "INBOX" = {{ query="tag:inbox", parent = "Drafts" }}, "Drafts" = 
             .set_kind(ErrorKind::Configuration)
     );
 
-    let mut s: melib::AccountSettings = toml::from_str(&format!(
+    let mut s: AccountSettings = toml::from_str(&format!(
         r#"
 name = "{account_name}"
 root_mailbox = "{}"
@@ -269,7 +270,7 @@ mailboxes = {{ "INBOX" = {{ query="tag:inbox", parent = "Drafts" }}, "Drafts" = 
     );
 
     // Check valid configuration
-    let mut s: melib::AccountSettings = toml::from_str(&format!(
+    let mut s: AccountSettings = toml::from_str(&format!(
         r#"
 name = "{account_name}"
 root_mailbox = "{}"

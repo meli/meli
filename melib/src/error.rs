@@ -654,9 +654,9 @@ impl From<nom::Err<(&str, nom::error::ErrorKind)>> for Error {
     }
 }
 
-impl From<crate::email::InvalidHeaderName> for Error {
+impl From<crate::email::headers::InvalidHeaderName> for Error {
     #[inline]
-    fn from(err: crate::email::InvalidHeaderName) -> Self {
+    fn from(err: crate::email::headers::InvalidHeaderName) -> Self {
         Self::from_inner(Arc::new(err)).set_kind(ErrorKind::ValueError)
     }
 }

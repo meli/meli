@@ -58,7 +58,7 @@ use imap_codec::{
 };
 use indexmap::IndexSet;
 use native_tls::TlsConnector;
-pub use smol::Async as AsyncWrapper;
+use smol::Async;
 
 use crate::{
     backends::{
@@ -167,7 +167,7 @@ pub struct ImapStream {
     pub cmd_id: Saturating<usize>,
     pub last_cmd: String,
     pub id: Cow<'static, str>,
-    pub stream: AsyncWrapper<Connection>,
+    pub stream: Async<Connection>,
     pub protocol: ImapProtocol,
     pub current_mailbox: MailboxSelection,
     pub timeout: Option<Duration>,
@@ -404,7 +404,7 @@ impl ImapStream {
                 .build()
                 .chain_err_kind(ErrorKind::Network(NetworkErrorKind::InvalidTLSConnection))?;
 
-            let mut socket = AsyncWrapper::new({
+            let mut socket = Async::new({
                 let addr = (hostname.clone(), server_conf.port);
                 let timeout = server_conf.timeout;
                 let conn = Connection::new_tcp(
@@ -506,12 +506,12 @@ impl ImapStream {
                 })
                 .await
                 .chain_err_summary(|| format!("Could not initiate TLS negotiation to {path}."))?;
-                AsyncWrapper::new(Connection::new_tls(conn))
+                Async::new(Connection::new_tls(conn))
                     .chain_err_summary(|| format!("{path} connection failed."))
                     .chain_err_kind(ErrorKind::External)?
             }
         } else {
-            AsyncWrapper::new({
+            Async::new({
                 let addr = (hostname.clone(), server_conf.port);
                 let timeout = server_conf.timeout;
                 let conn = Connection::new_tcp(
@@ -974,7 +974,7 @@ impl ImapConnection {
                                     cmd_id,
                                     last_cmd,
                                     id,
-                                    stream: AsyncWrapper::new(stream.deflate())?,
+                                    stream: Async::new(stream.deflate())?,
                                     protocol,
                                     current_mailbox,
                                     timeout,
@@ -1928,7 +1928,7 @@ async fn read(
     None
 }
 
-/// Async methods counterparts of the [`MailBackend`](crate::MailBackend) crate.
+/// Async methods counterparts of the [`MailBackend`](crate::backends::MailBackend) crate.
 /// Direct use should minimise cloning, locks and delay compared to using
 /// `MailBackend` methods.
 impl ImapConnection {

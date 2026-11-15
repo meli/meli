@@ -52,9 +52,9 @@ use futures::{
 };
 use melib::{
     backends::prelude::*,
+    email::Mail,
     maildir::{utilities::MaildirFilePathExt as _, *},
     utils::logging::{LogLevel, Logger},
-    Mail,
 };
 use tempfile::TempDir;
 

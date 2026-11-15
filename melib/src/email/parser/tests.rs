@@ -202,7 +202,7 @@ fn test_email_parser_address_list() {
         rfc2822address_list(b"Obit Oppidum <user@domain>, list <list@domain.tld>, list2 <list2@domain.tld>, Bobit Boppidum <user@otherdomain.com>, Cobit Coppidum <user2@otherdomain.com>, <user@domain.tld>").unwrap()
     );
     assert_eq!(
-        crate::Error::from(
+        crate::error::Error::from(
             rfc2822address_list(b"Prof. Einstein <einstein@example.org>").unwrap_err()
         )
         .to_string(),

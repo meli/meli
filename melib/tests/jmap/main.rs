@@ -56,9 +56,8 @@ pub mod server {
     };
     use melib::{
         backends::prelude::*,
-        email::address::MessageID,
+        email::{address::MessageID, Mail},
         jmap::{argument::*, identity, methods::*, objects::*, session::Session, *},
-        Mail,
     };
     use serde::Serialize as _;
     use serde_json::Value;
@@ -1259,9 +1258,9 @@ pub mod tests {
     use futures::{channel::mpsc::unbounded, executor::block_on, StreamExt as _};
     use melib::{
         backends::prelude::*,
+        email::Mail,
         jmap::*,
         utils::logging::{LogLevel, Logger},
-        Mail,
     };
     use tempfile::TempDir;
 

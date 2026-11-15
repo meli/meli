@@ -28,21 +28,25 @@ use std::{
 };
 
 use melib::{
+    backends::SpecialUsageMailbox,
     email::{
+        compose::Draft,
+        headers::HeaderName,
         list_management::{ListAction, ListActions},
         mailto::Mailto,
-        Draft, Flag,
+        Flag,
     },
     error::{Error, Result},
     utils::shellexpand::ShellExpandTrait as _,
-    HeaderName, LogLevel, SpecialUsageMailbox,
+    LogLevel,
 };
 
 use crate::{
     accounts::JobRequest,
     components::prelude::*,
     mail::compose::{send_draft_async, Composer},
-    mailbox_settings, ForkedProcess, NotificationType,
+    mailbox_settings,
+    types::{ForkedProcess, NotificationType},
 };
 
 pub fn save_attachment(path: &Path, bytes: &[u8]) -> Result<()> {
@@ -222,7 +226,9 @@ pub fn handle_mailing_list_action(
                     composer.set_draft(draft, context);
                     context
                         .replies
-                        .push_back(UIEvent::Action(Tab(New(Some(Box::new(composer))))));
+                        .push_back(UIEvent::Action(Action::Tab(TabAction::New(Some(
+                            Box::new(composer),
+                        )))));
                 }
                 ValidOption::Email { draft, auto: true } => {
                     match send_draft_async(

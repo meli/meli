@@ -19,13 +19,23 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use std::{
+    borrow::Cow,
+    hash::{DefaultHasher, Hasher as _},
+};
+
 use nom::{
     bytes::complete::{is_not, tag},
     combinator::opt,
 };
 
-use super::*;
-use crate::email::parser::{IResult, ParsingError};
+use crate::{
+    email::{
+        parser::{IResult, ParsingError},
+        Envelope, EnvelopeHash,
+    },
+    nntp::UID,
+};
 
 pub struct NntpLineIterator<'a> {
     slice: &'a str,

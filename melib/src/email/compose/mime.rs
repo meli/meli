@@ -19,7 +19,8 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
+use data_encoding::BASE64_MIME;
+
 use crate::text::grapheme_clusters::TextProcessing as _;
 
 pub fn encode_header(value: &str) -> String {

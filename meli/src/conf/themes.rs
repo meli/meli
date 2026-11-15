@@ -38,14 +38,14 @@ use std::{
 };
 
 use indexmap::IndexMap;
-use melib::{Error, Result};
+use melib::error::{Error, Result};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use smallvec::SmallVec;
 
 use crate::{
     conf::data_types::regex_pattern::{RegexOptions, RegexValue},
-    terminal::{Attr, Color},
-    Context,
+    state::Context,
+    terminal::{cells::Attr, Color},
 };
 
 pub const LIGHT: &str = "light";
@@ -682,7 +682,7 @@ use regexp::*;
 
 mod regexp {
     use super::*;
-    use crate::{conf::data_types::regex_pattern::RegexValue, terminal::FormatTag};
+    use crate::{conf::data_types::regex_pattern::RegexValue, terminal::cells::FormatTag};
 
     pub(super) const DEFAULT_TEXT_FORMATTER_KEYS: &[&str] =
         &["pager.envelope.body", "listing.from", "listing.subject"];

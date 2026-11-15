@@ -33,26 +33,11 @@ pub mod argcheck;
 pub mod completions;
 pub mod history;
 pub mod parser;
-use actions::MailboxOperation;
-use error::CommandError;
-pub use parser::parse_command;
-
-pub use crate::actions::{
-    AccountAction::{self, *},
-    Action::{self, *},
-    ComposeAction::{self, *},
-    ComposerTabAction, FlagAction,
-    ListingAction::{self, *},
-    MailingListAction::{self, *},
-    TabAction::{self, *},
-    TagAction,
-    ViewAction::{self, *},
-};
 
 pub type CommandCompletionEntry = (
     &'static str,
     TokenStream,
-    fn(&str) -> nom::IResult<&str, Result<Action, CommandError>>,
+    fn(&str) -> nom::IResult<&str, Result<actions::Action, error::CommandError>>,
 );
 
 /// Macro to create a const table with every command part that can be

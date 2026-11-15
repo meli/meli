@@ -19,12 +19,29 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::iter::FromIterator as _;
+use std::{collections::HashMap, convert::TryInto as _, iter::FromIterator as _};
 
-use melib::{Address, SortField, SortOrder, ThreadNode};
+use melib::{
+    backends::{AccountHash, MailboxHash},
+    email::{address::Address, Envelope, EnvelopeHash},
+    error::Result,
+    thread::{ThreadHash, ThreadNode, ThreadNodeHash},
+    SortField, SortOrder,
+};
+use smallvec::SmallVec;
 
-use super::{EntryStrings, *};
-use crate::{components::PageMovement, jobs::JoinHandle};
+use crate::{
+    components::prelude::*,
+    conf::data_types::IndexStyle,
+    jobs::JoinHandle,
+    mail::listing::{
+        ColorCache, DateString, EntryStrings, FlagString, Focus, FromString, ListingMessage,
+        ListingTrait, MailListingTrait, Modifier, RowsState, SubjectString, TagString,
+        TagsIterator,
+    },
+    mailbox_settings, shortcut,
+    types::{NotificationType, StatusEvent, UIEvent, UIMode},
+};
 
 macro_rules! row_attr {
     ($color_cache:expr, even: $even:expr, unseen: $unseen:expr, highlighted: $highlighted:expr, selected: $selected:expr  $(,)*) => {{
@@ -541,7 +558,7 @@ impl ListingTrait for PlainListing {
                     title: Some("Could not perform search".into()),
                     source: None,
                     body: message.into(),
-                    kind: Some(crate::types::NotificationType::Error(err.kind)),
+                    kind: Some(NotificationType::Error(err.kind)),
                 });
             }
         }
@@ -1741,7 +1758,7 @@ impl Component for PlainListing {
                 self.refresh_mailbox(context, false);
                 return true;
             }
-            UIEvent::Action(Action::Listing(Search {
+            UIEvent::Action(Action::Listing(ListingAction::Search {
                 term: ref filter_term,
                 raw_search,
             })) if !self.unfocused() => {
@@ -1771,14 +1788,14 @@ impl Component for PlainListing {
                             title: Some("Could not perform search".into()),
                             source: None,
                             body: err.to_string().into(),
-                            kind: Some(crate::types::NotificationType::Error(err.kind)),
+                            kind: Some(NotificationType::Error(err.kind)),
                         });
                     }
                 };
                 self.set_dirty(true);
                 return true;
             }
-            UIEvent::Action(Action::Listing(Select {
+            UIEvent::Action(Action::Listing(ListingAction::Select {
                 term: ref search_term,
                 raw_search,
             })) if !self.unfocused() => {
@@ -1808,7 +1825,7 @@ impl Component for PlainListing {
                             title: Some("Could not perform search".into()),
                             source: None,
                             body: err.to_string().into(),
-                            kind: Some(crate::types::NotificationType::Error(err.kind)),
+                            kind: Some(NotificationType::Error(err.kind)),
                         });
                     }
                 };
@@ -1832,7 +1849,7 @@ impl Component for PlainListing {
                             title: Some("Could not perform search".into()),
                             source: None,
                             body: err.to_string().into(),
-                            kind: Some(crate::types::NotificationType::Error(err.kind)),
+                            kind: Some(NotificationType::Error(err.kind)),
                         });
                     }
                 }

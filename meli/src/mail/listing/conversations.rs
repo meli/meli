@@ -19,13 +19,33 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{collections::BTreeMap, iter::FromIterator as _};
+use std::{
+    collections::{BTreeMap, HashMap},
+    iter::FromIterator as _,
+};
 
 use indexmap::IndexSet;
-use melib::{Address, SortField, SortOrder, TagHash, Threads};
+use melib::{
+    backends::TagHash,
+    email::{address::Address, Envelope, EnvelopeHash},
+    error::Result,
+    thread::{ThreadHash, Threads},
+    SortField, SortOrder,
+};
+use smallvec::SmallVec;
 
-use super::*;
-use crate::{components::PageMovement, jobs::JoinHandle};
+use crate::{
+    components::prelude::*,
+    conf::data_types::IndexStyle,
+    jobs::JoinHandle,
+    mail::listing::{
+        ColorCache, DateString, EntryStrings, FlagString, Focus, FromString, ListingMessage,
+        ListingTrait, MailListingTrait, Modifier, RowsState, SubjectString, TagString,
+        TagsIterator,
+    },
+    mailbox_settings, shortcut,
+    types::{NotificationType, StatusEvent, UIEvent, UIMode},
+};
 
 macro_rules! row_attr {
     ($field:ident, $color_cache:expr, unseen: $unseen:expr, highlighted: $highlighted:expr, selected: $selected:expr  $(,)*) => {{
@@ -564,7 +584,7 @@ impl ListingTrait for ConversationsListing {
                     title: Some("Could not perform search".into()),
                     source: None,
                     body: message.into(),
-                    kind: Some(crate::types::NotificationType::Error(err.kind)),
+                    kind: Some(NotificationType::Error(err.kind)),
                 });
             }
         }
@@ -1025,10 +1045,6 @@ impl Component for ConversationsListing {
                     None,
                     Some(0),
                 );
-                for c in grid.row_iter(area, x..area.width(), y) {
-                    grid[c] = Cell::default();
-                }
-
                 grid.clear_area(area.skip(x, y), self.color_cache.theme_default);
                 context.dirty_areas.push_back(area.nth_row(0));
 
@@ -1421,7 +1437,7 @@ impl Component for ConversationsListing {
                         self.subsort = (*field, *order);
                         return true;
                     }
-                    Action::Listing(ToggleThreadSnooze) if !self.unfocused() => {
+                    Action::Listing(ListingAction::ToggleThreadSnooze) if !self.unfocused() => {
                         //if let Some(thread) = self.get_thread_under_cursor(self.cursor_pos.2) {
                         //    let account = &mut context.accounts[&self.cursor_pos.0];
                         //    account
@@ -1467,7 +1483,7 @@ impl Component for ConversationsListing {
                 self.set_dirty(true);
             }
             UIEvent::Action(ref action) => match action {
-                Action::Listing(Search {
+                Action::Listing(ListingAction::Search {
                     term: ref filter_term,
                     raw_search,
                 }) if !self.unfocused() => {
@@ -1497,14 +1513,14 @@ impl Component for ConversationsListing {
                                 title: Some("Could not perform search".into()),
                                 source: None,
                                 body: err.to_string().into(),
-                                kind: Some(crate::types::NotificationType::Error(err.kind)),
+                                kind: Some(NotificationType::Error(err.kind)),
                             });
                         }
                     };
                     self.set_dirty(true);
                     return true;
                 }
-                Action::Listing(Select {
+                Action::Listing(ListingAction::Select {
                     term: ref search_term,
                     raw_search,
                 }) if !self.unfocused() => {
@@ -1534,7 +1550,7 @@ impl Component for ConversationsListing {
                                 title: Some("Could not perform search".into()),
                                 source: None,
                                 body: err.to_string().into(),
-                                kind: Some(crate::types::NotificationType::Error(err.kind)),
+                                kind: Some(NotificationType::Error(err.kind)),
                             });
                         }
                     };
@@ -1568,7 +1584,7 @@ impl Component for ConversationsListing {
                             title: Some("Could not perform search".into()),
                             source: None,
                             body: err.to_string().into(),
-                            kind: Some(crate::types::NotificationType::Error(err.kind)),
+                            kind: Some(NotificationType::Error(err.kind)),
                         });
                     }
                 }

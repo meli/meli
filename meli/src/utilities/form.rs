@@ -33,6 +33,7 @@ use melib::{
 use crate::{
     components::prelude::*,
     terminal::text_editing::UText,
+    types::NotificationType,
     utilities::autocomplete::{AutoComplete, AutoCompleteFn},
 };
 
@@ -661,7 +662,7 @@ impl Component for DictField {
                             context.replies.push_back(UIEvent::Notification {
                                 title: Some("Could not rename entry".into()),
                                 body: err.to_string().into(),
-                                kind: Some(crate::NotificationType::Error(err.kind)),
+                                kind: Some(NotificationType::Error(err.kind)),
                                 source: Some(err),
                             });
                         }
@@ -1047,7 +1048,7 @@ pub trait FormWidgetLabel:
 }
 
 impl FormWidgetLabel for Cow<'static, str> {}
-impl FormWidgetLabel for melib::HeaderName {
+impl FormWidgetLabel for melib::email::headers::HeaderName {
     fn display(&'_ self) -> Cow<'_, str> {
         Cow::Owned(self.to_string())
     }

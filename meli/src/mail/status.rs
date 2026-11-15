@@ -21,10 +21,18 @@
 
 use std::borrow::Cow;
 
-use melib::{MailBackendExtensionStatus, SpecialUsageMailbox};
+use melib::{
+    backends::{MailBackendExtensionStatus, SpecialUsageMailbox},
+    text::Truncate as _,
+};
 
-use super::*;
-use crate::{accounts::JobRequest, conf::themes::ThemeAttribute};
+use crate::{
+    accounts::JobRequest,
+    components::prelude::*,
+    conf::{data_types::SearchBackend, themes::ThemeAttribute},
+    terminal::{Color, Screen, Virtual},
+    utilities::ScrollBar,
+};
 
 #[derive(Debug)]
 pub struct AccountStatus {

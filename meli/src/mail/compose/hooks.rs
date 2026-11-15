@@ -20,11 +20,18 @@
  */
 
 //! Pre-submission hooks for draft validation and/or transformations.
-pub use std::borrow::Cow;
+use std::{
+    borrow::Cow,
+    io::Write as _,
+    process::{Command, Stdio},
+};
 
-use melib::email::headers::HeaderName;
+use melib::{
+    email::{address::Address, compose::Draft, headers::HeaderName},
+    error::{Error, Result},
+};
 
-use super::*;
+use crate::state::Context;
 
 #[allow(clippy::type_complexity)]
 pub enum HookFn {
@@ -74,7 +81,7 @@ impl std::ops::DerefMut for HookFn {
 pub struct Hook {
     /// Hook name for enabling/disabling it from configuration.
     ///
-    /// See [`crate::conf::ComposingSettings::disabled_compose_hooks`].
+    /// See [`crate::conf::composing::ComposingSettings::disabled_compose_hooks`].
     name: Cow<'static, str>,
     hook_fn: HookFn,
 }
@@ -82,7 +89,7 @@ pub struct Hook {
 impl Hook {
     /// Hook name for enabling/disabling it from configuration.
     ///
-    /// See [`crate::conf::ComposingSettings::disabled_compose_hooks`].
+    /// See [`crate::conf::composing::ComposingSettings::disabled_compose_hooks`].
     pub fn name(&self) -> &str {
         self.name.as_ref()
     }
@@ -178,7 +185,7 @@ fn past_date_warn(_ctx: &Context, draft: &Draft) -> Result<()> {
     Ok(())
 }
 
-/// Warn if [`melib::Draft`] Date is far in the past/future.
+/// Warn if [`Draft`] Date is far in the past/future.
 pub const PASTDATEWARN: Hook = Hook {
     name: Cow::Borrowed("past-date-warn"),
     hook_fn: HookFn::Ptr(past_date_warn),
@@ -186,7 +193,7 @@ pub const PASTDATEWARN: Hook = Hook {
 
 fn important_header_warn(_ctx: &Context, draft: &Draft) -> Result<()> {
     for hdr in [HeaderName::FROM, HeaderName::TO] {
-        match draft.headers.get(&hdr).map(melib::Address::list_try_from) {
+        match draft.headers.get(&hdr).map(Address::list_try_from) {
             Some(Ok(_)) => {}
             Some(Err(err)) => {
                 return Err(Error::new(format!("{hdr} header value is invalid"))
@@ -217,7 +224,7 @@ fn important_header_warn(_ctx: &Context, draft: &Draft) -> Result<()> {
             .headers
             .get(&hdr)
             .filter(|v| !v.trim().is_empty())
-            .map(melib::Address::list_try_from)
+            .map(Address::list_try_from)
         {
             return Err(Error::new(format!("{hdr} header value is invalid"))
                 .set_source(Some(Box::new(err))));
@@ -226,7 +233,7 @@ fn important_header_warn(_ctx: &Context, draft: &Draft) -> Result<()> {
     Ok(())
 }
 
-/// Warn if important [`melib::Draft`] header is missing or invalid.
+/// Warn if important [`Draft`] header is missing or invalid.
 pub const HEADERWARN: Hook = Hook {
     name: Cow::Borrowed("important-header-warn"),
     hook_fn: HookFn::Ptr(important_header_warn),
@@ -278,9 +285,18 @@ pub const EMPTYDRAFTWARN: Hook = Hook {
 
 #[cfg(test)]
 mod tests {
+    use melib::email::{
+        attachment_types::{ContentTransferEncoding, ContentType},
+        attachments::AttachmentBuilder,
+        compose::Draft,
+        headers::HeaderName,
+    };
     use rusty_fork::rusty_fork_test;
 
-    use super::*;
+    use crate::{
+        mail::compose::hooks::{EMPTYDRAFTWARN, HEADERWARN, MISSINGATTACHMENTWARN, PASTDATEWARN},
+        state::Context,
+    };
 
     rusty_fork_test! {
     #[test]

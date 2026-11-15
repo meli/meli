@@ -19,8 +19,19 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
-use crate::utilities::form::{ButtonWidget, FormButtonAction, TextField};
+use std::borrow::Cow;
+
+use melib::{backends::AccountHash, email::compose::Draft};
+
+use crate::{
+    components::{Component, ComponentId, ShortcutMaps},
+    conf::shortcuts::Shortcuts,
+    shortcut,
+    state::Context,
+    terminal::{cells::CellBuffer, keys::Key, Area},
+    types::{UIEvent, UIMode},
+    utilities::form::{ButtonWidget, FormButtonAction, TextField},
+};
 
 type FormWidget =
     crate::utilities::form::FormWidget<FormButtonAction, Cow<'static, str>, TextField>;

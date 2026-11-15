@@ -81,7 +81,7 @@
 //! ## Parsing an mbox file
 //!
 //! ```
-//! # use melib::{Result, Envelope, EnvelopeHash, mbox::*};
+//! # use melib::{error::Result, email::{Envelope, EnvelopeHash}, mbox::*};
 //! # use std::collections::HashMap;
 //! # use std::sync::{Arc, Mutex};
 //! let file_contents = vec![]; // Replace with actual mbox file contents
@@ -128,7 +128,7 @@
 //!     false,
 //! )?;
 //! file.flush()?;
-//! # Ok::<(), melib::Error>(())
+//! # Ok::<(), melib::error::Error>(())
 //! ```
 
 use std::{
@@ -145,7 +145,7 @@ use notify::{event::EventKind as NotifyEvent, RecommendedWatcher, RecursiveMode,
 
 use crate::{
     backends::prelude::*,
-    email::{parser::BytesExt as _, *},
+    email::{address::MessageID, parser::BytesExt as _, Envelope, EnvelopeHash, Flag},
     text::Truncate as _,
     utils::{lock::*, shellexpand::ShellExpandTrait as _},
 };

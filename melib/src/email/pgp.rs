@@ -37,7 +37,7 @@ use crate::{
     },
     error::{Error, ErrorKind, Result},
 };
-pub type ResultFuture<T> = crate::Result<BoxFuture<'static, crate::Result<T>>>;
+pub type ResultFuture<T> = Result<BoxFuture<'static, Result<T>>>;
 
 pub trait PGPBackend: Hash + Send + Sync {
     fn set_auto_key_locate(&mut self, val: LocateKey) -> Result<()>;

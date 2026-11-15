@@ -33,7 +33,8 @@ use isahc::{
 use url::Url;
 
 use crate::{
-    email::parser::BytesExt as _,
+    backends::{BackendEvent, RefreshEvent, RefreshEventKind},
+    email::{address::Address, parser::BytesExt as _, Flag},
     error::{Error, ErrorKind, NetworkErrorKind, Result, ResultIntoError as _},
     jmap::{
         argument::Argument,
@@ -47,7 +48,6 @@ use crate::{
         session::Session,
         JmapServerConf, Store,
     },
-    BackendEvent, Flag, RefreshEvent, RefreshEventKind,
 };
 
 #[derive(Debug)]
@@ -395,14 +395,10 @@ impl JmapClient {
                 Set::<Identity>::new(None)
                     .account_id(mail_account_id.clone())
                     .create(Some({
-                        let address =
-                            crate::email::Address::try_from(self.store.main_identity.as_str())
-                                .unwrap_or_else(|_| {
-                                    crate::email::Address::new(
-                                        None::<&str>,
-                                        self.store.main_identity.clone(),
-                                    )
-                                });
+                        let address = Address::try_from(self.store.main_identity.as_str())
+                            .unwrap_or_else(|_| {
+                                Address::new(None::<&str>, self.store.main_identity.clone())
+                            });
                         let id: Id<Identity> = Id::new_random();
                         log::trace!(
                             "identity id = {}, {:#?}",

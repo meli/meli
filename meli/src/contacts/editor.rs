@@ -24,9 +24,12 @@ use std::{borrow::Cow, sync::Arc};
 
 use futures::channel::oneshot;
 use melib::{
-    contacts::{jscontact::json_types::UTCDateTime, AddressBook, AddressBookName, Card},
-    error::Result,
-    AccountHash, ContactBackendID, Error,
+    backends::AccountHash,
+    contacts::{
+        jscontact::{self, json_types::UTCDateTime},
+        AddressBook, AddressBookName, Card, ContactBackendID,
+    },
+    error::{Error, Result},
 };
 
 use crate::{
@@ -34,10 +37,13 @@ use crate::{
     components::prelude::*,
     contacts::export::ContactExportDialog,
     jobs::JobId,
-    terminal::{text_editing::UText, Screen, Virtual},
-    types::NotificationType,
-    utilities::form::{Field, FormButtonAction, TextField},
-    CellBuffer, Component, ComponentId, Context, Key, StatusEvent, UIDialog, UIEvent,
+    state::Context,
+    terminal::{cells::CellBuffer, keys::Key, text_editing::UText, Screen, Virtual},
+    types::{NotificationType, StatusEvent, UIEvent},
+    utilities::{
+        form::{Field, FormButtonAction, TextField},
+        UIDialog,
+    },
 };
 
 #[derive(Debug, Clone, Ord, Hash, Eq, PartialEq, PartialOrd)]
@@ -83,7 +89,7 @@ impl AsRef<str> for ContactFieldLabel {
     }
 }
 
-impl crate::form::FormWidgetLabel for ContactFieldLabel {
+impl crate::utilities::form::FormWidgetLabel for ContactFieldLabel {
     fn display(&'_ self) -> Cow<'_, str> {
         Cow::Borrowed(self.as_ref())
     }
@@ -733,12 +739,12 @@ impl ContactEditor {
                 }
                 ContactFieldLabel::GrammaticalGender => {
                     retval.entry("speakToAs").or_insert_with(|| {
-                        serde_json::json!(melib::jscontact::json_types::SpeakToAs::default())
+                        serde_json::json!(jscontact::json_types::SpeakToAs::default())
                     })["grammaticalGender"] = value;
                 }
                 ContactFieldLabel::Pronouns => {
                     retval.entry("speakToAs").or_insert_with(|| {
-                        serde_json::json!(melib::jscontact::json_types::SpeakToAs::default())
+                        serde_json::json!(jscontact::json_types::SpeakToAs::default())
                     })["pronouns"] = value;
                 }
                 ContactFieldLabel::Extra => {

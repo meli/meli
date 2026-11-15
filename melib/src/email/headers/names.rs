@@ -36,8 +36,7 @@ use std::{
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use smallvec::SmallVec;
 
-use super::standards::StandardHeader;
-use crate::email::parser::BytesExt as _;
+use crate::email::{headers::standards::StandardHeader, parser::BytesExt as _};
 
 /// Case insensitive owned wrapper for a header name.
 ///

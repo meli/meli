@@ -21,8 +21,7 @@
 
 //! Parsing of `RFC2369` and `RFC2919` `List-*` headers.
 
-use super::{parser, Envelope};
-use crate::HeaderName;
+use crate::email::{headers::HeaderName, parser, Envelope};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ListAction {
@@ -147,6 +146,8 @@ impl ListActions {
 
 #[test]
 fn list_management() {
+    use crate::email::Mail;
+
     for (list_help, actions) in &[
         (
             "List-Help: <mailto:list@host.com?subject=help> (List Instructions)",
@@ -179,7 +180,7 @@ fn list_management() {
             ],
         ),
     ] {
-        let input = crate::Mail::new(
+        let input = Mail::new(
             format!(
                 "From: <list@example.com>
 Message-ID: <h2g7f.z0gy2pgaen6m@example.com>
@@ -228,7 +229,7 @@ hello world 2.
             ],
         ),
     ] {
-        let input = crate::Mail::new(
+        let input = Mail::new(
             format!(
                 "From: <list@example.com>
 Message-ID: <h2g7f.z0gy2pgaen6m@example.com>
@@ -266,7 +267,7 @@ hello world 2.
             ],
         ),
     ] {
-        let input = crate::Mail::new(
+        let input = Mail::new(
             format!(
                 "From: <list@example.com>
 Message-ID: <h2g7f.z0gy2pgaen6m@example.com>
@@ -298,7 +299,7 @@ hello world 2.
             vec![ListAction::No],
         ),
     ] {
-        let input = crate::Mail::new(
+        let input = Mail::new(
             format!(
                 "From: <list@example.com>
 Message-ID: <h2g7f.z0gy2pgaen6m@example.com>
@@ -321,7 +322,7 @@ hello world 2.
         );
     }
     {
-        let input = crate::Mail::new(
+        let input = Mail::new(
             br"From: <list@example.com>
 Message-ID: <h2g7f.z0gy2pgaen6m@example.com>
 List-Owner: <mailto:listmom@host.com> (Contact Person for Help)
@@ -355,7 +356,7 @@ hello world 2.
             )],
         ),
     ] {
-        let input = crate::Mail::new(
+        let input = Mail::new(
             format!(
                 "From: <list@example.com>
 Message-ID: <h2g7f.z0gy2pgaen6m@example.com>

@@ -24,12 +24,12 @@ use std::{
     time::SystemTime,
 };
 
-use super::{ImapConnection, ImapProtocol, ImapServerConf, UIDStore};
 use crate::{
     backends::prelude::*,
     email::parser::IResult,
     error::{Error, Result},
     get_conf_val,
+    imap::{ImapConnection, ImapProtocol, ImapServerConf, UIDStore},
     text::Truncate as _,
 };
 
@@ -164,8 +164,10 @@ impl ManageSieveConnection {
             .as_mut()?
             .read_lines(&mut ret, Some(b"OK"), true)
             .await?;
-        let (_rest, scripts) =
-            parser::terminated(parser::listscripts, parser::tag_no_case(b"OK"))(&ret)?;
+        let (_rest, scripts) = nom::sequence::terminated(
+            parser::listscripts,
+            nom::bytes::complete::tag_no_case(b"OK"),
+        )(&ret)?;
         Ok(scripts
             .into_iter()
             .map(|(n, a)| (n.to_vec(), a))
@@ -278,15 +280,11 @@ impl ManageSieveConnection {
 pub mod parser {
     use nom::{
         branch::alt,
-        bytes::complete::tag,
+        bytes::complete::{is_not, tag, tag_no_case},
         character::complete::crlf,
         combinator::{iterator, map, opt},
         multi::separated_list1,
-        sequence::separated_pair,
-    };
-    pub use nom::{
-        bytes::complete::{is_not, tag_no_case},
-        sequence::{delimited, pair, preceded, terminated},
+        sequence::{delimited, pair, preceded, separated_pair, terminated},
     };
 
     use super::*;

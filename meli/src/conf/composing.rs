@@ -24,14 +24,14 @@
 use indexmap::IndexMap;
 use melib::{
     conf::{ActionFlag, Secret},
-    email::HeaderName,
+    email::headers::HeaderName,
     error::{Error, Result},
 };
 
 use crate::conf::{
+    data_types::dotaddressable::DotAddressable,
     default_values::{ask, false_val, none, true_val},
     deserializers::non_empty_string,
-    DotAddressable,
 };
 
 /// Settings for writing and sending new e-mail
@@ -295,7 +295,7 @@ pub struct ComposeHook {
 
 impl DotAddressable for ComposeHook {}
 
-impl From<ComposeHook> for crate::mail::hooks::Hook {
+impl From<ComposeHook> for crate::mail::compose::hooks::Hook {
     fn from(c: ComposeHook) -> Self {
         Self::new_shell_command(c.name.into(), c.command)
     }

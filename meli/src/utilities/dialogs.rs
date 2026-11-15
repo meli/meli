@@ -21,7 +21,7 @@
 
 use crate::{
     components::prelude::*,
-    terminal::{cells::create_box, Alignment, Screen, Virtual},
+    terminal::{cells::boundaries::create_box, Alignment, Screen, Virtual},
     utilities::widgets::ScrollBar,
 };
 

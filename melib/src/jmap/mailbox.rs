@@ -30,6 +30,7 @@ use serde_json::value::RawValue;
 use smallvec::SmallVec;
 
 use crate::{
+    backends::{BackendEvent, MailboxCounters, MailboxHash, RefreshEvent, RefreshEventKind},
     error::{Error, Result},
     jmap::{
         argument::Argument,
@@ -39,7 +40,6 @@ use crate::{
         protocol::{Method, Request},
         JmapClient, JmapMailbox,
     },
-    BackendEvent, MailboxCounters, MailboxHash, RefreshEvent, RefreshEventKind,
 };
 
 impl Id<MailboxObject> {

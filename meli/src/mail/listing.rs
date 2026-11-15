@@ -27,23 +27,40 @@ use std::{
     future::Future,
     io::{BufWriter, Write as _},
     ops::{Deref, DerefMut},
+    path::PathBuf,
     pin::Pin,
 };
 
 use futures::future::try_join_all;
 use melib::{
-    backends::EnvelopeHashBatch,
+    backends::{EnvelopeHashBatch, FlagOp, Mailbox, TagHash},
+    email::{EnvelopeHash, Flag, Mail},
+    error::{Error, ErrorKind, Result, ResultIntoError as _},
     mbox::MboxMetadata,
-    utils::{datetime, shellexpand::ShellExpandTrait as _},
-    Flag, FlagOp, UnixTimestamp,
+    thread::ThreadHash,
+    utils::{datetime, logging::LogLevel, shellexpand::ShellExpandTrait as _},
+    UnixTimestamp,
 };
 use smallvec::SmallVec;
 
-use super::*;
 use crate::{
+    account_settings,
     accounts::{JobRequest, MailboxStatus},
-    conf::themes::ThemeAttribute,
+    components::prelude::*,
+    conf::{data_types::IndexStyle, themes::ThemeAttribute},
     jobs::IsAsync,
+    mail::{
+        status::AccountStatus,
+        view::{ThreadView, ThreadViewFocus},
+    },
+    mailbox_settings,
+    terminal::{
+        cells::WidgetWidth,
+        keys::{MouseButton, MouseEvent},
+        Color, Screen, Virtual,
+    },
+    types::{CallbackFn, NotificationType, RateLimit, UIEvent},
+    utilities::{ScrollBar, UIConfirmationDialog},
 };
 
 pub const DEFAULT_ATTACHMENT_FLAG: &str = concat!("📎", emoji_text_presentation_selector!());
@@ -242,20 +259,17 @@ impl RowsState {
     }
 }
 
-mod conversations;
-pub use self::conversations::*;
-
 mod compact;
-pub use self::compact::*;
-
-mod thread;
-pub use self::thread::*;
-
-mod plain;
-pub use self::plain::*;
-
+mod conversations;
 mod offline;
-pub use self::offline::*;
+mod plain;
+mod thread;
+
+pub use compact::*;
+pub use conversations::*;
+pub use offline::*;
+pub use plain::*;
+pub use thread::*;
 
 #[derive(Clone, Copy, Debug)]
 pub enum Focus {
@@ -1067,7 +1081,7 @@ pub trait MailListingTrait: ListingTrait {
                                         )
                                         .into()
                                     };
-                                    crate::sanitize_separator(&mut filename);
+                                    crate::types::sanitize_separator(&mut filename);
                                     path.push(filename.as_ref());
                                 }
                                 let mut file = BufWriter::new(
@@ -1284,7 +1298,7 @@ pub enum ListingComponent {
     Plain(Box<PlainListing>),
     Threaded(Box<ThreadListing>),
 }
-use crate::ListingComponent::*;
+use ListingComponent::*;
 
 impl std::ops::Deref for ListingComponent {
     type Target = dyn MailListingTrait;
@@ -2853,33 +2867,42 @@ impl Component for Listing {
         match *event {
             UIEvent::Input(ref k) if shortcut!(k == shortcuts[Shortcuts::LISTING]["new_mail"]) => {
                 let account_hash = context.accounts[self.cursor_pos.account].hash();
-                let composer = Composer::with_account(account_hash, context);
+                let composer = crate::mail::compose::Composer::with_account(account_hash, context);
                 context
                     .replies
-                    .push_back(UIEvent::Action(Tab(New(Some(Box::new(composer))))));
-                return true;
-            }
-            UIEvent::Action(Action::Tab(ManageMailboxes)) => {
-                let mgr = MailboxManager::new(context);
-                context
-                    .replies
-                    .push_back(UIEvent::Action(Tab(New(Some(Box::new(mgr))))));
-                return true;
-            }
-            UIEvent::Action(Action::Tab(ManageJobs)) => {
-                let mgr = JobManager::new(context);
-                context
-                    .replies
-                    .push_back(UIEvent::Action(Tab(New(Some(Box::new(mgr))))));
+                    .push_back(UIEvent::Action(Action::Tab(TabAction::New(Some(
+                        Box::new(composer),
+                    )))));
                 return true;
             }
             UIEvent::Action(Action::Compose(ComposeAction::Mailto(ref mailto))) => {
                 let account_hash = context.accounts[self.cursor_pos.account].hash();
-                let mut composer = Composer::with_account(account_hash, context);
+                let mut composer =
+                    crate::mail::compose::Composer::with_account(account_hash, context);
                 composer.set_draft(mailto.into(), context);
                 context
                     .replies
-                    .push_back(UIEvent::Action(Tab(New(Some(Box::new(composer))))));
+                    .push_back(UIEvent::Action(Action::Tab(TabAction::New(Some(
+                        Box::new(composer),
+                    )))));
+                return true;
+            }
+            UIEvent::Action(Action::Tab(TabAction::ManageMailboxes)) => {
+                let mgr = crate::manage::mailboxes::MailboxManager::new(context);
+                context
+                    .replies
+                    .push_back(UIEvent::Action(Action::Tab(TabAction::New(Some(
+                        Box::new(mgr),
+                    )))));
+                return true;
+            }
+            UIEvent::Action(Action::Tab(TabAction::ManageJobs)) => {
+                let mgr = crate::manage::jobs::JobManager::new(context);
+                context
+                    .replies
+                    .push_back(UIEvent::Action(Action::Tab(TabAction::New(Some(
+                        Box::new(mgr),
+                    )))));
                 return true;
             }
             UIEvent::StartupCheck(_)
@@ -3855,18 +3878,18 @@ struct TagsIterator<'envelope, 'context> {
     context: &'context Context,
     account_hash: AccountHash,
     mailbox_hash: MailboxHash,
-    tags: &'context BTreeMap<melib::TagHash, String>,
-    iter: indexmap::set::Iter<'envelope, melib::TagHash>,
+    tags: &'context BTreeMap<TagHash, String>,
+    iter: indexmap::set::Iter<'envelope, TagHash>,
 }
 
 impl<'envelope, 'context> TagsIterator<'envelope, 'context> {
     #[inline]
     fn new(
-        iter: indexmap::set::Iter<'envelope, melib::TagHash>,
+        iter: indexmap::set::Iter<'envelope, TagHash>,
         context: &'context Context,
         account_hash: AccountHash,
         mailbox_hash: MailboxHash,
-        tags: &'context BTreeMap<melib::TagHash, String>,
+        tags: &'context BTreeMap<TagHash, String>,
     ) -> Self {
         Self {
             context,

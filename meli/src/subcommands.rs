@@ -27,24 +27,32 @@ use std::{
 
 use crossbeam::channel::{Receiver, Sender};
 use melib::{
-    utils::{futures::timeout, logging::Logger, shellexpand::ShellExpandTrait as _},
-    Result,
+    email::{Flag, Mail},
+    error::{Error, ErrorKind, Result, ResultIntoError as _},
+    utils::{
+        futures::timeout,
+        logging::{LogLevel, Logger},
+        shellexpand::ShellExpandTrait as _,
+    },
 };
 
 use crate::{
     args::{MigrationOpt, PathOrStdio, ToolOpt},
-    conf::preprocessing::get_included_configs,
-    version_migrations, *,
+    conf::{get_config_file, preprocessing::get_included_configs, FileSettings},
+    state::State,
+    terminal::Ask,
+    types::ThreadEvent,
+    version_migrations,
 };
 
 pub fn create_config(path: Option<PathOrStdio>) -> Result<()> {
     let config_path = match path {
         Some(PathOrStdio::Stdio) => {
-            std::io::stdout().write_all(conf::FileSettings::EXAMPLE_CONFIG.as_bytes())?;
+            std::io::stdout().write_all(FileSettings::EXAMPLE_CONFIG.as_bytes())?;
             return Ok(());
         }
         Some(PathOrStdio::Path(path)) => path.expand(),
-        None => conf::get_config_file()?,
+        None => get_config_file()?,
     };
     if config_path.exists() {
         return Err(Error::new(format!(
@@ -52,7 +60,7 @@ pub fn create_config(path: Option<PathOrStdio>) -> Result<()> {
             config_path.display()
         )));
     }
-    conf::create_config_file(&config_path)?;
+    crate::conf::create_config_file(&config_path)?;
     Ok(())
 }
 
@@ -62,7 +70,7 @@ pub fn edit_config() -> Result<()> {
         .map_err(|err| {
             format!("Could not find any value in environment variables EDITOR and VISUAL. {err}")
         })?;
-    let config_path = conf::get_config_file()?;
+    let config_path = get_config_file()?;
 
     let mut cmd = Command::new(editor);
 
@@ -80,14 +88,14 @@ pub fn edit_config() -> Result<()> {
 }
 
 #[cfg(feature = "cli-docs")]
-pub fn man(page: manpages::ManPages, source: bool) -> Result<String> {
+pub fn man(page: crate::manpages::ManPages, source: bool) -> Result<String> {
     page.read(source)
 }
 
 #[cfg(feature = "cli-docs")]
 #[expect(clippy::print_stdout)]
 pub fn pager(v: String, no_raw: bool) -> Result<()> {
-    if no_raw || !terminal::is_tty() {
+    if no_raw || !crate::terminal::is_tty() {
         println!("{v}");
         return Ok(());
     }
@@ -139,15 +147,15 @@ pub fn test_config(path: Option<PathOrStdio>) -> Result<()> {
             if input.trim().is_empty() {
                 return Err(Error::new("Input was empty.").set_kind(ErrorKind::ValueError));
             }
-            conf::FileSettings::validate_string(input, false)?;
+            FileSettings::validate_string(input, false)?;
             return Ok(());
         }
         Some(PathOrStdio::Path(path)) => {
             path.expand().canonicalize().chain_err_related_path(&path)?
         }
-        None => conf::get_config_file()?,
+        None => get_config_file()?,
     };
-    conf::FileSettings::validate(config_path, false)?;
+    FileSettings::validate(config_path, false)?;
     Ok(())
 }
 
@@ -174,7 +182,7 @@ pub fn view(
         let Some(mbox_format) = melib::mbox::MboxFormat::detect(&bytes) else {
             return Err(Error::new("Could not detect mbox format").set_kind(ErrorKind::ValueError));
         };
-        let mut settings = Settings::without_accounts().unwrap_or_default();
+        let mut settings = crate::conf::Settings::without_accounts().unwrap_or_default();
         let mut ac = AccountSettings {
             name: "mbox".into(),
             root_mailbox: path.display().to_string(),
@@ -189,19 +197,24 @@ pub fn view(
 
         let mut state = State::new(Some(settings), sender, receiver)?;
 
-        let window = Box::new(Tabbed::new(
-            vec![Box::new(listing::Listing::new(&mut state.context))],
+        let window = Box::new(crate::utilities::Tabbed::new(
+            vec![Box::new(crate::mail::listing::Listing::new(
+                &mut state.context,
+            ))],
             &state.context,
         ));
 
-        state.register_component(Box::new(StatusBar::new(&state.context, window)));
-        state.register_component(Box::new(notifications::NotificationRouter::new(
+        state.register_component(Box::new(crate::utilities::StatusBar::new(
+            &state.context,
+            window,
+        )));
+        state.register_component(Box::new(crate::notifications::NotificationRouter::new(
             &state.context,
         )));
         return Ok(state);
     }
     let mut state = State::new(
-        Some(Settings::without_accounts().unwrap_or_default()),
+        Some(crate::conf::Settings::without_accounts().unwrap_or_default()),
         sender,
         receiver,
     )?;
@@ -209,7 +222,7 @@ pub fn view(
 
     let wrapper = Mail::new(bytes, Some(Flag::SEEN))
         .chain_err_summary(|| format!("Could not parse `{}`", path.display()))?;
-    state.register_component(Box::new(EnvelopeView::new(
+    state.register_component(Box::new(crate::mail::view::envelope::EnvelopeView::new(
         wrapper,
         None,
         None,
@@ -225,13 +238,13 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
         logger: &Logger,
         path: Option<PathBuf>,
         account: &str,
-    ) -> Result<(conf::FileAccount, conf::AccountConf)> {
+    ) -> Result<(crate::conf::FileAccount, crate::conf::AccountConf)> {
         let config_path = if let Some(path) = path {
             path.expand().canonicalize().chain_err_related_path(&path)?
         } else {
-            conf::get_config_file()?
+            get_config_file()?
         };
-        let conf = conf::FileSettings::validate(config_path, false)?;
+        let conf = FileSettings::validate(config_path, false)?;
         if !conf.accounts.contains_key(&account.to_string()) {
             println!(
                 "The configuration file does not contain the account `{account}`. It contains the \
@@ -246,7 +259,7 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
             logger.change_log_level(conf.log.maximum_level)
         }
         let file_account_conf = conf.accounts[account].clone();
-        let account_conf: conf::AccountConf = file_account_conf.clone().try_into()?;
+        let account_conf: crate::conf::AccountConf = file_account_conf.clone().try_into()?;
         Ok((file_account_conf, account_conf))
     }
 
@@ -308,7 +321,7 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
             let imap = melib::imap::ImapType::new(
                 &account_conf.account,
                 Default::default(),
-                melib::BackendEventConsumer::new(std::sync::Arc::new(|_, _| ())),
+                melib::backends::BackendEventConsumer::new(std::sync::Arc::new(|_, _| {})),
             )?;
 
             std::thread::spawn(move || {
@@ -379,7 +392,7 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
 
             let (_, account_conf) = get_account(&logger, path, account)?;
             let mut conn = melib::imap::managesieve::ManageSieveConnection::new(
-                AccountHash::default(),
+                Default::default(),
                 account.clone(),
                 &account_conf.account,
                 melib::backends::BackendEventConsumer::new(std::sync::Arc::new(|_, _| {})),
@@ -570,8 +583,8 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
             use std::fs::OpenOptions;
 
             use melib::{
+                email::address::MessageID,
                 utils::patch_retrieve::{PatchSource as _, PublicInboxHTTP},
-                MessageID,
             };
 
             use crate::args::PublicInboxOpt;
@@ -594,7 +607,7 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
                     if thread {
                         use std::io::{BufWriter, Write};
 
-                        use melib::{mbox::*, Address};
+                        use melib::{email::address::Address, mbox::*};
 
                         let msgs = futures::executor::block_on(
                             lore.fetch_thread(list.as_str(), msg_id.clone())?,
@@ -708,7 +721,7 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
                         return Err(Error::new(format!("Migration {migration:?} not found."))
                             .set_kind(ErrorKind::NotFound));
                     };
-                    let config = conf::get_config_file()?;
+                    let config = get_config_file()?;
                     let mut stdout = std::io::stdout();
                     let stdin = std::io::stdin();
                     let ask = Ask::new(m.question());
@@ -733,7 +746,7 @@ pub fn tool(path: Option<PathBuf>, opt: ToolOpt) -> Result<()> {
                         return Err(Error::new(format!("Migration {migration:?} not found."))
                             .set_kind(ErrorKind::NotFound));
                     };
-                    let config = conf::get_config_file()?;
+                    let config = get_config_file()?;
                     let mut stdout = std::io::stdout();
                     let stdin = std::io::stdin();
                     let ask = Ask::new(m.question());

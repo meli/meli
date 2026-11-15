@@ -19,19 +19,37 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{cmp, fs::File, io::BufWriter};
+use std::{
+    cmp,
+    fs::File,
+    io::{BufWriter, Write as _},
+    path::PathBuf,
+};
 
 use futures::future::try_join_all;
 use melib::{
+    backends::{AccountHash, MailboxHash},
+    email::{address::Address, EnvelopeHash},
+    error::{ErrorKind, Result, ResultIntoError as _},
+    thread::{ThreadHash, ThreadNodeHash},
     utils::{
         datetime::{timestamp_to_string, UnixTimestamp},
+        logging::LogLevel,
         shellexpand::ShellExpandTrait as _,
     },
-    Address,
 };
+use smallvec::SmallVec;
 
-use super::*;
-use crate::{components::PageMovement, conf::data_types::ThreadLayout};
+use crate::{
+    accounts::JobRequest,
+    components::prelude::*,
+    conf::data_types::ThreadLayout,
+    mail::view::{utils::save_attachment, MailView, MailViewState},
+    mailbox_settings,
+    terminal::{Screen, Virtual},
+    types::{CallbackFn, NotificationType},
+    utilities::ScrollBar,
+};
 
 #[derive(Debug)]
 struct ThreadEntry {
@@ -805,7 +823,10 @@ impl Component for ThreadView {
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if matches!(
             (&event, self.entries.is_empty()),
-            (UIEvent::Action(Listing(OpenInNewTab)), false)
+            (
+                UIEvent::Action(Action::Listing(ListingAction::OpenInNewTab)),
+                false
+            )
         ) {
             // Handle this before self.mailview does
             let mut new_tab = Self::new(
@@ -819,7 +840,9 @@ impl Component for ThreadView {
             new_tab.set_dirty(true);
             context
                 .replies
-                .push_back(UIEvent::Action(Tab(New(Some(Box::new(new_tab))))));
+                .push_back(UIEvent::Action(Action::Tab(TabAction::New(Some(
+                    Box::new(new_tab),
+                )))));
             return true;
         }
 
@@ -1050,7 +1073,7 @@ impl Component for ThreadView {
             {
                 true
             }
-            UIEvent::Action(View(ViewAction::ExportThread(ref path))) => {
+            UIEvent::Action(Action::View(ViewAction::ExportThread(ref path))) => {
                 // Save entire thread as eml files in a directory path
                 let mut path = std::path::Path::new(path).to_path_buf().expand();
                 if path.is_relative() {
@@ -1108,7 +1131,7 @@ impl Component for ThreadView {
                                     ),
                                     body: err.to_string().into(),
                                     source: Some(err),
-                                    kind: Some(NotificationType::Error(melib::ErrorKind::External)),
+                                    kind: Some(NotificationType::Error(ErrorKind::External)),
                                 });
                                 results.push(false);
                             } else {
@@ -1148,7 +1171,7 @@ impl Component for ThreadView {
 
                 true
             }
-            UIEvent::Action(View(ViewAction::ExportThreadMbox(ref format, ref path))) => {
+            UIEvent::Action(Action::View(ViewAction::ExportThreadMbox(ref format, ref path))) => {
                 // Save entire thread as eml files in a directory path
                 let mut path = path.expand_tilde().into_owned();
                 if path.is_relative() {
@@ -1195,7 +1218,7 @@ impl Component for ThreadView {
                                 )
                                 .into()
                             };
-                            crate::sanitize_separator(&mut filename);
+                            crate::types::sanitize_separator(&mut filename);
                             path.push(filename.as_ref());
                         }
                         let mut file = BufWriter::new(
@@ -1343,6 +1366,6 @@ impl Component for ThreadView {
         debug_assert!(self.id == id);
         context
             .replies
-            .push_back(UIEvent::Action(Tab(Kill(self.id))));
+            .push_back(UIEvent::Action(Action::Tab(TabAction::Kill(self.id))));
     }
 }

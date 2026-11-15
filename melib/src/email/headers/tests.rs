@@ -132,7 +132,7 @@ fn test_email_headers_names_headername_display() {
 
 #[test]
 fn test_email_headers_names_parse_standard_headers() {
-    use super::super::standards::TEST_HEADERS;
+    use crate::email::headers::standards::TEST_HEADERS;
 
     for &(std, name) in TEST_HEADERS {
         // Test lower case

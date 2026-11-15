@@ -40,13 +40,6 @@ use std::borrow::Cow;
 pub use braille::BraillePixelIter;
 pub use screen::{Area, Screen, ScreenGeneration, StateStdout, Tty, Virtual};
 
-pub use self::{
-    cells::*,
-    input::{get_events, InputCommand},
-    keys::*,
-    text_editing::*,
-};
-
 #[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
 #[repr(u8)]
 pub enum CursorStyle {

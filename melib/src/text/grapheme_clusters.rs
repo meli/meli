@@ -25,7 +25,7 @@
 
 use unicode_segmentation::UnicodeSegmentation;
 
-use super::{types::Reflow, wcwidth::wcwidth};
+use crate::text::{types::Reflow, wcwidth::wcwidth};
 
 pub trait TextProcessing: UnicodeSegmentation + AsRef<str> {
     /// Returns a vector containing each grapheme as a slice.

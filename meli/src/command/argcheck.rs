@@ -21,7 +21,7 @@
 
 //! Helper type for showing the exact reason why a command was invalid.
 
-use super::*;
+use crate::command::error::CommandError;
 
 pub enum ArgCheck<const MIN: u8, const MAX: u8> {
     Start { __func__: &'static str },
@@ -143,7 +143,7 @@ impl<const MIN: u8, const MAX: u8> ArgCheck<MIN, MAX> {
 
 macro_rules! arg_init {
     (min_arg: $n:expr, max_arg: $x:expr, $func:tt) => {{
-        ArgCheck::<$n, $x>::new(stringify!($func))
+        $crate::command::argcheck::ArgCheck::<$n, $x>::new(stringify!($func))
     }};
 }
 

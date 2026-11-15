@@ -19,13 +19,6 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::{
-    backends::{BackendMailbox as _, MailboxHash},
-    email::parser::BytesExt as _,
-    error::*,
-    utils::connections::{std_net::connect as tcp_stream_connect, Connection},
-};
-extern crate native_tls;
 use std::{
     collections::HashSet,
     future::Future,
@@ -36,9 +29,15 @@ use std::{
 
 use futures::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use native_tls::TlsConnector;
-pub use smol::Async as AsyncWrapper;
+use smol::Async;
 
-use super::{Capabilities, NntpServerConf, UIDStore};
+use crate::{
+    backends::{BackendMailbox as _, MailboxHash},
+    email::parser::BytesExt as _,
+    error::{Error, ErrorKind, NetworkErrorKind, Result, ResultIntoError as _},
+    nntp::{Capabilities, NntpServerConf, UIDStore},
+    utils::connections::{std_net::connect as tcp_stream_connect, Connection},
+};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NntpExtensionUse {
@@ -47,7 +46,7 @@ pub struct NntpExtensionUse {
 
 #[derive(Debug)]
 pub struct NntpStream {
-    pub stream: AsyncWrapper<Connection>,
+    pub stream: Async<Connection>,
     pub extension_use: NntpExtensionUse,
     pub current_mailbox: MailboxSelection,
     pub supports_submission: bool,
@@ -81,7 +80,7 @@ impl NntpStream {
 
         let stream = {
             let addr = (hostname.as_str(), server_conf.port);
-            AsyncWrapper::new({
+            Async::new({
                 Connection::new_tcp(tcp_stream_connect(
                     addr,
                     Some(std::time::Duration::new(16, 0)),
@@ -187,7 +186,7 @@ impl NntpStream {
                 })
                 .await
                 .chain_err_summary(|| format!("Could not initiate TLS negotiation to {path}."))?;
-                ret.stream = AsyncWrapper::new({
+                ret.stream = Async::new({
                     Connection::new_tls(conn)
                         .trace(server_conf.trace)
                         .with_id("nntp")
@@ -284,7 +283,7 @@ impl NntpStream {
             return Ok((
                 capabilities,
                 Self {
-                    stream: AsyncWrapper::new(stream.deflate())?,
+                    stream: Async::new(stream.deflate())?,
                     extension_use,
                     current_mailbox,
                     supports_submission,

@@ -47,10 +47,10 @@ pub mod tests {
     use futures::{executor::block_on, StreamExt as _};
     use melib::{
         backends::prelude::*,
+        email::Mail,
         maildir::MaildirType,
         notmuch::*,
         utils::logging::{LogLevel, Logger},
-        Mail,
     };
     use tempfile::TempDir;
 

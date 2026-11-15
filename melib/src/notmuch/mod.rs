@@ -20,9 +20,8 @@
  */
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
-    ffi::{CStr, CString, OsStr},
-    os::unix::ffi::OsStrExt as _,
+    collections::BTreeSet,
+    ffi::{CStr, CString},
     path::{Path, PathBuf},
     ptr::NonNull,
     sync::{Arc, Mutex, RwLock},
@@ -32,7 +31,7 @@ use futures::{channel::mpsc, SinkExt as _, StreamExt as _};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher as _};
 
 use crate::{
-    backends::prelude::*,
+    backends::{prelude::*, NOTMUCH_ERROR_DETAILS},
     error::{Error, ErrorKind, Result},
     maildir::utilities::MaildirFilePathExt as _,
     utils::shellexpand::ShellExpandTrait as _,
@@ -416,7 +415,7 @@ impl NotmuchDb {
                             .set_source(Some(Box::new(err))));
                         } else {
                             return Err(Error::new("Could not load libnotmuch!")
-                                .set_details(super::NOTMUCH_ERROR_DETAILS)
+                                .set_details(NOTMUCH_ERROR_DETAILS)
                                 .set_source(Some(Box::new(err))));
                         }
                     }

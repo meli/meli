@@ -20,7 +20,25 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
-use super::*;
+use std::{
+    collections::BTreeSet,
+    sync::{atomic::Ordering, Arc},
+};
+
+use imap_codec::imap_types::{
+    command::CommandBody,
+    sequence::{SequenceSet, ONE},
+};
+
+use crate::{
+    backends::{MailboxHash, TagHash},
+    email::{Envelope, EnvelopeHash},
+    error::{Result, ResultIntoError as _},
+    imap::{
+        connection::ConnectionMutex, generate_envelope_hash, protocol_parser, FetchResponse,
+        ImapCache as _, ImapConnection, SelectResponse, UIDStore, UID,
+    },
+};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum FetchStage {

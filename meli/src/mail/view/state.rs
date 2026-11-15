@@ -19,11 +19,19 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use melib::{text::Truncate as _, Envelope, Error, Mail, Result};
+use melib::{
+    email::{Envelope, Mail},
+    error::{Error, Result},
+    text::Truncate as _,
+};
 
-use super::{EnvelopeView, MailView, ViewSettings};
 use crate::{
-    jobs::JoinHandle, mailbox_settings, Component, Context, ShortcutMaps, ThreadEvent, UIEvent,
+    components::{Component, ShortcutMaps},
+    jobs::JoinHandle,
+    mail::view::{envelope::EnvelopeView, MailView, ViewSettings},
+    mailbox_settings,
+    state::Context,
+    types::{ThreadEvent, UIEvent},
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -41,7 +49,7 @@ pub enum MailViewState {
         pending_action: Option<PendingReplyAction>,
     },
     LoadingBody {
-        main_loop_handler: crate::MainLoopHandler,
+        main_loop_handler: crate::state::MainLoopHandler,
         handle: JoinHandle<Result<Vec<u8>>>,
         pending_action: Option<PendingReplyAction>,
     },

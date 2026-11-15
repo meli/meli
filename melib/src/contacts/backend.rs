@@ -21,8 +21,8 @@
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
 use crate::{
+    backends::prelude::*,
     contacts::{AddressBook, AddressBookName, Card},
-    prelude::*,
 };
 
 #[derive(Clone, Debug)]

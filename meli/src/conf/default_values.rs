@@ -50,7 +50,7 @@ pub fn internal_value_true<T: From<melib::conf::ToggleFlag>>() -> T {
     melib::conf::ToggleFlag::InternalVal(true).into()
 }
 
-pub fn action_internal_value_false<T: From<melib::ActionFlag>>() -> T {
+pub fn action_internal_value_false<T: From<melib::conf::ActionFlag>>() -> T {
     melib::conf::ActionFlag::InternalVal(false).into()
 }
 

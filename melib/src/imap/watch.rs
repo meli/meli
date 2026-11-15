@@ -19,17 +19,22 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 use std::{
+    collections::HashMap,
     sync::Arc,
     time::{Duration, Instant},
 };
 
-use imap_codec::imap_types::search::SearchKey;
+use imap_codec::imap_types::{command::CommandBody, search::SearchKey};
 
-use super::*;
 use crate::{
-    backends::SpecialUsageMailbox,
-    error::{ignore_not_found, Result},
-    imap::email::common_attributes,
+    backends::prelude::*,
+    error::{ignore_not_found, Error, ErrorKind, Result},
+    imap::{
+        email::common_attributes, generate_envelope_hash, protocol_parser, ConnectionMutex,
+        FetchResponse, ImapBlockingConnection, ImapCache as _, ImapConnection, ImapLineSplit as _,
+        ImapMailbox, RequiredResponses, UIDStore,
+    },
+    utils::futures::timeout,
 };
 
 /// Arguments for IMAP watching functions
@@ -481,7 +486,7 @@ pub async fn examine_updates(
             events.push(RefreshEvent {
                 account_hash: conn.uid_store.account_hash,
                 mailbox_hash,
-                kind: Create(Box::new(env)),
+                kind: RefreshEventKind::Create(Box::new(env)),
             });
         }
         if recreate_msn {

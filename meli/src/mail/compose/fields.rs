@@ -22,7 +22,9 @@
 
 use std::sync::Arc;
 
-use melib::{parser::BytesExt as _, text::Truncate as _, AccountHash, Contacts};
+use melib::{
+    backends::AccountHash, contacts::Contacts, email::parser::BytesExt as _, text::Truncate as _,
+};
 
 use crate::{
     account_settings,
@@ -173,7 +175,7 @@ mod tests {
         use melib::contacts::Card;
 
         let tempdir = tempfile::tempdir().unwrap();
-        let mut context = crate::Context::new_mock(&tempdir);
+        let mut context = crate::state::Context::new_mock(&tempdir);
         let card_a = {
             let mut card = Card::new();
             card.emails

@@ -23,8 +23,6 @@ pub mod parser;
 #[cfg(test)]
 mod tests;
 
-use crate::utils::parsec::*;
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RuleBlock(pub Vec<Rule>);
 

@@ -32,7 +32,7 @@
 //! user having mutable ownership.
 
 use crate::{
-    email::{parser::BytesExt as _, *},
+    email::{address::MessageID, parser::BytesExt as _, Envelope, EnvelopeHash},
     SortField, SortOrder, UnixTimestamp,
 };
 

@@ -27,7 +27,8 @@ use melib::error::Result;
 
 use crate::{
     state::MainLoopHandler,
-    terminal::Key,
+    terminal::keys::Key,
+    types::{ThreadEvent, UIEvent},
     varlink::{
         interface::{
             CommandRequest, CommandType, GetInfoResponse, GetInfoType,
@@ -37,7 +38,6 @@ use crate::{
         },
         server::Stream,
     },
-    ThreadEvent, UIEvent,
 };
 
 pub struct Handler {
@@ -135,7 +135,7 @@ impl Handler {
                                             ) {
                                                 Ok(req) => {
                                                     let success =
-                                                        match crate::command::parse_command(
+                                                        match crate::command::parser::parse_command(
                                                             &req.command,
                                                         ) {
                                                             Ok(_) => {

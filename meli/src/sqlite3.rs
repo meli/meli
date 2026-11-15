@@ -27,7 +27,8 @@ use std::{
 
 use melib::{
     backends::MailBackend,
-    email::{attachment_types::Text, Envelope, EnvelopeHash},
+    email::{address::MessageID, attachment_types::Text, Envelope, EnvelopeHash},
+    error::{Error, Result, ResultIntoError as _},
     search::{
         escape_double_quote,
         Query::{self, *},
@@ -36,7 +37,7 @@ use melib::{
         rusqlite::{params, OptionalExtension as _},
         DatabaseDescription,
     },
-    Error, Result, ResultIntoError as _, SortField, SortOrder,
+    Collection, SortField, SortOrder,
 };
 
 #[cfg(test)]
@@ -223,7 +224,7 @@ impl AccountCache {
                         envelope.message_id().to_string(),
                         envelope
                             .in_reply_to()
-                            .map(|f| melib::MessageID::display_slice(f.refs(), Some(" ")))
+                            .map(|f| MessageID::display_slice(f.refs(), Some(" ")))
                             .unwrap_or_default(),
                         envelope.field_references_to_string(),
                         i64::from(envelope.flags().bits()),
@@ -330,7 +331,7 @@ impl AccountCache {
                         envelope.message_id().to_string(),
                         envelope
                             .in_reply_to()
-                            .map(|f| melib::MessageID::display_slice(f.refs(), Some(" ")))
+                            .map(|f| MessageID::display_slice(f.refs(), Some(" ")))
                             .unwrap_or_default(),
                         envelope.field_references_to_string(),
                         i64::from(envelope.flags().bits()),
@@ -445,7 +446,7 @@ impl AccountCache {
 
     pub async fn index(
         acc_name: Arc<str>,
-        collection: melib::Collection,
+        collection: Collection,
         backend_mutex: Arc<Mutex<Box<dyn MailBackend>>>,
     ) -> Result<()> {
         let acc_mutex = collection.envelopes.clone();
@@ -538,10 +539,7 @@ impl AccountCache {
                                     e.subject().into_owned().trim_end_matches('\u{0}'),
                                     e.message_id().to_string(),
                                     e.in_reply_to()
-                                        .map(|f| melib::MessageID::display_slice(
-                                            f.refs(),
-                                            Some(" ")
-                                        ))
+                                        .map(|f| MessageID::display_slice(f.refs(), Some(" ")))
                                         .unwrap_or_default(),
                                     e.field_references_to_string(),
                                     i64::from(e.flags().bits()),

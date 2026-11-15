@@ -19,13 +19,16 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use melib::{conf::ActionFlag, Error, Result};
+use melib::{
+    conf::ActionFlag,
+    error::{Error, Result},
+};
 use serde::{
     de::{Deserialize, Deserializer},
     ser::{Serialize, Serializer},
 };
 
-use crate::conf::{default_values::*, DotAddressable};
+use crate::conf::{data_types::dotaddressable::DotAddressable, default_values::*};
 
 /// Settings for digital signing and encryption
 #[derive(Clone, Debug, Deserialize, Serialize)]

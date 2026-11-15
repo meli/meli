@@ -28,34 +28,30 @@ use std::{
 };
 
 use indexmap::IndexMap;
-use melib::text::Reflow;
 
-use super::*;
-use crate::{components::prelude::*, jobs::JobId};
+use crate::{
+    components::prelude::*,
+    conf::terminal::ProgressSpinnerSequence,
+    jobs::JobId,
+    terminal::{cells::boundaries::create_box, text_editing::UText, Alignment, Screen, Virtual},
+    types::{File, NotificationType, ProcessRequest, ProcessResultFn},
+};
 
-mod pager;
-pub use self::pager::*;
-
+pub mod autocomplete;
 pub mod form;
-use form::TextField;
-
-mod widgets;
-pub use self::widgets::*;
-
-mod dialogs;
-pub use self::dialogs::*;
-
-mod tables;
-pub use self::tables::*;
-
 pub mod listings;
-
 #[cfg(test)]
 pub mod tests;
 
-pub mod autocomplete;
+mod dialogs;
+mod pager;
+mod tables;
+mod widgets;
 
 use autocomplete::{AutoComplete, AutoCompleteEntry};
+use form::TextField;
+
+pub use self::{dialogs::*, pager::*, tables::*, widgets::*};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum SearchMovement {
@@ -112,10 +108,10 @@ impl StatusBar {
     pub fn new(context: &Context, container: Box<dyn Component>) -> Self {
         let mut progress_spinner = ProgressSpinner::new(20, context);
         match context.settings.terminal.progress_spinner_sequence.as_ref() {
-            Some(conf::terminal::ProgressSpinnerSequence::Integer(k)) => {
+            Some(ProgressSpinnerSequence::Integer(k)) => {
                 progress_spinner.set_kind(*k);
             }
-            Some(conf::terminal::ProgressSpinnerSequence::Custom {
+            Some(ProgressSpinnerSequence::Custom {
                 ref frames,
                 ref interval_ms,
             }) => {
@@ -335,10 +331,10 @@ impl Component for StatusBar {
             UIEvent::ConfigReload { old_settings: _ } => {
                 let mut progress_spinner = ProgressSpinner::new(20, context);
                 match context.settings.terminal.progress_spinner_sequence.as_ref() {
-                    Some(conf::terminal::ProgressSpinnerSequence::Integer(k)) => {
+                    Some(ProgressSpinnerSequence::Integer(k)) => {
                         progress_spinner.set_kind(*k);
                     }
-                    Some(conf::terminal::ProgressSpinnerSequence::Custom {
+                    Some(ProgressSpinnerSequence::Custom {
                         ref frames,
                         ref interval_ms,
                     }) => {
@@ -429,7 +425,7 @@ impl Component for StatusBar {
                 };
                 self.set_dirty(true);
                 if !command.is_empty() {
-                    if parse_command(&command).is_ok()
+                    if crate::command::parser::parse_command(&command).is_ok()
                         && self.cmd_history.last().map(String::as_str) != Some(command.as_str())
                     {
                         crate::command::history::log_cmd(command.clone());
@@ -1226,7 +1222,7 @@ impl Component for Tabbed {
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Action(Tab(New(ref mut e @ Some(_)))) => {
+            UIEvent::Action(Action::Tab(TabAction::New(ref mut e @ Some(_)))) => {
                 self.add_component(e.take().unwrap(), context);
                 self.children[self.cursor_pos]
                     .process_event(&mut UIEvent::VisibilityChange(false), context);
@@ -1240,7 +1236,7 @@ impl Component for Tabbed {
                     .expect("serializable component state");
                 return true;
             }
-            UIEvent::Action(Tab(Close)) => {
+            UIEvent::Action(Action::Tab(TabAction::Close)) => {
                 if self.pinned > self.cursor_pos {
                     return true;
                 }
@@ -1255,7 +1251,7 @@ impl Component for Tabbed {
                 self.set_dirty(true);
                 return true;
             }
-            UIEvent::Action(Tab(Kill(id))) => {
+            UIEvent::Action(Action::Tab(TabAction::Kill(id))) => {
                 if self.pinned > self.cursor_pos {
                     return true;
                 }

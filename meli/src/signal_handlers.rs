@@ -24,7 +24,7 @@
 
 use std::os::{fd::AsFd as _, raw::c_int};
 
-use crate::*;
+use crate::types::ThreadEvent;
 
 /// Set up signal handlers and notifying for received signals via `sender`.
 pub fn notify(

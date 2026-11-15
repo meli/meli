@@ -30,14 +30,14 @@ use std::{
 use melib::{
     email::{
         attachment_types::{ContentDisposition, ContentType, MultipartType, Text},
+        attachments::{Attachment, AttachmentBuilder},
+        parser::BytesExt as _,
         pgp::{
             self as melib_pgp, Key, LocateKey, NewSignature, PGPBackend, Recipient, ResultFuture,
             Signature, SignaturesMetadata, UnverifiedSignature,
         },
-        Attachment, AttachmentBuilder,
     },
-    error::*,
-    parser::BytesExt as _,
+    error::{Error, ErrorKind, Result, ResultIntoError as _},
 };
 
 use super::AttachmentBoxFuture;
@@ -250,7 +250,7 @@ pub fn sign_filter(
 
 pub fn encrypt_filter(
     choice: PGPBackendChoice,
-    encrypt_for_self: Option<melib::Address>,
+    encrypt_for_self: Option<melib::email::address::Address>,
     default_sign_key: Option<String>,
     mut sign_keys: Option<Vec<Key>>,
     default_encrypt_key: Option<String>,
@@ -813,8 +813,12 @@ mod tests {
     };
 
     use melib::{
+        email::{
+            compose::Draft,
+            pgp::{Summary, Validity},
+            Mail,
+        },
         gpgme::{EngineInfo, Protocol},
-        pgp::{Summary, Validity},
         utils::logging::{LogLevel, Logger},
     };
     use rusty_fork::rusty_fork_test;
@@ -1034,7 +1038,7 @@ iy22S9oOhvpIcPXS/GjgUQMrImZNsmCwx4kiQ9Dex7Xs+hKkp1+siM9P2XS5iiDm
             .unwrap()
             .into();
 
-        let mut draft = melib::Draft::default();
+        let mut draft = Draft::default();
         draft.set_body("foobar\r\n\r\n".into());
         draft
             .try_set_header("From", "user@example.org".into())
@@ -1078,7 +1082,7 @@ iy22S9oOhvpIcPXS/GjgUQMrImZNsmCwx4kiQ9Dex7Xs+hKkp1+siM9P2XS5iiDm
         draft.attachments.insert(0, body);
         let raw_mail = draft.finalise().unwrap();
         //eprintln!("{raw_mail}");
-        let mail = melib::Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
+        let mail = Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
 
         let signatures = smol::block_on(verify(gpgme_ctx.clone(), mail.body())).unwrap();
         assert_eq!(
@@ -1158,7 +1162,7 @@ iy22S9oOhvpIcPXS/GjgUQMrImZNsmCwx4kiQ9Dex7Xs+hKkp1+siM9P2XS5iiDm
             .into();
 
         {
-            let mut draft = melib::Draft::default();
+            let mut draft = Draft::default();
             draft.set_body("foobar\r\n\r\n".into());
             draft
                 .try_set_header("From", "user@example.org".into())
@@ -1188,7 +1192,7 @@ iy22S9oOhvpIcPXS/GjgUQMrImZNsmCwx4kiQ9Dex7Xs+hKkp1+siM9P2XS5iiDm
 
             draft.attachments.insert(0, body);
             let raw_mail = draft.finalise().unwrap();
-            let mail = melib::Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
+            let mail = Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
 
             let (decrypted_metadata, decrypted) =
                 smol::block_on(decrypt(gpgme_ctx.clone(), mail.body()))
@@ -1205,7 +1209,7 @@ iy22S9oOhvpIcPXS/GjgUQMrImZNsmCwx4kiQ9Dex7Xs+hKkp1+siM9P2XS5iiDm
         }
         // Do the same thing but this time also sign
         {
-            let mut draft = melib::Draft::default();
+            let mut draft = Draft::default();
             draft.set_body("foobar\r\n\r\n".into());
             draft
                 .try_set_header("From", "user@example.org".into())
@@ -1241,7 +1245,7 @@ iy22S9oOhvpIcPXS/GjgUQMrImZNsmCwx4kiQ9Dex7Xs+hKkp1+siM9P2XS5iiDm
 
             draft.attachments.insert(0, body);
             let raw_mail = draft.finalise().unwrap();
-            let mail = melib::Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
+            let mail = Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
 
             let (decrypted_metadata, decrypted) =
                 smol::block_on(decrypt(gpgme_ctx.clone(), mail.body()))
@@ -1308,10 +1312,10 @@ iy22S9oOhvpIcPXS/GjgUQMrImZNsmCwx4kiQ9Dex7Xs+hKkp1+siM9P2XS5iiDm
         )
         .into();
 
-        let mut draft = melib::Draft::default();
+        let mut draft = Draft::default();
         draft.attachments.insert(0, body);
         let raw_mail = draft.finalise().unwrap();
-        let mail = melib::Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
+        let mail = Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
 
         let signatures = smol::block_on(verify(
             PGPBackendChoice::GpgME.instantiate().unwrap(),
@@ -1444,7 +1448,7 @@ iy22S9oOhvpIcPXS/GjgUQMrImZNsmCwx4kiQ9Dex7Xs+hKkp1+siM9P2XS5iiDm
 
         // Sign and verify
         {
-            let mut draft = melib::Draft::default();
+            let mut draft = Draft::default();
             draft.set_body("foobar\r\n\r\n".into());
             draft
                 .try_set_header("From", "user@example.org".into())
@@ -1467,7 +1471,7 @@ iy22S9oOhvpIcPXS/GjgUQMrImZNsmCwx4kiQ9Dex7Xs+hKkp1+siM9P2XS5iiDm
             draft.attachments.insert(0, body);
             let raw_mail = draft.finalise().unwrap();
             //eprintln!("{raw_mail}");
-            let mail = melib::Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
+            let mail = Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
             let gpgme_signatures = smol::block_on(verify(gpgme_ctx.clone(), mail.body())).unwrap();
             let cli_signatures =
                 smol::block_on(verify(cli.instantiate().unwrap(), mail.body())).unwrap();
@@ -1479,7 +1483,7 @@ iy22S9oOhvpIcPXS/GjgUQMrImZNsmCwx4kiQ9Dex7Xs+hKkp1+siM9P2XS5iiDm
 
         // Encrypt and decrypt
         {
-            let mut draft = melib::Draft::default();
+            let mut draft = Draft::default();
             draft.set_body("foobar\r\n\r\n".into());
             draft
                 .try_set_header("From", "user@example.org".into())
@@ -1507,7 +1511,7 @@ iy22S9oOhvpIcPXS/GjgUQMrImZNsmCwx4kiQ9Dex7Xs+hKkp1+siM9P2XS5iiDm
 
             draft.attachments.insert(0, body);
             let raw_mail = draft.finalise().unwrap();
-            let mail = melib::Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
+            let mail = Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
 
             let (_, decrypted) = smol::block_on(decrypt(cli.instantiate().unwrap(), mail.body()))
                 .expect("Could not decrypt email");
@@ -1583,7 +1587,7 @@ iy22S9oOhvpIcPXS/GjgUQMrImZNsmCwx4kiQ9Dex7Xs+hKkp1+siM9P2XS5iiDm
 
         // Sign and verify
         {
-            let mut draft = melib::Draft::default();
+            let mut draft = Draft::default();
             draft.set_body("foobar\r\n\r\n".into());
             draft
                 .try_set_header("From", "user@example.org".into())
@@ -1609,7 +1613,7 @@ iy22S9oOhvpIcPXS/GjgUQMrImZNsmCwx4kiQ9Dex7Xs+hKkp1+siM9P2XS5iiDm
             draft.attachments.insert(0, body);
             let raw_mail = draft.finalise().unwrap();
             //eprintln!("{raw_mail}");
-            let mail = melib::Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
+            let mail = Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
             let signatures = smol::block_on(verify(
                 PGPBackendChoice::Sequoia.instantiate().unwrap(),
                 mail.body(),
@@ -1623,7 +1627,7 @@ iy22S9oOhvpIcPXS/GjgUQMrImZNsmCwx4kiQ9Dex7Xs+hKkp1+siM9P2XS5iiDm
 
         // Encrypt and decrypt
         {
-            let mut draft = melib::Draft::default();
+            let mut draft = Draft::default();
             draft.set_body("foobar\r\n\r\n".into());
             draft
                 .try_set_header("From", "user@example.org".into())
@@ -1651,7 +1655,7 @@ iy22S9oOhvpIcPXS/GjgUQMrImZNsmCwx4kiQ9Dex7Xs+hKkp1+siM9P2XS5iiDm
 
             draft.attachments.insert(0, body);
             let raw_mail = draft.finalise().unwrap();
-            let mail = melib::Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
+            let mail = Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
 
             let (signatures, decrypted) = smol::block_on(decrypt(
                 PGPBackendChoice::Sequoia.instantiate().unwrap(),
@@ -1670,7 +1674,7 @@ iy22S9oOhvpIcPXS/GjgUQMrImZNsmCwx4kiQ9Dex7Xs+hKkp1+siM9P2XS5iiDm
         }
         // Sign, then encrypt and decrypt
         {
-            let mut draft = melib::Draft::default();
+            let mut draft = Draft::default();
             draft.set_body("foobar\r\n\r\n".into());
             draft
                 .try_set_header("From", "user@example.org".into())
@@ -1706,7 +1710,7 @@ iy22S9oOhvpIcPXS/GjgUQMrImZNsmCwx4kiQ9Dex7Xs+hKkp1+siM9P2XS5iiDm
 
             draft.attachments.insert(0, body);
             let raw_mail = draft.finalise().unwrap();
-            let mail = melib::Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
+            let mail = Mail::new(raw_mail.into_bytes(), None).expect("Could not parse mail");
 
             let (metadata, decrypted) = smol::block_on(decrypt(
                 PGPBackendChoice::Sequoia.instantiate().unwrap(),

@@ -249,11 +249,14 @@ fn test_jmap_email_submission_object() {
 
 #[test]
 fn test_jmap_identity_methods() {
-    use crate::jmap::{
-        identity::{Identity, IdentityGet, IdentitySet},
-        methods::{Get, Set},
-        objects::Id,
-        protocol::Request,
+    use crate::{
+        email::address::Address,
+        jmap::{
+            identity::{Identity, IdentityGet, IdentitySet},
+            methods::{Get, Set},
+            objects::Id,
+            protocol::Request,
+        },
     };
     let account_id = "blahblah";
     let prev_seq = 33;
@@ -265,8 +268,8 @@ fn test_jmap_identity_methods() {
             .account_id(account_id.into())
             .create(Some({
                 let id: Id<Identity> = main_identity.into();
-                let address = crate::email::Address::try_from(main_identity)
-                    .unwrap_or_else(|_| crate::email::Address::new(None::<&str>, main_identity));
+                let address = Address::try_from(main_identity)
+                    .unwrap_or_else(|_| Address::new(None::<&str>, main_identity));
                 indexmap::indexmap! {
                     id.clone().into() => Identity {
                         id,

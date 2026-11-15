@@ -19,9 +19,14 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
+use std::{ffi::CStr, ptr::NonNull, sync::Arc};
+
 use crate::{
-    notmuch::ffi::{notmuch_thread_t, notmuch_threads_t},
+    notmuch::{
+        ffi::{notmuch_thread_t, notmuch_threads_t},
+        message::{Message, MessageIterator},
+        NotmuchLibrary, Query,
+    },
     thread::ThreadHash,
 };
 

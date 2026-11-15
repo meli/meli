@@ -25,7 +25,7 @@
 //! # Example
 //!
 //! ```no_run
-//! use melib::{utils::patch_retrieve::*, MessageID};
+//! use melib::{email::address::MessageID, utils::patch_retrieve::*};
 //!
 //! let lore = PublicInboxNNTP {
 //!     server_hostname: "nntp.lore.kernel.org".to_string(),
@@ -40,7 +40,10 @@
 //! println!("{}", String::from_utf8_lossy(&mail.as_mbox()));
 //! ```
 
-use crate::{email::Mail, prelude::*, MessageID};
+use crate::{
+    backends::prelude::*,
+    email::{address::MessageID, Mail},
+};
 
 pub trait PatchSource
 where
@@ -78,7 +81,7 @@ mod nttp {
             }
             let groupname = Self::groupname(list);
             let event_consumer = BackendEventConsumer::new(Arc::new(|_, _| {}));
-            let account_conf = crate::AccountSettings {
+            let account_conf = crate::conf::AccountSettings {
                 name: self.server_hostname.clone(),
                 root_mailbox: groupname.clone(),
                 format: "nntp".to_string(),

@@ -36,18 +36,19 @@ use std::{borrow::Cow, sync::Arc};
 
 use indexmap::IndexMap;
 use melib::{
-    backends::{AccountHash, BackendEvent, MailboxHash},
+    backends::{AccountHash, BackendEvent, MailboxHash, RefreshEvent, RefreshEventKind},
+    email::EnvelopeHash,
     error::{Error, Result, ResultIntoError as _},
-    EnvelopeHash, RefreshEvent, RefreshEventKind, ThreadHash,
+    thread::ThreadHash,
 };
 use nix::{errno::Errno, unistd::Pid};
 
-use super::{
-    command::Action,
+use crate::{
+    command::actions::Action,
+    components::{ComponentId, OverlayComponent, ScrollUpdate},
     jobs::{self, JobExecutor, JobId, TimerId},
-    terminal::{RgbColor, *},
+    terminal::{input, keys::Key, RgbColor},
 };
-use crate::components::{ComponentId, OverlayComponent, ScrollUpdate};
 
 #[macro_use]
 mod helpers;
@@ -147,7 +148,7 @@ pub enum TerminalEvent {
     },
     DECModeReport {
         mode: u16,
-        state: crate::terminal::input::ANSIDECModeSetting,
+        state: input::ANSIDECModeSetting,
     },
 }
 
@@ -512,7 +513,7 @@ macro_rules! declare_fn_newtype {
 }
 
 declare_fn_newtype! {
-    CallbackFn: Box<dyn FnOnce(&mut crate::Context) + Send + Sync + 'static>,
+    CallbackFn: Box<dyn FnOnce(&mut crate::state::Context) + Send + Sync + 'static>,
     ProcessResultFn: Box<dyn FnOnce(Result<std::process::Output>) -> Option<UIMessage> + Send + Sync + 'static>,
     SpawnInteractionFn: Box<dyn FnOnce(std::process::Child) -> Result<std::process::Child> + Send + Sync + 'static>,
     OnExitNotifyFn: Box<dyn Fn(nix::Result<nix::sys::wait::WaitStatus>) -> Option<UIEvent> + Send + Sync + 'static>,

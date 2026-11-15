@@ -26,7 +26,7 @@ use std::{
 };
 
 use flate2::bufread::GzDecoder;
-use melib::{mbox::*, Envelope, Result};
+use melib::{email::Envelope, error::Result, mbox::*};
 
 #[test]
 fn test_mbox_parse() {

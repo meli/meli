@@ -33,15 +33,18 @@ pub use sqz;
 use sqz::{openpgp, openpgp::KeyID, prompt::Cancel, types::HashMode, Sequoia};
 
 use crate::{
-    email::pgp::{
-        HashAlgorithm, Key, LocateKey, NewSignature, Recipient, Signature, SignaturesMetadata,
-        Summary, Validity,
+    email::{
+        address::Address,
+        pgp::{
+            HashAlgorithm, Key, LocateKey, NewSignature, Recipient, Signature, SignaturesMetadata,
+            Summary, Validity,
+        },
     },
     error::{Error, ErrorKind, Result},
 };
 
 enum Pattern {
-    Email(crate::Address),
+    Email(Address),
     KeyHandle(KeyHandle),
 }
 
@@ -55,7 +58,7 @@ impl TryFrom<String> for Pattern {
                     .set_kind(ErrorKind::ValueError));
             }
             Ok(Self::KeyHandle(kh))
-        } else if let Ok(addr) = crate::Address::try_from(pattern.as_str()) {
+        } else if let Ok(addr) = Address::try_from(pattern.as_str()) {
             Ok(Self::Email(addr))
         } else {
             Err(Error::new(format!(
@@ -450,7 +453,7 @@ impl From<Cert> for Key {
     }
 }
 
-impl TryFrom<&openpgp::packet::UserID> for crate::email::Address {
+impl TryFrom<&openpgp::packet::UserID> for Address {
     type Error = ();
 
     fn try_from(userid: &openpgp::packet::UserID) -> std::result::Result<Self, Self::Error> {

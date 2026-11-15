@@ -20,7 +20,16 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
-use super::*;
+use crate::{
+    sieve::{
+        ActionCommand, AddressOperator, CharacterOperator, ConditionRule, ControlCommand,
+        IntegerOperator, MatchOperator, Rule, RuleBlock,
+    },
+    utils::parsec::{
+        any_char, delimited, either, is_a, left, map, map_res, match_literal,
+        match_literal_anycase, opt, pair, pred, right, separated_list0, zero_or_more, Parser,
+    },
+};
 
 macro_rules! parse_action {
     ($parser_name:ident, $lit:literal, $t:ty, $action:expr) => {

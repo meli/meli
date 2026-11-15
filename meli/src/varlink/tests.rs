@@ -35,7 +35,7 @@ rusty_fork_test! {
 fn varlink() {
     let _logger = Logger::new_with(LogLevel::TRACE, true);
     let temp_dir = TempDir::new().unwrap();
-    let ctx = crate::Context::new_mock(&temp_dir);
+    let ctx = crate::state::Context::new_mock(&temp_dir);
 
     let listener = smol::block_on(TcpListener::bind(("127.0.0.1", 0))).unwrap();
     let local_addr = listener.local_addr().unwrap();

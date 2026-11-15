@@ -69,7 +69,7 @@ impl std::fmt::Debug for Braille16bitColumn {
 /// ];
 ///
 /// for lines in BEE.chunks(12) {
-///     let iter = meli::BraillePixelIter::from(lines);
+///     let iter = meli::terminal::BraillePixelIter::from(lines);
 ///     for b in iter {
 ///         print!("{}", b);
 ///     }

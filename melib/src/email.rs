@@ -28,7 +28,7 @@
 //! into [`Address`] types.
 //!
 //! ```
-//! use melib::{email::attachment_types::Text, Attachment, Envelope};
+//! use melib::email::{attachment_types::Text, attachments::Attachment, Envelope};
 //!
 //! let raw_mail = r#"From: "some name" <some@example.com>
 //! To: "me" <myself@example.com>
@@ -90,6 +90,16 @@
 //!     "test_image.gif"
 //! );
 //! ```
+use std::{borrow::Cow, ops::Deref};
+
+use indexmap::IndexSet;
+use smallvec::SmallVec;
+
+use crate::{
+    backends::TagHash,
+    error::{Error, Result},
+    UnixTimestamp,
+};
 
 pub mod address;
 pub mod attachment_types;
@@ -101,20 +111,10 @@ pub mod mailto;
 pub mod parser;
 pub mod pgp;
 
-use std::{borrow::Cow, ops::Deref};
-
-pub use address::{Address, MessageID, References};
-pub use attachments::{Attachment, AttachmentBuilder, StrBuild, StrBuilder};
-pub use compose::{attachment_from_file, Draft};
-pub use headers::*;
-use indexmap::IndexSet;
-use smallvec::SmallVec;
-
-use crate::{
-    error::{Error, Result},
-    parser::BytesExt as _,
-    TagHash, UnixTimestamp,
-};
+use address::{Address, MessageID, References};
+use attachments::{Attachment, AttachmentBuilder};
+use headers::{HeaderMap, HeaderName};
+use parser::BytesExt as _;
 
 bitflags! {
     #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

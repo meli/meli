@@ -20,8 +20,5 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
-pub mod mailboxes;
-pub use mailboxes::*;
-
 pub mod jobs;
-pub use jobs::*;
+pub mod mailboxes;

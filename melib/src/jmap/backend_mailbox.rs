@@ -22,13 +22,15 @@
 use std::sync::{Arc, Mutex, RwLock};
 
 use crate::{
-    backends::{BackendMailbox, MailboxCounters, MailboxPermissions, SpecialUsageMailbox},
+    backends::{
+        BackendMailbox, Mailbox, MailboxCounters, MailboxHash, MailboxPermissions,
+        SpecialUsageMailbox,
+    },
     error::Result,
     jmap::{
         mailbox::{JmapRights, MailboxObject},
         objects::Id,
     },
-    Mailbox, MailboxHash,
 };
 
 #[derive(Clone, Debug)]

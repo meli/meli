@@ -20,15 +20,45 @@
  */
 
 use std::{
-    collections::VecDeque,
+    collections::{HashSet, VecDeque},
+    io::Write as _,
+    path::PathBuf,
     process::{Command, Stdio},
 };
 
-use melib::utils::{shellexpand::ShellExpandTrait as _, xdg::query_default_app};
+use melib::{
+    email::{
+        address::MessageID,
+        attachment_types::{Charset, ContentType, MultipartType},
+        attachments::{Attachment, AttachmentBuilder},
+        headers::HeaderName,
+        list_management,
+        parser::BytesExt as _,
+        Flag, Mail,
+    },
+    error::{Error, ErrorKind, Result, ResultIntoError as _},
+    utils::{shellexpand::ShellExpandTrait as _, xdg::query_default_app},
+};
 use smallvec::SmallVec;
+use uuid::Uuid;
 
-use super::*;
-use crate::{command::actions::FileAction, jobs::IsAsync, ThreadEvent};
+use crate::{
+    components::prelude::*,
+    jobs::{IsAsync, JobId},
+    mail::view::{
+        filters::{FilterOutputMetadata, ViewFilter, ViewFilterContent},
+        types::{AttachmentDisplay, ViewOptions, ViewSettings},
+        utils::{desktop_exec_to_command, save_attachment},
+    },
+    shortcut,
+    state::{Context, MainLoopHandler},
+    terminal::{cells::CellBuffer, keys::Key, Area},
+    types::{
+        File, ForkedProcess, Link, NotificationType, ProcessRequest, ProcessResultFn,
+        SpawnInteractionFn, StatusEvent, ThreadEvent, UIEvent,
+    },
+    utilities::{Pager, UIDialog},
+};
 
 #[derive(Clone)]
 enum EnvelopeViewMessage {
@@ -170,7 +200,7 @@ impl EnvelopeView {
                         ),
                         body: err.to_string().into(),
                         source: Some(err.into()),
-                        kind: Some(NotificationType::Error(melib::ErrorKind::External)),
+                        kind: Some(NotificationType::Error(ErrorKind::External)),
                     }));
                     // [ref:FIXME]: add `v` configurable shortcut
                     let comment = Some(format!(
@@ -479,11 +509,7 @@ impl EnvelopeView {
         (paths, acc)
     }
 
-    fn open_attachment(
-        &'_ self,
-        lidx: usize,
-        context: &mut Context,
-    ) -> Option<&'_ melib::Attachment> {
+    fn open_attachment(&'_ self, lidx: usize, context: &mut Context) -> Option<&'_ Attachment> {
         if let Some(path) = self
             .attachment_paths
             .get(lidx)
@@ -494,7 +520,7 @@ impl EnvelopeView {
             fn find_attachment<'a>(
                 a: &'a AttachmentDisplay,
                 path: &[usize],
-            ) -> Option<&'a melib::Attachment> {
+            ) -> Option<&'a Attachment> {
                 if path.is_empty() {
                     return Some(a.attachment());
                 }
@@ -533,7 +559,7 @@ impl EnvelopeView {
         if let Some(u) = self.open_attachment(a_i, context) {
             if path.is_dir() {
                 if let Some(mut filename) = u.filename() {
-                    crate::sanitize_separator(&mut filename);
+                    crate::types::sanitize_separator(&mut filename);
                     path.push(filename.as_ref());
                 } else {
                     path.push(format!(
@@ -552,7 +578,7 @@ impl EnvelopeView {
                         title: Some(format!("Failed to create file at {}", path.display()).into()),
                         body: err.to_string().into(),
                         source: Some(err),
-                        kind: Some(NotificationType::Error(melib::ErrorKind::External)),
+                        kind: Some(NotificationType::Error(ErrorKind::External)),
                     });
                 }
                 Ok(()) => {
@@ -579,7 +605,7 @@ impl EnvelopeView {
                         title: Some(format!("Failed to create file at {}", path.display()).into()),
                         body: err.to_string().into(),
                         source: Some(err),
-                        kind: Some(NotificationType::Error(melib::ErrorKind::External)),
+                        kind: Some(NotificationType::Error(ErrorKind::External)),
                     });
                 }
                 Ok(()) => {
@@ -907,11 +933,11 @@ impl Component for EnvelopeView {
                         print_header!(
                             (
                                 HeaderName::IN_REPLY_TO,
-                                melib::MessageID::display_slice(val.refs(), Some(" "))
+                                MessageID::display_slice(val.refs(), Some(" "))
                             ),
                             (
                                 HeaderName::REFERENCES,
-                                melib::MessageID::display_slice(envelope.references(), Some(" "))
+                                MessageID::display_slice(envelope.references(), Some(" "))
                             )
                         );
                     }
@@ -1404,7 +1430,7 @@ impl Component for EnvelopeView {
                 }
                 return true;
             }
-            UIEvent::Action(View(ViewAction::ExportMail(ref path))) => {
+            UIEvent::Action(Action::View(ViewAction::ExportMail(ref path))) => {
                 // Save entire message as eml
                 let mut path = path.expand_tilde().into_owned();
                 if path.is_relative() {
@@ -1413,7 +1439,7 @@ impl Component for EnvelopeView {
 
                 if path.is_dir() {
                     let mut filename = self.mail.message_id().to_string().into();
-                    crate::sanitize_filename(&mut filename);
+                    crate::types::sanitize_filename(&mut filename);
                     path.push(format!("{filename}.eml",));
                 }
                 match save_attachment(&path, &self.mail.bytes) {
@@ -1425,7 +1451,7 @@ impl Component for EnvelopeView {
                             ),
                             body: err.to_string().into(),
                             source: Some(err),
-                            kind: Some(NotificationType::Error(melib::ErrorKind::External)),
+                            kind: Some(NotificationType::Error(ErrorKind::External)),
                         });
                         return true;
                     }
@@ -1441,7 +1467,10 @@ impl Component for EnvelopeView {
 
                 return true;
             }
-            UIEvent::Action(View(ViewAction::SaveAttachment(a_i, FileAction::Path(ref path)))) => {
+            UIEvent::Action(Action::View(ViewAction::SaveAttachment(
+                a_i,
+                FileAction::Path(ref path),
+            ))) => {
                 let mut path = path.expand_tilde().into_owned();
                 if path.is_relative() {
                     path = context.current_dir().join(&path);
@@ -1449,7 +1478,7 @@ impl Component for EnvelopeView {
                 self.save_attachment(a_i, path, context);
                 return true;
             }
-            UIEvent::Action(View(ViewAction::SaveAttachment(
+            UIEvent::Action(Action::View(ViewAction::SaveAttachment(
                 a_i,
                 FileAction::FilePicker(ref command),
             ))) => {
@@ -1468,7 +1497,7 @@ impl Component for EnvelopeView {
                                fallback. Try re-executing the command with a file picker command \
                                appended."
                             .into(),
-                        kind: Some(NotificationType::Error(melib::error::ErrorKind::None)),
+                        kind: Some(NotificationType::Error(ErrorKind::None)),
                     });
                     self.set_dirty(true);
                     return true;
@@ -1497,7 +1526,7 @@ impl Component for EnvelopeView {
                     })));
                 return true;
             }
-            UIEvent::Action(View(ViewAction::PipeAttachment {
+            UIEvent::Action(Action::View(ViewAction::PipeAttachment {
                 index: a_i,
                 ref command,
             })) => {
@@ -1754,7 +1783,7 @@ impl Component for EnvelopeView {
                             title: Some(format!("Failed to launch {url_launcher:?}").into()),
                             body: err.to_string().into(),
                             source: Some(err.into()),
-                            kind: Some(NotificationType::Error(melib::ErrorKind::External)),
+                            kind: Some(NotificationType::Error(ErrorKind::External)),
                         });
                     }
                 }
@@ -1837,9 +1866,7 @@ impl Component for EnvelopeView {
                                 ),
                                 source: None,
                                 body: err.to_string().into(),
-                                kind: Some(NotificationType::Error(
-                                    melib::error::ErrorKind::External,
-                                )),
+                                kind: Some(NotificationType::Error(ErrorKind::External)),
                             });
                             self.set_dirty(true);
                         }
@@ -1862,9 +1889,7 @@ impl Component for EnvelopeView {
                                         )
                                         .into()
                                     },
-                                    kind: Some(NotificationType::Error(
-                                        melib::error::ErrorKind::ValueError,
-                                    )),
+                                    kind: Some(NotificationType::Error(ErrorKind::ValueError)),
                                 });
                             } else {
                                 let path =
@@ -1886,9 +1911,7 @@ impl Component for EnvelopeView {
                                 ),
                                 source: None,
                                 body: err.to_string().into(),
-                                kind: Some(NotificationType::Error(
-                                    melib::error::ErrorKind::External,
-                                )),
+                                kind: Some(NotificationType::Error(ErrorKind::External)),
                             });
                             self.set_dirty(true);
                         }
@@ -1951,6 +1974,6 @@ impl Component for EnvelopeView {
         debug_assert!(self.id == id);
         context
             .replies
-            .push_back(UIEvent::Action(Tab(Kill(self.id))));
+            .push_back(UIEvent::Action(Action::Tab(TabAction::Kill(self.id))));
     }
 }

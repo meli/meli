@@ -36,15 +36,13 @@ use melib::{
         backend::{ContactBackend, ContactBackendCapabilities},
         mutt, notmuchcontact, vcard, AddressBook, AddressBookName, Card, CardId, ContactBackendID,
     },
-    error::{Error, Result, ResultIntoError as _},
-    ErrorKind,
+    error::{Error, ErrorKind, Result, ResultIntoError as _},
 };
 
 use crate::{
     accounts::{Account, JobRequest},
     jobs::{IsAsync, JobId, JoinHandle},
-    types::ContactBackendStatusChangeKind,
-    NotificationType, StatusEvent, ThreadEvent, UIEvent,
+    types::{ContactBackendStatusChangeKind, NotificationType, StatusEvent, ThreadEvent, UIEvent},
 };
 
 impl Account {

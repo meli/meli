@@ -601,9 +601,7 @@ impl Component for JobManager {
         debug_assert!(uuid == self.id);
         context
             .replies
-            .push_back(UIEvent::Action(crate::command::Action::Tab(
-                crate::command::TabAction::Kill(uuid),
-            )));
+            .push_back(UIEvent::Action(Action::Tab(TabAction::Kill(uuid))));
     }
 
     fn shortcuts(&self, context: &Context) -> ShortcutMaps {

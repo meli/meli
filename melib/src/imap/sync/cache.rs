@@ -19,13 +19,20 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{convert::TryFrom, path::Path};
+use std::{
+    convert::TryFrom,
+    path::Path,
+    sync::{atomic::Ordering, Arc},
+};
 
-use super::*;
 use crate::{
-    backends::MailboxHash,
+    backends::{EnvelopeHashBatch, FlagOp, MailboxHash, RefreshEvent},
     email::{Envelope, EnvelopeHash},
-    error::*,
+    error::Result,
+    imap::{
+        protocol_parser::{FetchResponse, SelectResponse},
+        UIDStore, UID,
+    },
 };
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -131,7 +138,7 @@ impl ImapCache for Arc<UIDStore> {
         }
         #[cfg(feature = "sqlite3")]
         {
-            sync::sqlite3_cache::Sqlite3Cache::reset_db(self, None)?;
+            crate::imap::sync::sqlite3_cache::Sqlite3Cache::reset_db(self, None)?;
         }
         Ok(())
     }

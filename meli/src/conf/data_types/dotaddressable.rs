@@ -20,7 +20,9 @@
 //
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 
-use crate::conf::*;
+use std::path::PathBuf;
+
+use melib::error::{Error, Result};
 
 pub trait DotAddressable: serde::Serialize {
     fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
@@ -45,24 +47,24 @@ impl DotAddressable for toml::Value {}
 impl DotAddressable for String {}
 impl DotAddressable for (String, String) {}
 impl DotAddressable for char {}
-impl DotAddressable for data_types::IndexStyle {}
-impl DotAddressable for data_types::SearchBackend {}
-impl DotAddressable for data_types::ThreadLayout {}
-impl DotAddressable for data_types::NotificationEnable {}
+impl DotAddressable for crate::conf::data_types::IndexStyle {}
+impl DotAddressable for crate::conf::data_types::SearchBackend {}
+impl DotAddressable for crate::conf::data_types::ThreadLayout {}
+impl DotAddressable for crate::conf::data_types::NotificationEnable {}
 impl DotAddressable for u8 {}
 impl DotAddressable for u64 {}
 impl DotAddressable for crate::terminal::Color {}
-impl DotAddressable for crate::terminal::Attr {}
-impl DotAddressable for crate::terminal::Key {}
+impl DotAddressable for crate::terminal::cells::Attr {}
+impl DotAddressable for crate::terminal::keys::Key {}
 impl DotAddressable for usize {}
-impl DotAddressable for Query {}
+impl DotAddressable for melib::search::Query {}
 impl DotAddressable for melib::LogLevel {}
 impl DotAddressable for PathBuf {}
 impl DotAddressable for melib::conf::ToggleFlag {}
 impl DotAddressable for melib::conf::ActionFlag {}
 impl DotAddressable for melib::conf::Secret {}
-impl DotAddressable for melib::SpecialUsageMailbox {}
-impl DotAddressable for melib::email::HeaderName {}
+impl DotAddressable for melib::backends::SpecialUsageMailbox {}
+impl DotAddressable for melib::email::headers::HeaderName {}
 impl<T: DotAddressable> DotAddressable for Option<T> {}
 impl<T: DotAddressable> DotAddressable for Vec<T> {}
 // impl<K: DotAddressable + std::cmp::Eq + std::hash::Hash, V: DotAddressable>
@@ -76,9 +78,9 @@ impl<K: DotAddressable + std::cmp::Eq + std::hash::Hash, V: DotAddressable> DotA
 {
 }
 impl<K: DotAddressable + std::cmp::Eq + std::hash::Hash> DotAddressable for indexmap::IndexSet<K> {}
-impl DotAddressable for (SortField, SortOrder) {}
+impl DotAddressable for (melib::SortField, melib::SortOrder) {}
 
-impl DotAddressable for LogSettings {
+impl DotAddressable for crate::conf::LogSettings {
     fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
         match path.first() {
             Some(field) => {
@@ -99,7 +101,7 @@ impl DotAddressable for LogSettings {
     }
 }
 
-impl DotAddressable for Settings {
+impl DotAddressable for crate::conf::Settings {
     fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
         match path.first() {
             Some(field) => {
@@ -127,7 +129,7 @@ impl DotAddressable for Settings {
     }
 }
 
-impl DotAddressable for AccountConf {
+impl DotAddressable for crate::conf::AccountConf {
     fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
         match path.first() {
             Some(field) => {
@@ -149,7 +151,7 @@ impl DotAddressable for AccountConf {
     }
 }
 
-impl DotAddressable for MailUIConf {
+impl DotAddressable for crate::conf::MailUIConf {
     fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
         match path.first() {
             Some(field) => {
@@ -187,7 +189,7 @@ impl DotAddressable for MailUIConf {
     }
 }
 
-impl DotAddressable for FileMailboxConf {
+impl DotAddressable for crate::conf::FileMailboxConf {
     fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
         match path.first() {
             Some(field) => {
@@ -207,7 +209,7 @@ impl DotAddressable for FileMailboxConf {
     }
 }
 
-impl DotAddressable for FileAccount {
+impl DotAddressable for crate::conf::FileAccount {
     fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
         match path.first() {
             Some(field) => {
@@ -237,7 +239,7 @@ impl DotAddressable for FileAccount {
     }
 }
 
-impl DotAddressable for melib::AccountSettings {
+impl DotAddressable for melib::conf::AccountSettings {
     fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
         match path.first() {
             Some(field) => {
@@ -265,7 +267,7 @@ impl DotAddressable for melib::AccountSettings {
     }
 }
 
-impl DotAddressable for melib::MailboxConf {
+impl DotAddressable for melib::conf::MailboxConf {
     fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
         match path.first() {
             Some(field) => {

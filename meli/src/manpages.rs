@@ -27,9 +27,10 @@ use std::{
 };
 
 use flate2::bufread::GzDecoder;
-use melib::utils::shellexpand::ShellExpandTrait as _;
-
-use crate::{Error, Result};
+use melib::{
+    error::{Error, Result},
+    utils::shellexpand::ShellExpandTrait as _,
+};
 
 pub const POSSIBLE_VALUES: &[&str] = &[
     "meli",

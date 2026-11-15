@@ -36,84 +36,35 @@
 //! backend needs. The split is done to theoretically be able to create
 //! different frontends with the same innards.
 
-use std::alloc::System;
-pub use std::{collections::VecDeque, path::PathBuf};
-
 #[macro_use]
 extern crate serde_derive;
-extern crate linkify;
-
-pub extern crate bitflags;
-pub extern crate serde_json;
-pub extern crate smallvec;
-
-pub use structopt::StructOpt;
-
-#[global_allocator]
-static GLOBAL: System = System;
 
 pub extern crate melib;
-pub use melib::{
-    error::*, AccountHash, ActionFlag, Envelope, EnvelopeHash, EnvelopeRef, Flag, LogLevel, Mail,
-    Mailbox, MailboxHash, ThreadHash, ToggleFlag,
-};
 
 pub mod args;
 #[cfg(feature = "cli-docs")]
 pub mod manpages;
 pub mod signal_handlers;
 pub mod subcommands;
-
 #[macro_use]
 pub mod types;
-pub use crate::types::*;
-
 #[macro_use]
 pub mod terminal;
-pub use crate::terminal::*;
-
 #[macro_use]
 pub mod command;
-pub use crate::command::*;
-
-pub mod state;
-pub use crate::state::*;
-
 pub mod components;
-pub use crate::components::*;
-
-pub mod utilities;
-pub use crate::utilities::*;
-
 pub mod contacts;
-
 pub mod mail;
-pub use crate::mail::*;
-
-pub mod notifications;
-
 pub mod manage;
-pub use manage::*;
-
-// #[cfg(feature = "svgscreenshot")]
-// pub mod svg;
-
+pub mod notifications;
+pub mod state;
+pub mod utilities;
 #[macro_use]
 pub mod conf;
-pub use crate::conf::{
-    data_types::{IndexStyle, SearchBackend},
-    DotAddressable, Settings, Shortcuts,
-};
-
-#[cfg(feature = "sqlite3")]
-pub mod sqlite3;
-
+pub mod accounts;
 pub mod jobs;
 pub mod mailcap;
-
-pub mod accounts;
-pub use self::accounts::Account;
-
-pub mod version_migrations;
-
+#[cfg(feature = "sqlite3")]
+pub mod sqlite3;
 pub mod varlink;
+pub mod version_migrations;

@@ -22,16 +22,28 @@
 //! Notification handling components
 use std::process::{Command, Stdio};
 
-use melib::{utils::datetime, UnixTimestamp};
+use melib::{
+    error::{Result, ResultIntoError as _},
+    utils::datetime,
+    UnixTimestamp,
+};
 pub use system::*;
 
-use super::*;
+use crate::{
+    components::prelude::*,
+    terminal::{cells::boundaries::create_box, Screen, Tty},
+    types::{ForkedProcess, NotificationType},
+};
 
 mod system {
     use std::borrow::Cow;
 
-    use super::*;
-    use crate::types::RateLimit;
+    use melib::error::ErrorKind;
+
+    use crate::{
+        components::prelude::*,
+        types::{NotificationType, RateLimit},
+    };
 
     /// Passes notifications to the OS using `notify-rust` crate.
     #[derive(Debug)]
@@ -108,20 +120,20 @@ mod system {
                     Some(NotificationType::Info) => {
                         notification.icon("dialog-information");
                     }
-                    Some(NotificationType::Error(melib::ErrorKind::Authentication)) => {
+                    Some(NotificationType::Error(ErrorKind::Authentication)) => {
                         notification.icon("dialog-password");
                     }
-                    Some(NotificationType::Error(melib::ErrorKind::Bug)) => {
+                    Some(NotificationType::Error(ErrorKind::Bug)) => {
                         notification.icon("face-embarrassed");
                     }
-                    Some(NotificationType::Error(melib::ErrorKind::None))
-                    | Some(NotificationType::Error(melib::ErrorKind::External)) => {
+                    Some(NotificationType::Error(ErrorKind::None))
+                    | Some(NotificationType::Error(ErrorKind::External)) => {
                         notification.icon("dialog-error");
                     }
-                    Some(NotificationType::Error(melib::ErrorKind::Network(_))) => {
+                    Some(NotificationType::Error(ErrorKind::Network(_))) => {
                         notification.icon("network-error");
                     }
-                    Some(NotificationType::Error(melib::ErrorKind::TimedOut)) => {
+                    Some(NotificationType::Error(ErrorKind::TimedOut)) => {
                         notification.icon("network-offline");
                     }
                     _ => {}

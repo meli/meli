@@ -89,7 +89,7 @@ impl ContactBackend for JmapContacts {
         }))
     }
 
-    fn address_books(&mut self) -> crate::prelude::ResultFuture<Vec<AddressBookName>> {
+    fn address_books(&mut self) -> ResultFuture<Vec<AddressBookName>> {
         let store = self.store.clone();
         let account_id = self.account_id.clone();
         let connection = self.connection.clone();
@@ -124,10 +124,7 @@ impl ContactBackend for JmapContacts {
         }))
     }
 
-    fn fetch_book(
-        &mut self,
-        address_book: &AddressBookName,
-    ) -> crate::prelude::ResultFuture<AddressBook> {
+    fn fetch_book(&mut self, address_book: &AddressBookName) -> ResultFuture<AddressBook> {
         let store = self.store.clone();
         let connection = self.connection.clone();
         let account_id = self.account_id.clone();

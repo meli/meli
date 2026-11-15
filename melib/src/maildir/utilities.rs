@@ -27,8 +27,11 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-use super::{Configuration, HashIndex};
-use crate::{backends::prelude::*, utils::shellexpand::ShellExpandTrait as _};
+use crate::{
+    backends::prelude::*,
+    maildir::{Configuration, HashIndex},
+    utils::shellexpand::ShellExpandTrait as _,
+};
 
 type HashIndexes = Arc<Mutex<HashMap<MailboxHash, HashIndex>>>;
 

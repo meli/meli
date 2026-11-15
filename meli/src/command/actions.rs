@@ -24,9 +24,9 @@
 use std::{path::PathBuf, sync::Arc};
 
 use melib::{
-    email::{mailto::Mailto, MessageID},
+    email::{address::MessageID, mailto::Mailto, Flag},
     mbox::MboxFormat,
-    Flag, SortField, SortOrder,
+    SortField, SortOrder,
 };
 
 use crate::components::{Component, ComponentId};

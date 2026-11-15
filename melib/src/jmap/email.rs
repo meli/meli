@@ -34,6 +34,7 @@ use crate::{
     email::{
         address::{Address, MailboxAddress},
         headers::HeaderName,
+        EnvelopeHash,
     },
     jmap::{
         comparator::Comparator,
@@ -49,7 +50,6 @@ use crate::{
         UtcDate,
     },
     utils::datetime,
-    EnvelopeHash,
 };
 
 mod import;
@@ -297,7 +297,7 @@ impl std::fmt::Display for EmailAddress {
     }
 }
 
-impl From<EmailObject> for crate::Envelope {
+impl From<EmailObject> for crate::email::Envelope {
     fn from(mut t: EmailObject) -> Self {
         use crate::email::parser::{address::rfc2822address_list, dates::rfc5322_date};
 
@@ -361,14 +361,14 @@ impl From<EmailObject> for crate::Envelope {
             env.set_from(
                 from.into_iter()
                     .map(|addr| addr.into())
-                    .collect::<SmallVec<[crate::email::Address; 1]>>(),
+                    .collect::<SmallVec<[Address; 1]>>(),
             );
         }
         if let Some(to) = t.to.take() {
             env.set_to(
                 to.into_iter()
                     .map(|addr| addr.into())
-                    .collect::<SmallVec<[crate::email::Address; 1]>>(),
+                    .collect::<SmallVec<[Address; 1]>>(),
             );
         }
 
@@ -376,7 +376,7 @@ impl From<EmailObject> for crate::Envelope {
             env.set_cc(
                 cc.into_iter()
                     .map(|addr| addr.into())
-                    .collect::<SmallVec<[crate::email::Address; 1]>>(),
+                    .collect::<SmallVec<[Address; 1]>>(),
             );
         }
 
@@ -384,7 +384,7 @@ impl From<EmailObject> for crate::Envelope {
             env.set_bcc(
                 bcc.into_iter()
                     .map(|addr| addr.into())
-                    .collect::<Vec<crate::email::Address>>(),
+                    .collect::<Vec<Address>>(),
             );
         }
 
@@ -428,8 +428,8 @@ impl From<EmailObject> for crate::Envelope {
     }
 }
 
-impl From<&crate::Mail> for EmailObject {
-    fn from(env: &crate::Mail) -> Self {
+impl From<&crate::email::Mail> for EmailObject {
+    fn from(env: &crate::email::Mail) -> Self {
         let keywords = {
             use crate::email::Flag;
             let mut keywords = IndexMap::new();

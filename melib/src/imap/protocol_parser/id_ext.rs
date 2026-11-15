@@ -30,8 +30,10 @@
 use indexmap::IndexMap;
 use nom::bytes::complete::tag;
 
-use super::{quoted, quoted_or_nil};
-use crate::email::parser::{BytesExt as _, IResult};
+use crate::{
+    email::parser::{BytesExt as _, IResult},
+    imap::protocol_parser::{quoted, quoted_or_nil},
+};
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize)]
 pub struct IDResponse {

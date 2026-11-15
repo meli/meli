@@ -28,7 +28,7 @@ use indexmap::IndexMap;
 
 use crate::{
     backends::SpecialUsageMailbox,
-    email::Address,
+    email::address::Address,
     error::{Error, ErrorKind, Result},
 };
 

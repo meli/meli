@@ -19,13 +19,34 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{collections::BTreeMap, convert::TryInto as _, iter::FromIterator as _};
+use std::{
+    collections::{BTreeMap, HashMap},
+    convert::TryInto as _,
+    iter::FromIterator as _,
+};
 
 use indexmap::IndexSet;
-use melib::{Address, SortField, SortOrder, TagHash, Threads};
+use melib::{
+    backends::TagHash,
+    email::{address::Address, Envelope, EnvelopeHash},
+    error::Result,
+    thread::{ThreadHash, Threads},
+    SortField, SortOrder,
+};
+use smallvec::SmallVec;
 
-use super::*;
-use crate::{components::prelude::*, jobs::JoinHandle, segment_tree::SegmentTree};
+use crate::{
+    components::prelude::*,
+    conf::data_types::IndexStyle,
+    jobs::JoinHandle,
+    mail::listing::{
+        ColorCache, DateString, EntryStrings, FlagString, Focus, FromString, ListingMessage,
+        ListingTrait, MailListingTrait, Modifier, RowsState, SubjectString, TagString,
+        TagsIterator,
+    },
+    mailbox_settings, shortcut,
+    types::{segment_tree::SegmentTree, NotificationType, StatusEvent, UIEvent, UIMode},
+};
 
 macro_rules! row_attr {
     ($color_cache:expr, even: $even:expr, unseen: $unseen:expr, highlighted: $highlighted:expr, selected: $selected:expr  $(,)*) => {{
@@ -799,7 +820,7 @@ impl ListingTrait for CompactListing {
                     title: Some("Could not perform search".into()),
                     source: None,
                     body: message.into(),
-                    kind: Some(crate::types::NotificationType::Error(err.kind)),
+                    kind: Some(NotificationType::Error(err.kind)),
                 });
             }
         }
@@ -1801,7 +1822,7 @@ impl Component for CompactListing {
                             // [ref:FIXME]: perform subsort.
                             return true;
                         }
-                        Action::Listing(ToggleThreadSnooze) if !self.unfocused() => {
+                        Action::Listing(ListingAction::ToggleThreadSnooze) if !self.unfocused() => {
                             // [ref:FIXME]: Re-implement toggle thread snooze
                             /*
                             let thread = self.get_thread_under_cursor(self.cursor_pos.2);
@@ -1915,7 +1936,7 @@ impl Component for CompactListing {
                 self.force_draw = true;
                 return true;
             }
-            UIEvent::Action(Action::Listing(Search {
+            UIEvent::Action(Action::Listing(ListingAction::Search {
                 term: ref filter_term,
                 raw_search,
             })) if !self.unfocused() => {
@@ -1945,14 +1966,14 @@ impl Component for CompactListing {
                             title: Some("Could not perform search".into()),
                             source: None,
                             body: err.to_string().into(),
-                            kind: Some(crate::types::NotificationType::Error(err.kind)),
+                            kind: Some(NotificationType::Error(err.kind)),
                         });
                     }
                 };
                 self.set_dirty(true);
                 return true;
             }
-            UIEvent::Action(Action::Listing(Select {
+            UIEvent::Action(Action::Listing(ListingAction::Select {
                 term: ref search_term,
                 raw_search,
             })) if !self.unfocused() => {
@@ -1982,7 +2003,7 @@ impl Component for CompactListing {
                             title: Some("Could not perform search".into()),
                             source: None,
                             body: err.to_string().into(),
-                            kind: Some(crate::types::NotificationType::Error(err.kind)),
+                            kind: Some(NotificationType::Error(err.kind)),
                         });
                     }
                 };
@@ -2006,7 +2027,7 @@ impl Component for CompactListing {
                             title: Some("Could not perform search".into()),
                             source: None,
                             body: err.to_string().into(),
-                            kind: Some(crate::types::NotificationType::Error(err.kind)),
+                            kind: Some(NotificationType::Error(err.kind)),
                         });
                     }
                 }

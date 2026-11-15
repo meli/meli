@@ -77,7 +77,10 @@ pub mod server {
         sequence::ONE,
     };
     use melib::{
-        backends::prelude::*, imap::*, parser::BytesExt as _, utils::connections::Connection, Mail,
+        backends::prelude::*,
+        email::{parser::BytesExt as _, Mail},
+        imap::*,
+        utils::connections::Connection,
     };
     use smol::Async;
 
@@ -1744,9 +1747,9 @@ pub mod tests {
     };
     use melib::{
         backends::prelude::*,
+        email::Mail,
         imap::*,
         utils::logging::{LogLevel, Logger},
-        Mail,
     };
     use tempfile::TempDir;
 

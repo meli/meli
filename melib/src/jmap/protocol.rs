@@ -30,7 +30,8 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
-    email::Envelope,
+    backends::MailboxHash,
+    email::{Envelope, Flag},
     error::Result,
     jmap::{
         argument::Argument,
@@ -42,7 +43,6 @@ use crate::{
         objects::{Account, Id, Object, State},
         JmapClient, JmapConnection, Store,
     },
-    Flag, MailboxHash,
 };
 
 pub type UtcDate = String;

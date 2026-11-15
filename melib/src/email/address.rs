@@ -22,12 +22,16 @@
 //! Email addresses. Parsing functions are in
 //! [`crate::email::parser::address`].
 use std::{
+    borrow::Cow,
     collections::HashSet,
     convert::TryFrom,
     hash::{Hash, Hasher},
 };
 
-use super::*;
+use crate::{
+    email::parser,
+    error::{Error, Result},
+};
 #[cfg(test)]
 mod tests;
 
@@ -74,7 +78,7 @@ impl PartialEq for MailboxAddress {
 /// [`Address::new_group`]:
 ///
 /// ```rust
-/// # use melib::email::Address;
+/// # use melib::email::address::Address;
 /// let addr = Address::new(Some("Jörg Doe"), "joerg@example.com");
 /// assert_eq!(addr.to_string().as_str(), "Jörg Doe <joerg@example.com>");
 /// ```
@@ -207,7 +211,7 @@ impl Address {
     /// # Examples
     ///
     /// ```
-    /// # use melib::email::Address;
+    /// # use melib::email::address::Address;
     /// let addr = "ken+sieve@example.org";
     /// let (rest, val) = melib::email::parser::address::address(addr.as_bytes()).unwrap();
     /// assert!(rest.is_empty());
@@ -255,7 +259,7 @@ impl Address {
     /// ## Example
     ///
     /// ```rust
-    /// # use melib::email::Address;
+    /// # use melib::email::address::Address;
     /// let addr = Address::new(Some("Jörg T. Doe"), "joerg@example.com");
     /// assert_eq!(
     ///     addr.to_string().as_str(),
@@ -395,7 +399,7 @@ impl<'de> serde::Deserialize<'de> for Address {
     where
         D: serde::Deserializer<'de>,
     {
-        let s = std::borrow::Cow::<'de, str>::deserialize(deserializer)?;
+        let s = Cow::<'de, str>::deserialize(deserializer)?;
         Self::try_from(s.as_ref()).map_err(serde::de::Error::custom)
     }
 }

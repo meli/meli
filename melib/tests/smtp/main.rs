@@ -61,8 +61,8 @@ pub mod server {
     };
     use melib::{
         backends::prelude::*,
+        email::parser::BytesExt as _,
         imap::ImapLineSplit as _,
-        parser::BytesExt as _,
         smtp::{ReplyCode, SmtpAuth, SmtpExtensionSupport, SmtpSecurity},
         utils::connections::Connection,
     };
@@ -765,7 +765,7 @@ pub mod tests {
     use futures::{channel::mpsc::unbounded, executor::block_on};
     use melib::{
         conf::Secret,
-        email::Address,
+        email::address::Address,
         error::ErrorKind,
         smtp::*,
         utils::logging::{LogLevel, Logger},

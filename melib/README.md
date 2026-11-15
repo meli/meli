@@ -44,7 +44,7 @@ and body structure. Addresses in `To`, `From` fields etc are parsed into
 `Address` types.
 
 ```rust
-use melib::{email::attachment_types::Text, Attachment, Envelope};
+use melib::email::{attachment_types::Text, attachments::Attachment, Envelope};
 
 let raw_mail = r#"From: "some name" <some@example.com>
 To: "me" <myself@example.com>

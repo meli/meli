@@ -21,11 +21,14 @@
 
 //! Command line arguments.
 
-use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _};
+use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _, path::PathBuf};
 
-use super::*;
+use melib::error::Result;
+use structopt::StructOpt;
+
 #[cfg(feature = "cli-docs")]
 use crate::manpages;
+use crate::{conf, subcommands, terminal::Hyperlink};
 
 fn try_path_or_stdio(input: &OsStr) -> PathOrStdio {
     if input.as_bytes() == b"-" {
@@ -259,7 +262,7 @@ impl Opt {
                 subcommands::edit_config()
             }
             SubCommand::PrintConfigPath => {
-                let config_path = ret_err!(crate::conf::get_config_file());
+                let config_path = ret_err!(conf::get_config_file());
                 print_path(&config_path);
                 Ok(())
             }
@@ -303,7 +306,7 @@ impl Opt {
                 Ok(())
             }
             SubCommand::PrintDefaultTheme => {
-                print!("{}", crate::conf::themes::Themes::default().key_to_string("dark", false));
+                print!("{}", conf::themes::Themes::default().key_to_string("dark", false));
                 Ok(())
             }
             SubCommand::PrintAppDirectories => {
@@ -333,7 +336,7 @@ impl Opt {
                 Ok(())
             }
             SubCommand::PrintLogPath => {
-                let settings = ret_err!(crate::conf::Settings::new());
+                let settings = ret_err!(conf::Settings::new());
                 print_path(&settings._logger.log_dest());
                 Ok(())
             }

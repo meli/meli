@@ -27,7 +27,6 @@ use melib::{
     error::Result,
     maildir::MaildirType,
     utils::logging::{LogLevel, Logger},
-    MailboxPermissions, SpecialUsageMailbox,
 };
 use rusty_fork::rusty_fork_test;
 use tempfile::TempDir;
@@ -35,6 +34,7 @@ use tempfile::TempDir;
 use crate::{
     accounts::{AccountConf, FileMailboxConf, MailboxEntry, MailboxStatus},
     command::actions::MailboxOperation,
+    types::ThreadEvent,
 };
 
 #[test]
@@ -42,7 +42,7 @@ fn test_mailbox_utf7() {
     #[derive(Debug)]
     struct TestMailbox(String);
 
-    impl melib::BackendMailbox for TestMailbox {
+    impl BackendMailbox for TestMailbox {
         fn hash(&self) -> MailboxHash {
             panic!()
         }
@@ -104,7 +104,7 @@ fn test_mailbox_utf7() {
         ("&BB4EQgQ,BEAEMAQyBDsENQQ9BD0ESwQ1-", "Отправленные"),
     ] {
         let ref_mbox = TestMailbox(n.to_string());
-        let mut conf: melib::MailboxConf = Default::default();
+        let mut conf: melib::conf::MailboxConf = Default::default();
         conf.extra.insert("encoding".to_string(), "utf7".into());
 
         let entry = MailboxEntry::new(
@@ -164,7 +164,7 @@ fn new_maildir_backend(
         indexmap::indexmap! {}
     };
 
-    let account_conf = melib::AccountSettings {
+    let account_conf = melib::conf::AccountSettings {
         name: acc_name.to_string(),
         root_mailbox: root_mailbox.display().to_string(),
         format: "maildir".to_string(),
@@ -200,7 +200,7 @@ fn run_accounts_mailbox_by_path_error_msg() {
             "Create maildir backend with a root mailbox, \"inbox\" which will be a valid maildir \
              folder because it will contain cur, new, tmp subdirectories..."
         );
-        let mut ctx = crate::Context::new_mock(&temp_dir);
+        let mut ctx = crate::state::Context::new_mock(&temp_dir);
         let backend_event_queue = Arc::new(std::sync::Mutex::new(
             std::collections::VecDeque::with_capacity(16),
         ));
@@ -242,7 +242,7 @@ fn run_accounts_mailbox_by_path_error_msg() {
         };
         account.init(ref_mailboxes).unwrap();
         while let Ok(thread_event) = ctx.receiver.try_recv() {
-            if let crate::ThreadEvent::JobFinished(job_id) = thread_event {
+            if let ThreadEvent::JobFinished(job_id) = thread_event {
                 if !account.process_event(&job_id) {
                     assert!(
                         ctx.accounts[0].process_event(&job_id),
@@ -277,7 +277,7 @@ fn run_accounts_mailbox_by_path_error_msg() {
             ($job_id:expr) => {{
                 let wait_for = $job_id;
                 while let Ok(thread_event) = ctx.receiver.recv() {
-                    if let crate::ThreadEvent::JobFinished(job_id) = thread_event {
+                    if let ThreadEvent::JobFinished(job_id) = thread_event {
                         if !account.process_event(&job_id) {
                             assert!(
                                 ctx.accounts[0].process_event(&job_id),
@@ -395,7 +395,7 @@ fn run_accounts_mailbox_by_path_error_msg() {
             "Create maildir backend with a root mailbox, \"inbox\" which will NOT be a valid \
              maildir folder because it will NOT contain cur, new, tmp subdirectories..."
         );
-        let mut ctx = crate::Context::new_mock(&temp_dir);
+        let mut ctx = crate::state::Context::new_mock(&temp_dir);
         let backend_event_queue = Arc::new(std::sync::Mutex::new(
             std::collections::VecDeque::with_capacity(16),
         ));
@@ -442,7 +442,7 @@ fn run_accounts_mailbox_by_path_error_msg() {
         };
         account.init(ref_mailboxes).unwrap();
         while let Ok(thread_event) = ctx.receiver.try_recv() {
-            if let crate::ThreadEvent::JobFinished(job_id) = thread_event {
+            if let ThreadEvent::JobFinished(job_id) = thread_event {
                 if !account.process_event(&job_id) {
                     assert!(
                         ctx.accounts[0].process_event(&job_id),
@@ -476,7 +476,7 @@ fn run_accounts_mailbox_by_path_error_msg() {
             ($job_id:expr) => {{
                 let wait_for = $job_id;
                 while let Ok(thread_event) = ctx.receiver.recv() {
-                    if let crate::ThreadEvent::JobFinished(job_id) = thread_event {
+                    if let ThreadEvent::JobFinished(job_id) = thread_event {
                         if !account.process_event(&job_id) {
                             assert!(
                                 ctx.accounts[0].process_event(&job_id),

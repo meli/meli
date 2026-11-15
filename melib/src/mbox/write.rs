@@ -19,10 +19,14 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
-use crate::utils::{
-    datetime,
-    parsec::{CRLF, LF},
+use crate::{
+    email::{address::Address, headers::HeaderName, parser, Flag},
+    error::{Error, ErrorKind, Result},
+    mbox::{MboxFormat, MboxMetadata},
+    utils::{
+        datetime,
+        parsec::{CRLF, LF},
+    },
 };
 
 impl MboxFormat {

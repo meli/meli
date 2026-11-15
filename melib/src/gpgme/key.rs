@@ -25,7 +25,7 @@
 use std::{borrow::Cow, ffi::CStr, ptr::NonNull, sync::Arc};
 
 use crate::{
-    email::Address,
+    email::address::Address,
     gpgme::{bindings::*, gpgme_error_to_string},
 };
 

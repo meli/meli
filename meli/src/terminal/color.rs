@@ -34,7 +34,7 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 /// # Examples
 ///
 /// ```no_run
-/// use meli::Color;
+/// use meli::terminal::Color;
 ///
 /// // The default color.
 /// let default = Color::Default;
@@ -813,7 +813,7 @@ impl Serialize for Color {
 }
 
 pub mod aliases {
-    use super::Color;
+    use crate::terminal::color::Color;
 
     impl Color {
         pub const BLACK: Self = Self::Black;

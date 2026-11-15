@@ -19,12 +19,29 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{convert::TryInto as _, iter::FromIterator as _};
+use std::{collections::HashMap, convert::TryInto as _, iter::FromIterator as _};
 
-use melib::{Address, SortField, SortOrder, ThreadNode, Threads};
+use indexmap::IndexMap;
+use melib::{
+    email::{address::Address, Envelope, EnvelopeHash},
+    error::Result,
+    thread::{ThreadHash, ThreadNode, ThreadNodeHash, Threads},
+    SortField, SortOrder,
+};
+use smallvec::SmallVec;
 
-use super::*;
-use crate::{components::PageMovement, jobs::JoinHandle, segment_tree::SegmentTree};
+use crate::{
+    components::prelude::*,
+    conf::data_types::IndexStyle,
+    jobs::JoinHandle,
+    mail::listing::{
+        ColorCache, DateString, EntryStrings, FlagString, Focus, FromString, ListingMessage,
+        ListingTrait, MailListingTrait, Modifier, RowsState, SubjectString, TagString,
+        TagsIterator,
+    },
+    mailbox_settings, shortcut,
+    types::{segment_tree::SegmentTree, NotificationType, StatusEvent, UIEvent, UIMode},
+};
 
 macro_rules! row_attr {
     ($color_cache:expr, even: $even:expr, unseen: $unseen:expr, highlighted: $highlighted:expr, selected: $selected:expr  $(,)*) => {{
@@ -65,8 +82,7 @@ macro_rules! row_attr {
     }};
 }
 
-/// A list of all mail ([`Envelope`]s) in a `Mailbox`. On `\n`
-/// it opens the [`Envelope`] content in a [`MailView`].
+/// A list of all mail ([`Envelope`]s) in a mailbox.
 #[derive(Debug)]
 pub struct ThreadListing {
     /// (x, y, z): x is accounts, y is mailboxes, z is index inside a mailbox.
@@ -729,7 +745,7 @@ impl ListingTrait for ThreadListing {
                     title: Some("Could not perform search".into()),
                     source: None,
                     body: message.into(),
-                    kind: Some(crate::types::NotificationType::Error(err.kind)),
+                    kind: Some(NotificationType::Error(err.kind)),
                 });
             }
         }
@@ -1725,7 +1741,7 @@ impl Component for ThreadListing {
                     }
                     return true;
                 }
-                Action::Listing(Search {
+                Action::Listing(ListingAction::Search {
                     term: ref filter_term,
                     raw_search,
                 }) if !self.unfocused() => {
@@ -1750,7 +1766,7 @@ impl Component for ThreadListing {
                             context.replies.push_back(UIEvent::Notification {
                                 title: Some("Could not perform search".into()),
                                 body: err.to_string().into(),
-                                kind: Some(crate::types::NotificationType::Error(err.kind)),
+                                kind: Some(NotificationType::Error(err.kind)),
                                 source: Some(err),
                             });
                         }
@@ -1758,7 +1774,7 @@ impl Component for ThreadListing {
                     self.set_dirty(true);
                     return true;
                 }
-                Action::Listing(Select {
+                Action::Listing(ListingAction::Select {
                     term: ref search_term,
                     raw_search,
                 }) if !self.unfocused() => {
@@ -1784,7 +1800,7 @@ impl Component for ThreadListing {
                                 title: Some("Could not perform search".into()),
                                 source: None,
                                 body: err.to_string().into(),
-                                kind: Some(crate::types::NotificationType::Error(err.kind)),
+                                kind: Some(NotificationType::Error(err.kind)),
                             });
                         }
                     };
@@ -1809,7 +1825,7 @@ impl Component for ThreadListing {
                         context.replies.push_back(UIEvent::Notification {
                             title: Some("Could not perform search".into()),
                             body: err.to_string().into(),
-                            kind: Some(crate::types::NotificationType::Error(err.kind)),
+                            kind: Some(NotificationType::Error(err.kind)),
                             source: Some(err),
                         });
                     }

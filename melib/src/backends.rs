@@ -31,8 +31,8 @@ pub mod prelude {
         lock::Mutex as FutureMutex,
         stream::{BoxStream, Stream},
     };
-    pub type ResultFuture<T> = crate::Result<BoxFuture<'static, crate::Result<T>>>;
-    pub type ResultStream<T> = crate::Result<BoxStream<'static, crate::Result<T>>>;
+    pub type ResultFuture<T> = Result<BoxFuture<'static, Result<T>>>;
+    pub type ResultStream<T> = Result<BoxStream<'static, Result<T>>>;
     pub use std::{
         any::Any,
         borrow::Cow,
@@ -47,21 +47,22 @@ pub mod prelude {
     pub use indexmap::{IndexMap, IndexSet};
     pub use smallvec::SmallVec;
 
-    pub use super::{
-        AccountHash, BackendEvent, BackendEventConsumer, BackendMailbox, EnvelopeHashBatch, FlagOp,
-        IsSubscribedFn, LazyCountSet, MailBackend, MailBackendCapabilities,
-        MailBackendExtensionStatus, Mailbox, MailboxCounters, MailboxHash, MailboxPermissions,
-        RefreshEvent, RefreshEventKind, TagHash,
-    };
     pub use crate::{
+        backends::{
+            AccountHash, BackendEvent, BackendEventConsumer, BackendMailbox, EnvelopeHashBatch,
+            FlagOp, IsSubscribedFn, LazyCountSet, MailBackend, MailBackendCapabilities,
+            MailBackendExtensionStatus, Mailbox, MailboxCounters, MailboxHash, MailboxPermissions,
+            RefreshEvent, RefreshEventKind, SpecialUsageMailbox, TagHash,
+        },
         conf::{AccountSettings, Secret},
-        email::{Envelope, EnvelopeHash, Flag},
+        email::{headers::HeaderName, Envelope, EnvelopeHash, Flag},
         error::{
             Error, ErrorKind, IntoError, NetworkErrorKind, Result, ResultIntoError,
             WrapResultIntoError,
         },
         search::Query,
-        Collection, HeaderName, LogLevel, SpecialUsageMailbox,
+        utils::logging::LogLevel,
+        Collection,
     };
 }
 use prelude::*;
@@ -618,7 +619,7 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         mailbox_hash: MailboxHash,
     ) -> ResultFuture<()>;
 
-    fn collection(&self) -> crate::Collection;
+    fn collection(&self) -> Collection;
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
 

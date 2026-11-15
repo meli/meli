@@ -25,9 +25,9 @@ use futures::lock::Mutex as FutureMutex;
 use isahc::AsyncReadResponseExt as _;
 
 use crate::{
+    email::EnvelopeHash,
     error::Result,
     jmap::{connection::JmapConnection, url_template::download_request_format, Store},
-    EnvelopeHash,
 };
 
 /// Fetch an envelope by hash as bytes.

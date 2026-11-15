@@ -22,7 +22,7 @@
 
 //! Error kinds for network related errors.
 
-use super::ErrorKind;
+use crate::error::ErrorKind;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum NetworkErrorKind {

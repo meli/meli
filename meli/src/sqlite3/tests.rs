@@ -70,7 +70,7 @@ fn new_maildir_backend(
         }
     }
 
-    let account_conf = melib::AccountSettings {
+    let account_conf = melib::conf::AccountSettings {
         name: acc_name.to_string(),
         root_mailbox: root_mailbox.display().to_string(),
         format: "maildir".to_string(),

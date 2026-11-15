@@ -72,7 +72,7 @@ pub trait QueryTrait {
     fn is_match(&self, query: &Query) -> bool;
 }
 
-impl QueryTrait for crate::Envelope {
+impl QueryTrait for crate::email::Envelope {
     fn is_match(&self, query: &Query) -> bool {
         use Query::*;
         match query {

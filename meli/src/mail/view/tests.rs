@@ -18,13 +18,16 @@
 // You should have received a copy of the GNU General Public License
 // along with meli. If not, see <http://www.gnu.org/licenses/>.
 
+use melib::email::attachments::{Attachment, AttachmentBuilder};
 use rusty_fork::rusty_fork_test;
 use smallvec::SmallVec;
 
 use crate::{
-    melib::{Attachment, AttachmentBuilder},
-    view::{ViewFilter, ViewFilterContent, ViewSettings},
-    Context,
+    mail::view::{
+        filters::{ViewFilter, ViewFilterContent},
+        ViewSettings,
+    },
+    state::Context,
 };
 
 rusty_fork_test! {

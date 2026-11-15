@@ -19,15 +19,25 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use std::collections::BTreeSet;
+
 use imap_codec::imap_types::{
-    command::FetchModifier,
+    command::{CommandBody, FetchModifier},
     fetch::{MacroOrMessageDataItemNames, MessageDataItemName},
     search::SearchKey,
-    sequence::SequenceSet,
+    sequence::{SequenceSet, ONE},
 };
 use indexmap::IndexSet;
 
-use super::*;
+use crate::{
+    backends::{MailboxHash, RefreshEvent, RefreshEventKind, TagHash},
+    email::{Envelope, EnvelopeHash},
+    error::{Result, ResultIntoError as _},
+    imap::{
+        generate_envelope_hash, protocol_parser, FetchResponse, ImapCache as _, ImapConnection,
+        ModSequence, RequiredResponses, SelectResponse, SyncPolicy, UID,
+    },
+};
 
 pub mod cache;
 #[cfg(feature = "sqlite3")]

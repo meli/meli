@@ -37,10 +37,10 @@ use std::sync::Arc;
 
 use indexmap::IndexMap;
 use melib::{
-    contacts::{AddressBook, AddressBookName, Card, CardId},
+    backends::AccountHash,
+    contacts::{AddressBook, AddressBookName, Card, CardId, ContactBackendID},
     email::compose::Draft,
     error::{ErrorKind, Result},
-    AccountHash, ContactBackendID,
 };
 
 use crate::{
@@ -51,8 +51,10 @@ use crate::{
     },
     mail::compose::Composer,
     types::{ContactBackendStatusChangeKind, NotificationType},
-    utilities::listings::{AccountEntryTrait, List},
-    UIConfirmationDialog,
+    utilities::{
+        listings::{AccountEntryTrait, List},
+        UIConfirmationDialog,
+    },
 };
 
 #[derive(Debug)]
@@ -600,7 +602,7 @@ impl Component for AddressBookList {
                 let mut draft: Draft = Draft::default();
                 *draft
                     .headers_mut()
-                    .entry(melib::HeaderName::TO)
+                    .entry(melib::email::headers::HeaderName::TO)
                     .or_default() = card.as_address().to_string();
                 let mut composer = Composer::with_account(self.account_hash, context);
                 composer.set_draft(draft, context);

@@ -283,7 +283,7 @@ where
     pub anchor_offset: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u64>,
-    #[serde(default = "crate::false_val")]
+    #[serde(default = "crate::conf::false_val")]
     pub calculate_total: bool,
     #[serde(skip)]
     pub _ph: PhantomData<fn() -> OBJ>,

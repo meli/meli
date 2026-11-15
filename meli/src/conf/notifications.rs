@@ -19,12 +19,14 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use melib::{Error, Result, ToggleFlag};
+use melib::{
+    conf::ToggleFlag,
+    error::{Error, Result},
+};
 
 use crate::conf::{
-    data_types::NotificationEnable,
+    data_types::{dotaddressable::DotAddressable, NotificationEnable},
     default_values::{internal_value_false, none},
-    DotAddressable,
 };
 
 /// Settings for the notifications function.

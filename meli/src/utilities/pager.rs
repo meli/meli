@@ -19,13 +19,20 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use melib::text::{Line, LineBreakText};
+use melib::{
+    error::{Error, ErrorKind, Result, ResultIntoError as _},
+    text::{Line, LineBreakText, Reflow},
+};
 
-use super::*;
 use crate::{
+    components::prelude::*,
     conf::themes::ThemeAttribute,
     jobs::{IsAsync, JoinHandle},
     terminal::embedded::EmbeddedGrid,
+    types::{
+        Link, LinkKind, NotificationType, ProcessRequest, ProcessResultFn, SpawnInteractionFn,
+    },
+    utilities::{widgets::ScrollBar, SearchMovement, SearchPattern},
 };
 
 /// A pager for text.
@@ -860,7 +867,7 @@ impl Component for Pager {
             UIEvent::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
             }
-            UIEvent::Action(View(Pipe { ref command })) => {
+            UIEvent::Action(Action::View(ViewAction::Pipe { ref command })) => {
                 use std::{
                     io::Write as _,
                     process::{Command, Stdio},
@@ -917,7 +924,7 @@ impl Component for Pager {
                     })));
                 return true;
             }
-            ev if matches!(ev, UIEvent::Action(View(Filter(None))))
+            ev if matches!(ev, UIEvent::Action(Action::View(ViewAction::Filter(None))))
                 || matches!(ev, UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::PAGER]["select_filter"])) =>
             {
@@ -944,9 +951,9 @@ impl Component for Pager {
                             Some(Box::new(
                                 move |_id: ComponentId, results: &[String], context| {
                                     if let Some(result) = results.first().cloned() {
-                                        context
-                                            .replies
-                                            .push_back(UIEvent::Action(View(Filter(Some(result)))));
+                                        context.replies.push_back(UIEvent::Action(Action::View(
+                                            ViewAction::Filter(Some(result)),
+                                        )));
                                     }
                                 },
                             )),
@@ -957,7 +964,7 @@ impl Component for Pager {
                 }
                 return true;
             }
-            UIEvent::Action(View(Filter(Some(ref cmd)))) => {
+            UIEvent::Action(Action::View(ViewAction::Filter(Some(ref cmd)))) => {
                 self.filter(cmd, context);
                 self.initialised = false;
                 self.dirty = true;
@@ -1116,6 +1123,8 @@ impl Component for Pager {
             return;
         }
 
-        context.replies.push_back(UIEvent::Action(Tab(Kill(uuid))));
+        context
+            .replies
+            .push_back(UIEvent::Action(Action::Tab(TabAction::Kill(uuid))));
     }
 }

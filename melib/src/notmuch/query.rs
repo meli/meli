@@ -22,7 +22,7 @@
 use std::{borrow::Cow, ffi::CString, ptr::NonNull, sync::Arc};
 
 use crate::{
-    email::HeaderName,
+    email::headers::HeaderName,
     error::{Error, ErrorKind, Result},
     notmuch::{
         ffi::{notmuch_messages_t, notmuch_query_t},

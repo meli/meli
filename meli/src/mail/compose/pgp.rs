@@ -20,10 +20,19 @@
  */
 
 use indexmap::IndexSet;
-use melib::email::pgp::{Key, LocateKey, PGPBackend as _};
+use melib::{
+    conf::ActionFlag,
+    email::pgp::{Key, LocateKey, PGPBackend as _},
+    error::{Error, Result},
+};
 
-use super::*;
-use crate::conf::PGPBackendChoice;
+use crate::{
+    components::prelude::*,
+    conf::pgp::PGPBackendChoice,
+    jobs::{IsAsync, JoinHandle},
+    types::{NotificationType, UIEvent},
+    utilities::ProgressSpinner,
+};
 
 type KeylistJoinHandle = JoinHandle<Result<Vec<Key>>>;
 
@@ -414,12 +423,18 @@ mod tests {
 
     use indexmap::IndexSet;
     use melib::{
-        email::pgp::{LocateKey, PGPBackend},
+        conf::ActionFlag,
+        email::pgp::{Key, LocateKey, PGPBackend},
+        error::Result,
         gpgme::{EngineInfo, Protocol},
     };
     use rusty_fork::rusty_fork_test;
 
-    use super::*;
+    use super::{KeySelection, KeySelectionLoading};
+    use crate::{
+        components::prelude::*, conf::pgp::PGPBackendChoice, jobs::IsAsync, types::ThreadEvent,
+        utilities::ProgressSpinner,
+    };
 
     impl KeySelection {
         fn new_mock(
@@ -578,7 +593,7 @@ mod tests {
                         KeySelection::Error {
                             ref id,
                             ref err
-                        } if *id == component_id && err.to_string() == melib::Error::new("No keys found.").to_string(),
+                        } if *id == component_id && err.to_string() == melib::error::Error::new("No keys found.").to_string(),
                     ),
                     "key_sel should have been an error but is: {key_sel:?}"
                 );
@@ -588,7 +603,7 @@ mod tests {
                 let assert_key = |key: &Key| {
                     key.fingerprint == "ADAB7FCC1F4DE2616ECFA402AF82244F9CD9FD55"
                         && key.primary_uid
-                            == Some(melib::Address::new(
+                            == Some(melib::email::address::Address::new(
                                 Some("Joe Random Hacker"),
                                 "joe@example.com",
                             ))

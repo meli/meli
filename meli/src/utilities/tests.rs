@@ -40,8 +40,10 @@ rusty_fork_test! {
 }
 
 fn utilities_text_input_field() {
+    use melib::text::TextProcessing as _;
+
     use super::TextField;
-    use crate::{melib::text::TextProcessing as _, Component as _, Key, UIEvent};
+    use crate::{components::Component as _, terminal::keys::Key, types::UIEvent};
 
     const PANGRAM: &str = "Blocky dwarf zings the jump.";
     const PANGRAM_END: usize = PANGRAM.len();

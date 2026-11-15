@@ -22,7 +22,7 @@
 
 use imap_types::sequence::ONE;
 
-use super::*;
+use crate::imap::protocol_parser::*;
 
 macro_rules! to_str (
     ($v:expr) => (unsafe{ std::str::from_utf8_unchecked($v) })
@@ -58,9 +58,7 @@ fn test_imap_required_responses() {
             }
         }
         assert_eq!(ret.as_slice(), &b"* 1040 FETCH (UID 1064 FLAGS ())\r\n"[..]);
-        let v = protocol_parser::uid_fetch_flags_responses(response)
-            .unwrap()
-            .1;
+        let v = uid_fetch_flags_responses(response).unwrap().1;
         assert_eq!(v.len(), 1);
     }
     assert!(RequiredResponses::CAPABILITY.check(b"* CAPABILITY IMAP4rev1\r\n"));

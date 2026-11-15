@@ -633,7 +633,7 @@ unsafe impl async_io::IoSafe for Connection {}
 
 #[deprecated = "While it supports IPv6, it does not implement the happy eyeballs algorithm. Use \
                 {std_net,smol}::tcp_stream_connect instead."]
-pub fn lookup_ip(host: &str, port: u16) -> crate::Result<std::net::SocketAddr> {
+pub fn lookup_ip(host: &str, port: u16) -> crate::error::Result<std::net::SocketAddr> {
     use std::net::ToSocketAddrs as _;
 
     use crate::error::{Error, ErrorKind, NetworkErrorKind};

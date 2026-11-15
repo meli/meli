@@ -26,7 +26,6 @@ extern crate toml;
 extern crate xdg;
 
 use std::{
-    env,
     fs::OpenOptions,
     io::Write as _,
     os::unix::fs::PermissionsExt as _,
@@ -37,7 +36,7 @@ use indexmap::IndexMap;
 use melib::{
     backends::MailboxHash,
     conf::{ActionFlag, MailboxConf, Secret, ToggleFlag},
-    error::*,
+    error::{Error, ErrorKind, Result, ResultIntoError as _},
     search::Query,
     utils::shellexpand::ShellExpandTrait as _,
     Logger, SortField, SortOrder,
@@ -47,7 +46,6 @@ use crate::{conf::deserializers::non_empty_opt_string, terminal::Color};
 
 pub mod default_values;
 pub mod preprocessing;
-use preprocessing as pp;
 
 pub mod data_types;
 #[cfg(test)]
@@ -65,14 +63,15 @@ pub mod shortcuts;
 mod listing;
 pub mod terminal;
 pub mod themes;
+
+use composing::SendMail;
 use default_values::*;
+use preprocessing as pp;
 pub use themes::value as theme_value;
 use themes::Themes;
 
-pub use self::{composing::*, pgp::*, shortcuts::*, tags::*};
-
 /// Utility macro to access an [`AccountConf`] setting field from
-/// [`Context`](crate::Context) indexed by `$account_hash`
+/// [`Context`](crate::state::Context) indexed by `$account_hash`
 ///
 /// The value returned is the optionally overridden one in the
 /// [`AccountConf::conf_override`] field, otherwise the global one.
@@ -95,7 +94,7 @@ macro_rules! account_settings {
 }
 
 /// Utility macro to access an [`AccountConf`] setting field from
-/// [`Context`](crate::Context) indexed by `$account_hash` and a mailbox.
+/// [`Context`](crate::state::Context) indexed by `$account_hash` and a mailbox.
 ///
 /// The value returned is the optionally overridden one in the
 /// [`FileMailboxConf::conf_override`] field, otherwise the
@@ -156,7 +155,7 @@ pub struct MailUIConf {
     #[serde(default)]
     pub notifications: NotificationsSettingsOverride,
     #[serde(default)]
-    pub shortcuts: ShortcutsOverride,
+    pub shortcuts: shortcuts::ShortcutsOverride,
     #[serde(default)]
     pub composing: ComposingSettingsOverride,
     #[serde(default)]
@@ -265,7 +264,7 @@ pub struct FileSettings {
 
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct AccountConf {
-    pub account: melib::AccountSettings,
+    pub account: melib::conf::AccountSettings,
     /// How to send e-mail for this account.
     /// Required
     pub send_mail: SendMail,
@@ -277,10 +276,10 @@ pub struct AccountConf {
 }
 
 impl AccountConf {
-    pub fn account(&self) -> &melib::AccountSettings {
+    pub fn account(&self) -> &melib::conf::AccountSettings {
         &self.account
     }
-    pub fn account_mut(&mut self) -> &mut melib::AccountSettings {
+    pub fn account_mut(&mut self) -> &mut melib::conf::AccountSettings {
         &mut self.account
     }
     pub fn conf(&self) -> &FileAccount {
@@ -291,8 +290,8 @@ impl AccountConf {
     }
 }
 
-impl From<melib::AccountSettings> for AccountConf {
-    fn from(account: melib::AccountSettings) -> Self {
+impl From<melib::conf::AccountSettings> for AccountConf {
+    fn from(account: melib::conf::AccountSettings) -> Self {
         Self {
             account,
             ..Self::default()
@@ -314,7 +313,7 @@ impl TryFrom<FileAccount> for AccountConf {
             .map(|(k, v)| (k.clone(), v.mailbox_conf.clone()))
             .collect();
 
-        let account = melib::AccountSettings {
+        let account = melib::conf::AccountSettings {
             name: String::new(),
             root_mailbox,
             format,
@@ -374,7 +373,7 @@ fn json_from_toml(t: toml::Value) -> Result<serde_json::Value> {
 }
 
 pub fn get_config_file() -> Result<PathBuf> {
-    if let Ok(path) = env::var("MELI_CONFIG") {
+    if let Ok(path) = std::env::var("MELI_CONFIG") {
         return Ok(PathBuf::from(&path).expand());
     }
     let xdg_dirs = xdg::BaseDirectories::with_prefix("meli")?;
@@ -502,7 +501,7 @@ impl FileSettings {
             } = acc.clone();
 
             let lowercase_format = format.to_lowercase();
-            let mut s = melib::AccountSettings {
+            let mut s = melib::conf::AccountSettings {
                 name: name.to_string(),
                 root_mailbox,
                 format,
@@ -608,7 +607,7 @@ impl FileSettings {
             } = acc.clone();
 
             let lowercase_format = format.to_lowercase();
-            let mut s = melib::AccountSettings {
+            let mut s = melib::conf::AccountSettings {
                 name: name.to_string(),
                 root_mailbox,
                 format,
@@ -796,5 +795,3 @@ pub struct LogSettings {
     #[serde(default)]
     pub maximum_level: melib::LogLevel,
 }
-
-pub use data_types::dotaddressable::*;

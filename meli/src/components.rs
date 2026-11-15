@@ -29,7 +29,11 @@ use indexmap::IndexMap;
 use smallvec::SmallVec;
 use uuid::Uuid;
 
-use super::*;
+use crate::{
+    state::Context,
+    terminal::{cells::CellBuffer, keys::Key, Area},
+    types::UIEvent,
+};
 
 #[derive(Clone, Copy, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[repr(transparent)]
@@ -398,18 +402,37 @@ pub mod prelude {
     pub use std::borrow::Cow;
 
     pub use indexmap::IndexMap;
+    pub use melib::{
+        backends::{AccountHash, MailboxHash},
+        email::EnvelopeHash,
+        text::TextProcessing,
+        utils::datetime,
+        SortOrder,
+    };
 
     pub use crate::{
         accounts::MailboxEntry,
-        command::*,
+        command::{
+            actions::{
+                AccountAction, Action, ComposeAction, ComposerTabAction, FileAction, FlagAction,
+                ListingAction, MailingListAction, TabAction, TagAction, ViewAction,
+            },
+            *,
+        },
         components::{
             Component, ComponentAttr, ComponentId, ComponentPath, ExtendShortcutsMaps,
             OverlayComponent, PageMovement, ScrollContext, ScrollUpdate, ShortcutMap, ShortcutMaps,
         },
-        conf::themes::ThemeAttribute,
+        conf::{shortcuts::Shortcuts, themes::ThemeAttribute},
         jobs::{JobId, JobMetadata},
-        melib::{text::TextProcessing, utils::datetime, SortOrder},
-        shortcut, AccountHash, Action, Area, Attr, CellBuffer, Context, DataColumns, EnvelopeHash,
-        Key, MailboxHash, Shortcuts, StatusEvent, UIDialog, UIEvent, UIMode,
+        shortcut,
+        state::Context,
+        terminal::{
+            cells::{Attr, CellBuffer},
+            keys::Key,
+            Area,
+        },
+        types::{StatusEvent, UIEvent, UIMode},
+        utilities::{DataColumns, UIDialog},
     };
 }

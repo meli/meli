@@ -184,7 +184,7 @@ pub enum Key {
     Esc,
 }
 
-impl From<Key> for crate::terminal::Key {
+impl From<Key> for crate::terminal::keys::Key {
     fn from(key: Key) -> Self {
         match key {
             Key::Backspace => Self::Backspace,

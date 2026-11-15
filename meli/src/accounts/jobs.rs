@@ -24,7 +24,7 @@ use std::{borrow::Cow, collections::HashMap};
 
 use melib::{backends::prelude::*, error::Result, LogLevel};
 
-use crate::{is_variant, jobs::JoinHandle, StatusEvent};
+use crate::{is_variant, jobs::JoinHandle, types::StatusEvent};
 
 pub enum MailboxJobRequest {
     Mailboxes {

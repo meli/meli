@@ -22,9 +22,15 @@
 //! Settings for the pager function.
 
 use indexmap::IndexMap;
-use melib::{email::headers::HeaderName, Error, Result, ToggleFlag};
+use melib::{
+    conf::ToggleFlag,
+    email::headers::HeaderName,
+    error::{Error, Result},
+};
 
-use crate::conf::{default_values::*, deserializers::*, DotAddressable};
+use crate::conf::{
+    data_types::dotaddressable::DotAddressable, default_values::*, deserializers::*,
+};
 
 /// Settings for the pager function.
 #[derive(Clone, Debug, Deserialize, Serialize)]

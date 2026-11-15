@@ -36,7 +36,7 @@
 
 use std::{
     borrow::Cow,
-    collections::BTreeSet,
+    collections::{BTreeSet, VecDeque},
     os::fd::OwnedFd,
     path::{Path, PathBuf},
     sync::Arc,
@@ -47,17 +47,31 @@ use crossbeam::channel::{unbounded, Receiver, Sender};
 use indexmap::{IndexMap, IndexSet};
 use melib::{
     backends::{
-        AccountHash, BackendEvent, BackendEventConsumer, Backends, RefreshEvent, RefreshEventKind,
+        AccountHash, BackendEvent, BackendEventConsumer, Backends, MailboxHash, RefreshEvent,
+        RefreshEventKind, SpecialUsageMailbox,
     },
-    utils::{datetime, shellexpand::ShellExpandTrait as _},
+    error::{Error, ErrorKind, Result, ResultIntoError as _},
+    utils::{datetime, logging::LogLevel, shellexpand::ShellExpandTrait as _},
 };
 use smallvec::SmallVec;
 
-use super::*;
 use crate::{
+    accounts::Account,
+    command::actions::{AccountAction, Action, TabAction},
+    components::{Component, ComponentId, ComponentPath, OverlayComponent},
+    conf::{data_types::dotaddressable::DotAddressable as _, Settings},
     jobs::{JobExecutor, JobId, JoinHandle},
+    mail::listing::Modifier,
     notifications::DisplayMessageBox,
-    terminal::{get_events, Screen, Tty},
+    terminal::{
+        input::{get_events, InputCommand},
+        Area, ColorContrast, RgbColor, Screen, Tty,
+    },
+    types::{
+        File, ForkedProcess, NotificationType, ProcessRequest, RateLimit, StatusEvent,
+        TerminalEvent, ThreadEvent, UIEvent, UIMode,
+    },
+    utilities::{Pager, UIConfirmationDialog},
 };
 
 struct InputHandler {
@@ -940,16 +954,16 @@ impl State {
     /// Convert user commands to actions/method calls.
     fn exec_command(&mut self, cmd: Action) {
         match cmd {
-            SetEnv(key, val) => {
+            Action::SetEnv(key, val) => {
                 // SAFETY: we only modify our environment from the main process/thread.
                 std::env::set_var(key.as_str(), val.as_str());
             }
-            PrintEnv(key) => {
+            Action::PrintEnv(key) => {
                 self.show_display_message(
                     std::env::var(key.as_str()).unwrap_or_else(|e| e.to_string()),
                 );
             }
-            ChangeCurrentDirectory(dir) => {
+            Action::ChangeCurrentDirectory(dir) => {
                 let mut dir = if dir.starts_with('~') {
                     Path::new(&dir).expand_tilde().into_owned()
                 } else {
@@ -991,10 +1005,10 @@ impl State {
                     ));
                 }
             }
-            CurrentDirectory => {
+            Action::CurrentDirectory => {
                 self.show_display_message(self.context.current_dir.display().to_string());
             }
-            Mailbox(account_name, op) => {
+            Action::Mailbox(account_name, op) => {
                 if let Some(account) = self
                     .context
                     .accounts
@@ -1019,7 +1033,7 @@ impl State {
                 }
             }
             #[cfg(feature = "sqlite3")]
-            AccountAction(ref account_name, ReIndex) => {
+            Action::AccountAction(ref account_name, AccountAction::ReIndex) => {
                 let account_index = if let Some(a) = self
                     .context
                     .accounts
@@ -1083,7 +1097,7 @@ impl State {
                 });
             }
             #[cfg(not(feature = "sqlite3"))]
-            AccountAction(_, ReIndex) => {
+            Action::AccountAction(_, AccountAction::ReIndex) => {
                 self.context.replies.push_back(UIEvent::Notification {
                     title: None,
                     source: None,
@@ -1115,7 +1129,7 @@ impl State {
                         .mailbox_by_path(mailbox)
                         .and_then(|h| self.context.accounts[account_index].refresh(h))
                 } else if let Some(h) = self.context.accounts[account_index]
-                    .special_use_mailbox(melib::SpecialUsageMailbox::Inbox)
+                    .special_use_mailbox(SpecialUsageMailbox::Inbox)
                 {
                     self.context.accounts[account_index].refresh(h)
                 } else if let Some(h) = self.context.accounts[account_index]
@@ -1136,7 +1150,10 @@ impl State {
                     });
                 }
             }
-            AccountAction(ref account_name, PrintAccountSetting(ref setting)) => {
+            Action::AccountAction(
+                ref account_name,
+                AccountAction::PrintAccountSetting(ref setting),
+            ) => {
                 let path = setting.split('.').collect::<SmallVec<[&str; 16]>>();
                 if let Some(pos) = self
                     .context
@@ -1161,7 +1178,7 @@ impl State {
                     });
                 }
             }
-            PrintSetting(ref setting) => {
+            Action::PrintSetting(ref setting) => {
                 let path = setting.split('.').collect::<SmallVec<[&str; 16]>>();
                 self.context
                     .replies
@@ -1172,12 +1189,12 @@ impl State {
                             .unwrap_or_else(|err| err.to_string()),
                     )));
             }
-            ToggleMouse => {
+            Action::ToggleMouse => {
                 let new_val = !self.screen.tty().mouse();
                 self.screen.tty_mut().set_mouse(new_val);
                 self.rcv_event(UIEvent::StatusEvent(StatusEvent::SetMouse(new_val)));
             }
-            Quit => {
+            Action::Quit => {
                 if self.can_quit_cleanly() {
                     self.context
                         .main_loop_handler
@@ -1187,21 +1204,23 @@ impl State {
                 }
             }
             #[cfg(feature = "cli-docs")]
-            Tab(Man(manpage)) => match manpage
+            Action::Tab(TabAction::Man(manpage)) => match manpage
                 .read(false)
                 .map(|text| crate::manpages::ManPages::remove_markup(&text).unwrap_or(text))
             {
-                Ok(m) => self.rcv_event(UIEvent::Action(Tab(New(Some(Box::new(
-                    Pager::from_string(
-                        m,
-                        &self.context,
-                        None,
-                        None,
-                        crate::conf::theme_value(&self.context, "theme_default"),
-                    )
-                    .with_title(manpage.to_string())
-                    .with_show_scrollbar(true),
-                )))))),
+                Ok(m) => self.rcv_event(UIEvent::Action(Action::Tab(TabAction::New(Some(
+                    Box::new(
+                        Pager::from_string(
+                            m,
+                            &self.context,
+                            None,
+                            None,
+                            crate::conf::theme_value(&self.context, "theme_default"),
+                        )
+                        .with_title(manpage.to_string())
+                        .with_show_scrollbar(true),
+                    ),
+                ))))),
                 Err(err) => self.context.replies.push_back(UIEvent::Notification {
                     title: None,
                     body: "Encountered an error while retrieving manual page.".into(),
@@ -1262,7 +1281,7 @@ impl State {
         match event {
             // Command type is handled only by State.
             UIEvent::Command(cmd) => {
-                match parse_command(&cmd) {
+                match crate::command::parser::parse_command(&cmd) {
                     Ok(action) => {
                         if action.needs_confirmation() {
                             let new = Box::new(UIConfirmationDialog::new(

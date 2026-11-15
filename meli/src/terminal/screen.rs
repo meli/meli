@@ -22,21 +22,23 @@
 //! Terminal grid cells, keys, colors, etc.
 use std::io::{BufWriter, Write};
 
+use melib::error::Result;
+
 use crate::{
     conf::themes::ThemeAttribute,
+    state::Context,
     terminal::{
-        cells::{Cell, CellBuffer},
+        cells::{Attr, Cell, CellBuffer},
         color::{Color, ColorContrast, RgbColor},
         csi, osc, Alignment, Hyperlink, Pos,
     },
-    Attr, Context,
 };
 
 pub type StateStdout = BufWriter<Box<dyn Write + 'static>>;
 
 type DrawHorizontalSegmentFn =
     fn(&mut CellBuffer, &mut StateStdout, std::ops::Range<usize>, usize) -> ();
-type TerminalSizeFn = fn() -> melib::Result<(u16, u16)>;
+type TerminalSizeFn = fn() -> Result<(u16, u16)>;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
@@ -151,7 +153,7 @@ impl Tty {
     }
 
     #[cfg(unix)]
-    pub fn terminal_size() -> melib::Result<(u16, u16)> {
+    pub fn terminal_size() -> Result<(u16, u16)> {
         use libc::{c_ushort, ioctl, STDOUT_FILENO, TIOCGWINSZ};
 
         #[repr(C)]
@@ -455,7 +457,7 @@ impl Screen<Tty> {
         }
     }
 
-    pub fn switch_to_alternate_screen(&mut self, context: &crate::Context) {
+    pub fn switch_to_alternate_screen(&mut self, context: &crate::state::Context) {
         let mut stdout = std::io::stdout();
 
         write!(

@@ -38,7 +38,7 @@ use futures::{
     stream::{FuturesUnordered, StreamExt as _},
 };
 
-use super::{bindings::gpgme_io_event_done_data, *};
+use crate::gpgme::{bindings::gpgme_io_event_done_data, *};
 
 enum IoMessage {
     Register(GpgmeFd),

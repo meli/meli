@@ -19,12 +19,16 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use melib::{search::Query, Error, Result, SortField, SortOrder, ToggleFlag};
+use melib::{
+    conf::ToggleFlag,
+    error::{Error, Result},
+    search::Query,
+    SortField, SortOrder,
+};
 
 use crate::conf::{
-    data_types::{IndexStyle, ThreadLayout},
+    data_types::{dotaddressable::DotAddressable, IndexStyle, ThreadLayout},
     default_values::*,
-    DotAddressable,
 };
 
 /// Settings for mail listings

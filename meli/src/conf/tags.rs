@@ -24,13 +24,16 @@
 use std::hash::{Hash, Hasher};
 
 use indexmap::{IndexMap, IndexSet};
-use melib::{Error, Result, TagHash};
+use melib::{
+    backends::TagHash,
+    error::{Error, Result},
+};
 use serde::{
     de::{Deserialize, Deserializer},
     ser::{Serialize, Serializer},
 };
 
-use crate::{conf::DotAddressable, terminal::Color};
+use crate::{conf::data_types::dotaddressable::DotAddressable, terminal::Color};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TagName {

@@ -44,8 +44,7 @@ pub mod managesieve;
 pub mod sync;
 pub mod untagged;
 use std::{
-    collections::{hash_map::DefaultHasher, BTreeMap, BTreeSet, HashMap, HashSet},
-    hash::Hasher as _,
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     num::NonZeroU32,
     str::FromStr as _,
     sync::{
@@ -63,12 +62,12 @@ use imap_codec::imap_types::{
     core::Atom,
     flag::{Flag as ImapCodecFlag, StoreResponse, StoreType},
     mailbox::Mailbox as ImapTypesMailbox,
-    sequence::{SequenceSet, ONE},
+    sequence::SequenceSet,
 };
 pub use sync::cache::ModSequence;
 
 use crate::{
-    backends::{prelude::*, RefreshEventKind::*},
+    backends::prelude::*,
     collection::Collection,
     conf::AccountSettings,
     email::{parser::BytesExt as _, *},
@@ -861,7 +860,7 @@ impl MailBackend for ImapType {
                                         "Application error: more than one flag bit set in \
                                          set_flags: {flags:?}"
                                     ))
-                                    .set_kind(crate::ErrorKind::Bug));
+                                    .set_kind(ErrorKind::Bug));
                                 }
                                 FlagOp::SetTag(tag) => {
                                     let hash = TagHash::from_bytes(tag.as_bytes());

@@ -33,9 +33,9 @@ use std::{
 };
 
 use melib::{
-    email::{attachment_types::ContentType, Attachment},
+    email::{attachment_types::ContentType, attachments::Attachment},
+    error::{Error, ErrorKind, Result},
     utils::fnmatch::Fnmatch as _,
-    Error, ErrorKind, Result,
 };
 use uuid::Uuid;
 
@@ -648,7 +648,7 @@ mod tests {
     use melib::{
         email::{
             attachment_types::{Charset, ContentTransferEncoding, ContentType, Text},
-            AttachmentBuilder,
+            attachments::AttachmentBuilder,
         },
         utils::logging::{LogLevel, Logger},
     };

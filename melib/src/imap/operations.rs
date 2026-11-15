@@ -21,10 +21,17 @@
 
 use std::sync::Arc;
 
-use imap_codec::imap_types::fetch::MessageDataItemName;
+use imap_codec::imap_types::{command::CommandBody, fetch::MessageDataItemName};
 
-use super::*;
-use crate::{backends::*, error::Error};
+use crate::{
+    backends::prelude::*,
+    error::{Error, ErrorKind, Result},
+    imap::{
+        connection::ConnectionMutex,
+        protocol_parser::{self, FetchResponse, RequiredResponses},
+        UIDStore, UID,
+    },
+};
 
 /// Fetch a [`UID`] as bytes.
 #[derive(Clone, Debug)]

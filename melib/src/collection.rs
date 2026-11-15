@@ -27,8 +27,11 @@ use std::{
 
 use smallvec::SmallVec;
 
-use super::*;
-use crate::backends::{MailboxHash, TagHash};
+use crate::{
+    backends::{MailboxHash, TagHash},
+    email::{Envelope, EnvelopeHash},
+    thread::Threads,
+};
 
 pub type EnvelopeRef<'g> = RwRef<'g, EnvelopeHash, Envelope>;
 pub type EnvelopeRefMut<'g> = RwRefMut<'g, EnvelopeHash, Envelope>;

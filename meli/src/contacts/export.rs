@@ -24,15 +24,18 @@ use std::{path::PathBuf, sync::Arc};
 
 use futures::channel::oneshot;
 use melib::{
-    contacts::Card,
+    contacts::{AddressBookName, Card, ContactBackendID},
     error::{Error, ErrorKind, Result},
     utils::shellexpand::ShellExpandTrait as _,
-    AddressBookName, ContactBackendID,
 };
 
 use crate::{
     components::prelude::*,
-    terminal::*,
+    terminal::{
+        cells::{boundaries::create_box, CellBuffer},
+        keys::Key,
+        Area,
+    },
     types::{File, NotificationType},
     utilities::{
         autocomplete::generic_file_path_complete_fn,

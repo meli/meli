@@ -23,7 +23,7 @@
 
 use std::borrow::Cow;
 
-use crate::parser::BytesExt as _;
+use crate::email::parser::BytesExt as _;
 
 pub mod connections;
 pub mod datetime;

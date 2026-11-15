@@ -29,8 +29,17 @@
 //! backend needs. The split is done to theoretically be able to create
 //! different frontends with the same innards.
 
-use args::*;
-use meli::*;
+use meli::{
+    args::{Opt, SubCommand},
+    jobs, signal_handlers,
+    state::State,
+    subcommands,
+    terminal::keys::Key,
+    types::{StatusEvent, ThreadEvent, UIEvent, UIMode},
+    utilities::{StatusBar, Tabbed},
+    varlink,
+};
+use structopt::StructOpt as _;
 
 #[expect(clippy::print_stderr)]
 fn main() {
@@ -44,7 +53,7 @@ fn main() {
     });
 }
 
-fn run_app(mut opt: Opt) -> Result<()> {
+fn run_app(mut opt: Opt) -> melib::error::Result<()> {
     if let Some(config_location) = opt.config.as_ref() {
         std::env::set_var("MELI_CONFIG", config_location);
     }
@@ -86,14 +95,14 @@ fn run_app(mut opt: Opt) -> Result<()> {
         // state.register_component(Box::new(svg::SVGScreenshotFilter::new()));
         let window = Box::new(Tabbed::new(
             vec![
-                Box::new(listing::Listing::new(&mut state.context)),
-                Box::new(contacts::list::ContactList::new(&mut state.context)),
+                Box::new(meli::mail::listing::Listing::new(&mut state.context)),
+                Box::new(meli::contacts::list::ContactList::new(&mut state.context)),
             ],
             &state.context,
         ));
 
         state.register_component(Box::new(StatusBar::new(&state.context, window)));
-        state.register_component(Box::new(notifications::NotificationRouter::new(
+        state.register_component(Box::new(meli::notifications::NotificationRouter::new(
             &state.context,
         )));
     }
@@ -114,7 +123,7 @@ fn run_app(mut opt: Opt) -> Result<()> {
         Some(state.context.main_loop_handler.job_executor.spawn(
             "varlink-server".into(),
             server,
-            crate::jobs::IsAsync::Async,
+            jobs::IsAsync::Async,
         ))
     } else {
         None
