@@ -59,6 +59,8 @@ use crate::{
 pub struct CompletionsGenerator {
     /// Known accounts and their mailboxes
     pub mailboxes: IndexMap<String, IndexSet<String>>,
+    /// Known theme names
+    pub themes: IndexSet<String>,
     pub maximum_filesystem_matches: usize,
 }
 
@@ -66,6 +68,7 @@ impl Default for CompletionsGenerator {
     fn default() -> Self {
         Self {
             mailboxes: IndexMap::default(),
+            themes: IndexSet::default(),
             maximum_filesystem_matches: 100,
         }
     }
@@ -111,6 +114,11 @@ impl CompletionsGenerator {
     /// Add or update account mailboxes
     pub fn add_account(&mut self, account: String, mailboxes: IndexSet<String>) {
         self.mailboxes.insert(account, mailboxes);
+    }
+
+    /// Set themes
+    pub fn set_themes(&mut self, themes: IndexSet<String>) {
+        self.themes = themes;
     }
 
     /// Get command suggestions for input
@@ -204,6 +212,14 @@ impl CompletionsGenerator {
                                 );
                             }
                         }
+                        Token::ThemeName => {
+                            for t in self.themes.iter() {
+                                suggestions.insert(
+                                    (format!("{input} {t}", t = quote_if_necessary(t)), *desc)
+                                        .into(),
+                                );
+                            }
+                        }
                         Token::MailboxPath => {
                             self.complete_mailbox_path(
                                 &data,
@@ -270,6 +286,14 @@ impl CompletionsGenerator {
                                         format!("{input}{acc}", acc = quote_if_necessary(acc)),
                                         *desc,
                                     )
+                                        .into(),
+                                );
+                            }
+                        }
+                        Token::ThemeName => {
+                            for t in self.themes.iter() {
+                                suggestions.insert(
+                                    (format!("{input}{t}", t = quote_if_necessary(t)), *desc)
                                         .into(),
                                 );
                             }
@@ -372,6 +396,23 @@ impl CompletionsGenerator {
                                             "{input}{acc}",
                                             input = input.strip_suffix(lex_token.raw()).unwrap(),
                                             acc = quote_if_necessary(acc)
+                                        ),
+                                        *desc,
+                                    )
+                                        .into(),
+                                );
+                            }
+                        }
+                    }
+                    Token::ThemeName => {
+                        for t in self.themes.iter() {
+                            if t.starts_with(lex_token.value()) && t != lex_token.value() {
+                                suggestions.insert(
+                                    (
+                                        format!(
+                                            "{input}{t}",
+                                            input = input.strip_suffix(lex_token.raw()).unwrap(),
+                                            t = quote_if_necessary(t)
                                         ),
                                         *desc,
                                     )
@@ -513,6 +554,23 @@ impl CompletionsGenerator {
                                                     "{input}{acc}",
                                                     input = input.strip_suffix(raw).unwrap(),
                                                     acc = quote(acc)
+                                                ),
+                                                *desc,
+                                            )
+                                                .into(),
+                                        );
+                                    }
+                                }
+                            }
+                            Token::ThemeName => {
+                                for t in self.themes.iter() {
+                                    if t.starts_with(value) && t != value {
+                                        suggestions.insert(
+                                            (
+                                                format!(
+                                                    "{input}{t}",
+                                                    input = input.strip_suffix(raw).unwrap(),
+                                                    t = quote(t)
                                                 ),
                                                 *desc,
                                             )
@@ -672,6 +730,23 @@ impl CompletionsGenerator {
                                         "{input}{acc}",
                                         input = input.strip_suffix(lex_token.raw()).unwrap(),
                                         acc = lex_token.complete(acc),
+                                    ),
+                                    desc,
+                                )
+                                    .into(),
+                            );
+                        }
+                    }
+                }
+                Token::ThemeName => {
+                    for t in self.themes.iter() {
+                        if t.starts_with(lex_token.value()) && t != lex_token.value() {
+                            suggestions.insert(
+                                (
+                                    format!(
+                                        "{input}{t}",
+                                        input = input.strip_suffix(lex_token.raw()).unwrap(),
+                                        t = lex_token.complete(t),
                                     ),
                                     desc,
                                 )
@@ -1016,6 +1091,7 @@ impl<'a, 'b, 'c> Iterator for Matcher<'a, 'b, 'c> {
                     }
                 }
             }
+            Token::ThemeName => {}
             Token::NewMailboxPath => {}
             Token::QuotedStringValue => {}
             Token::RestOfStringValue => {

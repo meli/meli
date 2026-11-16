@@ -188,6 +188,7 @@ pub enum Action {
     Mailbox(AccountName, MailboxOperation),
     AccountAction(AccountName, AccountAction),
     PrintSetting(String),
+    SetTheme(String),
     ReloadConfiguration,
     ToggleMouse,
     Quit,

@@ -219,9 +219,8 @@ pub fn parse_command(input: &str) -> Result<Action, CommandError> {
         rename_mailbox,
         new_tab,
         account_action,
-        print_setting,
         toggle,
-        reload_config,
+        alt((reload_config, print_setting, set_theme)),
         quit,
     ))(input)
     .map_err(|err| err.into())
@@ -1376,6 +1375,26 @@ pub(super) fn reload_config(input: &str) -> IResult<&str, Result<Action, Command
     arg_chk!(finish check, input);
     let (input, _) = eof(input.trim())?;
     Ok((input, Ok(Action::ReloadConfiguration)))
+}
+
+pub(super) fn set_theme(input: &str) -> IResult<&str, Result<Action, CommandError>> {
+    let mut check = arg_init! { min_arg: 0, max_arg: 1, theme};
+    let (input, _) = tag("theme")(input.trim())?;
+    arg_chk!(start check, input);
+    if let Ok((input, _)) = eof(input.trim()) {
+        arg_chk!(finish check, input);
+        return Ok((
+            input,
+            Ok(Action::PrintSetting("terminal.theme".to_string())),
+        ));
+    }
+    let (input, _) = is_a(" ")(input)?;
+    arg_chk!(inc check, input);
+    let (input, themename) = quoted_argument(input)?;
+    let (input, _) = eof(input)?;
+    arg_chk!(finish check, input);
+    let (input, _) = eof(input.trim())?;
+    Ok((input, Ok(Action::SetTheme(themename.into()))))
 }
 
 pub(super) fn import(input: &str) -> IResult<&str, Result<Action, CommandError>> {

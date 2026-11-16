@@ -70,6 +70,7 @@ pub enum Token {
     AttachmentIndexValue,
     MailboxIndexValue,
     IndexValue,
+    ThemeName,
 }
 
 #[rustfmt::skip]
@@ -399,5 +400,10 @@ define_commands!([
         desc: "reload configuration file",
         tokens: &[Literal("reload-config")],
         parser: parser::reload_config
+    },
+    {
+        desc: "set theme",
+        tokens: &[Literal("theme"), ThemeName],
+        parser: parser::set_theme
     }
 ]);

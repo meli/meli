@@ -1272,6 +1272,23 @@ impl State {
                 .into();
                 self.rcv_event(UIEvent::ProcessRequest(process_request));
             }
+            Action::SetTheme(themename) => {
+                use crate::conf::themes::theme_by_name;
+                if theme_by_name(&self.context, &themename).is_some() {
+                    let old_settings = self.context.settings.clone();
+                    self.context.settings.terminal.theme = themename;
+                    self.context
+                        .replies
+                        .push_back(UIEvent::ConfigReload { old_settings });
+                } else {
+                    self.context.replies.push_back(UIEvent::Notification {
+                        title: None,
+                        source: None,
+                        body: format!("{themename} is not a valid theme name").into(),
+                        kind: Some(NotificationType::Error(melib::error::ErrorKind::None)),
+                    });
+                }
+            }
             v => {
                 self.rcv_event(UIEvent::Action(v));
             }
