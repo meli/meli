@@ -464,7 +464,15 @@ impl<E: AccountEntryTrait> Component for List<E> {
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        if E::event_interest(event) {
+        if E::event_interest(event)
+            || matches!(
+                event,
+                UIEvent::ConfigReload { .. }
+                    | UIEvent::ChangeMode(_)
+                    | UIEvent::Resize
+                    | UIEvent::VisibilityChange(_)
+            )
+        {
             for acc in self.accounts.values_mut() {
                 if acc.process_event(event, context) {
                     return true;

@@ -441,7 +441,6 @@ impl Component for AddressBookList {
                 self.highlight_theme = crate::conf::theme_value(context, "highlight");
                 self.data_columns.reset_theme(self.theme_default);
                 self.set_dirty(true);
-                return false;
             }
             UIEvent::ContactBackendStatusChange(
                 ref account_hash,
@@ -938,11 +937,18 @@ impl Component for AccountContacts {
             UIEvent::ConfigReload { old_settings: _ } => {
                 self.theme_default = crate::conf::theme_value(context, "theme_default");
                 self.highlight_theme = crate::conf::theme_value(context, "highlight");
+                for book in self.books.values_mut() {
+                    book.process_event(event, context);
+                }
+                self.set_dirty(true);
             }
             UIEvent::ChangeMode(UIMode::Normal)
             | UIEvent::Resize
             | UIEvent::VisibilityChange(_) => {
                 self.set_dirty(true);
+                for book in self.books.values_mut() {
+                    book.process_event(event, context);
+                }
             }
             _ => {}
         }

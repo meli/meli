@@ -175,6 +175,8 @@ impl<const N: usize> DataColumns<N> {
         self.theme_config = TableThemeConfig::new(theme_default);
         for col in self.columns.iter_mut() {
             col.grid_mut().default_cell = theme_default.into();
+            let total_area = col.grid().area();
+            col.grid_mut().change_theme(total_area, theme_default);
         }
     }
 }
