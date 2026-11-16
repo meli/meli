@@ -1075,7 +1075,8 @@ pub mod aliases {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ColorContrast {
     #[default]
     Dark,

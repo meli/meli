@@ -1,4 +1,5 @@
 [terminal.themes.orca]
+color_contrast = "dark"
 color_aliases = { "neon_green" = "#6ef9d4",  "darkgrey" = "#4a4a4a",  "neon_purple" = "#df2f94"  }
 "theme_default" = { fg = "White", bg = "Black", attrs = "Default" }
 "mail.listing.attachment_flag" = { fg = "$neon_green", bg = "theme_default", attrs = "theme_default" }

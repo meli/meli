@@ -1,4 +1,5 @@
 [terminal.themes.spooky]
+color_contrast = "dark"
 "theme_default" = { fg = "#333", bg = "#fe9b13", attrs = "Default" }
 "mail.listing.attachment_flag" = { fg = "LightSlateGrey", bg = "theme_default", attrs = "theme_default" }
 "mail.listing.compact.even" = { fg = "theme_default", bg = "#bf200e", attrs = "theme_default" }

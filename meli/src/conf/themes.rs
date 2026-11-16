@@ -45,7 +45,7 @@ use smallvec::SmallVec;
 use crate::{
     conf::data_types::regex_pattern::{RegexOptions, RegexValue},
     state::Context,
-    terminal::{cells::Attr, Color},
+    terminal::{cells::Attr, Color, ColorContrast},
 };
 
 pub const LIGHT: &str = "light";
@@ -53,70 +53,87 @@ pub const DARK: &str = "dark";
 pub const AUTO: &str = "auto";
 
 #[inline(always)]
+pub fn theme_by_name<'c>(context: &'c Context, theme_name: &str) -> Option<&'c Theme> {
+    match theme_name {
+        self::AUTO => Some(&context.settings.terminal.themes.dark),
+        self::LIGHT => Some(&context.settings.terminal.themes.light),
+        self::DARK => Some(&context.settings.terminal.themes.dark),
+        t => context.settings.terminal.themes.other_themes.get(t),
+    }
+}
+
+#[inline(always)]
 pub fn value(context: &Context, key: &'static str) -> ThemeAttribute {
-    let theme = match context.settings.terminal.theme.as_str() {
-        self::AUTO => &context.settings.terminal.themes.dark,
-        self::LIGHT => &context.settings.terminal.themes.light,
-        self::DARK => &context.settings.terminal.themes.dark,
-        t => context
-            .settings
-            .terminal
-            .themes
-            .other_themes
-            .get(t)
-            .unwrap_or(&context.settings.terminal.themes.dark),
-    };
-    unlink(theme, &Cow::from(key))
+    let theme = theme_by_name(context, context.settings.terminal.theme.as_str())
+        .unwrap_or(&context.settings.terminal.themes.dark);
+    let mut ret = unlink(theme, &Cow::from(key));
+
+    if [&ret.underline, &ret.fg, &ret.bg]
+        .iter()
+        .all(|c| !matches!(c, Color::Default))
+        || theme.color_contrast.as_ref() == context.color_scheme().as_ref().map(|(c, _, _)| c)
+    {
+        return ret;
+    }
+
+    if ret.fg == Color::Default {
+        ret.fg = match (&theme.color_contrast, &context.color_scheme()) {
+            (Some(ColorContrast::Light), Some((ColorContrast::Dark, _, _))) => Color::Black,
+            (Some(ColorContrast::Dark), Some((ColorContrast::Light, _, _))) => Color::White,
+            _ => ret.fg,
+        };
+    }
+    if ret.underline == Color::Default {
+        ret.underline = match (&theme.color_contrast, &context.color_scheme()) {
+            (Some(ColorContrast::Light), Some((ColorContrast::Dark, _, _))) => Color::Black,
+            (Some(ColorContrast::Dark), Some((ColorContrast::Light, _, _))) => Color::White,
+            _ => ret.underline,
+        };
+    }
+    if ret.bg == Color::Default {
+        ret.bg = match (&theme.color_contrast, &context.color_scheme()) {
+            (Some(ColorContrast::Light), Some((ColorContrast::Dark, _, _))) => Color::White,
+            (Some(ColorContrast::Dark), Some((ColorContrast::Light, _, _))) => Color::Black,
+            _ => ret.bg,
+        };
+    }
+    ret
 }
 
 #[inline(always)]
 pub fn fg_color(context: &Context, key: &'static str) -> Color {
-    let theme = match context.settings.terminal.theme.as_str() {
-        self::AUTO => &context.settings.terminal.themes.dark,
-        self::LIGHT => &context.settings.terminal.themes.light,
-        self::DARK => &context.settings.terminal.themes.dark,
-        t => context
-            .settings
-            .terminal
-            .themes
-            .other_themes
-            .get(t)
-            .unwrap_or(&context.settings.terminal.themes.dark),
-    };
-    unlink_fg(theme, &ColorField::Fg, &Cow::from(key))
+    let theme = theme_by_name(context, context.settings.terminal.theme.as_str())
+        .unwrap_or(&context.settings.terminal.themes.dark);
+    let color = unlink_fg(theme, &ColorField::Fg, &Cow::from(key));
+    if color != Color::Default {
+        return color;
+    }
+    match (&theme.color_contrast, &context.color_scheme()) {
+        (Some(ColorContrast::Light), Some((ColorContrast::Dark, fg, _)))
+        | (Some(ColorContrast::Dark), Some((ColorContrast::Light, fg, _))) => (*fg).into(),
+        _ => color,
+    }
 }
 
 #[inline(always)]
 pub fn bg_color(context: &Context, key: &'static str) -> Color {
-    let theme = match context.settings.terminal.theme.as_str() {
-        self::AUTO => &context.settings.terminal.themes.dark,
-        self::LIGHT => &context.settings.terminal.themes.light,
-        self::DARK => &context.settings.terminal.themes.dark,
-        t => context
-            .settings
-            .terminal
-            .themes
-            .other_themes
-            .get(t)
-            .unwrap_or(&context.settings.terminal.themes.dark),
-    };
-    unlink_bg(theme, &ColorField::Bg, &Cow::from(key))
+    let theme = theme_by_name(context, context.settings.terminal.theme.as_str())
+        .unwrap_or(&context.settings.terminal.themes.dark);
+    let color = unlink_bg(theme, &ColorField::Bg, &Cow::from(key));
+    if color != Color::Default {
+        return color;
+    }
+    match (&theme.color_contrast, &context.color_scheme()) {
+        (Some(ColorContrast::Light), Some((ColorContrast::Dark, _, bg)))
+        | (Some(ColorContrast::Dark), Some((ColorContrast::Light, _, bg))) => (*bg).into(),
+        _ => color,
+    }
 }
 
 #[inline(always)]
 pub fn attrs(context: &Context, key: &'static str) -> Attr {
-    let theme = match context.settings.terminal.theme.as_str() {
-        self::AUTO => &context.settings.terminal.themes.dark,
-        self::LIGHT => &context.settings.terminal.themes.light,
-        self::DARK => &context.settings.terminal.themes.dark,
-        t => context
-            .settings
-            .terminal
-            .themes
-            .other_themes
-            .get(t)
-            .unwrap_or(&context.settings.terminal.themes.dark),
-    };
+    let theme = theme_by_name(context, context.settings.terminal.theme.as_str())
+        .unwrap_or(&context.settings.terminal.themes.dark);
     unlink_attrs(theme, &Cow::from(key))
 }
 
@@ -671,6 +688,7 @@ pub struct Themes {
 
 #[derive(Clone, Debug)]
 pub struct Theme {
+    color_contrast: Option<ColorContrast>,
     color_aliases: IndexMap<Cow<'static, str>, ThemeValue<Color>>,
     attr_aliases: IndexMap<Cow<'static, str>, ThemeValue<Attr>>,
     text_format_regexps: IndexMap<Cow<'static, str>, SmallVec<[TextFormatterSetting; 32]>>,
@@ -866,6 +884,8 @@ impl<'de> Deserialize<'de> for Themes {
         #[derive(Default, Deserialize)]
         struct ThemeOptions {
             #[serde(default)]
+            color_contrast: Option<ColorContrast>,
+            #[serde(default)]
             color_aliases: IndexMap<Cow<'static, str>, ThemeValue<Color>>,
             #[serde(default)]
             attr_aliases: IndexMap<Cow<'static, str>, ThemeValue<Attr>>,
@@ -906,13 +926,14 @@ impl<'de> Deserialize<'de> for Themes {
         } = <ThemesOptions>::deserialize(deserializer)?;
 
         fn construct_theme<'de, D>(
-            name: Cow<'_, str>,
+            name: &str,
             theme: &mut Theme,
             mut s: ThemeOptions,
         ) -> std::result::Result<(), D::Error>
         where
             D: Deserializer<'de>,
         {
+            theme.color_contrast = s.color_contrast.take();
             for (k, v) in theme.iter_mut() {
                 if let Some(ThemeAttributeInnerOptions {
                     from,
@@ -981,11 +1002,13 @@ impl<'de> Deserialize<'de> for Themes {
             Ok(())
         }
 
-        construct_theme::<D>(Cow::Borrowed(self::DARK), &mut ret.dark, dark)?;
-        construct_theme::<D>(Cow::Borrowed(self::LIGHT), &mut ret.light, light)?;
+        construct_theme::<D>(self::DARK, &mut ret.dark, dark)?;
+        ret.dark.color_contrast = Some(ColorContrast::Dark);
+        construct_theme::<D>(self::LIGHT, &mut ret.light, light)?;
+        ret.light.color_contrast = Some(ColorContrast::Light);
         for (name, theme_opts) in other_themes {
             let mut theme = ret.dark.clone();
-            construct_theme::<D>(Cow::Borrowed(&name), &mut theme, theme_opts)?;
+            construct_theme::<D>(&name, &mut theme, theme_opts)?;
             ret.other_themes.insert(name, theme);
         }
         Ok(ret)
@@ -1812,6 +1835,7 @@ impl Default for Themes {
         add!("pager.highlight_search_current", light = { fg: Color::White, bg: Color::Byte(17) /* NavyBlue */, attrs: Attr::BOLD }, dark = { fg: Color::White, bg: Color::Byte(17) /* NavyBlue */, attrs: Attr::BOLD });
         Self {
             light: Theme {
+                color_contrast: Some(ColorContrast::Light),
                 keys: light,
                 attr_aliases: Default::default(),
                 color_aliases: Default::default(),
@@ -1821,6 +1845,7 @@ impl Default for Themes {
                     .collect(),
             },
             dark: Theme {
+                color_contrast: Some(ColorContrast::Dark),
                 keys: dark,
                 attr_aliases: Default::default(),
                 color_aliases: Default::default(),

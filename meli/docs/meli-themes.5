@@ -86,13 +86,32 @@ and
 Valid fields for a theme are:
 .Bl -dash -compact
 .It
-Any theme key, case-sensitive
+Any theme key, case-sensitive.
+See
+.Sx VALID KEYS
+for valid key names.
+.It
+.Ic color_contrast
+Optional,
+.Li Dq light
+or
+.Li Dq dark Ns
+\&.
+If set, the
+.Dq Default
+color value will be adjusted if the theme's color contrast does not match the terminal's as reported by color queries.
 .It
 .Ic color_aliases
+Optional, see
+.Sx color_aliases FIELD
 .It
 .Ic attr_aliases
+Optional, see
+.Sx attr_aliases FIELD
 .It
 .Ic text_format_regexps
+Optional, see
+.Sx text_format_regexps FIELD
 .El
 .Sh THEME KEY FIELDS
 A theme key field specifies foreground color, background color, underline color and attributes.

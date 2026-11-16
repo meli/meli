@@ -1,4 +1,5 @@
 [terminal.themes.ibm-modern]
+color_contrast = "light"
 "theme_default" = { fg = "$Black100", bg = "$White0", attrs = "Default" }
 "status.bar" = { fg = "$Black100", bg = "$Magenta40", attrs = "theme_default" }
 "status.notification" = { fg = "$Black100", bg = "$Magenta40", attrs = "theme_default" }

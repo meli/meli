@@ -1,4 +1,5 @@
 [terminal.themes.nord]
+color_contrast = "dark"
 "theme_default" = { fg = "$nord6", bg = "$nord0", attrs = "Default" }
 "mail.listing.compact.even" = { fg = "theme_default", bg = "$nord1", attrs = "theme_default" }
 "mail.listing.compact.odd" = { fg = "theme_default", bg = "$nord2", attrs = "theme_default" }

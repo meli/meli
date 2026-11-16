@@ -1,4 +1,5 @@
 [terminal.themes.watermelon]
+color_contrast = "dark"
 color_aliases = { "JewelGreen" = "#157241", "PinkLace" = "#FFD5FD", "TorchRed" = "#F50431", "ChelseaCucumber" = "#6CA94A", "ScreaminGreen" = "#8FFF52", "SunsetOrange" = "#f74b41", "Melon" = "#fdbcb4", "BlueStone" = "#005F5F", "HotPink" = "#FF74D7" }
 "theme_default" = { fg = "$TorchRed", bg = "$PinkLace", attrs = "Default" }
 "widgets.list.header" = { fg = "$PinkLace", bg = "$TorchRed", attrs = "Bold" }

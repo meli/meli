@@ -1,4 +1,5 @@
 [terminal.themes.sail]
+color_contrast = "light"
 color_aliases = { "unseen_fg" = "theme_default", "unseen_bg" = "theme_default", "sea" = "#91C7FF", "dimmed_text" = "#afbec5", "dimmed_bg" = "Grey78", "header" = "#edeff1" }
 "theme_default" = { fg = "#37474f", bg = "White", attrs = "Default" }
 "mail.listing.attachment_flag" = { fg = "Blue", bg = "theme_default", attrs = "theme_default" }
