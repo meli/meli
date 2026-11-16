@@ -1607,9 +1607,11 @@ impl State {
     pub fn rcv_terminal_event(&mut self, event: TerminalEvent) {
         match event {
             TerminalEvent::ColorScheme { fg, bg } => {
+                let contrast = RgbColor::compute_scheme_contrast(fg, bg);
+                self.screen.set_color_scheme(Some((contrast, fg, bg)));
+                self.context.color_scheme = Some((contrast, fg, bg));
                 if self.context.settings.terminal.theme.as_str() == crate::conf::themes::AUTO {
                     let old_settings = self.context.settings.clone();
-                    let contrast = RgbColor::compute_scheme_contrast(fg, bg);
                     match contrast {
                         ColorContrast::Dark => {
                             log::debug!("changing default theme to dark");
@@ -1622,8 +1624,6 @@ impl State {
                                 crate::conf::themes::LIGHT.to_string();
                         }
                     }
-                    self.screen.set_color_scheme(Some((contrast, fg, bg)));
-                    self.context.color_scheme = Some((contrast, fg, bg));
                     self.context
                         .replies
                         .push_back(UIEvent::ConfigReload { old_settings });
