@@ -22,7 +22,11 @@
 
 //! Forms and text input widgets.
 
-use std::{borrow::Cow, sync::Arc};
+use std::{
+    borrow::Cow,
+    hash::{DefaultHasher, Hash as _, Hasher as _},
+    sync::{Arc, Mutex},
+};
 
 use melib::{
     error::{Error, ErrorKind, Result},
@@ -59,6 +63,7 @@ impl<K, V, S> GetIndex for IndexMap<K, V, S> {
 }
 
 pub type ValidateFn = Arc<dyn Fn(&str) -> bool + Send + Sync>;
+pub type OnChangeFn = Arc<Mutex<Box<dyn FnMut(&str, &mut Context) + Send + Sync>>>;
 
 /// Text input widget.
 #[derive(Clone)]
@@ -68,6 +73,7 @@ pub struct TextField {
     focused: bool,
     autocomplete: Option<(Arc<AutoCompleteFn>, Box<AutoComplete>)>,
     validate_fn: Option<ValidateFn>,
+    on_change_fn: Option<OnChangeFn>,
     is_hyperlink: bool,
     theme_attr: Option<ThemeAttribute>,
     read_only_attr: Option<ThemeAttribute>,
@@ -91,6 +97,7 @@ impl std::fmt::Debug for TextField {
             .field("focused", &self.focused)
             .field("is_hyperlink", &self.is_hyperlink)
             .field("has validate_fn", &self.validate_fn.is_some())
+            .field("has on_change_fn", &self.on_change_fn.is_some())
             .field("has AutoComplete", &self.autocomplete.is_some())
             .finish_non_exhaustive()
     }
@@ -105,6 +112,7 @@ impl Default for TextField {
             autocomplete: None,
             is_hyperlink: false,
             validate_fn: None,
+            on_change_fn: None,
             theme_attr: None,
             read_only_attr: None,
             invalid_attr: None,
@@ -136,6 +144,20 @@ impl TextField {
         }
     }
 
+    #[inline]
+    pub fn with_cursor(mut self, cursor: usize) -> Self {
+        self.inner.set_cursor(cursor);
+        self
+    }
+
+    #[inline]
+    pub fn with_on_change_fn(self, on_change_fn: Option<OnChangeFn>) -> Self {
+        Self {
+            on_change_fn,
+            ..self
+        }
+    }
+
     /// Text content as a string slice.
     pub fn as_str(&self) -> &str {
         self.inner.as_str()
@@ -147,9 +169,29 @@ impl TextField {
         self
     }
 
+    #[inline]
     /// Reset with new content.
-    pub fn set_content(&mut self, new_val: String) {
+    pub fn set_content(&mut self, new_val: String) -> &mut Self {
         self.inner.set_content(new_val);
+        self
+    }
+
+    #[inline]
+    pub fn set_validate_fn(&mut self, validate_fn: Option<ValidateFn>) -> &mut Self {
+        self.validate_fn = validate_fn;
+        self
+    }
+
+    #[inline]
+    pub fn set_is_hyperlink(&mut self, is_hyperlink: bool) -> &mut Self {
+        self.is_hyperlink = is_hyperlink;
+        self
+    }
+
+    #[inline]
+    pub fn set_on_change_fn(&mut self, on_change_fn: Option<OnChangeFn>) -> &mut Self {
+        self.on_change_fn = on_change_fn;
+        self
     }
 
     /// Cursor position as seen by the user: the cursor is seen moving by
@@ -185,8 +227,11 @@ impl TextField {
     }
 
     /// Clear inner string content and set cursor to zero.
-    pub fn clear(&mut self) {
-        self.inner.clear()
+    pub fn clear(&mut self, context: &mut Context) {
+        self.inner.clear();
+        if let Some(on_change_fn) = &mut self.on_change_fn {
+            on_change_fn.lock().unwrap()("", context);
+        }
     }
 
     /// Draw cursor at given area along with autocomplete suggestions, if any.
@@ -215,18 +260,6 @@ impl TextField {
             autocomplete.set_suggestions(entries);
             autocomplete.draw(grid, secondary_area, context);
         }
-    }
-
-    #[inline]
-    pub fn set_validate_fn(&mut self, validate_fn: Option<ValidateFn>) -> &mut Self {
-        self.validate_fn = validate_fn;
-        self
-    }
-
-    #[inline]
-    pub fn set_is_hyperlink(&mut self, is_hyperlink: bool) -> &mut Self {
-        self.is_hyperlink = is_hyperlink;
-        self
     }
 }
 
@@ -350,6 +383,12 @@ impl Component for TextField {
         if self.read_only {
             return false;
         }
+
+        let prev = self.on_change_fn.is_some().then(|| {
+            let mut hasher = DefaultHasher::new();
+            self.inner.as_str().hash(&mut hasher);
+            hasher.finish()
+        });
 
         match *event {
             UIEvent::ConfigReload { old_settings: _ } => {
@@ -532,6 +571,17 @@ impl Component for TextField {
                 return false;
             }
         }
+        let after = self.on_change_fn.is_some().then(|| {
+            let mut hasher = DefaultHasher::new();
+            self.inner.as_str().hash(&mut hasher);
+            hasher.finish()
+        });
+        if prev != after {
+            if let Some(on_change_fn) = &mut self.on_change_fn {
+                on_change_fn.lock().unwrap()(self.inner.as_str(), context);
+            }
+        }
+
         true
     }
 

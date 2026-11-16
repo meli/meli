@@ -71,6 +71,7 @@ impl From<(String, String)> for AutoCompleteEntry {
 pub struct AutoComplete {
     entries: Vec<AutoCompleteEntry>,
     cursor: Option<usize>,
+    visible_height: usize,
     reversed: bool,
     dirty: bool,
     id: ComponentId,
@@ -93,6 +94,7 @@ impl Component for AutoComplete {
         if rows == 0 {
             return;
         }
+        self.visible_height = rows;
         context.dirty_areas.push_back(area);
         let top_idx = self
             .cursor
@@ -192,6 +194,7 @@ impl AutoComplete {
         let mut ret = Self {
             entries: Vec::new(),
             cursor: None,
+            visible_height: 0,
             dirty: true,
             reversed: false,
             id: ComponentId::default(),
@@ -214,18 +217,65 @@ impl AutoComplete {
         true
     }
 
+    pub fn modify_cursor(&mut self, mvm: PageMovement) {
+        if self.entries.is_empty() {
+            self.cursor = None;
+            self.set_dirty(true);
+            return;
+        }
+
+        match mvm {
+            PageMovement::Right(_) | PageMovement::Left(_) => return,
+            PageMovement::Up(amount) => {
+                self.cursor = self
+                    .cursor
+                    .map(|c| {
+                        c.saturating_add(amount)
+                            .min(self.entries.len().saturating_sub(1))
+                    })
+                    .or(Some(1))
+            }
+            PageMovement::Down(amount) => {
+                self.cursor = self.cursor.map(|c| c.saturating_sub(amount)).or(Some(0))
+            }
+            PageMovement::PageUp(amount) => {
+                self.cursor = self
+                    .cursor
+                    .map(|c| {
+                        c.saturating_add(amount * self.visible_height)
+                            .min(self.entries.len().saturating_sub(1))
+                    })
+                    .or(Some(1))
+            }
+            PageMovement::PageDown(amount) => {
+                self.cursor = self
+                    .cursor
+                    .map(|c| {
+                        c.saturating_sub(amount * self.visible_height)
+                            .min(self.entries.len().saturating_sub(1))
+                    })
+                    .or(Some(9))
+            }
+            PageMovement::Home => self.cursor = Some(0),
+            PageMovement::End => self.cursor = Some(self.entries.len().saturating_sub(1)),
+        }
+
+        self.set_dirty(true);
+    }
+
     pub fn inc_cursor(&mut self) {
         if let Some(ref mut cursor) = self.cursor {
             if *cursor + 1 < self.entries.len() {
                 *cursor += 1;
-                self.set_dirty(true);
             }
         } else if self.entries.is_empty() {
             self.cursor = None;
         } else {
             self.cursor = Some(0);
         }
+        self.set_dirty(true);
     }
+
     pub fn dec_cursor(&mut self) {
         if let Some(ref mut cursor) = self.cursor {
             if *cursor == 0 {
@@ -235,6 +285,28 @@ impl AutoComplete {
             }
             self.set_dirty(true);
         }
+    }
+
+    pub fn cycle_cursor(&mut self, reverse: bool) {
+        if let Some(cursor) = &mut self.cursor {
+            if reverse {
+                if *cursor == 0 {
+                    *cursor = self.entries.len().saturating_sub(1);
+                } else {
+                    *cursor -= 1;
+                }
+            } else {
+                *cursor += 1;
+                *cursor %= self.entries.len();
+            }
+        } else if self.entries.is_empty() {
+            self.cursor = None;
+        } else if reverse {
+            self.cursor = Some(self.entries.len().saturating_sub(1));
+        } else {
+            self.cursor = Some(0);
+        }
+        self.set_dirty(true);
     }
 
     pub fn cursor(&self) -> Option<usize> {
@@ -256,8 +328,14 @@ impl AutoComplete {
         Some(ret.entry)
     }
 
+    pub fn peek_suggestion(&self) -> Option<&str> {
+        let cursor = self.cursor.as_ref()?;
+        let ret = self.entries.get(*cursor)?;
+        Some(&ret.entry)
+    }
+
     /// Generate a completion to the common prefix of all suggestions.
-    pub fn tab(&self) -> Option<String> {
+    pub fn common_prefix(&self) -> Option<String> {
         // https://users.rust-lang.org/t/how-to-find-common-prefix-of-two-byte-slices-effectively/25815/4
 
         fn mismatch(xs: &[u8], ys: &[u8]) -> usize {
@@ -286,6 +364,9 @@ impl AutoComplete {
             entries[0].entry.as_bytes(),
             entries[entries.len() - 1].entry.as_bytes(),
         );
+        if mismatch == 0 {
+            return None;
+        }
 
         Some(entries[0].entry[..mismatch].to_string())
     }

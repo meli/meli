@@ -24,7 +24,7 @@
 use std::{
     collections::HashSet,
     process::{Command, Stdio},
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 use indexmap::IndexMap;
@@ -33,7 +33,7 @@ use crate::{
     components::prelude::*,
     conf::terminal::ProgressSpinnerSequence,
     jobs::JobId,
-    terminal::{cells::boundaries::create_box, text_editing::UText, Alignment, Screen, Virtual},
+    terminal::{cells::boundaries::create_box, Alignment, Screen, Virtual},
     types::{File, NotificationType, ProcessRequest, ProcessResultFn},
 };
 
@@ -78,6 +78,7 @@ pub struct StatusBar {
     status_message: String,
     substatus_message: String,
     ex_buffer: TextField,
+    ex_buffer_preview: TextField,
     ex_buffer_cmd_history_pos: Option<usize>,
     display_buffer: String,
     mode: UIMode,
@@ -123,6 +124,18 @@ impl StatusBar {
         let mut auto_complete = AutoComplete::new(Vec::new());
         auto_complete.set_reversed(true);
         let mut complgen = crate::command::completions::CompletionsGenerator::default();
+        complgen.set_themes(
+            context
+                .settings
+                .terminal
+                .themes
+                .other_themes
+                .keys()
+                .cloned()
+                .chain(std::iter::once("light".to_string()))
+                .chain(std::iter::once("dark".to_string()))
+                .collect(),
+        );
         for acc in context.accounts.values() {
             complgen.add_account(
                 acc.name().to_string(),
@@ -132,12 +145,50 @@ impl StatusBar {
                     .collect(),
             );
         }
+
+        fn on_change_fn() -> form::OnChangeFn {
+            let mut prev_theme: Option<String> = None;
+            Arc::new(Mutex::new(Box::new(
+                move |s: &str, context: &mut Context| {
+                    if let Ok(Action::SetTheme(themename)) =
+                        crate::command::parser::parse_command(s)
+                    {
+                        if context.settings.terminal.theme != themename
+                            && prev_theme.as_deref() != Some(&themename)
+                        {
+                            if crate::conf::themes::theme_by_name(context, &themename).is_some() {
+                                prev_theme = Some(context.settings.terminal.theme.clone());
+                                let old_settings = context.settings.clone();
+                                context.settings.terminal.theme = themename;
+                                context
+                                    .replies
+                                    .push_back(UIEvent::ConfigReload { old_settings });
+                            } else if let Some(prev_theme) = prev_theme.take() {
+                                let old_settings = context.settings.clone();
+                                context.settings.terminal.theme = prev_theme;
+                                context
+                                    .replies
+                                    .push_back(UIEvent::ConfigReload { old_settings });
+                            }
+                        }
+                    } else if let Some(prev_theme) = prev_theme.take() {
+                        let old_settings = context.settings.clone();
+                        context.settings.terminal.theme = prev_theme;
+                        context
+                            .replies
+                            .push_back(UIEvent::ConfigReload { old_settings });
+                    }
+                },
+            )))
+        }
+
         Self {
             container,
             status: String::with_capacity(256),
             status_message: String::with_capacity(256),
             substatus_message: String::with_capacity(256),
-            ex_buffer: TextField::new(UText::new(String::with_capacity(256)), None),
+            ex_buffer: TextField::default().with_on_change_fn(Some(on_change_fn())),
+            ex_buffer_preview: TextField::default().with_on_change_fn(Some(on_change_fn())),
             ex_buffer_cmd_history_pos: None,
             display_buffer: String::with_capacity(8),
             dirty: true,
@@ -239,10 +290,15 @@ impl StatusBar {
     fn draw_command_bar(&self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         grid.clear_area(area, crate::conf::theme_value(context, "theme_default"));
         let command_bar = crate::conf::theme_value(context, "status.command_bar");
-        let (_, y) = grid.write_string(self.ex_buffer.as_str(), &command_bar, area, None, None);
+        let ex_buffer = if self.ex_buffer_preview.is_empty() {
+            &self.ex_buffer
+        } else {
+            &self.ex_buffer_preview
+        };
+        let (_, y) = grid.write_string(ex_buffer.as_str(), &command_bar, area, None, None);
         grid.change_theme(area, command_bar);
         if let Some(c) = grid
-            .row_iter(area, self.ex_buffer.cursor()..area.width(), y)
+            .row_iter(area, ex_buffer.cursor()..area.width(), y)
             .next()
         {
             grid[c].set_attrs(command_bar.attrs | Attr::UNDERLINE);
@@ -348,6 +404,18 @@ impl Component for StatusBar {
                 self.progress_spinner = progress_spinner;
                 self.mouse = context.settings.terminal.use_mouse.is_true();
                 self.set_dirty(true);
+                self.complgen.set_themes(
+                    context
+                        .settings
+                        .terminal
+                        .themes
+                        .other_themes
+                        .keys()
+                        .cloned()
+                        .chain(std::iter::once("light".to_string()))
+                        .chain(std::iter::once("dark".to_string()))
+                        .collect(),
+                );
                 self.container.set_dirty(true);
             }
             UIEvent::AccountStatusChange(account_hash, _) => {
@@ -391,7 +459,8 @@ impl Component for StatusBar {
                 match m {
                     UIMode::Normal => {
                         self.height = 1;
-                        self.ex_buffer.clear();
+                        self.ex_buffer.clear(context);
+                        self.ex_buffer_preview.clear(context);
                         self.ex_buffer_cmd_history_pos.take();
                     }
                     UIMode::Command => {
@@ -402,208 +471,290 @@ impl Component for StatusBar {
                     }
                 };
             }
-            UIEvent::CmdInput(Key::Char('\t')) => {
-                if let Some(suggestion) = self.auto_complete.tab() {
-                    let mut utext = UText::new(suggestion);
-                    let len = utext.as_str().len();
-                    utext.set_cursor(len);
-                    self.container.set_dirty(true);
-                    self.set_dirty(true);
-                    self.ex_buffer = TextField::new(utext, None);
+            UIEvent::CmdInput(key) => {
+                macro_rules! absorb_preview {
+                    () => {{
+                        if !self.ex_buffer_preview.is_empty() {
+                            std::mem::swap(&mut self.ex_buffer, &mut self.ex_buffer_preview);
+                            self.ex_buffer_preview.clear(context);
+                        }
+                    }};
                 }
-                return true;
-            }
-            UIEvent::CmdInput(Key::Char('\n')) => {
-                let command = if self.auto_complete.cursor().is_some() {
-                    if let Some(suggestion) = self.auto_complete.get_suggestion() {
-                        suggestion
-                    } else {
-                        self.ex_buffer.as_str().to_string()
-                    }
-                } else {
-                    self.ex_buffer.as_str().to_string()
-                };
-                self.set_dirty(true);
-                if !command.is_empty() {
-                    if crate::command::parser::parse_command(&command).is_ok()
-                        && self.cmd_history.last().map(String::as_str) != Some(command.as_str())
-                    {
-                        crate::command::history::log_cmd(command.clone());
-                        self.cmd_history.push(command.clone());
-                    }
-                    context.replies.push_back(UIEvent::Command(command));
-                }
-                self.ex_buffer.clear();
-                self.ex_buffer_cmd_history_pos.take();
-                context
-                    .replies
-                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
-                return true;
-            }
-            UIEvent::CmdInput(Key::Char(c)) => {
-                self.dirty = true;
-                self.ex_buffer
-                    .process_event(&mut UIEvent::InsertInput(Key::Char(*c)), context);
-                return true;
-            }
-            UIEvent::CmdInput(Key::Paste(s)) => {
-                self.dirty = true;
-                self.ex_buffer
-                    .process_event(&mut UIEvent::InsertInput(Key::Paste(s.clone())), context);
-                return true;
-            }
-            UIEvent::CmdInput(Key::Ctrl('u')) => {
-                self.dirty = true;
-                self.ex_buffer.clear();
-                self.ex_buffer_cmd_history_pos.take();
-                return true;
-            }
-            UIEvent::CmdInput(Key::Up) => {
-                self.auto_complete.inc_cursor();
-                self.set_dirty(true);
-            }
-            UIEvent::CmdInput(Key::Down) => {
-                self.auto_complete.dec_cursor();
-                self.set_dirty(true);
-            }
-            UIEvent::CmdInput(Key::Left) => {
-                self.ex_buffer.cursor_dec();
-                self.set_dirty(true);
-            }
-            UIEvent::CmdInput(Key::Right) => {
-                self.ex_buffer.cursor_inc();
-                self.set_dirty(true);
-            }
-            UIEvent::CmdInput(Key::Ctrl('p')) => {
-                if self.cmd_history.is_empty() {
-                    return true;
-                }
-                let pos = self.ex_buffer_cmd_history_pos.map(|p| p + 1).unwrap_or(0);
-                let pos = std::cmp::min(pos, self.cmd_history.len().saturating_sub(1));
-                if Some(pos) != self.ex_buffer_cmd_history_pos {
-                    let mut utext = UText::new(
-                        self.cmd_history[self.cmd_history.len().saturating_sub(1) - pos].clone(),
-                    );
-                    let len = utext.as_str().len();
-                    utext.set_cursor(len);
-                    self.container.set_dirty(true);
-                    self.set_dirty(true);
-                    self.ex_buffer = TextField::new(utext, None);
-                    self.ex_buffer_cmd_history_pos = Some(pos);
-                    self.dirty = true;
+                macro_rules! replace_content {
+                    (self.$ex_buffer:ident = $sug:expr) => {{
+                        let suggestion = $sug.into();
+                        let ex_buffer = &mut self.$ex_buffer;
+                        ex_buffer.process_event(&mut UIEvent::InsertInput(Key::Ctrl('e')), context);
+                        ex_buffer.process_event(&mut UIEvent::InsertInput(Key::Ctrl('u')), context);
+                        ex_buffer.process_event(
+                            &mut UIEvent::InsertInput(Key::Paste(suggestion)),
+                            context,
+                        );
+                    }};
                 }
 
-                return true;
-            }
-            UIEvent::CmdInput(Key::Ctrl('n')) => {
-                if self.cmd_history.is_empty() {
-                    return true;
-                }
-                if Some(0) == self.ex_buffer_cmd_history_pos {
-                    self.ex_buffer_cmd_history_pos = None;
-                    self.ex_buffer.clear();
-                    self.dirty = true;
-                } else if let Some(pos) = self.ex_buffer_cmd_history_pos.map(|p| p - 1) {
-                    let mut utext = UText::new(
-                        self.cmd_history[self.cmd_history.len().saturating_sub(1) - pos].clone(),
-                    );
-                    let len = utext.as_str().len();
-                    utext.set_cursor(len);
-                    self.container.set_dirty(true);
-                    self.set_dirty(true);
-                    self.ex_buffer = TextField::new(utext, None);
-                    self.ex_buffer_cmd_history_pos = Some(pos);
-                    self.dirty = true;
-                }
-
-                return true;
-            }
-            UIEvent::CmdInput(Key::Ctrl('g')) => {
-                // Edit command bar contents in editor
-                let editor = match std::env::var("VISUAL").or_else(|_| std::env::var("EDITOR")) {
-                    Err(err) => {
-                        context.replies.push_back(UIEvent::Notification {
-                            title: Some(err.to_string().into()),
-                            source: None,
-                            body: "$VISUAL or $EDITOR is not set. You can change an envvar's \
-                                   value without restarting meli with setenv."
-                                .into(),
-                            kind: Some(NotificationType::Error(melib::error::ErrorKind::None)),
-                        });
-                        self.set_dirty(true);
-                        return true;
-                    }
-                    Ok(v) => v,
-                };
-                let f = match File::create_temp_file(
-                    self.ex_buffer.as_str().as_bytes(),
-                    None,
-                    None,
-                    Some("txt"),
-                    true,
-                ) {
-                    Ok(f) => Arc::new(f),
-                    Err(err) => {
-                        context.replies.push_back(UIEvent::Notification {
-                            title: None,
-                            source: None,
-                            body: err.to_string().into(),
-                            kind: Some(NotificationType::Error(err.kind)),
-                        });
-                        self.set_dirty(true);
-                        return true;
-                    }
-                };
-                let initial_value = self.ex_buffer.as_str().to_string();
-                self.ex_buffer.clear();
-                let editor_command = format!("{} \"$@\"", editor);
-                context
-                    .replies
-                    .push_back(UIEvent::ProcessRequest(Box::new(ProcessRequest {
-                        owner: Some(self.id),
-                        command: {
-                            let mut cmd = Command::new("sh");
-                            cmd.arg("-c")
-                                .arg(&editor_command)
-                                .arg(&editor)
-                                .arg(f.path())
-                                .stdin(Stdio::inherit())
-                                .stdout(Stdio::inherit())
-                                .stderr(Stdio::inherit());
-                            cmd
-                        },
-                        spawn: Some(Default::default()),
-                        result_cb: ProcessResultFn(Box::new({
-                            let f = f.clone();
-                            move |output| {
-                                if output.is_ok() {
-                                    if let Ok(s) = f.read_to_string() {
-                                        Some(Box::new(UIEvent::CmdInput(Key::Paste(s))))
-                                    } else {
-                                        Some(Box::new(UIEvent::CmdInput(Key::Paste(initial_value))))
-                                    }
-                                } else {
-                                    Some(Box::new(UIEvent::CmdInput(Key::Paste(initial_value))))
-                                }
+                match key {
+                    Key::Char('\t') => {
+                        if let Some(suggestion) = self
+                            .auto_complete
+                            .common_prefix()
+                            .filter(|p| p != self.ex_buffer.as_str())
+                        {
+                            self.container.set_dirty(true);
+                            self.set_dirty(true);
+                            replace_content!(self.ex_buffer = suggestion);
+                            self.ex_buffer_preview.clear(context);
+                        } else {
+                            self.auto_complete.cycle_cursor(true);
+                            if let Some(suggestion) = self.auto_complete.peek_suggestion() {
+                                replace_content!(self.ex_buffer_preview = suggestion);
+                                self.container.set_dirty(true);
+                                self.set_dirty(true);
                             }
-                        })),
-                        temporary_files: vec![f],
-                    })));
-                return true;
-            }
-            UIEvent::CmdInput(k @ Key::Backspace) | UIEvent::CmdInput(k @ Key::Ctrl(_)) => {
-                self.dirty = true;
-                self.ex_buffer
-                    .process_event(&mut UIEvent::InsertInput(k.clone()), context);
-                return true;
-            }
-            UIEvent::CmdInput(Key::Esc) => {
-                self.ex_buffer.clear();
-                context
-                    .replies
-                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
-                self.dirty = true;
-                return true;
+                        }
+                        return true;
+                    }
+                    Key::Backtab => {
+                        self.auto_complete.cycle_cursor(false);
+                        if let Some(suggestion) = self.auto_complete.peek_suggestion() {
+                            replace_content!(self.ex_buffer_preview = suggestion);
+                            self.container.set_dirty(true);
+                            self.set_dirty(true);
+                        }
+                        return true;
+                    }
+                    Key::Char('\n') => {
+                        absorb_preview!();
+                        let command = if self.auto_complete.cursor().is_some() {
+                            if let Some(suggestion) = self.auto_complete.get_suggestion() {
+                                suggestion
+                            } else {
+                                self.ex_buffer.as_str().to_string()
+                            }
+                        } else {
+                            self.ex_buffer.as_str().to_string()
+                        };
+                        self.set_dirty(true);
+                        if !command.is_empty() {
+                            if crate::command::parser::parse_command(&command).is_ok()
+                                && self.cmd_history.last().map(String::as_str)
+                                    != Some(command.as_str())
+                            {
+                                crate::command::history::log_cmd(command.clone());
+                                self.cmd_history.push(command.clone());
+                            }
+                            context.replies.push_back(UIEvent::Command(command));
+                        }
+                        self.ex_buffer.clear(context);
+                        self.ex_buffer_cmd_history_pos.take();
+                        self.ex_buffer_preview.clear(context);
+                        context
+                            .replies
+                            .push_back(UIEvent::ChangeMode(UIMode::Normal));
+                        return true;
+                    }
+                    Key::Char(c) => {
+                        absorb_preview!();
+                        self.dirty = true;
+                        self.ex_buffer
+                            .process_event(&mut UIEvent::InsertInput(Key::Char(*c)), context);
+                        return true;
+                    }
+                    Key::Paste(s) => {
+                        absorb_preview!();
+                        self.dirty = true;
+                        self.ex_buffer.process_event(
+                            &mut UIEvent::InsertInput(Key::Paste(s.clone())),
+                            context,
+                        );
+                        return true;
+                    }
+                    Key::Ctrl('u') => {
+                        absorb_preview!();
+                        self.dirty = true;
+                        self.ex_buffer
+                            .process_event(&mut UIEvent::InsertInput(Key::Ctrl('u')), context);
+                        self.ex_buffer_cmd_history_pos.take();
+                        return true;
+                    }
+                    Key::Ctrl('p') => {
+                        absorb_preview!();
+                        if self.cmd_history.is_empty() {
+                            return true;
+                        }
+                        let pos = self.ex_buffer_cmd_history_pos.map(|p| p + 1).unwrap_or(0);
+                        let pos = std::cmp::min(pos, self.cmd_history.len().saturating_sub(1));
+                        if Some(pos) != self.ex_buffer_cmd_history_pos {
+                            let suggestion =
+                                &self.cmd_history[self.cmd_history.len().saturating_sub(1) - pos];
+                            replace_content!(self.ex_buffer = suggestion);
+                            self.container.set_dirty(true);
+                            self.set_dirty(true);
+                            self.ex_buffer_cmd_history_pos = Some(pos);
+                            self.dirty = true;
+                        }
+
+                        return true;
+                    }
+                    Key::Ctrl('n') => {
+                        absorb_preview!();
+                        if self.cmd_history.is_empty() {
+                            return true;
+                        }
+                        if Some(0) == self.ex_buffer_cmd_history_pos {
+                            self.ex_buffer_cmd_history_pos = None;
+                            self.ex_buffer.clear(context);
+                            self.dirty = true;
+                        } else if let Some(pos) = self.ex_buffer_cmd_history_pos.map(|p| p - 1) {
+                            let suggestion =
+                                &self.cmd_history[self.cmd_history.len().saturating_sub(1) - pos];
+
+                            replace_content!(self.ex_buffer = suggestion);
+                            self.container.set_dirty(true);
+                            self.set_dirty(true);
+                            self.ex_buffer_cmd_history_pos = Some(pos);
+                            self.dirty = true;
+                        }
+
+                        return true;
+                    }
+                    Key::Ctrl('g') => {
+                        absorb_preview!();
+                        // Edit command bar contents in editor
+                        let editor =
+                            match std::env::var("VISUAL").or_else(|_| std::env::var("EDITOR")) {
+                                Err(err) => {
+                                    context.replies.push_back(UIEvent::Notification {
+                                        title: Some(err.to_string().into()),
+                                        source: None,
+                                        body: "$VISUAL or $EDITOR is not set. You can change an \
+                                               envvar's value without restarting meli with setenv."
+                                            .into(),
+                                        kind: Some(NotificationType::Error(
+                                            melib::error::ErrorKind::None,
+                                        )),
+                                    });
+                                    self.set_dirty(true);
+                                    return true;
+                                }
+                                Ok(v) => v,
+                            };
+                        let f = match File::create_temp_file(
+                            self.ex_buffer.as_str().as_bytes(),
+                            None,
+                            None,
+                            Some("txt"),
+                            true,
+                        ) {
+                            Ok(f) => Arc::new(f),
+                            Err(err) => {
+                                context.replies.push_back(UIEvent::Notification {
+                                    title: None,
+                                    source: None,
+                                    body: err.to_string().into(),
+                                    kind: Some(NotificationType::Error(err.kind)),
+                                });
+                                self.set_dirty(true);
+                                return true;
+                            }
+                        };
+                        let initial_value = self.ex_buffer.as_str().to_string();
+                        self.ex_buffer.clear(context);
+                        let editor_command = format!("{} \"$@\"", editor);
+                        context.replies.push_back(UIEvent::ProcessRequest(Box::new(
+                            ProcessRequest {
+                                owner: Some(self.id),
+                                command: {
+                                    let mut cmd = Command::new("sh");
+                                    cmd.arg("-c")
+                                        .arg(&editor_command)
+                                        .arg(&editor)
+                                        .arg(f.path())
+                                        .stdin(Stdio::inherit())
+                                        .stdout(Stdio::inherit())
+                                        .stderr(Stdio::inherit());
+                                    cmd
+                                },
+                                spawn: Some(Default::default()),
+                                result_cb: ProcessResultFn(Box::new({
+                                    let f = f.clone();
+                                    move |output| {
+                                        if output.is_ok() {
+                                            if let Ok(s) = f.read_to_string() {
+                                                Some(Box::new(UIEvent::CmdInput(Key::Paste(s))))
+                                            } else {
+                                                Some(Box::new(UIEvent::CmdInput(Key::Paste(
+                                                    initial_value,
+                                                ))))
+                                            }
+                                        } else {
+                                            Some(Box::new(UIEvent::CmdInput(Key::Paste(
+                                                initial_value,
+                                            ))))
+                                        }
+                                    }
+                                })),
+                                temporary_files: vec![f],
+                            },
+                        )));
+                        return true;
+                    }
+                    k @ Key::Delete | k @ Key::Insert | k @ Key::Backspace | k @ Key::Ctrl(_) => {
+                        absorb_preview!();
+                        self.dirty = true;
+                        self.ex_buffer
+                            .process_event(&mut UIEvent::InsertInput(k.clone()), context);
+                        return true;
+                    }
+                    Key::Esc => {
+                        absorb_preview!();
+                        self.ex_buffer.clear(context);
+                        context
+                            .replies
+                            .push_back(UIEvent::ChangeMode(UIMode::Normal));
+                        self.dirty = true;
+                        return true;
+                    }
+                    Key::Left => {
+                        absorb_preview!();
+                        self.ex_buffer.cursor_dec();
+                        self.set_dirty(true);
+                    }
+                    Key::Right => {
+                        absorb_preview!();
+                        self.ex_buffer.cursor_inc();
+                        self.set_dirty(true);
+                    }
+                    Key::Up => {
+                        self.auto_complete.modify_cursor(PageMovement::Up(1));
+                        self.set_dirty(true);
+                    }
+                    Key::Down => {
+                        self.auto_complete.modify_cursor(PageMovement::Down(1));
+                        self.set_dirty(true);
+                    }
+                    Key::Home => {
+                        self.auto_complete.modify_cursor(PageMovement::Home);
+                        self.dirty = true;
+                        return true;
+                    }
+                    Key::End => {
+                        self.auto_complete.modify_cursor(PageMovement::End);
+                        self.dirty = true;
+                        return true;
+                    }
+                    Key::PageUp => {
+                        self.auto_complete.modify_cursor(PageMovement::PageUp(1));
+                        self.dirty = true;
+                        return true;
+                    }
+                    Key::PageDown => {
+                        self.auto_complete.modify_cursor(PageMovement::PageDown(1));
+                        self.dirty = true;
+                        return true;
+                    }
+                    Key::F(_) | Key::Alt(_) | Key::Null | Key::Mouse(_) => {}
+                }
             }
             UIEvent::Resize => {
                 self.dirty = true;
