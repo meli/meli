@@ -1,0 +1,81 @@
+[terminal.themes.base16]
+color_contrast = "dark"
+"theme_default" = { fg = "$base05", bg = "$base00", attrs = "Default" }
+"status.bar" = { fg = "$base04", bg = "$base01", attrs = "theme_default" }
+"status.notification" = { fg = "$base04", bg = "$base01", attrs = "theme_default" }
+"tab.focused" = { fg = "$base04", bg = "theme_default", attrs = "theme_default" }
+"tab.unfocused" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"tab.bar" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"widgets.list.header" = { fg = "theme_default", bg = "theme_default", attrs = "Bold" }
+"widgets.form.label" = { fg = "theme_default", bg = "theme_default", attrs = "Bold" }
+"widgets.form.field" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"widgets.form.highlighted" = { fg = "theme_default", bg = "$base02", attrs = "theme_default" }
+"widgets.options.highlighted" = { fg = "theme_default", bg = "$base02", attrs = "theme_default" }
+"mail.sidebar" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"mail.sidebar_divider" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"mail.sidebar_account_name" = { fg = "mail.sidebar", bg = "mail.sidebar", attrs = "Bold" }
+"mail.sidebar_unread_count" = { fg = "$base09", bg = "theme_default", attrs = "theme_default" }
+"mail.sidebar_index" = { fg = "$base09", bg = "theme_default", attrs = "theme_default" }
+"mail.sidebar_highlighted" = { fg = "$base04", bg = "$base01", attrs = "theme_default" }
+"mail.sidebar_highlighted_unread_count" = { fg = "mail.sidebar_highlighted", bg = "mail.sidebar_highlighted", attrs = "theme_default" }
+"mail.sidebar_highlighted_index" = { fg = "mail.sidebar_highlighted", bg = "mail.sidebar_highlighted", attrs = "theme_default" }
+"mail.sidebar_highlighted_account" = { fg = "mail.sidebar_highlighted", bg = "mail.sidebar_highlighted", attrs = "theme_default" }
+"mail.sidebar_highlighted_account_name" = { fg = "mail.sidebar_highlighted", bg = "mail.sidebar_highlighted", attrs = "Bold" }
+"mail.sidebar_highlighted_account_unread_count" = { fg = "mail.sidebar_highlighted", bg = "mail.sidebar_highlighted", attrs = "theme_default" }
+"mail.sidebar_highlighted_account_index" = { fg = "mail.sidebar_highlighted", bg = "mail.sidebar_highlighted", attrs = "theme_default" }
+"mail.listing.compact.even" = { fg = "theme_default", bg = "$base00", attrs = "theme_default" }
+"mail.listing.compact.odd" = { fg = "theme_default", bg = "$base01", attrs = "theme_default" }
+"mail.listing.compact.even_unseen" = { fg = "Black", bg = "$base09", attrs = "theme_default" }
+"mail.listing.compact.odd_unseen" = { fg = "Black", bg = "$base09", attrs = "theme_default" }
+"mail.listing.compact.even_selected" = { fg = "$base0E", bg = "$base01", attrs = "theme_default" }
+"mail.listing.compact.odd_selected" = { fg = "$base0E", bg = "$base01", attrs = "theme_default" }
+"mail.listing.compact.even_highlighted" = { fg = "theme_default", bg = "$base02", attrs = "theme_default" }
+"mail.listing.compact.odd_highlighted" = { fg = "theme_default", bg = "$base02", attrs = "theme_default" }
+"mail.listing.conversations" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"mail.listing.conversations.subject" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"mail.listing.conversations.from" = { fg = "$base06", bg = "theme_default", attrs = "theme_default" }
+"mail.listing.conversations.date" = { fg = "$base09", bg = "theme_default", attrs = "theme_default" }
+"mail.listing.conversations.unseen" = { fg = "$base03", bg = "theme_default", attrs = "theme_default" }
+"mail.listing.conversations.highlighted" = { fg = "theme_default", bg = "Grey58", attrs = "Bold" }
+"mail.listing.conversations.selected" = { fg = "$base06", bg = "$base07", attrs = "theme_default" }
+"mail.listing.plain.even" = { from = "mail.listing.compact.even" }
+"mail.listing.plain.odd" = { from = "mail.listing.compact.odd" }
+"mail.listing.plain.even_unseen" = { from = "mail.listing.compact.even_unseen" }
+"mail.listing.plain.odd_unseen" = { from = "mail.listing.compact.odd_unseen" }
+"mail.listing.plain.even_selected" = { from = "mail.listing.compact.even_selected" }
+"mail.listing.plain.odd_selected" = { from = "mail.listing.compact.odd_selected" }
+"mail.listing.plain.even_highlighted" = { from = "mail.listing.compact.even_highlighted" }
+"mail.listing.plain.odd_highlighted" = { from = "mail.listing.compact.odd_highlighted" }
+"mail.view.headers" = { fg = "$base0D", bg = "theme_default", attrs = "theme_default" }
+"mail.view.headers_names" = { fg = "mail.view.headers", bg = "mail.view.headers", attrs = "mail.view.headers" }
+"mail.view.headers_area" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"mail.view.body" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"mail.view.thread.indentation.a" = { fg = "theme_default", bg = "$base09", attrs = "theme_default" }
+"mail.view.thread.indentation.b" = { fg = "theme_default", bg = "$base0A", attrs = "theme_default" }
+"mail.view.thread.indentation.c" = { fg = "theme_default", bg = "$base0B", attrs = "theme_default" }
+"mail.view.thread.indentation.d" = { fg = "theme_default", bg = "$base0C", attrs = "theme_default" }
+"mail.view.thread.indentation.e" = { fg = "theme_default", bg = "$base0D", attrs = "theme_default" }
+"mail.view.thread.indentation.f" = { fg = "theme_default", bg = "$base0E", attrs = "theme_default" }
+"mail.listing.attachment_flag" = { fg = "$base09", bg = "theme_default", attrs = "theme_default" }
+"mail.listing.thread_snooze_flag" = { fg = "$base0A", bg = "theme_default", attrs = "theme_default" }
+"mail.listing.tag_default" = { fg = "$base06", bg = "$base04", attrs = "Bold" }
+"pager.highlight_search" = { fg = "theme_default", bg = "$base0A", attrs = "Bold" }
+"pager.highlight_search_current" = { fg = "$base0E", bg = "$base0A", attrs = "Bold | Underline" }
+
+[terminal.themes.base16.color_aliases]
+"base00" = "#2d2d2d" # Default Background
+"base01" = "#393939" # Lighter Background (Used for status bars, line number and folding marks)
+"base02" = "#515151" # Selection Background
+"base03" = "#777777" # Comments, Invisibles, Line Highlighting
+"base04" = "#b4b7b4" # Dark Foreground (Used for status bars)
+"base05" = "#cccccc" # Default Foreground, Caret, Delimiters, Operators
+"base06" = "#e0e0e0" # Light Foreground (Not often used)
+"base07" = "#ffffff" # Light Background (Not often used)
+"base08" = "#d25252" # Variables, XML Tags, Markup Link Text, Markup Lists, Diff Deleted
+"base09" = "#f9a959" # Integers, Boolean, Constants, XML Attributes, Markup Link Url
+"base0A" = "#ffc66d" # Classes, Markup Bold, Search Text Background
+"base0B" = "#a5c261" # Strings, Inherited Class, Markup Code, Diff Inserted
+"base0C" = "#bed6ff" # Support, Regular Expressions, Escape Characters, Markup Quotes
+"base0D" = "#6c99bb" # Functions, Methods, Attribute IDs, Headings
+"base0E" = "#d197d9" # Keywords, Storage, Selector, Markup Italic, Diff Changed
+"base0F" = "#f97394"
