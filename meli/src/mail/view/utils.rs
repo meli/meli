@@ -284,6 +284,7 @@ pub fn handle_mailing_list_action(
                         .arg(&url)
                         .stdin(Stdio::piped())
                         .stdout(Stdio::piped())
+                        .stderr(Stdio::piped())
                         .spawn()
                     {
                         Ok(child) => {

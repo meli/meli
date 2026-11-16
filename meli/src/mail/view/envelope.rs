@@ -186,6 +186,7 @@ impl EnvelopeView {
                 .args(["-c", filter_invocation])
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
                 .spawn()
                 .and_then(|mut cmd| {
                     cmd.stdin.as_mut().unwrap().write_all(&bytes)?;
@@ -1646,6 +1647,7 @@ impl Component for EnvelopeView {
                                         .args(["-c", &exec_cmd])
                                         .stdin(Stdio::piped())
                                         .stdout(Stdio::piped())
+                                        .stderr(Stdio::piped())
                                         .spawn()?;
                                     Ok((p, exec_cmd, child))
                                 });
@@ -1765,6 +1767,7 @@ impl Component for EnvelopeView {
                     .arg(url)
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
                     .spawn()
                 {
                     Ok(child) => {

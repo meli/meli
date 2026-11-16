@@ -203,6 +203,7 @@ impl ManPages {
             .arg("-x")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
             .spawn()?;
         child.stdin.as_mut().unwrap().write_all(input.as_bytes())?;
         Ok(String::from_utf8_lossy(&child.wait_with_output()?.stdout).to_string())

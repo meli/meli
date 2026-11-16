@@ -35,7 +35,7 @@ use melib::{
         headers::HeaderName,
         parser::BytesExt as _,
     },
-    error::{Error, ErrorKind, Result, ResultIntoError as _, WrapResultIntoError as _},
+    error::{Error, ErrorKind, Result, ResultIntoError as _},
     text::Truncate as _,
     utils::{percent_encoding, xdg::query_default_app},
 };
@@ -48,7 +48,7 @@ use crate::{
     state::Context,
     terminal::{cells::CellBuffer, Area},
     try_recv_timeout,
-    types::{File, ForkedProcess, NotificationType, StatusEvent, UIEvent},
+    types::{File, NotificationType, ProcessRequest, ProcessResultFn, StatusEvent, UIEvent},
 };
 
 #[derive(Clone, Debug)]
@@ -208,6 +208,7 @@ impl ViewFilter {
                 .args(args)
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
                 .spawn()?;
             html_filter
                 .stdin
@@ -888,7 +889,6 @@ impl ViewFilter {
                 "Couldn't find a default application for html files.",
             ));
         };
-
         let unfiltered = if self.cids.is_empty() {
             Cow::Borrowed(&self.unfiltered)
         } else {
@@ -903,28 +903,36 @@ impl ViewFilter {
         };
         let p = File::create_temp_file(unfiltered.as_ref(), None, None, Some("html"), true)?;
         let exec_cmd = desktop_exec_to_command(&command, p.path().display().to_string(), false);
-
-        let child = Command::new("sh")
-            .args(["-c", &exec_cmd])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .spawn()
-            .wrap_err(|| format!("Failed to start `{command}`"))?;
-        context
-            .replies
-            .push_back(UIEvent::StatusEvent(StatusEvent::UpdateSubStatus(
-                command.to_string(),
-            )));
         context.temp_files.push(p);
         context
-            .children
-            .entry(command.clone())
-            .or_default()
-            .push(ForkedProcess::Generic {
-                id: command.clone(),
-                command: Some(command),
-                child,
-            });
+            .replies
+            .push_back(UIEvent::ProcessRequest(Box::new(ProcessRequest {
+                owner: Some(self.id),
+                command: {
+                    let mut cmd = Command::new("sh");
+                    cmd.args(["-c", &exec_cmd])
+                        .stdin(Stdio::piped())
+                        .stdout(Stdio::piped())
+                        .stderr(Stdio::piped());
+                    cmd
+                },
+                spawn: None,
+                result_cb: ProcessResultFn(Box::new({
+                    move |output| {
+                        if let Err(err) = output {
+                            Some(Box::new(UIEvent::Notification {
+                                title: None,
+                                source: None,
+                                body: format!("{command} exited with error: {err}").into(),
+                                kind: Some(NotificationType::Info),
+                            }))
+                        } else {
+                            None
+                        }
+                    }
+                })),
+                temporary_files: vec![],
+            })));
         Ok(())
     }
 

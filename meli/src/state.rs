@@ -1519,7 +1519,7 @@ impl State {
                     mut command,
                     spawn,
                     result_cb,
-                    temporary_files: _,
+                    temporary_files,
                 } = *process_request;
                 command.current_dir(&self.context.current_dir);
                 log::trace!(
@@ -1572,6 +1572,7 @@ impl State {
                         .set_details(format!("Captured output was: {output:?}")))
                     }))
                 };
+                drop(temporary_files);
                 if let Some(content) = content {
                     if content.is::<UIEvent>() {
                         self.rcv_event(*content.downcast::<UIEvent>().unwrap());

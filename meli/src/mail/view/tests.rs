@@ -28,6 +28,7 @@ use crate::{
         ViewSettings,
     },
     state::Context,
+    types::UIEvent,
 };
 
 rusty_fork_test! {
@@ -193,16 +194,22 @@ RAsUgFNAADs=
         "expected two temp_files: {:?}",
         ctx.temp_files
     );
+    let reply = ctx.replies.pop_front().expect("ProcessRequest");
+    let UIEvent::ProcessRequest(reply) = reply else {
+        panic!("expected ProcessRequest, got: {reply:?}");
+    };
     assert_eq!(
-        ctx.children.len(),
-        1,
-        "expected one fork child: {:?}",
-        ctx.children
+        reply.command.get_program(),
+        "sh",
+        "expected html_open in process request: {reply:?}",
     );
-    assert!(
-        &ctx.children.contains_key("echo"),
-        "expected html_open in children: {:?}",
-        ctx.children
+    assert_eq!(
+        reply.command.get_args().collect::<Vec<_>>(),
+        vec![
+            "-c",
+            &format!("echo {}", ctx.temp_files[1].path().display())
+        ],
+        "expected html_open in process request: {reply:?}",
     );
     let html_path = ctx
         .temp_files

@@ -28,6 +28,7 @@ use std::{
     ops::{Index, IndexMut},
     path::{Path, PathBuf},
     pin::Pin,
+    process::{Command, Stdio},
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -740,11 +741,11 @@ impl Account {
             return Err(Error::new("Mailbox not found.").set_kind(ErrorKind::NotFound));
         }
         if let Some(ref refresh_command) = self.settings.conf().refresh_command {
-            let child = std::process::Command::new("sh")
+            let child = Command::new("sh")
                 .args(["-c", refresh_command])
-                .stdin(std::process::Stdio::null())
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::piped())
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::piped())
                 .spawn()?;
             self.main_loop_handler
                 .send(ThreadEvent::UIEvent(UIEvent::Fork(
@@ -1002,10 +1003,7 @@ impl Account {
         send_mail: crate::conf::composing::SendMail,
         #[allow(unused_variables)] complete_in_background: bool,
     ) -> Result<Option<JoinHandle<Result<()>>>> {
-        use std::{
-            io::Write as _,
-            process::{Command, Stdio},
-        };
+        use std::io::Write as _;
 
         use crate::conf::composing::SendMail;
         match send_mail {
@@ -1019,6 +1017,7 @@ impl Account {
                     .args(["-c", command])
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
                     .spawn()
                     .expect("Failed to start mailer command");
                 {
@@ -1095,10 +1094,7 @@ impl Account {
         let backend = self.backend.clone();
         move |message: Arc<String>| -> Pin<Box<dyn Future<Output = Result<()>> + Send>> {
             Box::pin(async move {
-                use std::{
-                    io::Write as _,
-                    process::{Command, Stdio},
-                };
+                use std::io::Write as _;
 
                 use crate::conf::composing::SendMail;
                 match send_mail {
@@ -1112,6 +1108,7 @@ impl Account {
                             .args(["-c", command])
                             .stdin(Stdio::piped())
                             .stdout(Stdio::piped())
+                            .stderr(Stdio::piped())
                             .spawn()
                             .expect("Failed to start mailer command");
                         {
