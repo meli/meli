@@ -134,6 +134,13 @@ Example in TOML format:
 .Bd -literal
 "mail.view.body" = { fg = "HotPink3", bg = "LightSalmon1" }
 .Ed
+.Pp
+Alternatively, to inherit all values from another key, specify field
+.Li Dq from Ns
+\&:
+.Bd -literal
+"mail.view.body" = { from = "mail.view.headers_area" }
+.Ed
 .Sh color_aliases FIELD
 The
 .Ic color_aliases
