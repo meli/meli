@@ -959,9 +959,11 @@ impl State {
                 std::env::set_var(key.as_str(), val.as_str());
             }
             Action::PrintEnv(key) => {
-                self.show_display_message(
-                    std::env::var(key.as_str()).unwrap_or_else(|e| e.to_string()),
-                );
+                self.context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
+                        std::env::var(key.as_str()).unwrap_or_else(|e| e.to_string()),
+                    )));
             }
             Action::ChangeCurrentDirectory(dir) => {
                 let mut dir = if dir.starts_with('~') {
@@ -999,14 +1001,20 @@ impl State {
                     });
                 } else {
                     self.context.current_dir = dir;
-                    self.show_display_message(format!(
-                        "Changed directory to: {}",
-                        self.context.current_dir.display()
+                    self.context.replies.push_back(UIEvent::StatusEvent(
+                        StatusEvent::UpdateStatus(format!(
+                            "Changed directory to: {}",
+                            self.context.current_dir.display()
+                        )),
                     ));
                 }
             }
             Action::CurrentDirectory => {
-                self.show_display_message(self.context.current_dir.display().to_string());
+                self.context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
+                        self.context.current_dir.display().to_string(),
+                    )));
             }
             Action::Mailbox(account_name, op) => {
                 if let Some(account) = self
