@@ -325,50 +325,26 @@ Expect a delay between query and response.
 Sqlite3 on the contrary at reasonable mailbox sizes should have a non noticeable delay.
 .Ss QUERY ABNF SYNTAX
 .HorizontalRule
-.Bl -dash -compact
-.It
-.Li query = \&"(\&" query \&")\&" | from | to | cc | bcc | message_id | in_reply_to | references | header | all_addresses | subject | flags | has_attachment | query \&"or\&" query | query \&"and\&" query | not query
-.It
-.Li not = \&"not\&" | \&"!\&"
-.It
-.Li has_attachment = \&"has:attachment\&" | \&"has:attachments\&"
-.It
-.Li quoted = ALPHA / SP *(ALPHA / DIGIT / SP)
-.It
-.Li term = ALPHA *(ALPHA / DIGIT) | DQUOTE quoted DQUOTE
-.It
-.Li tagname = term
-.It
-.Li flagval = \&"passed\&" | \&"replied\&" | \&"seen\&" | \&"read\&" | \&"junk\&" | \&"trash\&" | \&"trashed\&" | \&"draft\&" | \&"flagged\&" | tagname
-.It
-.Li flagterm = flagval | flagval \&",\&" flagterm
-.It
-.Li flags = \&"flag:\&" flag | \&"flags:\&" flag | \&"tag:\&" flag | \&"tags:\&" flag | \&"is:\&" flag
-.It
-.Li from = \&"from:\&" term
-.It
-.Li to = \&"to:\&" term
-.It
-.Li cc = \&"cc:\&" term
-.It
-.Li bcc = \&"bcc:\&" term
-.It
-.Li message_id = \&"message-id:\&" term | \&"msg-id:\&" term
-.It
-.Li in_reply_to = \&"in-reply-to:\&" term
-.It
-.Li references = \&"references:\&" term
-.It
-.Li header = \&"header:\&" field_name \&",\&" field_value
-.It
-.Li field_name = term
-.It
-.Li field_value = term
-.It
-.Li all_addresses = \&"all-addresses:\&" term
-.It
-.Li subject = \&"subject:\&" term
-.El
+.Bd -literal
+query = ("(" query ")") / from / to / cc / bcc / message-id / in-reply-to / references / header / all-addresses / subject / flags / has-attachment / (query 1*SP "or" 1*SP query) / (query 1*SP "and" 1*SP query) / (not 1*SP query)
+not = "not" / "!"
+has-attachment = "has:attachment"/"has:attachments"
+quoted = ALPHA / SP *(ALPHA / DIGIT / SP)
+term = (ALPHA *(ALPHA / DIGIT)) / (DQUOTE quoted DQUOTE)
+flagval = "passed" / "replied" / "seen" / "read" / "junk" / "trash" / "trashed" / "draft" / "flagged" / term
+flagterm = flagval / (flagval "," flagterm)
+flags = ("flag:" flagterm) / ("flags:" flagterm) / ("tag:" flagterm) / ("tags:" flagterm) / ("is:" flagterm)
+from = "from:" term
+to = "to:" term
+cc = "cc:" term
+bcc = "bcc:" term
+message-id = ("message-id:" term) / ("msg-id:" term)
+in-reply-to = "in-reply-to:" term
+references = "references:" term
+header = "header:" term "," term
+all-addresses = "all-addresses:" term
+subject = "subject:" term
+.Ed
 .Ss Raw search
 Wherever supported, you can perform a search using the backend's native query language:
 .Bl -dash -compact
