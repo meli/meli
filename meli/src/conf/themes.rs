@@ -498,7 +498,7 @@ impl std::ops::BitOr<Attr> for ThemeAttribute {
 
 /// Holds {fore,back}ground color and terminal attribute values.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, rename = "ThemeAttribute")]
 pub struct ThemeAttributeInner {
     #[serde(default)]
     fg: ThemeValue<Color>,
@@ -873,6 +873,7 @@ impl<'de> Deserialize<'de> for Themes {
         D: Deserializer<'de>,
     {
         #[derive(Deserialize)]
+        #[serde(rename(deserialize = "Themes"))]
         struct ThemesOptions {
             #[serde(default)]
             light: ThemeOptions,
@@ -882,6 +883,7 @@ impl<'de> Deserialize<'de> for Themes {
             other_themes: IndexMap<String, ThemeOptions>,
         }
         #[derive(Default, Deserialize)]
+        #[serde(rename(deserialize = "Theme"))]
         struct ThemeOptions {
             #[serde(default)]
             color_contrast: Option<ColorContrast>,
@@ -904,7 +906,7 @@ impl<'de> Deserialize<'de> for Themes {
             rest: ThemeAttributeInnerOptions,
         }
         #[derive(Default, Deserialize)]
-        #[serde(deny_unknown_fields)]
+        #[serde(deny_unknown_fields, rename(deserialize = "ThemeAttribute"))]
         struct ThemeAttributeInnerOptions {
             #[serde(default)]
             from: Option<Cow<'static, str>>,
