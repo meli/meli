@@ -25,6 +25,10 @@ path = "src/mboxparse.rs"
 name = "embedded"
 path = "src/embedded.rs"
 
+[[bin]]
+name = "linebreak"
+path = "src/linebreak.rs"
+
 [dependencies]
 crossbeam = { version = "^0.8" }
 meli = { path = "../meli", version = "0.9", default-features = false }
