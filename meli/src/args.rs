@@ -248,19 +248,13 @@ impl Opt {
             };
         }
         Some(match self.subcommand? {
-            SubCommand::View { .. } => { return None ; }
-            SubCommand::TestConfig { path } => {
-                subcommands::test_config(path)
+            SubCommand::View { .. } => {
+                return None;
             }
-            SubCommand::Tools(toolopt) => {
-                 subcommands::tool(self.config, toolopt)
-            }
-            SubCommand::CreateConfig { path } => {
-                subcommands::create_config(path)
-            }
-            SubCommand::EditConfig => {
-                subcommands::edit_config()
-            }
+            SubCommand::TestConfig { path } => subcommands::test_config(path),
+            SubCommand::Tools(toolopt) => subcommands::tool(self.config, toolopt),
+            SubCommand::CreateConfig { path } => subcommands::create_config(path),
+            SubCommand::EditConfig => subcommands::edit_config(),
             SubCommand::PrintConfigPath => {
                 let config_path = ret_err!(conf::get_config_file());
                 print_path(&config_path);
@@ -292,12 +286,8 @@ impl Opt {
                 page,
                 no_raw,
                 gzipped: false,
-            }) => {
-                subcommands::man(page, false).and_then(|s| subcommands::pager(s, no_raw))
-            }
-            SubCommand::CompiledWith => {
-                subcommands::compiled_with()
-            }
+            }) => subcommands::man(page, false).and_then(|s| subcommands::pager(s, no_raw)),
+            SubCommand::CompiledWith => subcommands::compiled_with(),
             SubCommand::Completions { shell } => {
                 Self::clap().gen_completions_to("meli", shell, &mut std::io::stdout());
                 Ok(())
@@ -308,16 +298,21 @@ impl Opt {
                 Ok(())
             }
             SubCommand::PrintDefaultTheme => {
-                print!("{}", conf::themes::Themes::default().key_to_string("dark", false));
+                print!(
+                    "{}",
+                    conf::themes::Themes::default().key_to_string("dark", false)
+                );
                 Ok(())
             }
             SubCommand::PrintAppDirectories => {
-                print_path(&xdg::BaseDirectories::with_prefix("meli")
+                print_path(
+                    &xdg::BaseDirectories::with_prefix("meli")
                         .expect(
                             "Could not find your XDG directories. If this is unexpected, please \
-                         report it as a bug."
+                             report it as a bug.",
                         )
-                        .get_data_file(""));
+                        .get_data_file(""),
+                );
                 let mut temp_dir = std::env::temp_dir();
                 temp_dir.push("meli");
                 print_path(&temp_dir);
