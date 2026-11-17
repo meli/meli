@@ -293,12 +293,16 @@ impl Pager {
             width = self.minimum_width;
         }
         if self.filtered_content.is_none() {
-            if self.line_breaker.width() != Some(width.saturating_sub(4)) {
-                let line_breaker = LineBreakText::new(
-                    self.text.clone(),
-                    self.reflow,
-                    Some(width.saturating_sub(4)),
-                );
+            if self.line_breaker.width() != Some(width) {
+                let mut line_breaker =
+                    LineBreakText::new(self.text.clone(), self.reflow, Some(width));
+                if context.settings.terminal.ascii_drawing {
+                    line_breaker.set_break_prefix(None);
+                } else if let Some(break_prefix) = context.settings.pager.break_prefix.clone() {
+                    line_breaker.set_break_prefix(
+                        Some(break_prefix).filter(|s| !s.is_empty()).map(Into::into),
+                    );
+                }
 
                 self.line_breaker = line_breaker;
                 self.text_lines.clear();
@@ -462,17 +466,30 @@ impl Pager {
                         // 1.
                         break;
                     } else if (l.start..l.end).contains(&link.start)
-                        || (l.start..l.end).contains(&link.end)
+                        || (l.start..=l.end).contains(&link.end)
                     {
                         // 2. or 3.
-                        {
-                            let skip_x = link.start.saturating_sub(l.start);
-                            let area = area2.skip_cols(skip_x).nth_row(0);
-                            let area = if link.end > l.end {
-                                area.take_cols(l.content.len())
+                        if (l.start..l.end).contains(&link.start) {
+                            let skip_x = link.start - l.start + l.offset;
+                            let len = if link.end > l.end {
+                                l.content[skip_x..].grapheme_len()
                             } else {
-                                area.take_cols(link.value.len())
+                                link.value.grapheme_len()
                             };
+                            let skip_x = l.content[..skip_x].grapheme_len();
+                            let area = area2.nth_row(0).skip_cols(skip_x).take_cols(len);
+                            let uri = grid.insert_uri(&link.value);
+                            grid.set_uri(uri, area);
+                        } else {
+                            let skip_x = l.content[..l.offset].grapheme_len();
+                            let len = if link.end > l.end {
+                                l.content.grapheme_len()
+                            } else {
+                                link.value.grapheme_len().saturating_sub(
+                                    link.value[..(l.start - link.start)].grapheme_len(),
+                                )
+                            };
+                            let area = area2.nth_row(0).skip_cols(skip_x).take_cols(len);
                             let uri = grid.insert_uri(&link.value);
                             grid.set_uri(uri, area);
                         }
@@ -492,7 +509,9 @@ impl Pager {
                     if (link.start..link.end).contains(&l.start)
                         && (link.start..link.end).contains(&l.end)
                     {
-                        let area = area2.nth_row(0).take_cols(l.content.len());
+                        let skip_x = l.content[..l.offset].grapheme_len();
+                        let len = l.content.grapheme_len();
+                        let area = area2.nth_row(0).skip_cols(skip_x).take_cols(len);
                         let uri = grid.insert_uri(&link.value);
                         grid.set_uri(uri, area);
                     }
@@ -508,11 +527,6 @@ impl Pager {
                     None,
                     None,
                 );
-                if l.content.starts_with('⤷') {
-                    grid[area2.upper_left()]
-                        .set_fg(crate::conf::theme_value(context, "highlight").fg)
-                        .set_attrs(crate::conf::theme_value(context, "highlight").attrs);
-                }
                 area2 = area2.skip_rows(1);
             }
 

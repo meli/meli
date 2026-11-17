@@ -38,6 +38,10 @@ pub fn eighty_val<T: From<usize>>() -> T {
     80.into()
 }
 
+pub fn thirty_val<T: From<usize>>() -> T {
+    30.into()
+}
+
 pub fn none<T>() -> Option<T> {
     None
 }

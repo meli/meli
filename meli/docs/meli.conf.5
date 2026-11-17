@@ -1773,7 +1773,7 @@ Split long lines that would overflow on the x axis.
 .It Ic minimum_width Ar num
 .Pq Em optional
 Minimum text width in columns.
-.Pq Em 80 \" default value
+.Pq Em 30 \" default value
 .It Ic auto_choose_multipart_alternative Ar boolean
 .Pq Em optional
 Choose
@@ -1822,6 +1822,14 @@ INBOX = {}
 .\"
 .\"
 .\"
+.It Ic break_prefix Ar String
+.Pq Em optional
+A string to prefix lines with when performing line breaking.
+If
+.Li Dq ascii_drawing
+is enabled, this is ignored because it might contain non-ascii characters.
+Set to an empty string to disable the prefix.
+.Pq Em Dq ⤷ \" default value
 .El
 .\"
 .\"

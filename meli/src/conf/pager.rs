@@ -93,8 +93,8 @@ pub struct PagerSettings {
     pub split_long_lines: bool,
 
     /// Minimum text width in columns.
-    /// Default: 80
-    #[serde(default = "eighty_val", alias = "minimum-width")]
+    /// Default: 30
+    #[serde(default = "thirty_val", alias = "minimum-width")]
     pub minimum_width: usize,
 
     /// Choose `text/html` alternative if `text/plain` is empty in
@@ -129,6 +129,17 @@ pub struct PagerSettings {
     /// Default: []
     #[serde(default = "Vec::new", alias = "show-extra-headers")]
     pub show_extra_headers: Vec<HeaderName>,
+
+    /// A string to prefix lines with when performing line breaking.
+    ///
+    /// If `ascii_drawing` is enabled, this is ignored because it might contain non-ascii
+    /// characters.
+    ///
+    /// Set to an empty string to disable the prefix.
+    ///
+    /// Default: "⤷"
+    #[serde(default = "none")]
+    pub break_prefix: Option<String>,
 }
 
 impl Default for PagerSettings {
@@ -149,6 +160,7 @@ impl Default for PagerSettings {
             show_date_in_my_timezone: ToggleFlag::InternalVal(true),
             url_launcher: None,
             show_extra_headers: vec![],
+            break_prefix: None,
         }
     }
 }
@@ -176,6 +188,7 @@ impl DotAddressable for PagerSettings {
                     "show_date_in_my_timezone" => self.show_date_in_my_timezone.lookup(field, tail),
                     "url_launcher" => self.url_launcher.lookup(field, tail),
                     "show_extra_headers" => self.show_extra_headers.lookup(field, tail),
+                    "break_prefix" => self.break_prefix.lookup(field, tail),
                     other => Err(Error::new(format!(
                         "{parent_field} has no field named {other}"
                     ))),
