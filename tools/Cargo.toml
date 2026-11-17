@@ -1,9 +1,9 @@
 [package]
 name = "tools"
-version = "0.4.1"
+version = "0.9.0"
 authors = ["Manos Pitsidianakis <manos@pitsidianak.is>"]
-edition = "2018"
-rust-version = "1.65.0"
+edition = "2021"
+rust-version = "1.88.0"
 license = "GPL-3.0-or-later"
 homepage = "https://meli-email.org"
 repository = "https://git.meli-email.org/meli/meli.git"
@@ -27,8 +27,8 @@ path = "src/embedded.rs"
 
 [dependencies]
 crossbeam = { version = "^0.8" }
-meli = { path = "../meli", version = "0.8" }
-melib = { path = "../melib", version = "0.8" }
-nix = { version = "0.29", default-features = false, features = ["signal", "poll", "term", "ioctl", "process"] }
+meli = { path = "../meli", version = "0.9", default-features = false }
+melib = { path = "../melib", version = "0.9", default-features = false }
+nix = { version = "0.30", default-features = false, features = ["signal", "poll", "term", "ioctl", "process"] }
 signal-hook = { version = "^0.3", default-features = false, features = ["iterator"] }
 signal-hook-registry = { version = "1.2.0", default-features = false }
