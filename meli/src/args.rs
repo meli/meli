@@ -268,7 +268,9 @@ impl Opt {
             }
             #[cfg(not(feature = "cli-docs"))]
             SubCommand::Man(ManOpt {}) => {
-                 Err(Error::new("error: this version of meli was not build with embedded documentation (cargo feature `cli-docs`). You might have it installed as manpages (eg `man meli`), otherwise check https://meli-email.org"))
+                use melib::error::Error;
+
+                Err(Error::new("error: this version of meli was not build with embedded documentation (cargo feature `cli-docs`). You might have it installed as manpages (eg `man meli`), otherwise check https://meli-email.org"))
             }
             #[cfg(feature = "cli-docs")]
             SubCommand::Man(ManOpt {
@@ -325,6 +327,8 @@ impl Opt {
             SubCommand::InstallMan {
                 destination_path: _,
             } => {
+                use melib::error::Error;
+
                 Err(Error::new("error: this version of meli was not build with embedded documentation (cargo feature `cli-docs`). You might have it installed as manpages (eg `man meli`), otherwise check https://meli-email.org"))
             }
             #[cfg(feature = "cli-docs")]
