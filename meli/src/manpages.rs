@@ -192,12 +192,90 @@ impl ManPages {
         Ok(v)
     }
 
-    /// Helper function to remove backspace markup from mandoc output.
-    pub fn remove_markup(input: &str) -> Result<String> {
-        use std::{
-            io::Write as _,
-            process::{Command, Stdio},
-        };
+    /// Remove mandoc backspace markup
+    ///
+    /// Equivalent to piping through `col -b -x` where
+    ///
+    /// ```text
+    /// -b, --no-backspaces    do not output backspaces
+    /// -x, --spaces           convert tabs to spaces
+    /// ```
+    ///
+    /// See `col(1)` for details
+    pub fn remove_markup(input: &str) -> String {
+        let mut out = String::with_capacity(input.len());
+        let mut iter = input.chars();
+        let mut line_buffer = String::new();
+        while let Some(c) = iter.next() {
+            if c == '\u{a0}' {
+                line_buffer.push(' ');
+                continue;
+            }
+            if ['\u{2007}', '\u{fe0e}', '\u{fe0f}'].contains(&c) {
+                continue;
+            }
+            if !c.is_ascii() || c.is_ascii_graphic() {
+                line_buffer.push(c);
+                continue;
+            }
+            match c {
+                '\x08' => {
+                    // backspace
+                    line_buffer.pop();
+                }
+                '\r' => {
+                    line_buffer.clear();
+                }
+                '\x1b' => {
+                    // ESC
+                    _ = iter.next();
+                }
+                '\n' | ' ' => {
+                    line_buffer.push(c);
+                    out.extend(line_buffer.drain(..));
+                }
+                '\x0f' => {
+                    // activate the G0 character set
+                    // ignore
+                }
+                '\x0e' => {
+                    // activate the G1 character set
+                    // ignore
+                }
+                '\t' => {
+                    line_buffer.push(' ');
+                }
+                '\x0b' => {
+                    // vertical tab
+                    // ignore
+                }
+                _ => {}
+            }
+        }
+        out.extend(line_buffer.drain(..));
+
+        out
+    }
+}
+
+#[test]
+fn markup() {
+    use std::{
+        io::Write as _,
+        process::{Command, Stdio},
+    };
+
+    if !matches!(Command::new("sh")
+                .arg("-c")
+                .arg("command -v col")
+                .stdout(Stdio::null())
+                .stdin(Stdio::null())
+                .stderr(Stdio::null()).output(), Ok(out) if out.status.success())
+    {
+        eprintln!("'col' binary not found in PATH, skipping test.");
+        return;
+    }
+    fn remove_markup_col(input: &str) -> Result<String> {
         let mut child = Command::new("col")
             .arg("-b")
             .arg("-x")
@@ -207,5 +285,26 @@ impl ManPages {
             .spawn()?;
         child.stdin.as_mut().unwrap().write_all(input.as_bytes())?;
         Ok(String::from_utf8_lossy(&child.wait_with_output()?.stdout).to_string())
+    }
+
+    for man in [
+        ManPages::Main,
+        ManPages::Conf,
+        ManPages::Themes,
+        ManPages::Guide,
+        ManPages::ConfExamples,
+    ] {
+        let text = man.read(false).unwrap();
+        let text = ManPages::remove_markup(&text);
+        let text2 = remove_markup_col(&text).unwrap();
+        if text != text2 {
+            for (i, (l, r)) in text.lines().zip(text2.lines()).enumerate() {
+                if l != r {
+                    eprintln!("{i}: our: {l:?}");
+                    eprintln!("{i}: col: {r:?}");
+                }
+            }
+            assert_eq!(&text, &text2);
+        }
     }
 }

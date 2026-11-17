@@ -1214,7 +1214,7 @@ impl State {
             #[cfg(feature = "cli-docs")]
             Action::Tab(TabAction::Man(manpage)) => match manpage
                 .read(false)
-                .map(|text| crate::manpages::ManPages::remove_markup(&text).unwrap_or(text))
+                .map(|text| crate::manpages::ManPages::remove_markup(&text))
             {
                 Ok(m) => self.rcv_event(UIEvent::Action(Action::Tab(TabAction::New(Some(
                     Box::new(
