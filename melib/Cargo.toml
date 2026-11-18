@@ -51,7 +51,7 @@ http = { version = "0.2.12", optional = true }
 imap-codec = { version = "=2.0.0-alpha.6", features = ["ext_condstore_qresync", "ext_id"], optional = true }
 imap-types = { version = "=2.0.0-alpha.6", features = ["ext_condstore_qresync", "ext_id"], optional = true }
 indexmap = { workspace = true }
-isahc = { version = "^1.7.2", optional = true, default-features = false, features = ["http2", "json", "text-decoding"] }
+isahc = { version = "^2.0.2", optional = true, default-features = false, features = ["tls", "tls-insecure", "native-tls", "http2", "json", "text-decoding"] }
 libc = { workspace = true }
 libloading = { version = "0.8" }
 log = { workspace = true }

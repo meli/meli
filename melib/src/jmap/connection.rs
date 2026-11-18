@@ -27,7 +27,7 @@ use std::{
 
 use futures::lock::MappedMutexGuard as FutureMappedMutexGuard;
 use isahc::{
-    config::{Configurable as _, DnsCache, RedirectPolicy, SslOption},
+    config::{Configurable as _, RedirectPolicy},
     http, AsyncReadResponseExt as _, HttpClient,
 };
 use url::Url;
@@ -92,17 +92,20 @@ impl JmapConnection {
 impl JmapClient {
     pub async fn new(server_conf: &JmapServerConf, store: &Arc<Store>) -> Result<Self> {
         let http_client = HttpClient::builder()
-            .dns_cache(DnsCache::Forever)
             .connect_timeout(Duration::from_secs(60))
             .connection_cache_size(8)
             .connection_cache_ttl(Duration::from_secs(30 * 60))
             .default_header(http::header::CONTENT_TYPE, "application/json")
-            .ssl_options(if server_conf.danger_accept_invalid_certs {
-                SslOption::DANGER_ACCEPT_INVALID_CERTS
-                    | SslOption::DANGER_ACCEPT_INVALID_HOSTS
-                    | SslOption::DANGER_ACCEPT_REVOKED_CERTS
-            } else {
-                SslOption::NONE
+            .tls_config({
+                if server_conf.danger_accept_invalid_certs {
+                    isahc::tls::TlsConfig::builder()
+                        .danger_accept_invalid_certs(true)
+                        .danger_accept_invalid_hosts(true)
+                        .danger_accept_revoked_certs(true)
+                        .build()
+                } else {
+                    isahc::tls::TlsConfig::builder().build()
+                }
             })
             .tcp_nodelay()
             .tcp_keepalive(Duration::new(60 * 9, 0))

@@ -178,7 +178,7 @@ mod http {
 
     use flate2::bufread::GzDecoder;
     use isahc::{
-        config::{Configurable as _, DnsCache, RedirectPolicy},
+        config::{Configurable as _, RedirectPolicy},
         http, AsyncReadResponseExt as _, HttpClient,
     };
     use url::Url;
@@ -212,7 +212,6 @@ mod http {
             let client = HttpClient::builder()
                 .timeout(Duration::from_secs(10))
                 .default_header(http::header::USER_AGENT, "melib")
-                .dns_cache(DnsCache::Forever)
                 .connection_cache_size(8)
                 .connection_cache_ttl(Duration::from_secs(30 * 60))
                 .tcp_nodelay()

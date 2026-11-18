@@ -27,7 +27,13 @@ use std::{
 
 use async_fn_stream::try_fn_stream;
 use futures::{io::AsyncReadExt as _, stream::Stream};
-use isahc::{config::RedirectPolicy, http, http::request::Request, prelude::*, HttpClient};
+use isahc::{
+    config::{Configurable as _, RedirectPolicy},
+    http,
+    http::request::Request,
+    prelude::*,
+    HttpClient,
+};
 use regex::Regex;
 use url::Url;
 
@@ -225,12 +231,16 @@ impl EventSourceConnection {
                 let mut request = Request::get(self.url.as_str())
                     .header(http::header::ACCEPT, "text/event-stream")
                     .header(http::header::CACHE_CONTROL, "no-cache")
-                    .ssl_options(if self.server_conf.danger_accept_invalid_certs {
-                        isahc::config::SslOption::DANGER_ACCEPT_INVALID_CERTS
-                            | isahc::config::SslOption::DANGER_ACCEPT_INVALID_HOSTS
-                            | isahc::config::SslOption::DANGER_ACCEPT_REVOKED_CERTS
-                    } else {
-                        isahc::config::SslOption::NONE
+                    .tls_config({
+                        if self.server_conf.danger_accept_invalid_certs {
+                            isahc::tls::TlsConfig::builder()
+                                .danger_accept_invalid_certs(true)
+                                .danger_accept_invalid_hosts(true)
+                                .danger_accept_revoked_certs(true)
+                                .build()
+                        } else {
+                            isahc::tls::TlsConfig::builder().build()
+                        }
                     })
                     .redirect_policy(RedirectPolicy::Limit(10));
                 let username = self
