@@ -187,6 +187,12 @@ pub struct ListingSettings {
     /// Default: "date, desc"
     #[serde(default, alias = "order")]
     pub sort: (SortField, SortOrder),
+
+    /// Pad Conversations listing style entries with empty row.
+    ///
+    /// Default: "0"
+    #[serde(default)]
+    pub conversations_row_pad: Option<usize>,
 }
 
 const fn default_divider() -> char {
@@ -226,6 +232,7 @@ impl Default for ListingSettings {
             mail_view_divider: default_divider(),
             thread_layout: ThreadLayout::default(),
             sort: Default::default(),
+            conversations_row_pad: None,
         }
     }
 }
@@ -272,6 +279,7 @@ impl DotAddressable for ListingSettings {
                     "mail_view_divider" => self.mail_view_divider.lookup(field, tail),
                     "thread_layout" => self.thread_layout.lookup(field, tail),
                     "sort" | "order" => self.sort.lookup(field, tail),
+                    "conversations_row_pad" => self.conversations_row_pad.lookup(field, tail),
                     other => Err(Error::new(format!(
                         "{parent_field} has no field named {other}"
                     ))),

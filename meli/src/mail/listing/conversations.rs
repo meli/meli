@@ -22,6 +22,7 @@
 use std::{
     collections::{BTreeMap, HashMap},
     iter::FromIterator as _,
+    num::NonZeroUsize,
 };
 
 use indexmap::IndexSet;
@@ -90,6 +91,7 @@ pub struct ConversationsListing {
     length: usize,
     sort: (SortField, SortOrder),
     subsort: (SortField, SortOrder),
+    rows_per_entry: NonZeroUsize,
     rows: RowsState,
     error: std::result::Result<(), String>,
 
@@ -440,7 +442,7 @@ impl ListingTrait for ConversationsListing {
             context.dirty_areas.push_back(area);
             return;
         }
-        let rows = area.height() / Self::ROWS_PER_ENTRY;
+        let rows = area.height() / self.rows_per_entry;
 
         if rows == 0 {
             return;
@@ -463,8 +465,8 @@ impl ListingTrait for ConversationsListing {
                     continue; //bounds check
                 }
                 let new_area = area
-                    .skip_rows(Self::ROWS_PER_ENTRY * (*idx % rows))
-                    .take_rows(Self::ROWS_PER_ENTRY);
+                    .skip_rows(self.rows_per_entry.get() * (*idx % rows))
+                    .take_rows(self.rows_per_entry.get());
                 self.highlight_line(grid, new_area, *idx, context);
                 context.dirty_areas.push_back(new_area);
             }
@@ -485,8 +487,8 @@ impl ListingTrait for ConversationsListing {
 
         self.highlight_line(
             grid,
-            area.skip_rows(Self::ROWS_PER_ENTRY * (self.cursor_pos.2 % rows))
-                .take_rows(Self::ROWS_PER_ENTRY),
+            area.skip_rows(self.rows_per_entry.get() * (self.cursor_pos.2 % rows))
+                .take_rows(self.rows_per_entry.get()),
             self.cursor_pos.2,
             context,
         );
@@ -680,7 +682,7 @@ impl std::fmt::Display for ConversationsListing {
 }
 
 impl ConversationsListing {
-    const ROWS_PER_ENTRY: usize = 3;
+    const MIN_ROWS_PER_ENTRY: NonZeroUsize = NonZeroUsize::MIN.saturating_add(1);
 
     pub fn new(
         parent: ComponentId,
@@ -688,12 +690,22 @@ impl ConversationsListing {
         context: &Context,
     ) -> Box<Self> {
         let sort = *mailbox_settings!(context[&coordinates.0][&coordinates.1].listing.sort);
+        let rows_per_entry = if let Some(row_pad) = *mailbox_settings!(
+            context[&coordinates.0][&coordinates.1]
+                .listing
+                .conversations_row_pad
+        ) {
+            Self::MIN_ROWS_PER_ENTRY.saturating_add(row_pad)
+        } else {
+            Self::MIN_ROWS_PER_ENTRY
+        };
         Box::new(Self {
             cursor_pos: (coordinates.0, MailboxHash::default(), 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
             length: 0,
             sort,
             subsort: (SortField::Date, SortOrder::Desc),
+            rows_per_entry,
             rows: RowsState::default(),
             error: Ok(()),
             search_job: None,
@@ -885,8 +897,8 @@ impl ConversationsListing {
                 continue;
             }
             let area = area
-                .skip_rows(Self::ROWS_PER_ENTRY * (idx - top_idx))
-                .take_rows(Self::ROWS_PER_ENTRY);
+                .skip_rows(self.rows_per_entry.get() * (idx - top_idx))
+                .take_rows(self.rows_per_entry.get());
             let thread = threads.thread_ref(*thread_hash);
 
             let row_attr = row_attr!(
@@ -1031,7 +1043,7 @@ impl Component for ConversationsListing {
 
                 area = area.skip_rows(1);
             }
-            let rows = area.height() / Self::ROWS_PER_ENTRY;
+            let rows = area.height() / self.rows_per_entry;
             if let Some(modifier) = self.modifier_command.take() {
                 if let Some(mvm) = self.movement.as_ref() {
                     match mvm {
@@ -1220,8 +1232,8 @@ impl Component for ConversationsListing {
                     // Update row only if it's currently visible
                     if row >= top_idx && row < top_idx + rows {
                         let area = area
-                            .skip_rows(Self::ROWS_PER_ENTRY * (row % rows))
-                            .take_rows(Self::ROWS_PER_ENTRY);
+                            .skip_rows(self.rows_per_entry.get() * (row % rows))
+                            .take_rows(self.rows_per_entry.get());
                         self.highlight_line(grid, area, row, context);
                         context.dirty_areas.push_back(area);
                     }
