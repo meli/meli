@@ -440,7 +440,7 @@ impl ListingTrait for ConversationsListing {
             context.dirty_areas.push_back(area);
             return;
         }
-        let rows = area.height() / 3;
+        let rows = area.height() / Self::ROWS_PER_ENTRY;
 
         if rows == 0 {
             return;
@@ -462,7 +462,9 @@ impl ListingTrait for ConversationsListing {
                 if *idx >= self.length {
                     continue; //bounds check
                 }
-                let new_area = area.skip_rows(3 * (*idx % rows)).take_rows(2);
+                let new_area = area
+                    .skip_rows(Self::ROWS_PER_ENTRY * (*idx % rows))
+                    .take_rows(Self::ROWS_PER_ENTRY);
                 self.highlight_line(grid, new_area, *idx, context);
                 context.dirty_areas.push_back(new_area);
             }
@@ -483,7 +485,8 @@ impl ListingTrait for ConversationsListing {
 
         self.highlight_line(
             grid,
-            area.skip_rows(3 * (self.cursor_pos.2 % rows)).take_rows(3),
+            area.skip_rows(Self::ROWS_PER_ENTRY * (self.cursor_pos.2 % rows))
+                .take_rows(Self::ROWS_PER_ENTRY),
             self.cursor_pos.2,
             context,
         );
@@ -677,6 +680,8 @@ impl std::fmt::Display for ConversationsListing {
 }
 
 impl ConversationsListing {
+    const ROWS_PER_ENTRY: usize = 3;
+
     pub fn new(
         parent: ComponentId,
         coordinates: (AccountHash, MailboxHash),
@@ -879,7 +884,9 @@ impl ConversationsListing {
             if !context.accounts[&self.cursor_pos.0].contains_key(*root_env_hash) {
                 continue;
             }
-            let area = area.skip_rows(3 * (idx - top_idx)).take_rows(3);
+            let area = area
+                .skip_rows(Self::ROWS_PER_ENTRY * (idx - top_idx))
+                .take_rows(Self::ROWS_PER_ENTRY);
             let thread = threads.thread_ref(*thread_hash);
 
             let row_attr = row_attr!(
@@ -888,14 +895,15 @@ impl ConversationsListing {
                 highlighted: self.cursor_pos.2 == idx,
                 selected: self.rows.is_thread_selected(*thread_hash)
             );
+            grid.change_theme(area, row_attr);
+
+            let mut first_row = area.nth_row(0);
             // draw flags
-            let (mut x, _) = grid.write_string(&strings.flag, &row_attr, area, None, None);
+            let (mut x, _) = grid.write_string(&strings.flag, &row_attr, first_row, None, None);
             if !strings.flag.is_empty() {
-                for c in grid.row_iter(area, x..(x + 1), 0) {
-                    grid[c].set_bg(row_attr.bg);
-                }
                 x += 1;
             }
+            first_row = first_row.skip_cols(x);
             let subject_attr = row_attr!(
                 subject,
                 self.color_cache,
@@ -904,49 +912,33 @@ impl ConversationsListing {
                 selected: self.rows.is_thread_selected(*thread_hash)
             );
             // draw subject
-            let (x_, subject_overflowed) = grid.write_string(
-                &strings.subject,
-                &subject_attr,
-                area.skip_cols(x),
-                None,
-                None,
-            );
-            x += x_;
-            let mut subject_overflowed = subject_overflowed > 0;
+            let (x, _) = grid.write_string(&strings.subject, &subject_attr, first_row, None, None);
+            first_row = first_row.skip_cols(x + 1);
             for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
-                if subject_overflowed {
+                if first_row.is_empty() {
                     break;
-                };
-                let area = area.skip_cols(x).take_cols(t.grapheme_width() + 2);
+                }
                 let color = color.unwrap_or(self.color_cache.tag_default.bg);
-                let (_x, _y) = grid.write_string(
+                let (x, _) = grid.write_string(
                     t,
                     &ThemeAttribute {
                         bg: color,
                         ..self.color_cache.tag_default
                     },
-                    area.skip_cols(1),
+                    first_row,
                     None,
                     None,
                 );
-                if _y > 0 {
-                    subject_overflowed = true;
-                    break;
-                }
-                for c in grid.row_iter(area, 0..area.width(), 0) {
+                for c in grid.row_iter(first_row, 0..t.grapheme_width(), 0) {
                     grid[c]
                         .set_keep_fg(true)
                         .set_bg(color)
                         .set_keep_bg(true)
                         .set_attrs(self.color_cache.tag_default.attrs);
                 }
-                x += _x + 2;
+                first_row = first_row.skip_cols(x + 1);
             }
-            if !subject_overflowed {
-                for c in grid.row_iter(area, x..area.width(), 0) {
-                    grid[c].set_ch(' ').set_fg(row_attr.fg).set_bg(row_attr.bg);
-                }
-            }
+            let mut second_row = area.nth_row(1);
             // Next line, draw date
             let date_attr = row_attr!(
                 date,
@@ -955,14 +947,9 @@ impl ConversationsListing {
                 highlighted: self.cursor_pos.2 == idx,
                 selected: self.rows.is_thread_selected(*thread_hash)
             );
-            x = 0;
-            x += grid
-                .write_string(&strings.date, &date_attr, area.skip(x, 1), None, None)
-                .0;
-            for c in grid.row_iter(area, x..(x + 4), 1) {
-                grid[c].set_ch('▁').set_fg(row_attr.fg).set_bg(row_attr.bg);
-            }
-            x += 4;
+            let (mut x, _) = grid.write_string(&strings.date, &date_attr, second_row, None, None);
+            x += 2;
+            second_row = second_row.skip_cols(x);
             let from_attr = row_attr!(
                 from,
                 self.color_cache,
@@ -971,13 +958,7 @@ impl ConversationsListing {
                 selected: self.rows.is_thread_selected(*thread_hash)
             );
             // draw from
-            x += grid
-                .write_string(&strings.from, &from_attr, area.skip(x, 1), None, None)
-                .0;
-
-            for c in grid.row_iter(area, x..area.width(), 1) {
-                grid[c].set_ch('▁').set_fg(row_attr.fg).set_bg(row_attr.bg);
-            }
+            grid.write_string(&strings.from, &from_attr, second_row, None, None);
         }
     }
 
@@ -1050,7 +1031,7 @@ impl Component for ConversationsListing {
 
                 area = area.skip_rows(1);
             }
-            let rows = area.height() / 3;
+            let rows = area.height() / Self::ROWS_PER_ENTRY;
             if let Some(modifier) = self.modifier_command.take() {
                 if let Some(mvm) = self.movement.as_ref() {
                     match mvm {
@@ -1238,7 +1219,9 @@ impl Component for ConversationsListing {
                     let top_idx = page_no * rows;
                     // Update row only if it's currently visible
                     if row >= top_idx && row < top_idx + rows {
-                        let area = area.skip_rows(3 * (row % rows)).take_rows(3);
+                        let area = area
+                            .skip_rows(Self::ROWS_PER_ENTRY * (row % rows))
+                            .take_rows(Self::ROWS_PER_ENTRY);
                         self.highlight_line(grid, area, row, context);
                         context.dirty_areas.push_back(area);
                     }
