@@ -27,7 +27,7 @@ use std::{
 
 use crossbeam::channel::{Receiver, Sender};
 use melib::{
-    email::{Flag, Mail},
+    email::{parser::BytesExt as _, Flag, Mail},
     error::{Error, ErrorKind, Result, ResultIntoError as _},
     utils::{
         futures::timeout,
@@ -177,11 +177,51 @@ pub fn view(
         .chain_err_summary(|| format!("Could not read from `{}`", path.display()))?;
 
     if bytes.starts_with(b"From ") {
-        use melib::conf::AccountSettings;
+        use std::{
+            collections::HashMap,
+            sync::{Arc, Mutex},
+        };
+
+        use melib::{
+            conf::AccountSettings,
+            email::{Envelope, EnvelopeHash},
+            error::Result,
+            mbox::MessageIterator,
+        };
 
         let Some(mbox_format) = melib::mbox::MboxFormat::detect(&bytes) else {
             return Err(Error::new("Could not detect mbox format").set_kind(ErrorKind::ValueError));
         };
+        let is_crlf = bytes.contains_subsequence(b"\r\n");
+        let index: Arc<Mutex<HashMap<EnvelopeHash, _>>> = Arc::new(Mutex::new(HashMap::default()));
+        let message_iter = MessageIterator {
+            index,
+            input: &bytes,
+            offset: 0,
+            file_offset: 0,
+            format: mbox_format,
+            is_crlf,
+        };
+        let envelopes: Vec<Envelope> = message_iter.collect::<Result<Vec<_>>>()?;
+        if envelopes.len() == 1 {
+            let mut state = State::new(
+                Some(crate::conf::Settings::without_accounts().unwrap_or_default()),
+                sender,
+                receiver,
+            )?;
+            let main_loop_handler = state.context.main_loop_handler.clone();
+
+            let wrapper = Mail::new(bytes, Some(Flag::SEEN))
+                .chain_err_summary(|| format!("Could not parse `{}`", path.display()))?;
+            state.register_component(Box::new(crate::mail::view::envelope::EnvelopeView::new(
+                wrapper,
+                None,
+                None,
+                None,
+                main_loop_handler,
+            )));
+            return Ok(state);
+        }
         let mut settings = crate::conf::Settings::without_accounts().unwrap_or_default();
         let mut ac = AccountSettings {
             name: "mbox".into(),
