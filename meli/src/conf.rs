@@ -47,25 +47,24 @@ use crate::{conf::deserializers::non_empty_opt_string, terminal::Color};
 pub mod default_values;
 pub mod preprocessing;
 
-pub mod data_types;
-#[cfg(test)]
-pub mod tests;
-#[rustfmt::skip]
-mod overrides;
-pub use overrides::*;
 pub mod composing;
+pub mod data_types;
 pub mod notifications;
 pub mod pager;
 pub mod pgp;
 pub mod tags;
+#[cfg(test)]
+pub mod tests;
 #[macro_use]
 pub mod shortcuts;
 mod listing;
 pub mod terminal;
 pub mod themes;
 
+mod overrides;
 use composing::SendMail;
 use default_values::*;
+pub use overrides::*;
 use preprocessing as pp;
 pub use themes::value as theme_value;
 use themes::Themes;

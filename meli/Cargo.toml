@@ -92,10 +92,6 @@ notify-rust = { version = "^4", default-features = false }
 
 [build-dependencies]
 flate2 = { workspace = true, optional = true }
-proc-macro2 = { version = "1.0.37" }
-quote = { version = "^1.0" }
-regex = { workspace = true }
-syn = { version = "1", features = [] }
 
 [dev-dependencies]
 assert_cmd = { version = "2" }

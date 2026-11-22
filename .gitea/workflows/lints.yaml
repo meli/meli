@@ -110,6 +110,11 @@ jobs:
         run: |
           source "${HOME}/.cargo/env"
           make -f .gitea/Makefile.lint clippy
+      - name: check conf overrides.rs is up-to-date
+        if: success() || failure()
+        run: |
+          cargo xtask confoverrides > /tmp/overrides.rs
+          diff -u /tmp/overrides.rs meli/src/conf/overrides.rs
       - name: Save build artifacts in target dir
         id: save-cache-deps
         uses: actions/cache/save@v6

@@ -1,0 +1,14 @@
+[package]
+name = "xtask"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+proc-macro2 = { version = "1.0.37" }
+quote = { version = "^1.0" }
+regex = { workspace = true }
+syn = { version = "1", features = ["full"] }
+
+[lints]
+workspace = true

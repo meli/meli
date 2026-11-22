@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 
-members = ["meli", "melib"]
+members = ["meli", "melib", "xtask"]
 
 [workspace.dependencies]
 bitflags = { version = "2.10", features = ["serde"] }
