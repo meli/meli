@@ -1000,6 +1000,7 @@ impl Component for EnvelopeView {
                         self.headers_no += 1;
                     }
                     if actions.iter().any(|(_, b)| *b) && sticky || skip_header_ctr == 0 {
+                        grid.clear_area(area.nth_row(y), hdr_area_theme);
                         {
                             let (_x, _y) = grid.write_string(
                                 "Available actions: [ ",
